@@ -53,6 +53,20 @@ export const ARM = {
     NOISE_STILL: 1.2, // rad/s: only while the segment barely turns (a moving arm's length changes on purpose)
     REBASE: 0.3, // a side changing with the segment nearer the plane than this (of its length) glides there (DirFilter.rebase)
     SIGN_HYST: 0.06, // a side (in front / behind) changes only when the other is better by this much (no flicker on noise)
+    // … and only when it stays better for FLIP_T s (unless it is better by FLIP_SURE at once: a real wind-up behind the shoulder),
+    // and the drawn arm then GLIDES to the other side over FLIP_GLIDE s through the body's plane. The author 02.11: «держу руку
+    // чуть согнутой, а после ещё больше сгибаю… она резко скачет назад»: on a real camera (15 pictures a second, MediaPipe's
+    // depth noisy) one picture's depth flipped the arm behind the body and it was drawn there at once - jumps of 1-1.6 m in a
+    // frame (tools/armstab.mjs «камера 15/с»)
+    // (both shortened by how fast the arm moves IN THE PICTURE: ÷ (1 + v / FLIP_V), v in its lengths a second - a real swing
+    // (a throw's release) changes side at once; the camera's noise flips a still or slow arm. Not the drawn arm's turn: the
+    // glide itself turns it - that sped the glide up on its own)
+    FLIP_T: 0.16, FLIP_SURE: 1.2, FLIP_GLIDE: 0.12, FLIP_V: 2, FLIP_VCUT: 4,
+    // a segment far out of the picture's plane (its depth over FLIP_PLANE of its length) never changes side while the arm is not
+    // moving fast in the picture (FLIP_FASTV lengths a second): a real arm going from in front of the body to behind it passes
+    // through the plane - the picture shows nearly its whole length on the way; there it may. A forearm held bent towards the
+    // camera turned over behind the body on the depth's noise (140° in a few frames)
+    FLIP_PLANE: 0.6, FLIP_FASTV: 5,
     // the drawn directions: an adaptive 1€ on each segment's direction (DirFilter), on EVERY camera. (31.10 it was switched off on a
     // usual camera for the wand's slow aim — the author: «руки начали трястись»: the camera's picture-to-picture noise reached the
     // drawn arm, 22…38 cm/s of trembling at rest, was 2…3 — tools/armstab.mjs «рывки в покое».) Now the wand's aim keeps its speed
@@ -150,7 +164,7 @@ function depthStep(prev, d, L, w, dt) {
 }
 
 function sideState() {
-    return { Lu: 0, Lf: 0, su: -1, sf: -1, zu: 0, zf: 0, gx: 0, gy: 0, gz: 0, du: -1, df: -1, seen: false, fu: new DirFilter(), ff: new DirFilter(), nu: noiseState(), nf: noiseState() };
+    return { pv: 0, pux: null, puy: 0, pfx: 0, pfy: 0, ku: -1, kf: -1, wantU: -1, wantF: -1, wantT: 0, Lu: 0, Lf: 0, su: -1, sf: -1, zu: 0, zf: 0, gx: 0, gy: 0, gz: 0, du: -1, df: -1, seen: false, fu: new DirFilter(), ff: new DirFilter(), nu: noiseState(), nf: noiseState() };
 }
 
 export class ArmSolver {
@@ -217,10 +231,28 @@ export class ArmSolver {
             if (su === S.su && sf === S.sf) cur = c;
             if (c < best - 1e-9) { best = c; bsu = su; bsf = sf; }
         }
-        if (cur - best < ARM.SIGN_HYST) { bsu = S.su; bsf = S.sf; } // (the other side only when clearly better)
+        // (the other side only when clearly better - and for a while: FLIP_T, or at once by FLIP_SURE)
+        const margin = cur - best, want = margin >= ARM.SIGN_HYST && (bsu !== S.su || bsf !== S.sf);
+        // (how fast the arm moves in the picture now: its segments' ends, in their own lengths a second)
+        if (S.pux != null && dt > 0) {
+            const v = (Math.hypot(ux - S.pux, uy - S.puy) / S.Lu + Math.hypot(fx - S.pfx, fy - S.pfy) / S.Lf) / dt;
+            S.pv += (v - S.pv) * alpha(ARM.FLIP_VCUT, dt);
+        }
+        S.pux = ux; S.puy = uy; S.pfx = fx; S.pfy = fy;
+        const turnK = 1 + S.pv / ARM.FLIP_V;
+        if (want && S.wantU === bsu && S.wantF === bsf) S.wantT += dt * turnK;
+        else { S.wantT = want ? dt : 0; S.wantU = bsu; S.wantF = bsf; }
+        if (!want || (S.wantT < ARM.FLIP_T && margin < ARM.FLIP_SURE)) { bsu = S.su; bsf = S.sf; } else S.wantT = 0;
+        if (S.pv < ARM.FLIP_FASTV) {
+            if (bsu !== S.su && ru > ARM.FLIP_PLANE) bsu = S.su;
+            if (bsf !== S.sf && rf > ARM.FLIP_PLANE) bsf = S.sf;
+        }
         const flipU = bsu !== S.su, flipF = bsf !== S.sf;
         S.su = bsu; S.sf = bsf;
-        let u = this._dir(out.u, ux, uy, bsu * du), f = this._dir(out.f, fx, fy, bsf * df);
+        // (the drawn side glides there - through the body's plane, never a jump from in front to behind)
+        const gs = Math.min(2, (2 * dt * turnK) / ARM.FLIP_GLIDE);
+        S.ku += clamp(bsu - S.ku, -gs, gs); S.kf += clamp(bsf - S.kf, -gs, gs);
+        let u = this._dirK(out.u, ux, uy, du, S.ku), f = this._dirK(out.f, fx, fy, df, S.kf);
         // (the other side: the drawn arm glides there — the jump is the solver's, not the player's turn: it must not open the
         // filter, or the arm was thrown 20–40 cm in a frame)
         // (near the plane only: a flip far out of it is a real move the solver saw clearly — drawn at once)
@@ -252,6 +284,18 @@ export class ArmSolver {
         if (l > ARM.NEAR_FULL * L) L += (l - L) * (1 - Math.pow(1 - ARM.LEARN_UP, n));
         else L = prior + (L - prior) * Math.pow(ARM.LEARN_DECAY, n); // (back towards the human proportion, never drifting below it)
         return clamp(L, prior * ARM.L_LO, prior * ARM.L_HI);
+    }
+
+    /**
+     * A unit direction from the picture's (x, y), the depth's size d and the side k (-1 in front … +1 behind; between - gliding
+     * from one to the other: evenly in the angle out of the plane, so the turn is spread over the glide, not bunched at the plane).
+     */
+    _dirK(o, x, y, d, k) {
+        if (k <= -1 || k >= 1) return this._dir(o, x, y, k * d);
+        const l = Math.hypot(x, y), a = Math.atan2(d, l) * k, c = Math.cos(a);
+        if (l < 1e-9) { o.x = 0; o.y = 0; o.z = Math.sign(a) || 1; return o; }
+        o.x = (x / l) * c; o.y = (y / l) * c; o.z = Math.sin(a);
+        return o;
     }
 
     /** A unit direction from the picture's (x, y) and a depth d (+ behind). */

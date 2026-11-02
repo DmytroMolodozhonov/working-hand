@@ -23,6 +23,7 @@ import { Chest, chestSamples } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
 import { SpellLog } from '../core/SpellLog.js';
+import { armLog } from '../core/ArmLog.js';
 import { LONGER_OF } from '../audio/SpellSpotter.js';
 import { WeaponSystem } from './Weapons.js';
 import { FlightController, FLIGHT } from './Flight.js';
@@ -526,6 +527,10 @@ export class Game {
 
         // Player
         this.character = new VoxelCharacter(this.scene);
+        // the arms' diary (zns-arms.log): what the camera saw of my arms and what the hero did with it
+        armLog.send = config.mode !== 'test';
+        this.character.armLog = armLog;
+        this.armLog = armLog;
         this.character.stepBoxes = true; // (my hero walks up onto a low box — a stone foot, a chest — as onto a step)
         this.character.setHandVersion(config.handVersion || 'v3');
         if (config.heroModel === 'real') this.character.setHeroModel('real'); // (the «Реалистичный» test model, chosen in the settings)

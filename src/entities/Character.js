@@ -51,6 +51,8 @@ const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _qBody = new THREE.Quaternion();
 const _up = new THREE.Vector3();
+const _q3 = new THREE.Quaternion(), _qa0 = new THREE.Quaternion(), _qe0 = new THREE.Quaternion(), _qa1 = new THREE.Quaternion(), _qe1 = new THREE.Quaternion();
+const _armY = new THREE.Vector3();
 const _ax = new THREE.Vector3();
 const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3();
 const _r5 = new THREE.Vector3(), _r6 = new THREE.Vector3(), _ru = new THREE.Vector3(), _rn = new THREE.Vector3();
@@ -359,6 +361,25 @@ export class VoxelCharacter {
         return out.set(dx * 8, dy * 8, dz).normalize();
     }
 
+    /**
+     * The «up» an arm's bone is turned by (lookAt): the body's up. But a bone pointing straight up (or down) has no up of
+     * its own: lookAt spun it round its length from one frame to the next on the camera's smallest jitter (and _smoothLookAt's
+     * «a big turn is followed at once» took that spin as a swing) - arms raised over the head shook, the hand on them whirled
+     * (tools/armstab.mjs «руки подняты, кисти за кадром»: up to 170° a frame). Near there the bone keeps its own present turn
+     * (its Y axis) instead, blended in by how vertical it is (no seam). Writes `out`; returns how much of the fix is on (0..1).
+     */
+    _armUp(anchor, dir, out) {
+        const c = Math.abs(dir.dot(_up));
+        out.copy(_up);
+        if (c < 0.8) return 0;
+        const k = Math.min(1, (c - 0.8) / 0.15), s = k * k * (3 - 2 * k);
+        _armY.set(0, 1, 0).applyQuaternion(anchor.getWorldQuaternion(_q3));
+        out.lerp(_armY, s);
+        if (out.lengthSq() < 1e-6) out.copy(_armY);
+        out.normalize();
+        return s;
+    }
+
     _smoothLookAt(obj, worldTarget, speed, fast = 0) {
         _q1.copy(obj.quaternion);
         obj.lookAt(worldTarget);
@@ -397,23 +418,31 @@ export class VoxelCharacter {
         const aspect = poseData.aspect || 1, adt = Math.min(0.2, Math.max(0.001, dt));
         AS.shoulders(poseData.rightShoulder, poseData.leftShoulder, aspect, adt);
         const so = this._armOut || (this._armOut = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } });
+        const log = this.armLog; // (the player's own hero only: zns-arms.log)
         const solveArm = (armAnchor, elbowAnchor, shoulder, elbow, wrist, side) => {
+            if (log) { armAnchor.getWorldQuaternion(_qa0); elbowAnchor.getWorldQuaternion(_qe0); }
             AS.solve(side, shoulder, elbow, wrist, aspect, so, adt, poseData.armMove ? poseData.armMove[side] : -1);
             // the shoulder girdle (up with a raised arm, back with an arm drawn behind, forward with a reach)
             armAnchor.position.set(side === 'left' ? -0.7 : 0.7, 0.5 + so.g.y, so.g.z);
             armAnchor.updateMatrixWorld(true);
             // Upper arm
             _v1.set(so.u.x, so.u.y, so.u.z).applyQuaternion(_qBody);
-            armAnchor.up.copy(_up);
+            const lift = log ? Math.acos(Math.max(-1, Math.min(1, -_v1.dot(_up)))) * 57.2958 : 0; // (0 hanging, 180 straight up)
+            const fixU = this._armUp(armAnchor, _v1, armAnchor.up);
             _v2.copy(armAnchor.position);
             armAnchor.parent.localToWorld(_v2).add(_v1);
             this._smoothLookAt(armAnchor, _v2, armK, ARM_SMOOTH.FAST * adt * 60);
             armAnchor.updateMatrixWorld(true);
             // Forearm
             _v1.set(so.f.x, so.f.y, so.f.z).applyQuaternion(_qBody);
-            elbowAnchor.up.copy(_up);
+            const fixF = this._armUp(elbowAnchor, _v1, elbowAnchor.up);
             elbowAnchor.getWorldPosition(_v2).add(_v1);
             this._smoothLookAt(elbowAnchor, _v2, armK, ARM_SMOOTH.FAST * adt * 60);
+            if (log) {
+                armAnchor.getWorldQuaternion(_qa1); elbowAnchor.getWorldQuaternion(_qe1);
+                const turn = Math.max(_qa0.angleTo(_qa1), _qe0.angleTo(_qe1)) * 57.2958;
+                log.render(side, { lift, fix: Math.max(fixU, fixF), turn, dt });
+            }
         };
         solveArm(this.leftArmAnchor, this.leftElbowAnchor, poseData.leftShoulder, poseData.leftElbow, poseData.leftWrist, 'left');
         solveArm(this.rightArmAnchor, this.rightElbowAnchor, poseData.rightShoulder, poseData.rightElbow, poseData.rightWrist, 'right');

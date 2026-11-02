@@ -29,6 +29,13 @@ import { BLOCK } from '../src/world/Terrain.js';
 
 /** Thresholds (only ever tighten). */
 export const LIMITS = {
+    // raised arms, the hands out of the picture's top (edge): before ArmGuard + the straight-arm turn fix 26…65 cm, 640…1650 cm/s,
+    // the forearm spun up to 180° a frame; after ≤ 4.4 cm / 28 cm/s / 1°
+    edgeCm: 6, edgeSpeed: 40, edgeSpin: 3,
+    // a real camera (15 pictures a second, noisy, MediaPipe's depth noisier still) - the arm held bent forward / hanging: the
+    // biggest jump of the drawn hand in one frame. Before (ArmSolver flipping the forearm behind the body on the depth's noise,
+    // drawn there at once - the author 02.11: «резко скачет назад»): 166 / 77 cm; after the side's guard: 22 / 28
+    camJumpCm: 35,
     // the arm held still, the worst pose (the hand in game metres — the hero is 3.5 m — and the forearm): a usual camera (noise
     // ×0.3: ≈ 0.4 cm of a real arm per point, as tools/handbench/pointing.mjs's 720p webcam) and a very noisy one (×1: ≈ 1.4 cm;
     // MediaPipe's depth far worse). Before (the side flipping on the noise, √ steep at the plane): 6…10 cm / 3…4° and
@@ -72,7 +79,7 @@ export const POSES = {
  * A person in front of a camera. arm(t) → [u, f] of the hero's right arm (body space). The left arm hangs down.
  * Returns the frames' measurements: { t, hand: Vector3 (world), fore: Vector3 (unit), up: Vector3 (upper arm unit) }.
  */
-export function run({ arm, seconds, seed = 1, camHz = 30, gameHz = 60, noise = 1, world = null, body = null, pre = null }) {
+export function run({ arm, seconds, seed = 1, camHz = 30, gameHz = 60, noise = 1, world = null, body = null, pre = null, y0 = 0.4, edge = false }) {
     const r = rng(seed);
     const sw = 0.38, upper = sw * 0.78, fore = sw * 0.7, scale = 0.45, aspect = 16 / 9;
     const zScale = 0.6, zNoise = 0.04 * noise, xyNoise = 0.006 * noise; // (≈ 1–2 cm of a real arm; MediaPipe's depth much worse)
@@ -84,7 +91,19 @@ export function run({ arm, seconds, seed = 1, camHz = 30, gameHz = 60, noise = 1
     const hb = game ? new HandBlocks(game) : null;
     let clock = 0, nextCam = 0, camCount = 0;
     const dtG = 1 / gameHz, out = [];
-    const pic = (X, Y, Z) => ({ x: 0.5 - (X * scale) / aspect + gauss(r) * xyNoise / aspect, y: 0.4 - Y * scale + gauss(r) * xyNoise, z: (Z * scale * zScale) / aspect + gauss(r) * zNoise / aspect, visibility: 0.99 });
+    const pic = (X, Y, Z) => {
+        const p = { x: 0.5 - (X * scale) / aspect + gauss(r) * xyNoise / aspect, y: y0 - Y * scale + gauss(r) * xyNoise, z: (Z * scale * zScale) / aspect + gauss(r) * zNoise / aspect, visibility: 0.99 };
+        // (edge: a point out of the picture's top is the network's guess - low visibility flickering round 0.35, the place
+        // wandering several centimetres picture to picture, pulled towards the edge - as a real camera does with raised arms)
+        if (edge && p.y < 0.02) {
+            const out = Math.min(1, (0.02 - p.y) / 0.06);
+            p.visibility = Math.max(0.05, 0.6 - 0.35 * out + (r() - 0.5) * 0.4);
+            p.y = p.y * 0.6 + gauss(r) * 0.03 * (0.4 + out);
+            p.x += gauss(r) * 0.02 * (0.4 + out) / aspect;
+            p.z += gauss(r) * zNoise;
+        }
+        return p;
+    };
     const lmFill = (lm, i, X, Y, Z) => { lm[i] = pic(X, Y, Z); };
     for (let step = 0; clock < seconds; step++) {
         clock = step * dtG;
@@ -121,7 +140,7 @@ export function run({ arm, seconds, seed = 1, camHz = 30, gameHz = 60, noise = 1
         const hand = ch.getHandWorldPosition('right', new THREE.Vector3());
         const S = ch.rightArmAnchor.getWorldPosition(new THREE.Vector3());
         const E = ch.rightElbowAnchor.getWorldPosition(new THREE.Vector3());
-        out.push({ t: clock, hand, S, E, fore: hand.clone().sub(E).normalize(), up: E.clone().sub(S).normalize(), pushed: hb ? hb.pushed.right : 0, K: hb?._mem?.get(ch)?.right.K.clone() ?? null, ch });
+        out.push({ t: clock, hand, S, E, qE: ch.rightElbowAnchor.getWorldQuaternion(new THREE.Quaternion()), fore: hand.clone().sub(E).normalize(), up: E.clone().sub(S).normalize(), pushed: hb ? hb.pushed.right : 0, K: hb?._mem?.get(ch)?.right.K.clone() ?? null, ch });
     }
     return out;
 }
@@ -146,6 +165,62 @@ export function still({ seeds = 3, noise = 1 } = {}) {
             sp = Math.max(sp, Math.sqrt(s2 / (fr.length - 1)) * 100);
         }
         res[name] = { cm, deg, sp };
+    }
+    return res;
+}
+
+/** The arms' poses with the hands out of the picture's top (the player close, arms raised): the elbow seen, the wrist a guess. */
+export const EDGE_POSES = {
+    overhead: POSES.overhead,
+    raisedBent: POSES.raisedBent,
+    halfBentUp: [[0.75, 0.65, 0.05], [-0.35, 1, 0.05]], // (the author: raised, the arms half bent, the hands not seen)
+    vUp: [[0.55, 0.85, 0.02], [0.45, 0.9, 0.02]],
+};
+
+/**
+ * Raised arms whose hands are out of the picture (the author: «руки полусгибаются, и кисти не видны, но это не повод чтобы руки
+ * мигали или дрожали или их искривляло»): the hand's trembling (cm, RMS), its frame-to-frame speed (cm/s), the forearm's
+ * direction (°) and its spin round its own length (° per frame, RMS - the hand on it whirls), with the camera's usual noise.
+ */
+export function edge({ seeds = 3, noise = 0.3 } = {}) {
+    const res = {};
+    for (const name of Object.keys(EDGE_POSES)) {
+        let cm = 0, deg = 0, sp = 0, spin = 0, spinMax = 0;
+        for (let s = 0; s < seeds; s++) {
+            // (as a player does: the arms seen in front first, then raised over 0.5 s - the hands go out of the picture)
+            const [U, F] = EDGE_POSES[name], A = POSES.reach;
+            const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+            const arm = (t) => { const k = Math.max(0, Math.min(1, (t - 1.2) / 0.5)), e = k * k * (3 - 2 * k); return [mix(A[0], U, e), mix(A[1], F, e)]; };
+            const fr = run({ arm, seconds: 6, seed: 5 + s * 17 + name.length, noise, y0: 0.17, edge: true }).filter((f) => f.t > 3);
+            cm = Math.max(cm, rms3(fr.map((f) => f.hand)) * 100);
+            deg = Math.max(deg, rmsAng(fr.map((f) => f.fore)));
+            let s2 = 0, w2 = 0;
+            const q = new THREE.Quaternion();
+            for (let i = 1; i < fr.length; i++) {
+                s2 += fr[i].hand.distanceToSquared(fr[i - 1].hand) / (fr[i].t - fr[i - 1].t) ** 2;
+                q.copy(fr[i - 1].qE).invert().multiply(fr[i].qE); // (the turn in the forearm's own frame: its z is the length)
+                const tw = Math.abs(2 * Math.atan2(q.z, q.w)) * DEG, twist = Math.min(tw, 360 - tw);
+                w2 += twist * twist; spinMax = Math.max(spinMax, twist);
+            }
+            sp = Math.max(sp, Math.sqrt(s2 / (fr.length - 1)) * 100);
+            spin = Math.max(spin, Math.sqrt(w2 / (fr.length - 1)));
+        }
+        res[name] = { cm, deg, sp, spin, spinMax };
+    }
+    return res;
+}
+
+/** A real camera (15 a second, noisy): the arm held still - bent forward (the forearm towards the camera), hanging. */
+export function realcam({ seeds = 4 } = {}) {
+    const res = {};
+    const poses = { holdBent: [[0.3, -0.6, -0.6], [0.1, 0.3, -0.9]], rest: POSES.rest, reach: POSES.reach };
+    for (const [name, p] of Object.entries(poses)) {
+        let jump = 0;
+        for (let s = 0; s < seeds; s++) {
+            const fr = run({ arm: () => p, seconds: 5, seed: 3 + s * 7, camHz: 15, noise: 1 }).filter((f) => f.t > 1.5);
+            for (let i = 1; i < fr.length; i++) jump = Math.max(jump, fr[i].hand.distanceTo(fr[i - 1].hand) * 100);
+        }
+        res[name] = { jump };
     }
     return res;
 }
@@ -298,6 +373,8 @@ export function all(opts = {}) {
     const o = opts.only;
     return {
         good: !o || o === 'still' ? still({ noise: 0.3 }) : null,
+        edge: !o || o === 'edge' ? edge() : null,
+        realcam: !o || o === 'realcam' ? realcam() : null,
         still: !o || o === 'still' ? still() : null,
         swing: !o || o === 'swing' ? swing() : null,
         moving: !o || o === 'moving' ? moving() : null,
@@ -314,6 +391,12 @@ export function all(opts = {}) {
  */
 export function verdict(r) {
     const bad = [];
+    if (r.realcam) for (const [k, v] of Object.entries(r.realcam)) if (v.jump > LIMITS.camJumpCm) bad.push(`камера 15/с ${k}: рывок ${v.jump.toFixed(1)} см за кадр > ${LIMITS.camJumpCm}`);
+    if (r.edge) for (const [k, v] of Object.entries(r.edge)) {
+        if (v.cm > LIMITS.edgeCm) bad.push(`руки подняты, кисти за кадром ${k}: дрожь ${v.cm.toFixed(2)} см > ${LIMITS.edgeCm}`);
+        if (v.sp > LIMITS.edgeSpeed) bad.push(`руки подняты, кисти за кадром ${k}: рывки ${v.sp.toFixed(1)} см/с > ${LIMITS.edgeSpeed}`);
+        if (v.spinMax > LIMITS.edgeSpin) bad.push(`руки подняты, кисти за кадром ${k}: прокрутка предплечья ${v.spinMax.toFixed(1)}° за кадр > ${LIMITS.edgeSpin}`);
+    }
     for (const [key, cmL, degL, spL, name] of [['good', LIMITS.goodCm, LIMITS.goodDeg, LIMITS.goodSpeed, 'хорошая камера'], ['still', LIMITS.noisyCm, LIMITS.noisyDeg, LIMITS.noisySpeed, 'шумная камера']]) {
         if (r[key]) for (const [k, v] of Object.entries(r[key])) {
             if (v.cm > cmL) bad.push(`покой (${name}) ${k}: ${v.cm.toFixed(2)} см > ${cmL}`);
@@ -341,6 +424,8 @@ export function verdict(r) {
 export function print(r) {
     const f = (x, d = 2) => x.toFixed(d);
     if (r.good) console.log('покой, хорошая камера (дрожь кисти, см / предплечья, ° / рывки кисти, см/с): ' + Object.entries(r.good).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)} / ${f(v.sp, 1)}`).join(', '));
+    if (r.realcam) console.log('камера 15/с, рука держится (самый большой рывок кисти за кадр, см): ' + Object.entries(r.realcam).map(([k, v]) => `${k} ${f(v.jump, 1)}`).join(', '));
+    if (r.edge) console.log('руки подняты, кисти за кадром (дрожь кисти, см / предплечья, ° / рывки кисти, см/с / прокрутка предплечья, °/кадр, макс): ' + Object.entries(r.edge).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)} / ${f(v.sp, 1)} / ${f(v.spin)}, ${f(v.spinMax, 1)}`).join(', '));
     if (r.still) console.log('покой, шумная камера: ' + Object.entries(r.still).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)} / ${f(v.sp, 1)}`).join(', '));
     if (r.swing) console.log('взмахи (видно %, опоздание мс): ' + Object.entries(r.swing).map(([k, v]) => `${k} Гц ${f(v.amp * 100, 0)} % ${f(v.lagMs, 0)}`).join(', '));
     if (r.moving) console.log('рывки в движении, рука с палочкой (мм за кадр², наведение / помахивание / круги): ' + Object.values(r.moving).map((v) => f(v, 1)).join(' / '));

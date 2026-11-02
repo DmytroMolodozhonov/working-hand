@@ -69,6 +69,7 @@ RECORD_DIR = "recordings"  # hand recordings (F9 in the game): sent to the devel
 RECORD_MAX = 30 * 1024 * 1024
 PERF_LOG = "zns-perf.log"  # the game's performance diary (send it to the developer)
 SPELL_LOG = "zns-spells.log"  # the spell journal: every phrase heard and what came of it
+ARM_LOG = "zns-arms.log"  # the arms' diary (src/core/ArmLog.js): what the camera saw of the arms, what the hero did
 ALL_LOG = "zns-all.log"  # «Общие логи»: every journal together, by time
 ALL_LOG_MAX = 20 * 1024 * 1024  # kept: the last ~20 MB (trimmed to half of it when it grows past)
 LOG_DIR = "logs"  # what the game prints (settings → «Журнал»)
@@ -78,6 +79,7 @@ LOG_TITLES = {
     "server.log": "Запуск и игра",
     "server.prev.log": "Прошлый запуск",
     PERF_LOG: "Производительность",
+    ARM_LOG: "Руки",
     SPELL_LOG: "Заклинания",
     ALL_LOG: "Общие логи (все журналы вместе)",
 }
@@ -311,6 +313,7 @@ def log_files():
     if not paths:
         paths = [os.path.join(LOG_DIR, "server.log"), os.path.join(LOG_DIR, "server.prev.log")]
     paths.append(SPELL_LOG)
+    paths.append(ARM_LOG)
     paths.append(PERF_LOG)
     paths.append(ALL_LOG)
     return paths
@@ -447,7 +450,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
-        if any(p in (self.path or "") for p in ("/api/perflog", "/api/spelllog", "/api/alllog", "/api/gamelog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
+        if any(p in (self.path or "") for p in ("/api/perflog", "/api/armlog", "/api/spelllog", "/api/alllog", "/api/gamelog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
             return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
@@ -822,6 +825,19 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 text = "".join((frame_start(x) if GAME_START_RE.search(x) else x + "\n") for x in (str(l)[:2000].replace("\r", " ").replace("\n", " ") for l in lines[:1000]))
                 if text:
                     append_all_log(text)
+                return self._json(200, {"status": "ok"})
+
+            if path == "/api/armlog":
+                lines = self._read_json().get("lines") or []
+                lines = [str(x)[:3000].replace("\r", " ").replace("\n", " ") for x in lines[:200]]
+                if lines and lines[0].startswith("==="):
+                    # a new game: start the file afresh when it has grown big
+                    if os.path.exists(ARM_LOG) and os.path.getsize(ARM_LOG) > 3 * 1024 * 1024:
+                        os.replace(ARM_LOG, ARM_LOG + ".old")
+                    print("  [Руки] журнал рук пишется в " + os.path.join(ROOT, ARM_LOG))
+                if lines:
+                    with open(ARM_LOG, "a", encoding="utf-8") as f:
+                        f.write("\n".join(lines) + "\n")
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/spelllog":

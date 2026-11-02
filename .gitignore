@@ -16,3 +16,4 @@ recordings/
 vendor/mediapipe/models/v5/
 vendor/ort-gpu/
 vendor/onnx-tools/
+zns-arms.log*

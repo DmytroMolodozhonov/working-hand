@@ -13,6 +13,7 @@
 
 import { WristTrace } from '../game/ThrowModel.js';
 import { assignHands, HandStabilizer, PoseStabilizer } from './TrackingGuard.js';
+import { ArmGuard } from './ArmGuard.js';
 import { PoseInterpreter } from './PoseInterpreter.js';
 import { PocketHints } from './PocketHints.js';
 import { drawPocketHints } from './PocketHintsDraw.js';
@@ -45,6 +46,8 @@ export class PoseService {
         this.inFlight = false;
         this.handGuards = { left: new HandStabilizer(), right: new HandStabilizer() };
         this.poseGuard = new PoseStabilizer();
+        // Holistic smooths its own landmarks, but an arm out of the picture (raised over the head) went through unguarded
+        this.holisticArms = new ArmGuard({ filter: false });
         this.interpreter = new PoseInterpreter(faceSolver);
         this.stats = { frames: 0, results: 0, avgCost: 0, delegate: null, mode: null, lastResultAt: 0 };
         this._lastFace = null;
@@ -259,7 +262,7 @@ export class PoseService {
         this.stats.results++;
         this.stats.lastResultAt = performance.now();
         const r = {
-            poseLandmarks: results.poseLandmarks || null,
+            poseLandmarks: results.poseLandmarks ? this.holisticArms.process(results.poseLandmarks, performance.now()) : null,
             faceLandmarks: results.faceLandmarks || null,
             leftHandLandmarks: results.leftHandLandmarks || null,
             rightHandLandmarks: results.rightHandLandmarks || null,

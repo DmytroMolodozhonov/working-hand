@@ -27,6 +27,7 @@
  */
 
 import { OneEuroFilter } from '../core/math.js';
+import { ArmGuard } from './ArmGuard.js';
 
 const BONES = [
     [0, 1], [1, 2], [2, 3], [3, 4],
@@ -323,7 +324,11 @@ export const POSE_ARM_DCUTOFF = 4; // (was 1: the arm's speed found ~0.15 s late
 
 /** Visibility gating + smoothing for the body landmarks that drive the arms. */
 export class PoseStabilizer {
-    constructor() {
+    constructor({ log } = {}) {
+        // the elbows and wrists first through ArmGuard (no filter of its own): a smooth trust from the visibility and the
+        // picture's edge instead of the 0.35 switch, the last good bone held from its parent, the bone never longer than seen -
+        // raised arms with the hands out of the picture shook (tools/armstab.mjs «руки подняты, кисти за кадром»)
+        this.arms = new ArmGuard({ filter: false, ...(log === undefined ? {} : { log }) });
         this.filters = new Map();
         this.held = new Map();
         this.lastPose = null;
@@ -348,6 +353,7 @@ export class PoseStabilizer {
         const t = tMs / 1000;
         const out = pose.map((p) => ({ x: p.x, y: p.y, z: p.z, visibility: p.visibility }));
         for (const k of POSE_KEYS) {
+            if (POSE_ARM_KEYS.has(k)) continue; // (below, after ArmGuard)
             const p = pose[k];
             const vis = p.visibility ?? 1;
             const finite = Number.isFinite(p.x) && Number.isFinite(p.y);
@@ -359,6 +365,15 @@ export class PoseStabilizer {
             if (!finite) continue;
             const [fx, fy, fz] = this.filters.get(k);
             out[k] = { x: fx.filter(p.x, t), y: fy.filter(p.y, t), z: fz.filter(p.z || 0, t), visibility: vis };
+            this.held.set(k, out[k]);
+        }
+        // the arms: guarded from the steadied shoulders, then the same 1€ as before (throws read the hand's speed through it)
+        const arms = this.arms.process(out, tMs);
+        for (const k of POSE_ARM_KEYS) {
+            const a = arms[k];
+            if (!a || !Number.isFinite(a.x) || !Number.isFinite(a.y)) { const prev = this.held.get(k); if (prev) out[k] = { ...prev, visibility: pose[k]?.visibility ?? 0 }; continue; }
+            const [fx, fy, fz] = this.filters.get(k);
+            out[k] = { x: fx.filter(a.x, t), y: fy.filter(a.y, t), z: fz.filter(a.z || 0, t), visibility: a.visibility, trust: a.trust };
             this.held.set(k, out[k]);
         }
         this.lastPose = out;
