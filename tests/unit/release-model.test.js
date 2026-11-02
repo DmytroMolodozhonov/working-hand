@@ -109,28 +109,28 @@ test('launch: the flick and the weight (a hammer leaves slower than an apple), a
 
 // the author: «если дочерняя рука не выше 30 градусов, то предмет не может выпасть из руки, даже если кисть разжата»
 const ARM = (up, forward = 0.8) => ({ reach: 0.9, forward, up, palmUp: 0 });
-const SIN = (deg) => Math.sin(deg * Math.PI / 180);
-test('the child hand not higher than 30° over level keeps the thing with open fingers; raised higher it falls', () => {
-    for (const deg of [-90, -60, -30, 0, 10, 20, 28]) assert.equal(openHand({ secondary: true, arm: ARM(SIN(deg)) })?.act ?? null, null, `${deg}°`);
-    for (const deg of [33, 45, 60, 80]) assert.equal(openHand({ secondary: true, arm: ARM(SIN(deg)) }).act, 'drop', `${deg}°`);
+const SIN = (deg) => -Math.cos(deg * Math.PI / 180); // (deg from hanging straight down: 0 = down, 90 = level)
+test('the child hand within 30° of hanging down keeps the thing with open fingers; level or higher it falls', () => {
+    for (const deg of [0, 10, 20, 28]) assert.equal(openHand({ secondary: true, arm: ARM(SIN(deg)) })?.act ?? null, null, `${deg}°`);
+    for (const deg of [33, 45, 60, 90, 120]) assert.equal(openHand({ secondary: true, arm: ARM(SIN(deg)) }).act, 'drop', `${deg}°`);
     assert.equal(openHand({ secondary: false, arm: ARM(-0.6) }).act, 'drop', 'the leading hand: the old level');
     assert.equal(openHand({ secondary: false, arm: ARM(-0.9) })?.act ?? null, null);
-    assert.match(openHand({ secondary: true, arm: ARM(0) })?.why || '', /30°/);
+    assert.match(openHand({ secondary: true, arm: ARM(SIN(10)) })?.why || '', /30°/);
 });
 
 test('a hand raised from low with open fingers: nothing falls until it is above 30°; no flicker on the line', () => {
     const run = (degs) => {
         const h = new HandTrack(); let t = 0, got = null;
         const push = (curl, deg) => { h.push({ t, hand: { x: -0.6, y: 0.5, z: -1.6 }, world: { x: 0, y: 4, z: -1.6 }, curl, seen: true, fresh: true, camMs: 33 }); const d = h.decide({ t, arm: ARM(SIN(deg)), secondary: true }); if (d?.act && !got) got = { ...d, deg }; t += 16.7; };
-        for (let i = 0; i < 60; i++) push(0.9, -60); // gripped, hanging
+        for (let i = 0; i < 60; i++) push(0.9, 0); // gripped, hanging
         for (const deg of degs) push(0.1, deg); // open, the arm coming up
         return got;
     };
-    assert.equal(run([-60, -20, 0, 15, 25, 29]), null, 'still not above 30°');
+    assert.equal(run([5, 10, 15, 25, 29]), null, 'still not above 30°');
     assert.equal(run([26, 29.5, 27, 29.8, 26, 29, 28, 29.9]), null, 'a flicker just under the line: nothing');
     const hys = run([40, 40, 40, 28, 27, 28, 27, 27, 27, 27]); // raised, then dipping to 27° (above the 25° lower level): still raised
     assert.ok(hys && hys.deg < 30, 'raised past 30° it stays raised down to 25° (it falls at 27–28°, no flicker)');
-    const up = run([-60, 0, 20, 40, 45, 50, 50, 50, 50, 50]);
+    const up = run([0, 10, 20, 40, 60, 80, 80, 80, 80, 80]);
     assert.ok(up && up.deg > 30, 'it falls only once the arm is above 30°');
 });
 
