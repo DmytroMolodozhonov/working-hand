@@ -137,7 +137,7 @@ test('recipes: exactly the ingredients (counts too), any order', () => {
     assert.equal(matchRecipe({ apple: 1, crystal: 1, wool: 1 }), null);
     assert.equal(matchRecipe({}), null);
     assert.ok(!matchRecipe({ glass: 1, web: 1, minotaurHorn: 1 }), 'no invisibility potion any more');
-    assert.equal(recipeById('invis'), undefined);
+    assert.ok(!recipeById('invis'));
     for (const r of RECIPES) for (const k of Object.keys(r.ingredients)) assert.ok(ITEM_INFO[k], `${k} is a real thing`);
 });
 
