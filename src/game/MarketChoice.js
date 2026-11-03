@@ -57,7 +57,7 @@ const NOUN = {
     magicPebble: ['волшебный камушек', 'm', 'камушек'], owlFeather: ['перо совы', 'n', 'перо'], spencerFeather: ['перо птички Спенсера', 'n', 'перо'], beslanGrass: ['трава Беслана', 'f', 'трава'], telewilpinLeaf: ['листок телевильпина', 'm'], carnivoreHead: ['головка плотоядной', 'f'], brightCore: ['сердцевина Ярколета', 'f'], canaryHide: ['кожа канарика', 'f'], bone: ['кость', 'f'], minotaurHorn: ['рог минотавра', 'm'], dragonEgg: ['яйцо дракона', 'n'], robe: ['мантия', 'f'],
 };
 const PIECE_NOUN = { helmet: ['шлем', 'm'], chest: ['нагрудник', 'm'], legs: ['поножи', 'p'] };
-const POTION_OF = { heal: 'зелье лечения', invis: 'зелье невидимости' };
+const POTION_OF = { heal: 'зелье лечения' };
 const genderOf = (w) => (/[ая]$/.test(w) ? 'f' : /[ое]$/.test(w) ? 'n' : /[ыи]$/.test(w) ? 'p' : 'm');
 
 /** {name, gender, fam}: the key name of a good (the word the merchant understands), its gender, and its family. */

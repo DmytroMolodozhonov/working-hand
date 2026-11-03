@@ -5,7 +5,7 @@
  * «обширное разнообразие магических предметов — это очень важно, в других местах их мало»:
  *  - cauldrons  the master of cauldrons and potions: flasks, ingredients, a big cauldron beside (CastleTalk's
  *               POTION_GOODS / WIZARD_RARE, Cauldrons.js);
- *  - potions    healing potions (~50), flasks, rare ingredients, now and then the potion of invisibility;
+ *  - potions    healing potions (~50), flasks, rare ingredients;
  *  - robes      magic robes (some soften 2–3 strong spells) and plain ones;
  *  - wands      small and middling wands (power 3–30: ~210–510 coins). The strongest (31–50) are NOT
  *               sold anywhere — only found in chests (the author: «их никто не продаст»);
@@ -60,9 +60,8 @@ export function wizardGood(trade, k, n = 0) {
             if (k < 2) return { item: { kind: 'potion', uid: newUid(), rec: 'heal', color: HEAL_COLOR }, price: 50 };
             const x = r();
             if (x < 0.3) return { item: { kind: 'flask', uid: newUid(), count: 3 }, price: 15 };
-            if (x < 0.5) return { item: { kind: 'potion', uid: newUid(), rec: 'invis', color: 0x9a7bd8 }, price: 350 };
-            if (x < 0.7) return { item: { kind: 'web', uid: newUid(), count: 1 }, price: 150 };
-            if (x < 0.85) return { item: { kind: 'minotaurHorn', uid: newUid() }, price: 260 };
+            if (x < 0.55) return { item: { kind: 'web', uid: newUid(), count: 1 }, price: 150 };
+            if (x < 0.8) return { item: { kind: 'minotaurHorn', uid: newUid() }, price: 260 };
             return { item: { kind: 'glass', uid: newUid(), count: 3 }, price: 10 };
         }
         case 'robes': {

@@ -48,8 +48,8 @@ test('labels: unique sorts by key name, repeats by number in the right gender, m
     assert.deepEqual([...labelGoods(STALL, armour).values()].map((x) => x.text), ['Первый шлем', 'Второй шлем', 'Поножи']);
     const robes = [good('r1', { kind: 'robe' }, 1, 1), good('r2', { kind: 'robe' }, 1, 3)];
     assert.deepEqual([...labelGoods(STALL, robes).values()].map((x) => x.text), ['Первая мантия', 'Вторая мантия']);
-    const mixed = [good('f', { kind: 'phoenixFeather' }, 380, 0.5), good('p1', { kind: 'potion', rec: 'heal' }, 50, 1.5), good('fl', { kind: 'flask' }, 15, 2.5), good('w', { kind: 'web' }, 150, 3.5), good('p2', { kind: 'potion', rec: 'invis' }, 350, 4.5)];
-    assert.deepEqual([...labelGoods(STALL, mixed).values()].map((x) => x.text), ['Перо феникса', 'Первое зелье лечения', 'Колба', 'Паутина', 'Второе зелье невидимости']);
+    const mixed = [good('f', { kind: 'phoenixFeather' }, 380, 0.5), good('p1', { kind: 'potion', rec: 'heal' }, 50, 1.5), good('fl', { kind: 'flask' }, 15, 2.5), good('w', { kind: 'web' }, 150, 3.5), good('p2', { kind: 'potion', rec: 'heal' }, 50, 4.5)];
+    assert.deepEqual([...labelGoods(STALL, mixed).values()].map((x) => x.text), ['Перо феникса', 'Первое зелье лечения', 'Колба', 'Паутина', 'Второе зелье лечения']);
     const wm = [good('w1', { kind: 'wand' }, 1, 1), good('w2', { kind: 'wand' }, 1, 2), good('s', { kind: 'scroll' }, 1, 3)];
     assert.deepEqual([...labelGoods(STALL, wm).values()].map((x) => x.text), ['Первая палочка', 'Вторая палочка', 'Свиток']);
 });

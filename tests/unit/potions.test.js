@@ -100,12 +100,7 @@ test('cauldron: 30 s for all the ingredients — too late, the fire out, wrong t
     assert.equal(runFire(late, 1.5), 'late');
     assert.equal(late.phase, 'sludge');
     assert.equal(late.color, SLUDGE);
-    // the invisibility potion: all three in time, in any order
-    const inv = boiled();
-    for (const k of ['glass', 'minotaurHorn', 'web']) { assert.equal(addIngredient(inv, k), 'in'); runFire(inv, 9); }
-    assert.equal(inv.phase, 'brewing');
-    runFire(inv, 61);
-    assert.equal(inv.rec, 'invis');
+    // (the invisibility potion is gone: glass + web + horn is no recipe)
     // the fire goes out while brewing
     const out = boiled();
     addIngredient(out, 'apple'); addIngredient(out, 'crystal');
@@ -141,8 +136,8 @@ test('recipes: exactly the ingredients (counts too), any order', () => {
     assert.equal(matchRecipe({ apple: 1 }), null);
     assert.equal(matchRecipe({ apple: 1, crystal: 1, wool: 1 }), null);
     assert.equal(matchRecipe({}), null);
-    assert.equal(matchRecipe({ glass: 1, web: 1, minotaurHorn: 1 })?.id, 'invis');
-    assert.equal(recipeById('invis').effect, null, 'its effect: not described yet');
+    assert.ok(!matchRecipe({ glass: 1, web: 1, minotaurHorn: 1 }), 'no invisibility potion any more');
+    assert.equal(recipeById('invis'), undefined);
     for (const r of RECIPES) for (const k of Object.keys(r.ingredients)) assert.ok(ITEM_INFO[k], `${k} is a real thing`);
 });
 

@@ -50,11 +50,6 @@ export const RECIPES = [
         effect: { hp: 30 }, desc: 'Выпейте: +30 HP',
     },
     {
-        // (the author: the giant spider's web, the Minotaur's horn, glass from a broken window — within 30 s)
-        id: 'invis', name: 'Зелье невидимости', ingredients: { web: 1, minotaurHorn: 1, glass: 1 }, window: 30,
-        effect: null, desc: 'Что оно делает — автор скоро расскажет (пока его не выпить)',
-    },
-    {
         // (the author: the owl's feather → the phoenix's feather → the golden apple; the body's dark marks go, the dark LEVEL stays — DarkMagic.js)
         // brew: it stews longer than the others (2–3 minutes); skin: how much of the body's darkness one flask takes away (DARK.CLEAR_STEP)
         id: 'clearmind', name: 'Зелье светлого ума', ingredients: { owlFeather: 1, phoenixFeather: 1, apple: 1 }, window: 30, brew: [120, 180],
