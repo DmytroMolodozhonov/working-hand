@@ -86,14 +86,29 @@ export const BELT_UPPER = 0.38;
 // looking at the camera window - «палочка должна быть немного левее, а то она сейчас ближе к центру пояса нарисована и берется»)
 // The middle (0.115) is half way from the belt's middle to the left hip joint (~0.25) - the things' pocket's mirror; the outer edge
 // stays short of the left trouser pocket (u ~0.28: a hand in it is not at the wand).
-export const BELT_AT = { dy: [-0.45, 0.1], u: [-0.02, 0.25] };
+/**
+ * The hips when the camera sees them; when they are below the picture (a tall player, a close camera - the author's friend
+ * 02.11: neither the pocket nor the wand belt worked), estimated from the shoulders (a human torso is ~1.5 shoulder widths).
+ */
+export function beltHips(lm, aspect = 4 / 3) {
+    const ls = lm?.[11], rs = lm?.[12], lh = lm?.[23], rh = lm?.[24];
+    if (!ls || !rs || (ls.visibility ?? 1) < 0.5 || (rs.visibility ?? 1) < 0.5) return null;
+    if (lh && rh && (lh.visibility ?? 1) >= 0.4 && (rh.visibility ?? 1) >= 0.4 && lh.y <= 0.98 && rh.y <= 0.98 && (lh.y + rh.y) / 2 - (ls.y + rs.y) / 2 > 0.05) return { lh, rh };
+    const sx = (ls.x + rs.x) / 2, sy = (ls.y + rs.y) / 2;
+    const sw = Math.max(0.06, Math.hypot((ls.x - rs.x) * aspect, ls.y - rs.y));
+    const T = sw * 1.48, hw = (sw * 0.36) / Math.max(0.5, aspect), sgn = ls.x >= rs.x ? 1 : -1;
+    return { lh: { x: sx + sgn * hw, y: sy + T, visibility: 0.9 }, rh: { x: sx - sgn * hw, y: sy + T, visibility: 0.9 } };
+}
+
+export const BELT_AT = { dy: [-0.45, 0.15], u: [-0.08, 0.3] };
 /** The wider zone a hand at the wand stays in / takes it from (beltPose `near`), the same way to the left. */
 export const BELT_NEAR = { dy: [-0.6, 0.25], u: [-0.2, 0.7] };
 export function beltPose(lm, side, aspect = 4 / 3) {
     const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
-    const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], lh = lm?.[23], rh = lm?.[24];
+    const hp = beltHips(lm, aspect);
+    const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], lh = hp?.lh, rh = hp?.rh;
     if (!sh || !el || !wr || !lh || !rh) return null;
-    if ((lh.visibility ?? 1) < 0.5 || (rh.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5) return null;
+    if ((sh.visibility ?? 1) < 0.5) return null;
     const hx = (lh.x + rh.x) / 2, hy = (lh.y + rh.y) / 2;
     const T = hy - sh.y;
     if (T < 0.05) return null;
@@ -123,9 +138,9 @@ export function beltPose(lm, side, aspect = 4 / 3) {
  * `side` is the hand; the right hand's own hip is its pouches'. Pure.
  */
 export function bodyPlace(lm, side, aspect = 4 / 3) {
-    const b = beltPose(lm, side, aspect);
-    if (!b) return null;
-    const sh = lm[side === 'left' ? 11 : 12], lh = lm[23], rh = lm[24];
+    const b = beltPose(lm, side, aspect), hp = b && beltHips(lm, aspect);
+    if (!hp) return null;
+    const sh = lm[side === 'left' ? 11 : 12], lh = hp.lh, rh = hp.rh;
     const T = (lh.y + rh.y) / 2 - sh.y;
     const hw = (Math.abs(lh.x - rh.x) * aspect) / (2 * T); // (the hip joints' half spread, torso heights)
     // (u: towards the person's left from the hips' middle — the right hip is at −hw)
@@ -173,10 +188,11 @@ export const OFF_POCKET = [-0.3, 0.1]; // (wide: the author — crossing the bod
 // in a little higher than the hip joint: the opening of a real pocket is at the waist)
 export const OFF_POCKET_DY = [-0.6, 0.45]; // (±25 cm around the hip: the hand passes at the belt or lower, not exactly at one height)
 export function offHip(lm, hand, aspect = 4 / 3) {
-    const sh = lm?.[11], el = lm?.[13], wr = lm?.[15], hip = lm?.[24];
+    const hp = beltHips(lm, aspect);
+    const sh = lm?.[11], el = lm?.[13], wr = lm?.[15], hip = hp?.rh;
     if (!sh || !el || !wr || !hip) return null;
-    if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5) return null;
-    if ((wr.visibility ?? 1) < 0.3) return false;
+    if ((sh.visibility ?? 1) < 0.5) return null;
+    if ((wr.visibility ?? 1) < 0.15 && (el.visibility ?? 1) < 0.5) return false;
     const T = hip.y - sh.y;
     if (T < 0.05) return null;
     const dy = (wr.y - hip.y) / T;
@@ -223,11 +239,11 @@ export function bodyPlaces(lm, leftHand, rightHand, aspect = 4 / 3, leftHanded =
 
 export function purseHand(lm, side, aspect = 4 / 3, hipSide = side) {
     const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
-    const h = hipSide === 'left' ? 23 : 24; // (the left hand can reach across to the RIGHT hip)
+    const hp = beltHips(lm, aspect);
     const cross = hipSide !== side;
-    const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], hip = lm?.[h];
+    const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], hip = hipSide === 'left' ? hp?.lh : hp?.rh;
     if (!sh || !el || !wr || !hip) return null;
-    if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5 || (wr.visibility ?? 1) < 0.3) return null;
+    if ((sh.visibility ?? 1) < 0.5 || (wr.visibility ?? 1) < 0.2) return null;
     const T = hip.y - sh.y;
     if (T < 0.05) return null;
     const out = hipSide === 'left' ? 1 : -1; // (the person's left is the picture's right)

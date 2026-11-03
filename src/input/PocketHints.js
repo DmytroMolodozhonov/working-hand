@@ -13,7 +13,7 @@
  * them), the wand in front of the belly a little to the left (the RIGHT hand takes it). A left-hander: all mirrored.
  * The numbers are in torso heights (shoulder → hip), so the distance to the camera does not matter.
  */
-import { OFF_POCKET, OFF_POCKET_DY, BELT_AT } from './PoseInterpreter.js';
+import { OFF_POCKET, OFF_POCKET_DY, BELT_AT, beltHips } from './PoseInterpreter.js';
 
 /** The middles of the places, torso heights: `out` — outwards of the leading hand's hip (the pocket - the coins too: one place), `u` — towards the person's other side from the hips' middle (the wand); `dy` — below the hip line. */
 export const HINT_AT = {
@@ -45,10 +45,11 @@ const vis = (p) => (p?.visibility ?? 1);
 export function placesFrom(out, lm, leftHanded = false, aspect = 4 / 3) {
     if (!lm || lm.length < 25) return false;
     // (the leading hand's side: a right-hander's right hip is point 24, a left-hander's — 23; the shoulders mirror likewise)
-    const hip = lm[leftHanded ? 23 : 24], hipO = lm[leftHanded ? 24 : 23];
+    const hp = beltHips(lm, aspect);
+    const hip = leftHanded ? hp?.lh : hp?.rh, hipO = leftHanded ? hp?.rh : hp?.lh;
     const shO = lm[leftHanded ? 12 : 11], shL = lm[leftHanded ? 11 : 12];
     if (!hip || !hipO || !shO || !shL) return false;
-    if (vis(hip) < MIN_VIS || vis(hipO) < MIN_VIS || vis(shO) < MIN_VIS || vis(shL) < MIN_VIS) return false;
+    if (vis(shO) < MIN_VIS || vis(shL) < MIN_VIS) return false;
     const mx = (hip.x + hipO.x) / 2, my = (hip.y + hipO.y) / 2;
     const sx = (shO.x + shL.x) / 2, sy = (shO.y + shL.y) / 2;
     // (each place measured as the game reads it: the pocket and the pouch as offHip - the other hand's shoulder to the leading

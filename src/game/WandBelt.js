@@ -28,7 +28,7 @@ export const BELT_TIP = new THREE.Vector3(-0.3, -0.85, -0.24);
 const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
 const CALM_S = 0.25; // s the arm must be calm first (no wind-up, no flick)
 /** Looking down this much (the view's forward, down, in the body's own space) to tuck it in: a slight nod never does. */
-export const TUCK_LOOK = -0.5;
+export const TUCK_LOOK = -0.25;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
