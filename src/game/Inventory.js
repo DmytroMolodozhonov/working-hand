@@ -446,8 +446,13 @@ export class Inventory {
         const want = SLOT_COUNT + n;
         while (this.slots.length < want) this.slots.push(null);
         while (this.slots.length > want) {
-            const it = this.slots.pop();
-            if (it) { const j = this.slots.findIndex((s) => !s); if (j >= 0) this.slots[j] = it; }
+            const last = this.slots[this.slots.length - 1];
+            if (last) { // (a thing in the last cell moves into a free one - and if there is none the cell STAYS: nothing is ever lost with a backpack taken off)
+                const j = this.slots.findIndex((s, k) => !s && k < this.slots.length - 1);
+                if (j < 0) break;
+                this.slots[j] = last;
+            }
+            this.slots.pop();
         }
         if (this.selected >= this.slots.length) this.selected = -1;
         this._buildBar();

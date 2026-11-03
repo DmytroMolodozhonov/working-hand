@@ -57,6 +57,9 @@ export function armorIcon(slot, code = 1, color = 0) {
     return `<svg viewBox="0 0 24 24" width="100%" height="100%"><path d="${path}" fill="${fill}" stroke="${stroke}" stroke-width="1"/>${slot === 'robe' && code >= 2 ? '<circle cx="12" cy="13" r="1.2" fill="#fff2a0"/>' : ''}</svg>`;
 }
 
+/** ms: a piece changed by hand for another cannot be changed again for this long (the author 02.11: 5 s). */
+export const SWAP_LOCK_MS = 5000;
+
 export class ArmorSystem {
     constructor(game) {
         this.game = game;
@@ -97,6 +100,7 @@ export class ArmorSystem {
         if (item.kind === 'armor' && g.darkLord?.on) item.cursed = true; // (any armour a dark mage puts on turns black and starts to break)
         const old = this.worn[slot];
         this.worn[slot] = item;
+        if (old && side) (this._swapAt ||= {})[slot] = performance.now(); // (changed by hand: the same place is not changed again for SWAP_LOCK_MS)
         // (changing: the old piece comes off into the hand the new one came from — it is free now; else a slot, else the ground)
         let inHand = false;
         if (old) { inHand = !!(side && g.items?.takeIntoHand?.(old, side, { closed: true })); if (!inHand) this._stow(old, drop); } // (closed: the fist holds it, an open hand would let it fall)
@@ -385,6 +389,13 @@ export class ArmorSystem {
             // (the High Mage's suit does not come off by hand; a plain thing does not push it out)
             if (this.worn[slot]?.archmage && !h.item.archmage) { g.hud?.setVoice?.('🌟 Костюм Высшего мага не снять — он на вас', true); continue; }
             if (slot === 'robe' && this.worn.robe?.lord) { g.hud?.setVoice?.(`🜏 ${CURSE_LINE}`, true); continue; } // (the dark mage's outfit: nothing takes its place)
+            // (the author: a piece just changed for another stays on for 5 s - the same place is not changed again at once)
+            const lockLeft = SWAP_LOCK_MS - (performance.now() - (this._swapAt?.[slot] ?? -1e9));
+            if (this.worn[slot] && lockLeft > 0) {
+                if (!(performance.now() - (this._lockSay || 0) < 1500)) { this._lockSay = performance.now(); g.hud?.setVoice?.(`⏳ Только что сменили — это место можно менять снова через ${Math.ceil(lockLeft / 1000)} с`, true); }
+                (this._swapLock ||= {})[side] = false;
+                continue;
+            }
             const item = items.releaseHand(side);
             if (inv?.inHand?.item === item) inv.inHand = null;
             if (!this.wear(item, { side })) items.takeIntoHand?.(item, side, { closed: true });

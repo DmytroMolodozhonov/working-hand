@@ -110,7 +110,10 @@ export class WandBelt {
             const h = items.held[side];
             if (h && h.item.kind === 'wand') {
                 // tucking it in: at the waistband, the tip down
-                const down = h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.2 : false; // (pointing down at all)
+                // (a spell on the wand - Lumos and the like: the spell holds the wand's own direction (character.aim), so the model never
+                // points down at the belt and it would not tuck in - the author 02.11; with a spell on, the hand at the belt is enough)
+                const spellOn = !!ch.aim?.[side] || !!g.spellBusy?.() || !!g.wandMagic?.active;
+                const down = spellOn || (h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.2 : false); // (pointing down at all)
                 // ...and the arm otherwise still: a wind-up or a flick (throwing Lumos, a spell)
                 // passing the hip never tucks it in — the hand and the real wrist must be calm
                 // (the hand's speed AGAINST THE BODY: on a sailing, rolling ship or going up its stairs
@@ -211,7 +214,9 @@ export class WandBelt {
         const it = g.items.releaseHand(side);
         if (!it) return;
         if (inv.inHand?.item === it) inv.inHand = null;
-        const free = inv.slots.findIndex((x) => !x);
+        let free = inv.slots.findIndex((x) => !x);
+        // (the author 02.11: the wand must always go in - after a long game the cells were full and it would not: it gets a cell of its own)
+        if (free < 0 && inv.setExtraSlots) { inv.setExtraSlots(inv.slots.length - 5 + 1); free = inv.slots.findIndex((x) => !x); }
         // the belt wand first in the slots (the one on the body)
         this._left[side] = false;
         this.log.push('away:' + side);

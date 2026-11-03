@@ -1021,7 +1021,9 @@ export class ItemSystem {
                 const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight, blurOk: true, strict: true });
                 const td = this._thr[side];
                 if (td.why) { handLog(`бросок не засчитан (${this._handName(side)}): ${td.why}`); td.why = null; }
-                if (thr) { this._letGo(side, tk.swing(tt), `бросок палочки (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)`); continue; }
+                // (the author 02.11: from the leading hand the wand never falls or flies off - only into the belt, WandBelt.js)
+                if (thr) { handLog(`бросок палочки из ведущей руки отключён (замах ${thr.speed.toFixed(1)} м/с)`); continue; }
+                if (false) { this._letGo(side, tk.swing(tt), `бросок палочки (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)`); continue; }
                 this._dropTry(side, kind, curl < DROP.CLOSED && tracked ? 'палочка в ведущей руке не выпадает из разжатой руки — только бросок' : null);
                 continue;
             }
