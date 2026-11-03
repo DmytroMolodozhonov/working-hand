@@ -972,6 +972,13 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'chest', id: chest.id });
     }
 
+    /** (guest) Standing by a cave chest the host may not have built yet: ask the host to open it and roll its loot. */
+    chestAsk(chest, by) {
+        if (this.net.isHost) return;
+        const p = chest.getRewardPosition ? chest.getRewardPosition(new THREE.Vector3()) : chest.mesh.position;
+        this.net.send({ t: 'chest-ask', id: chest.id, x: p.x, y: p.y, z: p.z, by: by || this.net.id, room: chest.room || null, df: chest.dungeonFlavor || null, ds: chest.dungeonSize || null });
+    }
+
     itemNew(item, p, v, hover) {
         if (this.net.isHost) this.net.send({ t: 'inew', item, p: [r3(p.x), r3(p.y), r3(p.z)], v: v ? [r3(v.x), r3(v.y), r3(v.z)] : null, h: hover ? 1 : 0 }, true);
     }
@@ -1179,6 +1186,20 @@ export class NetSync {
                 (g._openedChests = g._openedChests || new Set()).add(m.id);
                 const c = g.chests.find((x) => x.id === m.id);
                 if (c && !this.net.isHost) g.openChest(c);
+                break;
+            }
+            case 'chest-ask': {
+                if (!this.net.isHost || !m.id || g._openedChests?.has(m.id)) break;
+                const c = g.chests.find((x) => x.id === m.id);
+                if (c) { if (!c.isOpen && !c.locked) g.openChest(c, null, m.by); break; }
+                // (the host's land there is not made yet: roll the chest's loot where the guest sees it)
+                (g._openedChests = g._openedChests || new Set()).add(m.id);
+                const fake = { id: m.id, room: m.room, dungeonFlavor: m.df, dungeonSize: m.ds, itemType: 'loot' };
+                const rp = new THREE.Vector3(m.x || 0, m.y || 0, m.z || 0);
+                const pouch = g._chestPouch ? g._chestPouch(fake) : [];
+                pouch.push(...(g.houseMagic?.scrollFor(m.by) || []));
+                g.items?.lootChest(rp, Math.random, null, m.room === 'port' ? 'port' : null, { chest: fake, extra: pouch });
+                this.net.send({ t: 'chest', id: m.id });
                 break;
             }
             case 'boss': if (!this.net.isHost) g.spiders?.applyNet(rows(m.l)); break;

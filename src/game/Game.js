@@ -1373,12 +1373,13 @@ export class Game {
                 chest.awayT = far ? (chest.awayT || 0) + dt : 0;
                 if (chest.awayT > 4) { chest.awayT = 0; chest.close(); }
             }
-            if (chest.isOpen || chest.locked || (!this.authority && !chest.localOnly)) continue; // (castle chests: locked while the king lives)
+            if (chest.isOpen || chest.locked || (!this.authority && !chest.localOnly && chest.cave == null)) continue; // (a cave chest: a guest far from the host asks the host to open it) // (castle chests: locked while the king lives)
             const cp = chest.getPosition();
-            for (let i = 0; i < (chest.localOnly ? 1 : players.length); i++) { // (a ghosts' chest: only my own hero opens it — the first of `players` is mine)
+            for (let i = 0; i < (!this.authority || chest.localOnly ? 1 : players.length); i++) { // (a ghosts' chest: only my own hero opens it — the first of `players` is mine)
                 const p = players[i];
                 const dx = p.x - cp.x, dz = p.z - cp.z;
                 if (dx * dx + dz * dz < (chest.ship ? 2.6 * 2.6 : 4.5 * 4.5 + 9)) { // (a ship's chest: only when you really stand by it — walking past the deck did «open» it and the crew cried «thief»)
+                    if (!this.authority && !chest.localOnly) { if (!(performance.now() - (chest._askAt || 0) < 900)) { chest._askAt = performance.now(); this.sync?.chestAsk?.(chest, ids[i]); } break; }
                     this.openChest(chest, null, ids[i]);
                     break;
                 }
@@ -1516,7 +1517,11 @@ export class Game {
             this._caveChests = this._caveChests || new Set();
             this._caveSys = false; // (a cave system round the hero: the cave map may be wanted — _updateCaveMap)
             let built = false;
-            for (const cv of t.cavesNear(p.x, p.z, 90, true).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90, true) : [], t.densNear ? t.densNear(p.x, p.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(p.x, p.z, 90, true) : [])) {
+            // (the host builds caves near EVERY player, not only his own hero: a guest in a far cave must find its chests too - the author 02.11)
+            const scan = this.authority ? this._playerPositions() : [p];
+            const seenCv = new Set(), caves = [];
+            for (const q of scan) for (const cv of t.cavesNear(q.x, q.z, 90, true).concat(t.lairsNear ? t.lairsNear(q.x, q.z, 90, true) : [], t.densNear ? t.densNear(q.x, q.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(q.x, q.z, 90, true) : [])) if (!seenCv.has(cv.id)) { seenCv.add(cv.id); caves.push(cv); }
+            for (const cv of caves) {
                 if (cv.x0 != null ? ((cv.kind !== 'dungeon' && cv.kind !== 'ghostcastle') || cv.under) && p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
