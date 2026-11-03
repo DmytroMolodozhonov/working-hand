@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { Zombie } from '../../src/entities/Zombie.js';
 import { VillagerModel, villagerLook } from '../../src/entities/VillagerModel.js';
 import { animalModel } from '../../src/game/Animals.js';
+import { FarShape } from '../../src/core/FarShape.js';
+import { updateFarBatches, resetFarBatches, FAR_BATCH, farBatchStats } from '../../src/core/FarBatch.js';
 import { CreatureImpact, CREATURE, kindOf, registerKind, KINDS } from '../../src/game/CreatureImpact.js';
 
 /** A tiny world: one zombie, one villager, a cow and a pig, on flat ground; I am the host. */
@@ -172,4 +174,34 @@ test('a knight knocked up a slope climbs it with the ground, and does not sink i
         assert.ok(knight.y >= h(Math.round(knight.x)) - 1e-6, 'never below the ground');
     }
     assert.ok(knight.x > 0.5, 'was pushed up the hill');
+});
+
+test('a horse hit by Expelliarmus keeps its FarShape on the root and never blinks in FarBatch', () => {
+    resetFarBatches();
+    const { g, ci } = world();
+    const renderer = { capabilities: { floatVertexTextures: true } };
+    const m = animalModel('horse');
+    m.scale.setScalar(2.3);
+    m.position.set(4, 0, 5);
+    g.scene.add(m);
+    const horse = { id: 103, type: 'horse', group: m, model: m, isAnimal: true, dead: false, stunT: 0, vel: new THREE.Vector3() };
+    g.animals.list.push(horse);
+    g.animals.byId.set(103, horse);
+    horse.far = new FarShape(m);
+    m.userData.farRadius = 3.5 * 2.3;
+    horse.far.set(true);
+    g.scene.updateMatrixWorld(true);
+    for (let t = 0; t < FAR_BATCH.STABLE + 0.3; t += 0.1) updateFarBatches(g.scene, renderer, 0.1);
+    assert.ok(horse.far._slots, 'batched before the spell');
+    const parentLeaves0 = farBatchStats.why.parent || 0;
+    ci.spellHit(horse, 'Expelliarmus', new THREE.Vector3(4, 0, 0), 'me');
+    for (let i = 0; i < 30; i++) {
+        ci.update(0.1);
+        g.scene.updateMatrixWorld(true);
+        updateFarBatches(g.scene, renderer, 0.1);
+        assert.ok(horse.far.meshes.every((mesh) => mesh.parent === m), 'FarShape meshes stay on the model root');
+        assert.ok(horse.far.meshes.every((mesh) => mesh.visible || mesh.userData.batched), 'horse is always drawn (either by its FarShape or by FarBatch)');
+    }
+    assert.equal(farBatchStats.why.parent || 0, parentLeaves0, 'never kicked out of FarBatch because of parent');
+    resetFarBatches();
 });

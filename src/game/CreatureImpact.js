@@ -60,7 +60,7 @@ function wrapPivot(group, y = 0) {
     pivot.position.y = y;
     const inner = new THREE.Group();
     inner.position.y = -y;
-    for (const ch of [...group.children]) inner.add(ch);
+    for (const ch of [...group.children]) if (!ch.userData.farOne) inner.add(ch); // (FarShape: its skinned mesh stays on the root — its bones are the parts inside)
     pivot.add(inner);
     group.add(pivot);
     group.userData.impPivot = pivot;
