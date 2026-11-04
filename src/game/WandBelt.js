@@ -125,7 +125,14 @@ export class WandBelt {
                 // (...and never a wand this hand has just taken out of the pocket: reaching across to the other hip it
                 // passes the waistband looking down — the author's second wand went to the belt instead of the hand)
                 const fresh = inv.pocketCycling?.(side) || inv.justTook?.(side);
-                this._tuck[side] = !fresh && near && down && this._pushed[side] && this._calm[side] > CALM_S && this.lookingDown(TUCK_LOOK) ? this._tuck[side] + dt : 0;
+                const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
+                const belly3d = bellyWeight(this._mirror() ? _d.copy(local).setX(-local.x) : local) > 0.25;
+                const inZone = near || !!rb?.near || belly3d;
+                const lookOk = this.lookingDown(-0.08) || (inZone && down);
+                const pushOk = this._pushed[side] || (inZone && (this._stayT = (this._stayT || 0) + dt) > 0.35);
+                if (!inZone) this._stayT = 0;
+                this._tuck[side] = !fresh && inZone && down && pushOk && this._calm[side] > 0.15 && lookOk ? this._tuck[side] + dt : 0;
+                if ((rb && rb.dy > -0.8 && rb.dy < 0.7) || belly3d) this._diagLog(side, 'tuck', rb, local, { inZone, down, pushOk, calm: +this._calm[side].toFixed(2), lookOk, fresh, tuck: +this._tuck[side].toFixed(2) });
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
                 continue;
             }
@@ -141,7 +148,8 @@ export class WandBelt {
             const free = !h && !g.weapons?.hands?.[side]?.held;
             // (only the leading hand takes it off the belt: the right one, a left-hander's left)
             const leading = side === (g.dom || 'right');
-            if (free && leading && this.beltWand() && this.lookingDown() && curl > 0.45 && this._open[side]) {
+            if (reach && leading && this.beltWand()) this._diagLog(side, 'take', rb, null, { free, look: this.lookingDown(-0.05), curl: +curl.toFixed(2), open: this._open[side] });
+            if (free && leading && this.beltWand() && this.lookingDown(-0.05) && curl > 0.35) {
                 this._take(side);
                 return;
             }
@@ -201,6 +209,13 @@ export class WandBelt {
      * the feet doesn't tip the look). Taking it: a slight look down is enough; tucking it in
      * needs a real look down (TUCK_LOOK).
      */
+    _diagLog(side, act, rb, local, st) {
+        const now = performance.now();
+        if (now - (this._diagAt || 0) < 1000) return;
+        this._diagAt = now;
+        console.info('[Предметы]', `пояс(${act} ${side}): camera dy=${rb?.dy?.toFixed(2)} u=${rb?.u?.toFixed(2)} bend=${rb?.bend?.toFixed(2)} upper=${rb?.upper} at=${rb?.at} near=${rb?.near} hipsEst=${rb?.hipsEst} | 3d=${local ? local.toArray().map((x) => x.toFixed(2)).join(',') : '-'} | ${JSON.stringify(st)}`);
+    }
+
     lookingDown(lim = -0.1) {
         const ch = this.game.character;
         if (!ch.getHeadQuaternion) return false;

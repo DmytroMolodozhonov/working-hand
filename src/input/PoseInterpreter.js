@@ -72,7 +72,7 @@ export function pocketPose(lm, hand, side, aspect = 4 / 3, hipSide = side) {
  * (the wand's belt) is not at its own hip.
  */
 /** The upper arm (shoulder → elbow) seen at least this long (torso heights) for a hand at the belt: hanging by the body ~0.5. */
-export const BELT_UPPER = 0.38;
+export const BELT_UPPER = 0.22;
 /**
  * The REAL hand at the wand's place on the waistband (WandBelt.js), from the camera's
  * skeleton: the wrist at the waist (between the waist and the hip line), in front of the
@@ -97,12 +97,12 @@ export function beltHips(lm, aspect = 4 / 3) {
     const sx = (ls.x + rs.x) / 2, sy = (ls.y + rs.y) / 2;
     const sw = Math.max(0.06, Math.hypot((ls.x - rs.x) * aspect, ls.y - rs.y));
     const T = sw * 1.48, hw = (sw * 0.36) / Math.max(0.5, aspect), sgn = ls.x >= rs.x ? 1 : -1;
-    return { lh: { x: sx + sgn * hw, y: sy + T, visibility: 0.9 }, rh: { x: sx - sgn * hw, y: sy + T, visibility: 0.9 } };
+    return { est: true, lh: { x: sx + sgn * hw, y: sy + T, visibility: 0.9 }, rh: { x: sx - sgn * hw, y: sy + T, visibility: 0.9 } };
 }
 
-export const BELT_AT = { dy: [-0.45, 0.15], u: [-0.08, 0.3] };
+export const BELT_AT = { dy: [-0.55, 0.35], u: [-0.22, 0.42] };
 /** The wider zone a hand at the wand stays in / takes it from (beltPose `near`), the same way to the left. */
-export const BELT_NEAR = { dy: [-0.6, 0.25], u: [-0.2, 0.7] };
+export const BELT_NEAR = { dy: [-0.75, 0.5], u: [-0.35, 0.8] };
 export function beltPose(lm, side, aspect = 4 / 3) {
     const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
     const hp = beltHips(lm, aspect);
@@ -121,9 +121,9 @@ export function beltPose(lm, side, aspect = 4 / 3) {
     // short, its wrist over the belly and its elbow anywhere — the author: the arm straight, a little to the
     // left, and the wand went to the belt)
     const upper = nu / T >= BELT_UPPER;
-    const at = dy > BELT_AT.dy[0] && dy < BELT_AT.dy[1] && u > BELT_AT.u[0] && u < BELT_AT.u[1] && bend > 0.55 && upper; // (u ~0.25: the left hip, its trouser pocket)
+    const at = dy > BELT_AT.dy[0] && dy < BELT_AT.dy[1] && u > BELT_AT.u[0] && u < BELT_AT.u[1] && bend > 0.25 && upper; // (u ~0.25: the left hip, its trouser pocket)
     const near = dy > BELT_NEAR.dy[0] && dy < BELT_NEAR.dy[1] && u > BELT_NEAR.u[0] && u < BELT_NEAR.u[1] && bend > 0.35 && upper;
-    return { at, near, dy, u, bend };
+    return { at, near, dy, u, bend, upper: +(nu / T).toFixed(2), hipsEst: !!hp.est };
 }
 
 /**
@@ -183,10 +183,10 @@ const mirrorHand = (h) => (h ? h.map((p) => ({ ...p, x: 1 - p.x })) : h);
 // (moved in onto the belt: the middle of the zone is on the right half of the belt, between the hip joint and the belly's
 // middle - the author: the things' place «right on the belt, on the right»; it used to be centred on the hip joint itself, at
 // the body's edge, and its hint in the camera window hung off the belt. The outside edge still a little past the hip joint)
-export const OFF_POCKET = [-0.3, 0.1]; // (wide: the author — crossing the body must be as easy as the rest; from in front of the hip to a little outside it) // (the wrist outward of the hip joint, torso heights)
+export const OFF_POCKET = [-0.45, 0.25]; // (wide: the author — crossing the body must be as easy as the rest; from in front of the hip to a little outside it) // (the wrist outward of the hip joint, torso heights)
 // (its height: the wrist from this far above the hip to this far below, torso heights — the author puts the hand
 // in a little higher than the hip joint: the opening of a real pocket is at the waist)
-export const OFF_POCKET_DY = [-0.6, 0.45]; // (±25 cm around the hip: the hand passes at the belt or lower, not exactly at one height)
+export const OFF_POCKET_DY = [-0.7, 0.6]; // (±25 cm around the hip: the hand passes at the belt or lower, not exactly at one height)
 export function offHip(lm, hand, aspect = 4 / 3) {
     const hp = beltHips(lm, aspect);
     const sh = lm?.[11], el = lm?.[13], wr = lm?.[15], hip = hp?.rh;
@@ -201,13 +201,12 @@ export function offHip(lm, hand, aspect = 4 / 3) {
     const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
     const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
     if (nu < 1e-4 || nf < 1e-4) return false;
-    if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < 0.25) return false;
+    if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < 0.15) return false;
     if (wOut >= OFF_POCKET[0] && wOut <= OFF_POCKET[1] && dy > OFF_POCKET_DY[0] && dy < OFF_POCKET_DY[1]) {
         if (!hand || hand.length < 21) return 'pocket';
         const dxh = (hand[9].x - hand[0].x) * aspect, dyh = hand[9].y - hand[0].y;
         const len = Math.hypot(dxh, dyh);
-        // (fingers down into it, within ~70°: reaching across, the hand comes in at a slant)
-        return len > 1e-4 && dyh / len > 0.35 ? 'pocket' : 'purse';
+        return len > 1e-4 && dyh / len > 0.15 ? 'pocket' : 'purse';
     }
     return false;
 }
