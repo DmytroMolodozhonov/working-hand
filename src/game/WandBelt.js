@@ -28,7 +28,7 @@ export const BELT_TIP = new THREE.Vector3(-0.3, -0.85, -0.24);
 const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
 const CALM_S = 0.25; // s the arm must be calm first (no wind-up, no flick)
 /** Looking down this much (the view's forward, down, in the body's own space) to tuck it in: a slight nod never does. */
-export const TUCK_LOOK = -0.25;
+export const TUCK_LOOK = -0.5;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
@@ -125,14 +125,9 @@ export class WandBelt {
                 // (...and never a wand this hand has just taken out of the pocket: reaching across to the other hip it
                 // passes the waistband looking down — the author's second wand went to the belt instead of the hand)
                 const fresh = inv.pocketCycling?.(side) || inv.justTook?.(side);
-                const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
-                const belly3d = bellyWeight(this._mirror() ? _d.copy(local).setX(-local.x) : local) > 0.25;
-                const inZone = near || !!rb?.near || belly3d;
-                const lookOk = this.lookingDown(-0.08) || (inZone && down);
-                const pushOk = this._pushed[side] || (inZone && (this._stayT = (this._stayT || 0) + dt) > 0.35);
-                if (!inZone) this._stayT = 0;
-                this._tuck[side] = !fresh && inZone && down && pushOk && this._calm[side] > 0.15 && lookOk ? this._tuck[side] + dt : 0;
-                if ((rb && rb.dy > -0.8 && rb.dy < 0.7) || belly3d) this._diagLog(side, 'tuck', rb, local, { inZone, down, pushOk, calm: +this._calm[side].toFixed(2), lookOk, fresh, tuck: +this._tuck[side].toFixed(2) });
+                const lookOk = this.lookingDown(TUCK_LOOK);
+                this._tuck[side] = !fresh && near && down && this._pushed[side] && this._calm[side] > CALM_S && lookOk ? this._tuck[side] + dt : 0;
+                if (rb && rb.dy > -0.7 && rb.dy < 0.5) this._diagLog(side, 'tuck', rb, ch.getHandWorldPosition(side, _v).applyMatrix4(_inv), { near, down, pushed: this._pushed[side], calm: +this._calm[side].toFixed(2), lookOk, fresh, tuck: +this._tuck[side].toFixed(2) });
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
                 continue;
             }
@@ -148,8 +143,8 @@ export class WandBelt {
             const free = !h && !g.weapons?.hands?.[side]?.held;
             // (only the leading hand takes it off the belt: the right one, a left-hander's left)
             const leading = side === (g.dom || 'right');
-            if (reach && leading && this.beltWand()) this._diagLog(side, 'take', rb, null, { free, look: this.lookingDown(-0.05), curl: +curl.toFixed(2), open: this._open[side] });
-            if (free && leading && this.beltWand() && this.lookingDown(-0.05) && curl > 0.35) {
+            if (reach && leading && this.beltWand()) this._diagLog(side, 'take', rb, null, { free, look: this.lookingDown(), curl: +curl.toFixed(2), open: this._open[side] });
+            if (free && leading && this.beltWand() && this.lookingDown() && curl > 0.45 && this._open[side]) {
                 this._take(side);
                 return;
             }

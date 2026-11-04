@@ -622,12 +622,10 @@ export class Inventory {
             // and only the OTHER hand reaches into it, across the body: PoseInterpreter.offHip;
             // the leading hand is the wand's and never takes from it or puts into it)
             const pk = g.currentPose.pocket, dom = g.dom || 'right', off = dom === 'right' ? 'left' : 'right';
-            const near3d = side === off && nearPocket(local, g.dom === 'left' ? -1 : 1) && Math.hypot(local.x - POCKET_AT[0] * (g.dom === 'left' ? -1 : 1), local.y - POCKET_AT[1]) < 0.38;
-            let inPocket = side === off ? (pk?.off === true || g.currentPose.purse?.off === true || near3d) : false;
+            let inPocket = side === off ? pk?.off : false;
+            if (side === off && inPocket !== true && g.currentPose.purse?.off === true && this._pocketable(off)) inPocket = true;
             const zone = inPocket === true;
-            const lookOk = this.headDown || !!this.belt.lookingDown(-0.02) || (zone && (st.zoneT = (st.zoneT || 0) + dt) > 0.35);
-            if (!zone) st.zoneT = 0;
-            if (inPocket && !lookOk) inPocket = false;
+            if (inPocket && !this.headDown) inPocket = false;
             if (side === off) this._pocketJournal(side, local, zone, st);
             if (side === off) this._hintStep(side, local, sx, dt);
             // (the wand is not put away / drawn by a pocket — lowering the arm did it by
