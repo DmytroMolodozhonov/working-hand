@@ -623,15 +623,16 @@ export class Inventory {
             // the leading hand is the wand's and never takes from it or puts into it)
             const pk = g.currentPose.pocket, dom = g.dom || 'right', off = dom === 'right' ? 'left' : 'right';
             let inPocket = side === off ? pk?.off : false;
-            if (side === off && inPocket !== true && g.currentPose.purse?.off === true && this._pocketable(off)) inPocket = true;
+            const emptyPocketTake = !g.items?.held[off] && !g.weapons?.hands?.[off]?.held && g.coinDeal && !g.coinDeal.mayTake();
+            if (side === off && inPocket !== true && g.currentPose.purse?.off === true && (this._pocketable(off) || this._cyc?.side === off || emptyPocketTake)) inPocket = true;
             const zone = inPocket === true;
             if (inPocket && !this.headDown) inPocket = false;
             if (side === off) this._pocketJournal(side, local, zone, st);
             if (side === off) this._hintStep(side, local, sx, dt);
             // (the wand is not put away / drawn by a pocket — lowering the arm did it by
             // accident: it has its own place at the waistband, WandBelt.js)
-            st.inT = inPocket ? (st.inT || 0) + dt : 0;
-            st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
+            if (inPocket) { st.inT = (st.inT || 0) + dt; st.outT = 0; }
+            else { st.outT = (st.outT || 0) + dt; if (st.outT > 0.12) st.inT = 0; }
             if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
             if (this._cyc?.side === side && st.outT > POCKET_PICK) { // (the hand went away and did not come back: what it holds is its choice)
                 // (blocks are never in g.items.held — the stack stays in its cell and is drawn in the hand: resSide;

@@ -122,7 +122,9 @@ export class ArmGuard {
                 const J = this.joints.get(k);
                 const vis = p.visibility ?? 1;
                 const { edge, where } = edgeOf(p);
-                const trustRaw = smoothstep(P.visLo, P.visHi, vis) * smoothstep(P.edgeLo, P.edgeHi, edge);
+                // (bottom edge: a hand lowered to the belt or pocket is at y ≈ 0.98..1.18 with high visibility - never frozen above the belt)
+                const eLo = where === 'bottom' ? -0.22 : P.edgeLo, eHi = where === 'bottom' ? -0.05 : P.edgeHi;
+                const trustRaw = smoothstep(P.visLo, P.visHi, vis) * smoothstep(eLo, eHi, edge);
                 // 1. trust: down at once, back up gently
                 if (!J.has) J.trust = trustRaw;
                 else J.trust += (trustRaw - J.trust) * Math.min(1, dt / (trustRaw < J.trust ? P.trustFall : P.trustRise));
@@ -135,7 +137,7 @@ export class ArmGuard {
                 // (learnt only once the trust itself is back: a point seen again glides in from the held bone)
                 if (trustRaw > P.learnAt && J.trust > P.learnAt) {
                     J.off = { x: rx, y: ry, z: rz };
-                    J.len = J.lenSeen ? Math.max(rLen, J.len * (1 - Math.min(1, dt * P.lenForget))) : rLen;
+                    J.len = J.lenSeen ? Math.max(0.7, rLen, J.len * (1 - Math.min(1, dt * P.lenForget))) : Math.max(0.7, rLen);
                     J.lenSeen++;
                 }
 

@@ -42,7 +42,7 @@ export class LineFit {
             const fit = (n * this.sxy - this.sx * this.sy) / v;
             if (fit * this.b0 > 0) b = Math.sign(this.b0) * Math.min(Math.abs(this.b0) * 2, Math.max(Math.abs(this.b0) * 0.5, Math.abs(fit)));
         }
-        const a = Math.max(-0.4, Math.min(0.4, (this.sy - b * this.sx) / n));
+        const a = Math.max(-0.18, Math.min(0.18, (this.sy - b * this.sx) / n));
         return { a, b };
     }
 }

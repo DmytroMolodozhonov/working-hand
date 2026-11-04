@@ -28,7 +28,7 @@ export const BELT_TIP = new THREE.Vector3(-0.3, -0.85, -0.24);
 const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
 const CALM_S = 0.25; // s the arm must be calm first (no wind-up, no flick)
 /** Looking down this much (the view's forward, down, in the body's own space) to tuck it in: a slight nod never does. */
-export const TUCK_LOOK = -0.5;
+export const TUCK_LOOK = -0.34;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
@@ -96,13 +96,14 @@ export class WandBelt {
             // the edge never tucks it in
             const from = this._from[side]; // (the real wrist's places outside it lately)
             if (rb && !near) { from.push({ dy: rb.dy, u: rb.u, t: now }); if (from.length > 60) from.shift(); }
-            if (!rb?.near) this._pushed[side] = false;
-            else if (!this._pushed[side] && near) {
+            const outS = this._outT || (this._outT = { left: 0, right: 0 });
+            outS[side] = rb?.near ? 0 : outS[side] + dt;
+            if (outS[side] > 0.25) this._pushed[side] = false;
+            else if (!this._pushed[side] && near && rb) {
                 // (the camera's points glide in over a few pictures: the farthest of the last ones counts)
                 const recent = from.filter((e, i) => now - e.t < 3000 || i >= from.length - 8);
                 if (recent.some((e) => Math.hypot(e.dy - rb.dy, e.u - rb.u) > 0.15)) this._pushed[side] = true;
             }
-            if (this._pushed[side] && near) from.length = 0;
             // (after taking it or tucking it in, the hand must leave the belt first: a wand just
             // taken, still at the waistband pointing down, went straight back)
             if (!near) this._left[side] = true;
@@ -229,6 +230,8 @@ export class WandBelt {
         if (free < 0 && inv.setExtraSlots) { inv.setExtraSlots(inv.slots.length - 5 + 1); free = inv.slots.findIndex((x) => !x); }
         // the belt wand first in the slots (the one on the body)
         this._left[side] = false;
+        this._pushed[side] = false;
+        this._from[side].length = 0;
         this.log.push('away:' + side);
         if (free >= 0) {
             inv.slots[free] = it;
