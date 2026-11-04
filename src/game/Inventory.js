@@ -622,13 +622,12 @@ export class Inventory {
             // and only the OTHER hand reaches into it, across the body: PoseInterpreter.offHip;
             // the leading hand is the wand's and never takes from it or puts into it)
             const pk = g.currentPose.pocket, dom = g.dom || 'right', off = dom === 'right' ? 'left' : 'right';
-            let inPocket = side === off ? pk?.off : false;
-            // a thing in the other hand brought to the pouches, as a pouch is tied on (the hand is
-            // seen holding it, so its fingers never point down into the pocket): it goes into a slot too
-            if (side === off && inPocket !== true && g.currentPose.purse?.off === true && this._pocketable(off)) inPocket = true;
-            // ...and only looking down at it (as in life — never by chance)
+            const near3d = side === off && nearPocket(local, g.dom === 'left' ? -1 : 1) && Math.hypot(local.x - POCKET_AT[0] * (g.dom === 'left' ? -1 : 1), local.y - POCKET_AT[1]) < 0.38;
+            let inPocket = side === off ? (pk?.off === true || g.currentPose.purse?.off === true || near3d) : false;
             const zone = inPocket === true;
-            if (inPocket && !this.headDown) inPocket = false;
+            const lookOk = this.headDown || !!this.belt.lookingDown(-0.02) || (zone && (st.zoneT = (st.zoneT || 0) + dt) > 0.35);
+            if (!zone) st.zoneT = 0;
+            if (inPocket && !lookOk) inPocket = false;
             if (side === off) this._pocketJournal(side, local, zone, st);
             if (side === off) this._hintStep(side, local, sx, dt);
             // (the wand is not put away / drawn by a pocket — lowering the arm did it by
@@ -650,7 +649,7 @@ export class Inventory {
                 st.hist.length = 0;
                 const had = !!(g.items?.held[side] || g.weapons.hands[side].held);
                 this.pocketTouch(side);
-                console.info('[Предметы]', `карман: рука ${side}, ${had ? 'вещь убрана в ячейку' : 'достала следующую вещь'} (в зоне ${st.inT.toFixed(2)} с)`);
+                const rb = g.currentPose?.belt?.[side]; console.info('[Предметы]', `карман: рука ${side}, 3D=${d.toFixed(2)}м, cam dy=${rb?.dy?.toFixed(2)} u=${rb?.u?.toFixed(2)} pk=${g.currentPose?.pocket?.off} purse=${g.currentPose?.purse?.off} headDown=${this.headDown} pos=${g.character?.group?.position?.toArray?.()?.map((x) => Math.round(x))?.join(',')}, в руке ${holds ? 'вещь' : 'пусто'}, ${why}`);
                 this._handsOff(side);
             }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
