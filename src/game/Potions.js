@@ -151,7 +151,11 @@ export function addWater(st, vol) {
  *   'cold'  — the water does not boil: it sinks and counts for nothing;
  *   'in'    — it dissolved in the boiling water and counts (the first one starts the countdown).
  */
+/** Kinds that count as another in a recipe (the author: «крылья лебедей и одно золотое яблоко — этого достаточно»: ANY swan's wings brew the potion of wings, not only a magic swan's). */
+export const INGREDIENT_ALIAS = { swanWings: 'magicSwanWings' };
+
 export function addIngredient(st, kind, n = 1) {
+    kind = INGREDIENT_ALIAS[kind] || kind;
     if (st.phase === 'empty' || st.water < 0.3) return 'dry';
     if (DURABLE.has(kind)) return 'sink';
     if (st.phase === 'ready' || st.phase === 'sludge' || st.phase === 'crumble') {
