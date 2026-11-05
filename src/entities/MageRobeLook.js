@@ -197,22 +197,22 @@ export function mageRobeParts(ch, code, color, hood, list, tier = 0) {
     // the collar and lapels
     put(T, COLLAR(), velvet, list, 0, 0, -0.02, 1, 1, 0.8);
     if (tier >= 1) for (const sx of [-1, 1]) {
-        bx(T, velvet, list, 0.3, 0.9, 0.05, sx * 0.22, 0.2, -0.45, 0, 0, -sx * 0.14);
-        bx(T, gold, list, 0.04, 0.9, 0.06, sx * 0.36, 0.2, -0.46, 0, 0, -sx * 0.14);
+        bx(T, velvet, list, 0.34, 1.0, 0.05, sx * 0.24, 0.2, -0.6, 0, 0, -sx * 0.14);
+        bx(T, gold, list, 0.04, 1.0, 0.06, sx * 0.4, 0.2, -0.61, 0, 0, -sx * 0.14);
     }
     // the belt: leather with a gold buckle, a pouch and a vial (middle and strong robes), a gem on a strong one
     const lea = cloth(0x4a2c18, leatherTex(), 4, 1);
-    put(T, TORUS(), lea, list, 0, -0.62, 0, 0.7, 0.7 * 0.78, 0.9, Math.PI / 2).scale.z = 3.2;
-    bx(T, gold, list, 0.24, 0.2, 0.06, 0, -0.62, -0.5);
-    bx(T, cloth(0x2a1a10, null, 1, 1), list, 0.14, 0.12, 0.07, 0, -0.62, -0.52);
+    put(T, TORUS(), lea, list, 0, -0.62, 0, 0.84, 0.64, 3.0, Math.PI / 2);
+    bx(T, gold, list, 0.26, 0.22, 0.07, 0, -0.62, -0.66);
+    bx(T, cloth(0x2a1a10, null, 1, 1), list, 0.15, 0.13, 0.08, 0, -0.62, -0.69);
     if (tier >= 1) {
         const pouch = cloth(0x5a3a20, leatherTex(), 1, 1);
-        bx(T, pouch, list, 0.3, 0.3, 0.16, 0.5, -0.86, -0.3, 0, 0.5, 0);
-        bx(T, cloth(0x3a2412, leatherTex(), 1, 1), list, 0.32, 0.1, 0.18, 0.5, -0.74, -0.3, 0, 0.5, 0);
-        put(T, geo('vial', () => new THREE.CylinderGeometry(0.07, 0.09, 0.26, 8)), lam('vial', { color: 0x6bd0ff, emissive: 0x2a90c0, emissiveIntensity: 0.6, transparent: true, opacity: 0.85 }), list, -0.52, -0.9, -0.28);
+        bx(T, pouch, list, 0.3, 0.3, 0.16, 0.62, -0.9, -0.5, 0, 0.6, 0);
+        bx(T, cloth(0x3a2412, leatherTex(), 1, 1), list, 0.32, 0.1, 0.18, 0.62, -0.77, -0.5, 0, 0.6, 0);
+        put(T, geo('vial', () => new THREE.CylinderGeometry(0.07, 0.09, 0.26, 8)), lam('vial', { color: 0x6bd0ff, emissive: 0x2a90c0, emissiveIntensity: 0.6, transparent: true, opacity: 0.85 }), list, -0.62, -0.92, -0.5);
     }
     if (tier >= 2) {
-        put(T, geo('gem', () => new THREE.OctahedronGeometry(0.1)), lam('gemR', { color: 0xd02050, emissive: 0xc01040, emissiveIntensity: 0.9 }), list, 0, -0.62, -0.56);
+        put(T, geo('gem', () => new THREE.OctahedronGeometry(0.1)), lam('gemR', { color: 0xd02050, emissive: 0xc01040, emissiveIntensity: 0.9 }), list, 0, -0.62, -0.74);
         const cape = cloth(_tint(velvetC, 0.9), velvetTex(), 1, 1, { side: true });
         bx(T, cape, list, 1.3, 3.0, 0.05, 0, -0.7, 0.5, 0.05); // a cape down the back
         bx(T, gold, list, 1.34, 0.08, 0.07, 0, -2.18, 0.52);
