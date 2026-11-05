@@ -82,7 +82,7 @@ const _m = new Map();
 const mkey = (k, make) => { if (!_m.has(k)) { const m = make(); m.userData.shared = true; _m.set(k, m); } return _m.get(k); };
 const woodMat = (color, t = woodTex(), k = 0.55) => mkey(`w${color}:${t ? t.uuid : 0}:${k}`, () => new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(k), map: t }));
 const goldMat = () => mkey('gold', () => new THREE.MeshStandardMaterial({ color: 0xe0b43c, metalness: 0.88, roughness: 0.3 }));
-const crystalMat = (color) => mkey('cr' + color, () => new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.12, emissive: color, emissiveIntensity: 0.65, flatShading: true }));
+const crystalMat = (color) => mkey('cr' + color, () => new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.12, emissive: color, emissiveIntensity: 0.4, flatShading: true }));
 const glowMat = (color) => mkey('gl' + color, () => new THREE.MeshBasicMaterial({ color }));
 const _geo = {};
 const geo = (k, make) => _geo[k] || (_geo[k] = Object.assign(make(), { userData: { shared: true } }));
@@ -132,7 +132,8 @@ export function wandModel(it) {
     const light = woodMat(col.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex(), woodTex(), 0.95);
     const gold = goldMat();
     const tipC = col.clone().lerp(new THREE.Color(0xffffff), 0.5).getHex();
-    const gem = crystalMat(tipC);
+    const gemC = col.clone().lerp(new THREE.Color(0xffffff), 0.15).getHex();
+    const gem = crystalMat(gemC);
     // the handle: a leather-wrapped grip on designs 1 and 6, plain wood otherwise; a gold cap on every third
     const grip = m === 1 || m === 6 ? woodMat(col.getHex(), wrapTex(), 0.7) : wood;
     part(g, HANDLE(), grip, 0, 0.1, 0);
@@ -151,7 +152,7 @@ export function wandModel(it) {
         if (m === 9) for (let i = 0; i < 3; i++) part(g, PRONG(), gold, Math.cos(i * 2.094) * 0.02, 0.645, Math.sin(i * 2.094) * 0.02, Math.sin(i * 2.094) * 0.35, 0, -Math.cos(i * 2.094) * 0.35);
         part(g, CRYSTAL(), gem, 0, 0.66, 0);
         part(g, CRYSTAL(), gem, 0, 0.62, 0, Math.PI);
-        part(g, OCTA(0.012), glowMat(0xffffff), 0, 0.64, 0);
+        part(g, OCTA(0.011), glowMat(tipC), 0, 0.64, 0);
     } else if (m === 6) {
         part(g, PRONG(), wood, 0.02, 0.65, 0, 0, 0, -0.4);
         part(g, PRONG(), wood, -0.02, 0.65, 0, 0, 0, 0.4);
