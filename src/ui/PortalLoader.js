@@ -70,7 +70,7 @@ void main(){
 }`;
 
 /** Eight palettes (c0 c1 c2 — the arms, the eye's glow, the runes; c3 — the deep tint between the arms). */
-const PALETTES = [
+export const PALETTES = [
     [[0.42, 0.18, 0.95], [0.25, 0.85, 1.0], [0.95, 0.55, 1.0], [0.12, 0.04, 0.3]], // arcane violet and teal
     [[1.0, 0.45, 0.08], [1.0, 0.85, 0.35], [1.0, 0.3, 0.2], [0.25, 0.04, 0.02]], // the phoenix's fire
     [[0.1, 0.75, 0.4], [0.75, 1.0, 0.5], [0.2, 0.95, 0.85], [0.02, 0.18, 0.1]], // the forest's emerald
