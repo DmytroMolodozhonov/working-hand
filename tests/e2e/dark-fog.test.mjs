@@ -29,7 +29,7 @@ test('Caligo: the dome grows, the picture inside is black, the minds lose a play
         // the fog as the others' computers draw it: the middle at my feet, the wand a little in front
         g.spells.cast('Caligo', new THREE.Vector3(p.x, p.y - 2, p.z), new THREE.Vector3(0, 3, -2), 'right', 'remote1');
         out.fogs = g.darkFog.fogs.length;
-        await sleep(11000);
+        for (let i = 0; i < 44; i++) g.darkFog.update(0.25); // (game time by hand: the software renderer draws a frame a second)
         out.R = g.darkFog.fogs[0] && g.darkFog.fogs[0].mesh.scale.x;
         // the picture: a few frames inside
         const fog = g.scene.fog; const near0 = fog.near, far0 = fog.far;
@@ -49,7 +49,7 @@ test('Caligo: the dome grows, the picture inside is black, the minds lose a play
         out.stopNotMine = out.stop === false; // (the fog is another player's: mine untouched)
         g.darkFog.fogs[0].by = g.localId;
         out.stopMine = g.darkFog.stopMine();
-        await sleep(9000);
+        for (let i = 0; i < 40; i++) g.darkFog.update(0.25);
         out.left = g.darkFog.fogs.length;
         return out;
     });
