@@ -16,10 +16,12 @@ test('wizards look like wizards: robes, pointed hats, wands (a wanderer too), th
         for (let seed = 0; seed < 10; seed++) {
             const L = villagerLook(seed, role, role === 'master' ? false : undefined);
             assert.ok(L.wizard && L.dress, `${role} robe`);
-            assert.ok(L.hat.startsWith('wizard'), `${role} hat`);
+            // (the wanderers and the settlements' wizards wear one of five costumes now — a cowl, a wreath, an ice crown among them:
+            //  VillagerOutfits.js, the author's request; the tower's own keep the pointed hat)
+            assert.ok(L.hat.startsWith('wizard') || (L.outfit && ['cowl', 'wreath', 'icecrown'].includes(L.hat)), `${role} hat ${L.hat}`);
             assert.equal(L.tool, 'wand');
             const m = new VillagerModel(L);
-            assert.ok(m.hat && m.hatTop, 'the hat is its own mesh');
+            if (L.hat.startsWith('wizard')) assert.ok(m.hat && m.hatTop, 'the pointed hat is its own mesh (it folds under a low ceiling)'); // (a cowl / a wreath / an ice crown is low: part of the head)
             assert.ok(m.meshCount <= 12, `${role}: ${m.meshCount} meshes`);
         }
     }

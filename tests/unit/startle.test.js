@@ -84,7 +84,9 @@ test('death: the wand / the sword falls from the hand as a thing on the ground (
     D.dropHeld(knight);
     assert.equal(swords.length, 1);
     assert.ok(knight.disarmed);
-    assert.equal(heldDrop({ model: model('hoe') }), null, 'no such thing in the world: goes with the body');
+    // (a person's tool is a thing of the world now — ItemTypes 'tool', the author 05.11 «у фермера должна выпасть вила»: it falls too)
+    assert.equal(heldDrop({ model: model('hoe') })?.kind, 'tool', 'the hoe falls too');
+    assert.equal(heldDrop({ model: model('basket') }), null, 'a basket: no such thing — goes with the body');
 });
 
 test('the road folk: about a third are brave and fight (fists too) — the rest run', async () => {
