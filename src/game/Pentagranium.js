@@ -570,6 +570,21 @@ export class Pentagranium {
         if (why !== 'old') for (let i = 0; i < 16; i++) g.fx?.spark(_o.set(m.x + (Math.random() - 0.5) * m.r * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * m.r * 1.6), 0x6a0a18, 0.2, _d.set(0, 0.8, 0), 1);
     }
 
+    /**
+     * (every computer: Game.explode) A «Бомбардо» blast wipes the drawings it falls on — white and black (the author 05.11: «белые метки
+     * стираются Бомбардой», the dark marks on the ground — only by it). Not the way back out of hell (HellGate's own circle: else one
+     * would be shut in there), not a ritual's own circle while its rite goes on — that one breaks as ever (Offerings).
+     */
+    blast(pos, radius) {
+        for (const m of [...this.marks.values()]) {
+            if (String(m.id).startsWith('hell:')) continue;
+            if (Math.hypot(m.x - pos.x, m.z - pos.z) > radius + m.r * 0.35 || Math.abs(m.y - pos.y) > radius + 2) continue;
+            if (m.world) this._worldGone.add(m.world); // (a settlement's drawing wiped: it does not come back while the place stays awake)
+            if (m.mine) this.game.hud?.setVoice?.('💥 Взрыв стёр пентаграмму', true);
+            this._remove(m.id, 'blast');
+        }
+    }
+
     _markStep(m, dt) {
         const g = this.game;
         m.t += dt;

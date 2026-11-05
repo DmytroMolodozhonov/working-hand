@@ -1310,6 +1310,7 @@ export class Game {
         this.fx.shake = Math.max(this.fx.shake, Math.max(0, (power > 1 ? 2 : 1.2) - dPlayer / (power > 1 ? 45 : 30)));
         this.boards?.blast(pos, radius, power);
         this.cauldrons?.blast(pos, radius, power); // (a cauldron near the blast is thrown aside, knocked over)
+        this.pentagranium?.blast?.(pos, radius); // (a drawing under the blast is wiped — white and black: Pentagranium.blast)
         // the blast's wave swings the doors round it (those right at it are broken: Wreck.afterBlast)
         const wave = radius + 8 * push;
         this.doors?.blow((p) => { const d = _v2.subVectors(p, pos).setY(0); const L = d.length(); return L > wave || L < 1e-3 ? null : d.multiplyScalar(26 * push * (1 - L / wave) / L); }, pos);
