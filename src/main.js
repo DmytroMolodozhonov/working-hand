@@ -1556,7 +1556,7 @@ document.querySelectorAll('.set-reset[data-reset]').forEach((b) => {
 $('show-heard-toggle')?.addEventListener('change', (e) => { if (!e.target.checked) hud.heard('', false); });
 const settingsPane = $('tab-settings');
 const settingsBox = $('pause-settings');
-let settingsHome = null, settingsWasActive = false;
+let settingsHome = null, settingsWasActive = false, settingsWasDisplay = '';
 const settingsOpen = () => !!settingsHome;
 // the page is #tab-settings itself: while the pause tab is open it lives there, after — back in the main menu
 function openGeneralSettings() {
@@ -1565,6 +1565,10 @@ function openGeneralSettings() {
     settingsPane.before(settingsHome);
     settingsWasActive = settingsPane.classList.contains('active');
     settingsPane.classList.add('active');
+    // (the main menu's tabs hide a pane with an inline display:none — the author saw an empty «Общие настройки» in
+    // the pause after visiting another menu tab; the inline style is cleared here and restored on close)
+    settingsWasDisplay = settingsPane.style.display;
+    settingsPane.style.display = '';
     settingsBox.appendChild(settingsPane);
     applyFps(); syncHandVersion(); syncResets(); voiceChatUi.sync(); showVoiceMic();
 }
@@ -1572,6 +1576,7 @@ function closeGeneralSettings() {
     if (!settingsHome) return;
     if (settingsHome.parentNode) settingsHome.replaceWith(settingsPane);
     settingsPane.classList.toggle('active', settingsWasActive);
+    settingsPane.style.display = settingsWasDisplay;
     settingsHome = null;
 }
 // (keys typed on the page must not reach the game — walking, spells, slots; only Escape goes on)
