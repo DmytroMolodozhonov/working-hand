@@ -171,3 +171,12 @@ test('grow(): the caster lays the blocks in about a second, a body in a cell hol
     run(d.spells, 6);
     assert.equal(d.g.scene.children.length, 0, 'and out of it at the end');
 });
+
+test('в пещере стена видит пол под потолком, а не поверхность над ним', async () => {
+    const { groundTopNear } = await import('../../src/game/Groundprud.js');
+    // колонка: пол на слое 0, воздух до слоя 9, потолок-порода с 10 до поверхности 30
+    const data = { topLayer: () => 30, get: (x, L) => (L <= 0 || L >= 10 ? 3 : 0), floorBelow: (x, z, L) => { for (let l = L; l >= -5; l--) if (l <= 0 || l >= 10) return l; return -6; } };
+    assert.equal(groundTopNear(data, 0)(0, 0), 0, 'пол пещеры, не слой 30');
+    const hill = { topLayer: () => 9, get: () => 3, floorBelow: () => 3 };
+    assert.equal(groundTopNear(hill, 0)(0, 0), 9, 'холм впереди — его верх, как раньше');
+});

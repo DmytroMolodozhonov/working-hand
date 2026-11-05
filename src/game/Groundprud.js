@@ -181,6 +181,20 @@ export function groundprudHint(why) {
 }
 
 /**
+ * The top of a column as THIS wall sees it, near the layer L0 the wand shows (a cave: the floor under the ceiling, not the
+ * surface above it — the same slip as «Breakthrough»'s, the author's «в пещере не работает»; open ground: the usual top).
+ */
+export function groundTopNear(data, L0) {
+    return (a, b) => {
+        const t = data.topLayer(a, b);
+        if (t <= L0 + 3) return t;
+        const c = data.get(a, L0 + 3, b);
+        if (c !== BLOCK.AIR && c !== BLOCK.WATER) return t; // (a hill, a cliff ahead: its top, as before)
+        return data.floorBelow ? data.floorBelow(a, b, L0 + 3) : t;
+    };
+}
+
+/**
  * Where the wand shows: the spot on the ground and the way from the caster.
  * get / top / gift as in groundprudPlan; origin, dir: the hand; me: the caster's feet (x, y, z). → {A, f, plan} | {why}
  */
@@ -191,7 +205,7 @@ export function groundprudAim(data, origin, dir, me, known = null, gift = null) 
     if (!hit) return { why: 'none' };
     const x = Math.round(hit.x), z = Math.round(hit.z);
     if (known && !known(x, z)) return { why: 'unknown' };
-    const get = (a, L, b) => data.get(a, L, b), top = (a, b) => data.topLayer(a, b);
+    const get = (a, L, b) => data.get(a, L, b), top = groundTopNear(data, Math.round(hit.y + 0.5));
     const g = top(x, z);
     if (Math.abs(hit.y - (g - 0.5)) > 2.2) return { why: 'none' }; // (high up the side of a cliff, a wall: not the ground; the foot of a slope is)
     const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz);
@@ -300,7 +314,7 @@ export class Groundprud {
         const h = Math.hypot(d.x, d.z) || 1, f = { x: d.x / h, z: d.z / h };
         if (!plan) {
             const seed = (A.x * 73856093) ^ (A.z * 19349663) ^ Math.round(f.x * 100) * 83492791;
-            plan = groundprudPlan((x, L, z) => data.get(x, L, z), (x, z) => data.topLayer(x, z), A, f, seed, data.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
+            plan = groundprudPlan((x, L, z) => data.get(x, L, z), groundTopNear(data, A.L), A, f, seed, data.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
         }
         if (!plan.cells) return;
         const mine = casterId === g.localId || casterId === 'local';
