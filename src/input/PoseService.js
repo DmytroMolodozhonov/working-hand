@@ -14,7 +14,7 @@
 import { WristTrace } from '../game/ThrowModel.js';
 import { assignHands, HandStabilizer, PoseStabilizer } from './TrackingGuard.js';
 import { ArmGuard } from './ArmGuard.js';
-import { PoseInterpreter } from './PoseInterpreter.js';
+import { torsoTiltOf, PoseInterpreter } from './PoseInterpreter.js';
 import { PocketHints } from './PocketHints.js';
 import { drawPocketHints, drawHeldWands } from './PocketHintsDraw.js';
 import { matchSticks } from './RealStick.js';
@@ -527,7 +527,7 @@ export class PoseService {
         if (r.st) this.stats.stages = r.st;
         if (r.camFps != null) this.stats.camFps = r.camFps;
         const ts = this._nativeTs = Math.max((this._nativeTs || 0) + 1, performance.now() - age); // (never back in time)
-        if (r.hands) this._handleResult({ ts, cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks });
+        if (r.hands) this._handleResult({ ts, cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks, torsoTilt: r.torsoTilt });
         else this._onHolistic(r);
     }
 
@@ -837,6 +837,7 @@ export class PoseService {
             faceLandmarks: this._lastFace,
             leftHandLandmarks: this.handGuards.left.process(assigned.left, t),
             rightHandLandmarks: this.handGuards.right.process(assigned.right, t),
+            torsoTilt: r.torsoTilt || (r.poseWorldLandmarks ? torsoTiltOf(r.poseWorldLandmarks) : null), // (the back's lean from the network's 3-D body: «ходьба назад»)
         };
         results.at = performance.now(); // (CrossedArms: a picture not renewed for a while is no pose)
         this.lastResults = results;

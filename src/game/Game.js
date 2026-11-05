@@ -172,6 +172,7 @@ import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
 import { Mermaid } from './Mermaid.js';
+import { SeaFloor } from '../fx/SeaFloor.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
@@ -287,29 +288,20 @@ const LIGHTNING_AIM = { T: 0.6, MOVE: 0.6 };
 const BRAINROT_UPKEEP = 1;
 
 /**
- * (Settings «Ходьба назад») Is the body leaning back now? The shoulders' depth behind the hips in shoulder widths (torsoMetrics.back:
- * the camera network's own depth, measured from the hips' middle even when the hips are out of the frame), smoothed (~0.25 s) and
- * against this player's own upright one — learned slowly while they stand near it. The author 05.11 (twice): «сильно наклонял спину,
- * но никак не уходит». Found: the old sign was the shoulders' depth against the hips only when the hips were clearly in the frame —
- * seated at the monitor never; the shoulders' width in the frame (tried next) changes as much by stepping away from the camera.
- * Returns 0 (no), 1 (leaning back: walks back while stepping on the spot), 2 (strongly: walks back by itself).
+ * (Settings «Ходьба назад») Is the back leaning back now (the author 05.11: «когда я иду вперёд, держу прямо спину; когда назад — хоть
+ * немного наклоняю спину назад»)? The back's lean in degrees from the network's 3-D body (torso.tilt; pose_guard.torso_tilt — the old
+ * signs, the image's depth of the shoulders and their width, were too noisy: «хожу назад, хотя должен вперёд»), smoothed (~0.25 s), against
+ * this player's own upright: measured the first CAL s, then followed (standing quickly, stepping slowly). ON° over it for HOLD s — back;
+ * under OFF° — forward; «back» STUCK s with the lean barely changing — an offset, the upright anew. Only ever while stepping on the spot
+ * (Game: ch.backward = back && ch.isRunning). `stepping`: pose.isRunning. → 0 / 1.
  */
-export const LEAN_BACK = { ON: 0.45, OFF: 0.25, HOLD: 0.4, CAL: 2, SMOOTH: 4, LEARN: 0.35, STEP_LEARN: 0.1, STUCK: 15, STUCK_RANGE: 0.15, NEAR: 0.08 }; // (in shoulder widths: ~0.021 a degree — ON ≈ 21°)
-/**
- * The author 05.11 (third and fourth time): «теперь я почти всегда хожу назад… в большей степени хожу назад, хотя должен идти вперёд».
- * Why: stepping on the spot the camera sees the shoulders a little «deeper» than standing (the body bobs, leans into the steps) — the
- * «upright» learned standing was not the stepping one. Now:
- *   - the first CAL s: its own upright measured (the mean), nothing walks;
- *   - standing (not stepping) the upright follows the body quickly; stepping — slowly too (STEP_LEARN): a steady offset of the
- *     steps is the body's own, it never walks back for good;
- *   - only a clear lean back counts: over ON (≈ 21°) for HOLD s; off under OFF;
- *   - stuck: «back» for STUCK s while the lean barely changes (within STUCK_RANGE) — an offset, not a lean: the upright is taken anew;
- *   - never walks by itself (only while stepping on the spot: Game — ch.backward = back && ch.isRunning).
- * `stepping`: the player steps on the spot now (pose.isRunning). → 0 / 1.
- */
+export const LEAN_BACK = { ON: 9, OFF: 5, HOLD: 0.35, CAL: 2, SMOOTH: 4, LEARN: 0.35, STEP_LEARN: 0.1, STUCK: 15, STUCK_RANGE: 6, NEAR: 4, DEG_PER_SW: 46 }; // (degrees of the back's lean)
 function leanBack(st, torso, dt, stepping = true) {
-    const b = torso && Number.isFinite(torso.back) ? torso.back : null;
+    // the back's lean in degrees: from the network's 3-D body (torso.tilt — the camera program sends it; the author: «когда иду назад, я
+    // наклоняю спину назад, хоть и немного») — else, an older program, from the image's depth of the shoulders (much noisier)
+    const b = torso && Number.isFinite(torso.tilt) ? torso.tilt : torso && Number.isFinite(torso.back) ? torso.back * LEAN_BACK.DEG_PER_SW : null;
     if (b == null) { st.on = false; st.k = null; st.hold = 0; return 0; }
+    st.src = Number.isFinite(torso.tilt) ? '3D' : 'глубина';
     st.k = st.k == null ? b : st.k + (b - st.k) * Math.min(1, dt * LEAN_BACK.SMOOTH);
     st.cal = (st.cal || 0) + dt;
     if (st.cal < LEAN_BACK.CAL) { st.base = st.base == null ? st.k : st.base + (st.k - st.base) * Math.min(1, dt * 2); st.x = 0; return 0; } // (measuring its own upright)
@@ -663,6 +655,7 @@ export class Game {
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
+        this.seaFloor = new SeaFloor(this); // the sea's bottom: kelp, seagrass, corals, glowing anemones and lilies, the fish schools (SeaFloor.js)
         this.oceanStorm = new OceanStorm(this); // the storms over the sea: rain, lightning, waterspouts (OceanStorm.js — the wind's, SeaWind.js)
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
         this.sunContest = new SunContest(this); // …and against the black clouds of the gargoyle ritual it fights them (SunContest.js)
@@ -3756,7 +3749,8 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
-        for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m); // (a waterspout's funnel and its wall cloud — WaterspoutFx.js)
+        for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m);
+        for (const m of this.seaFloor?.samples?.() || []) zoo.add(m); // (the sea's plants, its glowing ones, the fish) // (a waterspout's funnel and its wall cloud — WaterspoutFx.js)
         for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
         for (const m of this.tarons?.sampleModels?.() || []) zoo.add(m); // (a Taron near and as one skinned shape: the underworld's giants — Taron.js)
@@ -4225,6 +4219,7 @@ export class Game {
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
         this._updateWind();
         this.oceanStorm?.update(dt);
+        this.seaFloor?.update(dt);
         this.storm.update(dt);
         this.sun.update(dt);
         this.sunContest?.update(dt);
@@ -4626,10 +4621,10 @@ export class Game {
     _walkBackLog(back, pose, dt) {
         const L = this._lean || {}, t = pose.torso || {};
         const f = (v) => (Number.isFinite(v) ? v.toFixed(2) : '—');
-        const line = () => `ходьба назад: ${back ? 'НАЗАД' : 'вперёд/стоит'}, шаги ${pose.isRunning ? 'да' : 'нет'}, наклон ${f(L.x)} (порог ${LEAN_BACK.ON}), плечи за бёдрами ${f(L.k)}, своё «прямо» ${f(L.base)}${(L.cal || 0) < LEAN_BACK.CAL ? ' (замер)' : ''}${L.stuck ? `, сбросов «залипания» ${L.stuck}` : ''}; глубина плеч ${f(t.sz)}, бёдер ${f(t.hz)}, ширина плеч ${f(t.sw)}, бёдра ${t.hips ? 'видны' : 'не видны'}`;
+        const line = () => `ходьба назад: ${back ? 'НАЗАД' : 'вперёд/стоит'}, шаги ${pose.isRunning ? 'да' : 'нет'}, наклон спины ${f(L.x)}° (порог ${LEAN_BACK.ON}°, по ${L.src || '—'}), сейчас ${f(L.k)}°, своё «прямо» ${f(L.base)}°${(L.cal || 0) < LEAN_BACK.CAL ? ' (замер)' : ''}${L.stuck ? `, сбросов «залипания» ${L.stuck}` : ''}; глубина плеч ${f(t.sz)}, бёдер ${f(t.hz)}, ширина плеч ${f(t.sw)}, бёдра ${t.hips ? 'видны' : 'не видны'}`;
         if (back !== (this._backWas ?? 0)) {
             this.perf?.note?.(line());
-            if (back && performance.now() - (this._backToldAt || 0) > 5000) { this._backToldAt = performance.now(); this.hud.setVoice(`↩️ Назад (наклон ≈ ${Math.round((L.x || 0) / 0.021)}°)`, true); } // (every time it starts: the player sees when and why)
+            if (back && performance.now() - (this._backToldAt || 0) > 5000) { this._backToldAt = performance.now(); this.hud.setVoice(`↩️ Назад (наклон спины ≈ ${Math.round(L.x || 0)}°)`, true); } // (every time it starts: the player sees when and why)
             this._backWas = back;
         }
         if (pose.isRunning && (this._backLogT = (this._backLogT || 0) - dt) <= 0) { this._backLogT = 1; this.perf?.note?.(line()); }

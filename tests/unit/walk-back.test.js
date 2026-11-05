@@ -83,7 +83,7 @@ test('seated at the monitor, the hips out of the frame: the lean back is still s
 
 test('not a lean back: turning round, leaning forward, stepping away from the camera, a small sway', () => {
     seed = 3;
-    for (const o of [{ turn: 40 }, { turn: -40 }, { lean: -25 }, { dist: 3.6 }, { dist: 1.6 }, { lean: 6 }, { lean: 14 }]) {
+    for (const o of [{ turn: 40 }, { turn: -40 }, { lean: -25 }, { dist: 3.6 }, { dist: 1.6 }, { lean: 4 }]) {
         const st = {};
         run(st, {}, 5);
         assert.equal(run(st, o, 3).max, 0, JSON.stringify(o));
@@ -117,15 +117,31 @@ test('the author\'s «хожу назад, хотя должен идти впе
     seed = 11;
     const st = {};
     run(st, {}, 4, false); // (standing: its upright)
-    assert.equal(run(st, { lean: 10 }, 30, true).max, 0, 'stepping with the body\'s own small lean: forward');
+    assert.equal(run(st, { lean: 5 }, 30, true).max, 0, 'stepping with the body\'s own small lean: forward');
     assert.equal(run(st, { lean: 42 }, 1.5, true).last, 1, 'a real lean back while stepping: back');
 });
 
 test('stuck on «back» with the lean not changing (an offset of the camera) — the upright is taken anew, forward again', () => {
-    seed = 12;
     const st = {};
-    run(st, {}, 3);
-    assert.equal(run(st, { lean: 30 }, 2).last, 1);
-    assert.equal(run(st, { lean: 30 }, LEAN_BACK.STUCK + 2).last, 0, 'not back for ever');
+    const t = (tilt) => ({ tilt });
+    for (let i = 0; i < 90; i++) _leanBack(st, t(Math.sin(i) * 1.5), 1 / 30, true);
+    let last = 0;
+    for (let i = 0; i < 60; i++) last = _leanBack(st, t(14 + Math.sin(i) * 1.5), 1 / 30, true);
+    assert.equal(last, 1);
+    for (let i = 0; i < 30 * (LEAN_BACK.STUCK + 2); i++) last = _leanBack(st, t(14 + Math.sin(i) * 1.5), 1 / 30, true);
+    assert.equal(last, 0, 'not back for ever');
     assert.ok(st.stuck >= 1);
+});
+
+test('the 3-D body\'s tilt (the camera program sends it): a straight back walks forward; leaning back ~12° — back; it wins over the noisy depth', () => {
+    const st = {};
+    const t = (tilt, back = 0.6) => ({ tilt, back, sw: 0.2 }); // (a noisy depth saying «leaning back» all the time)
+    let max = 0;
+    for (let i = 0; i < 30 * 10; i++) max = Math.max(max, _leanBack(st, t((Math.sin(i) * 2)), 1 / 30, true)); // (a straight back, ±2° of jitter)
+    assert.equal(max, 0, 'a straight back: forward, whatever the depth says');
+    let last = 0;
+    for (let i = 0; i < 30; i++) last = _leanBack(st, t(12 + Math.sin(i)), 1 / 30, true);
+    assert.equal(last, 1, 'leaning back 12°: back');
+    for (let i = 0; i < 20; i++) last = _leanBack(st, t(1), 1 / 30, true);
+    assert.equal(last, 0, 'straight again: forward');
 });

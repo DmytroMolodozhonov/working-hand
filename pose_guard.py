@@ -118,6 +118,25 @@ class PoseGuard:
         self._make_spare()
         return True
 
+    @staticmethod
+    def torso_tilt(r):
+        """The back's lean (degrees) from the network's own 3-D points in metres (pose_world_landmarks — the hips' middle is their
+        origin, y down, z away from the camera): + leaning back, − forward; and sideways (+ to the person's left). None: no points.
+        The author: «когда я иду назад, я наклоняю спину назад, хоть и немного» — the image's depth of a point was too noisy for it;
+        these points are the network's real body, the same near the camera or far, seated or standing."""
+        w = getattr(r, "pose_world_landmarks", None)
+        if not w:
+            return None
+        p = w[0]
+        if len(p) < 25:
+            return None
+        sx, sy, sz = (p[11].x + p[12].x) / 2, (p[11].y + p[12].y) / 2, (p[11].z + p[12].z) / 2
+        hx, hy, hz = (p[23].x + p[24].x) / 2, (p[23].y + p[24].y) / 2, (p[23].z + p[24].z) / 2
+        up = hy - sy  # (y is down: the shoulders over the hips — positive)
+        if up <= 0.05:
+            return None
+        return {"back": round(math.degrees(math.atan2(sz - hz, up)), 1), "side": round(math.degrees(math.atan2(hx - sx, up)), 1)}
+
     def fresh(self, img):
         r = self.image.detect(img)
         return self.to_points(r.pose_landmarks[0]) if r.pose_landmarks else None
@@ -128,6 +147,7 @@ class PoseGuard:
         jf = pool.submit(self.fresh, img) if check and pool is not None else None
         r = self.video.detect_for_video(img, ts)
         pose = self.to_points(r.pose_landmarks[0]) if r.pose_landmarks else None
+        self.tilt = self.torso_tilt(r)  # (the back's lean from the 3-D points — the game's «ходьба назад»)
         # (an odd body the fresh look has just confirmed — bent over the camera — is not asked about again at once)
         ok = pose is None or self.n < self.trust_until or sane(pose)
         fresh = None
@@ -157,6 +177,8 @@ class PoseGuard:
             self.bad = 0
             return pose, "swap"
         return pose, "fresh"
+
+    tilt = None
 
     def close(self):
         for t in (self.video, self.image, self.spare):

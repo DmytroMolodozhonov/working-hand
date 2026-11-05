@@ -466,6 +466,7 @@ export class PoseInterpreter {
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));
             data.torso = torsoMetrics(lm);
+            if (results.torsoTilt && Number.isFinite(results.torsoTilt.back)) { data.torso.tilt = results.torsoTilt.back; data.torso.tiltSide = results.torsoTilt.side; } // (the back's lean in degrees from the 3-D body — pose_guard.torso_tilt)
 
             // Run intensity from shoulder bobbing (8-frame window)
             this.shoulderHistory.push((lm[11].y + lm[12].y) / 2);
@@ -560,6 +561,19 @@ export class PoseInterpreter {
         }
         return data;
     }
+}
+
+/**
+ * The back's lean (degrees) from the network's 3-D body in metres (MediaPipe's world landmarks: the hips' middle the origin, y down,
+ * z away from the camera): {back: + leaning back, side}. The same as pose_guard.torso_tilt (the camera program sends it ready).
+ */
+export function torsoTiltOf(w) {
+    if (!w || w.length < 25) return null;
+    const sy = (w[11].y + w[12].y) / 2, sz = (w[11].z + w[12].z) / 2, sx = (w[11].x + w[12].x) / 2;
+    const hy = (w[23].y + w[24].y) / 2, hz = (w[23].z + w[24].z) / 2, hx = (w[23].x + w[24].x) / 2;
+    const up = hy - sy;
+    if (!(up > 0.05)) return null;
+    return { back: Math.round(Math.atan2(sz - hz, up) * 1800 / Math.PI) / 10, side: Math.round(Math.atan2(hx - sx, up) * 1800 / Math.PI) / 10 };
 }
 
 /**

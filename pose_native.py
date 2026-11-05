@@ -497,6 +497,8 @@ class NativePose:
                     hands_out = v5.process(rgb, pl or last_pose[0], pool=hand_pool, seeds=seeds)
                 last_pose[0] = pl or last_pose[0]
                 out = {"poseLandmarks": pl, "hands": hands_out}
+                if pose.tilt:
+                    out["torsoTilt"] = pose.tilt  # (the back's lean, degrees, from the network's 3-D body — pose_guard.torso_tilt)
             else:
                 jh = pool.submit(hands.detect_for_video, img, ts)
                 pl, h = self._um(jp.result()[0], rgb), jh.result()
@@ -511,6 +513,8 @@ class NativePose:
                         for i, lm in enumerate(h.hand_landmarks or [])
                     ],
                 }
+            if pose.tilt and "torsoTilt" not in out:
+                out["torsoTilt"] = pose.tilt
             if jf is not None:
                 f = jf.result()
                 out["faceLandmarks"] = self._um(_pts(f.face_landmarks[0]), rgb) if f.face_landmarks else None
