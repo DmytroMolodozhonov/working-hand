@@ -927,9 +927,44 @@ function shieldBoxes(cc) {
     return B;
 }
 
+/**
+ * A wand of its own (the author 05.11: «у всех волшебников уникальные волшебные палочки… текстура у всех одинаковая»): 64 wands built from
+ * the wizard's look — the wood (ten of them: ebony, walnut, cherry, holly, ash, yew, birch, rosewood, oak, bog oak), the handle (smooth,
+ * ringed, knobbed, carved spiral, a pommel), a band of metal or none, the shaft straight / tapering / gnarled, its length, its tip (bone,
+ * a coloured crystal, a plain point, a little knot). The grip at the origin, the tip at TIP_Y.wand (the same for all: the spells come
+ * from there). Kinds 'wand#0' … 'wand#63' (a bounded cache).
+ */
+const WAND_WOODS = [0x1c1410, 0x4e3220, 0x7a3a2a, 0xd8cdb8, 0xb59a74, 0x8a5a30, 0xe6dccb, 0x5a2420, 0x8f6a3e, 0x2c2622];
+const WAND_TIPS = [0xe8e0c8, 0xc58bff, 0x7fe0ff, 0xff8f6b, 0x9cff9a, 0xfff2a0];
+function wandBoxes(B, n) {
+    const h = (k) => ((n * 2654435761 + k * 40503) >>> 0) % 1000 / 1000;
+    const wood = WAND_WOODS[(n * 7) % WAND_WOODS.length], dark = WAND_WOODS[(n * 3 + 5) % WAND_WOODS.length];
+    const handle = n % 5, band = [GOLD, GOLD_DARK, 0xc9ced6, 0x8c5a2c, null][(n >> 1) % 5], tipC = WAND_TIPS[(n >> 2) % WAND_TIPS.length];
+    const len = 0.68 + h(1) * 0.16, w = 0.05 + h(2) * 0.018;
+    // the handle
+    if (handle === 0) b(B, 0.09, 0.3, 0.09, 0, 0, 0, dark);
+    else if (handle === 1) { b(B, 0.085, 0.3, 0.085, 0, 0, 0, dark); for (let i = 0; i < 3; i++) b(B, 0.105, 0.03, 0.105, 0, -0.1 + i * 0.1, 0, wood); }
+    else if (handle === 2) { b(B, 0.08, 0.3, 0.08, 0, 0, 0, dark); b(B, 0.12, 0.08, 0.12, 0, -0.14, 0, dark, 0, Math.PI / 4, 0); b(B, 0.1, 0.06, 0.1, 0, 0.06, 0, dark, 0, Math.PI / 4, 0); }
+    else if (handle === 3) { b(B, 0.08, 0.3, 0.08, 0, 0, 0, dark); for (let i = 0; i < 5; i++) b(B, 0.1, 0.035, 0.05, 0, -0.12 + i * 0.06, 0, wood, 0, i * 0.6, 0); }
+    else { b(B, 0.085, 0.28, 0.085, 0, 0.01, 0, dark); b(B, 0.13, 0.09, 0.13, 0, -0.16, 0, band ?? wood, Math.PI / 4, 0, Math.PI / 4); }
+    if (band != null) b(B, 0.11, 0.045, 0.11, 0, 0.16, 0, band);
+    // the shaft: straight, tapering in two steps, or gnarled (little knots along it)
+    const kind = (n >> 3) % 3, y0 = 0.18, L = len;
+    if (kind === 0) b(B, w, L, w, 0, y0 + L / 2, 0, wood);
+    else if (kind === 1) { b(B, w * 1.15, L * 0.5, w * 1.15, 0, y0 + L * 0.25, 0, wood); b(B, w * 0.8, L * 0.5, w * 0.8, 0, y0 + L * 0.75, 0, wood); }
+    else { b(B, w, L, w, 0, y0 + L / 2, 0, wood); for (let i = 0; i < 3; i++) b(B, w * 1.5, w * 1.3, w * 1.5, (h(3 + i) - 0.5) * 0.02, y0 + L * (0.25 + i * 0.25), 0, dark, h(6 + i), h(9 + i), 0); }
+    // the tip (at TIP_Y.wand ≈ 1.05: the shaft reaches it)
+    const top = 1.0, tipK = (n >> 4) % 3;
+    if (y0 + L < top - 0.04) b(B, w * 0.75, top - (y0 + L), w * 0.75, 0, (top + y0 + L) / 2, 0, wood);
+    if (tipK === 0) b(B, 0.07, 0.07, 0.07, 0, top, 0, 0xe8e0c8);
+    else if (tipK === 1) b(B, 0.09, 0.09, 0.09, 0, top + 0.01, 0, tipC, Math.PI / 4, 0, Math.PI / 4);
+    else b(B, w * 0.6, 0.09, w * 0.6, 0, top, 0, wood);
+}
+
 /** Tools: the grip is at the origin, the tool goes along +Y. */
 function toolBoxes(kind) {
     const B = [];
+    if (kind.startsWith('wand#')) { wandBoxes(B, +kind.slice(5) | 0); return B; }
     switch (kind) {
         case 'hammer':
             b(B, 0.1, 1.0, 0.1, 0, 0.25, 0, WOOD);
@@ -1320,7 +1355,9 @@ export class VillagerModel {
         }
         this.toolKind = kind;
         if (kind === 'none') return;
-        this.tool = new THREE.Mesh(takeGeo(partGeometry(toolBoxes(kind === 'wand' && this.look.role === 'master' ? 'wandMaster' : kind))), this._currentMat());
+        // (a wand: the head of the tower's own; every other wizard's — one of 64, by his look's seed: no two near alike)
+        const shape = kind !== 'wand' ? kind : this.look.role === 'master' ? 'wandMaster' : 'wand#' + ((((this.look.seed | 0) * 2654435761) >>> 0) % 64);
+        this.tool = new THREE.Mesh(takeGeo(partGeometry(toolBoxes(shape))), this._currentMat());
         this.tool.castShadow = this._shadow;
         if (HANGING.has(kind)) this.tool.rotation.x = -REST_WRIST; // hangs along the arm
         this.handSlot.add(this.tool);

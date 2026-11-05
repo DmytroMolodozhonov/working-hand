@@ -169,6 +169,27 @@ export class PotionMasterLife {
         // used to go on every frame while the body got up — the doll rose one way, the model turned the other. Down — nothing of his own.
         const ci = this.game.creatureImpact;
         if (ci?.stateOf && ci.stateOf(v) !== 'up') { if (j) this._end(); this.show = null; return false; }
+        // his wand knocked out («Экспеллиармус»): the work stops; a moment of shock, then he goes for it and picks it up (unless someone
+        // took it — then he waits: a new one comes with his next coming into the lair)
+        if (v.noWand) {
+            if (j) this._end();
+            this.show = null;
+            const g = this.game, it = v.lostWand && g.items?.loose?.get(v.lostWand.uid);
+            if (!it) { v.speed = 0; v.mode = 'idle'; return true; }
+            v.lostWand.t = (v.lostWand.t || 0) + dt;
+            if (v.lostWand.t < 1.2) { v.speed = 0; v.mode = 'stagger'; this.life._ground?.(v); return true; }
+            const p = it.model.position, L = this.life;
+            const d = L._steer ? L._steer(v, p.x, p.z, 3.2, dt, 0.8) : Math.hypot(p.x - v.x, p.z - v.z);
+            v.mode = v.speed > 0 ? 'walk' : 'idle';
+            L._ground?.(v);
+            if (d <= 1.1 && Math.abs(p.y - v.y) < 3) {
+                g.items.pickUp(v.lostWand.uid, '#' + v.id, 'right');
+                v.noWand = false; v.lostWand = null;
+                v.model?.setHeldTool?.('wand');
+                L._say?.(v, 'Так-то лучше. Без палочки зелья не сваришь.', 4);
+            }
+            return true;
+        }
         if (!j) return this.show ? this._showStep(v, dt) : this._idle(v, dt);
         const g = this.game, life = this.life, c = this.cauldron;
         if (!c) { life._say(v, LINES.noCauldron, 5); this._end(); return false; }
