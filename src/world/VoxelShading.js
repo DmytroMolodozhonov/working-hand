@@ -61,6 +61,15 @@ if (uBoomK.y > 0.0) {
     }
 }`;
 
+/**
+ * The sea's bottom (UnderwaterLight.js drives it): `y` the sea's level (faces lower than it, lit by the sky, are the bottom), `t` the time
+ * of the caustics, `k` their strength (the sun's: 0 at night). The bottom's sand and rock are drawn without the blocks' pixels and
+ * edges — continuous over the world: sand ripples, patches of algae and pink coralline on rock, shells — and the dancing net of
+ * the sun's light focused by the waves (the caustics) plays on them, fading with the depth (the author 05.11: «дно… явно видно, что
+ * оно сделано из блоков… такого не должно быть»).
+ */
+export const UNDERSEA = { y: { value: -0.12 }, t: { value: 0 }, k: { value: 0 } };
+
 /** Hell (HellRealm.js): the time that moves the lava (s) — one number for the whole land; 0 elsewhere (the shader is the same program). */
 export const HELL_TIME = { t: { value: 0 } };
 
@@ -129,6 +138,9 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uBoomC = BOOM_SWELL.c;
         shader.uniforms.uBoomK = BOOM_SWELL.k;
         shader.uniforms.uHellT = HELL_TIME.t;
+        shader.uniforms.uSeaY = UNDERSEA.y;
+        shader.uniforms.uSeaT = UNDERSEA.t;
+        shader.uniforms.uSeaK = UNDERSEA.k;
         shader.vertexShader = shader.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;\n' + BOOM_PARS)
             .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
@@ -147,6 +159,21 @@ export function applyVoxelDetail(material) {
 ${BOOM_PARS}
 uniform float uSkyComp;
 uniform float uHellT;
+uniform float uSeaY; uniform float uSeaT; uniform float uSeaK;
+float seaUnder = 0.0; // (the sea's bottom: how much this face is under the sea — set by the colour part, read by the light part)
+// the caustics: a net of bright lines where the waves focus the sun (a classic iterated warp), 0…1
+float seaCaustic(vec2 p, float t) {
+    vec2 i = p;
+    float c = 1.0;
+    for (int k = 0; k < 3; k++) {
+        float tt = t * (1.0 - 3.5 / float(k + 1));
+        i = p + vec2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+        c += 1.0 / length(vec2(p.x / (sin(i.x + tt) / 0.005), p.y / (cos(i.y + tt) / 0.005)));
+    }
+    c /= 3.0;
+    c = 1.17 - pow(c, 1.4);
+    return clamp(pow(abs(c), 8.0), 0.0, 1.0);
+}
 float hellE = 0.0; // (hell's glowing blocks: how much and what colour they shine — set by the pattern, read by the emissive part)
 vec3 hellC = vec3(0.0);
 varying float vVoxSky;
@@ -252,6 +279,7 @@ float snowflakeAt(vec2 uv) {
     }
     float detail = pat > 0.5 ? 0.0 : (r - 0.5) * (snowy ? 0.02 : 0.08);
     if (pat < 0.5 && green && n.y > 0.5) detail += (r > 0.9 ? 0.07 : 0.0) - (r < 0.08 ? 0.06 : 0.0); // grass speckles
+    if (pat < 0.5 && vVoxPos.y < uSeaY - 0.1 && vVoxSky > 0.02) detail *= 0.15; // (the sea's bottom: no blocks' pixels)
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides
     diffuseColor.rgb *= 1.0 + detail * kFine;
     if (pat == 1.0) {
@@ -462,11 +490,36 @@ float snowflakeAt(vec2 uv) {
             diffuseColor.rgb *= fr < 0.1 ? 0.2 : (mull < 0.025 ? 0.35 : 0.75 + 0.25 * vnoise(uv * 4.0 + layerId));
         }
     }
+    // the sea's bottom: one continuous seabed, not blocks (UNDERSEA) — sand with ripples and shells, rock grown over with algae and
+    // pink coralline; the sides of a step the same stuff, only a little in the shade
+    seaUnder = pat < 0.5 ? (1.0 - smoothstep(uSeaY - 0.7, uSeaY - 0.1, vVoxPos.y)) * smoothstep(0.02, 0.12, vVoxSky) : 0.0;
+    if (seaUnder > 0.0) {
+        vec2 wp = n.y > 0.5 ? vVoxPos.xz : vec2(vVoxPos.x + vVoxPos.z, vVoxPos.y * 1.3);
+        float m1 = vnoise(wp / 6.0), m2 = vnoise(wp / 1.7 + 9.0), m3 = vnoise(wp / 19.0 - 4.0);
+        bool sandy = voxBase.r > voxBase.b * 1.2 && dot(voxBase, vec3(0.299, 0.587, 0.114)) > 0.42;
+        vec3 col = voxBase * (0.84 + 0.24 * m1 + 0.08 * m2) * mix(vec3(0.96, 1.0, 1.04), vec3(1.05, 1.0, 0.92), m3);
+        if (sandy) {
+            // ripples the current combs into the sand, bending round the bumps; shells and pebbles here and there
+            float rip = sin(dot(vVoxPos.xz, vec2(0.83, 0.56)) * 3.3 + m1 * 6.0 + m3 * 4.0);
+            col *= 1.0 + (0.06 * rip + 0.03 * sin(rip * 3.0 + m2 * 4.0)) * kFine * (n.y > 0.5 ? 1.0 : 0.3);
+            float sp = vhash(vec3(floor(wp * 5.0), 31.0));
+            if (sp > 0.988) col = mix(col, vec3(0.95, 0.9, 0.82), 0.6 * kFine);
+            else if (sp < 0.01) col *= 1.0 - 0.35 * kFine;
+            col = mix(col, vec3(0.42, 0.5, 0.32) * (0.8 + 0.4 * m2), smoothstep(0.66, 0.85, m3) * 0.35); // (a film of green algae in the hollows)
+        } else {
+            float al = smoothstep(0.5, 0.78, m2 * 0.55 + m1 * 0.45);
+            col = mix(col, vec3(0.2, 0.31, 0.15) * (0.75 + 0.5 * m2), al * 0.6); // (algae)
+            float cor = smoothstep(0.68, 0.8, vnoise(wp / 2.3 + 51.0));
+            col = mix(col, vec3(0.8, 0.42, 0.55) * (0.85 + 0.3 * m1), cor * 0.5); // (pink coralline crusts)
+            col *= 0.9 + 0.2 * vnoise(wp * 2.1 + 7.0) * kFine; // (pitted rock)
+        }
+        diffuseColor.rgb = mix(diffuseColor.rgb, col * (n.y > 0.5 ? 1.0 : 0.88), seaUnder);
+    }
     // soft edge darkening (fake ambient occlusion along block borders)
     vec2 e = min(f, 1.0 - f);
     float edge = smoothstep(0.0, 0.09, min(e.x, e.y));
-    // (very light on flat grass so a meadow doesn't look like tiles)
-    float edgeAmt = (green || snowy) && n.y > 0.5 ? 0.05 : snowy ? 0.08 : 0.14;
+    // (very light on flat grass so a meadow doesn't look like tiles; none on the sea's bottom)
+    float edgeAmt = ((green || snowy) && n.y > 0.5 ? 0.05 : snowy ? 0.08 : 0.14) * (1.0 - seaUnder);
     diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
     // far: the patterned blocks (stone, planks, bricks…) take their average tone
     if (pat > 0.5) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);
@@ -476,6 +529,15 @@ float snowflakeAt(vec2 uv) {
             .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
     float vp = floor(vVoxPat + 0.5);
+    // the caustics on the sea's bottom: the sun's light the waves focus, dancing; fading with the depth and in the shade of a side
+    if (seaUnder > 0.0 && uSeaK > 0.0) {
+        vec2 cp = vVoxPos.xz * 0.42 + vVoxNormal.xz * vVoxPos.y * 0.2;
+        float cs = seaCaustic(mod(cp, 6.2831853 * 4.0), uSeaT * 0.55) * 0.75 + seaCaustic(mod(cp * 0.6 + 3.1, 6.2831853 * 4.0), uSeaT * 0.4 + 2.0) * 0.45;
+        float far = 1.0 - smoothstep(0.08, 0.3, max(fwidth(vVoxPos.x), fwidth(vVoxPos.z))); // (far: it would shimmer — its average)
+        float deep = exp(-max(0.0, uSeaY - vVoxPos.y) * 0.07);
+        float face = abs(vVoxNormal.y) > 0.5 ? 1.0 : 0.35;
+        totalEmissiveRadiance += diffuseColor.rgb * vec3(0.85, 1.0, 0.95) * mix(0.18, cs * 1.4, far) * uSeaK * deep * face * seaUnder * vVoxSky;
+    }
     if (vp == 11.0 || vp == 12.0) totalEmissiveRadiance += diffuseColor.rgb * 0.9; // lanterns and crystal lamps glow at night
     else if (vp >= 22.5 && vp < 30.5) totalEmissiveRadiance += hellC * hellE; // hell: the lava, the red-hot cracks, the embers in the ash and the joints
     else if (vp >= 17.5 && vp < 21.5) totalEmissiveRadiance += vec3(0.032, 0.03, 0.058) + diffuseColor.rgb * 0.1; // the Castle of Ghosts: a cold glimmer from within, so its black stone is never quite lost in the dark

@@ -4,8 +4,11 @@
  * PotionEffects ('mermaid', 12 min — «Обнуление» and death end it, «стоп» does not: it is no spell); here is what it does:
  *   - the legs are gone: a fish's tail grows from the hips (the model below), seen by everyone (the pose packet's px bit 8);
  *   - under the water the air never runs out (Swimming);
- *   - in the water: the arms raised together over the head and the body waving (the hands going up and down together, the way a
- *     fish swims) — the tail drives the body on up to twice the swimmer's top speed (TAIL); the arms' strokes push as always;
+ *   - in the water: the TORSO swaying side to side, the way a fish wriggles (the author 05.11, the second time: «не нужно руки вверх
+ *     поднимать… достаточно просто туловищем туда-сюда водить… ещё сильнее ускоряться, до 5 раз больше… при условии, что он немало
+ *     времени потратил на то, чтобы петлять») — the tail drives the body on: at once twice the swimmer's top speed, and the longer the
+ *     wriggling goes on, the faster — up to TAIL_TOP (five times that); the old way (the raised hands waving) works too; the arms'
+ *     strokes push as always;
  *   - on the land: it does not walk — it drags itself slowly on the tail (LAND_K of the walking pace), no jumping;
  *   - the tail sweeps up and down in the water, faster the faster it swims; out of the water it lies still and only twitches.
  * What may go wrong: drunk on a horse / a broom / in flight — the tail is there, the riding goes on (no walking is the only rule); in the
@@ -22,11 +25,13 @@ const _sp = new THREE.Vector3(), _sv = new THREE.Vector3();
 export const MERMAID = {
     LAND_K: 0.18, // × the walking pace on the land (it drags itself)
     TAIL_MAX: 2, // × the swimmer's top speed with the tail, from the first strokes of it
-    TAIL_TOP: 4, // × the swimmer's top speed: the tail at full rhythm (FLOW 1) — the more and the faster the waves, the faster
-    FLOW_UP: 0.035, // 1/s the rhythm builds while the waves go on (× how fast they are: quick waves build it quicker)
+    TAIL_TOP: 10, // × the swimmer's top speed: the tail at full rhythm (FLOW 1) — five times the start (the author: «до 5 раз больше»)
+    FLOW_UP: 0.03, // 1/s the rhythm builds while the wriggling goes on (× how fast: ~25–35 s of it to the top — «немало времени петлять»)
     FLOW_DOWN: 0.45, // 1/s it falls away when the waves stop (slow ones: it eases off a little at a time)
     THRUST: 3.2, // m/s² the tail adds while the fish's movement goes on (more at a higher rhythm)
-    WAVE: 0.55, // m/s: the raised hands going up and down together at least this fast — the fish's movement
+    WAVE: 0.55, // m/s: the raised hands going up and down together at least this fast — the fish's movement (the old way)
+    SWAY: 0.55, // shoulder-widths a second: the torso swaying side to side at least this fast — the wriggle
+    SWAY_TURN: 1.6, // s: a turn of the sway (left ↔ right) at least this recent — it is a wriggle, not one step aside
     LEN: 2.25, // m from the hips to the fluke's root (the legs were 1.95)
     // the change (the author 05.11: «как с крыльями… анимация какое-то время длилась… страдания… минус 1 хп… красное вокруг экрана,
     // замыливание, а через секунд 10 — хвост»)
@@ -173,7 +178,7 @@ export class Mermaid {
             if (this.tail) this.tail.root.scale.set(1, 1, 1);
             for (const l of legs) l.rotation.z = 0;
             this._pain(-1);
-            g.hud?.setVoice?.('🧜 Вместо ног — хвост! В воде поднимите руки над головой и двигайтесь волной, как рыба. Под водой дышите', true);
+            g.hud?.setVoice?.('🧜 Вместо ног — хвост! В воде водите туловищем вправо-влево, как рыба: чем дольше петляете, тем быстрее плывёте. Под водой дышите', true);
             g.sound?.playSea?.(p, 'tail', 0.6);
         }
     }
@@ -183,7 +188,30 @@ export class Mermaid {
     /** The pain's red at the edges of the eyes (k 0…1; < 0: gone) — TransformPain. */
     _pain(k) { painRed(k); }
 
-    /** In the water (Swimming._swim calls it): the fish's movement with the arms raised — the tail drives the body on. */
+    /**
+     * The torso's sway from the camera (shoulder-widths a second; 0: not seen): the middle of the shoulders going left and right and
+     * the shoulders rolling (one up, the other down) — the fish's wriggle. Counts the turns (left ↔ right) to tell it from a step aside.
+     */
+    _sway(dt) {
+        const p = this.game.currentPose, ls = p?.leftShoulder, rs = p?.rightShoulder;
+        if (!ls || !rs || !(dt > 0)) { this.swayV = Math.max(0, (this.swayV || 0) - dt * 2); return this.swayV; }
+        const a = p.aspect || 4 / 3;
+        const sw = Math.max(0.04, Math.hypot((ls.x - rs.x) * a, ls.y - rs.y));
+        const sig = ((ls.x + rs.x) / 2) * a / sw + 0.7 * (ls.y - rs.y) / sw;
+        const prev = this._sig;
+        this._sig = sig;
+        if (prev == null) return this.swayV || 0;
+        const d = (sig - prev) / dt;
+        if (!Number.isFinite(d) || Math.abs(d) > 30) return this.swayV || 0; // (a lost frame: the body jumped)
+        const dir = Math.sign(d);
+        if (Math.abs(d) > 0.2 && dir && dir !== this._dir) { this._dir = dir; this._turnT = 0; }
+        this._turnT = (this._turnT ?? 9) + dt;
+        const v = this._turnT < MERMAID.SWAY_TURN ? Math.abs(d) : 0;
+        this.swayV = (this.swayV || 0) + (v - (this.swayV || 0)) * Math.min(1, dt * 3);
+        return this.swayV;
+    }
+
+    /** In the water (Swimming._swim calls it): the fish's wriggle (the torso, or the raised hands waving) — the tail drives the body on. */
     swim(M, dt) {
         const g = this.game, ch = g.character;
         const up = ch.areBothHandsUp?.() || false;
@@ -192,17 +220,18 @@ export class Mermaid {
         this.wave += ((up ? vy : 0) - this.wave) * Math.min(1, dt * 3);
         // the rhythm (the author 05.11: «чем больше он делает туда-сюда движений… тем быстрее он ускоряется; зависит от того, как много он
         // уже сделал движений и как быстро; хочет остановиться — не делает движений; делает медленно — небольшое замедление»):
-        // it builds while the waves go on (quicker for quick ones) and falls away when they stop or slow down
-        const r = this.wave / MERMAID.WAVE;
-        if (up && r > 1) this.flow = Math.min(1, (this.flow || 0) + MERMAID.FLOW_UP * Math.min(2.5, r) * dt);
-        else this.flow = Math.max(0, (this.flow || 0) - MERMAID.FLOW_DOWN * (up && r > 0.4 ? 0.35 : 1) * dt);
+        // it builds while the wriggle goes on (quicker for a quick one) and falls away when it stops or slows down
+        const r = Math.max(this.wave / MERMAID.WAVE, this._sway(dt) / MERMAID.SWAY);
+        const on = r > 1;
+        if (on) this.flow = Math.min(1, (this.flow || 0) + MERMAID.FLOW_UP * Math.min(2.5, r) * dt);
+        else this.flow = Math.max(0, (this.flow || 0) - MERMAID.FLOW_DOWN * (r > 0.4 ? 0.35 : 1) * dt);
         const f = this.flow;
-        const top = SWIM.MAX_SPEED * (MERMAID.TAIL_MAX + (MERMAID.TAIL_TOP - MERMAID.TAIL_MAX) * f);
-        // the speed the waves make now: slower waves — a lower speed, eased down to it; none — the water slows her (SwimMotion's drag)
-        const want = up && r > 0.4 ? top * Math.min(1, 0.35 + 0.65 * Math.min(1, (r - 0.4) / 1.2)) : 0;
-        if (want > M.speed) M.speed = Math.min(want, M.speed + MERMAID.THRUST * (1 + 2 * f) * Math.min(2, Math.max(0.5, r)) * dt);
+        const top = SWIM.MAX_SPEED * (MERMAID.TAIL_MAX + (MERMAID.TAIL_TOP - MERMAID.TAIL_MAX) * f * f); // (the last of the speed comes late: «немало времени»)
+        // the speed the wriggle makes now: a slower one — a lower speed, eased down to it; none — the water slows her (SwimMotion's drag)
+        const want = r > 0.4 ? top * Math.min(1, 0.35 + 0.65 * Math.min(1, (r - 0.4) / 1.2)) : 0;
+        if (want > M.speed) M.speed = Math.min(want, M.speed + MERMAID.THRUST * (1 + 6 * f) * Math.min(2, Math.max(0.5, r)) * dt);
         else if (want > 0) M.speed = Math.max(want, M.speed * Math.exp(SWIM.DRAG * 0.6 * dt)); // (slower waves: eased down, streamlined)
         M.fish = true; // (SwimMotion: her way follows the head, she hardly floats up)
-        if (up && M.speed > 1) M.sinceStroke = 0;
+        if (on && M.speed > 1) M.sinceStroke = 0;
     }
 }

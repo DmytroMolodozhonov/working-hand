@@ -553,7 +553,7 @@ export class Duel {
         if (pb) return { kind: pb.kind, id: pb.id, dist: 0, miss: 0 };
         const o = new THREE.Vector3(), d = new THREE.Vector3();
         this._myRay(side, o, d);
-        const hit = pickBody(o, d, this._bodies(this.me), range);
+        const hit = pickBody(o, d, this._bodies(this.me, undefined, true), range);
         return hit ? { kind: hit.body.kind, id: hit.body.id, dist: hit.along, miss: hit.miss } : null;
     }
 
@@ -561,7 +561,7 @@ export class Duel {
      * Every body a charge can touch (`skip`: the caster — never his own), as capsules
      * {kind, id, a, b, r}. (The entries are reused: read them before the next call.)
      */
-    _bodies(skip = null, reach = RANGE_MAX + 5) {
+    _bodies(skip = null, reach = RANGE_MAX + 5, withF = false) {
         const g = this.game;
         const pool = this._bpool || (this._bpool = []);
         const out = [];
@@ -608,6 +608,9 @@ export class Duel {
         for (const c of g.iceCastle?.targets() || []) iceBody(c, put('I', c.id));
         // plant creatures (telewilpins, carnivorous heads): a charge hits the stem and the head (Plants.boltHit says what it does)
         for (const p of g.plants?.near || []) if (!p.dead) this._plantBody(p, put('P', p.id));
+        // the fire serpents («Serpent» out of a Hellfire): a charge hits the neck and the head (FireSerpent.boltHit: cold and water hurt it, «Авада» passes through)
+        // (only for the duel's own charges and aim — `withF`: building, the other spells' bodies never meet a thing of fire)
+        if (withF) for (const s of g.fireSerpent?.targets() || []) if (s.by !== skip) s.bodyCapsule(put('F', s.id));
         return out;
     }
 
@@ -637,6 +640,7 @@ export class Duel {
         if (kind === 'Y') { const o = g.diabolos?.byId(id); return o ? o.bodyCapsule(e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? this._plantBody(p, e) : null; }
+        if (kind === 'F') { const s = g.fireSerpent?.byId(id); return s && s.fade === 0 ? s.bodyCapsule(e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
         return kind === 'v' || kind === 'c' ? this._tipped(c, this._villagerBody(c, e)) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
@@ -780,6 +784,7 @@ export class Duel {
     /** The middle of an animal / a villager (where a charge flies). */
     _creaturePoint(c, out) {
         if (c.isBird) return out.copy(c.model.position);
+        if (c.isFireSerpent) return c.centre(out);
         if (c.isPhoenix) return phoenixCenter(c, out);
         if (c.isOwl) return owlCenter(c, out);
         if (c.isCanary) return out.set(c.model.position.x, c.model.position.y + 1.2, c.model.position.z);
@@ -818,12 +823,13 @@ export class Duel {
         if (kind === 'C') return g.customCreatures?.byId(id) || null; // (a creature of one's own)
         if (kind === 'g') return g.gargoyles?.byId(id) || null; // (an infernal gargoyle)
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? p : null; } // (a plant creature)
+        if (kind === 'F') { const s = g.fireSerpent?.byId(id); return s && s.fade === 0 ? s : null; } // (a fire serpent)
         return null;
     }
 
     _targetPos(b, out) {
         const g = this.game;
-        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o' || b.tk === 'N' || b.tk === 'C') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o' || b.tk === 'N' || b.tk === 'C' || b.tk === 'F') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
         if (b.tk === 'Y') return g.diabolos?.byId(b.tid) ? g.diabolos._centre(out) : null;
@@ -877,14 +883,14 @@ export class Duel {
         // the body it may turn a little towards: the one pointed at — and where on it
         // the line of the hand comes closest (the head, the legs…)
         let tk = 'n', tid = null, ak = 0.5;
-        const t = aim ? aim.t : (() => { const f = pickBody(origin, dir, this._bodies(this.me)); return f ? { kind: f.body.kind, id: f.body.id } : null; })();
+        const t = aim ? aim.t : (() => { const f = pickBody(origin, dir, this._bodies(this.me, undefined, true)); return f ? { kind: f.body.kind, id: f.body.id } : null; })();
         const body = t ? this._bodyOf(t.kind, t.id, this._tmpBody()) : null;
         if (body) { tk = t.kind; tid = t.id; ak = rayToSegment(origin, dir, body.a, body.b).k; }
         // («Левиоса» lifts the body by its middle: pointed at the feet, it must not dive into the ground beside them)
         if (spell === 'LevitateDuel') ak = Math.max(0.3, Math.min(0.75, ak));
         const b = this._addBolt({ id: `${this.me}:${nextId++}`, by: this.me, spell, side, tk, tid, ak, o: origin, d: dir });
         // (the reach: the caster's mana before the price — DuelRange.js; nobody on the line: it goes out sooner)
-        if (reach != null) b.rng = emptyRange(reach, !!pickBody(origin, dir, this._bodies(this.me, reach + 5), reach));
+        if (reach != null) b.rng = emptyRange(reach, !!pickBody(origin, dir, this._bodies(this.me, reach + 5, true), reach));
         b.aim = tk === 'p' ? tid : null; // (whom it was cast at: Leviosa tells why it did not lift them)
         const g = this.game;
         if (LOGGED_CHARGES.has(spell)) this._chargeStart(b, origin, dir, tk);
@@ -1024,7 +1030,7 @@ export class Duel {
         const end = _vEnd.copy(b.front).addScaledVector(b.dir, len);
         const w = this._wallOnWay(b.front, end);
         if (w <= 1) { len *= w; end.copy(b.front).addScaledVector(b.dir, len); }
-        return wayIsClear(b.front, end, this._bodies(b.by, len + 5));
+        return wayIsClear(b.front, end, this._bodies(b.by, len + 5, true));
     }
 
     /** Every DETACH.CHECK s: if the charge surely misses, its beam comes off the wand (b.free, b.tail = where the wand was). */
@@ -1088,7 +1094,7 @@ export class Duel {
         // a door's leaf on its way: no charge goes through a door — «Джолт» shoves it (it swings open, or shut,
         // as hard as the charge: Doors.impulse; a locked one only rattles); the others burst on the wood
         const dh = g.doors?.segmentHit(from, b.front);
-        if (dh && !firstTouched(from, _v3.lerpVectors(from, b.front, dh.s), this._bodies(b.by))) {
+        if (dh && !firstTouched(from, _v3.lerpVectors(from, b.front, dh.s), this._bodies(b.by, undefined, true))) {
             b.front.lerpVectors(from, b.front, dh.s);
             if (isJolt(b.spell)) g.doors.impulse(dh.door, _v3.copy(b.dir).multiplyScalar(DOOR_SPELLS[b.spell]), dh.k);
             this._end(b, 'fizzle');
@@ -1098,7 +1104,7 @@ export class Duel {
         // low FPS a charge moves a metre and more per frame) — its target or anybody else
         // a wall or a floor on this step's way (looked at every 0.3 m): nothing behind it is touched
         const wallS = this._wallOnWay(from, b.front);
-        const hit = firstTouched(from, b.front, this._bodies(b.by));
+        const hit = firstTouched(from, b.front, this._bodies(b.by, undefined, true));
         // (host) a player's charge flying close past people: a threat — they flinch, turn, look for who (Startle.js)
         if (g.authority && !b.npc) this._passBy(b, from, Math.min(1, wallS, hit ? hit.s : 1), hit?.body);
         // the strong charges burst on a ship's hull, a mast, a sail (StrongSpells: «не действует» on ships); the black ship's barrier flares
@@ -1165,6 +1171,8 @@ export class Duel {
         if (b.tk === 'Y' && this._referee()) { const o = this.game.diabolos?.byId(b.tid); this._end(b, 'fizzle'); if (o) this.game.diabolos.boltHit(o, b.spell, b.by); return; } // (Дьяволос: ни один заряд не действует — только злит)
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
+        // a fire serpent: its owner's computer counts it (the others see the charge end there)
+        if (b.tk === 'F') { const s = this.game.fireSerpent?.byId(b.tid); if (s && s === this.game.fireSerpent.mine) { this._end(b, 'hit'); this.game.fireSerpent.boltHit(s, b.spell, b.by); return; } if (!s) { this._end(b, 'fizzle', false); return; } }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
         if (b.waitT > 2) this._end(b, 'fizzle', false);

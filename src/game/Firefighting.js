@@ -158,10 +158,12 @@ export class Firefighting {
             sp.done = true;
             if (this._douse(sp, reach, half, hit)) did = true;
             if (g.hellfire?.douse?.(hit, 0)) { did = true; this._steamOn(sp, reach, hit); }
+            if (g.fireSerpent?.douse?.(hit, 0)) did = true; // (the fire serpent: knocked back)
             return did;
         }
         // the hose: the Hellfire every frame (it smothers while the cone is on it), the rest every tick
         if (g.hellfire?.douse?.(hit, dt)) { did = true; if (Math.random() < dt * 6) this._steamOn(sp, reach, hit); }
+        if (g.fireSerpent?.douse?.(hit, dt)) did = true; // (the fire serpent: «Firefighting Maxima» puts it out)
         sp.tickT = (sp.tickT ?? 0) - dt;
         if (sp.tickT <= 0) {
             sp.tickT = FIREFIGHT.TICK;

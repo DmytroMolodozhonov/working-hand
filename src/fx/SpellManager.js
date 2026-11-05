@@ -10,6 +10,7 @@
  * peers render the same spell for the eyes only.
  */
 
+import { serpentWords } from '../game/FireSerpentRules.js';
 import { dieWords } from '../game/StrongSpells.js';
 import { isExpelliarmus } from '../game/Expelliarmus.js';
 import { alohomoraWords, isLockWord } from '../game/Alohomora.js';
@@ -188,6 +189,8 @@ export function matchSpell(text) {
     const ff = firefightWords(s);
     if (ff) return ff;
     // «Let the Hellfire Come» (whole words only): before «fire» / «файр» (Fire, Fire Maxima), «лет» (Let it rain)…
+    // «Serpent» (English only): the fire serpent out of one's own Hellfire — before «fire» words (FireSerpentRules.js)
+    if (serpentWords(s)) return 'FireSerpent';
     const hell = hellfireWords(s);
     if (hell === 2) return 'Hellfire';
     if (hell === 1) return null; // («hellfire» alone: wait for «come» — never a campfire)

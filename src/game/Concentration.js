@@ -41,7 +41,7 @@ export const HELD = {
     LevitationMaxima: { ru: 'Левиоса Максима', icon: '🪶', own: ['LevitationMaxima', 'Attack'] },
     PlanetMove: { ru: 'Левиоса Супер Максима', icon: '🪐', own: ['LevitationSuperMaxima'] }, // (a planet held: PlanetMagic.js)
     Alive: { ru: 'Живое дерево', icon: '🌳', own: ['Alive', 'AliveMaxima', 'Attack'] },
-    Hellfire: { ru: 'Адский огонь', icon: '🔥', own: ['Hellfire'] },
+    Hellfire: { ru: 'Адский огонь', icon: '🔥', own: ['Hellfire', 'FireSerpent', 'Attack'] }, // («Serpent» out of the fire, «Атак» for it — FireSerpent.js)
     Inferno: { ru: 'Инферно', icon: '🔥', own: ['Inferno'] },
     Drawdown: { ru: 'Drawdown', icon: '⬇️', own: ['Drawdown', 'DrawdownMaxima'] },
     House: { ru: 'Магия дома', icon: '🏠', own: ['CreateHouse', 'ImproveHouse'] },

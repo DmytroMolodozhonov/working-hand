@@ -25,6 +25,7 @@
 import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
 import { StrokeDetector, SwimMotion, SWIM } from './SwimStroke.js';
+import { waterTint } from '../fx/UnderwaterLight.js';
 
 export const AIR_MAX = 20;
 const SWIM_DEPTH = 3.2; // water this deep (blocks) lifts you off your feet
@@ -34,7 +35,7 @@ const FEET = 1.95;
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
-const _fogDeep = new THREE.Color(0x0b4f74);
+const _tint = new THREE.Color();
 
 export class Swimming {
     constructor(game) {
@@ -293,12 +294,18 @@ export class Swimming {
     applyFog() {
         const fog = this.game.scene?.fog;
         if (!fog) return;
-        if (this.underwater) {
+        // (the haze is about the CAMERA — the same judgement as the blue overlay: judged at the body, a wave crossing the eyes
+        //  turned the haze on and off frame by frame — the author 05.11: «под водой мир мигает»)
+        if (this.eyeUnder) {
             if (!this._fogSaved || fog.color.getHex() !== this._fogSet) this._fogSaved = fog.color.clone();
-            fog.color.copy(this._fogSaved).lerp(_fogDeep, 0.85);
+            // the water's own colour by the depth of the eyes (the red goes first, the deep is blue and dark — UnderwaterLight.waterTint)
+            const L = this.game.underwaterLight;
+            const day = L?.day ?? Math.min(1, 0.15 + 2.2 * (0.299 * this._fogSaved.r + 0.587 * this._fogSaved.g + 0.114 * this._fogSaved.b));
+            const t = waterTint(L?.depth ?? 2, day, _tint);
+            fog.color.copy(t.color);
             this._fogSet = fog.color.getHex();
             fog.near = 0.5;
-            fog.far = Math.min(fog.far, this.bubble ? 34 : 26);
+            fog.far = Math.min(fog.far, this.bubble ? t.far * 1.3 : t.far);
         } else if (this._fogSaved) {
             if (fog.color.getHex() === this._fogSet) fog.color.copy(this._fogSaved);
             this._fogSaved = null;
@@ -401,8 +408,9 @@ export class Swimming {
         }
         // the blue haze is about where the CAMERA is: a wave passing over it is under water, a trough over it is air
         // (judged at the body, the view and the haze disagreed when the sea's waves rose and fell around the head)
-        const eyeUnder = this._cameraUnderwater();
-        this.overlay.style.opacity = eyeUnder ? (this.bubble ? '0.35' : '0.6') : '0';
+        const eyeUnder = this.eyeUnder = this._cameraUnderwater();
+        const op = eyeUnder ? (this.bubble ? '0.22' : '0.38') : '0';
+        if (op !== this._op) { this._op = op; this.overlay.style.opacity = op; } // (a style written only when it changes)
     }
 
     /** Is the camera itself under the water's top (a wave counted where the camera is)? */
@@ -411,7 +419,11 @@ export class Swimming {
         if (!cam) return this.underwater;
         const p = cam.getWorldPosition(_v);
         const w = this.waterAt(p.x, p.z);
-        return !!w && p.y < w.surface - (w.sea ? 0.03 : 0.15) && p.y > w.bottom; // (a lake's top is drawn a little lower)
+        if (!w || p.y <= w.bottom) { this._eyeSurface = null; return false; }
+        this._eyeSurface = w.surface;
+        // (a margin both ways: the eyes right at the surface, a small wave, never flips it frame by frame)
+        const under = this.eyeUnder ? p.y < w.surface + 0.1 : p.y < w.surface - (w.sea ? 0.06 : 0.15); // (a lake's top is drawn a little lower)
+        return under;
     }
 
     dispose() {

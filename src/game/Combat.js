@@ -169,6 +169,7 @@ export const SPELL_COST = {
     GroundVortex: 20, // «Ground Vortex»: the earth rises and circles; then 1 a second while held (a scroll — GroundVortex.js)
     Nihilis: 40, // «Nihilis Atra»: a cone of light scatters black magic; instant (only from a scroll — Nihilis.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
+    FireSerpent: 60, // «Serpent» out of my Hellfire: one must have 350 mana; then the Hellfire's drain ×2 while it lives (FireSerpent.js)
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
     IceCastle: 500, // «Create an Ice Castle»: a stamp, then the hands raise it (IceMagic.js; free in Creative)
     IceBridge: 50, // «Ice Bridge»: an arch of ice after the hand (IceMagic.js)
@@ -1222,6 +1223,7 @@ export class Combat {
         if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
         this.game.imperius?.interruptByDamage?.(amount, kind); // («Империус»: ANY harm to the body left standing brings the mind back at once — the author)
         this.hp = Math.max(0, this.hp - amount);
+        this.game.fireSerpent?.masterHurt?.(byId); // (my fire serpent answers whoever really hurt me — FireSerpent.js)
         this.game.fleet?.kingHurt(byId); // (the crew of my ship answers whoever struck me — FleetOrders.kingHurt)
         this.hurtAt = performance.now(); // (in a fight: the microphone listens for spells — main.js)
         this.game.castleLife?.guard?.masterHurt(this.game.localId, byId, kind); // (my knights, if I am a king: whoever did it is their first enemy — Bodyguard.js)

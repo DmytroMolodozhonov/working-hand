@@ -39,6 +39,7 @@ export const TAUGHT_BY = {
     CircleAttackMaxima: 'CircleAttack', DrawdownMaxima: 'Drawdown', AirBubbleMaxima: 'AirBubble', WaveAttackMaxima: 'WaveAttack',
     WaterForming: 'Waterball', VortexBubble: 'WaterVortex', Furl: 'Unfurl', BreakthroughMaxima: 'Breakthrough',
     WallRise: 'Breakthrough', WallRiseMaxima: 'Breakthrough', WardGrow: 'ProtectionHouse', GroundShield: 'GroundVortex',
+    FireSerpent: 'Hellfire', // (the fire serpent: the Hellfire's scroll teaches it — it is called out of that fire)
 };
 
 /** Learned from the book-birds' books (BookBirds.BOOK_POOL; the book of protection; the swift book — «Флайн»). */

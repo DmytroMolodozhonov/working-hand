@@ -94,6 +94,7 @@ import { CircleAttack } from './CircleAttack.js';
 import { Inspirius } from './Inspirius.js';
 import { Boom } from './Boom.js';
 import { Hellfire } from './Hellfire.js';
+import { FireSerpent } from './FireSerpent.js';
 import { Firefighting } from './Firefighting.js';
 import { WindRing } from './WindRing.js';
 import { Burning } from './Burning.js';
@@ -173,6 +174,7 @@ import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
 import { Mermaid } from './Mermaid.js';
 import { SeaFloor } from '../fx/SeaFloor.js';
+import { UnderwaterLight } from '../fx/UnderwaterLight.js';
 import { WalkRecorder } from '../core/WalkRecorder.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -690,6 +692,7 @@ export class Game {
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
         this.sunken = new SunkenWorld(this); // the wrecks and the sunken temple on the sea's bottom, their chests (SunkenWorld.js)
+        this.underwaterLight = new UnderwaterLight(this); // the light under the water: its colour by the depth, the sun's shafts, the marine snow, the caustics (UnderwaterLight.js)
         this.seaFloor = new SeaFloor(this); // the sea's bottom: kelp, seagrass, corals, glowing anemones and lilies, the fish schools (SeaFloor.js)
         this.oceanStorm = new OceanStorm(this); // the storms over the sea: rain, lightning, waterspouts (OceanStorm.js — the wind's, SeaWind.js)
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
@@ -753,6 +756,7 @@ export class Game {
         this.planetDestroy = new PlanetDestroy(this); // «Planet Liquidation»: a planet blown up — the sixth scroll of the gods' library
         this.boom = new Boom(this); // «Бум»: a mountain (a castle) torn apart from inside — the fifth scroll of the gods' library
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
+        this.fireSerpent = new FireSerpent(this); // «Serpent»: the fire serpent out of my Hellfire (FireSerpent.js)
         this.smokeSwipe = new SmokeSwipe(this); // a stroke of the wand (down, aslant) turns a wave of smoke aside: 3 mana, no words, from the start
         this.windRing = new WindRing(this);
         this.burning = new Burning(this); // a creature ON FIRE: burns for a while, put out by «Firefighting» up / water (Burning.js)
@@ -2104,8 +2108,10 @@ export class Game {
             if (this.dragonRide?.active) { const dr = this.dragonRide.attack(isFinal); if (dr !== undefined) return dr; }
             // the swarm of things («Левиоса Максима»): a volley at the one the wand points at
             if (this.levMax?.swarm?.active) { const r = this.levMax.swarm.attack(isFinal); if (r) return r; return null; }
-            // my servants (a living tree, «Брейнрот») go for the one the hand points at
-            if (this.levitation.state?.kind !== 'weapon' && this.levitation.state?.kind !== 'board' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal);
+            // my fire serpent (FireSerpent.js) — and my servants (a living tree, «Брейнрот») go for the one the hand points at
+            const serp = this.levitation.state?.kind !== 'weapon' && this.levitation.state?.kind !== 'board' && this.fireSerpent?.alive ? this.fireSerpent.attack(isFinal) : false;
+            if (this.levitation.state?.kind !== 'weapon' && this.levitation.state?.kind !== 'board' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal) || (serp ? 'Attack' : null);
+            if (serp) return 'Attack';
             const hint = this.levitation.attack();
             if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
             return 'Attack';
@@ -2183,6 +2189,7 @@ export class Game {
         if (name === 'Inspirius') return this.inspirius.cast(isFinal);
         if (name === 'Boom') return this.boom.cast(isFinal);
         if (name === 'Hellfire') return this.hellfire.cast(isFinal);
+        if (name === 'FireSerpent') return this.fireSerpent.cast(isFinal);
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (name === 'GiveMyPower') return this._castGiveMyPower(isFinal);
@@ -3794,7 +3801,9 @@ export class Game {
         for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m);
         for (const m of this.boats?.samples?.() || []) zoo.add(m); // (a boat — BoatModel.js)
         for (const m of this.sunken?.samples?.() || []) zoo.add(m); // (the sunken temple — SeaTempleModel.js)
-        for (const m of this.seaFloor?.samples?.() || []) zoo.add(m); // (the sea's plants, its glowing ones, the fish) // (a waterspout's funnel and its wall cloud — WaterspoutFx.js)
+        for (const m of this.seaFloor?.samples?.() || []) zoo.add(m);
+        for (const m of this.underwaterLight?.samples?.() || []) zoo.add(m); // (the sun's shafts and the marine snow)
+        { const fs = this.fireSerpent?.sample?.(); if (fs) zoo.add(fs.group); } // (the fire serpent's body, head and flames: its shapes are shared — kept)
         for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
         for (const m of this.tarons?.sampleModels?.() || []) zoo.add(m); // (a Taron near and as one skinned shape: the underworld's giants — Taron.js)
@@ -4286,6 +4295,7 @@ export class Game {
         this.ghosts?.afterCombat(); // (a ghost's chill slows the legs: after Combat set their speed for this frame)
         this.vortex.update(dt);
         this.hellfire?.update(dt);
+        this.fireSerpent?.update(dt);
         this.smokeSwipe?.update(dt);
         this.burning?.update(dt);
         this.waterStorm?.update(dt);
@@ -4327,6 +4337,7 @@ export class Game {
         if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost);
         this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
+        this.underwaterLight?.update(dt); // (the depth of the eyes, the shafts, the caustics — before the haze takes its colour)
         this.swim.applyFog(); // (under the water: murky and blue)
         this.world.terrain?.data?.settling?.step(SETTLE_MS); // (what the last changes left too weak gives way: Structure.js)
         this.falling?.update(Math.min(0.05, dt));
@@ -5321,6 +5332,8 @@ export class Game {
         this.wandMagic?.dispose();
         this.vortex?.dispose();
         this.hellfire?.dispose();
+        this.fireSerpent?.dispose();
+        this.underwaterLight?.dispose();
         this.burning?.dispose();
         this.waterStorm?.dispose();
         this.gear?.dispose();

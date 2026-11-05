@@ -41,6 +41,7 @@ import { wantedTactics } from './Wanted.js';
 import { lessonSpell } from './BumpRules.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { reactLagText, huntRole, huntLeash, chooseShield, canDome, SHIELD } from './WizardMind.js';
+import { pickThreat } from './FireSerpentRules.js';
 
 const WALK = 2.3, RUN = 5.6;
 const DUEL_DRAIN = 1; // mana a second a wizard spends pushing in a duel (as a player's fatigue)
@@ -811,6 +812,7 @@ export class WizardFight {
     /** Taken unawares: no answer — but now he knows (a moment later he is ready, if he still stands). */
     _caught(v, b) {
         v.readyUntil = Date.now() + 20000;
+        if (b.by != null && this.life._isPlayer(b.by)) this.noteHit(v, 'p:' + b.by);
         if (!v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; }
     }
 
@@ -826,19 +828,46 @@ export class WizardFight {
         const at = duel._creaturePoint(c, _d.clone());
         const fp = { x: at.x, y: at.y - 0.3, z: at.z };
         if (!this.clearShot(v, fp)) return false;
-        const spell = v.role === 'master' ? 'JoltMaxima' : 'Jolt';
+        // (a fire serpent: «Джолт» only scatters its flames — cold hurts it: «Айс»; FireSerpentRules.serpentHit)
+        const spell = ref.k === 'F' ? 'IceDuel' : v.role === 'master' ? 'JoltMaxima' : 'Jolt';
         const cost = NPC_COST[spell] ?? 5;
         if (v.mana < cost) return false;
-        // not facing it yet: he turns to it first (pursueThreat), then casts
-        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) { v.threatAt = { ref, until: this.clock + 3 }; return false; }
+        // not facing it yet: he turns to it first (pursueThreat), then casts (`first`: chosen over his player foe — helperFirst)
+        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) { v.threatAt = { ref, until: this.clock + 3, first: !!v.foe }; return false; }
         // he says it first (a second), then it flies (_prepTick)
         return this._begin(v, spell, null, fp, { at: ref, cost, cd: v.W.cast * manaPace(v.mana - cost, v.maxMana) });
+    }
+
+    /**
+     * (host) Several foes at once (the author 01.11: a player and 2–4 helpers — the fire serpent, living trees, servants): is the
+     * helper `h` {k, id, kind: 'serpent' | 'tree' | 'servant', dist, small, hp} the one to answer first now, before his player foe?
+     * The most dangerous first — the nearest, the one hitting him, who began it; a weak little helper first (one blow and it is out
+     * of the way); otherwise the player (FireSerpentRules.threatScore). No player foe: yes.
+     */
+    helperFirst(v, h) {
+        if (!v.foe) return true;
+        const fp = this.life._playerPos(v.foe);
+        if (!fp) return true;
+        const hits = v.hitsBy || {}, now = this.clock, key = h.k + ':' + h.id;
+        const ago = (k) => (hits[k] != null ? now - hits[k] : null);
+        return pickThreat([
+            { kind: 'player', dist: Math.hypot(fp.x - v.x, fp.z - v.z), hitMe: ago('p:' + v.foe), first: v.firstBy === 'p:' + v.foe },
+            { kind: h.kind, dist: h.dist ?? 30, hitMe: ago(key), first: v.firstBy === key, small: !!h.small, hp: h.hp ?? 1 },
+        ]) === 1;
+    }
+
+    /** (host) `v` was hurt by `key` ('p:<id>' a player, '<k>:<id>' a helper): remembered for helperFirst (the last 30 s). */
+    noteHit(v, key) {
+        const m = v.hitsBy || (v.hitsBy = {}), now = this.clock;
+        for (const k in m) if (now - m[k] > 30) delete m[k];
+        m[key] = now;
+        if (!v.firstBy || !(v.firstAt > now - 60)) { v.firstBy = key; v.firstAt = now; }
     }
 
     /** (host) A creature hurt him and he is turning to it to answer (threat): true — busy with it this frame. */
     pursueThreat(v, dt) {
         const t = v.threatAt;
-        if (!t || v.foe || v.noWand || v.dead || v.stunT > 0 || this.clock > t.until) { v.threatAt = null; return false; }
+        if (!t || (v.foe && !t.first) || v.noWand || v.dead || v.stunT > 0 || this.clock > t.until) { v.threatAt = null; return false; }
         const c = this.game.duel?._creature?.(t.ref.k, t.ref.id);
         if (!c) { v.threatAt = null; return false; }
         const at = this.game.duel._creaturePoint(c, _d.clone());

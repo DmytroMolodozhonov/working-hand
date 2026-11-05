@@ -2977,7 +2977,16 @@ export class CastleLife {
     _defend(w, src, opts = {}) {
         if (!w || w.dead || !src) return;
         this.fear(w, src.x, src.z, 0.4);
-        if (w.wizard && opts.srcRef) this.wizards.fight.threat(w, opts.srcRef);
+        if (w.wizard && opts.srcRef) {
+            // (several foes at once: the helper hitting him now — answered first only if it is the worst of them; WizardFight.helperFirst)
+            const F = this.wizards.fight, r = opts.srcRef;
+            F.noteHit?.(w, r.k + ':' + r.id);
+            const c = this.game.duel?._creature?.(r.k, r.id);
+            const hp = c ? (c.hp ?? c.health ?? 1) / (c.maxHp || c.maxHealth || c.hp || c.health || 1) : 1;
+            const kind = r.k === 'F' ? 'serpent' : r.k === 't' ? 'tree' : 'servant';
+            const dist = src ? Math.hypot(src.x - w.x, src.z - w.z) : 10;
+            if (!F.helperFirst || F.helperFirst(w, { k: r.k, id: r.id, kind, dist, small: kind === 'servant', hp })) F.threat(w, r);
+        }
     }
 
     /**

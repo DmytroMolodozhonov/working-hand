@@ -458,6 +458,18 @@ const TUNES = {
         noise(o, sr, 0, 8, 0.05, () => 0.05, swell(0.3, 0.3), r); // (the roar under it)
         return finish(o, sr, { rms: 0.08 });
     },
+    /** «Serpent» (FireSerpent.js): a hiss rising out of the roar, a coiling chromatic line on low brass over Phrygian E, the drums of its heave. */
+    thSerpent(sr) {
+        const o = buf(sr, 8.5), r = rng(211);
+        noise(o, sr, 0, 2.4, 0.08, (u) => 0.08 + 0.3 * u, (u) => Math.sin(Math.min(1, u * 1.2) * Math.PI * 0.5) * (1 - u * 0.4), r); // (the hiss rising)
+        pad(o, sr, ['E2', 'B2', 'E3', 'G3'], 0.6, 3.4, 0.42, { att: 0.9, vib: 0.009, harm: 3 });
+        pad(o, sr, ['F2', 'C3', 'F3', 'Ab3'], 3.4, 5.4, 0.46, { att: 0.25, vib: 0.009, harm: 4 });
+        pad(o, sr, ['E2', 'Bb2', 'E3', 'G3', 'Db4'], 5.4, 8.2, 0.5, { att: 0.3, rel: 1.3, vib: 0.008, harm: 4 });
+        melody([[0, 'E3', 1], [1, 'F3', 1], [2, 'Gb3', 1], [3, 'F3', 1], [4, 'E3', 2], [6, 'Bb2', 1], [7, 'B2', 1], [8, 'C3', 1], [9, 'B2', 1], [10, 'Bb2', 2], [12, 'E3', 3]], 0.5, 1.2, (f, t, l) => brass(o, sr, f, t, l, 0.15)); // (it coils)
+        for (let k = 0; k < 10; k++) drum(o, sr, 1.0 + k * 0.7 + (k % 2 ? 0.12 : 0), 0.42, 46, 1.0, r);
+        noise(o, sr, 5.2, 3, 0.06, () => 0.05, swell(0.2, 0.5), r); // (the roar of its fire)
+        return finish(o, sr, { rms: 0.08 });
+    },
     /** «Настоящий тёмный маг» (DarkLord.js): a slow toll, a black choir sinking into D minor, a roar that swells and a last deep chord. */
     thDarkLord(sr) {
         const o = buf(sr, 11), r = rng(167);
@@ -996,6 +1008,7 @@ export const SPELL_SOUND = {
     LevitationSuperMaxima: { own: ['spaceRise'], cast: 'fxMaxima' },
     PlanetLiquidation: { own: ['doomBeam', 'doomRumble', 'doomBlast'], theme: 'thDoom' }, // (the beam, the cracking, the blast — SpaceSounds, everybody who sees it; the tune from the caster)
     Hellfire: { own: ['inferno', 'rumble'], theme: 'thHell' },
+    FireSerpent: { own: ['inferno', 'rumble'], theme: 'thSerpent' }, // (the serpent rises out of the fire: its own dark tune — FireSerpent.js)
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
     GroundVortex: { theme: 'thEarth' }, GroundShield: { cast: 'fxShield' }, // («Ground Vortex»: its tune; the shield word — a short shield chime)
     // the duel charges and the fights (their own short sounds; Duel.js plays them for everyone)

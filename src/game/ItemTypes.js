@@ -118,7 +118,7 @@ const SPELL_LABEL = SPELL_RU;
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
 
 /** Raw meat by the animal it came from (HP when eaten raw); roasted on a fire it gives twice as much. */
-export const MEAT_HP = { cow: 8, horse: 8, pig: 7, sheep: 6, ram: 6, bull: 9, minotaur: 10, pegasus: 9, swan: 5, shark: 8, dolphin: 7, glowfin: 4 };
+export const MEAT_HP = { cow: 8, horse: 8, pig: 7, sheep: 6, ram: 6, bull: 9, minotaur: 10, pegasus: 9, swan: 5, shark: 8, dolphin: 7, glowfin: 5 }; // (the glowfin: a small fish, but every meat feeds at least 5 — food.test)
 export const MEAT_RU = { cow: 'говядина', horse: 'конина', pig: 'свинина', sheep: 'баранина', ram: 'баранина', bull: 'говядина', minotaur: 'мясо минотавра', pegasus: 'мясо пегаса', swan: 'мясо лебедя' , shark: 'мясо акулы', dolphin: 'мясо дельфина', glowfin: 'мясо светлохвоста' };
 /** How much health this food gives (golden apple 10, apple 3, raw meat 5–10 by the animal, roasted ×2, the rest its own `heal`). */
 export function foodHeal(it) {

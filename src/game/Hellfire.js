@@ -44,6 +44,8 @@ import * as THREE from 'three';
 import { ParticlePool } from '../fx/Particles.js';
 import { SwingMeter } from './WaterVortex.js';
 
+import { serpentDrainK } from './FireSerpentRules.js';
+
 export const HELLFIRE = {
     NAME: 'Hellfire',
     MIN_MAX_MANA: 100, // the mana maximum one must have (free world)
@@ -350,7 +352,7 @@ export class Hellfire {
         const w = g.items?.heldOf?.('wand');
         if (w && w.side !== s.side) s.side = w.side;
         // the caster pays while holding it (the free world)
-        if (c && (c.drain(hellfireDrain(dt), dt) === false || c.manaOut())) { this.stop('mana'); return; }
+        if (c && (c.drain(hellfireDrain(dt) * serpentDrainK(!!g.fireSerpent?.alive), dt) === false || c.manaOut())) { this.stop('mana'); return; }
         s.t += dt;
         if (s.t > HELLFIRE.MAX_LIFE) { this.stop('time'); return; }
         // the wand: where it is, where it points, how far the arm is stretched
@@ -581,7 +583,7 @@ export class Hellfire {
         if (pushNow) f.pushT = HELLFIRE.PUSH_EVERY;
         const surge = (f.vel ? Math.hypot(f.vel.x, f.vel.z) : 0) > HELLFIRE.SURGE_SPEED || f.surgeT > 0;
         for (const b of bodies) {
-            if (b.kind === 'p' || b.kind === 'b') continue;
+            if (b.kind === 'p' || b.kind === 'b' || b.kind === 'F') continue; // (the fire serpent is this fire itself)
             const mid = _c.copy(b.a).add(b.b).multiplyScalar(0.5);
             // how far the body is from the fire's edge (≤ 0: in it), and where the fire is for it
             let gap = Infinity, fx = 0, fz = 0;

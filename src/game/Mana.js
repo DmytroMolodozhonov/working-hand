@@ -73,7 +73,7 @@ export const FIRST_SPELL = {
     EarthquakeMaxima: 5, WindImpulseMaxima: 5, BombardoMaxima: 5, JoltMaxima: 5, FireMaxima: 5, FirefightingMaxima: 5,
     // strong: up to +20
     Snowman: 3, WaterVortex: 8, Alive: 8, AliveMaxima: 12, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
-    TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
+    TotalDestructionMaxima: 20, Hellfire: 20, FireSerpent: 15, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8, CreateCastle: 20,
     IceCastle: 15, IceBridge: 3, GiveMyPower: 2,
     IceMaxima: 5, Accentric: 8, Electrum: 10, Pilbidrio: 12, // (the strong duel spells — StrongSpells.js)
@@ -430,7 +430,7 @@ const TITLES = {
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', WardDispel: 'Dispel Ward', ProtectionHouse: 'Protection House', StrengthenHouse: 'Strengthen House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
     IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
-    Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
+    Hellfire: 'Let the Hellfire Come', FireSerpent: 'Serpent', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
     WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima', ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', PlanetLiquidation: 'Planet Liquidation',

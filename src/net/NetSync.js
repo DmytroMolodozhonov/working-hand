@@ -653,6 +653,16 @@ export class NetSync {
         this.net.send(why ? { t: 'hf', by: this.me, s, w: why } : { t: 'hf', by: this.me, s }, true);
     }
 
+    /** My fire serpent (~10×/s; null: it is gone) — FireSerpent.onNet; `b`: a bite the host must apply. */
+    fireSerpent(s, b = null) {
+        this.net.send(b ? { t: 'fs', by: this.me, s, b } : { t: 'fs', by: this.me, s }, true);
+    }
+
+    /** My fire serpent bit player `to` (their computer burns them) — FireSerpent.onBite. */
+    fireSerpentBite(to, by) {
+        this.net.send({ t: 'fsb', by: this.me, to }, true);
+    }
+
     /** My «Water Vortex Super Maxima» storm (~10×/s; null: it fell) — see WaterStorm.onNet. */
     waterStorm(s, why = null) {
         this.net.send(why ? { t: 'ws', by: this.me, s, w: why } : { t: 'ws', by: this.me, s }, true);
@@ -1354,6 +1364,8 @@ export class NetSync {
             case 'wdrop': if (m.by !== this.me && arr(m.p, 3) && arr(m.v, 3)) g.water.remoteDrop(m); break;
             case 'vx': if (m.by !== this.me) g.vortex?.onNet(m); break;
             case 'hf': if (m.by !== this.me) g.hellfire?.onNet(m); break;
+            case 'fs': if (m.by !== this.me) g.fireSerpent?.onNet(m); break;
+            case 'fsb': if (m.to === this.me) g.fireSerpent?.onBite(m.by); break;
             case 'burn': if (m.by !== this.me) g.burning?.onNet(m); break;
             case 'burnl': if (m.by !== this.me) g.burning?.onList(m); break;
             case 'gv': if (m.by !== this.me) g.groundVortex?.onNet(m); break;
