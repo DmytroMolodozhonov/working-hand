@@ -1918,3 +1918,32 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #wings-grow .wg-cap { color: #e9f1ff; font-weight: bold; text-shadow: 0 0 4px #000, 0 1px 2px #000; margin-bottom: 4px; letter-spacing: 0.02em; }
 #wings-grow .wg-track { height: 12px; background: rgba(10, 14, 30, 0.6); border: 2px solid rgba(220, 232, 255, 0.7); border-radius: 7px; overflow: hidden; box-shadow: 0 0 10px rgba(170, 200, 255, 0.35); }
 #wings-grow .wg-fill { height: 100%; width: 0; background: linear-gradient(90deg, #f6f8ff, #bcd2ff 55%, #e8dcff); box-shadow: inset 0 -3px 6px rgba(120, 140, 200, 0.4); transition: width 0.5s; }
+/* the mermaid's time (Swimming._mermaidBar): NOT like the mana bar (the author: «главное, чтобы отличалась от полосы маны») — at the TOP of
+   the screen, a pearl-rimmed capsule of fish scales in the sea's turquoise and gold, the tail at its end; it empties from the right as the
+   tail's time runs out; the time in big figures on it */
+#mermaid-bar {
+    position: fixed; left: 50%; top: 64px; transform: translateX(-50%);
+    width: min(440px, 56vw); height: 36px; display: none; z-index: 1200; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 0%, rgba(40, 90, 110, 0.9), rgba(4, 22, 34, 0.94));
+    border: 3px solid transparent; border-radius: 999px; overflow: hidden;
+    background-clip: padding-box;
+    box-shadow: 0 0 0 2px #f4e6c8, 0 0 0 4px rgba(120, 90, 40, 0.8), 0 0 18px rgba(255, 220, 140, 0.55), inset 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+#mermaid-bar .mb-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transition: width 0.4s linear; border-radius: 999px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.35) 0 28%, transparent 30%) 0 0 / 14px 10px,
+        radial-gradient(circle at 50% 100%, transparent 0 62%, rgba(0, 40, 50, 0.45) 64% 70%, transparent 72%) 0 0 / 14px 10px,
+        radial-gradient(circle at 50% 100%, transparent 0 62%, rgba(0, 40, 50, 0.45) 64% 70%, transparent 72%) 7px 5px / 14px 10px,
+        linear-gradient(90deg, #0f8f86 0%, #22c7b2 45%, #7fe3c8 75%, #f2cf6a 100%);
+    box-shadow: 0 0 12px rgba(255, 220, 120, 0.7);
+    animation: mermaid-sway 3.2s ease-in-out infinite;
+}
+@keyframes mermaid-sway { 50% { filter: brightness(1.18) hue-rotate(-8deg); } }
+#mermaid-bar .mb-txt {
+    position: relative; text-align: center; font: 900 26px/36px Georgia, 'Times New Roman', serif; color: #fff8e6; letter-spacing: 1px;
+    -webkit-text-stroke: 1.5px rgba(10, 30, 40, 0.95); paint-order: stroke fill; text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 210, 120, 0.8);
+}
+#mermaid-bar.low { animation: mermaid-low 0.8s ease-in-out infinite; }
+#mermaid-bar.low .mb-fill { background: linear-gradient(90deg, #b8324a, #ff7a6a 70%, #ffd08a); }
+@keyframes mermaid-low { 50% { box-shadow: 0 0 0 2px #ffd2c8, 0 0 0 4px rgba(160, 40, 40, 0.9), 0 0 26px rgba(255, 90, 80, 0.9); } }

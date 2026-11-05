@@ -26,6 +26,7 @@ import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
 import { StrokeDetector, SwimMotion, SWIM } from './SwimStroke.js';
 import { waterTint } from '../fx/UnderwaterLight.js';
+import { POTION_FX } from './PotionEffects.js';
 
 export const AIR_MAX = 20;
 const SWIM_DEPTH = 3.2; // water this deep (blocks) lifts you off your feet
@@ -390,14 +391,11 @@ export class Swimming {
         // a mermaid breathes the water: in place of the bubbles — how long the tail is left (the author 05.11: «вместо пузыриков будет
         // таймер, сколько можно находиться»)
         const mer = this.game.potionFx?.has?.('mermaid') ? Math.max(0, this.game.potionFx.left.mermaid || 0) : -1;
+        // (the author 05.11: «циферки… очень маленькие… будет полоса, по аналогии полосы маны, которая идёт назад») — a bar like the mana's,
+        // emptying as the tail's time runs out, the time in big figures on it; shown while the tail lasts, in the water or out of it
+        this._mermaidBar(mer);
         if (mer >= 0 && this.underwater) {
-            this.hudEl.style.display = 'flex';
-            const key = 'm' + Math.ceil(mer);
-            if (key !== this._lastKey) {
-                this._lastKey = key;
-                const m = Math.floor(mer / 60), sec = Math.floor(mer % 60);
-                this.hudEl.innerHTML = `<span class="air-txt" style="font-weight:700;color:${mer < 60 ? '#ffb0a0' : '#9ff0e6'}">🧜 ${m}:${String(sec).padStart(2, '0')}</span>`;
-            }
+            this.hudEl.style.display = 'none';
         } else if (show) {
             const n = Math.ceil(this.air / 2); // 10 bubbles
             const key = n + (this.bubble ? 'b' : '');
@@ -411,6 +409,31 @@ export class Swimming {
         const eyeUnder = this.eyeUnder = this._cameraUnderwater();
         const op = eyeUnder ? (this.bubble ? '0.22' : '0.38') : '0';
         if (op !== this._op) { this._op = op; this.overlay.style.opacity = op; } // (a style written only when it changes)
+    }
+
+    /** The mermaid's time: a bar emptying (`left` s; < 0: no tail — hidden). Written only when it changes. */
+    _mermaidBar(left) {
+        let el = this._merEl;
+        if (!el) {
+            if (typeof document === 'undefined' || left < 0) return;
+            el = this._merEl = document.createElement('div');
+            el.id = 'mermaid-bar';
+            el.innerHTML = '<div class="mb-fill"></div><div class="mb-txt"></div>';
+            document.body.appendChild(el);
+            this._merFill = el.firstChild; this._merTxt = el.lastChild;
+        }
+        if (left < 0) { if (this._merShown) { el.style.display = 'none'; this._merShown = false; } return; }
+        if (!this._merShown) { el.style.display = 'block'; this._merShown = true; }
+        const total = POTION_FX.mermaid?.s || 720;
+        const k = Math.max(0, Math.min(1, left / total));
+        const w = (k * 100).toFixed(1) + '%';
+        if (w !== this._merW) { this._merW = w; this._merFill.style.width = w; }
+        const t = Math.ceil(left), key = t + (t < 60 ? 'l' : '');
+        if (key !== this._merKey) {
+            this._merKey = key;
+            this._merTxt.textContent = `🧜 ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+            el.classList.toggle('low', t < 60);
+        }
     }
 
     /** Is the camera itself under the water's top (a wave counted where the camera is)? */
