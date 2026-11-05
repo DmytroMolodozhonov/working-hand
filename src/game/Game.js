@@ -79,6 +79,7 @@ import { Campfires } from './Campfires.js';
 import { LanternLights } from './LanternLights.js';
 import { FireLights } from './FireLights.js';
 import { Cauldrons } from './Cauldrons.js';
+import { PotionLair } from './PotionLair.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
 import { BuildingFx } from './BuildingFx.js';
@@ -735,6 +736,7 @@ export class Game {
         this.caveEyes = new CaveExplorer(this.caveMap);
         this.lanterns = new LanternLights(this); // the houses' lamps shine: lights at the nearest lanterns (made before prewarm too)
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
+        this.potionLair = new PotionLair(this); // «Логово зельевара» (Творческий, «Где появиться»): зал в небе с котлом, ручьём и полками (PotionLair.js)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
         this.buildingFx = new BuildingFx(this); // the mill's sails, the church bell, the chimneys' smoke, the anvil (generation 11: Buildings.js)
@@ -1679,7 +1681,8 @@ export class Game {
         // in a cave: as dark as the daylight reaching the head (the mouth lit, deeper in dark — the
         // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
         const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;
-        const dark = sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
+        let dark = sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
+        if (this.potionLair?.inLair) dark = this.potionLair.darkness(); // (the potion-maker's lair: lit, but dimmed — «светло, но затемнено»)
         this._caveK = (this._caveK || 0) + (dark - (this._caveK || 0)) * Math.min(1, dt * 1.5);
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
@@ -4209,6 +4212,7 @@ export class Game {
         if (earth && !duelOnly) this.campfires.update(dt);
         if (earth && !duelOnly) this.lanterns?.update(dt);
         if (earth && !duelOnly) this.cauldrons?.update(dt);
+        this.potionLair?.update(dt);
         if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         if (earth && !duelOnly) this.crystals?.update(dt);
@@ -5346,6 +5350,7 @@ export class Game {
         this.campfires?.dispose();
         this.lanterns?.dispose();
         this.cauldrons?.dispose();
+        this.potionLair?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
         this.buildingFx?.dispose();

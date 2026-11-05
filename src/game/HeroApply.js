@@ -63,6 +63,11 @@ export class HeroApply {
         const port = () => { const sp = data?.test ? testSeaCastleSpot(data.seed, data.bigHouses) : null; return sp ? { x: sp.shore.x, z: sp.shore.z + 8 } : null; };
         this.pending = { id, age: 0, far: false, hold: null, origin: g.character?.group?.position?.clone?.() || null, cells: null, t: null };
         if (id === 'blackship') return;
+        if (id === 'potionlair') { // («Логово зельевара»: зал в небе строится блоками при входе — PotionLair)
+            this.pending = null;
+            if (!g.potionLair?.start()) this._fail(g.potionLair?.why || 'не получилось', id);
+            return;
+        }
         if (id === 'hellmap') { // («Ад»: through the gates' own dark passage — HellGate.startIn: the screen stays closed until the land round is drawn)
             this.pending = null;
             if (!data?.hell || !g.hellGate?.startIn?.()) this._fail('в этом мире ада нет — вы на начальной площадке', id);
