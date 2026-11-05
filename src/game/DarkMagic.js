@@ -44,7 +44,7 @@ export const DARK = {
 
 /** Виды заклинаний чёрной магии (имена как в Mana / SpellBook). «ImperiusMaxima» — НЕ тут (божественное). */
 /** («Пентаграниум» и сама пентаграмма сюда НЕ входят — бывают и хорошие; +1 даёт только РИТУАЛ дьявольской силы: вызывающий код сам делает addDark(hero, 1, 'ritual').) */
-export const DARK_SPELLS = new Set(['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower', 'Accentric', 'Hellfire', 'FireSerpent', 'Sectura']);
+export const DARK_SPELLS = new Set(['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower', 'Accentric', 'Hellfire', 'FireSerpent', 'Sectura', 'Caligo']);
 /** Чёрные, но сам каст тьму НЕ повышает: «Let the Hellfire Come» — +1 только за каждого убитого им человекоподобного (HellKills.js). */
 export const DARK_NO_CAST = new Set(['Hellfire', 'FireSerpent']); // («Serpent»: its +10 is given by FireSerpent.cast itself)
 /** Эти всегда дают +1 (не 50 %). */

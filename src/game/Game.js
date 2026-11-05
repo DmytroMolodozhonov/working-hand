@@ -227,6 +227,7 @@ import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
 import { Slash } from './Slash.js';
+import { DarkFog } from './DarkFog.js';
 import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
@@ -619,6 +620,7 @@ export class Game {
             liquidation: (name, o, d, casterId) => this.liquidation?.fly(name, o, d, casterId),
             stitching: (o, d, casterId) => this.stitching?.sew(o, d, casterId),
             slash: (o, d, casterId, side) => this.slash?.fire(o, d, casterId, side),
+            caligo: (o, d, casterId, side) => this.darkFog?.fire(o, d, casterId, side),
             bridge: (o, d, casterId) => this.bridge?.grow(o, d, casterId),
             groundprud: (o, d, casterId) => this.groundprud?.grow(o, d, casterId),
             collision: this.collision,
@@ -683,6 +685,7 @@ export class Game {
         this.drawdown = new Drawdown(this); // «Drawdown»: the ground sinks where the wand points (Drawdown.js)
         this.liquidation = new Liquidation(this); // «Liquidation»: a splash — a thing crumbles into dust (Liquidation.js)
         this.stitching = new Stitching(this); // «Stitching»: a passage sewn shut with stones (Stitching.js)
+        this.darkFog = new DarkFog(this); // «Caligo»: the dark mage's fog — a jet from the wand, a dome nobody sees through (DarkFog.js)
         this.slash = new Slash(this); // «Sectura»: the cutting curse of black magic — the wand arms, a swing lets the blade go (Slash.js)
         this.groundprud = new Groundprud(this); // «Groundprud»: the ground rises into a wall (Groundprud.js)
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
@@ -2232,6 +2235,7 @@ export class Game {
         if (name === 'Drawdown' || name === 'DrawdownMaxima') return this.drawdown.cast(name, isFinal);
         if (name === 'Liquidation' || name === 'LiquidationMaxima') return this.liquidation.cast(name, isFinal);
         if (name === 'Stitching') return this.stitching.cast(isFinal);
+        if (name === 'Caligo') return this.darkFog.cast(isFinal); // (a jet of black smoke for 10 s — DarkFog.js)
         if (name === 'Sectura') return this.slash.cast(isFinal); // (the word arms the wand; the swing lets the blade go — Slash.js)
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
@@ -2428,6 +2432,7 @@ export class Game {
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
+        if (this.darkFog?.stopMine()) done.push('тёмный туман');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.sunContest?.stop('stop')) done.push('To the Sun');
@@ -3755,7 +3760,9 @@ export class Game {
         // (the water's haze last of all, right before the picture: the day's colour (setDayPhase, every 15th frame), the storm, the cave
         //  set the fog after it and the land's haze flashed through the water four times a second — the author 05.11: «сильно мигает»)
         this.swim?.applyFog?.();
+        this.darkFog?.begin(); // (inside «Caligo»'s fog the world's fog is swapped for a black one for this picture only)
         if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera);
+        this.darkFog?.end();
         this.seeFx?.render(); // («Visible Godi»: the cloud over the picture — nothing when the spell is off)
     }
 
@@ -3850,6 +3857,7 @@ export class Game {
         for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
         for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
         for (const m of this.buildingFx?.sampleModels?.() || []) zoo.add(m); // (a mill's sails, a church bell)
+        if (this.darkFog) for (const m of this.darkFog.sampleMeshes()) zoo.add(m); // («Caligo»: the dome's and the smoke's shaders)
         if (this.slash) zoo.add(this.slash.sampleMesh()); // («Sectura»: the flying crescent's material)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         for (let i = 0; i < PEGASUS_COATS.length; i++) zoo.add(animalModel('horse', PEGASUS_COLOR - 5 + i)); // (the Pegasus of some herds, every coat's hair picture made now)
@@ -4237,6 +4245,7 @@ export class Game {
         this.gear.update(dt);
         this.bleeding.update(dt);
         this.slash?.update(dt);
+        this.darkFog?.update(dt);
         const duelOnly = this.duelOnly; // (the duel-only start: no animals, no roads' people, no zombies, no bosses — only the arena)
         if (earth && !duelOnly) this.animals.update(dt);
         if (earth) this.runner.update(dt);

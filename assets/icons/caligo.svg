@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="c" cx="50%" cy="55%" r="55%"><stop offset="0" stop-color="#2b1646"/><stop offset="0.7" stop-color="#120820"/><stop offset="1" stop-color="#120820" stop-opacity="0"/></radialGradient>
+    <radialGradient id="e" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#d9c4ff"/><stop offset="1" stop-color="#d9c4ff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="66" r="58" fill="url(#c)"/>
+  <!-- billows of black smoke -->
+  <g fill="#07030f" opacity="0.92">
+    <circle cx="42" cy="78" r="26"/><circle cx="72" cy="86" r="28"/><circle cx="92" cy="70" r="22"/><circle cx="58" cy="58" r="24"/><circle cx="82" cy="50" r="18"/>
+  </g>
+  <g fill="none" stroke="#5a3a8a" stroke-width="2.5" opacity="0.7">
+    <path d="M24 84 q10 -14 24 -6"/><path d="M60 100 q16 -10 30 0"/><path d="M70 44 q12 -8 22 2"/>
+  </g>
+  <!-- the wand and the jet -->
+  <path d="M14 112 L52 74" stroke="#7a5a38" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="54" cy="72" r="9" fill="url(#e)"/>
+  <!-- two cold eyes in the dark -->
+  <circle cx="88" cy="40" r="3" fill="#ffe9ff"/><circle cx="100" cy="42" r="3" fill="#ffe9ff"/>
+</svg>

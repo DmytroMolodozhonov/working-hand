@@ -379,6 +379,17 @@ const TUNES = {
      * «Дай» (Die): death of the gods — a black, slow descent: a low choir in D minor and a cluster, a funeral
      * brass falling by semitones, a single bell tolling, the drone left alone at the end.
      */
+    /** «Caligo» — the black jet out of the wand (10 s of it): a deep rushing noise swelling and sinking, a low drone, cold choir-less pads, a few far rumbles. A tune of 9 s. */
+    thCaligo(sr) {
+        const o = buf(sr, 9.5), r = rng(331);
+        noise(o, sr, 0, 9, 0.5, (u) => 0.07 + 0.13 * Math.sin(u * 3.1) ** 2, swell(0.1, 0.3), r);
+        glide(o, sr, 0, 9.4, 0.3, (u) => 62 - 20 * u, swell(0.08, 0.35), 3);
+        pad(o, sr, ['C2', 'G2', 'Eb3'], 0.3, 6, 0.42, { att: 1.4, rel: 1.2, vib: 0.006, harm: 4, det: 0.012 });
+        pad(o, sr, ['B1', 'F#2', 'D3'], 4, 9.2, 0.4, { att: 1, rel: 1.4, vib: 0.007, harm: 4, det: 0.014 });
+        for (let q = 0; q < 5; q++) noise(o, sr, 1 + q * 1.7, 0.6, 0.2, () => 0.05, swell(0.1, 0.8), r);
+        bell(o, sr, hz('C3'), 0.4, 0.14, 3.2, 0.4);
+        return finish(o, sr, { rms: 0.16 });
+    },
     thDie(sr) {
         const o = buf(sr, 8.5), r = rng(173);
         pad(o, sr, ['D2', 'A2', 'D3', 'F3'], 0, 3.4, 0.5, { att: 1.2, rel: 1, vib: 0.006, harm: 4, det: 0.01 });
@@ -1021,6 +1032,7 @@ export const SPELL_SOUND = {
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
     Nihilis: { cast: 'fxNihilis' }, // («Nihilis Atra»: a short bright shimmer — an instant, not a tune; Nihilis.js)
+    Caligo: { theme: 'thCaligo' }, // («Caligo»: the black jet, 10 s — a tune; DarkFog.js)
     Sectura: { cast: 'fxSectura' }, SecturaSwing: { cast: 'fxSecturaSwing' }, // («Sectura»: the word arms the wand — a «shing»; the swing — the air tears: Slash.js)
     Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' }, MonsterForm: { cast: 'fxMonsterRoar', theme: 'thMonster' }, MonsterBack: { cast: 'fxMonsterBack' }, // («Пентаграмма страшного монстра» — MonsterForm.js: not a spoken spell, the pentagram's)
     Jolt: { own: ['jolt'] }, JoltMaxima: { own: ['jolt'] }, Levitation: { own: ['cast'] }, LevitationMaxima: { own: ['cast', 'crack', 'rumble'] },

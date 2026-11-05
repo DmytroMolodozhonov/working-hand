@@ -70,6 +70,8 @@ const SAID = [
     ['сьют ап', 'сют ап', 'съют ап'],
     ['джолт', 'джоулт'],
     ['авада кедавра', 'авада кидавра'],
+    ['сектура', 'сэктура', 'сектюра'], // («Sectura»: the cutting curse — Slash.js; «сектора» is the everyday word and is not in it)
+    ['калиго', 'каллиго'], // («Caligo»: the dark fog — DarkFog.js)
     ['акцентрик', 'аксентрик', 'эксентрик'], // (the strong duel spells — StrongSpells.js; «Дай» is not here: only its written whole word casts)
     ['пилбидрио', 'пилбидро', 'пильбидрио'],
     ['электром', 'электрум'],

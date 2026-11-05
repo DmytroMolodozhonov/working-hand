@@ -104,6 +104,7 @@ export class Invisibility {
     /** Where the creatures of the world think player `id` is (see cluePos). */
     aiPos(id, pos, boss = null) {
         if (!pos) return pos;
+        if (!boss && this.game.darkFog?.fogs.length) { const fp = this.game.darkFog.aiPos(id, pos); if (fp !== pos) return fp; } // («Caligo»: a player in the dark fog is seen by nobody — only where he was seen last; bosses see through)
         if (boss && this.hidden(id)) { this._bossSees(id, pos, boss); return pos; } // (a boss sees through it)
         return cluePos(this.hidden(id), pos, this.clues.get(id), performance.now());
     }

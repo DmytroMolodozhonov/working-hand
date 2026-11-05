@@ -176,6 +176,7 @@ export const SPELL_PHYSICS = {
     WindImpulse: { push: 22, range: 3, always: true, down: 1.5, toss: 4, jolt: 1.5 }, WindImpulseMaxima: { push: 34, range: 9, always: true, down: 2, toss: 6, jolt: 2.5 },
     // («Drawdown»: the ground sinks — bodies stand on it and go down with it, nobody is pushed;
     //  «Stitching»: stones laid where nobody stands; «Invisibility»: nobody sees — Drawdown.js / Stitching.js / Invisibility.js)
+    Caligo: null, // («Caligo»: a fog, nobody is pushed — DarkFog.js)
     Sectura: null, // («Sectura»: a cut, not a push — an invisible blade: Slash.js; the body is cut or wounded, nothing is shoved)
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, Groundprud: null, /* (the ground rises where nobody stands — Groundprud.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
     GroundVortex: { push: 7, jolt: 0.3 }, GroundShield: null, /* (a flying block of the earth vortex: GroundVortex.js; the shield word pushes nobody) */
