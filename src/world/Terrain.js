@@ -279,7 +279,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 24;
+export const WORLD_GEN = 25;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -389,6 +389,12 @@ export const CAVE_LAKE = { GAP: 2 };
  * under the water (Terrain._slopeLand, `seabed`). Older worlds keep their flat bottom.
  */
 export const SEABED_FROM_GEN = 24;
+/**
+ * The first generation whose wizards' settlements have their two big shops (the author 05.11): the POTION HALL («Лавка зелий»: every potion,
+ * a cauldron, empty flasks — a serving shopkeeper walks the room) and the SCROLL HALL («Лавка свитков»: the simple spells' scrolls).
+ * src/world/ShopHalls.js; older worlds keep their settlements as they were (the lots there stay houses).
+ */
+export const WIZ_SHOPS_FROM_GEN = 25;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -688,7 +694,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false } = {}) {
         this.seed = seed;
         this.hell = !!hell; // (hell: a far map of this world — HellMap.js; in every world, the Earth's land is not touched)
         this._hellPlan = null;
@@ -722,7 +728,7 @@ export class TerrainData {
             this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.bigHouses, this.buildings, !!knightCap);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
-            this.villages = new VillageIndex(seed, raw, this.castles, this.towers, !!arenaX2);
+            this.villages = new VillageIndex(seed, raw, this.castles, this.towers, !!arenaX2, !!wizShops);
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
             const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || this.villages.landAt(ix, iz)); };
             const testIce = { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 };

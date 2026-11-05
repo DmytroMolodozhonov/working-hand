@@ -81,6 +81,8 @@ import { LanternLights } from './LanternLights.js';
 import { FireLights } from './FireLights.js';
 import { CauldronForge } from './CauldronForge.js';
 import { GlassBlowing } from './GlassBlowing.js';
+import { ShopHallLife } from './ShopHallLife.js';
+import { hallSamples } from './ShopHallModels.js';
 import { Cauldrons } from './Cauldrons.js';
 import { PotionLair } from './PotionLair.js';
 import { PotionMasterLife, lairDef } from './PotionMasterLife.js';
@@ -174,7 +176,7 @@ import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -500,6 +502,7 @@ export class Game {
             ghostCastle: this.gen >= GHOST_CASTLE_FROM_GEN, // (the Castle of Ghosts — only a hero who sees the invisible has it in his land: GhostCastleLife.js)
             iceArena: this.gen >= ICE_ARENA_FROM_GEN, // (the Ice Queen's palace on the great ice arena — IceCastle.ICE_CASTLE.ARENA)
             caveLake: this.gen >= CAVE_LAKE_FROM_GEN, // (rock between a cave and a lake — Terrain._nearWater)
+            wizShops: this.gen >= WIZ_SHOPS_FROM_GEN, // (the wizards' settlements' potion hall and scroll hall — ShopHalls.js)
             seabed: this.gen >= SEABED_FROM_GEN, // (the sea's bottom a landscape: canyons, ridges, reefs, dunes — Sea.seabedDepth)
             hell: this.gen >= HELL_FROM_GEN, // (hell: a far map of the same world — HellMap.js; every world: the Earth's land is not changed)
             queenMap: this.gen >= QUEEN_MAP_FROM_GEN, // (the Ice Queen on a map of her own, far from everything — QueenMap.js; only the Creative test ground)
@@ -745,6 +748,7 @@ export class Game {
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.glassBlowing = new GlassBlowing(this); // «Create a Flask»: empty flasks of sand or glass (GlassBlowing.js)
         this.cauldronForge = new CauldronForge(this); // «Create a Cauldron»: a cauldron cast out of three armour pieces (CauldronForge.js)
+        this.shopHalls = new ShopHallLife(this); // a wizards' settlement's potion hall and scroll hall: the shelves, the keeper who serves (ShopHallLife.js)
         this.potionMaster = new PotionMasterLife(this); // the potion master of the lair: brews, talks, lifts things (PotionMasterLife.js)
         this.potionLair = new PotionLair(this); // «Логово зельевара» (Творческий, «Где появиться»): зал в небе с котлом, ручьём и полками (PotionLair.js)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
@@ -3831,6 +3835,7 @@ export class Game {
         for (const m of this.underwaterLight?.samples?.() || []) zoo.add(m); // (the sun's shafts and the marine snow)
         { const fs = this.fireSerpent?.sample?.(); if (fs) zoo.add(fs.group); } // (the fire serpent's body, head and flames: its shapes are shared — kept)
         for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
+        for (const m of hallSamples()) zoo.add(m); // (the big shops' show: bottles, rolled scrolls — ShopHallModels.js)
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
         for (const m of this.tarons?.sampleModels?.() || []) zoo.add(m); // (a Taron near and as one skinned shape: the underworld's giants — Taron.js)
         for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
@@ -4240,6 +4245,7 @@ export class Game {
         this.glassBlowing?.update(dt);
         this.potionLair?.update(dt);
         this.potionMaster?.update(dt);
+        this.shopHalls?.update(dt);
         if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         if (earth && !duelOnly) this.crystals?.update(dt);
@@ -5385,6 +5391,7 @@ export class Game {
         this.lanterns?.dispose();
         this.cauldrons?.dispose();
         this.potionLair?.dispose();
+        this.shopHalls?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
         this.buildingFx?.dispose();

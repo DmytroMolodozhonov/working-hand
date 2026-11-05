@@ -32,6 +32,7 @@ import { CASTLE_CELL, BLEND, hash01, Plan, buildHouse, rotLot, inwardRy } from '
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
 import { faceYaw } from './LoreStand.js';
+import { buildPotionHall, buildScrollHall, HALL_RECTS } from './ShopHalls.js';
 
 export const VILLAGE_ZONE = 124; // half-size of the levelled land
 const VILLAGE_P = 0.6; // share of the castle- and tower-free cells that try to hold a settlement
@@ -476,7 +477,7 @@ function buildMarket(p, rng, out) {
 
 // ------------------------------------------------------------- the houses
 /** Reserved places of the middle: no lot may come near them. */
-function lotFree(u, v, r, x2 = false) {
+function lotFree(u, v, r, x2 = false, shops = false) {
     if (Math.abs(u) < 5 + r || Math.abs(v) < 5 + r) return false; // the spokes
     if (Math.hypot(u, v) < PLAZA_R + 4 + r) return false;
     const inRect = (a0, a1, b0, b1, m = 3) => u + r > a0 - m && u - r < a1 + m && v + r > b0 - m && v - r < b1 + m;
@@ -484,6 +485,7 @@ function lotFree(u, v, r, x2 = false) {
     if (inRect(-52, -30, 10, 32)) return false; // the cauldron hall
     if (inRect(28, 46, 10, 28)) return false; // the library
     if (inRect(-14, 14, LANE_END - 2, -16)) return false; // the market
+    if (shops) for (const R of Object.values(HALL_RECTS)) if (inRect(R.u0, R.u1, R.v0, R.v1)) return false; // the potion hall, the scroll hall (ShopHalls.js)
     const AS = x2 ? ARENA_SPOT_X2 : ARENA_SPOT;
     if (Math.hypot(u - AS.u, v - AS.v) < AS.r + 4 + r) return false; // the arena's place
     for (const [su, sv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) if (Math.abs(u - su * (R1 - 5)) < r + 4 && Math.abs(v - sv * (R1 - 5)) < r + 4) return false; // the obelisks
@@ -491,14 +493,14 @@ function lotFree(u, v, r, x2 = false) {
 }
 
 /** Up to MAX_HOUSES wizards' houses on lots facing the roads; the other lots: gardens, fountains, obelisks. */
-function buildHouses(p, rng, out, x2 = false) {
+function buildHouses(p, rng, out, x2 = false, shops = false) {
     const B = BLOCK;
     const lots = [];
     const addLots = (along, fixed, from, to, side, face) => {
         for (let t = from; t <= to; t += 16) {
             const u = along === 'u' ? t : fixed + side * 9;
             const v = along === 'u' ? fixed + side * 9 : t;
-            if (!lotFree(u, v, 7, x2)) continue;
+            if (!lotFree(u, v, 7, x2, shops)) continue;
             lots.push({ u, v, face });
         }
     };
@@ -579,16 +581,22 @@ function garden(p, lot, road, rng) {
 
 // ------------------------------------------------------------- the whole site
 /** The whole settlement. Returns the castle-shaped record. */
-export function buildVillageSite(seed, gx, gz, X, Z, F, rng, x2 = false) {
+export function buildVillageSite(seed, gx, gz, X, Z, F, rng, x2 = false, shops = false) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
-    const out = { houses: [], pens: [], chests: [], civic: [], stalls: [], spots: [] };
+    const out = { houses: [], pens: [], chests: [], civic: [], stalls: [], spots: [], halls: [] };
     buildCore(p, rng, out, x2);
     buildHall(p, rng, out);
     buildCauldronHall(p, rng, out);
     buildLibrary(p, rng, out);
     buildMarket(p, rng, out);
-    buildHouses(p, rng, out, x2);
+    if (shops) { // (generation WIZ_SHOPS_FROM_GEN: the two big shops — their own rng, the houses' lots stay rolled as before the shops took theirs)
+        const hr = createRng((seed ^ (gx * 92821) ^ (gz * 68917) ^ 0x5a0b) >>> 0);
+        const kit = { gable, windowHole, civicDoor };
+        buildPotionHall(p, hr, out, kit);
+        buildScrollHall(p, hr, out, kit);
+    }
+    buildHouses(p, rng, out, x2, shops);
     p.joinRoads();
     const id = 'wv' + gx + '_' + gz;
     const name = `${NAMES_A[Math.floor(rng() * NAMES_A.length)]} ${NAMES_B[Math.floor(rng() * NAMES_B.length)]}`;
@@ -606,7 +614,7 @@ export function buildVillageSite(seed, gx, gz, X, Z, F, rng, x2 = false) {
         throne: out.throne, throneFront: out.throneFront, posts: out.posts,
         rooms: [], chests: out.chests.map((c, i) => ({ ...c, id: id + '_ch' + i })),
         houses, stalls: out.stalls, fields: [], pens: [], market: out.market, wallWalk: [],
-        dummies: [], spots: out.spots, fire: out.fire, statue: out.statue, library: out.library, arena: out.arena,
+        dummies: [], spots: out.spots, halls: out.halls, fire: out.fire, statue: out.statue, library: out.library, arena: out.arena,
         lore: out.library.lore, // (the library's desk: where the books of the world's history lie — LoreLibrary.js)
         nodes: p.nodes, edges: p.edges, parts: p.parts,
         topL: F + 1 + 60,
@@ -637,8 +645,9 @@ export function villageGround(raw, X, Z) {
 
 /** Finds and remembers the settlements (the same shape of answers as CastleIndex / TowerIndex). */
 export class VillageIndex {
-    constructor(seed, raw, castles, towers, arenaX2 = false) {
+    constructor(seed, raw, castles, towers, arenaX2 = false, shops = false) {
         this.arenaX2 = arenaX2;
+        this.shops = shops; // (generation WIZ_SHOPS_FROM_GEN: the potion hall and the scroll hall — ShopHalls.js)
         this.seed = seed; this.raw = raw; this.castles = castles; this.towers = towers;
         this.cells = new Map();
         this._lastCell = null;
@@ -718,7 +727,7 @@ export class VillageIndex {
     _make(gx, gz) {
         const at = this._site(gx, gz);
         if (!at) return null;
-        return buildVillageSite(this.seed, gx, gz, at.X, at.Z, at.F, at.rng, this.arenaX2);
+        return buildVillageSite(this.seed, gx, gz, at.X, at.Z, at.F, at.rng, this.arenaX2, this.shops);
     }
 
     /**

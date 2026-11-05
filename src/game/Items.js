@@ -1382,6 +1382,7 @@ export class ItemSystem {
         const now = performance.now();
         if (now - (this._shopHintT || -1e9) < 6000 || L.model.position.distanceToSquared(G) > 0.5) return;
         this._shopHintT = now;
+        if (L.item.shop.hall && this.game.shopHalls?.handAt(L)) return; // (a big shop's good: its keeper names it and comes — ShopHallLife)
         this.game.hud.setVoice?.(`💰 ${L.item.shop.price} монет. Сначала заплатите: положите мешочек с монетами на прилавок и назовите товар`, true);
     }
 

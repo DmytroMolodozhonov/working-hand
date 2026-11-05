@@ -717,6 +717,19 @@ export class CastleTalk {
                 return true;
             }
         }
+        // (the keeper of a settlement's potion hall / scroll hall: a good named, «да», «что есть» — by the rules at once, ShopHallLife.hear)
+        if (g.shopHalls?.isKeeper(v)) {
+            const hr = g.shopHalls.hear(v, text);
+            if (hr) {
+                const tr = this._traceTurn(v, text, info);
+                this.trace.mark(tr, 'rules');
+                v.talking = 4; v.talkTo = g.localId;
+                this.attention?.talkedWith(v.id, performance.now());
+                journal(`разговор: «${text}» → «${hr}» — хозяин лавки (правила)`);
+                this._sayReply(v, hr);
+                return true;
+            }
+        }
         // (the king's court: to the vizier — troubles, the treasury, «веди к нему»; to a man with a trouble — a word of help)
         if (this.life.court?.hear(v, text, info)) return true;
         // (a command in plain words — «присядь», «сразитесь друг с другом», «построиться»: the rules, at once)
@@ -1150,7 +1163,7 @@ export class CastleTalk {
         for (const cs of this.life.castles.values()) {
             if (!cs.awake) continue;
             cs.def.stalls.forEach((stall, i) => {
-                if (budget <= 0 || stall.fence || stall.pawn || !this._merchantOf(cs.def, i)) return; // (the shady buyer and the pawnshop only buy)
+                if (budget <= 0 || stall.fence || stall.pawn || stall.hall || !this._merchantOf(cs.def, i)) return; // (the shady buyer and the pawnshop only buy; a big shop's shelves — ShopHallLife)
                 const key = this._stallKey(cs.def, i);
                 let s = this.stalls.get(key);
                 if (!s) { s = { goods: [], restockAt: 0 }; this.stalls.set(key, s); }

@@ -570,7 +570,7 @@ export class Cauldrons {
                 const land = this.game.world?.terrain?.data;
                 if (land?.landMade && !land.landMade(s.cauldron.x, s.cauldron.z)) return; // (its land is not made yet: the next look)
                 const y = col.groundAt ? col.groundAt(s.cauldron.x, s.cauldron.z, s.cauldron.y + 1.5) : col.groundY(s.cauldron.x, s.cauldron.z);
-                const c = this.spawn({ id: `shop:${key}:${this.sold[key] || 0}`, x: s.cauldron.x, y, z: s.cauldron.z, yaw: s.cauldron.yaw || 0, tilt: 0, tdir: 0, shop: { stall: key, price: CAULDRON.PRICE }, home: { x: s.cauldron.x, z: s.cauldron.z } });
+                const c = this.spawn({ id: `shop:${key}:${this.sold[key] || 0}`, x: s.cauldron.x, y, z: s.cauldron.z, yaw: s.cauldron.yaw || 0, tilt: 0, tdir: 0, shop: { stall: key, price: s.cauldronPrice || CAULDRON.PRICE }, home: { x: s.cauldron.x, z: s.cauldron.z } });
                 this._send(c);
             });
         }

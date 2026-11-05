@@ -1594,6 +1594,7 @@ export class CastleLife {
         if ((v.pack > 0 || v.rounds) && this.night?.duty(v, dt)) return; // (a merchant packing up, the watch's rounds)
         if (v.fleeT > 0) { this._fleeStep(v, dt); return; }
         if (v.watch && this.watch.step(v, dt)) return; // (a stranger inside the walls: one knight keeps an eye on him)
+        if (v.job === 'stall' && this.game.shopHalls?.step(v, dt)) return; // (the keeper of a potion hall / scroll hall walks his shop — ShopHallLife)
         // the new king comes by: bow
         const st = this.state(cs.def.id);
         if (st.owner && v.bowT <= 0 && !v.follow && !v.order) { // (a bow once, not on the march and not at every step)

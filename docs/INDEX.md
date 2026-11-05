@@ -126,6 +126,7 @@
 - `UltraGrass.js` — the soft lawn of «Ультра качество»: thousands of thin curved blades on every grass block round the player (as in Minecraft's best shader packs), thick near, thinning out smoothly further away; gusts of wind roll over them in…
 - `VoxelShading.js` — simple but pleasant block textures, without texture files.
 - `WizardTowers.js` — the wizards' towers (academies) and the wizards' houses around them.
+- `ShopHalls.js` — a wizards' settlement's potion hall and scroll hall (generation 25): the blocks, the shelves' places, the keeper's aisles (docs/rules/shop-halls.md).
 - `WizardVillages.js` — the big settlements of the wizards (no castle, no tower: a town of wizards).
 - `World.js` — everything static in a level: lights, sky, ground/terrain, decorations (grass cubes, trees), tables and custom-map walls.
 - `castle.worker.js` — the blocks of a castle made by magic (MagicCastle.castleCells: ~0.15 s of work — never in a frame of the game). In: {id, o}; out: {id, cells, shapes, fill, n, nAir, nRise} (the arrays moved, not copied).
@@ -426,6 +427,7 @@
 - `PoseHint.js` — «я вас услышал, но сделайте сначала вот это»: ОДНО место, где написано, какая поза нужна заклинанию и что сказать игроку, если её не хватает.
 - `PotionEffects.js` — the timed effects of the potions (the author 05.11: «скрытие личности 24 минуты, ослепительность 24 минуты, удача на 12 игровых часов, дыхание под водой на игровой день, обнуление эффектов»). Rules and numbers here (pure,…
 - `Potions.js` — what a cauldron does with what goes into it (pure, node-testable).
+- `ShopHallGoods.js`, `ShopHallLife.js`, `ShopHallModels.js` — the big shops of the wizards' settlements: prices and the buyer's words; the shelves and the keeper who serves; the show of bottles and scrolls, the signs (docs/rules/shop-halls.md).
 - `PouchModel.js` — the coin pouches' 3D models (ItemTypes.makeItemModel, kind 'coins').
 - `ProtectionGods.js` — «Protection Gods» (божественная защита) and «Protection Gods Maxima»: the gods' shield.
 - `Quake.js` — what «Earthquake» does to the ground and the eye, beyond the crack SpellManager draws (how bodies fall when the ground runs away under them is Impact.js / CreatureImpact.js, for every creature and the players): - the ground…
