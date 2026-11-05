@@ -1926,6 +1926,9 @@ function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+// «Ходьба назад» changed in the middle of a game: at once (it was read only at the start — the author turned it on and nothing happened)
+document.getElementById('walk-back')?.addEventListener('change', (e) => { const g = window.__zns?.game || null; if (g?.config) g.config.walkBack = !!e.target.checked; });
+
 // Hooks for automated tests (read-only helpers + pose injection)
 // ------------------------------------------------------------------ remembered settings
 // Volumes, graphics, camera… are kept in this browser between launches.

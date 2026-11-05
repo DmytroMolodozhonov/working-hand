@@ -589,7 +589,7 @@ export function torsoMetrics(lm) {
         // Shoulder roll: leaning left drops the person's left shoulder (lm 11)
         lateral = (ls.y - rs.y) / sw;
     }
-    return { lateral, depth, noseRel: (sMidY - nose.y) / sw, hips: !!hipsOk };
+    return { lateral, depth, noseRel: (sMidY - nose.y) / sw, hips: !!hipsOk, sw, twist: Math.abs((ls.z || 0) - (rs.z || 0)) / sw }; // (twist: the shoulders turned — one nearer the camera; sw: the shoulders' width in the frame — they narrow as the body leans back away from the camera)
 }
 
 /**

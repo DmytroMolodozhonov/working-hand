@@ -62,10 +62,6 @@ const html = (p) => `
   <div class="hero-row" id="${p}-foe-row" hidden title="${T.foe}"><label for="${p}-foe">⚔️ Соперник на арене:</label> <select id="${p}-foe">${DUEL_FOES.map(foeOption).join('')}</select></div>
   <label class="world-opt" id="${p}-same-row" hidden title="${T.same}"><input type="checkbox" id="${p}-same" checked> 🤝 Дать другу такую же силу <span class="mp-hint">— соперником станет друг, который зайдёт на сервер; остальные — зрители</span></label>
   <label class="world-opt" title="${T.wings}"><input type="checkbox" id="${p}-wings"> 🪽 С крыльями <span class="mp-hint">— летать взмахами рук, без маны</span></label>
-  <details class="hero-potions" title="${T.potions}">
-    <summary>🧪 Зелья в сумке: <b id="${p}-pot-count">ни одного</b></summary>
-    <div class="hero-pot-list">${RECIPES.map((r) => `<label class="world-opt" title="${r.desc.replace(/"/g, '&quot;')}"><input type="checkbox" data-pot="${r.id}"> ${r.name}</label>`).join('')}</div>
-  </details>
   <label class="world-opt" title="${T.noCrew}"><input type="checkbox" id="${p}-nocrew"> ⚓ Корабли без моряков <span class="mp-hint">— и чёрный корабль без капитана и скелетов</span></label>
   <label class="world-opt" title="${T.mana}"><input type="checkbox" id="${p}-inf" checked> ♾️ Бесконечная мана <span class="mp-hint">— заклинания ничего не стоят</span></label>
   <div class="hero-row" id="${p}-cells-row" hidden title="${T.cells}">
@@ -91,6 +87,10 @@ const html = (p) => `
     </div>
     <div class="hero-row" title="${T.dark}"><label for="${p}-dark">🜏 Чёрная магия:</label> <input type="range" id="${p}-dark" min="0" max="${HERO.DARK_MAX}" value="0"> <b id="${p}-dark-val">0</b></div>
     <label class="world-opt" title="${T.breakward}"><input type="checkbox" id="${p}-bw"> 🜏 Метка слома магической защиты <span class="mp-hint">— с самого начала</span></label>
+    <details class="hero-potions" title="${T.potions}">
+      <summary>🧪 Зелья в сумке: <b id="${p}-pot-count">ни одного</b></summary>
+      <div class="hero-pot-list">${RECIPES.map((r) => `<label class="world-opt" title="${r.desc.replace(/"/g, '&quot;')}"><input type="checkbox" data-pot="${r.id}"> ${r.name}</label>`).join('')}</div>
+    </details>
     <div class="hero-row" title="${T.steady}"><label for="${p}-steady">🦶 Устойчивость:</label> <input type="range" id="${p}-steady" min="${HERO.STEADY_MIN}" max="${HERO.STEADY_MAX}" value="100"> <b id="${p}-steady-val">100</b></div>
   </details>
 </div>`;
