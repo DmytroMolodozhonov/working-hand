@@ -28,7 +28,7 @@ import { armLog } from '../core/ArmLog.js';
 import { LONGER_OF } from '../audio/SpellSpotter.js';
 import { WeaponSystem } from './Weapons.js';
 import { FlightController, FLIGHT } from './Flight.js';
-import { poseHint, PoseHinter, FULL as ARM_FULL } from './PoseHint.js';
+import { poseHint, PoseHinter, FULL as ARM_FULL, armsHeldUp, TAKEOFF_LOST } from './PoseHint.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
@@ -4746,10 +4746,16 @@ export class Game {
         const ch = this.character;
         const flight = this.flight;
         const out = flight.update(dt, {
-            armsUp: ch.areBothHandsUp(),
+            armsUp: flight.state === 'takeoff' ? (ch.areBothHandsUp() || armsHeldUp(ch.armsRaise())) : ch.areBothHandsUp(), // (the take-off's check: as soft as the word's — PoseHint.CONFIRM_RAISE)
             torso: pose ? pose.torso : null,
             headPitch: this.smoothHead.pitch,
         });
+        if (flight.lastEvent === 'cancelled') { // (the arms dropped in the first second: say why, give the mana back)
+            flight.lastEvent = 'cancelled-told';
+            this.hud.setVoice(TAKEOFF_LOST, true);
+            this.lastCastWhy = 'взлёт сорвался: руки опустились в первую секунду';
+            this.combat._refund?.('Flight');
+        }
         ch.flying = flight.active;
         ch.setFlightTilt(out.tilt);
         // The head looks where we fly (counter the body tilt)

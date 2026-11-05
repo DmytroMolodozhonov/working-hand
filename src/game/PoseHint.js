@@ -14,6 +14,17 @@
 export const FULL = 0.55;
 /** Ниже этого — руки практически опущены. */
 export const DOWN = 0.2;
+/** Первую секунду взлёта руки должны оставаться поднятыми хотя бы так (мягче FULL: после слова руки чуть оседают — это не отмена).
+ *  Автор 05.11: «Флайн плохо распознаётся… руки недоподнял» — раньше здесь требовались кисти выше лба (строже, чем при слове), и взлёт
+ *  молча срывался уже после оплаты. */
+export const CONFIRM_RAISE = 0.3;
+/** Обе руки подняты хотя бы на CONFIRM_RAISE (для подтверждения взлёта). raise: {left, right, lost:{left,right}}. */
+export function armsHeldUp(raise) {
+    if (!raise || raise.lost?.left || raise.lost?.right) return false;
+    return raise.left >= CONFIRM_RAISE && raise.right >= CONFIRM_RAISE;
+}
+export const TAKEOFF_LOST = '🙌 Взлёт сорвался: руки опустились слишком рано — держите обе руки поднятыми над головой ещё секунду после «Флайн». Мана возвращена';
+
 /** Подсказка не чаще, мс. */
 export const HINT_GAP = 2500;
 

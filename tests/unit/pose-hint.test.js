@@ -52,3 +52,11 @@ test('не спамит: раз в 2,5 с', () => {
     t = 2400; assert.equal(h.pass(), false);
     t = 2600; assert.equal(h.pass(), true);
 });
+
+test('«Флайн»: the take-off confirmation is as soft as the word (arms a little above the shoulders count), lost hands do not', async () => {
+    const { armsHeldUp, CONFIRM_RAISE, FULL } = await import('../../src/game/PoseHint.js');
+    assert.ok(CONFIRM_RAISE < FULL, 'after the word the arms may sag a little');
+    assert.ok(armsHeldUp({ left: 0.4, right: 0.35, lost: {} }));
+    assert.ok(!armsHeldUp({ left: 0.6, right: 0.1, lost: {} }), 'one arm dropped');
+    assert.ok(!armsHeldUp({ left: 0.6, right: 0.6, lost: { right: true } }));
+});
