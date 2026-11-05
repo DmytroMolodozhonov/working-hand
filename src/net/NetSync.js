@@ -1405,7 +1405,7 @@ export class NetSync {
                 break;
             }
             case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
-            case 'dblg': if (typeof m.id === 'string') g.death?.onNetLegacy(m.id); break;
+            case 'dblg': if (typeof m.id === 'string') g.death?.onNetLegacy(m.id, m.from || null); break; // (the light flows to him on every computer)
             case 'bmv': if (typeof m.id === 'string') g.death?.onNetMove(m); break;
             case 'pdead': {
                 if (m.by === this.me) break;

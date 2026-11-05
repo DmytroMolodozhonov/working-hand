@@ -187,6 +187,8 @@ function disposeTree(o) {
     o.traverse((m) => { if (m.isMesh && m.geometry && !m.geometry.userData?.shared && m.material === BONE) m.geometry.dispose(); });
 }
 
+/** (Death.legacyShow) «Give Me My Power» seen: how long (s), how high the stream arcs (m) */
+const LEGACY_FX = { T: 2.6, ARC: 2.2 };
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
@@ -524,6 +526,7 @@ export class DeathSystem {
 
     update(dt) {
         const g = this.game;
+        this._legacyStep(dt); // («Give Me My Power»: the power flows from the bones to its owner)
         // (a long war leaves many: the oldest beyond MAX_BODIES go — each is a whole model in the scene)
         if (this.bodies.size > DEATH.MAX_BODIES) {
             let old = null;
@@ -712,16 +715,77 @@ export class DeathSystem {
         const rec = b.lg;
         delete b.lg;
         absorbLegacy(g, rec);
-        if (g.fx) for (let i = 0; i < 50; i++) g.fx.spark(_v.set(b.x, b.y + 0.5, b.z), i % 2 ? 0xffd36e : 0xfff2b0, 0.13, _v2.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3), 1.1);
+        this.legacyShow(b, g.localId);
         g.sound?.playMagic?.(null, 1);
         g.sync?.bodyLegacy?.(b.id);
         return true;
     }
 
     /** (network) Its owner took the legacy from this body. */
-    onNetLegacy(id) {
+    onNetLegacy(id, by = null) {
         const b = this.bodies.get(id);
-        if (b) delete b.lg;
+        if (b) { delete b.lg; if (by) this.legacyShow(b, by); }
+    }
+
+    /**
+     * «Give Me My Power» seen (every computer, LEGACY_FX.T s; the author: «красивая анимация, не как сейчас»): the bones flare gold
+     * (a crown of light rises from them), then the power streams out of them to its owner in a turning spiral of golden-white motes,
+     * and gathers round him — a ring at his feet, a column of light up his body, a last flash. Only the shared glow / spark pools:
+     * no lights, no meshes of its own; ≤ ~60 motes a frame.
+     */
+    legacyShow(b, by) {
+        (this._lgFx || (this._lgFx = [])).push({ t: 0, x: b.x, y: b.y + 0.5, z: b.z, by });
+        if (this._lgFx.length > 4) this._lgFx.shift();
+    }
+
+    _legacyStep(dt) {
+        const L = this._lgFx, g = this.game, fx = g.fx;
+        if (!L?.length || !fx) return;
+        for (let i = L.length - 1; i >= 0; i--) {
+            const e = L[i];
+            e.t += dt;
+            const T = LEGACY_FX.T, k = e.t / T;
+            if (k >= 1) { L.splice(i, 1); continue; }
+            // where its owner is now (mine — my hero; another — his avatar)
+            const me = e.by === g.localId || e.by === 'local';
+            const tp = me ? g.character?.group?.position : g.remotes?.get(e.by)?.position;
+            const tx = tp ? tp.x : e.x, ty = tp ? tp.y + 0.6 : e.y + 2, tz = tp ? tp.z : e.z;
+            const glow = fx.glow;
+            if (k < 0.25) {
+                // 1. the bones flare: a crown of light out of the skeleton, rising
+                for (let n = 0; n < 6; n++) {
+                    const a = Math.random() * 6.283, r = 0.4 + Math.random() * 1.1;
+                    if (glow) glow.spawn(e.x + Math.cos(a) * r, e.y + Math.random() * 0.3, e.z + Math.sin(a) * r, Math.cos(a) * 0.3, 1.2 + Math.random() * 1.6, Math.sin(a) * 0.3, n % 2 ? 0xffd36e : 0xfff2b0, 0.12 + Math.random() * 0.1, 0.9 + Math.random() * 0.5, { shrink: 0.5 });
+                    else fx.spark(_v.set(e.x, e.y, e.z), 0xffd36e, 0.12, _v2.set(Math.cos(a), 2, Math.sin(a)), 0.9);
+                }
+            }
+            if (k > 0.15 && k < 0.8) {
+                // 2. the stream: motes along an arc from the bones to him, turning round the arc's line (a spiral), the front moving on
+                const front = Math.min(1, (k - 0.15) / 0.5);
+                for (let n = 0; n < 10; n++) {
+                    const u = Math.random() * front;
+                    const px = e.x + (tx - e.x) * u, pz = e.z + (tz - e.z) * u, py = e.y + (ty - e.y) * u + Math.sin(u * Math.PI) * LEGACY_FX.ARC;
+                    const sp = e.t * 9 + u * 14, rr = 0.35 + 0.5 * Math.sin(u * Math.PI);
+                    const ox = Math.cos(sp) * rr, oy = Math.sin(sp) * rr;
+                    const vx = (tx - e.x) * 0.9, vz = (tz - e.z) * 0.9, vy = (ty - e.y) * 0.9;
+                    if (glow) glow.spawn(px + ox, py + oy, pz - ox * 0.5, vx * 0.15, vy * 0.15 + 0.2, vz * 0.15, n % 3 ? 0xffe08a : 0xffffff, 0.1 + Math.random() * 0.08, 0.45 + Math.random() * 0.3, { shrink: 0.7 });
+                    else fx.spark(_v.set(px, py, pz), 0xffe08a, 0.1, _v2.set(vx * 0.2, vy * 0.2, vz * 0.2), 0.5);
+                }
+            }
+            if (k > 0.6) {
+                // 3. it gathers round him: a ring of light at his feet closing in, a column up his body
+                const c = (k - 0.6) / 0.4, R = 2.4 * (1 - c) + 0.4;
+                for (let n = 0; n < 8; n++) {
+                    const a = (n / 8) * 6.283 + e.t * 3;
+                    if (glow) glow.spawn(tx + Math.cos(a) * R, ty - 2 + 0.1, tz + Math.sin(a) * R, -Math.cos(a) * 1.2, 1.4 + c * 2.5, -Math.sin(a) * 1.2, n % 2 ? 0xffd36e : 0xfff2b0, 0.13, 0.7, { shrink: 0.6 });
+                }
+                if (!e.flash && k > 0.9) {
+                    e.flash = true; // (the last flash: all of it in him)
+                    for (let n = 0; n < 40; n++) fx.spark(_v.set(tx, ty + 0.5, tz), n % 2 ? 0xffd36e : 0xffffff, 0.14, _v2.set((Math.random() - 0.5) * 7, Math.random() * 6, (Math.random() - 0.5) * 7), 1.0);
+                    if (me) g.hud?.flashColor?.('rgba(255, 220, 120, 0.35)');
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------ «Gather»
