@@ -18,7 +18,7 @@ import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { waveGlsl, seaDepth, waveAmp, WAVES } from '../world/Sea.js';
 import { SPACE } from '../world/Planets.js';
 import { boomReach } from '../world/BoomCarve.js';
-import { applyUltraWater } from './UltraWater.js';
+import { ULTRA_PARS, addUltraUniforms } from './UltraUniforms.js';
 
 const TEX = 256; // texels per side
 const TEXEL = 5; // m per texel → 1280 m covered
@@ -38,8 +38,9 @@ export class SeaSurface {
             uTexSize: { value: TEX * TEXEL },
             uStorm: { value: 0 },
             uShore: { value: null },
-            uShallow: { value: new THREE.Color(0x3fb7c9) },
-            uDeep: { value: new THREE.Color(0x1d4f8f) },
+            uShallow: { value: new THREE.Color(0x3fc4c4) }, // (turquoise over the sand)
+            uDeep: { value: new THREE.Color(0x0a3550) }, // (the open sea's body: deep blue-green, nearly black far down)
+            uWind: { value: new THREE.Vector2(1, 0) }, // (the wind's direction: the small waves run with it — Game.wind)
         };
         this.data = new Uint8Array(TEX * TEX * 4);
         this.texture = new THREE.DataTexture(this.data, TEX, TEX, THREE.RGBAFormat);
@@ -92,6 +93,7 @@ export class SeaSurface {
         const U = this.uniforms;
         mat.onBeforeCompile = (shader) => {
             Object.assign(shader.uniforms, U);
+            addUltraUniforms(shader);
             const common = `#include <common>
 uniform float uTime;
 uniform vec2 uOrigin;
@@ -132,9 +134,27 @@ uniform vec2 uOrigin;
 uniform float uTexSize;
 uniform sampler2D uShore;
 uniform float uStorm;
+uniform vec2 uWind;
 varying float vSeaS;
 varying float vSeaDepth;
 varying vec3 vSeaWorld;
+${ULTRA_PARS}
+// the small waves riding on the big ones: eight trains round the wind's direction (their slopes, analytic — no texture), the
+// shorter ones faster and steeper; they fade with the distance (no shimmering far off)
+vec2 seaRipples(vec2 p, float t, vec2 w, float amp, float dist) {
+    vec2 sl = vec2(0.0);
+    float a = 0.11, k = 0.35;
+    for (int i = 0; i < 8; i++) {
+        float fi = float(i);
+        float an = (fract(sin(fi * 12.9898) * 43758.5) - 0.5) * 1.9;
+        vec2 d = vec2(w.x * cos(an) - w.y * sin(an), w.x * sin(an) + w.y * cos(an));
+        float om = sqrt(9.81 * k);
+        float ph = dot(p, d) * k - om * t + fi * 1.7;
+        sl += d * cos(ph) * a * k * exp(-k * dist * 0.045); // (each train fades where it would be finer than a pixel: no grain far off)
+        a *= 0.72; k *= 1.55;
+    }
+    return sl * amp;
+}
 float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5);
     float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5), d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5);
@@ -159,12 +179,73 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
                 float seaStreak = seaN(seaFp) * 0.6 + seaN(seaFp * 2.7 + 13.0) * 0.4;
                 float seaCrest = smoothstep(0.15, 0.6, (vSeaWorld.y - ${WATER_LEVEL_Y.toFixed(2)}) / (0.6 + seaWind * 0.8));
                 seaFoam = max(seaFoam, seaOpen * smoothstep(0.05, 0.6, seaWind) * seaCrest * smoothstep(0.45, 0.8, seaStreak) * 0.85);
-                diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.23, 0.29, 0.32), seaOpen * smoothstep(0.6, 2.0, seaWind) * 0.55);
-                diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.98, 1.0), seaFoam * 0.8);
-                diffuseColor.a = mix(diffuseColor.a, 0.95, seaFoam * 0.6 + seaK * 0.12);`);
+                // (foam is no flat white: it is torn into lacy patches and bubbles)
+                vec2 seaLp = vSeaWorld.xz * 1.6 + vec2(uTime * 0.3, -uTime * 0.2);
+                float seaLace = seaN(seaLp) * 0.55 + seaN(seaLp * 2.3 + 7.0) * 0.3 + seaN(seaLp * 5.1 - 3.0) * 0.15;
+                seaFoam *= smoothstep(0.3, 0.62, seaLace + seaFoam * 0.25);
+                float seaGrey = seaOpen * smoothstep(0.6, 2.0, seaWind) * 0.55;`)
+                .replace('#include <fog_fragment>', `
+                // ——— THE SEA'S OWN LIGHT (all qualities): the water's body, the sky in it, the sun, the foam ———
+                {
+                    float seaWL = ${WATER_LEVEL_Y.toFixed(2)};
+                    vec3 sV = normalize(cameraPosition - vSeaWorld);
+                    float sDist = length(cameraPosition - vSeaWorld);
+                    vec3 sN0 = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
+                    if (sN0.y < 0.0) sN0 = -sN0;
+                    float sDet = 1.0 - smoothstep(60.0, 600.0, sDist);
+                    vec2 sSl = seaRipples(vSeaWorld.xz, uTime, normalize(uWind + vec2(1e-4)), (0.55 + 0.6 * clamp(uStorm, 0.0, 2.0)) * sDet, sDist);
+                    if (uUltraOn > 0.5) sSl += ultraRain(vSeaWorld.xz, uUltraTime) * 0.12 * uUltraWet;
+                    vec3 sN = normalize(sN0 + vec3(-sSl.x, 0.0, -sSl.y));
+                    vec3 sL = normalize(uUltraSunDir);
+                    vec3 sSun = uUltraSunCol * uUltraSunVis;
+                    vec3 sAmb = mix(uUltraHorizon, uUltraZenith, 0.5);
+                    float sLight = clamp(dot(sAmb, vec3(0.3, 0.5, 0.2)) * 1.3 + dot(sSun, vec3(0.3, 0.5, 0.2)) * 0.6, 0.04, 1.3);
+                    bool sUnder = cameraPosition.y < seaWL - 0.2;
+                    if (!sUnder) {
+                        // the water's body: turquoise over the sand, deepening to the open sea's blue-green; darker in a storm
+                        float sDeepK = clamp((seaDepth - 0.5) / 9.0, 0.0, 1.0);
+                        vec3 sBody = mix(uShallow, uDeep, sqrt(sDeepK));
+                        sBody = mix(sBody, vec3(0.16, 0.22, 0.25), seaGrey);
+                        sBody *= sLight;
+                        // the light through the crests (seen against the sun the top of a wave glows green-blue)
+                        float sCrest = clamp((vSeaWorld.y - seaWL) / (0.45 + 0.6 * uStorm), 0.0, 1.0);
+                        float sBack = pow(max(dot(-sV, sL) * 0.5 + 0.5, 0.0), 3.0);
+                        sBody += vec3(0.05, 0.42, 0.38) * sCrest * (0.35 + 0.9 * sBack) * dot(sSun, vec3(0.33)) * 0.55;
+                        // the sky in it (Fresnel: a mirror at a glancing look, clear looking down)
+                        float sF = 0.02 + 0.98 * pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 5.0);
+                        vec3 sR = reflect(-sV, sN); sR.y = abs(sR.y);
+                        // (far off a sea mirrors the sky higher up than the bright horizon — the far faces of the waves tilt to it: the
+                        //  far sea a deep blue under a pale horizon, not white)
+                        sR.y = max(sR.y, 0.18 + 0.25 * smoothstep(80.0, 900.0, sDist)); sR = normalize(sR);
+                        vec3 sSky = ultraSky(sR) * 0.9;
+                        vec3 sCol = mix(sBody, sSky, clamp(sF, 0.0, 0.62));
+                        // the sun's path: a sharp glitter on every little wave and a broad sheen round it
+                        vec3 sH = normalize(sL + sV);
+                        float sNH = max(dot(sN, sH), 0.0);
+                        sCol += sSun * (pow(sNH, 700.0) * 9.0 + pow(sNH, 90.0) * 0.45) * (1.0 - seaFoam);
+                        // the foam: white, lit by the sky and the sun, a little blue in its shadow
+                        vec3 sFoamC = vec3(0.92, 0.96, 1.0) * (sLight * 0.75 + 0.25 * dot(sSun, vec3(0.33)));
+                        sCol = mix(sCol, sFoamC, clamp(seaFoam * 0.9, 0.0, 1.0));
+                        gl_FragColor.rgb = sCol;
+                        // over the sand the water is clear (the bottom seen through it), the open sea opaque; foam and the mirror opaque too
+                        float sA = mix(0.42, 0.97, smoothstep(0.3, 6.0, seaDepth));
+                        gl_FragColor.a = clamp(max(max(sA, sF * 0.9), seaFoam), 0.0, 1.0);
+                    } else {
+                        // seen from under the water: the sky only through Snell's window right above, the rest the surface's silver mirror
+                        // of the dark water below
+                        vec3 sUp = normalize(vSeaWorld - cameraPosition);
+                        float sWin = smoothstep(0.6, 0.78, sUp.y);
+                        vec3 sTint = vec3(0.04, 0.24, 0.3) * sLight;
+                        vec3 sSkyW = ultraSky(normalize(vec3(sUp.x * 0.5, 1.0, sUp.z * 0.5))) * 1.1;
+                        float sRip = seaN(vSeaWorld.xz * 0.8 + uTime * 0.4) * 0.5 + 0.5;
+                        gl_FragColor.rgb = mix(sTint * (0.9 + 0.3 * sRip), sSkyW, sWin) + sSun * pow(max(dot(sUp, sL), 0.0), 60.0) * 1.5 * sWin;
+                        gl_FragColor.a = 0.97;
+                    }
+                }
+                #include <fog_fragment>`);
         };
-        mat.customProgramCacheKey = () => 'sea-surface-v3';
-        return applyUltraWater(mat); // («Ультра качество»: the sky mirrored, ripples, the sun's path)
+        mat.customProgramCacheKey = () => 'sea-surface-v4';
+        return mat; // (its own light now, every quality: the sky mirrored, the sun's path, the ripples — «Ультра» adds the rain's rings)
     }
 
     /** Start rebuilding the shore texture around (x, z). */
@@ -225,6 +306,7 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
         const g = this.game;
         this.uniforms.uTime.value = this.sea.time();
         this.uniforms.uStorm.value = this.sea.storm || 0;
+        if (g.wind && (g.wind.x || g.wind.z)) this.uniforms.uWind.value.set(g.wind.x, g.wind.z).normalize();
         if ((this._checkT -= dt) <= 0) {
             this._checkT = 0.5;
             const view = g.world?.terrain?.viewDistance || 112;

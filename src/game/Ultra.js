@@ -79,7 +79,7 @@ export class Ultra {
 
     /** Each frame (before drawing): only while on. */
     update(dt) {
-        if (!this.on) return;
+        // (the sky's colours and the sun are read every frame in every quality: the sea's own light uses them — SeaSurface.js)
         const g = this.game, w = g.world;
         ULTRA.time.value = (ULTRA.time.value + dt) % 3600;
         const sky = w?.sky?.uniforms;
@@ -101,6 +101,7 @@ export class Ultra {
                 ULTRA.sunVis.value = 0.6 * night * (1 - overcast);
             }
         }
+        if (!this.on) return;
         // the land soaks in the rain fast and dries slowly after it
         const wet = ULTRA.wet.value, want = raining && !off ? 1 : 0;
         ULTRA.wet.value = want > wet ? Math.min(1, wet + dt / 8) : Math.max(0, wet - dt / 45);
