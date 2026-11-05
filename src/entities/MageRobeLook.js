@@ -37,7 +37,7 @@ function canvasTex(name, w, h, draw, seed, alpha = false) {
 }
 
 /** Woven wool: pale base (the cloth colour tints it), weft and warp threads, twill, fibres, pills, worn and stained patches. */
-function woolTex() {
+export function woolTex() {
     return canvasTex('wool', 256, 256, (g, S, _h, r) => {
         g.fillStyle = '#dcd7cd'; g.fillRect(0, 0, S, S);
         for (let y = 0; y < S; y += 2) { g.fillStyle = `rgba(30,25,15,${0.07 + 0.05 * ((y >> 1) & 1)})`; g.fillRect(0, y, S, 1); }
@@ -52,7 +52,7 @@ function woolTex() {
 }
 
 /** Velvet pile with a soft sheen. */
-function velvetTex() {
+export function velvetTex() {
     return canvasTex('velvet', 128, 128, (g, S, _h, r) => {
         g.fillStyle = '#c9c0c8'; g.fillRect(0, 0, S, S);
         for (let i = 0; i < 1800; i++) { g.fillStyle = r() < 0.5 ? `rgba(255,240,255,${0.05 + r() * 0.1})` : `rgba(10,0,10,${0.06 + r() * 0.12})`; g.fillRect(r() * S, r() * S, 1 + r() * 2, 1 + r() * 2); }
@@ -61,7 +61,7 @@ function velvetTex() {
 }
 
 /** Leather with pores, creases and a stitched border. */
-function leatherTex() {
+export function leatherTex() {
     return canvasTex('leather', 128, 128, (g, S, _h, r) => {
         g.fillStyle = '#d6cbb9'; g.fillRect(0, 0, S, S);
         for (let i = 0; i < 1400; i++) { const x = r() * S, y = r() * S, rad = 0.5 + r() * 1.2; g.fillStyle = `rgba(40,25,10,${0.08 + r() * 0.14})`; g.beginPath(); g.arc(x, y, rad, 0, 6.3); g.fill(); g.fillStyle = 'rgba(255,245,225,0.08)'; g.beginPath(); g.arc(x + 0.8, y + 0.8, rad * 0.7, 0, 6.3); g.fill(); }
@@ -72,7 +72,7 @@ function leatherTex() {
 }
 
 /** Gold thread on a transparent ground: stitched lines and motifs (the band under it is velvet). Each thread has a shadow and a highlight. */
-function threadTex(motif) {
+export function threadTex(motif) {
     return canvasTex('thread-' + motif, 512, 96, (g, W, H, r) => {
         const thread = (fn) => {
             g.save(); g.translate(1.2, 1.4); g.strokeStyle = g.fillStyle = 'rgba(40,20,0,0.65)'; fn(); g.restore();
@@ -87,10 +87,12 @@ function threadTex(motif) {
         const step = 64;
         for (let i = 0; i < W / step; i++) {
             const cx = i * step + step / 2, cy = H / 2;
-            if (motif === 'flame') { flame(cx, cy, i % 2 ? 15 : 19); thread(() => { g.beginPath(); g.arc(cx + 32, cy, 3.2, 0, 6.3); g.fill(); }); }
+            if (motif === 'leaf') { thread(() => { g.lineWidth = 1.7; g.beginPath(); g.ellipse(cx, cy, 8, 17, i % 2 ? 0.5 : -0.5, 0, 6.3); g.stroke(); g.globalAlpha = 0.5; g.fill(); g.globalAlpha = 1; g.beginPath(); g.moveTo(cx - 5, cy + 11); g.lineTo(cx + 5, cy - 11); g.stroke(); }); thread(() => { g.beginPath(); g.arc(cx + 32, cy, 3, 0, 6.3); g.fill(); }); }
+            else if (motif === 'snow') { thread(() => { g.lineWidth = 1.6; for (let k = 0; k < 6; k++) { const a = k * 1.047; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * 17, cy + Math.sin(a) * 17); g.moveTo(cx + Math.cos(a) * 10, cy + Math.sin(a) * 10); g.lineTo(cx + Math.cos(a + 0.5) * 14, cy + Math.sin(a + 0.5) * 14); g.stroke(); } }); thread(() => { g.beginPath(); g.arc(cx + 32, cy, 3, 0, 6.3); g.fill(); }); }
+            else if (motif === 'flame') { flame(cx, cy, i % 2 ? 15 : 19); thread(() => { g.beginPath(); g.arc(cx + 32, cy, 3.2, 0, 6.3); g.fill(); }); }
             else { if (i % 2) moon(cx, cy, 15); else star(cx, cy, 17, 8); for (const d of [-1, 1]) rune(cx + d * 32, cy, 9, (i + (d > 0 ? 1 : 0)) % 4); }
         }
-    }, motif === 'flame' ? 14 : 15, true);
+    }, motif === 'flame' ? 14 : motif === 'leaf' ? 16 : motif === 'snow' ? 17 : 15, true);
 }
 
 // ------------------------------------------------------------------ materials and shapes (shared)
