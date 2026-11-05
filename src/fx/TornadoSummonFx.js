@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 
-export const TORNADO_FX = { DESCEND: 3.6, LIFE: 11, RADIUS: 170, HEIGHT: 120, MAX: 2 };
+export const TORNADO_FX = { DESCEND: 3.6, LIFE: 11, RADIUS: 260, HEIGHT: 150, MAX: 2, DARK_R: 700 };
 
 const NOISE = /* glsl */ `
 float tH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -26,16 +26,33 @@ float tN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
 float tF(vec2 p) { return tN(p) * 0.5 + tN(p * 2.03 + 3.1) * 0.3 + tN(p * 4.1 - 7.7) * 0.2; }
 `;
 
-let _disc = null;
-const disc = () => _disc || (_disc = (() => { const g = new THREE.CircleGeometry(1, 72); g.rotateX(-Math.PI / 2); return g; })());
+let _disc = null, _flat = null;
+// (rings of vertices, not a fan: the vortex cloud sags down in the middle — the wall cloud lowering towards the sea)
+const disc = () => _disc || (_disc = (() => { const g = new THREE.RingGeometry(0.004, 1, 96, 28); g.rotateX(-Math.PI / 2); return g; })());
+const flat = () => _flat || (_flat = (() => { const g = new THREE.CircleGeometry(1, 72); g.rotateX(-Math.PI / 2); return g; })());
 
 function cloudMat() {
     return new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide,
         uniforms: { uT: { value: 0 }, uOpen: { value: 0 }, uFade: { value: 1 }, uFlash: { value: 0 }, uLight: { value: 1 }, uSpin: { value: 1 } },
-        vertexShader: /* glsl */ `varying vec2 vP; void main() { vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        vertexShader: /* glsl */ `
+uniform float uT, uOpen, uSpin;
+varying vec2 vP;
+varying float vSag;
+${NOISE}
+void main() {
+    vP = position.xz;
+    float r = length(position.xz), a = atan(position.z, position.x);
+    // the cloud is no flat lid: it sags into a lowering bowl round the eye (the wall cloud), lumpy and turning; the edge billows up
+    float lumps = tF(vec2(a * 2.5 + uT * 0.3 * uSpin, r * 6.0 - uT * 0.2)) - 0.5;
+    float sag = (1.0 - smoothstep(0.0, 0.55, r)) * 0.32 * smoothstep(0.1, 0.8, uOpen) + lumps * 0.07;
+    vSag = sag;
+    vec3 p = position; p.y -= sag;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}`,
         fragmentShader: /* glsl */ `
 uniform float uT, uOpen, uFade, uFlash, uLight, uSpin;
+varying float vSag;
 varying vec2 vP;
 ${NOISE}
 void main() {
@@ -43,16 +60,18 @@ void main() {
     if (r > uOpen) discard;
     // spiral arms wheeling in: a log spiral, turning faster near the eye
     float turn = uT * uSpin * (0.35 + 1.4 * (1.0 - r));
-    float arm = sin(a * 3.0 + log(r + 0.03) * 7.0 * uSpin - turn * 3.0);
+    // (the arms broken up by the noise — even bands read as a target painted on the sky)
+    float wob = tF(vec2(a * 1.5, r * 4.0) + uT * 0.07) * 2.5;
+    float arm = sin(a * 3.0 + log(r + 0.03) * 7.0 * uSpin - turn * 3.0 + wob);
     vec2 q = vec2(a * 2.0 + turn, r * 9.0 - uT * 0.4);
-    float lump = tF(q * 1.4) * 0.65 + tF(vP * 7.0 + uT * 0.05) * 0.35;
-    float dense = smoothstep(-0.4, 0.9, arm + (lump - 0.5) * 1.6);
+    float lump = tF(q * 1.4) * 0.6 + tF(vP * 7.0 + uT * 0.05) * 0.25 + tF(vP * 19.0 - uT * 0.1) * 0.15;
+    float dense = smoothstep(-0.6, 1.1, arm * 0.55 + (lump - 0.5) * 2.4);
     // the edge torn and ragged as it opens; the eye clear
     float edge = 1.0 - smoothstep(uOpen * (0.72 + 0.18 * lump), uOpen, r);
     float eye = smoothstep(0.035, 0.11, r);
-    float alpha = (0.45 + 0.5 * dense) * edge * eye * uFade;
-    vec3 dark = vec3(0.09, 0.1, 0.13), mid = vec3(0.26, 0.29, 0.34);
-    vec3 col = mix(dark, mid, dense * (0.6 + 0.4 * lump)) * uLight;
+    float alpha = (0.62 + 0.36 * dense) * edge * eye * uFade;
+    vec3 dark = vec3(0.07, 0.08, 0.1), mid = vec3(0.24, 0.27, 0.32);
+    vec3 col = mix(dark, mid, dense * (0.6 + 0.4 * lump)) * uLight * (1.0 - 1.2 * vSag); // (the sagging middle darker: thicker cloud)
     // the eye glows from within; lightning lights the cloud's underside
     col += vec3(0.55, 0.68, 0.9) * (1.0 - smoothstep(0.03, 0.22, r)) * (0.5 + 0.5 * sin(uT * 3.0)) * 0.7;
     col += vec3(0.7, 0.8, 1.0) * uFlash * (0.4 + 0.6 * lump) * (1.0 - r);
@@ -93,13 +112,24 @@ export class TornadoSummonFx {
         this.game = game;
         this.slots = [];
         for (let i = 0; i < TORNADO_FX.MAX; i++) {
-            const cloud = new THREE.Mesh(disc(), cloudMat()), foam = new THREE.Mesh(disc(), foamMat());
+            const cloud = new THREE.Mesh(disc(), cloudMat()), foam = new THREE.Mesh(flat(), foamMat());
             cloud.visible = foam.visible = false;
             cloud.frustumCulled = foam.frustumCulled = false;
             cloud.renderOrder = 2; foam.renderOrder = 1;
             game.scene.add(cloud); game.scene.add(foam);
             this.slots.push({ cloud, foam, on: false });
         }
+    }
+
+    /** How dark the sky is made by the callings now at `me` (0…1: Storm.seaK — the world darkens, it pours, as the vortex opens). */
+    darkAt(me) {
+        let k = 0;
+        for (const S of this.slots) {
+            if (!S.on) continue;
+            const d = Math.hypot(me.x - S.at.x, me.z - S.at.z);
+            k = Math.max(k, Math.min(1, S.t / 2.5) * Math.max(0, 1 - d / TORNADO_FX.DARK_R));
+        }
+        return k;
     }
 
     samples() { const s = this.slots[0]; return [new THREE.Mesh(s.cloud.geometry, s.cloud.material), new THREE.Mesh(s.foam.geometry, s.foam.material)]; }

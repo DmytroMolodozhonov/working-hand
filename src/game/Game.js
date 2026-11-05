@@ -6,11 +6,12 @@
  * ones from main.js; see the README for the list of fixes.
  */
 
+import { threatStep, THREAT_BACK } from './ThreatBack.js';
 import { FIGHT_UPGRADE, UPGRADE_MS } from '../input/NativeVoice.js';
 import { marketDef, buildMarketStall } from './CreativeMarket.js';
 import { guestDef } from './CreativeGuest.js';
 import { deepAt, swimStep, SWIMMERS, splashes } from './CreatureSwim.js';
-import { crowdStep, spotTaken } from './CrowdSources.js';
+import { crowdStep, spotTaken, crowdNear } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
@@ -4441,7 +4442,9 @@ export class Game {
             // the steps went unseen, the hero stood. Leaning back (against its own upright) with a weak but lasting bob — steps back.)
             const weak = this._weakSteps(pose, dt);
             if (back && !ch.isRunning && weak && !flying && !down) ch.setRunning(true, 0);
-            ch.backward = !!(back && ch.isRunning);
+            // («Отход назад от нападающих»: a foe coming at me and in front — the steps go backwards, facing it; turned away — forward)
+            const threat = this.config.walkBackThreat && !flying && !down && !this.animals?.riding ? this._threatBack(dt) : false;
+            ch.backward = !!((back || threat) && ch.isRunning);
             if (this.config.walkBack) this._walkBackLog(back, pose, dt);
             if (this.walkRec?.on) {
                 // (F8: «Ходьба» — what the camera saw, with the player's spoken label; the hero stands still meanwhile: it is a recording of
@@ -4664,6 +4667,20 @@ export class Game {
      * when it should not: every change of the state, and once a second while stepping on the spot — what the camera saw (the shoulders'
      * and the hips' depth, the lean over the body's own upright, the shoulders' width, the hips seen) and what the hero did.
      */
+    /** «Отход назад от нападающих» (ThreatBack.js): is a foe coming at me in front now? The crowd's bodies, without me. */
+    _threatBack(dt) {
+        const ch = this.character, p = ch.group.position, now = performance.now() / 1000;
+        const bodies = this._tbBodies || (this._tbBodies = []);
+        bodies.length = 0;
+        for (const b of crowdNear(this, p.x, p.y - 1.95, p.z, THREAT_BACK.R, ch, 6, this._tbNear || (this._tbNear = []))) {
+            if (b.id === 'me' || b.ref === ch || b.kind === 'plant' || b.ref?.owner === this.localId || b.ref?.tamedBy === this.localId) continue;
+            bodies.push({ id: b.id, x: b.x, z: b.z });
+        }
+        const r = threatStep(this._tb || (this._tb = {}), { x: p.x, z: p.z, yaw: ch.group.rotation.y }, bodies, dt, now);
+        if (r.back && ch.isRunning && now - (this._tbSaid || 0) > 20) { this._tbSaid = now; this.hud?.setVoice?.('↩️ Отхожу назад — лицом к нападающему', true); }
+        return r.back;
+    }
+
     /** Weak steps (the shoulders' bob over WEAK_BOB, most of the last ~0.7 s) — only for «ходьба назад» leaning back. */
     _weakSteps(pose, dt) {
         const on = Number.isFinite(pose.bob) && pose.bob > WEAK_BOB.MIN ? 1 : 0;

@@ -80,8 +80,10 @@ void main() {
     vec3 p = position;
     // the wall is no smooth pipe: it bulges and pinches, the bulges climbing and turning (mist torn by the wind)
     float ang = uv.x * 6.2832;
+    // (no regular rings: the author saw «труба», and the even ripples read as a coiled spring — only noise, two sizes)
     float bulge = spF(vec2(ang * 1.2 + uTime * 0.8 * uSpin, u * 7.0 - uTime * 0.9)) - 0.5;
-    p.xz *= 1.0 + 0.55 * bulge * (0.4 + 0.6 * (1.0 - u)) + 0.18 * sin(u * 23.0 - uTime * 3.0) * (1.0 - u);
+    float lump = spF(vec2(ang * 3.1 - uTime * 1.3 * uSpin, u * 17.0 - uTime * 1.7)) - 0.5;
+    p.xz *= 1.0 + (0.55 * bulge + 0.3 * lump) * (0.4 + 0.6 * (1.0 - u));
     // the spin: faster low down, the mist wound round
     float spin = uTime * uSpin * (2.4 - 1.6 * u);
     float c = cos(spin), s = sin(spin);

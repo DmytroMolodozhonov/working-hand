@@ -155,7 +155,8 @@ export class OceanStorm {
         this.spouts = _list.slice();
         this._lastT = t;
         // a called spout brings its own dark cloud and rain round it (≤ 400 m)
-        for (const sp of this.spouts) if (sp.summoned) this.seaK = Math.max(this.seaK, sp.k * Math.max(0, 1 - sp.d / 400));
+        for (const sp of this.spouts) if (sp.summoned) this.seaK = Math.max(this.seaK, Math.min(1, sp.k * 1.5) * Math.max(0, 1 - sp.d / 600));
+        if (this.callFx) this.seaK = Math.max(this.seaK, this.callFx.darkAt(me)); // (the calling: the sky goes dark at once, not when the funnel is down)
         if (g.storm) g.storm.seaK = this.seaK;
         const seaY = WATER_LEVEL_Y;
         if (this.spouts.length || this.fx) {
