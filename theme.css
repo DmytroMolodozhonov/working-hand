@@ -595,3 +595,12 @@ button, input, select, textarea { font-family: inherit; }
 #pause-settings .menu-btn { border: 1px solid var(--ui-border); color: #fff; }
 #pause-settings #test-mode-btn.menu-btn { width: 100%; }
 #pause-settings .sub-tabs { margin-bottom: 12px; }
+
+/* «Хост покинул игру» — the game's own screen, not the browser's window */
+#host-gone { position: fixed; inset: 0; z-index: 3100; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: radial-gradient(circle at 50% 40%, rgba(40, 30, 90, 0.55), rgba(5, 3, 18, 0.94)); }
+#host-gone.hidden { display: none; }
+.host-gone-box { max-width: 520px; border-color: rgba(150, 120, 255, 0.45); box-shadow: var(--ui-shadow), 0 0 40px rgba(150, 120, 255, 0.18); }
+#host-gone-text { font-family: var(--ui-font-title); font-weight: 700; color: #e6dcff; font-size: 2rem; margin-bottom: 12px; }
+#host-gone-btn { display: block; margin: 18px auto 0; font-size: 20px; padding: 12px 34px; border: none; border-radius: 10px; cursor: pointer;
+    background: var(--ui-grad-gold); color: #2a1a05; box-shadow: 0 6px 22px rgba(240, 169, 60, 0.35); }

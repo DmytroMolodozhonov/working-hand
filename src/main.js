@@ -1893,10 +1893,20 @@ net.on('version', (ev) => {
         }, 1200);
     }
 }
-net.on('disconnected', ({ reason }) => {
+net.on('disconnected', ({ reason, kind }) => {
     if (game && game.active) {
-        alert('Мультиплеер: ' + reason);
-        location.reload();
+        // (the author: not the browser's window — the game's own screen: the host left, the server is off, the world is saved)
+        const box = $('host-gone');
+        if (box) {
+            $('host-gone-text').textContent = kind === 'host-left' ? '🏠 Хост покинул игру' : '📡 Связь с хостом потеряна';
+            $('host-gone-sub').textContent = kind === 'host-left'
+                ? 'Сервер выключен. Данные мира сохранены у хоста — когда он снова откроет мир, вы сможете вернуться.'
+                : 'Хост закрыл игру или пропал интернет. Мир сохраняется у хоста — попробуйте войти снова чуть позже.';
+            box.classList.remove('hidden');
+            try { document.exitPointerLock?.(); } catch (e) { /* ignore */ }
+            try { game.active = false; game.sound?.stopAll?.(); } catch (e) { /* ignore */ }
+            $('host-gone-btn').onclick = () => location.reload();
+        } else { alert('Мультиплеер: ' + reason); location.reload(); }
     } else {
         setMpStatus('❌ ' + escapeHtml(reason));
         renderPlayers();

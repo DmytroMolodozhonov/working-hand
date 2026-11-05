@@ -372,11 +372,11 @@ export class Network extends Emitter {
                 stage.broker = true;
                 netLog(`сервер связи ответил (${sec()}), ищем игру ${clean}…`);
                 const conn = peer.connect(PREFIX + clean, { reliable: true, serialization: 'json', metadata: { name: this.name, v: this.version, pid: this.pid, joinSession: this._joinSession } });
-                const lost = () => {
+                const lost = (kind) => {
                     if (!settled) { fail({ type: 'p2p' }); return; }
                     if (this.role !== 'client' || this.hostConn !== conn) return;
                     this.leave();
-                    this.emit('disconnected', { reason: 'Хост закрыл игру или связь потеряна' });
+                    this.emit('disconnected', kind === 'host-left' ? { reason: 'Хост покинул игру', kind } : { reason: 'Хост закрыл игру или связь потеряна', kind: 'lost' });
                 };
                 conn.on('iceStateChanged', (st) => {
                     stage.ice = st;
@@ -421,7 +421,7 @@ export class Network extends Emitter {
                         if (!ev.handled) this.emit('disconnected', { reason: humanError({ type: 'version' }) });
                         return;
                     }
-                    if (msg.t === 'host-left') { lost(); return; }
+                    if (msg.t === 'host-left') { lost('host-left'); return; }
                     if (msg.t === 'players') {
                         this.players = new Map(msg.players.map((p) => [p.id, { name: p.name, color: p.color }]));
                         this.emit('players', msg.players);
