@@ -179,7 +179,7 @@ export function swanWingsItemModel(magic = false) {
     for (const s of [1, -1]) {
         const w = new THREE.Group();
         w.scale.set(0.42 * s, 0.42, 0.42);
-        w.rotation.set(-Math.PI / 2, 0, 0); // (the span along the item's length, the two exactly parallel)
+        w.rotation.set(-Math.PI / 2, 0, 0); w.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), 0.2 * s); // (the span along the item length; each leans in a little: the two close into one pair)
         const m = new THREE.Mesh(K.pigWingGeo(), feather);
         m.morphTargetInfluences = [0.2, 0.05]; // (folded: the feathers close up)
         m.castShadow = true;
