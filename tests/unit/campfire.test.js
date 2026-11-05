@@ -44,3 +44,19 @@ test('burn time: 3 minutes, +1 minute per wood, at most 10, embers light up agai
     assert.equal(burnText(60), '1 мин');
     assert.equal(burnText(42), '42 с');
 });
+
+test('«Fire» на котёл: палочка, направленная на стоящий котёл, выбирает его; на котёл над огнём/в воздухе/в стороне — нет', async () => {
+    const { Campfires } = await import('../../src/game/Campfires.js');
+    const THREE = await import('three');
+    const mk = (cauldrons) => ({ game: { cauldrons: { list: new Map(cauldrons.map((c) => [c.id, c])), upright: (c) => !c.lev && c.tilt < 0.2 }, character: {
+        getHandWorldPosition: (s, v) => v.set(0, 3, 0), getHandDirection: (s, v) => v.set(0, -0.2, 1),
+    } } });
+    const aim = (o) => Campfires.prototype._cauldronAim.call(o, 'right');
+    const c = { id: 'a', x: 0, y: 0.6, z: 10, tilt: 0 };
+    assert.equal(aim(mk([c])), c);
+    assert.equal(aim(mk([{ ...c, x: 6 }])), null, 'в стороне');
+    assert.equal(aim(mk([{ ...c, fire: 'f1' }])), null, 'уже над костром');
+    assert.equal(aim(mk([{ ...c, lev: true }])), null, 'в воздухе');
+    assert.equal(aim(mk([{ ...c, z: 40 }])), null, 'дальше 25 м');
+    void THREE;
+});

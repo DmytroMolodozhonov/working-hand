@@ -232,10 +232,14 @@ export class Campfires {
         if (!side) return say('🔥 Поднимите руку, покажите на землю и скажите «Fire»', 'рука не поднята');
         const tired = g.combat.check('Fire');
         if (tired) { g.hud.setVoice(tired, true); return null; } // (Combat.check writes the reason itself: lastCastWhy)
-        const spot = this.aim(side);
+        let spot = this.aim(side);
         // a ship's gun (its fuse is lit — no campfire needed) or a ship's deck (it burns): Ships.js
         const onShip = g.ships?.fireSpell(side, spot?.wall ? null : spot, isFinal);
         if (onShip !== undefined) { if (onShip) this._lastCast = now; return onShip; }
+        // a cauldron under the wand: the fire is lit right under it, and it hangs over it by itself (Cauldrons._fireUnder) — no «Левиоса» needed;
+        // the water then heats slowly and boils harder and harder (Cauldrons: st.heat over BOIL_TIME)
+        const caul = this._cauldronAim(side);
+        if (caul) spot = { x: caul.x, y: caul.y, z: caul.z, cauldron: true };
         if (!spot) return say('🔥 Покажите рукой на землю (не дальше 25 м)', 'нет точки на земле: рука направлена в небо или слишком далеко (больше 25 м)');
         if (spot.wall) return say('🔥 Огонь горит только на земле — покажите вниз, на пол или землю', 'нет точки на земле: рука направлена на стену или потолок (пол ниже чем на 2,5 м не найден)');
         if (spot.water) return say('🔥 На воде костёр не загорится — покажите на сушу', 'нет точки на земле: рука направлена на воду');
@@ -258,6 +262,26 @@ export class Campfires {
         else g.sync?.campfire?.({ t: 'cfask', p: [r2(spot.x), r2(spot.y), r2(spot.z)], k });
         g.hud.setVoice('🔥 Костёр горит! Подержите у огня руку с деревом — будет гореть дольше. Мясо в огне пожарится', true);
         return 'Fire';
+    }
+
+    /** The cauldron the hand points at (the ray passes through its body; standing upright, not hung over a fire yet, ≤ 25 m). */
+    _cauldronAim(side) {
+        const g = this.game;
+        const list = g.cauldrons?.list;
+        if (!list?.size) return null;
+        const hand = g.character.getHandWorldPosition(side, new THREE.Vector3());
+        const dir = g.character.getHandDirection(side, new THREE.Vector3()).normalize();
+        let best = null, bd = 25;
+        for (const c of list.values()) {
+            if (c.fire || !g.cauldrons.upright(c)) continue;
+            const mx = c.x - hand.x, my = c.y + 1.2 - hand.y, mz = c.z - hand.z;
+            const t = mx * dir.x + my * dir.y + mz * dir.z; // (along the ray)
+            if (t < 0.5 || t > bd) continue;
+            const px = mx - dir.x * t, py = my - dir.y * t, pz = mz - dir.z * t;
+            if (Math.hypot(px, py, pz) > 1.9) continue; // (the cauldron's width plus a little for a shaky hand)
+            bd = t; best = c;
+        }
+        return best;
     }
 
     /**
