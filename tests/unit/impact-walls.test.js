@@ -34,6 +34,13 @@ function inside(d, x, z, y, r = 0.42, ax = null, len = 0) {
     return n;
 }
 
+/** How deep a point is inside the block it is in (0 — in the air): the nearest face, sideways or up/down (layer L spans y ∈ [L−1.5, L−0.5]). */
+function blockDepth(d, w) {
+    const L = Math.round(w.y + 1);
+    if (!d.solidIn(Math.round(w.x), Math.round(w.z), L, L)) return 0;
+    return Math.min(0.5 - Math.abs(w.x - Math.round(w.x)), 0.5 - Math.abs(w.z - Math.round(w.z)), (L - 0.5) - w.y, w.y - (L - 1.5));
+}
+
 function setup(d) {
     const scene = new THREE.Scene();
     const model = new VillagerModel(villagerLook(3, 'farmer'), {});
@@ -59,6 +66,25 @@ function run(d, ang, force, x0 = 1, z0 = 0) {
     const vx = Math.cos(ang) * force, vz = Math.sin(ang) * force;
     ci.apply(v, { v: new THREE.Vector3(vx, 0, vz), spell: 'Jolt', always: { down: 1 }, toss: 0 });
     let bad = 0, worst = 0;
+    // (near the hero a villager knocked off his feet is a rag doll — CreatureImpact RAG: the doll's balls and the drawn parts are what must stay
+    // out of the wall; v.x is then the middle of his hips, not his feet)
+    const doll = ci.active.get('v|' + v.id)?.s.rag;
+    if (doll) {
+        const W0 = { boxes: () => [], solid: (ix, iz, lo, hi) => d.solidIn(ix, iz, lo, hi), floor: () => FLOOR_Y };
+        const parts = [['head', 0, 0.6, 0], ['leftArm', 0, -0.95, 0], ['rightArm', 0, -0.95, 0], ['leftKnee', 0, -0.65, 0], ['rightKnee', 0, -0.65, 0], ['pelvis', 0, 0, 0], ['leftKnee', 0, 0, 0], ['rightKnee', 0, 0, 0]];
+        const w = new THREE.Vector3();
+        for (let t = 0; t < 8; t += 1 / 60) {
+            ci.update(1 / 60);
+            v.model.group.position.set(v.x, v.y + 1.95, v.z); v.model.group.updateMatrixWorld(true);
+            if (doll.penetration(W0) > 0.12) { bad++; worst = Math.max(worst, 1); }
+            for (const [k, x, y, z] of parts) {
+                v.model[k].localToWorld(w.set(x, y, z));
+                if (blockDepth(d, w) > 0.25) { bad++; worst = Math.max(worst, 2); }
+            }
+            if (!Number.isFinite(v.x)) assert.fail('NaN');
+        }
+        return { bad, worst, x: v.x, z: v.z };
+    }
     for (let t = 0; t < 8; t += 1 / 60) {
         ci.update(1 / 60);
         const lying = ci.stateOf(v);

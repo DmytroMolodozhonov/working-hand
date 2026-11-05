@@ -90,7 +90,9 @@ test('a gentle push: a stagger (steps back, leans, arms flail), never a fall', (
 });
 
 test('a villager falls the way it was pushed, using its own feet pivot; a knight in armour only reels', () => {
-    const { v, knight, ci } = world();
+    const { g, v, knight, ci } = world();
+    // (far from the hero — beyond RAG.NEAR — the old tilt over the feet; near, the rag doll lays him: solid-guard-impact.test.js)
+    g.character = { group: { position: new THREE.Vector3(500, 0, 500) } };
     // a villager looks along −Z at yaw 0: pushed towards +Z from the front → on its back
     assert.equal(ci.apply(v, { v: new THREE.Vector3(0, 0, 13) }), 'knockdown');
     step(ci, 0.6);

@@ -1345,7 +1345,7 @@ export class CastleLife {
      * that still stands, and lies there (its body in Death.js goes with it).
      */
     _deadFall(v, dt) {
-        if (v.lev) return; // (held up by «Левиоса»: the magic carries it)
+        if (v.lev || v.rag) return; // (a rag doll lays the body: it lies where the doll fell — Ragdoll.js) // (held up by «Левиоса»: the magic carries it)
         if (!v.vy) {
             v.supT = (v.supT || 0) - dt;
             if (v.supT > 0) return;
@@ -1380,7 +1380,7 @@ export class CastleLife {
      */
     _bodyNet(v, dt) {
         const g = this.game, ci = g.creatureImpact;
-        if (v.seated || v.sleep?.phase === 'lie' || v.carriedBy || v.lev) return false;
+        if (v.seated || v.sleep?.phase === 'lie' || v.carriedBy || v.lev || v.rag) return false; // (a rag doll keeps itself out of everything)
         const thrown = v.vy || v.stunT > 0 || (ci && ci.stateOf(v) !== 'up');
         if (!thrown) { v.netIn = 0; return false; }
         if ((v.netT = (v.netT || 0) - dt) > 0) return false;
@@ -3251,6 +3251,7 @@ export class CastleLife {
             v.darkKill = hellRecent(v.darkT, Date.now()); // (killed by black magic: the body keeps it — Death.villagerDied → the rite of monstrous vitality)
             if (hellRecent(v.hellT, Date.now())) hellKilled(this.game, by, 'v', v.role, v.id); // (the Hellfire killed a humanoid: +1 black magic to the caster)
             this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
+            if (!v.annihilated && !v.burst) this.game.creatureImpact?.ragDeath?.(v); // (he falls as a rag doll: against the wall, over the chest — Ragdoll.js)
             if (v.byOrder != null && !v.rebelOrder) this.reb?.note(v.cs, v.byOrder, 'execution'); // (a man put to death on the king's order: the people do not forget)
             if (v.byOrder == null) this._comradeDown(v, by); // (on the king's order: nobody is startled)
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
@@ -4170,7 +4171,7 @@ export class CastleLife {
             if ((disarmed & 2) && !v.shieldGone) { v.shieldGone = true; v.model?.dropShield?.(); }
             if ((disarmed & 4) && !v.toolGone) { v.toolGone = true; v.model?.setHeldTool?.('none'); }
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
-            if (mode === 'dead') v.dead = true;
+            if (mode === 'dead' && !v.dead) { v.dead = true; this.game.creatureImpact?.ragDeath?.(v); } // (a guest: the body falls as a rag doll here too)
         }
         for (const v of [...this.byId.values()]) if (!seen.has(v.id)) this._deactivate(v);
     }

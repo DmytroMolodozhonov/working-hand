@@ -61,6 +61,7 @@ for (const door of [false, true]) {
             }
             if (q >= 100) continue;
             d.lie(x, FLOOR, z, Math.cos(a), Math.sin(a));
+            if (d.penetration(world) > 0.05) continue; // (laid down partly in something: not a body that fell there)
         }
         let t = 0;
         while (t < 8 && !d.asleep) { d.step(world, 1 / 60); t += 1 / 60; const p = d.penetration(world); worst = Math.max(worst, p); if (p > 0.12 && !(door && d.at(0)[2] > 10)) pen++; }

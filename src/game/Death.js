@@ -26,6 +26,7 @@
  * to late joiners and kept in the world save); every computer draws them.
  */
 
+import { apply as ragApply } from './RagdollPose.js';
 import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
 import { RESOURCE } from './Inventory.js';
@@ -469,9 +470,11 @@ export class DeathSystem {
         if (b.st) look = strippedLook(look); // (its plates / robe lie beside it: Armor.js)
         const m = new VillagerModel({ ...look, tool: 'none' }, { shield: false });
         for (let i = 0; i < 10 && !m.isDeadDone; i++) m.update(0.1, { mode: 'dead' });
+        if (b.rp) ragApply(m, b.rp); // (the pose his rag doll fell in: against the wall, over the chest — RagdollPose.js)
         const pivot = new THREE.Group();
         m.group.position.set(0, VILLAGER_FOOT_OFFSET, 0);
         pivot.add(m.group);
+        pivot.userData.vm = m;
         return { pivot, len: 4, headPlusZ: true };
     }
 
@@ -577,6 +580,21 @@ export class DeathSystem {
             if (!o) continue;
             if (b.k === 'v' && !b.moved) { const v = g.castleLife?.byId?.get(b.who); if (v && v.dead && !v.bodyMoved) continue; } // (the villager's own body falls itself: CastleLife._deadFall)
             if (this._ground(b.x, b.z, b.y + 0.5) < b.y - 0.3) this.falling.set(b.id, { b, vel: new THREE.Vector3(), gentle: false });
+        }
+    }
+
+    /**
+     * A villager's rag doll has come to rest (CreatureImpact.ragDeath): his body keeps that pose (`rp`, relative to his model's group) and
+     * the group's place and heading — so the copy lies exactly as he fell, here, on the others' computers and after a load.
+     */
+    reposeBody(k, who, pose, group) {
+        for (const b of this.bodies.values()) {
+            if (b.k !== k || b.who !== who || b.lev || b.moved) continue;
+            b.rp = pose.slice();
+            if (group) { b.x = group.position.x; b.y = group.position.y - VILLAGER_FOOT_OFFSET; b.z = group.position.z; b.yaw = group.rotation.y; }
+            const vm = b.model?.userData?.vm;
+            if (vm) ragApply(vm, b.rp);
+            if (b.model) { b.model.position.set(b.x, b.y, b.z); b.model.rotation.y = b.yaw || 0; }
         }
     }
 
@@ -779,7 +797,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined, rp: b.rp ? b.rp.map((x) => Math.round(x * 1000) / 1000) : undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */

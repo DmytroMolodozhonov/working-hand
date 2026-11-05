@@ -76,6 +76,7 @@ const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: '
 export { JERK, sharpJerk } from './Jerk.js';
 
 const _tipP = new THREE.Vector3(), _tipQ = new THREE.Quaternion(), _tipD = new THREE.Quaternion();
+const _tipM = new THREE.Matrix4(), _tipRest = new THREE.Vector3(0, -1.95, 0); // (a villager's root at rest: his feet, 1.95 below the group — VillagerModel)
 export const DUEL_SPELLS = {
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
     // a poison-green charge: an acid core (never white), a murky swamp-green glow, smoke and sparks (AvadaLook.js);
@@ -675,6 +676,14 @@ export class Duel {
      * is turned about that pivot (a charge at a body lying on the ground must not fly through it).
      */
     _tipped(c, e) {
+        // (a rag doll lays him — CreatureImpact/RagdollPose: the model's root is placed AND turned; the standing capsule goes with the root's whole frame)
+        if (c.rag && c.model?.root && c.group) {
+            const root = c.model.root;
+            c.group.updateWorldMatrix(true, false); root.updateWorldMatrix(false, false);
+            _tipM.copy(c.group.matrixWorld).invert();
+            for (const q of [e.a, e.b]) q.applyMatrix4(_tipM).sub(_tipRest).applyMatrix4(root.matrixWorld);
+            return e;
+        }
         const piv = c.group?.userData?.impPivot || c.model?.root;
         if (!piv || Math.abs(piv.rotation.x) + Math.abs(piv.rotation.z) < 0.05) return e;
         piv.getWorldPosition(_tipP);

@@ -29,7 +29,17 @@
 import * as THREE from 'three';
 import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
-import { stepBody, bounce, lieProbe, GUARD, guardWorld } from './SolidGuard.js';
+import { stepBody, bounce, lieProbe, GUARD, guardWorld, standFree, freeSpot } from './SolidGuard.js';
+import { Ragdoll } from './Ragdoll.js';
+import * as RagPose from './RagdollPose.js';
+
+/**
+ * The rag doll (Ragdoll.js, RagdollPose.js): a person knocked off his feet, thrown («Джолт», a blast, a blow) or killed is drawn BY the doll —
+ * he flies, hits the wall, goes limp against it, a leg over the chest's lid, an arm along the bed's edge — and lies as he fell.
+ * Only near the hero (NEAR m) and at most MAX bodies at once (the rest fall the old way: tilted over); the dolls' work a frame is held
+ * to BUDGET_MS (a doll over it waits a frame). A doll asleep costs nothing.
+ */
+export const RAG = { NEAR: 45, MAX: 8, BUDGET_MS: 2.5, DEAD_TIP: 1.6, UP_MAX: 1.6, UP_NEAR: 0.07, BLEND_T: 0.25 };
 import { FIRM, absoluteStops } from './FirmRules.js';
 import { creatureHolds, creatureAbsolute, ordinaryOutcome, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
@@ -72,6 +82,7 @@ function wrapPivot(group, y = 0) {
 const BODY_CLEAR = 0.45;
 
 const _got = { x: 0, z: 0 }, _want = { x: 0, z: 0 };
+const _pt = [0, 0, 0], _fr = new Float64Array(9);
 
 /**
  * Move `p` by (dx, dz) in sub-steps of at most half the body's radius, each one pushed out of the blocks AND the boxes (a hard throw never
@@ -193,6 +204,41 @@ export class CreatureImpact {
         this._out = [];
         this.log = []; // (tests) what happened to whom
         this.rnd = Math.random; // (tests: a fixed roll)
+        this.deadRags = new Map(); // villager id → {c, doll} (a dead body still settling as a rag doll)
+        this._pose = [];
+    }
+
+    /** How many rag dolls are being drawn now (alive and dead). */
+    ragCount() { let n = this.deadRags.size; for (const e of this.active.values()) if (e.s.rag) n++; return n; }
+
+    /** Is this body drawn by a rag doll now (its own place / fall / guard must not move it)? */
+    ragOf(c) { const ck = kindOf(c); const e = ck && this.active.get(ck + '|' + c.id); return !!(e?.s.rag || e?.s.pose || this.deadRags.has(c.id)); }
+
+    /** May a doll start for this body (a villager's model, near the hero, room for one more)? */
+    _ragOk(ck, c) {
+        if (ck !== 'v' || !c.model?.leftKnee || !c.model.root || c.seated || c.lev || c.carriedBy) return false;
+        const me = this.game.character?.group?.position;
+        if (me && Math.hypot(c.x - me.x, c.z - me.z) > RAG.NEAR) return false;
+        return this.ragCount() < RAG.MAX;
+    }
+
+    /** The doll takes the model's pose of this moment and flies with (vx, vy, vz); `tip` (rad/s) topples it over the way it is pushed. */
+    _ragStart(c, s, vx, vy, vz, tip = 0) {
+        const doll = new Ragdoll();
+        RagPose.fromModel(doll, c.model);
+        doll.launch(vx, vy, vz, 0);
+        if (tip) {
+            // (the upper body goes on with the push, the feet stay a moment: it topples — and Jolt's turns go over the head)
+            const n = Math.hypot(vx, vz) || 1, dx = vx / n, dz = vz / n;
+            let yc = 0;
+            for (let i = 0; i < 11; i++) yc += doll.x[i * 3 + 1];
+            yc /= 11;
+            for (let i = 0; i < 11; i++) { const h = doll.x[i * 3 + 1] - yc; doll.o[i * 3] -= dx * h * tip * 1 / 60; doll.o[i * 3 + 2] -= dz * h * tip * 1 / 60; }
+        }
+        s.rag = doll; s.pose = null;
+        c.rag = true;
+        c.vy = 0; // (the doll flies — not the villager's own fall: CastleLife._fallStep)
+        return doll;
     }
 
     get auth() { return this.game.authority !== false; }
@@ -301,6 +347,12 @@ export class CreatureImpact {
         // thrown and tumbling over in the air («Джолт»): as long as it is in the air (at least a moment)
         const tumble = res === 'knockdown' && o.tumble > 0 && toss > 2 && !o.noSlide ? { turns: o.tumble | 0 || 1, dur: Math.max(0.5, 2 * toss / CREATURE.G + 0.15) } : null;
         if (res === 'knockdown') this._knock(ck, c, e, dir, o.always?.down ?? o.down ?? CREATURE.MIN_DOWN, true, tumble);
+        // the rag doll: knocked off his feet near the hero — he is drawn by it (another blow on a body lying there pushes the doll on)
+        if (res === 'knockdown' && !o.noSlide) {
+            const tip = tumble ? (tumble.turns * Math.PI * 2) / tumble.dur : Math.min(6, 0.9 + Math.hypot(o.v.x, o.v.z) / B.mass * 0.12);
+            if (s.rag) { s.rag.push(o.v.x / B.mass, toss, o.v.z / B.mass); s.pose = null; c.vy = 0; this._emit(ck, c, 'g', [r2(o.v.x / B.mass), r2(toss), r2(o.v.z / B.mass), 0, 1]); }
+            else if (this._ragOk(ck, c)) { this._ragStart(c, s, s.vx, toss, s.vz, tip); this._emit(ck, c, 'g', [r2(s.vx), r2(toss), r2(s.vz), r2(tip), 0]); }
+        }
         else if (res === 'stagger') this._stagger(ck, c, e, dir, (held ? vHeld : v) / B.mass, true, held);
         // dizzy once it is up again (a heavy body less)
         if (o.daze > 0 && res !== 'none') this._daze(ck, c, e, o.daze / Math.sqrt(B.mass));
@@ -381,7 +433,7 @@ export class CreatureImpact {
         if (emit) this._emit(ck, c, held ? 'h' : 's', [KD[dir], r2(v)]);
     }
 
-    _busy(s) { return s.state !== 'up' || s.jolt.busy || Math.abs(s.vx) + Math.abs(s.vz) > 0.05 || s.daze > 0 || !!s.tum; }
+    _busy(s) { return !!s.rag || !!s.pose || s.state !== 'up' || s.jolt.busy || Math.abs(s.vx) + Math.abs(s.vz) > 0.05 || s.daze > 0 || !!s.tum; }
 
     _emit(ck, c, ev, args) {
         if (!this.auth || !this.game.sync) return;
@@ -393,7 +445,7 @@ export class CreatureImpact {
         if (this.auth || !Array.isArray(list)) return;
         for (const it of list.slice(0, 200)) {
             if (!Array.isArray(it)) continue;
-            const [ck, id, ev, a, b, c3, c4] = it;
+            const [ck, id, ev, a, b, c3, c4] = it; // (it[7]: 'g' — pushed again)
             const K = KINDS[ck];
             const c = K?.get(this.game, id);
             if (!c || !c.group) continue;
@@ -404,6 +456,11 @@ export class CreatureImpact {
             else if (ev === 'h') this._stagger(ck, c, e, KD_NAME[a] || 'back', +b || 4, false, true);
             else if (ev === 'r') { if (e.s.state === 'down' || e.s.state === 'falling') { e.s.state = 'rising'; e.s.t = 0; } }
             else if (ev === 'j') e.s.jolt.kick({ pitch: +a || 0, yaw: +b || 0, roll: +c3 || 0 });
+            else if (ev === 'g') { // (the host's doll started / was pushed again: ours does the same — each computer lies it on its own world)
+                const cl = (x, m) => Math.max(-m, Math.min(m, +x || 0));
+                if (e.s.rag && it[7]) e.s.rag.push(cl(a, 80), cl(b, 40), cl(c3, 80));
+                else if (!e.s.rag && this._ragOk(ck, c)) this._ragStart(c, e.s, cl(a, 80), cl(b, 40), cl(c3, 80), cl(c4, 12));
+            }
         }
     }
 
@@ -483,13 +540,19 @@ export class CreatureImpact {
     // =============================================================== frame
     update(dt) {
         const g = this.game;
+        this._budget = performance.now() + RAG.BUDGET_MS;
         for (const [key, e] of this.active) {
             const { ck, c, s } = e;
             const K = KINDS[ck];
             const gone = !c.group || !c.group.parent || !K.alive(c) || (ck === 'z' && g.zombieById && !g.zombieById.has(c.id)) || c.removable;
-            if (gone) { this._release(K, c, s, true); this.active.delete(key); continue; }
+            if (gone) {
+                if (s.rag && c.dead && !this.deadRags.has(c.id)) this.deadRags.set(c.id, { c, doll: s.rag }); // (killed while flying / lying: the same doll lies on, dead)
+                s.rag = null; s.pose = null;
+                this._release(K, c, s, true); this.active.delete(key); continue;
+            }
             if (c.lev && s.state !== 'up') { this._release(K, c, s, false); s.state = 'up'; }
             s.t += dt;
+            if (s.rag || s.pose) { this._ragFrame(ck, K, c, s, dt); if (!this._busy(s)) { this._release(K, c, s, false); this.active.delete(key); } continue; }
             // the slide (host: it moves the body; friction is stronger lying on the ground)
             if (this.auth && (s.vx || s.vz)) {
                 const lying = s.state === 'falling' || s.state === 'down';
@@ -509,7 +572,107 @@ export class CreatureImpact {
             this._draw(K, c, s, dt);
             if (!this._busy(s)) { this._release(K, c, s, false); this.active.delete(key); }
         }
+        this._deadFrame(dt);
         if (this._out.length && g.sync) { g.sync.creatureImpacts?.(this._out.splice(0, 200)); this._out.length = 0; }
+    }
+
+    /**
+     * A body drawn by its rag doll: the doll moves (as long as the frame's budget allows), the model follows it, the villager's place goes
+     * with the hips (host); getting up — from the pose it lies in to standing, smoothly (RAG.RISE_T), facing where its head lay.
+     */
+    _ragFrame(ck, K, c, s, dt) {
+        const g = this.game, doll = s.rag;
+        s.vx = s.vz = 0; s.airT = 0; s.rest = 0;
+        if (doll) {
+            if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
+            if (this.auth) {
+                doll.at(12, _pt); // (the middle of the hips)
+                c.x = _pt[0]; c.z = _pt[2];
+                const fl = guardWorld(g).floor(c.x, c.z, _pt[1]);
+                if (Number.isFinite(fl)) c.y = Math.min(fl, _pt[1]);
+                c.vy = 0;
+                if (c.group) c.group.position.set(c.x, c.y + 1.95, c.z);
+            }
+        }
+        const was = s.state;
+        if (!s.getUp) this._step(ck, K, c, s, dt);
+        if (doll && s.state === 'rising' && was !== 'rising' && !s.getUp) {
+            // up: he gets up as the doll — pulled toward a man standing on a free spot by his hips, the world holding it (by a wall he gets
+            // up along it, not through it); he faces his feet if he lay on his back (he sits up), his head if on his face (he pushes up)
+            const W = guardWorld(g);
+            doll.at(12, _pt);
+            const fy = W.floor(_pt[0], _pt[2], _pt[1]);
+            let sx = _pt[0], sz = _pt[2];
+            if (!standFree(W, sx, sz, 0.45, fy)) { const f = freeSpot(W, sx, sz, 0.45, fy); if (f) { sx = f.x; sz = f.z; } }
+            doll.frame(_fr);
+            let fx = _fr[3], fz = _fr[5];
+            if (_fr[7] < 0) { fx = -fx; fz = -fz; } // (on his back: the back looks down — he sits up facing his feet)
+            if (Math.hypot(fx, fz) < 0.2) { fx = Math.sin(c.yaw || 0) * -1; fz = -Math.cos(c.yaw || 0); }
+            doll.standUp(sx, fy, sz, fx, fz);
+            s.getUp = { yaw: Math.atan2(-fx, -fz), t: 0 };
+        }
+        if (s.getUp && doll) {
+            s.getUp.t += dt;
+            s.t = 0; // (still rising: not «up» until he stands)
+            K.hold(g, c, 0.3);
+            if (this.auth) { c.yaw = s.getUp.yaw; if (c.group) c.group.rotation.y = c.yaw; }
+            if (s.getUp.t >= RAG.UP_MAX || doll.goalDist() < RAG.UP_NEAR) {
+                // standing: the last few centimetres go over to the model's own standing pose
+                RagPose.toModel(doll, c.model);
+                c.model.group.updateMatrixWorld(true);
+                s.pose = RagPose.capture(c.model, []);
+                s.poseFrom = (s.poseFrom || new THREE.Matrix4()).copy(c.model.group.matrixWorld);
+                s.rag = null; c.rag = false; s.riseT = 0; s.getUp = null;
+            }
+        }
+        if (s.rag) { RagPose.toModel(s.rag, c.model); return; }
+        if (s.pose) {
+            s.riseT = (s.riseT || 0) + dt;
+            const k = Math.min(1, s.riseT / RAG.BLEND_T);
+            const tmp = this._pose;
+            tmp.length = 0;
+            for (let i = 0; i < s.pose.length; i++) tmp.push(s.pose[i]);
+            RagPose.cleanOwn(c.model); // (the model's own standing, without what the doll left in it)
+            if (c.model.group) RagPose.rebaseRoot(tmp, s.poseFrom, c.model.group);
+            RagPose.blend(c.model, tmp, k * k * (3 - 2 * k));
+            if (k >= 1) { s.pose = null; s.poseFrom = null; s.state = 'up'; s.t = 0; }
+            else K.hold(g, c, 0.2);
+        }
+    }
+
+    /**
+     * (every computer) A villager died: his body falls as a rag doll — the one he flew as, or a new one from the pose he died in, toppling
+     * the way the last blow went (or backwards). Asleep, the pose goes to his body (Death.reposeBody) — it lies so for good, and is sent and saved so.
+     */
+    ragDeath(c) {
+        if (!c || this.deadRags.has(c.id)) return;
+        const e = this.active.get('v|' + c.id);
+        if (e?.s.rag) { this.deadRags.set(c.id, { c, doll: e.s.rag }); e.s.rag = null; e.s.pose = null; return; }
+        if (!this._ragOk('v', c)) return;
+        const tmp = { };
+        const yaw = c.yaw ?? c.group?.rotation.y ?? 0;
+        let vx = e?.s.vx || 0, vz = e?.s.vz || 0;
+        if (Math.hypot(vx, vz) < 0.5) { vx = Math.sin(yaw) * 0.8; vz = Math.cos(yaw) * 0.8; } // (no blow: he sinks back, away from where he looked — the model looks along −Z)
+        this._ragStart(c, tmp, vx, 0, vz, RAG.DEAD_TIP);
+        this.deadRags.set(c.id, { c, doll: tmp.rag });
+    }
+
+    _deadFrame(dt) {
+        if (!this.deadRags.size) return;
+        const g = this.game;
+        for (const [id, r] of this.deadRags) {
+            const { c, doll } = r;
+            if (!c.group || !c.group.parent || !c.model?.root || !c.dead || c.lev || c.bodyMoved) { this.deadRags.delete(id); if (!c.dead) c.rag = false; continue; } // (carried off by «Левиоса», gone from the world, raised: the doll is done)
+            if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
+            RagPose.toModel(doll, c.model);
+            if (doll.asleep && c.model.isDeadDone) {
+                c.model.group.updateMatrixWorld(true);
+                const pose = RagPose.capture(c.model, []);
+                g.death?.reposeBody?.('v', c.id, pose, c.group);
+                c.rag = 'done';
+                this.deadRags.delete(id);
+            }
+        }
     }
 
     /**
@@ -678,6 +841,9 @@ export class CreatureImpact {
     /** Back to the creature's own animation (alive: upright; dead: its death takes over). */
     _release(K, c, s, dead) {
         if (!c.group) return;
+        if (!dead && (s.rag || s.pose) && c.model?.root) RagPose.cleanOwn(c.model); // (the doll let go of him: his own animation again)
+        if (!dead || !this.deadRags.has(c.id)) { if (c.rag !== 'done') c.rag = false; }
+        s.rag = null; s.pose = null; s.getUp = null;
         try {
             const P = K.pivot(c);
             // (a villager's own death fall turns the same root: only the sideways tilt is taken back)

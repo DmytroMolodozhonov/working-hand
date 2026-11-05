@@ -71,8 +71,11 @@ test('standing: every creature is hit where it is seen', () => {
 });
 
 test('knocked down and lying (stunned): a charge at the lying body hits it, head end and feet end', () => {
-    const w = world();
-    for (const [k, c, id, obj] of KIND(w)) {
+    // (each in a world of its own: a villager knocked down near the hero is a rag doll now — CreatureImpact RAG — and slides on ~4 m
+    // along the floor, lying right across the line to the cow: the charge rightly hits him first)
+    for (let i = 0; i < 4; i++) {
+        const w = world();
+        const [k, c, id, obj] = KIND(w)[i];
         w.ci.apply(c, { v: V(0, 0, 14), kind: 'shove', always: { down: 8 }, down: 8 });
         step(w.ci, 1);
         assert.equal(w.ci.stateOf(c), 'down', `${k} ${id} lies`);

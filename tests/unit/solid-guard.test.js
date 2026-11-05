@@ -127,7 +127,7 @@ test('the bones keep their lengths and the joints their limits through a hard th
     const d = new Ragdoll();
     d.stand(6, FLOOR, 6, 1, 0, 40, 6, 5, 3);
     let worstBone = 0;
-    const torso = () => { const a = d.at(P.CHEST), b = d.at(P.PELVIS); return Math.abs(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) - 1.0); };
+    const torso = () => { const a = d.at(P.CHEST), b = d.at(P.PELVIS); return Math.abs(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) - 1.3); }; // (shoulders 3.25 − hips 1.95: the model's torso)
     run(d, world, 3, () => { worstBone = Math.max(worstBone, torso()); });
     assert.ok(worstBone < 0.5, `torso length error in the throw ${worstBone.toFixed(2)} m`);
     run(d, world, 6);
