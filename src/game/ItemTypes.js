@@ -45,6 +45,7 @@ import { glowfinTailItemModel } from './SeaModels.js';
 import { FLORA_ITEMS, FLORA_ITEM_TEXT, FLORA_OF_ITEM } from './MagicFlora.js';
 import { floraItemModel } from '../fx/FloraModels.js';
 import { pouchModel } from './PouchModel.js';
+import { backpackModel } from './BackpackModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
 import { DRAGON_KINDS } from './DragonKinds.js';
@@ -134,7 +135,7 @@ export const ITEM_INFO = {
     wand: { name: 'Волшебная палочка', icon: '🪄', weight: 0.15 },
     scroll: { name: 'Свиток', icon: '📜', weight: 0.2 },
     shield: { name: 'Щит', icon: '🛡️', weight: 3 },
-    backpack: { name: 'Рюкзак', icon: '🎒', weight: 1.5 },
+    backpack: { name: 'Рюкзак', icon: '🎒', weight: 1.5 }, // (it.magic: «Магический рюкзак» — see MagicPack.js)
     bow: { name: 'Лук', icon: '🏹', weight: 1 },
     hammer: { name: 'Молот Тора', icon: '🔨', weight: 4 },
     apple: { name: 'Золотое яблоко', icon: '🍏', weight: 0.2, stack: 10 },
@@ -228,7 +229,7 @@ function baseValue(it) {
         case 'weapon': return isDivine(it) ? 5000 : it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
         case 'scroll': return it.stat === 'flight' || it.stat === 'spell' || it.stat === 'pentagram' ? 220 : 60;
-        case 'backpack': return 30 + 5 * (it.slots || 3);
+        case 'backpack': return it.magic ? 900 : 30 + 5 * (it.slots || 3);
         case 'bow': return it.magic ? 90 + (it.bonus || 0) : 25;
         case 'hammer': return 300;
         case 'iceRod': return 2000;
@@ -735,6 +736,11 @@ export const SEA_SCROLLS = ['Unfurl', 'Unfurl', 'WaveAttack', 'AirBubble', 'Wate
 /** The Ice Queen's scrolls: the ice. */
 export const ICE_SCROLLS = ['IceCastle', 'IceBridge', 'IceMaxima', 'Snowman'];
 
+/** The golden magic backpack: no cells of its own; what does not fit the cells goes inside (`store`), unseen — MagicPack.js. */
+export function newMagicBackpack() {
+    return { kind: 'backpack', magic: true, uid: newUid(), slots: 0, color: 0xe0b43c, store: [] };
+}
+
 /** The precious thing of a chest: a wand, a scroll, a magic weapon, shield or bow, a backpack, Thor's hammer. */
 export function rollKeyItem(r = Math.random) {
     const x = r();
@@ -742,7 +748,7 @@ export function rollKeyItem(r = Math.random) {
     if (x < 0.52) return rollScroll(r);
     if (x < 0.66) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: true, bonus: randInt(r, 1, 60), uid: newUid() };
     if (x < 0.76) { const t = randInt(r, 0, 2); return { kind: 'shield', uid: newUid(), type: t, magic: true, max: randInt(r, 20, 50) }; }
-    if (x < 0.86) return { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) };
+    if (x < 0.86) return r() < 0.2 ? newMagicBackpack() : { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) }; // (one in five: the golden magic one)
     if (x < 0.975) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: true, bonus: randInt(r, 1, 60), arrows: 10 };
     return { kind: 'hammer', uid: newUid(), charges: 0 };
 }
@@ -883,6 +889,7 @@ function describeItemBase(it) {
             if (it.swift || it.spells?.includes('Flight')) return { title: '📘 Быстрая книга', color: SWIFT_COVER, lines: ['Сожгите её («Инферно» с книгой в руке или в огне): вы научитесь заклинанию <b>«Флайн»</b> (полёт)', 'Раскрыть и прочитать можно, но выучит «Флайн» только тот, кто её сожжёт'] };
             return { title: '📖 Книга заклинаний', color: 0xffe9a8, lines: ['Раскройте и прочитайте (или сожгите «Инферно»): в ней заклинания для стройки'] };
         case 'backpack':
+            if (it.magic) return { title: '🎒✨ Магический рюкзак', color: 0xe0b43c, lines: ['Наденьте, как обычный (руки за спину). Ячеек не добавляет, зато когда ячейки заканчиваются, вещи сами уходят внутрь — и нигде не видны.', 'Достать: снимите, бросьте на землю и скажите «Акцио» и название вещи. «Акцио» без названия — рюкзак прилетит в руку.', `Лежит внутри: <b>${(it.store || []).length}</b>`] };
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
         case 'bow':
             return { title: '🏹 ' + BOW_KINDS[it.type || 0] + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: [it.magic ? `Стрелы бьют сильнее на <b>${it.bonus}%</b>` : 'Обычный лук', `Стрел: <b>${it.arrows ?? 0}</b> (до 25)`] };
@@ -1094,21 +1101,6 @@ function shieldModel(it) {
         g.add(halo);
         g.userData.halo = halo;
     }
-    return g;
-}
-
-function backpackModel(it) {
-    const g = new THREE.Group();
-    const c = mat(it.color ?? 0x7a4a24);
-    const dark = mat(new THREE.Color(it.color ?? 0x7a4a24).multiplyScalar(0.6).getHex());
-    g.add(box(0.7, 0.85, 0.35, c));
-    g.add(box(0.72, 0.25, 0.37, dark, 0, 0.32, 0.01));
-    g.add(box(0.5, 0.3, 0.12, dark, 0, -0.15, 0.22));
-    g.add(box(0.08, 0.08, 0.05, mat(0xd4af37), 0, 0.22, 0.2));
-    // the carrying loop on top (the hand hooks its fingers into it)
-    g.add(box(0.24, 0.04, 0.04, dark, 0, 0.52, 0));
-    g.add(box(0.03, 0.09, 0.03, dark, -0.105, 0.47, 0));
-    g.add(box(0.03, 0.09, 0.03, dark, 0.105, 0.47, 0));
     return g;
 }
 

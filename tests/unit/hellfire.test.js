@@ -30,16 +30,16 @@ test('Hellfire: ordinary talk never casts it', () => {
     assert.equal(matchSpell('лед'), 'Ice');
 });
 
-test('Hellfire: mana — a maximum of 100+, 80 at once, 2 a second; Creative has no mana rules', () => {
-    assert.equal(SPELL_COST.Hellfire, 80);
-    assert.equal(HELLFIRE.MIN_MAX_MANA, 100);
-    assert.equal(HELLFIRE.COST, 80);
+test('Hellfire: mana — a maximum of 250+, 250 at once (the author 05.11: was 100 / 80), 2 a second; Creative has no mana rules', () => {
+    assert.equal(SPELL_COST.Hellfire, 250);
+    assert.equal(HELLFIRE.MIN_MAX_MANA, 250);
+    assert.equal(HELLFIRE.COST, 250);
     assert.equal(hellfireDrain(1), 2);
     assert.equal(hellfireDrain(0.25), 0.5);
     assert.equal(hellfireDrain(-1), 0);
     assert.equal(hellfireBlock({ enabled: true, max: 99, mana: 99 }), 'max');
-    assert.equal(hellfireBlock({ enabled: true, max: 100, mana: 79 }), 'mana');
-    assert.equal(hellfireBlock({ enabled: true, max: 100, mana: 80 }), null);
+    assert.equal(hellfireBlock({ enabled: true, max: 250, mana: 249 }), 'mana');
+    assert.equal(hellfireBlock({ enabled: true, max: 250, mana: 250 }), null);
     assert.equal(hellfireBlock({ enabled: false, max: 30, mana: 0 }), null, 'Creative: it just works');
 });
 
@@ -93,15 +93,15 @@ function fakeGame(mode = 'freeworld') {
 
 const run = (g, secs, step = 0.1) => { for (let t = 0; t < secs - 1e-9; t += step) { g.combat.update(step); g.hellfire.update(step); } };
 
-test('Hellfire: needs a mana maximum of 100; costs 80, then drains 2 a second; out when the mana runs out', () => {
+test('Hellfire: needs a mana maximum of 250; costs 250, then drains 2 a second; out when the mana runs out', () => {
     const g = fakeGame();
     const c = g.combat;
     c.fatigue = 30;
     assert.equal(g.hellfire.cast(true), null, 'a maximum of 30: not strong enough');
     assert.equal(c.fatigue, 30, 'nothing paid');
-    c.maxFatigue = 100; c.fatigue = 100;
+    c.maxFatigue = 270; c.fatigue = 270;
     assert.equal(g.hellfire.cast(true), 'Hellfire');
-    assert.equal(c.fatigue, 20, '80 at once (a wand saves nothing on it)');
+    assert.equal(c.fatigue, 20, '250 at once (a wand saves nothing on it)');
     run(g, 2);
     assert.ok(Math.abs(c.fatigue - 16) < 0.05, `2 a second while held, nothing comes back: ${c.fatigue}`);
     assert.ok(g.hellfire.busy);
@@ -123,17 +123,17 @@ test('Hellfire: «стоп» puts it out; Creative casts it with no mana at all'
 test('Hellfire: the first real burn gives +20 to the mana maximum — only once', () => {
     const g = fakeGame();
     const c = g.combat;
-    c.maxFatigue = 100; c.fatigue = 100;
+    c.maxFatigue = 500; c.fatigue = 500;
     g.hellfire.cast(true);
     run(g, 1);
-    assert.equal(c.maxFatigue, 100, 'nothing burnt yet: no reward');
+    assert.equal(c.maxFatigue, 500, 'nothing burnt yet: no reward');
     g.fire.lit = 1; // (a tree catches fire)
     run(g, 0.5);
     const after = c.maxFatigue;
-    assert.equal(after, 120, '+20 the first time');
+    assert.equal(after, 520, '+20 the first time');
     g.hellfire.stop();
     g.hellfire._endAt = -99;
-    c.fatigue = 100;
+    c.fatigue = 250;
     g.hellfire.cast(true);
     g.fire.lit = 1;
     run(g, 0.5);
@@ -144,7 +144,7 @@ test('Hellfire: the caster is not immune — the blaze on him burns him (a shiel
     const g = fakeGame();
     const c = g.combat;
     c.maxHp = 400; c.hp = 400; // (a creature with more HP than 20 survives: the damage is the same for all)
-    c.maxFatigue = 200; c.fatigue = 200;
+    c.maxFatigue = 500; c.fatigue = 500;
     // (the wand pointing at his own feet)
     g.character.getPointingDirection = (side, out = new THREE.Vector3()) => out.set(0, -1, 0.05).normalize();
     g.castOrigin = (side, out = new THREE.Vector3()) => out.set(0.25, 1.4, -0.4);
@@ -163,7 +163,7 @@ test('Hellfire: «стоп» is free — it can always be put out, even with no 
     assert.equal(HELLFIRE.STOP_COST, undefined);
     const g = fakeGame();
     const c = g.combat;
-    c.maxFatigue = 200; c.fatigue = 200;
+    c.maxFatigue = 500; c.fatigue = 500;
     g.hellfire.cast(true);
     run(g, 0.5);
     c.fatigue = 3;
@@ -199,7 +199,7 @@ test('Hellfire: the fire left on the ground burns the caster who walks into it; 
     const g = fakeGame();
     const c = g.combat;
     c.maxHp = 400; c.hp = 400;
-    c.maxFatigue = 200; c.fatigue = 82;
+    c.maxFatigue = 500; c.fatigue = 252;
     g.hellfire.cast(true);
     run(g, 2);
     assert.equal(g.hellfire.busy, false, 'the mana ran out');
@@ -251,7 +251,7 @@ test('Hellfire: the real hand going round — the ring grows turn after turn, ma
     assert.ok(grows.length >= 5, `it spread out turn after turn: ${JSON.stringify(grows)}`);
     for (let i = 1; i < grows.length; i++) assert.ok(grows[i].rr > grows[i - 1].rr);
     assert.ok(sizes[sizes.length - 1] > sizes[1] + 4, `metres wider: ${sizes.map((x) => x.toFixed(1)).join(' → ')}`);
-    assert.ok(Math.abs((500 - 80 - 2 * 9) - c.fatigue) < 0.2, `2 a second while held: ${c.fatigue}`);
+    assert.ok(Math.abs((500 - 250 - 2 * 9) - c.fatigue) < 0.2, `2 a second while held: ${c.fatigue}`);
 });
 
 test('Hellfire on castle knights: a raised shield and armour only slow the burn — the hearts still go down fast', async () => {

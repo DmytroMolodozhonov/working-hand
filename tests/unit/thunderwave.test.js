@@ -13,7 +13,7 @@ const O = { x: 0, y: 2, z: 0 };
 const D = { x: 0, y: 0, z: -1 };
 
 test('cost 40, damage 10', () => {
-    assert.equal(SPELL_COST.Thunderwave, 200);
+    assert.equal(SPELL_COST.Thunderwave, 150);
     assert.equal(THUNDER.DAMAGE, 10);
     assert.equal(DAMAGE.Thunderwave, 10);
 });

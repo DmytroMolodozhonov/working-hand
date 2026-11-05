@@ -48,8 +48,8 @@ import { serpentDrainK } from './FireSerpentRules.js';
 
 export const HELLFIRE = {
     NAME: 'Hellfire',
-    MIN_MAX_MANA: 100, // the mana maximum one must have (free world)
-    COST: 80, // mana at once
+    MIN_MAX_MANA: 250, // the mana maximum one must have (free world): at least what one cast costs
+    COST: 250, // mana at once (was 80; the author 05.11)
     DRAIN: 2, // mana a second while it is held
     REACH_MIN: 3, // m: the blaze from the wand's tip, the arm bent…
     REACH_MAX: 18, // …the arm stretched out

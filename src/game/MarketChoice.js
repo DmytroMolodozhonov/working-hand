@@ -64,6 +64,7 @@ const genderOf = (w) => (/[ая]$/.test(w) ? 'f' : /[ое]$/.test(w) ? 'n' : /[�
 export function describe(item) {
     let name, gender, fam;
     if (item.kind === 'coins' && item.magic) [name, gender] = ['магический мешочек', 'm'];
+    else if (item.kind === 'backpack' && item.magic) [name, gender, fam] = ['магический рюкзак', 'm', 'рюкзак'];
     else if (item.kind === 'armor') [name, gender] = PIECE_NOUN[item.piece] || ['доспех', 'm'];
     else if (item.kind === 'weapon') [name, gender] = item.type === 'axe' ? ['топор', 'm'] : ['меч', 'm'];
     else if (item.kind === 'potion') { name = POTION_OF[item.rec] || 'зелье'; gender = 'n'; fam = 'зелье'; }

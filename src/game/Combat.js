@@ -65,7 +65,7 @@ export const SPELL_COST = {
     ProtectionGodsMaxima: 300, // … its dome: then 5 a second (the author: 300 + 5)
     Bombardo: 20, // (the author 05.11: +5)
     BombardoMaxima: 35, // (the author 05.11: +10)
-    Thunderwave: 200, // (the author: 200 a cast — it hits everyone in the zone at once and only Protection Maxima / the gods hold it; 200 mana is easy to reach in 1–2 hours)
+    Thunderwave: 150, // (the author 05.11: 150 now, was 200; 200 a cast — it hits everyone in the zone at once and only Protection Maxima / the gods hold it; 200 mana is easy to reach in 1–2 hours)
     Sapira: 20,
     Inferno: 10,
     Fire: 4, // a campfire
@@ -170,7 +170,7 @@ export const SPELL_COST = {
     Nihilis: 40, // «Nihilis Atra»: a cone of light scatters black magic; instant (only from a scroll — Nihilis.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
     FireSerpent: 60, // «Serpent» out of my Hellfire: one must have 350 mana; then the Hellfire's drain ×2 while it lives (FireSerpent.js)
-    Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
+    Hellfire: 250, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
     IceCastle: 500, // «Create an Ice Castle»: a stamp, then the hands raise it (IceMagic.js; free in Creative)
     IceBridge: 50, // «Ice Bridge»: an arch of ice after the hand (IceMagic.js)
     FlyingMaxima: 30, // «Flying Maxima»: up out of the air into space (Space.js; then breathing there: 0.5 a second)

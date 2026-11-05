@@ -793,6 +793,11 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         // (in a port both may be near: the nearer one — a sailor at the rail or a man on the pier — hears)
         // a clever owl that loves me, near me: «я хочу найти паучиху» is for it — no spell, no word to a
         // villager (only then: without such an owl the words go on as always — Owls.claims)
+        // («Акцио меч» with the golden backpack lying near: the thing flies out of it — a phrase of its own, not the one-word spell)
+        if (isFinal && game.magicPack?.hear(command)) {
+            journal(command, isFinal, meta, null, false, 'достаю вещь из магического рюкзака');
+            return;
+        }
         if (game.owls?.claims?.(command)) {
             if (isFinal) game.owls.hear(command);
             journal(command, isFinal, meta, null, false, 'слова для совы рядом');

@@ -133,7 +133,7 @@ test('Water Vortex Super Maxima: 80 at once, 2 a second; «стоп» costs 50 �
 test('Water Vortex Super Maxima: it puts out the Hellfire — the first time it gives +10 to the mana maximum', () => {
     const g = fakeGame();
     const c = g.combat;
-    c.maxFatigue = 300; c.fatigue = 300;
+    c.maxFatigue = 600; c.fatigue = 600;
     g.hellfire.cast(true);
     run(g, 1);
     assert.ok(g.hellfire.busy);

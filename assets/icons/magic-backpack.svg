@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="mb-l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6dc7e"/><stop offset="0.55" stop-color="#d9a93a"/><stop offset="1" stop-color="#a8761c"/></linearGradient>
+    <linearGradient id="mb-f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a2a62"/><stop offset="1" stop-color="#4a1440"/></linearGradient>
+    <radialGradient id="mb-g" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#ff7a96"/><stop offset="1" stop-color="#b01238"/></radialGradient>
+  </defs>
+  <path d="M50 22 Q50 6 64 6 Q78 6 78 22" fill="none" stroke="#c99a2e" stroke-width="6" stroke-linecap="round"/>
+  <rect x="12" y="52" width="16" height="50" rx="6" fill="#d9a93a" stroke="#6a4210" stroke-width="2.5"/>
+  <rect x="100" y="52" width="16" height="50" rx="6" fill="#d9a93a" stroke="#6a4210" stroke-width="2.5"/>
+  <rect x="22" y="20" width="84" height="100" rx="18" fill="url(#mb-l)" stroke="#6a4210" stroke-width="3"/>
+  <path d="M30 70 L64 44 L98 70 L64 96 Z M30 96 L64 70 L98 96 M30 44 L64 70 L98 44" fill="none" stroke="#8a5f16" stroke-width="1.6" opacity="0.7"/>
+  <rect x="36" y="82" width="56" height="30" rx="6" fill="url(#mb-f)" stroke="#6a4210" stroke-width="2.5"/>
+  <rect x="40" y="86" width="48" height="22" rx="4" fill="none" stroke="#ffe9a0" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <path d="M24 38 Q24 22 40 22 L88 22 Q104 22 104 38 L104 62 Q64 76 24 62 Z" fill="url(#mb-f)" stroke="#6a4210" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M30 40 L98 40 M30 58 Q64 70 98 58" fill="none" stroke="#ffe9a0" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <path d="M64 36 L69 50 L64 64 L59 50 Z" fill="#f0cf6a" stroke="#6a4210" stroke-width="2"/>
+  <circle cx="64" cy="50" r="6" fill="url(#mb-g)" stroke="#6a4210" stroke-width="1.5"/>
+  <circle cx="40" cy="52" r="3.5" fill="#4f8cff" stroke="#6a4210" stroke-width="1.2"/>
+  <circle cx="88" cy="52" r="3.5" fill="#4f8cff" stroke="#6a4210" stroke-width="1.2"/>
+  <path d="M104 14 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z M18 30 l1.5 3.5 3.5 1.5 -3.5 1.5 -1.5 3.5 -1.5 -3.5 -3.5 -1.5 3.5 -1.5z" fill="#fff2b8"/>
+</svg>

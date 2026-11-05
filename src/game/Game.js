@@ -42,6 +42,7 @@ const BLAST = DAMAGE.BlastPeak, LIGHTNING = DAMAGE.Lightning;
 import { Levitation } from './Levitation.js';
 import { LevitationMaxima } from './LevitationMaxima.js';
 import { Accio, accioCatcher } from './Accio.js';
+import { MagicPack } from './MagicPack.js';
 import { Storm, aimedAtSky, SKY_TILT } from '../fx/Storm.js';
 import { skyBlockFor, mayTell, lightningLand, skyVisible } from './SkyRules.js';
 import { Inventory } from './Inventory.js';
@@ -71,7 +72,7 @@ import { Ships } from './Ships.js';
 import { sailorModels, setCrewless } from './Sailors.js';
 import { DeathSystem } from './Death.js';
 import { refusal, HintGate } from './Hints.js';
-import { ITEM_INFO, newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel, disposeModel as disposeItemModel, rollWand, spellScroll } from './ItemTypes.js';
+import { ITEM_INFO, newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel, disposeModel as disposeItemModel, rollWand, spellScroll, newMagicBackpack } from './ItemTypes.js';
 import { prewarmVillagers, villagerMaterials } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Alohomora } from './Alohomora.js';
@@ -693,6 +694,7 @@ export class Game {
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
+        this.magicPack = new MagicPack(this); // the golden backpack: «Акцио <вещь>» takes a thing out of it (MagicPack.js)
         this.storm = new Storm(this); // «Lightning Strike» weather
         this.sunken = new SunkenWorld(this); // the wrecks and the sunken temple on the sea's bottom, their chests (SunkenWorld.js)
         this.underwaterLight = new UnderwaterLight(this); // the light under the water: its colour by the depth, the sun's shafts, the marine snow, the caustics (UnderwaterLight.js)
@@ -3717,7 +3719,7 @@ export class Game {
         for (let m = 0; m < 10; m++) out.push({ ...rollWand(), model: m }); // (every shape of wand; a new wood's colour is made in play)
         out.push({ kind: 'wand', plain: true, model: 0, color: 0x8b5a2b }, { kind: 'weapon', type: 'sword' }, { kind: 'weapon', type: 'axe' }, spellScroll('Bombardo'));
         for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'magicPebble', 'gargoyleHead', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'canaryHide', 'taronAxe', 'taronIron', 'redStone', 'bone']) out.push({ kind });
-        out.push({ kind: 'coins', magic: true }, { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
+        out.push({ kind: 'coins', magic: true }, newMagicBackpack(), { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
         for (const s of this.inventory?.slots || []) if (s) out.push(s);
         for (const s of this.inventory?.back || []) if (s) out.push(s);
         for (const sd of ['left', 'right']) { const h = this.items?.held[sd]; if (h) out.push(h.item); }
@@ -3836,6 +3838,7 @@ export class Game {
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
         for (const k of [1, 2]) { zoo.add(animalModel('swan', k)); const m = animalModel('swan', k); new FarShape(m).set(true); zoo.add(m); } // (the swans of the lakes, plain and magic: as near and as the video card draws them far — SwanModel.js)
         zoo.add(makeItemModel({ kind: 'swanWings' }), makeItemModel({ kind: 'magicSwanWings' })); // (their wings as a thing)
+        zoo.add(makeItemModel(newMagicBackpack()), makeItemModel({ kind: 'backpack', uid: 'prewarm', color: 0x7a4a24, slots: 3 })); // (the golden backpack: its own materials — a shader at start, not in play)
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), ...(this.diabolos?.sampleModels() || []), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)

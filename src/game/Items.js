@@ -172,7 +172,7 @@ const _hq = new THREE.Quaternion();
  * or both hands behind the back. Body space: x right, y up from the hips, the body looks along −Z, its back is at z +0.4;
  * the hero ~3.5 m tall, shoulders at ±0.7 (y ≈ 0.5 above the hips… the arm anchor), arm 1.9 m. The camera's depth is rough, so loose.
  */
-export const BACKPACK_WEAR = { T: 0.35, T_SHOULDER: 0.6, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7 };
+export const BACKPACK_WEAR = { T: 0.35, T_SHOULDER: 0.6, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7, T_OFF: 1.2 }; // (T_OFF: an EMPTY hand behind the back this long takes the worn backpack off)
 export function backpackSpot(hand, other, shoulder) {
     const bx = Math.abs(hand.x), sy = shoulder ? shoulder.y : 0.5;
     // behind the back (either hand with the pack; the arm's depth is a guess, so the band is wide)
@@ -1515,7 +1515,41 @@ export class ItemSystem {
         this.takeIntoHand({ kind: 'flask', uid: newUid(), count: 1 }, side, { closed: true });
     }
 
+    /**
+     * Taking the worn backpack off: an empty hand (no wand, no thing) held behind the back for T_OFF — the pack is in that hand,
+     * ready to be thrown down (the magic one: «Акцио» + a thing then takes the thing out — MagicPack.js).
+     * What can go wrong: a full hand/wand never counts; the monster form has no such hands; a pack taken off while the cells are full
+     * keeps every thing (Inventory.setExtraSlots never loses one).
+     */
+    _takeOff(dt, ch) {
+        const w = this.worn.backpack;
+        const g = this.game;
+        if (!w || g.monster?.active || g.dead) { this._offT = 0; return; }
+        let side = null;
+        for (const sd of ['right', 'left']) {
+            if (this.held[sd] || g.weapons?.hands?.[sd]?.held || g.boards?.handBusy?.(sd)) continue;
+            ch.group.updateMatrixWorld(true);
+            _inv.copy(ch.group.matrixWorld).invert();
+            const spot = backpackSpot(ch.getHandWorldPosition(sd, _v).applyMatrix4(_inv),
+                ch.getHandWorldPosition(sd === 'left' ? 'right' : 'left', _v2).applyMatrix4(_inv),
+                (sd === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_f).applyMatrix4(_inv));
+            if (spot === 'back') { side = sd; break; }
+        }
+        if (!side) { this._offT = Math.max(0, (this._offT || 0) - 0.5 * dt); return; }
+        this._offT = (this._offT || 0) + dt;
+        if (this._offT < BACKPACK_WEAR.T_OFF) return;
+        this._offT = 0;
+        const item = w.item;
+        this.game.scene.remove(w.model); disposeModel(w.model);
+        this.worn.backpack = null;
+        g.inventory.setExtraSlots(0);
+        g.sync?.itemHold?.('back', null);
+        if (!this.takeIntoHand(item, side, { closed: true })) { this.worn.backpack = null; g.inventory.storeItem?.(item) || this._noRoom?.(item); }
+        g.hud.setVoice?.('🎒 Рюкзак снят — он в руке', true);
+    }
+
     _wear(dt, ch) {
+        this._takeOff(dt, ch);
         const bp = this.heldOf('backpack');
         if (!bp || (bp.item.shop && !bp.item.shop.paid)) { this._wearT = 0; this._wearWhy = null; return; }
         ch.group.updateMatrixWorld(true);
@@ -1537,8 +1571,13 @@ export class ItemSystem {
         const model = makeItemModel(item);
         g.scene.add(model);
         this.worn.backpack = { item, model };
-        g.inventory.setExtraSlots((item.slots || 3) + enchantAdd(item, 'slots'));
-        g.hud.setVoice?.(`🎒 Рюкзак надет: +${item.slots} ячейки`, true);
+        if (item.magic) { // (the golden one: no cells of its own — what does not fit the cells goes inside)
+            g.inventory.setExtraSlots(0);
+            g.hud.setVoice?.(`🎒 Магический рюкзак надет: когда ячейки кончатся, вещи уйдут в него`, true);
+        } else {
+            g.inventory.setExtraSlots((item.slots || 3) + enchantAdd(item, 'slots'));
+            g.hud.setVoice?.(`🎒 Рюкзак надет: +${item.slots} ячейки`, true);
+        }
         if (g.sync) g.sync.itemHold?.('back', item);
     }
 

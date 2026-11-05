@@ -74,7 +74,7 @@ test('fatigue: 30 points, +1 per second, spells cost fatigue, not enough → the
     // (the author 05.11: Bombardo +5, its Maxima +10 — 35 is more than the first 30 mana)
     assert.equal(SPELL_COST.Bombardo, 20);
     assert.equal(SPELL_COST.BombardoMaxima, 35);
-    assert.equal(SPELL_COST.Thunderwave, 200);
+    assert.equal(SPELL_COST.Thunderwave, 150);
     assert.match(combat.check('BombardoMaxima'), /Не хватает маны/);
     assert.equal(combat.check('Bombardo'), null);
     combat.pay('Bombardo');
