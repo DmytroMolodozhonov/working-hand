@@ -451,7 +451,7 @@ export class Game {
         // world generation: a new world is the newest kind; a saved world and a guest keep theirs
         // (a NEW Creative world is always the newest generation — the bosses' places apart, the Queen on her own map; the old landscape is only for the saved)
         // («Гладкий мир» ticked when the world is made: generation 6 — ramps and slabs, BlockShapes.js; else generation 5, as before)
-        this.config.gen = this.gen = config.gen ?? (config.saved ? (config.saved.gen ?? 1) : (config.smooth || config.mode === 'creative') ? WORLD_GEN : 5);
+        this.config.gen = this.gen = config.gen ?? (config.saved ? (config.saved.gen ?? 1) : WORLD_GEN);
         // (multiplayer: the gods' spells on the Earth — the host's choice when the world was made, kept with it; off by default)
         this.config.godsOnEarth = !!(config.godsOnEarth ?? config.saved?.godsOnEarth);
         // «Настройки героя» Творческого мира (HeroSetup.js): записаны в мире; у старого мира их нет — всё как было раньше

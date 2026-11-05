@@ -95,7 +95,6 @@ export async function startFromMenu(page, mode = 'creative', { zombies = 0, smoo
     if (mode === 'creative' && zombies) {
         await page.evaluate((n) => { const el = document.getElementById('creative-zombie-count'); el.value = String(n); }, zombies);
     }
-    if (smooth) await page.evaluate(() => { const c = document.getElementById('smooth-world'); if (c) c.checked = true; }); // («Гладкий мир»: the newest world generation)
     await page.click('#start-btn');
     // (a container without a real graphics card compiles the shaders for minutes: ZNS_START_TIMEOUT=ms)
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: Number(process.env.ZNS_START_TIMEOUT) || 90000 });

@@ -269,13 +269,11 @@ const createMem = new CreateMemory();
 const CREATE_MODES = MODE_ORDER.filter((id) => id !== 'maps');
 function restoreCreateMemory(mode) {
     const d = createMem.load(mode);
-    const smooth = $('smooth-world');
-    if (smooth) smooth.checked = !!d?.smooth;
     if (mode === 'creative') { try { heroSp.set(d?.hero); } catch (e) { heroSp.set(undefined); } }
 }
 function saveCreateMemory() {
     if (pickingMap) return;
-    const patch = { smooth: !!$('smooth-world')?.checked };
+    const patch = {};
     if (selectedMode === 'creative') {
         const hero = heroSp.read();
         patch.hero = hero;
@@ -296,7 +294,6 @@ function saveCreateMemory() {
         }
         saveCreateMemory();
     });
-    $('smooth-world')?.addEventListener('change', saveCreateMemory);
 }
 
 // ------------------------------------------------------------------ settings
@@ -1337,7 +1334,7 @@ $('start-btn').addEventListener('click', () => {
     }
     const cfg = readConfig();
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
-    cfg.smooth = !!$('smooth-world')?.checked; // («Гладкий мир»: ramps — only when a world is made)
+    cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     startGame(cfg);
 });
@@ -1760,7 +1757,7 @@ async function joinRoom(code, byCode = false) {
 }
 
 /** A new multiplayer world's choices: «Гладкий мир» (ramps) and «Божественные заклинания на Земле» (both off by default). */
-const mpWorldOpts = () => ({ voiceChat: voiceChatUi.createMode(), smooth: !!$('mp-smooth')?.checked, godsOnEarth: !!$('mp-gods')?.checked, ...($('mp-mode')?.value === 'creative' ? { hero: heroMp.read() } : {}) }); // (Creative: the hero's settings — HeroSettingsUi.js; guests get the host's)
+const mpWorldOpts = () => ({ voiceChat: voiceChatUi.createMode(), smooth: true, godsOnEarth: !!$('mp-gods')?.checked, ...($('mp-mode')?.value === 'creative' ? { hero: heroMp.read() } : {}) }); // (Creative: the hero's settings — HeroSettingsUi.js; guests get the host's)
 const heroMp = mountHeroPanel($('hero-settings-mp'), 'hero-mp');
 { const showHeroMp = () => { $('hero-settings-mp').hidden = $('mp-mode').value !== 'creative'; }; $('mp-mode')?.addEventListener('change', showHeroMp); showHeroMp(); }
 
