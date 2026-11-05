@@ -194,3 +194,6 @@ export function dressMage(ch, kind) {
     OUTFITS[kind](new D(ch));
     return ch;
 }
+
+// (shared with TowerLooks.js: the builder, the robe, the hat and the textures)
+export { D, robe, hat, skyTex, furTex, barkTex, RBOX, tint, lite };

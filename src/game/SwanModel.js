@@ -174,8 +174,8 @@ export function swanWingsItemModel(magic = false) {
     const g = new THREE.Group();
     g.name = magic ? 'magicSwanWings' : 'swanWings';
     const feather = magic ? K.wingMat(0xeef3ff, 0x9fc8ff) : K.wingMat(0xf9f8f4);
-    // ONE bundle (the author 06.11: «выглядит ужасно, состоит из двух элементов»): the two wings lie back to back, roots and tips together (each is
-    // 0.08 thick along x, 0.36 long along y), bound with two leather bands round the middle with brass buckles and a knot — one object.
+    // ONE pair, just folded (the author 06.11: «просто сложены, и всё красиво» — no hoop, no straps): the two wings lie back to back, roots and tips together
+    // (each is 0.08 thick along x, 0.36 long along y), leaning in a little, like closed hands.
     for (const s of [1, -1]) {
         const w = new THREE.Group();
         w.scale.set(0.42 * s, 0.42, 0.42);
@@ -186,14 +186,6 @@ export function swanWingsItemModel(magic = false) {
         w.add(m);
         g.add(w);
     }
-    const strap = mat('swanStrap', () => new THREE.MeshLambertMaterial({ color: 0x6a4a2a, side: THREE.DoubleSide })), brass = K.lam(0xc9a23a);
-    const band = K.cached('swanBand', () => new THREE.CylinderGeometry(1, 1, 0.034, 20, 1, true));
-    const buckle = K.cached('swanBuckle', () => new THREE.BoxGeometry(0.05, 0.04, 0.012));
-    for (const y of [0.1, 0.24]) { // (two bands round the bundle: it is about 0.16 wide and 0.2 deep)
-        const b1 = new THREE.Mesh(band, strap); b1.position.set(0, y, 0.04); b1.scale.set(0.1, 1, 0.125); g.add(b1);
-        const bk = new THREE.Mesh(buckle, brass); bk.position.set(0, y, 0.168); g.add(bk);
-    }
-    const knot = new THREE.Mesh(K.cached('swanKnot', () => new THREE.SphereGeometry(0.016, 7, 5)), K.lam(0x6a4a2a)); knot.position.set(0.0, 0.17, 0.17); g.add(knot);
     if (magic) {
         const mote = mat('mote', () => new THREE.MeshBasicMaterial({ color: 0xcfe9ff, transparent: true, opacity: 0.85, depthWrite: false }));
         const r = K.rng(77);
