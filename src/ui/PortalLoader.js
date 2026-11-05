@@ -16,6 +16,8 @@
  * of the game's interface shows through it while the world is made.
  */
 
+import { passageStart, passageTick, passageArrive, passageStop } from '../audio/MagicSound.js';
+
 const VERT = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }';
 
 const FRAG = `
@@ -43,13 +45,13 @@ void main(){
   // the dark between the arms keeps a deep tint (never flat black)
   col += uC3 * 0.18 * (1.0 - band) * smoothstep(1.4, 0.1, r);
   // the eye: a white-hot core far ahead, breathing
-  float eye = exp(-r * (9.0 - uOut * 7.5)) * (0.85 + 0.15 * sin(uT * 2.3));
+  float eye = exp(-r * (9.0 - uProg * 3.5 - uOut * 5.0)) * (0.8 + 0.2 * sin(uT * 2.3) + uProg * 0.5); // (the light ahead grows as the world comes near)
   col += mix(uC1, vec3(1.0, 0.97, 0.9), 0.6) * eye * 1.6;
   // sparks and star streaks rushing inward (cells along the angle and the depth)
   vec2 sc = vec2(a * 6.0 / 6.2831 * 8.0, depth * 3.0);
   vec2 ci = floor(sc), cf = fract(sc) - 0.5;
   float hh = h21(ci + uSeed);
-  float star = step(0.82, hh) * smoothstep(0.08, 0.0, abs(cf.x)) * smoothstep(0.45, 0.0, abs(cf.y + (hh - 0.5) * 0.4)) * smoothstep(0.02, 0.25, r);
+  float star = step(0.82 - uProg * 0.12, hh) * smoothstep(0.08, 0.0, abs(cf.x)) * smoothstep(0.45 + uProg * 0.4, 0.0, abs(cf.y + (hh - 0.5) * 0.4)) * smoothstep(0.02, 0.25, r);
   col += mix(vec3(1.0), uC2, 0.35) * star * (1.2 + uOut * 2.0);
   // the ring of runes' glow (the runes themselves are drawn over it): lit as far round as the loading has gone
   float ringR = 0.26 + uOut * 0.6;
@@ -225,6 +227,8 @@ export class PortalLoader {
             requestAnimationFrame(() => { menu.style.transform = `scale(0.12) rotate(${this.dir * 75}deg)`; menu.style.filter = 'blur(8px) saturate(1.6)'; menu.style.opacity = '0'; });
         }
         this.on = true;
+        this.tt = 0; this._lastT = 0;
+        passageStart((this.pal === PALETTES[0] ? 0 : PALETTES.indexOf(this.pal) / PALETTES.length));
         if (!this._raf) this._raf = requestAnimationFrame((t) => this._frame(t));
     }
 
@@ -239,7 +243,7 @@ export class PortalLoader {
     /** The loading's progress (0…100) and its words. */
     progress(pct, text) {
         this.prog = Math.max(this.prog, Math.min(1, (pct || 0) / 100));
-        if (text && this.status) this.status.textContent = text;
+        void text; // (no words nor numbers of the loading: the passage itself shows it — the author)
     }
 
     /** The world is ready: the arrival — the flash — and the passage is gone. `done` when it is quite gone. */
@@ -248,15 +252,20 @@ export class PortalLoader {
         this.phase = 'arrive'; this.tOut = performance.now(); this.prog = 1;
         this.el.classList.add('arrive');
         this._done = done;
+        passageArrive();
     }
 
     /** Words over the passage (an error): it stays until the page goes. */
-    message(text) { if (!this.el) this._build(); this.status.textContent = text; }
+    message(text) { if (!this.el) this._build(); this.status.textContent = text; this.el.classList.add('err'); passageStop(); }
 
     _frame(now) {
         this._raf = 0;
         if (!this.on) return;
         const t = (now - this.t0) / 1000;
+        // (the passage speeds up as the world comes near: the whirl's own clock runs faster with the progress — and faster still at the arrival)
+        const dts = Math.min(0.1, (now - (this._lastT || now)) / 1000); this._lastT = now;
+        this.tt = (this.tt || 0) + dts * (0.55 + this.shown * 2.6 + this.out * 6);
+        passageTick(this.shown);
         this.open = Math.min(1, (now - this.tOpen) / 1400);
         if (this.open >= 1 && this.menu) { this.menu.classList.add('hidden'); this.menu.style.transform = ''; this.menu.style.filter = ''; this.menu.style.opacity = ''; this.menu.style.transition = ''; this.menu = null; }
         this.shown += (this.prog - this.shown) * 0.06;
@@ -271,7 +280,7 @@ export class PortalLoader {
         if (now - this.loreAt > 5200 && this.phase !== 'arrive') this._lore();
         // the runes' ring: lit as far round as the loading has gone (a conic mask), turning slowly the way the whirl turns
         this.litC.style.webkitMaskImage = this.litC.style.maskImage = `conic-gradient(#000 ${this.shown * 360}deg, transparent ${this.shown * 360 + 0.5}deg)`;
-        this.ring.style.transform = `translate(-50%, -50%) rotate(${this.dir * t * 6}deg) scale(${1 + this.out * 2.5})`;
+        this.ring.style.transform = `translate(-50%, -50%) rotate(${this.dir * this.tt * 9}deg) scale(${1 + this.out * 2.5})`;
         this.ring.style.opacity = String(Math.min(1, this.open * 1.5) * (1 - this.out));
         const gl = this.gl;
         if (gl) {
@@ -284,7 +293,7 @@ export class PortalLoader {
             const sc = this.scale, w = Math.max(2, Math.round(window.innerWidth * sc)), h = Math.max(2, Math.round(window.innerHeight * sc));
             if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; gl.viewport(0, 0, w, h); }
             const U = this.U, P = this.pal;
-            gl.uniform2f(U.uRes, w, h); gl.uniform1f(U.uT, t); gl.uniform1f(U.uOpen, this.open); gl.uniform1f(U.uOut, this.out);
+            gl.uniform2f(U.uRes, w, h); gl.uniform1f(U.uT, this.tt); gl.uniform1f(U.uOpen, this.open); gl.uniform1f(U.uOut, this.out);
             gl.uniform1f(U.uProg, this.shown); gl.uniform1f(U.uDir, this.dir); gl.uniform1f(U.uArms, this.arms); gl.uniform1f(U.uSeed, this.seed);
             gl.uniform3fv(U.uC0, P[0]); gl.uniform3fv(U.uC1, P[1]); gl.uniform3fv(U.uC2, P[2]); gl.uniform3fv(U.uC3, P[3]);
             gl.drawArrays(gl.TRIANGLES, 0, 3);

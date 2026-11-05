@@ -1969,7 +1969,8 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #portal-loader .pl-text { position: absolute; left: 0; right: 0; bottom: 4.5vh; text-align: center; color: #f6f0ff; pointer-events: none;
     text-shadow: 0 0 18px var(--pl-rune, #c8a0ff), 0 2px 6px rgba(0, 0, 0, 0.85); animation: pl-in 2.2s ease-out both; transition: opacity 0.8s; }
 #portal-loader .pl-title { font-family: 'Philosopher', serif; font-weight: 700; font-size: clamp(24px, 3.4vw, 46px); letter-spacing: 0.07em; }
-#portal-loader .pl-status { font-family: 'Nunito', sans-serif; font-size: clamp(13px, 1.35vw, 18px); opacity: 0.82; margin-top: 10px; min-height: 1.3em; }
+#portal-loader .pl-status { display: none; font-family: 'Nunito', sans-serif; font-size: clamp(13px, 1.35vw, 18px); opacity: 0.9; margin-top: 10px; }
+#portal-loader.err .pl-status { display: block; color: #ffd0d0; }
 #portal-loader .pl-lore { font-family: 'Philosopher', serif; font-style: italic; font-size: clamp(14px, 1.55vw, 21px); margin-top: 14px; opacity: 0.92; transition: opacity 0.5s; }
 #portal-loader .pl-lore.fade { opacity: 0; }
 #portal-loader.arrive .pl-text { opacity: 0; }

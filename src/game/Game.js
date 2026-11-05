@@ -3729,6 +3729,8 @@ export class Game {
 
     // =================================================================== loop
     setPose(poseData) {
+        // (the world is still being made behind the loading's passage: the camera is seen working, but the hands do nothing in the world yet)
+        if (this.revealed === false) { this.firstPoseReceived = true; return; }
         this.voiceGate.noteFace(performance.now(), poseData?.mouth ?? null);
         this.poseSmoother.push(poseData);
         this.currentPose = this.poseSmoother.sample();

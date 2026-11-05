@@ -199,6 +199,7 @@ function updateProgress(percent, text) {
     progressBar.style.width = `${percent}%`;
     if (text && loadingStatus) loadingStatus.textContent = text;
     portal.progress(percent, text);
+    if (text && /^(Ошибка|Видеокарта)/.test(text)) portal.message(text); // (no numbers on the passage — only a trouble is written on it)
 }
 
 // Loading screen starts visible in the HTML: hide it, show the menu.
@@ -731,6 +732,9 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (isFinal && game?.active && game.arenaDuels?.askVoice?.(command)) return; // (the duel mode's «Вы проиграли. Ещё раз?» window: «ещё раз» / «выйти» — ArenaDuels.askVoice)
     // (in a beam clash my «Максима» shouted over and over is heard as one stream of «максимум максиму сим…»: it is one shout — MaximaShout.js)
     if (game?.active && game.duel?.clashes?.some((c) => c.a.by === game.localId || c.b.by === game.localId)) command = collapseMaxima(command);
+    // the world is still being made (the loading's passage is on): nothing said is heard — no spell, no word to anyone (the author: «игрок ещё не
+    // дозагрузился, а уже взаимодействует с миром голосом»; the potion-maker's own lines from the speakers came back as my words, and he talked with himself)
+    if (portal.on && portal.phase !== 'arrive' || (game && game.revealed === false)) { journal(command, isFinal, meta, matchSpell(command), false, 'мир ещё загружается — голос не слушается'); return; }
     // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager
     if (game?.active && !$('pause-menu')?.classList.contains('hidden')) { journal(command, isFinal, meta, matchSpell(command), false, 'открыто меню паузы — голос не слушается'); return; }
     // the gods listen to a description («Да пусть создастся» said): every word is theirs — even what the sound took for
@@ -1262,6 +1266,7 @@ async function startGameInner(config, welcome) {
 
         if (game) game.dispose();
         game = new Game({ renderer, camera, poseService, voice, sound, hud, net, ui });
+        game.revealed = false; // (from the very first moment: nothing reaches the world until the passage is over — reveal())
         window.game = game;
         game.settings.smoothness = settings.smoothness;
         game.settings.sensitivity = settings.sensitivity;

@@ -3940,6 +3940,7 @@ export class CastleLife {
     // ------------------------------------------------------------ speech
     _say(v, text, seconds = 4, broadcast = true, force = false) {
         if (!text || v.dead || v.stunT > 0 || v.sayT > 0 && !broadcast && !force) return;
+        if (this.game.revealed === false) return; // (nobody speaks while the world is still loading: the player is not there yet — and a line from the speakers would come back as his words)
         v.sayT = 1.5;
         sayCtx(v, text, seconds);
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
