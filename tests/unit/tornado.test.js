@@ -29,10 +29,13 @@ function game(clock) {
 test('only at sea: on the land / a lake — no; deep water ahead — the place; shallow ahead — no', () => {
     const { g, idx, s0 } = game(1000);
     const os = new OceanStorm(g);
-    const land = idx.pointAt(s0, 0.3, -60), atSea = idx.pointAt(s0, 0.3, 150);
+    const land = idx.pointAt(s0, 0.3, -60), atSea = idx.pointAt(s0, 0.3, 150), shore = idx.pointAt(s0, 0.3, -15);
     assert.equal(os.seaHere(land), false);
     assert.equal(os.placeFor(land, 0), null, 'on the land');
     assert.equal(os.seaHere(atSea), true);
+    assert.equal(os.seaHere(shore), true, 'on the beach 15 m from the water — may call it (the author)');
+    const toSea = Math.atan2(-(s0.x - shore.x), -(s0.z - shore.z));
+    assert.ok(os.placeFor(shore, toSea), 'from the beach: over the deep water ahead');
     // facing out to sea (towards the middle) — a place over deep water
     const yaw = Math.atan2(-(s0.x - atSea.x), -(s0.z - atSea.z));
     const at = os.placeFor(atSea, yaw);

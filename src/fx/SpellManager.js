@@ -547,7 +547,7 @@ export class SpellManager {
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o, casterId, handSide); break; // (the beam goes with that player's wand)
             case 'LetItRain': this.castLetItRain(o, casterId); break;
-            case 'Tornado': this.castTornado(o, d, casterId); break;
+            case 'Tornado': this.castTornado(o, direction.clone(), casterId); break; // (the direction is the spout's PLACE {x, 0, z} — never normalised: it came down by the world's middle, far from anyone — the author: «не появился»)
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;

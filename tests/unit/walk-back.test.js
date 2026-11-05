@@ -41,26 +41,42 @@ function body({ lean = 0, turn = 0, dist = 2.4, seated = false, noise = 0.012 } 
 }
 
 /** Feed `secs` of a pose (30 a second) → the last leanBack value and the most seen. */
-function run(st, o, secs) {
+function run(st, o, secs, stepping = true) {
     let last = 0, max = 0;
-    for (let i = 0; i < secs * 30; i++) { last = _leanBack(st, torsoMetrics(body(o)), 1 / 30); max = Math.max(max, last); }
+    for (let i = 0; i < secs * 30; i++) { last = _leanBack(st, torsoMetrics(body(o)), 1 / 30, stepping); max = Math.max(max, last); }
     return { last, max };
 }
 
-test('standing: upright never walks back (noise over a minute); leaning back 16° — back (while stepping); 40° — by itself; upright again — stops', () => {
+test('standing: upright never walks back (noise over a minute, stepping); leaning back 16° while stepping — back; upright — stops; never by itself', () => {
     seed = 1;
     const st = {};
     assert.equal(run(st, {}, 60).max, 0, 'upright with a jitter: never');
-    assert.equal(run(st, { lean: 16 }, 1).last, 1, 'leaning back');
-    assert.equal(run(st, { lean: 40 }, 1).last, 2, 'strongly: walks by itself');
+    assert.equal(run(st, { lean: 16 }, 1).last, 1, 'leaning back while stepping');
     assert.equal(run(st, {}, 1).last, 0, 'upright: stops');
+    assert.equal(run(st, { lean: 40 }, 1).last, 1, 'a strong lean: the same — only while stepping (ch.backward needs the steps)');
 });
 
+test('the author\'s «почти всегда хожу назад»: a body whose own upright depth is large (a low camera, a chair, a posture) walks forward', () => {
+    seed = 7;
+    for (const lean of [12, 20, 28]) {
+        const st = {};
+        run(st, { lean }, 3, false); // (the first seconds: its own upright measured, standing)
+        assert.equal(run(st, { lean }, 20).max, 0, `its own posture ${lean}° is its upright`);
+        assert.equal(run(st, { lean: lean + 18 }, 1.5).last, 1, `and a real lean back from it counts (${lean}° → ${lean + 18}°)`);
+    }
+});
+
+test('a blink of a lean (shorter than HOLD) — nothing: the camera\'s jump never walks back', () => {
+    seed = 8;
+    const st = {};
+    run(st, {}, 5);
+    assert.equal(run(st, { lean: 30 }, LEAN_BACK.HOLD * 0.5).max, 0);
+});
 test('seated at the monitor, the hips out of the frame: the lean back is still seen (the old sign never saw it)', () => {
     seed = 2;
     const st = {};
     assert.equal(run(st, { seated: true }, 20).max, 0);
-    assert.ok(run(st, { seated: true, lean: 25 }, 1).last >= 1);
+    assert.ok(run(st, { seated: true, lean: 25 }, 1.5).last >= 1);
     // (the old sign: no depth without the hips)
     assert.equal(torsoMetrics(body({ seated: true, lean: 25 })).depth, null);
 });
@@ -79,7 +95,7 @@ test('its own upright is learned: a player who stands a little back all the time
     const st = {};
     run(st, { lean: 9 }, 30);
     assert.equal(run(st, { lean: 9 }, 5).max, 0);
-    assert.equal(run(st, { lean: 32 }, 1).last >= 1, true, 'and a real lean from it still counts');
+    assert.equal(run(st, { lean: 32 }, 1.5).last >= 1, true, 'and a real lean from it still counts');
     assert.ok(LEAN_BACK.ON > LEAN_BACK.OFF);
 });
 
@@ -89,8 +105,10 @@ test('no depth from the camera (an old engine): nothing, never a walk', () => {
     assert.equal(_leanBack(st, t, 1 / 30), 0);
 });
 
-test('a game started already leaning back: it walks back (that first pose is not taken for «upright»)', () => {
-    seed = 5;
+test('standing still (not stepping) never walks back, whatever the lean', () => {
+    seed = 9;
     const st = {};
-    assert.ok(run(st, { lean: 30 }, 1).last >= 1);
+    run(st, {}, 3);
+    // (the hero walks back only while stepping on the spot — Game: ch.backward = back && ch.isRunning)
+    assert.ok(run(st, { lean: 25 }, 2, false).max <= 1);
 });

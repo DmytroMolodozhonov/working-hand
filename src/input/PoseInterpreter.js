@@ -594,7 +594,7 @@ export function torsoMetrics(lm) {
     // seen). Leaning back → the shoulders further → larger. Stepping away from the camera or turning round leaves it as it was.
     const hz = lh && rh ? ((lh.z || 0) + (rh.z || 0)) / 2 : 0;
     const back = (Number.isFinite(sMidZ) && (ls.z || rs.z)) ? (sMidZ - hz) / sw : null;
-    return { lateral, depth, noseRel: (sMidY - nose.y) / sw, hips: !!hipsOk, sw, back, twist: Math.abs((ls.z || 0) - (rs.z || 0)) / sw }; // (twist: the shoulders turned — one nearer the camera; sw: the shoulders' width in the frame — they narrow as the body leans back away from the camera)
+    return { lateral, depth, noseRel: (sMidY - nose.y) / sw, hips: !!hipsOk, sw, back, sz: sMidZ, hz, twist: Math.abs((ls.z || 0) - (rs.z || 0)) / sw }; // (twist: the shoulders turned — one nearer the camera; sw: the shoulders' width in the frame — they narrow as the body leans back away from the camera)
 }
 
 /**

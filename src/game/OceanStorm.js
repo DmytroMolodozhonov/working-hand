@@ -38,6 +38,7 @@ export const OCEAN_STORM = {
     SUMMON_LIFE: 12 * 60, // s: 12 game hours at most (a game hour is a real minute) — no spout stands for ever (the author)
     SUMMON_AHEAD: 45, // m ahead of the caster it comes down
     SUMMON_MIN_S: 25, // m off the shore at least (deep water)
+    SHORE_REACH: 25, // m: on the land this near the sea it may be called too (the author: «в 20 метрах от моря на суше — тоже можно»)
     SUMMON_ROAM: [55, 40], // m: it wanders round where it was called (a slow loop, not off across the sea)
     MAX_SUMMONED: 4, // at once in the world (the oldest goes first)
 };
@@ -63,7 +64,7 @@ export class OceanStorm {
     /** Is (p) at sea — over the sea's water (on it, under it, on a deck, flying over it)? A lake, a river, the land — no. */
     seaHere(p) {
         const sea = this.game.sea;
-        return !!sea && sea.s(p.x, p.z) > 0;
+        return !!sea && sea.s(p.x, p.z) > -OCEAN_STORM.SHORE_REACH; // (on it, or on its shore within SHORE_REACH m — a lake is no sea: sea.s knows only the seas)
     }
 
     /** Where a «Tornado» cast from p facing yaw comes down: {x, z} ahead over deep sea, or null (not at sea / too shallow ahead). */
@@ -71,7 +72,7 @@ export class OceanStorm {
         const sea = this.game.sea;
         if (!sea || !this.seaHere(p)) return null;
         const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-        for (const d of [OCEAN_STORM.SUMMON_AHEAD, 70, 30, 95]) {
+        for (const d of [OCEAN_STORM.SUMMON_AHEAD, 70, 95, 30, 120]) { // (from the shore: further out, where the water is deep)
             const x = p.x + fx * d, z = p.z + fz * d;
             if (sea.index.signedDist(x, z) >= OCEAN_STORM.SUMMON_MIN_S && sea.s(x, z) >= OCEAN_STORM.SUMMON_MIN_S) return { x, z };
         }

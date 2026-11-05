@@ -293,19 +293,29 @@ const BRAINROT_UPKEEP = 1;
  * seated at the monitor never; the shoulders' width in the frame (tried next) changes as much by stepping away from the camera.
  * Returns 0 (no), 1 (leaning back: walks back while stepping on the spot), 2 (strongly: walks back by itself).
  */
-export const LEAN_BACK = { ON: 0.2, OFF: 0.12, STRONG: 0.5, SMOOTH: 4, LEARN: 0.25, NEAR: 0.1 }; // (in shoulder widths: ~0.021 a degree — ON ≈ 10°, STRONG ≈ 24°; the network's depth may run smaller than the real one: room left)
-function leanBack(st, torso, dt) {
+export const LEAN_BACK = { ON: 0.25, OFF: 0.14, HOLD: 0.3, CAL: 2, SMOOTH: 4, LEARN: 0.35, NEAR: 0.08 }; // (in shoulder widths: ~0.021 a degree — ON ≈ 12°)
+/**
+ * The author 05.11 (third time): «теперь я почти всегда хожу назад, вперёд не могу нормально ходить». Why it could: the «upright» was
+ * the first pose's depth clamped to 0.1 — a body whose own upright depth is more (the camera low, a chair, a posture) stood «leaning
+ * back» for good; a strong lean also walked by itself. Now:
+ *   - the first CAL s the body's own upright is measured (the mean), nothing walks;
+ *   - standing (not stepping) the upright follows the body all the time — walking back is only ever while stepping on the spot;
+ *   - leaning back must last HOLD s over ON to count; never walks by itself.
+ * `stepping`: the player steps on the spot now (pose.isRunning). → 0 / 1.
+ */
+function leanBack(st, torso, dt, stepping = true) {
     const b = torso && Number.isFinite(torso.back) ? torso.back : null;
-    if (b == null) { st.on = false; st.k = null; return 0; }
+    if (b == null) { st.on = false; st.k = null; st.hold = 0; return 0; }
     st.k = st.k == null ? b : st.k + (b - st.k) * Math.min(1, dt * LEAN_BACK.SMOOTH);
-    if (st.base == null) st.base = Math.min(st.k, 0.1); // (the network's depth is from the hips: upright is near 0 — a game started already leaning back is not taken for «upright»)
+    st.cal = (st.cal || 0) + dt;
+    if (st.cal < LEAN_BACK.CAL) { st.base = st.base == null ? st.k : st.base + (st.k - st.base) * Math.min(1, dt * 2); st.x = 0; return 0; } // (measuring its own upright)
     const x = st.k - st.base;
     st.x = x;
-    st.on = st.on ? x > LEAN_BACK.OFF : x > LEAN_BACK.ON;
-    if (!st.on && Math.abs(x) < LEAN_BACK.NEAR) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN); // (its own upright: slowly, only near it)
-    else if (!st.on && x > 0 && x < LEAN_BACK.ON) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN * 0.3); // (a posture a little back: learned more slowly still)
-    if (!st.on && x < -LEAN_BACK.NEAR) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN * 0.5); // (leaning forward for long: the upright follows down, never up into a lean)
-    return st.on ? (x > LEAN_BACK.STRONG ? 2 : 1) : 0;
+    if (!stepping && !st.on) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN); // (standing: its upright is whatever it does now)
+    else if (!st.on && Math.abs(x) < LEAN_BACK.NEAR) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN * 0.3);
+    if (st.on) { if (x < LEAN_BACK.OFF) { st.on = false; st.hold = 0; } }
+    else { st.hold = x > LEAN_BACK.ON ? (st.hold || 0) + dt : 0; if (st.hold >= LEAN_BACK.HOLD) st.on = true; }
+    return st.on ? 1 : 0;
 }
 export { leanBack as _leanBack };
 
@@ -4381,15 +4391,9 @@ export class Game {
             ch.setCrouching(flying || down ? false : pose.isCrouching);
             ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
             ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
-            const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt) : 0;
-            if (back === 2 && !ch.isRunning) ch.setRunning(true, 0.4); // (a clear lean back walks backwards by itself)
+            const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning) : 0;
             ch.backward = !!(back && ch.isRunning);
-            if (this.config.walkBack && back !== (this._backWas ?? 0)) { // (the journal: what the camera saw, to find why if it does not go — «Тело»)
-                const L = this._lean || {};
-                this.perf?.note?.(`ходьба назад: ${back ? (back === 2 ? 'сильный наклон назад' : 'наклон назад') : 'прямо'} (плечи за бёдрами ${(L.k ?? 0).toFixed(2)}, своё «прямо» ${(L.base ?? 0).toFixed(2)})`);
-                if (back && !this._backTold) { this._backTold = true; this.hud.setVoice('↩️ Наклон назад: герой идёт спиной вперёд', true); }
-                this._backWas = back;
-            }
+            if (this.config.walkBack) this._walkBackLog(back, pose, dt);
         }
         // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
         const J = this._jolt = this.impact.step(dt);
@@ -4597,6 +4601,23 @@ export class Game {
         // (the wind is smooth in time already — the sea follows it directly, the same on every computer; the gusts breathe in it a little)
         w.seaLevel = Math.min(9, Math.max(0, windLevelSmooth(w.speed) + spell * 3 + w.gust / 6));
         if (this.sea) this.sea.storm = stormOf(w.seaLevel);
+    }
+
+    /**
+     * «Ходьба назад» in the journal (zns-perf.log — «Производительность»), to find from the author's own log why it does not go / goes
+     * when it should not: every change of the state, and once a second while stepping on the spot — what the camera saw (the shoulders'
+     * and the hips' depth, the lean over the body's own upright, the shoulders' width, the hips seen) and what the hero did.
+     */
+    _walkBackLog(back, pose, dt) {
+        const L = this._lean || {}, t = pose.torso || {};
+        const f = (v) => (Number.isFinite(v) ? v.toFixed(2) : '—');
+        const line = () => `ходьба назад: ${back ? 'НАЗАД' : 'вперёд/стоит'}, шаги ${pose.isRunning ? 'да' : 'нет'}, наклон ${f(L.x)} (порог ${LEAN_BACK.ON}), плечи за бёдрами ${f(L.k)}, своё «прямо» ${f(L.base)}${(L.cal || 0) < LEAN_BACK.CAL ? ' (замер)' : ''}; глубина плеч ${f(t.sz)}, бёдер ${f(t.hz)}, ширина плеч ${f(t.sw)}, бёдра ${t.hips ? 'видны' : 'не видны'}`;
+        if (back !== (this._backWas ?? 0)) {
+            this.perf?.note?.(line());
+            if (back && !this._backTold) { this._backTold = true; this.hud.setVoice('↩️ Наклон назад: герой идёт спиной вперёд', true); }
+            this._backWas = back;
+        }
+        if (pose.isRunning && (this._backLogT = (this._backLogT || 0) - dt) <= 0) { this._backLogT = 1; this.perf?.note?.(line()); }
     }
 
     /** Is it night now (spiders come out)? */
