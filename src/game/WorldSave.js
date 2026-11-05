@@ -366,6 +366,7 @@ export class WorldKeeper {
             doors: g.doors?.snapshot() || [],
             locks: g.locks?.snapshot() || null, // («Алохомора»: what was unlocked, the gates)
             boards: g.boards?.snapshot() || null,
+            boats: g.boats?.snapshot() || null, // boats made by «Create a Boat», the ports' boats carried away (Boats.js)
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
             bloom: g.flourish?.snapshot() || null, // («Flourish»: the flowers asked on the grass — Flourish.js)
@@ -448,6 +449,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.doors) g.doors?.restore(save.doors);
     if (save.locks) g.locks?.restore(save.locks);
     if (save.boards) g.boards?.restore(save.boards);
+    if (save.boats) g.boats?.restore(save.boats);
     if (save.campfires) g.campfires?.restore(save.campfires);
     if (save.cauldrons) g.cauldrons?.restore(save.cauldrons);
     if (save.bloom) g.flourish?.restore(save.bloom);

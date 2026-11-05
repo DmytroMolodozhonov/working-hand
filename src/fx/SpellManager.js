@@ -229,6 +229,11 @@ export function matchSpell(text) {
     // «Let it rain» («Лет ит рейн», heard as «летит рейн», «лед ит рэйн»…): before everything with short tokens
     if ((has('rain', 'reign', 'рейн', 'рэйн', 'рейм', 'рэин', 'реин', 'рейна') && has('let', 'лет', 'лэт', 'лед', 'лит ит', 'лидит')) ||
         has('letitrain', 'летитрейн', 'пусть идёт дождь', 'пусть идет дождь', 'пусть пойдёт дождь', 'пусть пойдет дождь', 'пусть льёт дождь', 'пусть льет дождь')) return 'LetItRain';
+    // «Create a Boat» (a rowing boat for two — Boats.js; the author 05.11) — «боут», «бот» only with «create» (a «бот» alone is talk)
+    if ((has('boat', 'боут', 'боат', 'бoут', 'лодк') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк')) ||
+        (has('бот ') && has('крейт', 'криейт', 'creat'))) return 'CreateBoat';
+    // «Navigare» (the boat / the surfboard goes on its own where the head looks — Boats.js)
+    if (has('navigare', 'navigar', 'навигаре', 'навигарэ', 'навигари', 'навигара', 'навигарe', 'нэвигаре', 'навигейре', 'навегаре')) return 'Navigare';
     // «Create a Board» (a surfboard) — never «абордаж» (boarding a ship)
     if (!has('абордаж', 'abordag', 'aborda') && (has('surfboard', 'surf board', 'серфборд', 'сёрфборд', 'серф борд', 'сёрф борд') ||
         (has('board', 'борд', 'bord', 'bored', 'доск') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк')))) return 'CreateBoard';

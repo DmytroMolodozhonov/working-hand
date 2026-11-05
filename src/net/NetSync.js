@@ -172,6 +172,7 @@ export class NetSync {
         this.game.handHold?.onLeave(id);
         this.game.items?.onHandoverLeave?.(id); // (hands they held or that held mine: let go)
         this.game.boards?.onLeave(id); // (the surfboard they held or rode stays where it was)
+        this.game.boats?.onLeave(id); // (their seat is free; their enchanted boat slows to a stop)
         this.game.groundVortex?.onLeave?.(id); // (the blocks of their «Ground Vortex» go back into the ground: the host lays them)
         this.game.dragons?.onLeave?.(id); // (a dragon they tamed is free again)
         // Drop weapons they were holding — but one that is in their pocket by their last word (a sword taken out of a slot:
@@ -206,6 +207,7 @@ export class NetSync {
             doors: g.doors?.snapshot() || [],
             locks: g.locks?.snapshot() || null, // («Алохомора»: unlocked chests, doors, gates; the doors locked now)
             boards: g.boards?.snapshot() || null,
+            boats: g.boats?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
             liquidated: g.liquidation?.snapshot() || [], // (crumbled by «Liquidation»: not made again)
@@ -250,6 +252,7 @@ export class NetSync {
         if (msg.doors) g.doors?.restore(msg.doors);
         if (msg.locks) g.locks?.restore(msg.locks);
         if (msg.boards) g.boards?.restore(msg.boards);
+        if (msg.boats) g.boats?.restore(msg.boats);
         if (msg.campfires) g.campfires?.restore(msg.campfires);
         if (msg.cauldrons) g.cauldrons?.restore(msg.cauldrons);
         if (msg.houses) g.houses?.restore(msg.houses);
@@ -1226,6 +1229,7 @@ export class NetSync {
             case 'spx': g.spencers?.onNet(m, this.net.isHost); break; // (the invisible birds of Spencer: SpencerBirds.js)
             case 'garg': g.gargoyles?.onNet(m, this.net.isHost); break; // (the infernal gargoyles and their ritual: Gargoyles.js)
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
+            case 'btnew': case 'bts': case 'btseat': case 'btdrive': case 'btlev': case 'btlevp': g.boats?.onNet(m); break; // (boats: Boats.js)
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'lock': case 'dlk': g.locks?.applyNet(m); break; // («Алохомора» — Alohomora.js)

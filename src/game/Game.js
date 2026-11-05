@@ -177,6 +177,7 @@ import { SeaFloor } from '../fx/SeaFloor.js';
 import { WalkRecorder } from '../core/WalkRecorder.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
+import { Boats } from './Boats.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep, lyingHead } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
@@ -724,6 +725,7 @@ export class Game {
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.locks = new Alohomora(this); // «Алохомора»: locked chests, house doors, the gates of throne rooms
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
+        this.boats = new Boats(this); // rowing boats for two: «Create a Boat», the ports' boats, «Navigare» (Boats.js)
         this.fireLights = new FireLights(this); // firelight: a few warm lights at the nearest fires (made before prewarm; FireLights.js)
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (their light: fireLights)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
@@ -2364,6 +2366,8 @@ export class Game {
         if (this.imperius?.stop('stop')) done.push('Империус'); // (the mind flies back into its own body)
         if (this.combat.dropShield('🛑 Стоп — щит снят')) done.push('щит');
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
+        if (this.boats?.stop()) done.push('лодка'); // (it slows down over a few seconds and stops: the spell is over)
+        if (this.boards?.stopDrive?.()) done.push('доска');
         if (this.levMax?.stop()) done.push('Левиоса Максима'); // (what it holds falls)
         const pm = !!this.planetMagic?.stop(); // (the planet stays on its new orbit)
         if (pm) done.push('Левиоса Супер Максима');
@@ -3167,6 +3171,8 @@ export class Game {
         if (name === 'Gather') hint = this.builder.gather();
         else if (name === 'CreateDoor') hint = this.doors ? this.doors.create() : '🚪 Двери скоро будут';
         else if (name === 'CreateBoard') hint = this.boards.create();
+        else if (name === 'CreateBoat') hint = this.boats.create();
+        else if (name === 'Navigare') hint = this.boats.enchant();
         else hint = this.builder.start(name);
         if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
         if (manaRules(this)) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
@@ -3786,6 +3792,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m);
+        for (const m of this.boats?.samples?.() || []) zoo.add(m); // (a boat — BoatModel.js)
         for (const m of this.seaFloor?.samples?.() || []) zoo.add(m); // (the sea's plants, its glowing ones, the fish) // (a waterspout's funnel and its wall cloud — WaterspoutFx.js)
         for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
@@ -4160,6 +4167,7 @@ export class Game {
         this.builder.update(dt);
         this.swim.update(dt);
         this.mermaid?.update(dt); // («Зелье русалки»: the tail, the drag on the land — after the swimming set its pace)
+        if (earth) this.boats?.update(dt, this.currentPose); // (the boats: before the boards — a boat's seat holds the body)
         if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();
@@ -4435,7 +4443,7 @@ export class Game {
             ch.legLift = (this._legFilter ??= new LegFilter(legLog)).step(pose.legs, dt); // (clamped, a flicker thrown out, none when the legs are not in the picture: LegSafe)
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
             ch.setCrouching(flying || down ? false : pose.isCrouching);
-            ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
+            ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || (this.boards?.mounted || this.boats?.riding) ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
             ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
             const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning) : 0;
             // (the author's F8 records of 05.11: stepping while leaning back, the shoulders bob 3–10 times weaker than stepping forward —
@@ -4475,13 +4483,13 @@ export class Game {
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.wingFlight?.airborne && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.wingFlight?.airborne && !(this.boards?.mounted || this.boats?.riding) && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
         // a fast run on a slow frame: the step is walked in short pieces against the walls, so a
         // thin wall or a door is never jumped over between two frames (the push-out below decides the rest)
         const walkDX = ch.group.position.x - walkFromX, walkDZ = ch.group.position.z - walkFromZ;
         const walkD = Math.hypot(walkDX, walkDZ);
-        if (walkD > 0.25 && walkD < 5 && !flight.active && !this.beds?.lying && !this.boards?.mounted) {
+        if (walkD > 0.25 && walkD < 5 && !flight.active && !this.beds?.lying && !(this.boards?.mounted || this.boats?.riding)) {
             const n = Math.ceil(walkD / 0.25);
             ch.group.position.x = walkFromX; ch.group.position.z = walkFromZ;
             for (let i = 0; i < n; i++) {
@@ -4494,7 +4502,7 @@ export class Game {
         // against the walls: a blast throws the body at the rock, never into it (a cave, a house)
         if (this.knockback.lengthSq() > 0.0001) {
             const n = Math.max(1, Math.ceil(this.knockback.length() * dt / 0.25));
-            const solid = !flight.active && !this.beds?.lying && !this.boards?.mounted;
+            const solid = !flight.active && !this.beds?.lying && !(this.boards?.mounted || this.boats?.riding);
             for (let i = 0; i < n; i++) {
                 const was = _v1.copy(ch.group.position);
                 ch.group.position.addScaledVector(this.knockback, dt / n);
@@ -4514,7 +4522,7 @@ export class Game {
         }
 
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
-        if (!flight.active && !this.beds?.lying && !this.boards?.mounted) {
+        if (!flight.active && !this.beds?.lying && !(this.boards?.mounted || this.boats?.riding)) {
             // (a step up to one block high is walked onto by itself: the feet are on the floor they
             // stand on, even while the body still eases up the last step — _feetY)
             this._resolveMe(ch.group.position);
@@ -5186,7 +5194,7 @@ export class Game {
             this._jumpSeen = J.jumps;
             const busy = this.flight.busy || ch.swimY != null || ch.swimming || this.knock.down || this.knock.flyT > 0
                 || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.() || this.dragonRide?.busy || this.dragonRide?.mountable?.()
-                || this.spiders?.held || this.diabolos?.holding || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy || this.imperius?.puppet
+                || this.spiders?.held || this.diabolos?.holding || this.levitation.lifted || (this.boards?.mounted || this.boats?.riding) || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy || this.imperius?.puppet
                 || (this.config.mode === 'test' && this.testState === 'setup');
             const went = !first && !busy && ch.onGround && ch.jump(J.strength);
             if (went) { this._jumpAt = J.at; this._jumpOnto(); }

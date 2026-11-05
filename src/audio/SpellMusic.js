@@ -980,7 +980,8 @@ export const SPELL_SOUND = {
     Snowman: { own: ['snowman'] },
     ToTheSun: { own: ['magic'], theme: 'thSun' },
     LetItRain: { own: ['cast', 'rain'], theme: 'thRain' },
-    Tornado: { own: ['sea_spout', 'sea_gale'], theme: 'thRain', rate: 0.78 }, // (the waterspout's roar and the gale — SeaSounds.js; the storm's tune lower)
+    Tornado: { own: ['sea_spout', 'sea_gale'], theme: 'thRain', rate: 0.78 },
+    CreateBoat: { cast: 'fxCreate' }, Navigare: { own: ['sea_chime', 'sea_tail'] }, // (a boat out of the wood; the boat sent on — Boats.js) // (the waterspout's roar and the gale — SeaSounds.js; the storm's tune lower)
     Alive: { theme: 'thAlive' }, AliveMaxima: { theme: 'thAlive', rate: 0.85 },
     GiveMyPower: { own: ['magic'], theme: 'thPower' },
     Pentagranium: { own: ['magic'], theme: 'thPentagram' }, // (black magic: its dark tune from the caster; the lit pentagram — fxPentagram, the rite — thRite: Pentagranium.js)

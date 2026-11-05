@@ -26,6 +26,7 @@ import { SurfWater } from './SurfWater.js';
 import { BoardBody, SURF, riderInput } from './BoardPhysics.js';
 import { nearestRail, solveTwoHands, solveOneHand, halfWidth } from './BoardHold.js';
 import { BoardRegistry } from './BoardRegistry.js';
+import { driveStep } from './Boats.js';
 import { boardModel, disposeBoard } from '../entities/BoardModel.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 import { TREE_KINDS, isWood, BLOCK, isCastleBlock } from '../world/Terrain.js';
@@ -95,6 +96,34 @@ export class SurfBoards {
         return true;
     }
     get riding() { return this.ride?.body.riding ? this.ride : null; }
+
+    /**
+     * «Navigare» on my board (Boats.js, the author 05.11: «это же заклинание будет работать для водяного скейта»): it goes forward on its
+     * own while I ride it, where my head looks it turns; «стоп» (stopDrive) or me off it — it slows down over a few seconds. → hint | null.
+     */
+    enchant() {
+        const r = this.ride;
+        if (!r?.body || r.body.fallen) return '🏄 Встаньте на доску на воде — тогда «Navigare»';
+        this.driveOn = { id: r.id, stop: false };
+        const b = r.body, fx = this.game.fx;
+        if (fx) for (let i = 0; i < 30; i++) fx.spark(_v.set(b.x + (Math.random() - 0.5) * 1.5, b.y + 0.3, b.z + (Math.random() - 0.5) * 4), i % 2 ? 0x9fe6ff : 0xfff2b8, 0.1, _v2.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
+        this.game.hud?.setVoice?.('🏄 Доска поплыла сама! Куда смотрите — туда поворачивает. «Стоп» — остановиться', true);
+        return null;
+    }
+    stopDrive() { if (!this.driveOn || this.driveOn.stop) return false; this.driveOn.stop = true; return true; }
+    _drive(dt) {
+        const D = this.driveOn;
+        if (!D) return;
+        const r = this.ride, b = r?.id === D.id ? r.body : null;
+        if (!b || b.fallen) { this.driveOn = null; return; }
+        const g = this.game, going = !D.stop;
+        const head = g._headBase?.yaw ?? g.smoothHead?.yaw ?? 0;
+        const st = { yaw: b.yaw, u: b.u };
+        driveStep(st, going ? head : 0, dt, going);
+        b.u = Math.max(b.u, st.u); if (!going) b.u = Math.min(b.u, st.u); // (going: never slower than the waves carry it; stopping: it slows)
+        b.yaw = st.yaw;
+        if (!going && b.u <= 0.05) { this.driveOn = null; g.hud?.setVoice?.('🏄 Доска остановилась. Чтобы снова — «Navigare»', true); }
+    }
     handBusy(side) { return !!this.hold?.grips[side]; }
     get me() { return this.game.localId; }
 
@@ -240,6 +269,7 @@ export class SurfBoards {
         const g = this.game;
         if (g.currentPose) this._hands(dt);
         this._legsAndRide(dt);
+        this._drive(dt);
         if (this.auth) this._freePhysics(dt);
         this._remoteBoards(dt);
         this._beachRacks(dt);
