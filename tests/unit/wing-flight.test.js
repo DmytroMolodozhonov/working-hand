@@ -1,10 +1,10 @@
 // Flying on the wings of the potion by the arms' strokes (WingFlight.js): a run and strokes — up; standing — no flight; without strokes
-// it goes down (high up the air's currents hold it, but never up); the arms spread at the ground — a soft landing; the wings folded
+// it goes down (up in the clouds the wings carry longer, but they always tire — 05.11); the torso steers; the arms spread at the ground — a soft landing; the wings folded
 // (a dive) into the ground — it hurts; no mana; no wings / growing — no flight.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { WingFlight, HERO_FLY, AIR, LAND, thermalAt, landingHurt } from '../../src/game/WingFlight.js';
+import { WingFlight, HERO_FLY, AIR, LAND, thermalAt, landingHurt, wingStep, cloudAt, WING } from '../../src/game/WingFlight.js';
 import { HeroWings } from '../../src/game/HeroWings.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../../src/entities/Character.js';
 
@@ -72,26 +72,40 @@ test('standing still the strokes only lift the heels; a run and strokes — up i
     assert.ok(g.character.flightTilt > 0.3, 'the body leans forward');
 });
 
-test('without strokes it goes down; high up the currents hold it (≤ CALM m/s down) — but it never climbs on them', () => {
+// (the author 05.11: «нужно периодически махать крыльями, иначе он упадёт… чем выше, тем легче, но выше — это прямо в облаках… и даже
+// очень высоко махать нужно» — the old rule «high up the currents hold it at ≤ CALM m/s» let one fly on without a stroke and never
+// come down: replaced by wingStep's `hold`, which always runs out)
+test('without strokes it always goes down — in the clouds the wings carry longer, but they tire there too; never a climb on them', () => {
+    const sinkAfter = (alt, secs) => {
+        const st = { air: true, vf: 12, vy: 0, since: 0 };
+        let y = 0, top = 0;
+        for (let t = 0; t < secs; t += dt) { wingStep(st, HERO_FLY, { stroke: 0, arms: 'spread', alt, dive: 0 }, dt); y += st.vy * dt; top = Math.max(top, y); }
+        return { y, vy: st.vy, top };
+    };
+    const lowEarly = sinkAfter(10, 3), highEarly = sinkAfter(WING.CLOUD_FULL + 20, 3);
+    assert.ok(highEarly.y > lowEarly.y, `in the clouds it sinks slower: ${highEarly.y.toFixed(1)} vs ${lowEarly.y.toFixed(1)}`);
+    assert.ok(highEarly.top < 0.01 && lowEarly.top < 0.01, 'never a climb without a stroke');
+    const highLate = sinkAfter(WING.CLOUD_FULL + 20, 30);
+    assert.ok(highLate.vy < -5, `even in the clouds: no strokes — it falls (${highLate.vy.toFixed(1)} m/s)`);
+    const lowLate = sinkAfter(10, 8);
+    assert.ok(lowLate.vy < -5, `low down it falls soon (${lowLate.vy.toFixed(1)} m/s)`);
+    assert.ok(cloudAt(10) === 0 && cloudAt(WING.CLOUD_FULL) === 1);
+});
+
+test('the torso steers as in «Флайн»: leaning forward — down (faster), back — up on its speed; the wings: fewer strokes up high', () => {
+    const run = (dive, secs = 2) => { const st = { air: true, vf: 14, vy: 0, since: 0 }; let y = 0; for (let t = 0; t < secs; t += dt) { wingStep(st, HERO_FLY, { stroke: 0, arms: null, alt: 80, dive }, dt); y += st.vy * dt; } return { y, vf: st.vf }; };
+    const flat = run(0), fwd = run(1), back = run(-1);
+    assert.ok(fwd.y < flat.y - 3 && fwd.vf > flat.vf, `a dive: ${fwd.y.toFixed(1)} / ${flat.y.toFixed(1)}`);
+    assert.ok(back.y > flat.y + 3 && back.vf < flat.vf, `leaning back: up, the speed spent (${back.y.toFixed(1)})`);
+    // the WingFlight reads the torso's lean from its pose at the take-off (Flight.steering's rule)
     const g = world();
     g.wings.grant();
-    const ch = g.character;
-    ch.group.position.y = PLAYER_GROUND_OFFSET + 60;
-    ch.onGround = false; ch.verticalVelocity = -8;
-    frame(g, dt);
-    assert.ok(g.wingFlight.airborne, 'falling from high: the wings caught the air');
-    g.arms.spread = true;
-    g.wingFlight.st.vf = 10;
-    let y0 = ch.group.position.y;
-    for (let i = 0; i < 150; i++) frame(g, dt);
-    const sink = (y0 - ch.group.position.y) / 5;
-    assert.ok(sink > 0, 'it goes down');
-    assert.ok(sink <= AIR.CALM + 0.3, `high up the currents hold it: ${sink.toFixed(2)} m/s`);
-    // low down it sinks faster
-    ch.group.position.y = PLAYER_GROUND_OFFSET + 10; g.wingFlight.st.vy = 0; g.wingFlight.st.vf = 4;
-    y0 = ch.group.position.y;
-    for (let i = 0; i < 30; i++) frame(g, dt);
-    assert.ok((y0 - ch.group.position.y) > AIR.CALM, 'low down it sinks more');
+    const wf = g.wingFlight;
+    wf.st.air = true;
+    for (let i = 0; i < 25; i++) wf._steer({ lateral: 0, noseRel: 0.5, depth: null }, 0, dt);
+    assert.ok(wf._steer({ lateral: 0, noseRel: 0.2, depth: null }, 0, dt).dive > 0.3, 'the head and shoulders forward: a dive');
+    assert.ok(wf._steer({ lateral: 0, noseRel: 0.8, depth: null }, 0, dt).dive < -0.3, 'back: up');
+    assert.ok(Math.abs(wf._steer({ lateral: 0.3, noseRel: 0.5, depth: null }, 0, dt).turn) > 0.3, 'sideways: a turn');
 });
 
 test('a soft landing with the arms spread does not hurt; a dive with the wings folded into the ground hurts', () => {

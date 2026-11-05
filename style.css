@@ -1867,6 +1867,11 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .hero-seg { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); border: 1px solid transparent; cursor: pointer; }
 .hero-seg:has(input:checked) { background: rgba(140, 110, 255, 0.28); border-color: rgba(190, 170, 255, 0.7); }
 .hero-slide { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 200px; }
+.hero-potions { margin: 4px 0; }
+.hero-potions > summary { cursor: pointer; padding: 4px 0; }
+.hero-potions > summary b { color: #ffd36e; }
+.hero-pot-list { max-height: 210px; overflow-y: auto; padding: 4px 6px; margin-top: 2px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; background: rgba(0, 0, 0, 0.25); }
+.hero-pot-list .world-opt { display: block; }
 .hero-adv { margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(255, 255, 255, 0.2); }
 .hero-adv > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 @media (max-width: 640px) { .hero-settings { max-height: 55vh; padding: 10px; } .hero-seg { flex: 1 1 100%; } }

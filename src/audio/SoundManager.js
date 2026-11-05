@@ -15,6 +15,7 @@ import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { MusicDirector } from './MusicDirector.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
 import { synthSwan, SWAN_SOUNDS } from './SwanSounds.js';
+import { synthSea, SEA_SOUNDS } from './SeaSounds.js';
 import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
 import { synthGhost, GHOST_SOUND_IDS } from './GhostSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
@@ -779,6 +780,8 @@ export class SoundManager {
             // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
             ...SWAN_SOUNDS.map((k) => ['swan_' + k, () => synthSwan(this.context, k)]),
+            // (the sea update — SeaSounds.js: the gale, a waterspout, under the water, the sea creatures)
+            ...SEA_SOUNDS.map((k) => ['sea_' + k, () => synthSea(this.context, k)]),
             // (the invisible bird of Spencer — SpencerBirds.js: a chirp, a trill, small wings)
             ...SPENCER_SOUNDS.map((k) => ['spencer_' + k, () => synthSpencer(this.context, k)]),
             // (the Castle of Ghosts — Ghosts.js: steps, whispers, a cry, knocks, a chair's scrape, the wail, a child's laugh, the chill, a far bell, a door, the hum)
@@ -2126,6 +2129,32 @@ export class SoundManager {
         const key = 'swan_' + kind;
         if (!this.sounds[key]) { if (!SWAN_SOUNDS.includes(kind)) return; this.sounds[key] = synthSwan(this.context, kind); }
         this._playAt(this.sounds[key], position, kind === 'hiss' ? 0.9 : kind === 'wings' ? 0.65 : 0.8, kind === 'hiss' ? 7 : 12, 0.94 + Math.random() * 0.12);
+    }
+
+    /** The sea's creatures (SeaLife.js): 'click' | 'tail' | 'bite' | 'chime' — made ahead (prewarmStep). */
+    playSea(position, kind, volume = 0.8) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'sea_' + kind;
+        if (!this.sounds[key]) { if (!SEA_SOUNDS.includes(kind)) return; this.sounds[key] = synthSea(this.context, kind); }
+        this._playAt(this.sounds[key], position, volume, kind === 'tail' ? 14 : 9, 0.93 + Math.random() * 0.14);
+    }
+
+    /**
+     * The sea's loops (OceanStorm.js / SeaLife.js), each 0…1: `gale` the storm's wind over the sea, `spout` a waterspout near,
+     * `under` the hum under the water. Made ahead; all 0 — silent.
+     */
+    seaAmbience(gale, spout, under) {
+        if (!this.context) return;
+        const amb = this._seaAmb || (this._seaAmb = {});
+        for (const [key, k, vol] of [['sea_gale', gale, 0.5], ['sea_spout', spout, 0.75], ['sea_under', under, 0.4]]) {
+            let a = amb[key];
+            const want = this.enabled && this.loaded ? k : 0;
+            if (want <= 0.01) { if (a?.isPlaying) a.stop(); continue; }
+            if (!this.sounds[key]) continue; // (not made yet: comes a moment later)
+            if (!a) { a = amb[key] = new THREE.Audio(this.effectsListener); a.setBuffer(this.sounds[key]); a.setLoop(true); }
+            a.setVolume(want * vol);
+            if (!a.isPlaying) a.play();
+        }
     }
 
     /** The clever owl (Owls.js): 'hoot' | 'sad' | 'wings' | 'coo' | 'chime' — made ahead (prewarmStep). */

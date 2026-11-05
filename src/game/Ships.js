@@ -1062,27 +1062,20 @@ export class Ships {
         s.st.tau = Infinity;
     }
 
-    /** (host) A natural breeze now and then; a storm blows hard. */
+    /**
+     * (host) The natural wind in the sails: the world's wind (SeaWind.js — the same on every computer, 10 levels; «Lightning Strike»'s
+     * storm already in it). The sails were made for 3–9 m/s: the world's wind is scaled to them (a gale fills them hard, a storm ~11 m/s —
+     * not a flight). A level change worth telling is told to whoever is at sea (once per change).
+     */
     _weather(dt) {
-        const g = this.game;
-        const storm = g.storm && g.storm.until > performance.now();
-        const b = this._breeze;
-        if (b) {
-            b.t += dt;
-            const ramp = Math.min(1, b.t / 20, Math.max(0, (b.dur - b.t) / 20));
-            const sp = (storm ? 9 : b.speed) * ramp;
-            this.wind.x = Math.cos(b.dir) * sp;
-            this.wind.z = Math.sin(b.dir) * sp;
-            if (b.t >= b.dur) { this._breeze = null; this.wind.x = this.wind.z = 0; }
-            return;
-        }
-        this.wind.x = this.wind.z = 0;
-        if ((this._weatherT -= dt) > 0) return;
-        this._weatherT = 90;
-        if (!this.awake.size) return;
-        if (storm || Math.random() < 0.3) {
-            this._breeze = { t: 0, dur: 120 + Math.random() * 180, speed: 3 + Math.random() * 3, dir: Math.random() * Math.PI * 2 };
-            if (this.me) g.hud.setVoice('🌬️ Подул ветер', true);
+        const g = this.game, w = g.wind;
+        if (!w) { this.wind.x = this.wind.z = 0; return; }
+        const sp = Math.min(11, w.speed * 0.55 + (g.storm && g.storm.until > performance.now() ? 3 : 0));
+        this.wind.x = Math.cos(w.dir) * sp;
+        this.wind.z = Math.sin(w.dir) * sp;
+        if (this.me && w.level !== this._toldLevel && (w.level >= 6 || (this._toldLevel ?? 0) >= 6)) {
+            this._toldLevel = w.level;
+            g.hud.setVoice(w.level >= 8 ? '⛈️ На море шторм' : w.level >= 6 ? '🌬️ Ветер крепчает' : '🌬️ Ветер стихает', true);
         }
     }
 

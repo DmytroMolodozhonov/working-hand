@@ -22,13 +22,85 @@
  * growing — nothing (no take-off); in the air and any of these starts — the wings let go: the body falls as any body (the normal fall);
  * hit hard in the air (knocked down) — it falls; into a wall / a roof — the body stops (never through), a ceiling — no climb.
  */
-import { FlapReader, flyStep, armsOf } from './ImperiusFlight.js';
+import { FlapReader, armsOf } from './ImperiusFlight.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
+
+/*
+ * The author (05.11): «туловище должно быть элементом того, что я могу пикировать вниз… управлять вверх-вниз, чуть наклоняюсь — как в
+ * полёте через Флайн… в полёте махать периодически крыльями, иначе он упадёт; не должно быть такого, чтобы игрок расслаблялся… чем выше,
+ * тем легче, но выше — это прямо в облаках, очень высоко; и даже очень высоко махать нужно». So (wingStep):
+ *   - the torso steers as in «Флайн» (Flight.steering, from the pose at the take-off): leaning forward — the nose down, a dive (faster
+ *     and steeper the more); leaning back — the nose up, the speed spent on the height (no climb without speed); leaning sideways — a turn;
+ *     the head bowed helps the dive (as in «Флайн»);
+ *   - the wings hold the body only for a while after a stroke: `hold` falls off as exp(−since/holdT); low down holdT is HOLD_LOW s, up in
+ *     the clouds (CLOUD_FULL m over the ground) HOLD_HIGH s — the air there carries longer, but never for ever: no strokes — it falls;
+ *   - landing: lean back (or spread the arms) near the ground — the flare brakes; the touch is soft when slow.
+ * (The old model held the height with no strokes from 40 m up and while looking straight ahead — one could not come down: gone.)
+ */
+export const WING = {
+    HOLD_LOW: 2.6, HOLD_HIGH: 11, // s the wings carry after a stroke: low / in the clouds
+    CLOUD_FROM: 50, CLOUD_FULL: 220, // m over the ground: the air carries more and more up to the clouds
+    SINK_LOW: 1.5, SINK_HIGH: 0.7, // m/s down while the wings still carry
+    FALL: 11, FALL_SPREAD: 7.5, FALL_FOLDED: 22, // m/s down when they do not (the arms spread fall slower; folded — a stoop)
+    DIVE: 0.95, // × speed: the vertical speed a full forward lean gives (down)
+    CLIMB: 0.75, // × speed: a full lean back (up, the speed spent)
+    TURN: 1.5, // rad/s at a full sideways lean
+};
+
+/** How much the air carries at `alt` m over the ground: 0 low … 1 in the clouds. */
+export function cloudAt(alt) {
+    const k = Math.max(0, Math.min(1, ((alt || 0) - WING.CLOUD_FROM) / (WING.CLOUD_FULL - WING.CLOUD_FROM)));
+    return k * k * (3 - 2 * k);
+}
+
+/**
+ * One step of the flight in the air (pure). st {air, vf, vy, since}; i {stroke, dive (−1 back … 1 forward), arms, alt}; P: HERO_FLY.
+ * On the ground: a stroke while running fast enough takes off.
+ */
+export function wingStep(st, P, i, dt) {
+    st.took = false;
+    if (!st.air) {
+        if (i.stroke > 0 && (i.ground || 0) >= P.takeoff) {
+            st.air = true; st.took = true; st.since = 0;
+            st.vf = Math.max(i.ground || 0, P.thrust * i.stroke);
+            st.vy = Math.min(P.maxUp, P.lift * (1 + i.stroke));
+        } else { st.vf = i.ground || 0; st.vy = 0; }
+        return st;
+    }
+    st.since = (st.since || 0) + dt;
+    if (i.stroke > 0) {
+        st.since = 0;
+        st.vy = Math.min(P.maxUp, Math.max(st.vy, 0) + P.lift * i.stroke);
+        st.vf = Math.min(P.maxFwd, st.vf + P.thrust * i.stroke);
+    }
+    const c = cloudAt(i.alt);
+    const hold = Math.exp(-st.since / (WING.HOLD_LOW + (WING.HOLD_HIGH - WING.HOLD_LOW) * c));
+    const fall = i.arms === 'down' ? WING.FALL_FOLDED : i.arms === 'spread' ? WING.FALL_SPREAD : WING.FALL;
+    const sinkMin = WING.SINK_LOW + (WING.SINK_HIGH - WING.SINK_LOW) * c;
+    let target = -(sinkMin * hold + fall * (1 - hold));
+    if (i.arms === 'down') target = Math.min(target, -WING.FALL_FOLDED * 0.6);
+    const dive = Math.max(-1, Math.min(1, i.dive || 0));
+    if (dive > 0) {
+        // leaning forward: the nose down — steeper and faster
+        target -= dive * Math.max(st.vf, 0.4 * P.maxFwd) * WING.DIVE;
+        st.vf = Math.min(P.maxFwd * 1.3, st.vf + P.gravity * 0.55 * dive * dt);
+    } else if (dive < 0 && st.vf > 2) {
+        // leaning back: the nose up — up on its own speed, the speed spent (a flare near the ground)
+        target += -dive * st.vf * WING.CLIMB;
+        st.vf = Math.max(0, st.vf - P.gravity * 0.5 * -dive * dt);
+    }
+    // the vertical speed goes to the target: up — gravity takes it; down — the air brakes or lets it fall
+    if (st.vy > target) st.vy = Math.max(target, st.vy - P.gravity * (1 - 0.45 * hold) * dt); // (the beating wings bear the climb a while)
+    else st.vy = Math.min(target, st.vy + P.gravity * 1.5 * dt);
+    st.vf = Math.max(0, st.vf - st.vf * (P.drag + (st.since > 1 ? 0.08 : 0)) * dt * (i.arms === 'down' ? 2 : 1));
+    st.hold = hold;
+    return st;
+}
 
 /** The hero's wings: lift / thrust per stroke, top speeds, gravity, the glide's sink, the drag, the run needed to take off. */
 export const HERO_FLY = { lift: 3.4, thrust: 3.0, maxUp: 8, maxFwd: 22, gravity: 9, sink: 2.6, drag: 0.1, takeoff: 4.0, turn: 1 };
 /** The air's currents over the land. */
-export const AIR = { THERMAL_FROM: 14, THERMAL_FULL: 40, CALM: 0.6, CEIL: 160 };
+export const AIR = { THERMAL_FROM: 14, THERMAL_FULL: 40, CALM: 0.6, CEIL: 320 };
 /** The landing. */
 export const LAND = { FLARE: 6, FLARE_VY: 2.2, SAFE_VY: 5.5, PER: 2, KNOCK_VY: 11, FWD_SAFE: 13, FWD_PER: 0.6 };
 
@@ -48,7 +120,8 @@ export function landingHurt(vy, vf) {
 export class WingFlight {
     constructor(game) {
         this.game = game;
-        this.st = { air: false, vf: 0, vy: 0 };
+        this.st = { air: false, vf: 0, vy: 0, since: 0 };
+        this.neutral = null; this._samples = 0; // (the torso at the take-off: leaning from it steers — as Flight.steering)
         this.reader = new FlapReader();
         this._gs = 0; // ground speed, smoothed
         this._lx = null; this._lz = null;
@@ -67,7 +140,7 @@ export class WingFlight {
         return null;
     }
 
-    update(dt) {
+    update(dt, pose = null) {
         const g = this.game, ch = g.character;
         if (!ch || !(dt > 0)) return;
         this.t += dt;
@@ -90,15 +163,20 @@ export class WingFlight {
         const st = this.st;
         const wasAir = st.air;
         if (!st.air && !ch.onGround && (ch.verticalVelocity || 0) < -6 && alt > 3) { st.air = true; st.vf = this._gs; st.vy = ch.verticalVelocity || 0; } // (falling off a cliff: the wings catch the air; an ordinary jump stays a jump)
-        flyStep(st, HERO_FLY, { stroke, arms, ground: this._gs, alt: null, pitch: g.smoothHead?.pitch || 0 }, dt);
+        const steer = this._steer(pose?.torso || null, g.smoothHead?.pitch || 0, dt);
+        wingStep(st, HERO_FLY, { stroke, arms, ground: this._gs, alt, dive: steer.dive }, dt);
+        if (st.air && steer.turn) { // (leaning sideways turns, as in «Флайн»)
+            const yr = steer.turn * WING.TURN * dt; // (the sign of Flight's yawRate)
+            if (g.settings?.drifting) g.cameraBaseRotation += yr; else if (g.smoothBody != null) g.smoothBody += yr;
+            ch.setBodyRotation?.(g.settings?.drifting ? g.cameraBaseRotation : g.smoothBody);
+        }
         if (stroke > 0) g.sound?.playSwan?.(p, 'wings');
         if (!st.air) { if (wasAir) this._touch(0, 0); this._pose(false, arms, dt); return; }
-        if (!wasAir) g.hud?.setVoice?.('🪽 Взлёт! Машите руками — выше и быстрее; руки в стороны — планируете', true);
-        // the air's currents: high up the sink is small — but never a climb without strokes
-        const k = thermalAt(alt);
-        if (!stroke && st.vy < 0 && k > 0) st.vy = Math.max(st.vy, -(AIR.CALM + (1 - k) * 99));
+        if (!wasAir) g.hud?.setVoice?.('🪽 Взлёт! Машите руками, иначе упадёте. Наклон вперёд — вниз, назад — вверх, вбок — поворот', true);
+        if (st.hold < 0.35 && !this._toldFall) { this._toldFall = true; g.hud?.setVoice?.('🪽 Крылья устали держать — машите!', true); }
+        if (st.hold > 0.8) this._toldFall = false;
         // the flare: the arms spread near the ground brake the fall (a soft landing); folded or a dive — no brake
-        if (arms === 'spread' && alt < LAND.FLARE && st.vy < -LAND.FLARE_VY) { st.vy += (-LAND.FLARE_VY - st.vy) * Math.min(1, dt * 3); st.vf *= 1 - Math.min(0.9, dt * 0.8); }
+        if ((arms === 'spread' || steer.dive < -0.3) && alt < LAND.FLARE && st.vy < -LAND.FLARE_VY) { st.vy += (-LAND.FLARE_VY - st.vy) * Math.min(1, dt * 3); st.vf *= 1 - Math.min(0.9, dt * 0.8); }
         // the body moves: along its facing, never through a wall; no higher than the sky's ceiling
         const yaw = ch.group.rotation.y, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
         const col = g.collision;
@@ -123,6 +201,29 @@ export class WingFlight {
         }
         ch.verticalVelocity = 0;
         this._pose(true, arms, dt, stroke);
+    }
+
+    /** The torso's lean from its pose at the take-off → {turn, dive} (Flight.steering's rule); the head bowed helps the dive. */
+    _steer(torso, headPitch, dt) {
+        const st = this.st;
+        if (!st.air) { this.neutral = null; this._samples = 0; }
+        const n = this.neutral;
+        if (st.air && torso && (!n || this._samples < 20)) {
+            // the first moments in the air: the body's calm pose (leaning from it steers)
+            const k = 1 / (++this._samples), m = n || { lateral: torso.lateral, noseRel: torso.noseRel, depth: torso.depth ?? null };
+            m.lateral += (torso.lateral - m.lateral) * k; m.noseRel += (torso.noseRel - m.noseRel) * k;
+            if (torso.depth != null) m.depth = m.depth == null ? torso.depth : m.depth + (torso.depth - m.depth) * k;
+            this.neutral = m;
+            return { turn: 0, dive: Math.max(-1, Math.min(1, -headPitch * 0.6)) };
+        }
+        let turn = 0, dive = -headPitch * 0.6;
+        if (torso && n) {
+            turn = Math.max(-1, Math.min(1, (torso.lateral - n.lateral) * 2.2));
+            if (torso.depth != null && n.depth != null) dive += (n.depth - torso.depth) * 6;
+            dive += (n.noseRel - torso.noseRel) * 1.6;
+        }
+        const dz = (v, d) => (Math.abs(v) < d ? 0 : v - Math.sign(v) * d);
+        return { turn: dz(turn, 0.12), dive: Math.max(-1, Math.min(1, dz(dive, 0.08))) };
     }
 
     /** The wings let go in the air (busy, knocked, dead): the body falls by itself (Character's own gravity). */

@@ -169,6 +169,8 @@ import { HELL_FROM_GEN } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
+import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
+import { OceanStorm } from './OceanStorm.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
@@ -628,6 +630,7 @@ export class Game {
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
+        this.oceanStorm = new OceanStorm(this); // the storms over the sea: rain, lightning, waterspouts (OceanStorm.js — the wind's, SeaWind.js)
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
         this.sunContest = new SunContest(this); // …and against the black clouds of the gargoyle ritual it fights them (SunContest.js)
         this.coinDeal = new CoinDeal(this); // coins come out of the pouch only when buying or selling (CoinDeal.js)
@@ -3689,6 +3692,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
+        for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m); // (a waterspout's funnel and its wall cloud — WaterspoutFx.js)
         for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
         for (const m of this.tarons?.sampleModels?.() || []) zoo.add(m); // (a Taron near and as one skinned shape: the underworld's giants — Taron.js)
@@ -4154,6 +4158,8 @@ export class Game {
         if (earth && !duelOnly) this._updateCaves(dt);
         this.keeper?.update(dt);
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
+        this._updateWind();
+        this.oceanStorm?.update(dt);
         this.storm.update(dt);
         this.sun.update(dt);
         this.sunContest?.update(dt);
@@ -4318,7 +4324,7 @@ export class Game {
                     this.yawNeutral = this._headTurn.neutral;
                     this.cameraBaseRotation += turn.rate * dt;
                     ch.setBodyRotation(this.cameraBaseRotation);
-                } else if (pose.bodyRotation !== undefined && !flying) {
+                } else if (pose.bodyRotation !== undefined && !flying && !this.wingFlight?.airborne) { // (on the wings, as in «Флайн», the torso's lean turns the body — WingFlight._steer)
                     this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
                     ch.setBodyRotation(this.smoothBody);
                 }
@@ -4349,7 +4355,7 @@ export class Game {
 
         if (this.space?.handles) this.space.update(dt, pose); // (the climb to space, space, the fall back: Space.js)
         else if (flying) this._updateFlight(dt, pose);
-        if (!flying) this.wingFlight?.update(dt); // (the wings of the potion: strokes of the arms — WingFlight.js)
+        if (!flying) this.wingFlight?.update(dt, pose); // (the wings of the potion: strokes of the arms — WingFlight.js)
         if (iced) ch.setRunning(false);
         this._jumpStep(pose);
         this.steady.step(dt);
@@ -4527,6 +4533,22 @@ export class Game {
     seaTime() {
         const P = WAVES.PERIOD * 1000;
         return ((((Date.now() - this.dayStart) % P) + P) % P) / 1000;
+    }
+
+    /**
+     * The world's wind (SeaWind.js): the same on every computer (from the seed and the real clock); the sea's waves follow its level
+     * (10 levels), «Lightning Strike»'s storm adds up to three. `this.wind` {dir, speed, level, x, z, gust} — the ships, the storms
+     * over the sea (OceanStorm.js) read it.
+     */
+    _updateWind() {
+        // (the real clock, not the day's: a night slept through or a save loaded must not make the wind jump; every computer's clock agrees
+        // to a second or so, and the wind is smooth over seconds)
+        const w = windAt(this.seed, this.weatherClock ?? Date.now() / 1000, this.wind || (this.wind = {})); // (weatherClock: a test's / a tool's fixed moment)
+        const spell = this.storm?.raining ? this.storm.k : 0; // (the spell's / the weather's storm — not the sea's own, which follows this wind)
+        w.level = Math.min(9, w.level + Math.round(spell * 3));
+        // (the wind is smooth in time already — the sea follows it directly, the same on every computer; the gusts breathe in it a little)
+        w.seaLevel = Math.min(9, Math.max(0, windLevelSmooth(w.speed) + spell * 3 + w.gust / 6));
+        if (this.sea) this.sea.storm = stormOf(w.seaLevel);
     }
 
     /** Is it night now (spiders come out)? */

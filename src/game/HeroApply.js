@@ -11,6 +11,15 @@
 import { creativeFiniteMana, creativeMortal } from './HeroSetup.js';
 import { makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { clampDark } from './DarkMagic.js';
+
+/** A steady colour for a starting potion (a brewed one gets a random colour; a kit's — from its name, the same every time). */
+export function potionKitColor(rec) {
+    let h = 0;
+    for (const ch of String(rec)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const hue = (h % 360) / 360, s = 0.55, l = 0.62;
+    const f = (n) => { const k = (n + hue * 12) % 12, a = s * Math.min(l, 1 - l); return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+    return (Math.round(f(0) * 255) << 16) | (Math.round(f(8) * 255) << 8) | Math.round(f(4) * 255);
+}
 import { spotTarget, safeNear, spawnLabel, farTarget, lairCells, spiderSpot, FAR_SPOT, standLayer, lairApproach, denSpot, queenApproach, lairUsable } from './SpawnSpots.js';
 import { LAIR } from '../world/DragonLairs.js';
 import { isCrewless } from './Sailors.js';
@@ -266,9 +275,12 @@ export class HeroApply {
     initial() {
         const g = this.game, h = g.hero;
         this.dress();
-        if (h.wings) { // («С крыльями»: grown at once — and the potion in the bag to try the growing too)
-            g.wings?.grant();
-            if (g.inventory?.storeItem && !g.inventory.hasAnywhere?.((it) => it?.kind === 'potion' && it.rec === 'wings')) g.inventory.storeItem({ kind: 'potion', uid: 'wingsKit' + Date.now().toString(36), rec: 'wings', color: 0xd8e6ff });
+        // («С крыльями»: grown at once. The author 05.11: no potion of wings in the bag for it — «у меня и так крылья есть, зачем мне зелье?»)
+        if (h.wings) g.wings?.grant();
+        // the potions chosen in the list «Зелья в сумке» (HeroSettingsUi): one flask of each
+        for (const rec of h.potions || []) {
+            if (!g.inventory?.storeItem || g.inventory.hasAnywhere?.((it) => it?.kind === 'potion' && it.rec === rec)) continue;
+            g.inventory.storeItem({ kind: 'potion', uid: 'kit' + rec + Date.now().toString(36), rec, color: potionKitColor(rec) });
         }
         if (h.dark > 0 && g.dark) {
             const n = clampDark(h.dark);

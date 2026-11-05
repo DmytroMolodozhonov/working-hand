@@ -19,6 +19,7 @@
 import { GOD_SPELLS } from './Mana.js';
 import { isDivine } from './ProtectionGods.js';
 import { normalizeSpawn, normalizeFoe } from './SpawnSpots.js';
+import { RECIPES } from './Potions.js';
 
 export const HERO = {
     CELLS_MIN: 30, CELLS_MAX: 100000, CELLS_DEFAULT: 500,
@@ -42,6 +43,7 @@ export const DEFAULT_HERO = Object.freeze({
     foe: 'mid', // who stands opposite on the arena of «Перед дуэлью» (SpawnSpots.DUEL_FOES)
     friendSame: true, // multiplayer «Перед дуэлью»: the friend who joins gets the same strength as the host (off — he chooses his own when he enters)
     wings: false, // the hero starts with grown wings (HeroWings.js: flying by the arms' strokes) — the author: «галочка с крыльями или без, по умолчанию без»
+    potions: [], // the potions (RECIPES ids) the hero starts with in the bag, one flask each — the author 05.11: «выпадающий список, где можно выбрать любое зелье… несколько или ни одного»
     noCrew: false, // ships without sailors (and the black ship without Black Moustache and his skeletons) — Sailors.setCrewless
 });
 
@@ -72,8 +74,15 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         wandBonus: clamp(Math.round(num(r.wandBonus, b.wandBonus ?? 0)), 0, HERO.WAND_MAX),
         noCrew: r.noCrew == null ? !!b.noCrew : !!r.noCrew,
         wings: r.wings == null ? !!b.wings : !!r.wings,
+        potions: heroPotions(r.potions ?? b.potions),
         friendSame: r.friendSame == null ? b.friendSame !== false : !!r.friendSame,
     };
+}
+
+/** The starting potions: known recipes only, each once, in the recipes' order. */
+export function heroPotions(list) {
+    const want = new Set(Array.isArray(list) ? list.map(String) : []);
+    return RECIPES.filter((r) => want.has(r.id)).map((r) => r.id);
 }
 
 /** Настройки героя этого мира: записанные — как есть; нет записи (старый мир) — как было раньше. */

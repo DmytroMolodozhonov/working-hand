@@ -35,6 +35,7 @@ export class Storm {
     constructor(game) {
         this.game = game;
         this.k = 0;
+        this.seaK = 0; // the storm over the sea (OceanStorm.js, from the world's wind): rain and thunder there too
         this.until = 0; // a thunderstorm (with lightning) until then
         this.rainUntil = 0; // «Let it rain» (a thunderstorm too, the whole world) until then
         // the weather's own storm comes slowly: the clouds gather first (no rain), then the first
@@ -66,7 +67,7 @@ export class Storm {
 
     /** A thunderstorm (lightning): «Lightning Strike», the weather or «Let it rain». */
     get thunder() {
-        return this.raining;
+        return this.raining || this.seaK > 0.6;
     }
 
     /** «Let it rain»: rain everywhere for `seconds` (default 2 game hours). */
@@ -134,7 +135,7 @@ export class Storm {
 
     update(dt) {
         const now = performance.now();
-        const want = this.raining ? 1 : 0;
+        const want = Math.max(this.raining ? 1 : 0, this.seaK || 0);
         const cloud = this.gathering;
         const garg = this.game.gargoyles?.skyDark?.() || 0; // (the infernal gargoyles' ritual: black-crimson clouds over its place — GargoyleRitual; no rain, only the dark)
         if (want === 0 && this.k <= 0 && cloud <= 0 && garg <= 0 && !(this._dark > 0)) { if (this._sound) { this._sound = false; this.game.sound?.setRain?.(0); } return; }

@@ -19,7 +19,7 @@ const fakeGame = (hero, mode = 'creative') => {
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
     // (почему `wings`: автор 05.11 — галочка «С крыльями» в Творческом, по умолчанию без крыльев)
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false, wings: false, friendSame: true });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false, wings: false, potions: [], friendSame: true }); // (potions: the author 05.11 — a list of starting potions, none by default)
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
@@ -243,4 +243,14 @@ test('multiplayer «Перед дуэлью»: «Дать другу такую 
     assert.equal(normalizeHero({ friendSame: false }).friendSame, false);
     assert.equal(normalizeHero(normalizeHero({ friendSame: false })).friendSame, false, 'passes through the network / the save unchanged');
     assert.equal(heroOf({ hero: { spawn: 'arena' } }).friendSame, true, 'an old world: the default');
+});
+
+test('зелья в сумке (автор 05.11): любые из рецептов, несколько или ни одного; чужие/повторы отброшены; с крыльями — без зелья крыльев', async () => {
+    const { RECIPES } = await import('../../src/game/Potions.js');
+    assert.deepEqual(normalizeHero({ potions: ['luck', 'heal', 'nonsense', 'luck'] }).potions, RECIPES.filter((r) => r.id === 'heal' || r.id === 'luck').map((r) => r.id));
+    assert.deepEqual(normalizeHero({}).potions, []);
+    assert.deepEqual(normalizeHero({ potions: 'heal' }).potions, []);
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(new URL('../../src/game/HeroApply.js', import.meta.url), 'utf8');
+    assert.ok(!/rec: 'wings'/.test(src), 'the wings checkbox puts no potion of wings in the bag');
 });

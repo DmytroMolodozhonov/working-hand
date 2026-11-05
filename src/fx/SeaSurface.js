@@ -131,9 +131,14 @@ uniform float uTime;
 uniform vec2 uOrigin;
 uniform float uTexSize;
 uniform sampler2D uShore;
+uniform float uStorm;
 varying float vSeaS;
 varying float vSeaDepth;
-varying vec3 vSeaWorld;`)
+varying vec3 vSeaWorld;
+float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5);
+    float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5), d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5);
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }`)
                 .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
                 // where the sea ends: looked up for THIS point (not interpolated across a big far triangle,
                 // whose corners move as the surface follows the camera — that made the shore line jump and flicker)
@@ -146,10 +151,19 @@ varying vec3 vSeaWorld;`)
                 // foam: the little waves breaking on the sand, white caps on high crests out at sea
                 float seaFoam = (1.0 - smoothstep(0.0, 6.0, seaS)) * smoothstep(0.35, 0.9, sin(${WAVES.shore.k.toFixed(4)} * seaS + ${WAVES.shore.omega.toFixed(7)} * uTime));
                 seaFoam = max(seaFoam, smoothstep(0.55, 0.95, vSeaWorld.y - ${WATER_LEVEL_Y.toFixed(2)}) * 0.6);
+                // the wind (SeaWind.js, 10 levels → uStorm): from a fresh breeze white horses on the crests, torn into streaks by
+                // the wind; in a gale and a storm the sea goes slate-grey and the foam lies in long bands
+                float seaWind = clamp(uStorm, 0.0, 2.4);
+                float seaOpen = smoothstep(20.0, 120.0, seaS);
+                vec2 seaFp = vSeaWorld.xz * 0.35 + vec2(uTime * 0.6, uTime * 0.25);
+                float seaStreak = seaN(seaFp) * 0.6 + seaN(seaFp * 2.7 + 13.0) * 0.4;
+                float seaCrest = smoothstep(0.15, 0.6, (vSeaWorld.y - ${WATER_LEVEL_Y.toFixed(2)}) / (0.6 + seaWind * 0.8));
+                seaFoam = max(seaFoam, seaOpen * smoothstep(0.05, 0.6, seaWind) * seaCrest * smoothstep(0.45, 0.8, seaStreak) * 0.85);
+                diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.23, 0.29, 0.32), seaOpen * smoothstep(0.6, 2.0, seaWind) * 0.55);
                 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.98, 1.0), seaFoam * 0.8);
                 diffuseColor.a = mix(diffuseColor.a, 0.95, seaFoam * 0.6 + seaK * 0.12);`);
         };
-        mat.customProgramCacheKey = () => 'sea-surface-v2';
+        mat.customProgramCacheKey = () => 'sea-surface-v3';
         return applyUltraWater(mat); // («Ультра качество»: the sky mirrored, ripples, the sun's path)
     }
 
