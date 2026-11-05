@@ -145,6 +145,13 @@ void main(){
   al *= uFade;
 #ifdef SHELL
   gl_FragColor = vec4(col * al * 1.15, al);
+#elif defined(GLOW)
+  // (the heart of the fire under its flames: smouldering embers — deep red, dark crusts, glowing cracks flowing along; much darker
+  //  than the flames over it, so the fire has depth and the shape reads, as in the film)
+  vec3 emb = mix(vec3(0.42, 0.06, 0.0), vec3(0.95, 0.3, 0.03), smoothstep(0.35, 0.8, vein + n2 * 0.3));
+  emb += vec3(1.0, 0.45, 0.08) * smoothstep(0.78, 0.95, vein) * 0.6;
+  emb *= 0.55 + 0.6 * smoothstep(-0.7, 0.85, vUpN) + 0.5 * rim;
+  gl_FragColor = vec4(emb * (0.4 + 0.6 * uFade), 1.0);
 #else
   gl_FragColor = vec4(col * (0.4 + 0.6 * uFade), 1.0);
 #endif
@@ -160,9 +167,10 @@ export function serpentMaterials() {
     const mk = (defs, extra, o = add) => new THREE.ShaderMaterial({ defines: defs, uniforms: { ...extra, uTime: shared.uTime, uShell: { value: defs.SHELL ? 1 : 0 }, uHeat: { value: 1 }, uFade: { value: 1 } }, vertexShader: VERT, fragmentShader: FRAG, ...o });
     _mats = {
         shared,
-        core: (sp) => mk({ SPINE: 1 }, sp, solid),
+        flames: (sp) => new THREE.ShaderMaterial({ uniforms: { ...sp, uTime: shared.uTime, uFade: { value: 1 }, uHeat: { value: 1 }, uHeadS: { value: 1 }, uHeadM: { value: new THREE.Matrix4() }, uJawM: { value: new THREE.Matrix4() } }, vertexShader: FL_VERT, fragmentShader: FL_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+        core: (sp) => mk({ SPINE: 1, GLOW: 1 }, sp, solid),
         shell: (sp) => mk({ SPINE: 1, SHELL: 1 }, sp),
-        head: () => mk({ HEAD: 1 }, {}, solid),
+        head: () => mk({ HEAD: 1, GLOW: 1 }, {}, solid),
         headShell: () => mk({ SHELL: 1 }, {}),
     };
     return _mats;
@@ -248,6 +256,105 @@ function headGeometry() {
     return _headGeo;
 }
 
+// ------------------------------------------------------------------ the flames (the author 05.11, a still of the film: «это всё ещё
+// текстура, а я хочу именно из самого огня»): the body and the head are THOUSANDS of tongues of flame — soft billboards, each born on
+// the body, rising, flaring and dying in its own rhythm (white-hot at its root, orange, red at its torn tip), all placed by the video
+// card from the same spine (the body) and the head's frame (the head: its tongues sit on the viper's skull and jaw — the head is
+// drawn by fire, its eyes blazing through). One draw for all of them.
+const FL_RING = 44; // tongues round every ring of the body
+const FL_HEAD = 1100, FL_JAW = 320; // on the skull, on the lower jaw
+const FL_VERT = `
+${NOISE}
+uniform float uTime; uniform float uFade; uniform float uHeadS;
+uniform vec4 uC[${N}]; uniform vec3 uN[${N}]; uniform vec3 uB[${N}];
+uniform mat4 uHeadM; uniform mat4 uJawM;
+attribute float aRing; attribute float aAng; attribute float aRad; attribute float aSeed; attribute float aKind; attribute vec3 aHead;
+varying vec2 vUv; varying float vPh; varying float vSeed; varying float vHot;
+void main(){
+  float ph = fract(uTime * (0.85 + aSeed * 0.9) + aSeed * 7.13);
+  vec3 c; float size; float hot;
+  if (aKind < 0.5) {
+    int i = int(aRing);
+    int i1 = min(i + 1, ${N - 1});
+    float fr = aRing - float(i); // (anywhere between two rings: no rows of flames, no comb)
+    vec4 C = mix(uC[i], uC[i1], fr);
+    if (uC[i].w < 0.05 || uC[i1].w < 0.05) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vUv = vec2(0.0); vPh = 1.0; vSeed = 0.0; vHot = 0.0; return; }
+    float a = aAng + ph * 0.5;
+    vec3 dir = normalize(mix(uN[i], uN[i1], fr)) * cos(a) + normalize(mix(uB[i], uB[i1], fr)) * sin(a);
+    dir.y = max(dir.y, -0.15); // (all over it — its back, its flanks — but not into the ground)
+    c = C.xyz + normalize(dir) * C.w * (0.85 + 0.35 * aRad); // (on its surface and just off it: in front of the embers)
+    c.y += C.w * (0.05 + 0.9 * ph * ph); // (licking up off it)
+    size = C.w * (0.9 + 0.7 * aSeed) * (0.5 + 0.6 * sin(min(1.0, ph * 1.4) * 3.1416 * 0.5 + 0.2));
+    hot = 1.0 - aRad * 0.5;
+  } else {
+    mat4 M = aKind < 1.5 ? uHeadM : uJawM;
+    c = (M * vec4(aHead, 1.0)).xyz;
+    c.y += uHeadS * 0.12 * ph;
+    size = uHeadS * (0.3 + 0.2 * aSeed) * (0.55 + 0.6 * sin(min(1.0, ph * 1.4) * 1.5708 + 0.2));
+    hot = 0.7;
+  }
+  vec4 mv = modelViewMatrix * vec4(c, 1.0);
+  mv.x += position.x * size;
+  mv.y += (position.y + 0.25) * size * 1.6; // (tall: a flame is taller than wide, its root at the point)
+  vUv = position.xy + 0.5; vPh = ph; vSeed = aSeed; vHot = hot;
+  gl_Position = projectionMatrix * mv;
+}`;
+const FL_FRAG = `
+${NOISE}
+uniform float uTime; uniform float uFade; uniform float uHeat;
+varying vec2 vUv; varying float vPh; varying float vSeed; varying float vHot;
+vec3 ramp(float h){
+  vec3 c = mix(vec3(0.5, 0.05, 0.0), vec3(1.0, 0.3, 0.02), smoothstep(0.1, 0.45, h));
+  c = mix(c, vec3(1.0, 0.68, 0.18), smoothstep(0.45, 0.8, h));
+  return mix(c, vec3(1.0, 0.95, 0.8), smoothstep(0.8, 1.15, h));
+}
+void main(){
+  // a tongue of flame: wide at its root, licking up to a torn point, its edges eaten by the moving noise
+  vec2 uv = vUv;
+  float n = vn(vec3(uv.x * 3.0 + vSeed * 17.0, uv.y * 2.2 - uTime * 3.3, vSeed * 5.0));
+  float n2 = vn(vec3(uv.x * 7.0 - vSeed * 9.0, uv.y * 5.0 - uTime * 5.1, 1.7));
+  float x = (uv.x - 0.5) * 2.0 + (n - 0.5) * 0.7 * uv.y;
+  float w = mix(0.95, 0.12, pow(uv.y, 0.8)); // (narrowing upward)
+  float body = smoothstep(w, w * 0.25, abs(x)) * smoothstep(1.0, 0.55, uv.y + (n2 - 0.5) * 0.35) * smoothstep(0.0, 0.12, uv.y);
+  float life = smoothstep(0.0, 0.12, vPh) * (1.0 - smoothstep(0.55, 1.0, vPh));
+  float heat = (body * (0.95 - uv.y * 0.6) * (1.0 - vPh * 0.6) * vHot + 0.12) * uHeat;
+  float al = body * life * uFade * 0.3;
+  if (al < 0.004) discard;
+  gl_FragColor = vec4(ramp(heat) * al, al);
+}`;
+
+let _flameGeo = null;
+/** The tongues of flame: one quad, an instance per tongue — on the body (ring, angle, depth) and on the head (a point of the skull / jaw). */
+function flameGeometry() {
+    if (_flameGeo) return _flameGeo;
+    const H = headGeometry();
+    const nBody = N * FL_RING, n = nBody + FL_HEAD + FL_JAW;
+    const ring = new Float32Array(n), ang = new Float32Array(n), rad = new Float32Array(n), seed = new Float32Array(n), kind = new Float32Array(n), head = new Float32Array(n * 3);
+    const rng = (() => { let a = 1234567; return () => { a = (Math.imul(a, 1103515245) + 12345) >>> 0; return a / 4294967296; }; })();
+    let k = 0;
+    for (let i = 0; i < N; i++) for (let j = 0; j < FL_RING; j++, k++) { ring[k] = Math.min(N - 1.001, i + rng()); ang[k] = (j / FL_RING) * TAU + rng() * 0.4; rad[k] = 0.35 + 0.65 * rng(); seed[k] = rng(); }
+    const fromShape = (geo, count, kd) => {
+        const P = geo.attributes.position;
+        for (let c = 0; c < count; c++, k++) {
+            const v = (rng() * P.count) | 0;
+            head[k * 3] = P.getX(v) * 1.06; head[k * 3 + 1] = P.getY(v) * 1.08; head[k * 3 + 2] = P.getZ(v) * 1.02; // (just off its surface: in front of the embers)
+            kind[k] = kd; seed[k] = rng();
+        }
+    };
+    fromShape(H.skull, FL_HEAD, 1);
+    fromShape(H.jaw, FL_JAW, 2);
+    const g = new THREE.InstancedBufferGeometry();
+    const q = new THREE.PlaneGeometry(1, 1);
+    g.setIndex(q.index); g.setAttribute('position', q.attributes.position);
+    const ia = (arr, sz) => new THREE.InstancedBufferAttribute(arr, sz);
+    g.setAttribute('aRing', ia(ring, 1)); g.setAttribute('aAng', ia(ang, 1)); g.setAttribute('aRad', ia(rad, 1));
+    g.setAttribute('aSeed', ia(seed, 1)); g.setAttribute('aKind', ia(kind, 1)); g.setAttribute('aHead', ia(head, 3));
+    g.instanceCount = n;
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
+    g.userData.shared = true; // (every serpent's; never disposed)
+    return (_flameGeo = g);
+}
+
 let _basic = null;
 const basics = () => _basic || (_basic = {
     fang: new THREE.MeshBasicMaterial({ color: 0xfff1cc }),
@@ -299,16 +406,20 @@ class Serpent {
         const geo = tubeGeometry(), H = headGeometry(), B = basics();
         this.group = new THREE.Group();
         this.group.name = 'fireSerpent';
-        const core = new THREE.Mesh(geo, this.coreMat), shell = new THREE.Mesh(geo, this.shellMat);
-        core.renderOrder = 3; shell.renderOrder = 4;
-        this.group.add(core, shell);
+        const core = new THREE.Mesh(geo, this.coreMat);
+        core.renderOrder = 3;
+        core.scale.setScalar(1); // (its rings' radii are the body's: the flames grow off it)
+        this.flameMat = M.flames(spine);
+        const flames = this.flames = new THREE.Mesh(flameGeometry(), this.flameMat);
+        flames.renderOrder = 5;
+        this.group.add(core, flames);
         // the head: its middle at the head point; z — forward, y — up
         const hd = this.headGroup = new THREE.Group();
-        const skull = new THREE.Mesh(H.skull, this.headMat), skullF = new THREE.Mesh(H.skull, this.headShellMat);
-        skull.renderOrder = 3; skullF.renderOrder = 4;
+        const skull = new THREE.Mesh(H.skull, this.headMat);
+        skull.renderOrder = 3;
         const fu = new THREE.Mesh(H.fangsUp, B.fang);
         const throat = new THREE.Mesh(H.throat, B.throat); throat.scale.set(0.55, 0.25, 1.1); throat.position.set(0, -0.12, 0.1); throat.renderOrder = 4;
-        hd.add(skull, skullF, fu, throat);
+        hd.add(skull, fu, throat);
         for (const sx of [-1, 1]) {
             // the eyes under the brow ridges, looking forward-sideways; a vertical slit of a pupil
             const e = new THREE.Mesh(H.eye, B.eye); e.position.set(sx * 0.58, 0.22, 0.45); e.scale.set(1.3, 1.1, 1.7);
@@ -319,10 +430,10 @@ class Serpent {
         // the lower jaw: hinged at the back of the head
         const hinge = this.jawHinge = new THREE.Group();
         hinge.position.set(0, -0.08, -1.28);
-        const jaw = new THREE.Mesh(H.jaw, this.headMat), jawF = new THREE.Mesh(H.jaw, this.headShellMat);
-        jaw.renderOrder = 3; jawF.renderOrder = 4;
+        const jaw = new THREE.Mesh(H.jaw, this.headMat);
+        jaw.renderOrder = 3;
         const tl = new THREE.Mesh(H.teeth, B.fang);
-        hinge.add(jaw, jawF, tl);
+        hinge.add(jaw, tl);
         hd.add(hinge);
         this.group.add(hd);
         for (const m of [...this.group.children, ...hd.children, ...hinge.children]) m.frustumCulled = false;
@@ -331,7 +442,7 @@ class Serpent {
 
     dispose() {
         this.group.parent?.remove(this.group); // (three r128 has no removeFromParent)
-        for (const m of [this.coreMat, this.shellMat, this.headMat, this.headShellMat]) m.dispose(); // (the geometries are shared)
+        for (const m of [this.coreMat, this.shellMat, this.headMat, this.headShellMat, this.flameMat]) m.dispose(); // (the geometries are shared)
     }
 
     /** The first ring out of the fire (rings before it are still in the blaze). */
@@ -476,7 +587,13 @@ class Serpent {
         this.jawHinge.rotation.x = 0.04 + this.jaw * 0.9 + Math.sin(this.sys._t * 2.3 + this.wobble) * 0.03;
         // heat: weakened — darker
         const heat = (0.7 + 0.3 * this.hp / SERPENT.HP) * (1 - 0.6 * this.fade);
-        for (const m of [this.coreMat, this.shellMat, this.headMat, this.headShellMat]) { m.uniforms.uHeat.value = heat; m.uniforms.uFade.value = 1 - this.fade; }
+        for (const m of [this.coreMat, this.shellMat, this.headMat, this.headShellMat, this.flameMat]) { m.uniforms.uHeat.value = heat; m.uniforms.uFade.value = 1 - this.fade; }
+        // the head's flames: on its skull and its jaw, wherever they are now
+        hd.updateMatrix(); this.jawHinge.updateMatrix();
+        const F = this.flameMat.uniforms;
+        F.uHeadM.value.copy(hd.matrix);
+        F.uJawM.value.multiplyMatrices(hd.matrix, this.jawHinge.matrix);
+        F.uHeadS.value = hd.scale.x;
         this._particles(dt);
     }
 
