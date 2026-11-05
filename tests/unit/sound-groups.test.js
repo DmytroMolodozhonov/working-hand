@@ -47,8 +47,11 @@ test('no audio source outside the volume buses: only SoundManager and Speech mak
     walk('src');
     // (the injury ringing in the HUD is the one outside source — it joins the effects bus, which its own test checks)
     // (почему ещё два: голоса друзей — своя регулировка громкости в настройках голосового чата, VoiceChat.s.volume; пасхалка-кряканье
-    //  играет в стартовом меню до начала игры, когда ползунков игры ещё нет — DuckTripleClick.js)
-    assert.deepEqual(hit.filter((p) => !['src/ui/Hud.js', 'src/net/VoiceChat.js', 'src/ui/DuckTripleClick.js'].includes(p)), [], 'plays sound outside the volume groups');
+    //  играет в стартовом меню до начала игры, когда ползунков игры ещё нет — DuckTripleClick.js;
+    //  звуки интерфейса и музыка загрузки (просьба автора 05.11) — MagicSound.js: звучат в меню, паузе и при загрузке мира, когда
+    //  SoundManager ещё не создан; громкость берут с ползунка эффектов #zombie-vol — проверено ниже)
+    assert.deepEqual(hit.filter((p) => !['src/ui/Hud.js', 'src/net/VoiceChat.js', 'src/ui/DuckTripleClick.js', 'src/audio/MagicSound.js'].includes(p)), [], 'plays sound outside the volume groups');
+    assert.match(read('src/audio/MagicSound.js'), /getElementById\('zombie-vol'\)/, 'the interface sounds follow the effects slider');
     const hud = read('src/ui/Hud.js');
     assert.ok(/connect\(sound\.effectsGain\)/.test(hud), 'HUD ringing must join effectsGain');
     // inside SoundManager: only music tracks use the bare listener; everything else the effects bus
