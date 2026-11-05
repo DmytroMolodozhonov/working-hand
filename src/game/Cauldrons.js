@@ -39,8 +39,9 @@
 import * as THREE from 'three';
 import { makeCauldronModel } from './CauldronModel.js';
 import { disposeModel, newUid, ITEM_INFO, makeItemModel } from './ItemTypes.js';
-import { CAULDRON, boiling, newBrew, addWater, addIngredient, stepBrew, takePortion, spill, fullness, ingCount, surfaceY, innerRadius, wallRadius, recipeById, matchRecipe, rollCaveCauldron, SLUDGE, INGREDIENT_RU } from './Potions.js';
+import { CAULDRON, boiling, newBrew, addWater, addIngredient, stepBrew, takePortion, spill, fullness, ingCount, surfaceY, innerRadius, wallRadius, recipeById, matchRecipe, rollCaveCauldron, SLUDGE, INGREDIENT_RU, brewWindow } from './Potions.js';
 import { createRng, hashString } from '../core/math.js';
+import { BrewBar, brewBarState } from './BrewBar.js';
 
 const H = CAULDRON.H;
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -230,7 +231,7 @@ export class Cauldrons {
             this._shopT -= dt;
             if (this._shopT <= 0) { this._shopT = 4; this._shops(); }
         }
-        if (!this.list.size) return;
+        if (!this.list.size) { this._bar?.show(null); return; }
         const me = g.character.group.position;
         if (g.currentPose && !g.combat?.dead && !g.isDeadLocal) this._hands(dt);
         else this._prev.right = this._prev.left = null;
@@ -250,8 +251,17 @@ export class Cauldrons {
             const d2 = c.pos.distanceToSquared(me);
             c.group.visible = d2 < 160 * 160; // (far ones — every cave's flown over — not drawn)
             if (d2 < 90 * 90) this._visual(c, dt, me);
-            // the countdown: all the ingredients in before it runs out
-            if (c.st.phase === 'water' && c.st.win > 0 && ingCount(c.st) && this._near(c, 20)) this._hint(c, `⏳ ${Math.ceil(c.st.win)} с — бросьте остальные ингредиенты`, 'win', 900);
+        }
+        // the brewing's bar over the mana's (BrewBar.js): the nearest cauldron that heats / waits for the rest / brews
+        {
+            let best = null, bd = 400; // (20 m)
+            for (const c of this.list.values()) {
+                const st = c.st;
+                if (st.phase !== 'brewing' && st.phase !== 'water') continue;
+                const d2 = c.pos.distanceToSquared(me);
+                if (d2 < bd && c.group.visible) { const f = c.fire ? g.campfires?.list.get(c.fire) : null; const bs = brewBarState(st, !!(f && f.left > 0), brewWindow()); if (bs) { best = bs; bd = d2; } }
+            }
+            (this._bar || (this._bar = new BrewBar())).show(g.dead || g.isDeadLocal ? null : best);
         }
         // a thing carried by «Левиоса» over the opening: let go there, it falls in (like one dropped by hand)
         const ls = this.auth ? g.levitation?.state : null;

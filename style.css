@@ -1947,3 +1947,12 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #mermaid-bar.low { animation: mermaid-low 0.8s ease-in-out infinite; }
 #mermaid-bar.low .mb-fill { background: linear-gradient(90deg, #b8324a, #ff7a6a 70%, #ffd08a); }
 @keyframes mermaid-low { 50% { box-shadow: 0 0 0 2px #ffd2c8, 0 0 0 4px rgba(160, 40, 40, 0.9), 0 0 26px rgba(255, 90, 80, 0.9); } }
+
+/* the brewing bar (BrewBar.js): over the mana's, drains as the time goes (heating fills) */
+#brew-bar { position: fixed; bottom: calc(14px + 90px * var(--hotbar-k, 1) + 46px); left: 50%; transform: translateX(-50%); width: min(690px, 70vw); display: none; z-index: 1200; pointer-events: none; text-align: center; }
+#brew-bar .bb-cap { color: #fff3dc; font-weight: bold; font-size: 15px; text-shadow: 0 0 4px #000, 0 1px 2px #000; margin-bottom: 3px; letter-spacing: 0.02em; }
+#brew-bar .bb-track { height: 16px; background: linear-gradient(180deg, rgba(40, 22, 14, 0.85), rgba(18, 10, 8, 0.9)); border: 2px solid #d4af37; border-radius: 9px; overflow: hidden; box-shadow: 0 0 10px rgba(255, 150, 60, 0.4), inset 0 0 6px rgba(0, 0, 0, 0.8); }
+#brew-bar .bb-fill { height: 100%; width: 0; transition: width 0.45s linear; }
+#brew-bar.bb-brew .bb-fill { background: linear-gradient(90deg, #7a3bd6, #c06bff 55%, #6be0ff); box-shadow: 0 0 8px rgba(190, 120, 255, 0.8); }
+#brew-bar.bb-win .bb-fill { background: linear-gradient(90deg, #ff5a2a, #ffb02e 60%, #ffe066); box-shadow: 0 0 8px rgba(255, 170, 50, 0.8); }
+#brew-bar.bb-heat .bb-fill { background: linear-gradient(90deg, #ff7a3a, #ffd36b); box-shadow: 0 0 8px rgba(255, 140, 60, 0.8); }
