@@ -2008,6 +2008,12 @@ export class Game {
             return null;
         }
         // the monster form: no wand, no spells — only «стоп» to stop what is mine (MonsterForm.MONSTER_BLOCKS)
+        // («стоп» as a monster: back to the human form — the author 05.11; the way back is the usual slow shrinking with its pain)
+        if (this.monster?.active && name === 'Stand' && /стоп|stop/i.test(text) && this.monster.phase !== 'shrink') {
+            this.monster.end('stop');
+            this.lastCastWhy = 'стоп: монстр возвращается в облик человека';
+            return 'Stop';
+        }
         if (this.monster?.active && !(name === 'Stand' && /стоп|stop/i.test(text))) {
             if (isFinal) this.hud.setVoice('🐺 В облике монстра колдовать нельзя — палочки нет', true);
             this.lastCastWhy = 'в облике монстра колдовать нельзя';

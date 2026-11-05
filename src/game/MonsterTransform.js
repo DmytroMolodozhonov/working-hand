@@ -167,7 +167,7 @@ export class MonsterTransform {
 
     // ------------------------------------------------------------------ конец
 
-    /** Обратное превращение (время вышло / «стоп» не снимает — только время, смерть, выход). `instant` — сразу. */
+    /** Обратное превращение (время вышло, «стоп» — по желанию игрока (автор 05.11), смерть, выход). `instant` — сразу. */
     end(why = 'time', instant = false) {
         if (!this.phase) return;
         if (instant) { this._finish(why); return; }
@@ -177,7 +177,7 @@ export class MonsterTransform {
         const g = this.game;
         g.sound?.spellCast?.('MonsterBack', g.character.group.position);
         g.sync?.castSound?.('MonsterBack', g.character.group.position);
-        g.hud?.setVoice?.(why === 'fell' ? '🐺 <span style="color:#ff7a5a">Тело монстра не выдержало — вы снова человек</span>' : '🐺 Сила пентаграммы уходит — вы снова человек', true);
+        g.hud?.setVoice?.(why === 'fell' ? '🐺 <span style="color:#ff7a5a">Тело монстра не выдержало — вы снова человек</span>' : why === 'stop' ? '🐺 «Стоп» — тело монстра сжимается, вы возвращаетесь в свой облик' : '🐺 Сила пентаграммы уходит — вы снова человек', true);
     }
 
     _finish(why) {
