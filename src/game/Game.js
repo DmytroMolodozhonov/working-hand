@@ -173,6 +173,7 @@ import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
 import { Mermaid } from './Mermaid.js';
 import { SeaFloor } from '../fx/SeaFloor.js';
+import { WalkRecorder } from '../core/WalkRecorder.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
@@ -758,6 +759,7 @@ export class Game {
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
         this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
+        this.walkRec = new WalkRecorder(this); // F8: «Ходьба» — a recording to tune walking back (WalkRecorder.js)
         this.mermaid = new Mermaid(this); // «Зелье русалки»: a fish's tail for 12 min (Mermaid.js)
         this.wings = new HeroWings(this); // «Зелье крыльев»: the wings grow on the back, for good (HeroWings.js; the flight — WingFlight.js)
         this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
@@ -4404,6 +4406,7 @@ export class Game {
             const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning) : 0;
             ch.backward = !!(back && ch.isRunning);
             if (this.config.walkBack) this._walkBackLog(back, pose, dt);
+            if (this.walkRec?.on) { if (!this.config.walkBack) leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning); this.walkRec.frame(dt, pose, back); } // (F8: «Ходьба» — what the camera saw, with the player's spoken label)
         }
         // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
         const J = this._jolt = this.impact.step(dt);

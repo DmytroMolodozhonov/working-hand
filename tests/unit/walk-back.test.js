@@ -145,3 +145,23 @@ test('the 3-D body\'s tilt (the camera program sends it): a straight back walks 
     for (let i = 0; i < 20; i++) last = _leanBack(st, t(1), 1 / 30, true);
     assert.equal(last, 0, 'straight again: forward');
 });
+
+test('the F8 recording: the spoken labels; a line 10 times a second with what the camera saw and the decision', async () => {
+    const { WalkRecorder, walkLabel } = await import('../../src/core/WalkRecorder.js');
+    assert.equal(walkLabel('иду вперёд'), 'ВПЕРЁД');
+    assert.equal(walkLabel('теперь иду назад'), 'НАЗАД');
+    assert.equal(walkLabel('стою'), 'СТОЮ');
+    assert.equal(walkLabel('лумос'), null);
+    const g = { config: { walkBack: true }, character: { isRunning: true }, hud: { setVoice() {} }, _lean: { x: 12, k: 13, base: 1, src: '3D' } };
+    const R = new WalkRecorder(g);
+    R._flush = () => {};
+    R.toggle();
+    R.heard('иду назад');
+    for (let i = 0; i < 30; i++) R.frame(1 / 30, { isRunning: true, runIntensity: 0.5, torso: { tilt: 13, sz: 0.1, hz: 0, back: 0.5, sw: 0.2 } }, 1);
+    for (let i = 0; i < 30; i++) R.frame(1 / 30, { isRunning: true, runIntensity: 0.5, torso: { tilt: 13, sz: 0.1, hz: 0, back: 0.5, sw: 0.2 } }, 1);
+    assert.ok(R.buf.some((l) => l.includes('метка НАЗАД (переход) |')), 'the first 1.5 s after the words: «переход»');
+    const lines = R.buf.filter((l) => l.includes('метка НАЗАД |'));
+    assert.ok(lines.length >= 3, `${lines.length}`);
+    assert.match(lines[0], /игра НАЗАД/);
+    assert.match(lines[0], /спина3D 13\.0°/);
+});

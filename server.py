@@ -71,6 +71,7 @@ PERF_LOG = "zns-perf.log"  # the game's performance diary (send it to the develo
 SPELL_LOG = "zns-spells.log"  # the spell journal: every phrase heard and what came of it
 ARM_LOG = "zns-arms.log"  # the arms' diary (src/core/ArmLog.js): what the camera saw of the arms, what the hero did
 ALL_LOG = "zns-all.log"  # «Общие логи»: every journal together, by time
+WALK_LOG = "zns-walk.log"  # «Ходьба» (F8 in the game): what the camera saw of the body while the player says «иду вперёд / назад»
 ALL_LOG_MAX = 20 * 1024 * 1024  # kept: the last ~20 MB (trimmed to half of it when it grows past)
 LOG_DIR = "logs"  # what the game prints (settings → «Журнал»)
 LOG_TITLES = {
@@ -82,6 +83,7 @@ LOG_TITLES = {
     ARM_LOG: "Руки",
     SPELL_LOG: "Заклинания",
     ALL_LOG: "Общие логи (все журналы вместе)",
+    WALK_LOG: "Ходьба (запись F8)",
 }
 MAX_BODY = 5 * 1024 * 1024  # 5 MB is plenty for a map
 
@@ -315,6 +317,7 @@ def log_files():
     paths.append(SPELL_LOG)
     paths.append(ARM_LOG)
     paths.append(PERF_LOG)
+    paths.append(WALK_LOG)
     paths.append(ALL_LOG)
     return paths
 
@@ -488,7 +491,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
-        if any(p in (self.path or "") for p in ("/api/perflog", "/api/armlog", "/api/spelllog", "/api/alllog", "/api/gamelog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
+        if any(p in (self.path or "") for p in ("/api/perflog", "/api/walklog", "/api/armlog", "/api/spelllog", "/api/alllog", "/api/gamelog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
             return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
@@ -902,6 +905,16 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if line:
                     with open(SPELL_LOG, "a", encoding="utf-8") as f:
                         f.write(frame_start(line) if line.startswith("===") else line + "\n")
+                return self._json(200, {"status": "ok"})
+
+            if path == "/api/walklog":
+                # «Ходьба» (F8): lines of what the camera saw while the player said «иду вперёд / назад / стою» — to tune walking back
+                lines = self._read_json().get("lines") or []
+                if os.path.exists(WALK_LOG) and os.path.getsize(WALK_LOG) > 8 * 1024 * 1024:
+                    os.replace(WALK_LOG, WALK_LOG + ".old")
+                with open(WALK_LOG, "a", encoding="utf-8") as f:
+                    for ln in lines[:2000]:
+                        f.write(str(ln)[:1000].replace("\r", " ").replace("\n", " ") + "\n")
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/perflog":

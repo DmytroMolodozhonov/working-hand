@@ -779,6 +779,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         }
     }
     if (game && game.active) {
+        game.walkRec?.heard(command); // (F8 recording: «иду вперёд / назад / стою» — the label)
         game._voiceMeta = meta; // (when the words were said: the journal counts how late the spell came — Game.castLocalSpell)
         // the words being caught: a big short line, only in Creative (partly a developer mode)
         hud.heard(command, game.config?.mode === 'creative' && !!$('show-heard-toggle')?.checked); // (off by default; switched in «Общие настройки»)
@@ -1071,6 +1072,8 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'F9') { e.preventDefault(); startHandRecording(); return; }
     // F10: the skeleton's diary - a long recording of what the camera saw of the body and what the game made of it (no video)
     if (e.key === 'F10') { e.preventDefault(); toggleSkeletonRecording(); return; }
+    // F8: «Ходьба» — say «иду вперёд» / «иду назад» and walk: the camera's body is written with the label (WalkRecorder.js → zns-walk.log)
+    if (e.key === 'F8') { e.preventDefault(); game.walkRec?.toggle(); return; }
     const k = e.key.toLowerCase();
     if (k >= '1' && k <= '9' && game.inventory) game.inventory.select(Math.min(parseInt(k, 10), game.inventory.slots.length) - 1);
     if ((k === '0' || k === '`' || k === 'ё') && game.inventory) game.inventory.select(-1);
