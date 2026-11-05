@@ -328,3 +328,23 @@ test('the model: the neck is one dynamic shape, written in the plant\'s own axes
     assert.ok(b.max.x > 2.5 && b.min.y < 1.1 && b.max.y > 3, 'the neck runs from the root to the hinge');
     assert.ok(n.sample(1, new w.THREE.Vector3()).distanceTo(new w.THREE.Vector3(3, 3, 1)) < 1e-6);
 });
+
+test('every plant leaves its thing when it dies, and nothing hangs in the air: the ground under it gone → it breaks and leaves it (the author\'s rule)', async () => {
+    const w = await world();
+    const { BLOCK } = await import('../../src/world/Terrain.js');
+    let solid = true; const drops = [];
+    w.g.terrain = { data: { get: () => (solid ? BLOCK.GRASS : BLOCK.AIR), landMade: () => true } };
+    w.g.items = { spawnLoose: (it) => drops.push(it.kind) };
+    w.plants._aroundT = 1e9; // (no world generation in this stub)
+    const p = w.head(0, 0, 0.5); w.g.character.group.position.set(40, 2, 40);
+    for (let i = 0; i < 90; i++) w.plants.update(1 / 60);
+    assert.equal(p.dead, false, 'standing on ground it stays');
+    solid = false; // the ground is blown away
+    for (let i = 0; i < 90; i++) w.plants.update(1 / 60);
+    assert.equal(p.dead, true, 'no ground — it falls and breaks');
+    assert.deepEqual(drops, ['carnivoreHead'], 'and leaves the head of a carnivorous plant');
+    // a plain kill leaves it too
+    const w2 = await world(); const d2 = []; w2.g.items = { spawnLoose: (it) => d2.push(it.kind) };
+    const q = w2.head(0, 0, 0.5); w2.plants.die(q, 'melee', null);
+    assert.deepEqual(d2, ['carnivoreHead']);
+});

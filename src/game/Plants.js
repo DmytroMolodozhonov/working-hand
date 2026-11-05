@@ -299,6 +299,13 @@ export class Plants {
         if (p.kind === 'telewilpin') { this.die(p, 'cold', null); return; } // (brittle: it shatters)
         this._dropHeld(p); p.freezeT = FREEZE.TIME; p.hunt.freeze(); this._sync(p);
     }
+    /** Is there still ground (a solid block, not water) under the plant's foot? Checked twice a second, only where the land is made. */
+    _grounded(p) {
+        const t = this.game.terrain?.data;
+        if (!t?.get || (t.landMade && !t.landMade(Math.round(p.x), Math.round(p.z)))) return true;
+        const top = Math.round(p.y + 0.5), b = t.get(Math.round(p.x), top, Math.round(p.z));
+        return b !== BLOCK.AIR && b !== BLOCK.WATER;
+    }
     /** (host) Let go of whatever the plant holds (it died, froze, was left behind). */
     _dropHeld(p) {
         const h = p.hunt; if (!h) return;
@@ -376,6 +383,7 @@ export class Plants {
             }
         }
         for (const p of was) if (!this.near.includes(p)) this._abandon(p);
+        if (this.auth) for (const p of this.near) if (!p.dead && !this._grounded(p)) this.die(p, 'fall', null); // (nothing hangs in the air: the ground under it is gone)
     }
 
     // ============================================================ telewilpin: thorns
