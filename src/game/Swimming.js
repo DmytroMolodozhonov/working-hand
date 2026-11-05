@@ -147,6 +147,7 @@ export class Swimming {
             M.stroke(ev, { under, look });
             this._strokeFx(ev, w, under);
         }
+        M.fish = false;
         if (g.mermaid?.active) g.mermaid.swim(M, dt); // («Зелье русалки»: the tail drives the body on — Mermaid.js)
         const m = M.step(dt, { under, look });
         if (this.atTop) {
@@ -254,6 +255,7 @@ export class Swimming {
             fx.spark(at, i % 3 ? 0xffffff : 0x9fd8ff, 0.07 + Math.random() * 0.1 * k, _v2.set((Math.random() - 0.5) * 2.5 * k, 1.5 + Math.random() * 2.5 * k, (Math.random() - 0.5) * 2.5 * k), 0.45 + Math.random() * 0.25);
         }
         this._ripple(at, k);
+        this.game.seaSurface?.ring?.(at.x, at.z, k); // (the sea's own rings run out from it — SeaSurface.ring)
     }
 
     /** A ring on the water, running out and fading. */
@@ -378,7 +380,18 @@ export class Swimming {
         if (!this.hudEl) return;
         const show = this.underwater || this.air < AIR_MAX - 0.05;
         this.hudEl.style.display = show ? 'flex' : 'none';
-        if (show) {
+        // a mermaid breathes the water: in place of the bubbles — how long the tail is left (the author 05.11: «вместо пузыриков будет
+        // таймер, сколько можно находиться»)
+        const mer = this.game.potionFx?.has?.('mermaid') ? Math.max(0, this.game.potionFx.left.mermaid || 0) : -1;
+        if (mer >= 0 && this.underwater) {
+            this.hudEl.style.display = 'flex';
+            const key = 'm' + Math.ceil(mer);
+            if (key !== this._lastKey) {
+                this._lastKey = key;
+                const m = Math.floor(mer / 60), sec = Math.floor(mer % 60);
+                this.hudEl.innerHTML = `<span class="air-txt" style="font-weight:700;color:${mer < 60 ? '#ffb0a0' : '#9ff0e6'}">🧜 ${m}:${String(sec).padStart(2, '0')}</span>`;
+            }
+        } else if (show) {
             const n = Math.ceil(this.air / 2); // 10 bubbles
             const key = n + (this.bubble ? 'b' : '');
             if (key !== this._lastKey) {

@@ -3,8 +3,8 @@
  * Each is an animal of Animals.js (types 'shark', 'dolphin', 'glowfin' — every spell, blow, blast, Leviosa, the carcass, the meat, the
  * network and the save already know the animals); this file is how they live under the water. Models — SeaModels.js.
  *
- *   shark    out in the open sea, alone or a pair, cruising at mid depth. A swimmer (a player in the water) within HUNT m — it comes,
- *            circles, and bites (BITE, its jaw opening), then sheers off and comes again; a wounded swimmer draws it from twice as far.
+ *   shark    out in the open sea, alone or a pair, cruising at mid depth. It leaves a swimmer alone — only one who HURT it it comes for:
+ *            circles, and bites (BITE, its jaw opening), then sheers off and comes again (Animals.hit: state 'attack' for 15 s).
  *            Hit — it fights back. Nobody in the water — it never leaves it (a deck, a beach, the air are safe).
  *   dolphin  a pod of 3–6 near the surface, swimming together; now and then one leaps out of the water in an arc (a splash, its clicks);
  *            curious — it comes to a swimmer and swims round them; harmless. Hit — the pod flees.
@@ -33,7 +33,7 @@ export const SEA_LIFE = {
     WANDER: 45, // m round home
     SPEED: { shark: [2.2, 7.5], dolphin: [3, 9], glowfin: [1.2, 8] }, // m/s cruising / at full
     TURN: { shark: 1.0, dolphin: 1.6, glowfin: 1.3 }, // rad/s
-    HUNT: 32, // m: a shark smells a swimmer this far (twice when he is wounded)
+    HUNT: 32, // m: (kept for the tools) how far a shark smelled a swimmer — it hunts no more: only one who hurt it (Animals.hit)
     BITE: 3, BITE_R: 2.8, BITE_EVERY: 1.6,
     CURIOUS: 26, // m: a dolphin comes to a swimmer
     SHY: 14, // m: a glowfin darts off
@@ -201,7 +201,8 @@ export class SeaLife {
         const A = this.A, g = this.game, p = a.group.position;
         let prey = null;
         if (a.state === 'attack' && a.attacker != null) { const q = A._playerPos(a.attacker); if (q) prey = { id: a.attacker, p: q, d: q.distanceTo(p) }; if ((a.stateT -= dt) <= 0) { a.state = 'graze'; a.attacker = null; } }
-        if (!prey) prey = this._nearSwimmer(a, SEA_LIFE.HUNT);
+        // (no hunting of its own: a shark goes for one who hurt it, never a swimmer passing by — the author 05.11: «акулы нападают только
+        //  тогда, когда ты на них нападаешь»; Animals.hit turns it on the attacker)
         a.hunt = !!prey;
         a.biteT = (a.biteT || 0) - dt;
         a.biteK = Math.max(0, (a.biteK || 0) - dt * 3);

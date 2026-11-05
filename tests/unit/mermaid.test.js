@@ -30,7 +30,10 @@ function world() {
 test('the tail: grows for the legs while it lasts, gone after (the legs back); on the land a slow drag', () => {
     const { g, ch } = world();
     g.potionFx.start('mermaid');
+    // (the author 05.11: the change takes ~10 s — the pain, the red, the legs growing into the tail; the tail is there after it)
     g.mermaid.update(1 / 30);
+    assert.ok(!g.mermaid.tail || g.mermaid.tail.root.scale.y < 0.5, 'not at once: the change first');
+    for (let t = 0; t < MERMAID.CHANGE_S + 0.2; t += 1 / 30) g.mermaid.update(1 / 30);
     assert.ok(g.mermaid.tail?.root.visible, 'a tail');
     assert.equal(ch.leftLegPivot.visible, false, 'no legs');
     assert.equal(ch.speedScale, MERMAID.LAND_K, 'on the land: it drags itself');
@@ -40,13 +43,32 @@ test('the tail: grows for the legs while it lasts, gone after (the legs back); o
     assert.equal(ch.leftLegPivot.visible, true, 'the legs back');
 });
 
-test('in the water: the arms raised and waving — up to twice the top speed; the arms down — no tail drive', () => {
+test('in the water: the waves build up speed — the more and the faster, the faster; slow waves ease her down; the arms down — no tail drive', () => {
+    // (the author 05.11: «чем больше он делает движений… тем быстрее ускоряется; зависит от того, сколько и как быстро; остановиться —
+    //  не делает движений; медленно — небольшое замедление»; it used to stop at twice the top speed at once)
     const { g, arms } = world();
     g.potionFx.start('mermaid');
     const M = new SwimMotion();
     arms(true, 1.2);
-    for (let i = 0; i < 300; i++) { g.mermaid.swim(M, 1 / 30); M.step(1 / 30, { under: true, look: 0 }); }
-    assert.ok(M.speed > SWIM.MAX_SPEED * 1.3 && M.speed <= SWIM.MAX_SPEED * MERMAID.TAIL_MAX + 1e-9, `fast: ${M.speed.toFixed(2)}`);
+    const at = [];
+    for (let i = 0; i < 900; i++) { g.mermaid.swim(M, 1 / 30); M.step(1 / 30, { under: true, look: 0 }); if (i === 90 || i === 899) at.push(M.speed); }
+    assert.ok(at[0] > SWIM.MAX_SPEED * 1.2, `the first waves already carry her: ${at[0].toFixed(2)}`);
+    assert.ok(at[1] > at[0] * 1.4 && at[1] <= SWIM.MAX_SPEED * MERMAID.TAIL_TOP + 1e-9, `faster and faster with the rhythm: ${at.map((v) => v.toFixed(1))}`);
+    const fast = M.speed;
+    arms(true, 0.6); // (slower waves)
+    for (let i = 0; i < 60; i++) { g.mermaid.swim(M, 1 / 30); M.step(1 / 30, { under: true, look: 0 }); }
+    assert.ok(M.speed < fast && M.speed > fast * 0.3, `slower waves: eased down, not stopped — ${fast.toFixed(1)} → ${M.speed.toFixed(1)}`);
+    const Q = new SwimMotion();
+    arms(true, 2.4);
+    for (let i = 0; i < 300; i++) { g.mermaid.swim(Q, 1 / 30); Q.step(1 / 30, { under: true, look: 0 }); }
+    const P = new SwimMotion(); g.mermaid.flow = 0;
+    arms(true, 1.2);
+    for (let i = 0; i < 300; i++) { g.mermaid.swim(P, 1 / 30); P.step(1 / 30, { under: true, look: 0 }); }
+    assert.ok(Q.speed > P.speed, 'quicker waves build it up quicker');
+    // looking down she dives (no stroke needed), and she hardly floats up when still
+    const D = new SwimMotion();
+    for (let i = 0; i < 60; i++) { g.mermaid.swim(D, 1 / 30); var m = D.step(1 / 30, { under: true, look: -0.6 }); }
+    assert.ok(m.up < -1, `down where the head looks: ${m.up.toFixed(2)}`);
     const N = new SwimMotion();
     arms(false, 1.2);
     for (let i = 0; i < 300; i++) { g.mermaid.swim(N, 1 / 30); N.step(1 / 30, { under: true, look: 0 }); }

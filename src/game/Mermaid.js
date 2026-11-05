@@ -16,12 +16,22 @@ import { MODEL_KIT as K } from './AnimalModels.js';
 import { finGeo } from './SeaModels.js';
 import { SWIM } from './SwimStroke.js';
 
+const _sp = new THREE.Vector3(), _sv = new THREE.Vector3();
+
 export const MERMAID = {
     LAND_K: 0.18, // × the walking pace on the land (it drags itself)
-    TAIL_MAX: 2, // × the swimmer's top speed with the tail
-    THRUST: 3.2, // m/s² the tail adds while the fish's movement goes on
+    TAIL_MAX: 2, // × the swimmer's top speed with the tail, from the first strokes of it
+    TAIL_TOP: 4, // × the swimmer's top speed: the tail at full rhythm (FLOW 1) — the more and the faster the waves, the faster
+    FLOW_UP: 0.035, // 1/s the rhythm builds while the waves go on (× how fast they are: quick waves build it quicker)
+    FLOW_DOWN: 0.45, // 1/s it falls away when the waves stop (slow ones: it eases off a little at a time)
+    THRUST: 3.2, // m/s² the tail adds while the fish's movement goes on (more at a higher rhythm)
     WAVE: 0.55, // m/s: the raised hands going up and down together at least this fast — the fish's movement
     LEN: 2.25, // m from the hips to the fluke's root (the legs were 1.95)
+    // the change (the author 05.11: «как с крыльями… анимация какое-то время длилась… страдания… минус 1 хп… красное вокруг экрана,
+    // замыливание, а через секунд 10 — хвост»)
+    CHANGE_S: 10, // s from the potion to the tail
+    PAIN: 1, // HP lost to it
+    TAIL_GROW_S: 3, // s: the last of the change — the legs grow together into the tail
 };
 
 let _tailMats = null;
@@ -94,6 +104,7 @@ export class Mermaid {
         this.ph = 0;
         this._hy = null;
         this.wave = 0;
+        this.change = null; // s into the change (≥ 0), −1 done, null: no potion
     }
 
     get active() { return !!this.game.potionFx?.has?.('mermaid'); }
@@ -103,14 +114,89 @@ export class Mermaid {
         const g = this.game, ch = g.character;
         if (!ch) return;
         const on = this.active && !g.dragonForm?.active;
-        if (on && !this.tail) { this.tail = attachTail(ch); g.hud?.setVoice?.('🧜 Вместо ног — хвост! В воде поднимите руки над головой и двигайтесь волной, как рыба', true); }
-        if (!on) { if (this.tail) { this.tail.dispose(); this.tail = null; } return; }
+        if (on && !this.tail && this.change == null) {
+            // drunk just now (its full time left): the change, ~10 s; loaded / come back to an old one: the tail at once
+            const left = g.potionFx?.left?.mermaid || 0, full = 12 * 60;
+            if (left > full - 2) this.change = 0;
+            else { this.tail = attachTail(ch); this.change = -1; }
+        }
+        if (!on) { if (this.tail) { this.tail.dispose(); this.tail = null; } this.change = null; this._pain(-1); return; }
+        if (this.change >= 0) { this._changing(dt); if (this.change >= 0) return; }
         const swimming = !!ch.swimming;
         const sp = swimming ? (g.swim?.motion?.speed || 0) : 0;
         this.ph += dt * (swimming ? 2 + sp * 1.6 : 0.8);
         this.tail.set(true, swimming ? Math.sin(this.ph) * (0.35 + 0.15 * Math.min(1, sp / 4)) : 0.06 * Math.sin(this.ph * 3));
         // on the land: no walking — it drags itself
         if (!swimming && ch.swimY == null) { ch.speedScale = MERMAID.LAND_K; ch.jumpAir = false; }
+    }
+
+    /**
+     * The change (every frame of it): the legs cramp and shake, scales glint on them, the picture swims and the edges of the eyes go red
+     * with pain in waves, −1 HP; in the last seconds the legs grow together into the tail. The hero can still move (no lock: in the water
+     * he might drown — the water's breath is the potion's from the first moment: Swimming).
+     */
+    _changing(dt) {
+        const g = this.game, ch = g.character, M = MERMAID;
+        const t0 = this.change, t = (this.change += dt);
+        const k = Math.min(1, t / M.CHANGE_S);
+        // the words
+        if (t0 === 0) g.hud?.setVoice?.('🧜 Ноги сводит судорогой… кожа горит', true);
+        if (t0 < 4 && t >= 4) g.hud?.setVoice?.('🧜 Ноги покрываются чешуёй — их стягивает вместе…', true);
+        if (t0 < M.CHANGE_S - M.TAIL_GROW_S && t >= M.CHANGE_S - M.TAIL_GROW_S) g.hud?.setVoice?.('🧜 Ноги срастаются в хвост!', true);
+        // the pain: −1 HP when it bites (the Creative's immortal: no harm)
+        if (t0 < 1.2 && t >= 1.2) this._hurt(M.PAIN);
+        // the picture swims (Knockdown's dizziness) and the pain's red at the edges, in waves
+        if (g.knock) { const s = 0.5 + 0.5 * Math.sin(t * 1.7); if (!(g.knock.dizzyLeft > 1.5)) { g.knock.dizzyLeft = g.knock.dizzyDur = 2.5; } g.knock.dizzyS = 0.55 * (0.45 + 0.55 * s) * (1 - 0.6 * Math.max(0, k - 0.85) / 0.15); }
+        this._pain(Math.min(1, t / 1.5) * (0.55 + 0.45 * Math.sin(t * 3.4) ** 2) * (1 - Math.max(0, (t - M.CHANGE_S + 0.8) / 0.8)));
+        // the legs shake; scales glint over them (teal and violet sparks), more and more
+        const legs = [ch.leftLegPivot, ch.rightLegPivot].filter(Boolean);
+        const shake = 0.12 * Math.min(1, t / 2);
+        legs.forEach((l, i) => { l.rotation.z = (i ? -1 : 1) * Math.max(0, k - 0.3) * 0.12 + Math.sin(t * 31 + i * 2) * shake; });
+        const fx = g.fx, p = ch.group.position;
+        if (fx?.spark && Math.random() < dt * (6 + 30 * k)) {
+            const side = Math.random() < 0.5 ? -0.3 : 0.3, y = p.y - 2 + Math.random() * 1.9;
+            const c = Math.cos(ch.group.rotation.y), s = Math.sin(ch.group.rotation.y);
+            fx.spark(_sp.set(p.x + side * c, y, p.z - side * s), Math.random() < 0.6 ? 0x5fe0d0 : 0xa080ff, 0.06 + Math.random() * 0.05, _sv.set((Math.random() - 0.5) * 0.6, 0.3 + Math.random() * 0.5, (Math.random() - 0.5) * 0.6), 0.7);
+        }
+        // the tail: grows over the last seconds, the legs fade into it
+        const grow = (t - (M.CHANGE_S - M.TAIL_GROW_S)) / M.TAIL_GROW_S;
+        if (grow > 0 && !this.tail) this.tail = attachTail(ch);
+        if (this.tail) {
+            const e = Math.min(1, grow);
+            this.tail.root.visible = true;
+            this.tail.root.scale.set(0.55 + 0.45 * e, 0.25 + 0.75 * e * e, 0.55 + 0.45 * e);
+            for (const l of legs) l.visible = e < 0.6;
+        }
+        if (t >= M.CHANGE_S) {
+            this.change = -1;
+            if (this.tail) this.tail.root.scale.set(1, 1, 1);
+            for (const l of legs) l.rotation.z = 0;
+            this._pain(-1);
+            g.hud?.setVoice?.('🧜 Вместо ног — хвост! В воде поднимите руки над головой и двигайтесь волной, как рыба. Под водой дышите', true);
+            g.sound?.playSea?.(p, 'tail', 0.6);
+        }
+    }
+
+    _hurt(n) {
+        const g = this.game, c = g.combat;
+        if (g.isDeadLocal || c?.dead) return;
+        g.hud?.damageFlash?.();
+        if (c?.enabled) { c.hp = Math.max(0, (c.hp ?? 0) - n); c._hudKey = ''; if (c.hp <= 0) c.die(null, 'mermaid'); }
+        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(n, 'mermaid');
+    }
+
+    /** The pain's red at the edges of the eyes (k 0…1; < 0: gone). */
+    _pain(k) {
+        if (typeof document === 'undefined') return;
+        let el = this._painEl;
+        if (!el) {
+            if (k < 0) return;
+            el = this._painEl = document.createElement('div');
+            el.id = 'mermaid-pain';
+            el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:40;opacity:0;transition:opacity 0.12s;background:radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(150,0,10,0.35) 75%, rgba(110,0,0,0.75) 100%);';
+            document.body.appendChild(el);
+        }
+        el.style.opacity = k < 0 ? '0' : String(Math.max(0, Math.min(1, k)));
     }
 
     /** In the water (Swimming._swim calls it): the fish's movement with the arms raised — the tail drives the body on. */
@@ -120,9 +206,19 @@ export class Mermaid {
         const v = ch.handRelVelocity;
         const vy = v ? (Math.abs(v.left?.y || 0) + Math.abs(v.right?.y || 0)) / 2 : 0;
         this.wave += ((up ? vy : 0) - this.wave) * Math.min(1, dt * 3);
-        const max = SWIM.MAX_SPEED * MERMAID.TAIL_MAX;
-        if (up && this.wave > MERMAID.WAVE) M.speed = Math.min(max, M.speed + MERMAID.THRUST * Math.min(2, this.wave / MERMAID.WAVE) * dt);
-        else if (up) M.speed = Math.min(max, M.speed * Math.exp(SWIM.DRAG * 0.6 * dt)); // (streamlined, the arms up: it glides on longer)
+        // the rhythm (the author 05.11: «чем больше он делает туда-сюда движений… тем быстрее он ускоряется; зависит от того, как много он
+        // уже сделал движений и как быстро; хочет остановиться — не делает движений; делает медленно — небольшое замедление»):
+        // it builds while the waves go on (quicker for quick ones) and falls away when they stop or slow down
+        const r = this.wave / MERMAID.WAVE;
+        if (up && r > 1) this.flow = Math.min(1, (this.flow || 0) + MERMAID.FLOW_UP * Math.min(2.5, r) * dt);
+        else this.flow = Math.max(0, (this.flow || 0) - MERMAID.FLOW_DOWN * (up && r > 0.4 ? 0.35 : 1) * dt);
+        const f = this.flow;
+        const top = SWIM.MAX_SPEED * (MERMAID.TAIL_MAX + (MERMAID.TAIL_TOP - MERMAID.TAIL_MAX) * f);
+        // the speed the waves make now: slower waves — a lower speed, eased down to it; none — the water slows her (SwimMotion's drag)
+        const want = up && r > 0.4 ? top * Math.min(1, 0.35 + 0.65 * Math.min(1, (r - 0.4) / 1.2)) : 0;
+        if (want > M.speed) M.speed = Math.min(want, M.speed + MERMAID.THRUST * (1 + 2 * f) * Math.min(2, Math.max(0.5, r)) * dt);
+        else if (want > 0) M.speed = Math.max(want, M.speed * Math.exp(SWIM.DRAG * 0.6 * dt)); // (slower waves: eased down, streamlined)
+        M.fish = true; // (SwimMotion: her way follows the head, she hardly floats up)
         if (up && M.speed > 1) M.sinceStroke = 0;
     }
 }

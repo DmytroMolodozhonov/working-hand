@@ -176,12 +176,17 @@ export class SwimMotion {
         this.sinceStroke += dt;
         this.speed *= Math.exp(-SWIM.DRAG * dt);
         if (this.speed < 0.02) this.speed = 0;
-        const want = under ? Math.max(-SWIM.MAX_PITCH, Math.min(SWIM.MAX_PITCH, look)) : 0;
+        // (a mermaid — Mermaid.swim sets `fish`: her way follows the head at once and more steeply, on top too: looking down she dives
+        //  with the tail, no stroke needed; she hangs in the water, hardly floating up — the author 05.11: «опускал голову, а вниз не
+        //  тянуло… постоянно вверх тянуло»)
+        const fish = !!this.fish;
+        const lk = fish ? look * 1.5 : look;
+        const want = under || (fish && look < SWIM.DIVE_LOOK * 0.6 && this.speed > 0.4) ? Math.max(-SWIM.MAX_PITCH, Math.min(SWIM.MAX_PITCH, lk)) : 0;
         // the way bends towards the look (under water) or slowly levels out (on top: a dive goes on a while)
-        this.pitch += (want - this.pitch) * Math.min(1, dt * (under ? 2.5 : 0.6));
+        this.pitch += (want - this.pitch) * Math.min(1, dt * (fish ? 4.5 : under ? 2.5 : 0.6));
         const forward = this.speed * Math.cos(this.pitch);
         let up = this.speed * Math.sin(this.pitch);
-        if (under) up += SWIM.BUOYANCY;
+        if (under) up += fish ? SWIM.BUOYANCY * 0.12 : SWIM.BUOYANCY;
         else up = Math.min(0, up);
         // the body lies along its way: flat on top while swimming, upright treading water
         const moving = Math.min(1, this.speed / 1.2);

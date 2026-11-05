@@ -1,5 +1,5 @@
 // The sea's creatures (SeaLife.js, SeaModels.js; animals of Animals.js): sharks, dolphins and the magic glowfin — only in the deep sea
-// (never a lake); they keep in the water, never through the bottom; the shark bites a swimmer but never one out of the water; a dolphin
+// (never a lake); they keep in the water, never through the bottom; the shark bites only one who hurt it, never one out of the water; a dolphin
 // is harmless and curious; the glowfin darts off and, killed, drops its tail (the potion of the mermaid); a dead one floats belly up.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -90,12 +90,16 @@ test('they keep in the water: never above the surface (but a dolphin\'s leap), n
     assert.ok(leapt, 'a dolphin leaps now and then');
 });
 
-test('the shark bites a swimmer, never one on the land; a dolphin never bites', () => {
+test('the shark leaves a swimmer alone — it bites only one who hurt it, never one on the land; a dolphin never bites', () => {
+    // (the author 05.11: «акулы нападают только тогда, когда ты на них нападаешь» — it used to hunt any swimmer within 32 m)
     const { g, A } = fakeGame();
     const sh = A._spawn('shark', new THREE.Vector3(30, 6, 0), {});
     sh.home = { x: 30, z: 0 };
     g.character.group.position.set(40, 8, 0); // (in the water)
     step(A, 20);
+    assert.equal(g.bitten, 0, 'a swimmer passing by: left alone');
+    sh.state = 'attack'; sh.attacker = g.localId ?? 'local'; sh.stateT = 15; // (hurt by me: Animals.hit)
+    step(A, 14);
     assert.ok(g.bitten > 0, 'bitten in the water');
     const n = g.bitten;
     g.character.group.position.set(-50, 15, 0); // (on the land)
