@@ -512,7 +512,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     // generation 5: the far land is the new landscape (Landscape.js); the spawn's land as it was
     const land = lush ? createLandscape(seed) : null;
     const fn = (ix, iz) => {
-        fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
+        fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND; fn.river = false;
         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
         // the creative test ground's river: water just past the pedestals, a valley through the hills
         let rcap = Infinity;
@@ -586,6 +586,10 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
             if (rv < width) {
                 const depth = rv < width * 0.5 ? 2 : 1;
                 fn.water = depth;
+                // which way it flows: along the river's line (across the gradient of its noise) — the water's look only (UltraWater)
+                const sAt = land ? (x, z) => rivers(x / 380, z / 380) + 0.16 * rivers(x / 60 + 50, z / 60 - 20) : (x, z) => rivers(x / 230, z / 230) + 0.18 * rivers(x / 45 + 50, z / 45 - 20);
+                const gx = sAt(ix + 2, iz) - sAt(ix - 2, iz), gz = sAt(ix, iz + 2) - sAt(ix, iz - 2), gl = Math.hypot(gx, gz) || 1;
+                fn.river = true; fn.flowX = -gz / gl; fn.flowZ = gx / gl;
                 return -depth;
             }
             // Valley sides rise gently from the banks
@@ -2766,7 +2770,12 @@ export class TerrainData {
                             }
                         } else if (a === WATER && (bRaw === AIR || bRaw === ICE_SHAPE)) {
                             // (the sea's top is drawn by the moving wave surface instead)
-                            if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) { key = (c.sea && c.sea[az * CHUNK + ax] ? SEA_WATER_COL : WATER_COL) + 1; kind = 2; }
+                            if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) {
+                                // (a river's top: its colour carries the way it flows — r, g the direction, b = 1 the mark — UltraWater draws the current)
+                                const fl = d === 1 && !pdef ? this._flowOf(c) : null, fi = (az * CHUNK + ax) * 2;
+                                key = (fl && (fl[fi] || fl[fi + 1]) ? (((fl[fi] >> 4) * 16 + 136) << 16) | (((fl[fi + 1] >> 4) * 16 + 136) << 8) | 1 : (c.sea && c.sea[az * CHUNK + ax] ? SEA_WATER_COL : WATER_COL)) + 1;
+                                kind = 2;
+                            }
                         } else if (b === WATER && (aRaw === AIR || aRaw === ICE_SHAPE)) {
                             const sx = ax + qx, sz = az + qz; // (the sea's water — a crater of «Бум» it poured into — in the sea's colour, not a lake's)
                             key = -((c.sea && sx >= 0 && sz >= 0 && sx < CHUNK && sz < CHUNK && c.sea[sz * CHUNK + sx] ? SEA_WATER_COL : WATER_COL) + 1); kind = 2;
@@ -2811,6 +2820,28 @@ export class TerrainData {
         }
         if (spad) this._shapeFaces(c, out, pad, spad, PX, PXZ, yTop, lowest, x0, z0, sky, PAT);
         return { ground: finishBuffers(out.ground), raised: finishBuffers(out.raised), water: finishBuffers(out.water) };
+    }
+
+    /**
+     * The rivers' flow over the chunk's columns (an Int8Array: x, z × 127 per column; 0 where no river), made once per chunk (the
+     * same recipe on every computer, any thread) — only for the look of the water (UltraWater: the current). null: no river here.
+     */
+    _flowOf(c) {
+        if (c._flow !== undefined) return c._flow;
+        let out = null;
+        const raw = this.rawHeight;
+        if (raw && this.lush && !c.empty) {
+            const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK, A = CHUNK * CHUNK;
+            for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
+                const col = lz * CHUNK + lx, t = c.top[col];
+                if (t >= MAX_LAYER || c.blocks[(t + 1 - MIN_LAYER) * A + col] !== BLOCK.WATER || (c.sea && c.sea[col])) continue;
+                raw(x0 + lx, z0 + lz);
+                if (!raw.river) continue;
+                (out || (out = new Int8Array(A * 2)))[col * 2] = Math.round(raw.flowX * 120);
+                out[col * 2 + 1] = Math.round(raw.flowZ * 120);
+            }
+        }
+        return (c._flow = out);
     }
 
     /**

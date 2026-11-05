@@ -497,7 +497,9 @@ float snowflakeAt(vec2 uv) {
         vec2 wp = n.y > 0.5 ? vVoxPos.xz : vec2(vVoxPos.x + vVoxPos.z, vVoxPos.y * 1.3);
         float m1 = vnoise(wp / 6.0), m2 = vnoise(wp / 1.7 + 9.0), m3 = vnoise(wp / 19.0 - 4.0);
         bool sandy = voxBase.r > voxBase.b * 1.2 && dot(voxBase, vec3(0.299, 0.587, 0.114)) > 0.42;
-        vec3 col = voxBase * (0.84 + 0.24 * m1 + 0.08 * m2) * mix(vec3(0.96, 1.0, 1.04), vec3(1.05, 1.0, 0.92), m3);
+        // (not the block's own tint: each block's colour differs a little and the bottom lay in light and dark squares)
+        vec3 seaBase = sandy ? vec3(0.8, 0.73, 0.55) : vec3(0.47, 0.47, 0.45);
+        vec3 col = mix(seaBase, voxBase, 0.2) * (0.84 + 0.24 * m1 + 0.08 * m2) * mix(vec3(0.96, 1.0, 1.04), vec3(1.05, 1.0, 0.92), m3);
         if (sandy) {
             // ripples the current combs into the sand, bending round the bumps; shells and pebbles here and there
             float rip = sin(dot(vVoxPos.xz, vec2(0.83, 0.56)) * 3.3 + m1 * 6.0 + m3 * 4.0);

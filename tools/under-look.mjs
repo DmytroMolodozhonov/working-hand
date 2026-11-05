@@ -31,6 +31,7 @@ try {
     const at = (x, z, under, yaw, pitch, frames = 12) => page.evaluate(async ([x, z, under, yaw, pitch, frames]) => {
         const g = window.__zns.game;
         g.world.terrain.flushAround?.(x, z);
+        if (!window.__seaAt || Math.hypot(window.__seaAt[0] - x, window.__seaAt[1] - z) > 60) { g.seaSurface?.flush?.(x, z); window.__seaAt = [x, z]; } // (the sea's surface made at once for the new place)
         const hold = () => { g.character.group.position.set(x, -0.6 + 2 - under, z); g.character.verticalVelocity = 0; g.character.group.rotation.y = yaw; if (g.smoothHead) g.smoothHead.pitch = pitch; };
         clearInterval(window.__hold); window.__hold = setInterval(hold, 5); hold();
         const f = g.frameCount; while (g.frameCount < f + frames) await new Promise((r) => setTimeout(r, 20));
@@ -43,15 +44,16 @@ try {
         g.dayPhase = () => best; g.world.setDayPhase(best);
     }, elev);
     await setPhase(0.8);
-    const spots = [0.3, 0.45, 0.6, 0.75].map((k) => [sea.x + Math.cos(0.7) * sea.r0 * k, sea.z + Math.sin(0.7) * sea.r0 * k]);
+    const spots = [0.35, 0.55, 0.75].map((k) => [sea.x + Math.cos(0.7) * sea.r0 * k, sea.z + Math.sin(0.7) * sea.r0 * k]);
     let i = 0;
     for (const [x, z] of spots) {
         i++;
-        console.log(i, JSON.stringify(await at(x, z, 4, 0.4, -0.25, 25)));
+        console.log(i, JSON.stringify(await at(x, z, 3, 0.4, -0.25, 25)));
         await shoot(`${i}a-shallow-down`);
         console.log(JSON.stringify(await at(x, z, 8, 2.0, -0.05, 8)));
         await shoot(`${i}b-along`);
-        await at(x, z, 8, 2.0, 0.9, 8); await shoot(`${i}c-up`);
+        console.log(JSON.stringify(await at(x, z, 10, 4.0, 0, 8)));
+        await shoot(`${i}c-deep`);
     }
     await setPhase(-0.5);
     await at(spots[1][0], spots[1][1], 6, 1.0, -0.2); await shoot('9-night');

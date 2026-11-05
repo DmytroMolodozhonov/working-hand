@@ -415,7 +415,11 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
         // does not fit here; the sea waits the few frames its new one takes — made all at once it froze a frame ~25 ms)
         if (this._job && this.ready && Math.hypot(focus.x - o.x, focus.z - o.y) > TEX * TEXEL / 2 - 200) this.ready = false;
         if (this._job) this._runJob(this.ready ? SLICE : SLICE * 4, this.ready ? 2 : 4);
-        this.mesh.visible = this.ready;
+        // (once made, the surface never vanishes while the next texture is made: hidden, the sky showed through — swimming fast, a
+        //  mermaid's 30 m/s, the sea blinked off and on; the author 05.11: «когда я плыву, у меня под водой мир мигает». The old
+        //  texture a little out of place is not seen; only before the first one is the sea held back)
+        if (this.ready) this._made = true;
+        this.mesh.visible = this.ready || !!this._made;
         const cam = g.camera ? g.camera.getWorldPosition(_v) : focus;
         this.mesh.position.set(Math.round(cam.x / 2) * 2, WATER_LEVEL_Y, Math.round(cam.z / 2) * 2);
     }

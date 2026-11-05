@@ -28,7 +28,7 @@ export const UWL = {
 
 const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const _c = new THREE.Color(), _c2 = new THREE.Color();
-const SHALLOW = new THREE.Color(0x3fb7b4), MID = new THREE.Color(0x1678a6), DEEPC = new THREE.Color(0x06294a), NIGHT = new THREE.Color(0x020c18);
+const SHALLOW = new THREE.Color(0x2b939b), MID = new THREE.Color(0x0f5f86), DEEPC = new THREE.Color(0x05233f), NIGHT = new THREE.Color(0x020c18);
 
 /**
  * The water's colour seen at `depth` m under the surface (`day` 0 night … 1 noon), into `out`; and how far one sees (m).
@@ -170,6 +170,10 @@ export class UnderwaterLight {
         UNDERSEA.t.value = this.t;
         UNDERSEA.k.value = 0.85 * sun;
         UNDERSEA.y.value = WATER_LEVEL_Y + 0.5;
+        // the sky dome: not seen from under the water (the surface's underside is the ceiling, Snell's window in it — SeaSurface)
+        const dome = g.world?.sky?.mesh;
+        if (dome && under && this.depth > 0.4) { if (dome.visible) { dome.visible = false; this._hidSky = true; } }
+        else if (dome && this._hidSky) { dome.visible = true; this._hidSky = false; } // (only what it hid: space and the rest decide the sky themselves)
         const on = this.k > 0.01 && !!this.shafts;
         if (this.shafts) { this.shafts.visible = on && sun > 0.02; this.snow.visible = on; }
         if (!on) return;
