@@ -133,16 +133,15 @@ const rivets = (p, mat, list, r, n, x0, x1, y, z) => { for (let i = 0; i < n; i+
 export function helmetParts(p, code, list, dk = false) {
     const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), ml = mail(dk), lt = strap(), rm = rivetMat(code, dk);
     const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
-    // the skull: ONE smooth round dome (a hemisphere big enough to wrap the box head's corners), a flared rim, a raised comb, a small front peak
-    put(p, DOME(), s, list, 0, 0.14, 0, 1.98, 1.56, 1.98);
-    put(p, geo('torusR', () => new THREE.TorusGeometry(0.5, 0.06, 8, 32)), t, list, 0, 0.14, 0, 1.96, 1.96, 1, Math.PI / 2); // the rim band (a rolled edge)
-    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.98, 0.15, Math.sin(a) * 0.98); }
-    rb(d, 0.12, 0.1, 1.5, 0, 0.9, 0.05); rb(t, 0.07, 0.07, 1.6, 0, 0.96, 0.05); // the comb along the top
-    bx(p, d, list, 0.9, 0.06, 0.28, 0, 0.2, -0.98, -0.25); // a small peak over the face
-    if (code >= 2) bx(p, t, list, 0.05, 0.2, 0.9, 0, 1.0, 0.1, -0.05); // a thin fin
+    // a light open Norman cap: a close round skull (four rounded layers that hug the box head and cover the hair — no brim), a thin brow band, a comb along the top
+    rb(s, 1.4, 0.5, 1.4, 0, 0.36, 0); rb(s, 1.38, 0.2, 1.38, 0, 0.74, 0); rb(s, 1.2, 0.14, 1.2, 0, 0.9, 0); rb(s, 0.86, 0.1, 0.86, 0, 1.0, 0);
+    rb(t, 1.44, 0.07, 1.44, 0, 0.12, 0);
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.73, 0.12, Math.sin(a) * 0.73); }
+    rb(d, 0.1, 0.1, 1.3, 0, 1.0, 0.04); // the comb
+    if (code >= 2) bx(p, t, list, 0.05, 0.18, 0.8, 0, 1.1, 0.06, -0.05); // a thin fin
     // a Norman nasal and brow peaks (the face stays open)
     bx(p, s, list, 0.12, 0.6, 0.07, 0, -0.1, -0.78);
-    for (const sx of [-1, 1]) { bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.1, -0.78, 0, 0, sx * 0.25); rb(s, 0.1, 0.5, 0.56, sx * 0.78, -0.08, 0.14); rivet(p, rm, list, 0.06, sx * 0.84, 0.1, 0.2); }
+    for (const sx of [-1, 1]) { bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.1, -0.78, 0, 0, sx * 0.25); rb(s, 0.1, 0.62, 0.6, sx * 0.74, -0.14, 0.12); rb(t, 0.12, 0.05, 0.62, sx * 0.74, -0.44, 0.12); rivet(p, rm, list, 0.06, sx * 0.8, 0.08, 0.2); }
     // the camail: a mail hood hanging from the helm over the neck and the shoulders
     rb(ml, 1.4, 0.32, 1.38, 0, -0.64, 0.02); rb(ml, 1.56, 0.18, 1.1, 0, -0.84, 0.02);
     for (const sx of [-1, 1]) bx(p, lt, list, 0.07, 0.5, 0.05, sx * 0.66, -0.42, -0.62, 0.15, 0, sx * 0.1);
