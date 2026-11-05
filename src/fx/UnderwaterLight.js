@@ -16,30 +16,32 @@ import { UNDERSEA } from '../world/VoxelShading.js';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 
 export const UWL = {
-    SHAFTS: 26, // sun shafts round the eyes
-    SHAFT_R: 34, // m: they stand within this
+    SHAFTS: 49, // sun shafts round the eyes: one place each of the 7×7 cells round them…
+    SHAFT_CELL: 11, // m: …of this size — each shaft stands at its OWN place in the world (moving on, none jumps: they never blink)
     SHAFT_LEN: 46, // m long (from the surface down)
     SNOW: 900, // specks of marine snow
     SNOW_BOX: 22, // m: the box of them round the eyes
-    CLEAR: 46, // m one sees just under the surface by day…
-    DEEP_SEE: 20, // …and in the depths
-    DEEP: 28, // m: «the depths» (the colour and the haze at their deepest)
+    CLEAR: 75, // m one sees just under the surface by day (clear azure water, as divers see it — the author 05.11)…
+    DEEP_SEE: 40, // …and in the depths
+    DEEP: 45, // m: «the depths» (the colour and the haze at their deepest)
+    MERMAID_SEE: 1.35, // × as far for a mermaid (her eyes are made for the water), and the water brighter for her
 };
 
 const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const _c = new THREE.Color(), _c2 = new THREE.Color();
-const SHALLOW = new THREE.Color(0x2b939b), MID = new THREE.Color(0x0f5f86), DEEPC = new THREE.Color(0x05233f), NIGHT = new THREE.Color(0x020c18);
+const SHALLOW = new THREE.Color(0x3fc6d4), MID = new THREE.Color(0x1f9ccc), DEEPC = new THREE.Color(0x0d5a8e), NIGHT = new THREE.Color(0x020c18);
 
 /**
  * The water's colour seen at `depth` m under the surface (`day` 0 night … 1 noon), into `out`; and how far one sees (m).
  * The red goes first: the shallow water is green-turquoise, deeper blue, the depths dark blue. Pure (tests).
  */
-export function waterTint(depth, day, out = new THREE.Color()) {
+export function waterTint(depth, day, out = new THREE.Color(), mermaid = false) {
     const d = Math.max(0, depth);
     out.copy(SHALLOW).lerp(MID, ss(0, 9, d)).lerp(DEEPC, ss(8, UWL.DEEP, d));
     out.lerp(NIGHT, 1 - Math.max(0, Math.min(1, day)) * 0.92);
     const see = UWL.DEEP_SEE + (UWL.CLEAR - UWL.DEEP_SEE) * (1 - ss(0, UWL.DEEP, d));
-    return { color: out, far: see * (0.55 + 0.45 * Math.max(0, Math.min(1, day))) };
+    if (mermaid) out.lerp(SHALLOW, 0.3).multiplyScalar(1.12);
+    return { color: out, far: see * (0.55 + 0.45 * Math.max(0, Math.min(1, day))) * (mermaid ? UWL.MERMAID_SEE : 1) };
 }
 
 const SHAFT_VS = `
@@ -135,15 +137,16 @@ export class UnderwaterLight {
         this._placeShafts(0, 0);
     }
 
-    /** The shafts scattered round a cell of the eyes (the same whichever way one came: by the cell). */
+    /** The shafts round the cell of the eyes: each cell of the world has its own shaft (or none) at its own place — the same whenever seen. */
     _placeShafts(cx, cz) {
         this._cell = [cx, cz];
-        const S = this._shaftData;
-        for (let i = 0; i < UWL.SHAFTS; i++) {
-            const h = (k) => { const v = Math.sin((cx * 127.1 + cz * 311.7 + i * 74.7 + k * 19.3)) * 43758.5453; return v - Math.floor(v); };
-            const a = h(1) * Math.PI * 2, r = Math.sqrt(h(2)) * UWL.SHAFT_R;
-            S[i * 4] = cx * 16 + Math.cos(a) * r; S[i * 4 + 1] = cz * 16 + Math.sin(a) * r;
-            S[i * 4 + 2] = h(3); S[i * 4 + 3] = 0.6 + h(4) * 2.2;
+        const S = this._shaftData, C = UWL.SHAFT_CELL;
+        let i = 0;
+        for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++, i++) {
+            const gx = cx + dx, gz = cz + dz;
+            const h = (k) => { const v = Math.sin(gx * 127.1 + gz * 311.7 + k * 19.3) * 43758.5453; return v - Math.floor(v); };
+            S[i * 4] = (gx + h(1)) * C; S[i * 4 + 1] = (gz + h(2)) * C;
+            S[i * 4 + 2] = h(3); S[i * 4 + 3] = h(5) < 0.6 ? 0.6 + h(4) * 2.2 : 0; // (some cells: no shaft)
         }
         this.shafts.geometry.attributes.aShaft.needsUpdate = true;
     }
@@ -152,7 +155,7 @@ export class UnderwaterLight {
     update(dt) {
         const g = this.game, sw = g.swim;
         this.t = (this.t + dt) % 3600;
-        const under = !!sw?.underwater;
+        const under = !!(sw?.eyeUnder ?? sw?.underwater); // (the camera's judgement — the same as the haze's: never one on and the other off)
         this.k += ((under ? 1 : 0) - this.k) * Math.min(1, dt * (under ? 10 : 14));
         const cam = g.camera?.position || g.character?.group?.position;
         if (!cam) return;
@@ -172,7 +175,7 @@ export class UnderwaterLight {
         UNDERSEA.y.value = WATER_LEVEL_Y + 0.5;
         // the sky dome: not seen from under the water (the surface's underside is the ceiling, Snell's window in it — SeaSurface)
         const dome = g.world?.sky?.mesh;
-        if (dome && under && this.depth > 0.4) { if (dome.visible) { dome.visible = false; this._hidSky = true; } }
+        if (dome && under) { if (dome.visible) { dome.visible = false; this._hidSky = true; } }
         else if (dome && this._hidSky) { dome.visible = true; this._hidSky = false; } // (only what it hid: space and the rest decide the sky themselves)
         // (…and past the surface's edge, far off, the background is the water itself, not the white of an empty sky)
         const sc = g.scene;
@@ -185,7 +188,7 @@ export class UnderwaterLight {
         if (this.shafts) { this.shafts.visible = on && sun > 0.02; this.snow.visible = on; }
         if (!on) return;
         // the shafts: the sun refracted into the water (steeper: n = 1.33), from the surface over the eyes down
-        const cx = Math.floor(cam.x / 16), cz = Math.floor(cam.z / 16);
+        const cx = Math.floor(cam.x / UWL.SHAFT_CELL), cz = Math.floor(cam.z / UWL.SHAFT_CELL);
         if (!this._cell || Math.abs(cx - this._cell[0]) > 0 || Math.abs(cz - this._cell[1]) > 0) this._placeShafts(cx, cz);
         const U = this.shaftU;
         U.uTime.value = this.t;

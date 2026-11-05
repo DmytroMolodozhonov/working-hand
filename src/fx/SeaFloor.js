@@ -25,7 +25,7 @@ import { waterAt } from '../game/CreatureSwim.js';
 import { ReefFish } from './ReefFish.js';
 import { SeaCritters } from './SeaCritters.js';
 
-export const FLOOR = { R: 56, CELL: 8, PER_CELL: 12, REEF_CELL: 26, BUDGET: 1.2, CAP: { kelp: 600, grass: 2600, staghorn: 700, fan: 420, brain: 420, anemone: 420, lily: 200, table: 300, tube: 340, soft: 420, urchin: 320, star: 220, glowcoral: 520, glowfan: 260, glowbrain: 220, crystal: 300 } };
+export const FLOOR = { R: 76, CELL: 8, PER_CELL: 12, REEF_CELL: 26, BUDGET: 1.2, CAP: { kelp: 600, grass: 2600, staghorn: 700, fan: 420, brain: 420, anemone: 420, lily: 200, table: 300, tube: 340, soft: 420, urchin: 320, star: 220, glowcoral: 520, glowfan: 260, glowbrain: 220, crystal: 300 } };
 /** The kinds that shine (their own light: brighter at night and in the dark depths). */
 export const GLOW_KINDS = new Set(['anemone', 'lily', 'glowcoral', 'glowfan', 'glowbrain', 'crystal']);
 

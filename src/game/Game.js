@@ -3726,6 +3726,9 @@ export class Game {
 
     /** The scene to the screen: the usual way, or with the «Ультра качество» picture. */
     _draw() {
+        // (the water's haze last of all, right before the picture: the day's colour (setDayPhase, every 15th frame), the storm, the cave
+        //  set the fog after it and the land's haze flashed through the water four times a second — the author 05.11: «сильно мигает»)
+        this.swim?.applyFog?.();
         if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera);
         this.seeFx?.render(); // («Visible Godi»: the cloud over the picture — nothing when the spell is off)
     }
@@ -4346,6 +4349,7 @@ export class Game {
         if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost);
         this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
+        if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         this.underwaterLight?.update(dt); // (the depth of the eyes, the shafts, the caustics — before the haze takes its colour)
         this.swim.applyFog(); // (under the water: murky and blue)
         this.world.terrain?.data?.settling?.step(SETTLE_MS); // (what the last changes left too weak gives way: Structure.js)
@@ -4354,7 +4358,6 @@ export class Game {
         this.circleAttack?.update(dt);
         this.inspirius?.update(dt);
         this.boom?.update(dt);
-        if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(focus, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
         this.seaSurface?.update(dt, focus);
         this.space?.afterWorld(dt); // (the sky, the light and the air of space / another planet; the breathing; the Sun's heat)

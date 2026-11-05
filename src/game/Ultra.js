@@ -109,7 +109,7 @@ export class Ultra {
         if (p) ULTRA.player.value.set(p.x, p.y - 0.3, p.z);
         // the picture
         if (this.post) {
-            const L = this.post.look, cave = w?.cave || 0, ind = w?.indoor || 0, under = !!g.swim?.underwater;
+            const L = this.post.look, cave = w?.cave || 0, ind = w?.indoor || 0, under = !!(g.swim?.eyeUnder ?? g.swim?.underwater);
             const sunUp = sky ? ss(-0.03, 0.1, sky.uSunDir.value.y) : 1;
             L.night = night;
             L.wet = ULTRA.wet.value;

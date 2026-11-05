@@ -302,7 +302,7 @@ export class Swimming {
             // the water's own colour by the depth of the eyes (the red goes first, the deep is blue and dark — UnderwaterLight.waterTint)
             const L = this.game.underwaterLight;
             const day = L?.day ?? Math.min(1, 0.15 + 2.2 * (0.299 * this._fogSaved.r + 0.587 * this._fogSaved.g + 0.114 * this._fogSaved.b));
-            const t = waterTint(L?.depth ?? 2, day, _tint);
+            const t = waterTint(L?.depth ?? 2, day, _tint, !!this.game.potionFx?.has?.('mermaid'));
             fog.color.copy(t.color);
             this._fogSet = fog.color.getHex();
             fog.near = 0.5;
@@ -407,7 +407,7 @@ export class Swimming {
         // the blue haze is about where the CAMERA is: a wave passing over it is under water, a trough over it is air
         // (judged at the body, the view and the haze disagreed when the sea's waves rose and fell around the head)
         const eyeUnder = this.eyeUnder = this._cameraUnderwater();
-        const op = eyeUnder ? (this.bubble ? '0.22' : '0.38') : '0';
+        const op = eyeUnder ? (this.bubble || this.game.potionFx?.has?.('mermaid') ? '0.12' : '0.24') : '0'; // (clear water: a light vignette; a mermaid's eyes — hardly any)
         if (op !== this._op) { this._op = op; this.overlay.style.opacity = op; } // (a style written only when it changes)
     }
 
