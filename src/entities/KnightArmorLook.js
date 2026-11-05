@@ -86,6 +86,16 @@ const DOME = () => geo('dome', () => new THREE.SphereGeometry(0.5, 18, 10, 0, Ma
 const BALL = () => geo('ball', () => new THREE.SphereGeometry(0.5, 8, 6));
 const SPIKE = () => geo('spike', () => new THREE.ConeGeometry(0.5, 1, 6));
 const RING = () => geo('ring', () => new THREE.TorusGeometry(0.5, 0.04, 6, 24));
+/** A rounded-corner prism (a rounded square in plan, height 1 along y, 1 × 1): armour must wrap the hero's BOXY limbs — round tubes left the box corners poking out. */
+const RBOX = () => geo('rbox', () => {
+    const r = 0.2, w = 0.47, sh = new THREE.Shape();
+    sh.moveTo(-w + r, -w); sh.lineTo(w - r, -w); sh.quadraticCurveTo(w, -w, w, -w + r); sh.lineTo(w, w - r); sh.quadraticCurveTo(w, w, w - r, w);
+    sh.lineTo(-w + r, w); sh.quadraticCurveTo(-w, w, -w, w - r); sh.lineTo(-w, -w + r); sh.quadraticCurveTo(-w, -w, -w + r, -w);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.94, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 2, curveSegments: 5 });
+    g.rotateX(-Math.PI / 2); g.translate(0, -0.47, 0);
+    g.computeVertexNormals();
+    return g;
+});
 const DISK = () => geo('disk', () => new THREE.CylinderGeometry(0.5, 0.5, 1, 14));
 
 function put(parent, geometry, material, list, x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) {
@@ -102,109 +112,85 @@ const rivets = (p, mat, list, r, n, x0, x1, y, z) => { for (let i = 0; i < n; i+
 
 // ------------------------------------------------------------------ the helmet (round the head box 1.2, its middle at 0)
 export function helmetParts(p, code, list, dk = false) {
-    const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), ml = mail(dk), lt = strap();
-    // the skull: a dome over the crown (a little flattened), a brow band all round, a raised rim above the face
-    put(p, DOME(), s, list, 0, 0.28, 0, 1.52, 1.12, 1.52);
-    put(p, CYL(), s, list, 0, 0.26, 0, 1.52, 0.4, 1.52);
-    put(p, geo('torus1', () => new THREE.TorusGeometry(0.5, 0.05, 8, 28)), t, list, 0, 0.1, 0, 1.5, 1.5, 1.5, Math.PI / 2); // the brow band
-    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; rivet(p, rivetMat(code, dk), list, 0.05, Math.cos(a) * 0.76, 0.1, Math.sin(a) * 0.76); }
-    // a comb along the top (magic: a blade-like crest; plain: a low ridge) and a seam
-    bx(p, d, list, 0.08, 0.1, 1.2, 0, 0.84, 0);
-    if (code >= 2) bx(p, t, list, 0.06, 0.34, 0.9, 0, 1.0, 0.08, -0.05);
-    // the nasal bar (the face stays open) and the brow's two small peaks
-    bx(p, s, list, 0.12, 0.62, 0.07, 0, -0.1, -0.78);
-    for (const sx of [-1, 1]) bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.09, -0.78, 0, 0, sx * 0.25);
-    // cheek guards: hinged plates with a rolled edge and a rivet at the hinge
+    const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), ml = mail(dk), lt = strap(), rm = rivetMat(code, dk);
+    const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
+    // the skull: stepped rounded layers (a dome that wraps a box head), a brow band with rivets all round
+    rb(s, 1.46, 0.5, 1.46, 0, 0.3, 0); rb(s, 1.36, 0.3, 1.36, 0, 0.68, 0); rb(s, 1.04, 0.2, 1.04, 0, 0.9, 0); rb(s, 0.66, 0.12, 0.66, 0, 1.03, 0);
+    rb(t, 1.5, 0.08, 1.5, 0, 0.08, 0);
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.74, 0.08, Math.sin(a) * 0.74); }
+    // a comb along the top (magic: a tall blade-like crest) with a seam
+    bx(p, d, list, 0.08, 0.1, 1.2, 0, 1.1, 0); if (code >= 2) bx(p, t, list, 0.06, 0.3, 0.9, 0, 1.22, 0.06, -0.06);
+    // the nasal bar (the face stays open), brow peaks, hinged cheek guards with rivets
+    bx(p, s, list, 0.12, 0.6, 0.07, 0, -0.1, -0.78);
     for (const sx of [-1, 1]) {
-        bx(p, s, list, 0.1, 0.78, 0.9, sx * 0.74, -0.18, -0.06, 0, 0, sx * 0.07);
-        bx(p, d, list, 0.12, 0.1, 0.92, sx * 0.75, -0.55, -0.06);
-        rivet(p, rivetMat(code, dk), list, 0.07, sx * 0.8, 0.12, 0.2); rivet(p, rivetMat(code, dk), list, 0.05, sx * 0.8, -0.2, 0.02);
+        bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.1, -0.78, 0, 0, sx * 0.25);
+        bx(p, s, list, 0.1, 0.78, 0.92, sx * 0.76, -0.2, -0.06); bx(p, d, list, 0.12, 0.1, 0.94, sx * 0.77, -0.56, -0.06);
+        rivet(p, rm, list, 0.06, sx * 0.82, 0.1, 0.2); rivet(p, rm, list, 0.05, sx * 0.82, -0.2, 0.02);
     }
-    // the neck: three overlapping lames at the back and a mail aventail under them
-    for (let i = 0; i < 3; i++) bx(p, i % 2 ? d : s, list, 1.36 - i * 0.04, 0.22, 0.12, 0, -0.1 - i * 0.2, 0.7 - i * 0.02);
-    put(p, CYL(), ml, list, 0, -0.62, 0.02, 1.34, 0.28, 1.34);
-    for (const sx of [-1, 1]) put(p, CYL(), ml, list, sx * 0.0, -0.78, 0, 1.2, 0.18, 1.2);
-    // leather chin strap with a buckle
-    for (const sx of [-1, 1]) bx(p, lt, list, 0.07, 0.5, 0.05, sx * 0.62, -0.4, -0.62, 0.15, 0, sx * 0.1);
-    bx(p, t, list, 0.14, 0.1, 0.05, 0, -0.55, -0.6).visible = false;
-    if (code === 3) { // named: a plume of red horsehair on a socket, a gold rim line
-        put(p, DISK(), t, list, 0, 0.9, 0.05, 0.22, 0.12, 0.22);
-        for (let i = 0; i < 6; i++) put(p, SPIKE(), mk('plume', () => new THREE.MeshLambertMaterial({ color: 0xb0202a, emissive: 0x300004 })), list, 0, 1.15 - i * 0.04, 0.15 + i * 0.12, 0.22, 0.6 - i * 0.05, 0.14, 0.5 + i * 0.1);
+    // the neck: lames at the back and a mail aventail under them
+    for (let i = 0; i < 3; i++) bx(p, i % 2 ? d : s, list, 1.4 - i * 0.04, 0.2, 0.12, 0, -0.08 - i * 0.18, 0.72 - i * 0.02);
+    rb(ml, 1.34, 0.3, 1.34, 0, -0.66, 0.02);
+    for (const sx of [-1, 1]) bx(p, lt, list, 0.07, 0.5, 0.05, sx * 0.64, -0.42, -0.6, 0.15, 0, sx * 0.1);
+    if (code === 3) { // named: a plume of red horsehair on a gold socket
+        put(p, DISK(), t, list, 0, 1.12, 0.05, 0.24, 0.12, 0.24);
+        for (let i = 0; i < 6; i++) put(p, SPIKE(), mk('plume', () => new THREE.MeshLambertMaterial({ color: 0xb0202a, emissive: 0x300004 })), list, 0, 1.3 - i * 0.03, 0.12 + i * 0.12, 0.22, 0.6 - i * 0.05, 0.14, 0.5 + i * 0.1);
     }
 }
 
 // ------------------------------------------------------------------ the breastplate (torso space: body 1.2 × 1.5 × 0.8, y 0 at its middle, the front −z)
 export function chestParts(ch, p, code, list, dk = false) {
     const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), lt = strap(), ml = mail(dk), rm = rivetMat(code, dk);
-    // the cuirass: front and back shells (rounded), a ridge down the front, a rolled neck edge
-    put(p, FRONT(), s, list, 0, 0.12, 0, 1.46, 1.1, 1.0);
-    put(p, BACK(), s, list, 0, 0.12, 0, 1.44, 1.1, 0.96);
-    bx(p, t, list, 0.07, 1.0, 0.07, 0, 0.14, -0.51);
-    put(p, geo('torusC', () => new THREE.TorusGeometry(0.5, 0.045, 6, 24)), t, list, 0, 0.68, 0, 1.0, 0.62, 1, Math.PI / 2);
-    for (const sx of [-1, 1]) put(p, geo('ball2', () => new THREE.SphereGeometry(0.5, 8, 6)), s, list, sx * 0.3, 0.3, -0.5, 0.5, 0.42, 0.14); // the chest swells
-    // the waist: lames stacked, each a little wider, with a rivet at each side
-    for (let i = 0; i < 4; i++) {
-        const y = -0.5 - i * 0.14, w = 1.36 + i * 0.03;
-        put(p, FRONT(), i % 2 ? d : s, list, 0, y, 0, w, 0.18, 0.92 + i * 0.01); put(p, BACK(), i % 2 ? d : s, list, 0, y, 0, w, 0.18, 0.9);
-        for (const sx of [-1, 1]) rivet(p, rm, list, 0.05, sx * (w / 2 - 0.02), y, 0);
-    }
-    // the belt with a buckle, a dagger loop, and leather side straps joining the front and back
-    bx(p, lt, list, 1.4, 0.16, 0.9, 0, -0.42, 0); bx(p, t, list, 0.26, 0.2, 0.06, 0, -0.42, -0.47); bx(p, d, list, 0.12, 0.12, 0.07, 0, -0.42, -0.49);
-    for (const sx of [-1, 1]) { bx(p, lt, list, 0.08, 1.0, 0.82, sx * 0.62, 0.1, 0); bx(p, t, list, 0.14, 0.1, 0.1, sx * 0.62, 0.34, -0.4); bx(p, t, list, 0.14, 0.1, 0.1, sx * 0.62, -0.1, -0.4); }
-    // the gorget: a ring of lames round the neck with mail under it
-    put(p, CYL(), ml, list, 0, 0.78, 0, 0.9, 0.2, 0.7);
-    for (let i = 0; i < 2; i++) put(p, CYL(), i ? d : s, list, 0, 0.74 + i * 0.1, 0, 0.98 - i * 0.14, 0.12, 0.78 - i * 0.1);
-    // the pauldrons: a dome over each shoulder, lames below it, a rim of rivets
+    const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
+    // the cuirass: a rounded shell round the whole torso, a ridge down the front, a rolled neck edge
+    rb(s, 1.4, 1.0, 0.98, 0, 0.18, 0);
+    bx(p, t, list, 0.07, 0.9, 0.07, 0, 0.2, -0.5);
+    rb(t, 1.2, 0.07, 0.8, 0, 0.7, 0);
+    // the waist: lames stacked, each a little wider, rivets at the sides
+    for (let i = 0; i < 4; i++) { const y = -0.42 - i * 0.14, w = 1.4 + i * 0.03; rb(i % 2 ? d : s, w, 0.17, 0.96 + i * 0.02, 0, y, 0); for (const sx of [-1, 1]) rivet(p, rm, list, 0.05, sx * (w / 2), y, 0); }
+    // the belt with a buckle and leather side straps
+    bx(p, lt, list, 1.46, 0.14, 0.96, 0, -0.3, 0); bx(p, t, list, 0.26, 0.18, 0.06, 0, -0.3, -0.5); bx(p, d, list, 0.12, 0.1, 0.07, 0, -0.3, -0.52);
+    for (const sx of [-1, 1]) { bx(p, lt, list, 0.07, 0.95, 0.9, sx * 0.72, 0.2, 0); bx(p, t, list, 0.12, 0.08, 0.1, sx * 0.72, 0.5, -0.46); bx(p, t, list, 0.12, 0.08, 0.1, sx * 0.72, 0.0, -0.46); }
+    // the gorget: mail under two rounded lames
+    rb(ml, 0.92, 0.2, 0.74, 0, 0.78, 0); rb(s, 1.0, 0.12, 0.8, 0, 0.8, 0); rb(d, 0.86, 0.12, 0.7, 0, 0.9, 0);
+    // the pauldrons: a dome over each shoulder, three lames below it, a rim of rivets
     for (const sx of [-1, 1]) {
-        const x = sx * 0.78;
-        put(p, DOME(), s, list, x, 0.66, 0, 0.74, 0.52, 0.8, 0, 0, sx * 0.25);
-        put(p, geo('torusP', () => new THREE.TorusGeometry(0.5, 0.045, 6, 22)), t, list, x, 0.64, 0, 0.74, 0.8, 1, Math.PI / 2, 0, sx * 0.25);
-        for (let i = 0; i < 3; i++) put(p, FRONT(), i % 2 ? d : s, list, x + sx * (0.04 + i * 0.02), 0.5 - i * 0.14, 0, 0.62 - i * 0.02, 0.16, 0.82, 0, 0, sx * 0.25).visible = false;
-        for (let i = 0; i < 3; i++) bx(p, i % 2 ? d : s, list, 0.62 - i * 0.03, 0.17, 0.82, x + sx * (0.06 + i * 0.03), 0.48 - i * 0.14, 0, 0, 0, sx * 0.25);
-        for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; rivet(p, rm, list, 0.04, x + Math.cos(a) * 0.38, 0.64, Math.sin(a) * 0.4); }
+        const x = sx * 0.82;
+        put(p, DOME(), s, list, x, 0.62, 0, 0.8, 0.5, 0.84, 0, 0, sx * 0.2);
+        rb(t, 0.8, 0.06, 0.84, x, 0.62, 0, 0, 0, sx * 0.2);
+        for (let i = 0; i < 3; i++) rb(i % 2 ? d : s, 0.7 - i * 0.02, 0.15, 0.86, x + sx * (0.04 + i * 0.03), 0.44 - i * 0.13, 0, 0, 0, sx * 0.2);
+        for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; rivet(p, rm, list, 0.04, x + Math.cos(a) * 0.36, 0.64, Math.sin(a) * 0.38); }
     }
-    // the arms: a rerebrace on the upper arm, the couter (elbow cup with a spike), the vambrace on the forearm — all with edge bands
+    // the arms: a rerebrace on the upper arm, the couter (elbow cup with a spike), the vambrace on the forearm — rounded sleeves with edge bands
     const UP = ch.BONE_LENGTH_UPPER || 1, LOW = ch.BONE_LENGTH_LOWER || 1;
     for (const [a, e] of [[ch.leftArmAnchor, ch.leftElbowAnchor], [ch.rightArmAnchor, ch.rightElbowAnchor]]) {
-        if (a) {
-            put(a, CYL(), s, list, 0, 0, UP * 0.42, 0.66, UP * 0.62, 0.66, Math.PI / 2);
-            put(a, geo('torusA', () => new THREE.TorusGeometry(0.5, 0.04, 6, 18)), t, list, 0, 0, UP * 0.12, 0.64, 0.64, 1);
-            put(a, geo('torusA', () => new THREE.TorusGeometry(0.5, 0.04, 6, 18)), t, list, 0, 0, UP * 0.74, 0.64, 0.64, 1);
-        }
+        if (a) { put(a, RBOX(), s, list, 0, 0, UP * 0.42, 0.58, UP * 0.62, 0.58, Math.PI / 2); put(a, RBOX(), t, list, 0, 0, UP * 0.1, 0.6, 0.05, 0.6, Math.PI / 2); put(a, RBOX(), t, list, 0, 0, UP * 0.74, 0.6, 0.05, 0.6, Math.PI / 2); }
         if (e) {
-            put(e, DOME(), s, list, 0, 0, 0, 0.56, 0.5, 0.56, Math.PI / 2); put(e, SPIKE(), t, list, 0, 0.3, 0, 0.1, 0.26, 0.1);
-            put(e, TAPER(), s, list, 0, 0, LOW * 0.5, 0.58, LOW * 0.66, 0.58, Math.PI / 2);
-            put(e, geo('torusA', () => new THREE.TorusGeometry(0.5, 0.04, 6, 18)), t, list, 0, 0, LOW * 0.86, 0.5, 0.5, 1);
+            put(e, DOME(), s, list, 0, 0.06, 0, 0.56, 0.5, 0.56, Math.PI / 2); put(e, SPIKE(), t, list, 0, 0.34, 0, 0.1, 0.26, 0.1);
+            put(e, RBOX(), s, list, 0, 0, LOW * 0.5, 0.5, LOW * 0.66, 0.5, Math.PI / 2); put(e, RBOX(), t, list, 0, 0, LOW * 0.86, 0.54, 0.05, 0.54, Math.PI / 2);
             bx(e, d, list, 0.1, 0.06, LOW * 0.5, 0, 0.27, LOW * 0.45);
         }
     }
-    if (code === 3) { // named: an embossed crest on the chest and a gold band at the neck
-        put(p, geo('torusC', () => new THREE.TorusGeometry(0.5, 0.045, 6, 24)), t, list, 0, 0.3, -0.52, 0.34, 0.34, 1);
-        put(p, SPIKE(), t, list, 0, 0.3, -0.54, 0.16, 0.34, 0.04, Math.PI);
-    }
-    if (code >= 2) for (const sx of [-1, 1]) for (const y of [0.0, -0.18]) bx(p, t, list, 0.05, 0.1, 0.03, sx * 0.34, y, -0.5, 0, 0, 0.4 * sx); // glowing runes on the plate
+    if (code === 3) { put(p, SPIKE(), t, list, 0, 0.32, -0.54, 0.2, 0.36, 0.04, Math.PI); bx(p, t, list, 0.3, 0.05, 0.04, 0, 0.42, -0.53); } // named: an embossed crest on the chest
+    if (code >= 2) for (const sx of [-1, 1]) for (const y of [0.0, -0.16]) bx(p, t, list, 0.05, 0.1, 0.03, sx * 0.34, y, -0.5, 0, 0, 0.4 * sx); // glowing runes
 }
 
 // ------------------------------------------------------------------ the greaves (a leg pivot: the leg 0.5 thick hangs down to −1.95)
 export function legParts(p, code, list, dk = false) {
     const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), lt = strap(), rm = rivetMat(code, dk);
-    // the cuisse: a tapering shell on the thigh, with a rolled top and a hanging tasset from the belt
-    put(p, TAPER(), s, list, 0, -0.5, 0, 0.7, 0.9, 0.7);
-    put(p, geo('torusL', () => new THREE.TorusGeometry(0.5, 0.045, 6, 20)), t, list, 0, -0.06, 0, 0.62, 0.62, 1, Math.PI / 2);
-    bx(p, d, list, 0.06, 0.8, 0.06, 0, -0.5, -0.34);
-    // the poleyn: a cup over the knee with a fan plate on each side and a rivet
-    put(p, DOME(), s, list, 0, -1.02, -0.1, 0.66, 0.52, 0.62, -Math.PI / 2 + 0.2);
-    for (const sx of [-1, 1]) { put(p, DOME(), d, list, sx * 0.3, -1.02, 0, 0.34, 0.3, 0.36, 0, 0, -sx * Math.PI / 2); rivet(p, rm, list, 0.05, sx * 0.32, -1.02, 0.0); }
-    bx(p, t, list, 0.1, 0.06, 0.1, 0, -1.02, -0.4);
-    // the greave: a plate on the shin with a ridge, edge bands, a strap at the calf
-    put(p, TAPER(), s, list, 0, -1.46, 0, 0.6, 0.86, 0.6);
-    bx(p, t, list, 0.06, 0.8, 0.07, 0, -1.46, -0.31);
-    put(p, geo('torusL', () => new THREE.TorusGeometry(0.5, 0.04, 6, 18)), t, list, 0, -1.04, 0, 0.58, 0.58, 1, Math.PI / 2);
-    for (const y of [-1.3, -1.62]) bx(p, lt, list, 0.62, 0.08, 0.62, 0, y, 0.0);
-    bx(p, t, list, 0.1, 0.1, 0.05, 0, -1.3, -0.33);
+    const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
+    // the cuisse: a rounded shell on the thigh with a rolled top
+    rb(s, 0.66, 0.9, 0.66, 0, -0.52, 0); rb(t, 0.68, 0.06, 0.68, 0, -0.1, 0); bx(p, d, list, 0.06, 0.8, 0.06, 0, -0.52, -0.34);
+    // the poleyn: a cup over the knee with a fan plate each side and a rivet
+    put(p, DOME(), s, list, 0, -1.04, -0.1, 0.62, 0.5, 0.6, -Math.PI / 2 + 0.2);
+    for (const sx of [-1, 1]) { put(p, DOME(), d, list, sx * 0.31, -1.04, 0, 0.32, 0.28, 0.34, 0, 0, -sx * Math.PI / 2); rivet(p, rm, list, 0.05, sx * 0.34, -1.04, 0); }
+    bx(p, t, list, 0.1, 0.06, 0.1, 0, -1.04, -0.38);
+    // the greave: a shell on the shin with a ridge, edge bands, straps at the calf
+    rb(s, 0.6, 0.76, 0.6, 0, -1.5, 0); rb(t, 0.62, 0.05, 0.62, 0, -1.12, 0); bx(p, t, list, 0.06, 0.7, 0.07, 0, -1.5, -0.31);
+    for (const y of [-1.34, -1.66]) bx(p, lt, list, 0.64, 0.08, 0.64, 0, y, 0);
+    bx(p, t, list, 0.1, 0.1, 0.05, 0, -1.34, -0.33);
     // the sabaton: segmented lames over the foot and a pointed toe
-    for (let i = 0; i < 3; i++) bx(p, i % 2 ? d : s, list, 0.56 - i * 0.02, 0.1, 0.22, 0, -1.86 + i * 0.04, -0.16 - i * 0.2, 0.15 * i);
-    bx(p, s, list, 0.5, 0.18, 0.26, 0, -1.84, 0.08); put(p, SPIKE(), s, list, 0, -1.88, -0.78, 0.28, 0.3, 0.28, -Math.PI / 2 - 0.2);
-    bx(p, d, list, 0.52, 0.06, 0.78, 0, -1.94, -0.12);
-    if (code >= 2) bx(p, t, list, 0.04, 0.5, 0.03, 0, -1.46, -0.34);
+    for (let i = 0; i < 3; i++) bx(p, i % 2 ? d : s, list, 0.58 - i * 0.02, 0.1, 0.22, 0, -1.86 + i * 0.04, -0.16 - i * 0.2, 0.15 * i);
+    bx(p, s, list, 0.52, 0.18, 0.26, 0, -1.84, 0.08); put(p, SPIKE(), s, list, 0, -1.88, -0.78, 0.28, 0.3, 0.28, -Math.PI / 2 - 0.2);
+    bx(p, d, list, 0.54, 0.06, 0.78, 0, -1.94, -0.12);
+    if (code >= 2) bx(p, t, list, 0.04, 0.5, 0.03, 0, -1.5, -0.34);
 }

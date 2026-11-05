@@ -33,7 +33,6 @@ try {
             const scene = new THREE.Scene(); scene.background = new THREE.Color(0x2e3340);
             scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x554433, 1.0));
             const sun = new THREE.DirectionalLight(0xfff0d8, 1.3); sun.position.set(-5, 9, 10); scene.add(sun);
-            const fill = new THREE.DirectionalLight(0x9ab8ff, 0.7); fill.position.set(7, 3, 6); scene.add(fill);
             const rim = new THREE.DirectionalLight(0x8ab0ff, 0.4); rim.position.set(6, 3, -6); scene.add(rim);
             const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 30), new THREE.MeshLambertMaterial({ color: 0x3a3a44 })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
             const look = { ...A.defaultLook(), top: 0, topColor: 0x5a5a66, bottom: 3, bottomColor: 0x2a2a30, hair: 0, hairColor: 0x4a3728, shoes: 1, shoesColor: 0x3a2412, face: 4 };
