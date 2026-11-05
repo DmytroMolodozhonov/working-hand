@@ -16,7 +16,7 @@
  * model built a little a frame (ShipModel lazy), put away beyond FAR m (its chests and boxes with it); the temple's geometry is one shared.
  */
 import * as THREE from 'three';
-import { SUNKEN, sunkenSitesNear, siteFits } from './SunkenSites.js';
+import { SUNKEN, sunkenSitesNear, fitSite } from './SunkenSites.js';
 import { buildLayout, keelY, hullHalfWidth } from './ShipLayout.js';
 import { ShipModel } from '../entities/ShipModel.js';
 import { ShipPose, ShipCollider } from './ShipCollision.js';
@@ -68,11 +68,11 @@ export class SunkenWorld {
         if (s) this._try(s);
     }
 
-    _try(site) {
-        let pending = false;
-        const fit = siteFits(site, (x, z) => { const w = this._seaAt(x, z); if (w === undefined) pending = true; return w || null; });
-        if (pending) return; // (its land not made yet: tried again next second)
-        if (!fit) { this.bad.set(site.id, { x: site.x, z: site.z }); return; }
+    _try(site0) {
+        const got = fitSite(site0, (x, z) => this._seaAt(x, z)); // (near its point, turned: the first spot flat enough — SunkenSites.fitSite)
+        if (got === undefined) return; // (its land not made yet: tried again next second)
+        if (!got) { this.bad.set(site0.id, { x: site0.x, z: site0.z }); return; }
+        const { site, fit } = got;
         if (site.kind === 'temple') this._raiseTemple(site, fit); else this._raiseWreck(site, fit);
     }
 

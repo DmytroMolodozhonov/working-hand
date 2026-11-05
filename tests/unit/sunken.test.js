@@ -92,3 +92,17 @@ test('raised near the player: a wreck (solid, her chests in her) and the temple 
     assert.ok(g._openedChests.has(T.chests[0].id));
     assert.equal(g.chests.length, 0);
 });
+
+test('a wreck looks for a flat spot near its point (the reefs and canyons of the gen-24 seabed — the author: «никак не могу найти»)', async () => {
+    const { fitSite, siteVariants } = await import('../../src/game/SunkenSites.js');
+    let s = null;
+    for (let x = 0; !s; x++) { const t = sunkenSiteAt(x, 3, 777); if (t?.kind === 'wreck') s = t; }
+    // the bottom: a steep slope (1 m up a metre) round the point — no ship fits it whichever way she lies — flat 40 m east of it
+    const seaAt = (x, z) => ({ depth: 25, floor: x < s.x + 40 ? -60 + (x - s.x) : -30 });
+    const got = fitSite(s, seaAt);
+    assert.ok(got && got.site.x > s.x + 35, 'moved to the flat bottom');
+    assert.equal(got.site.id, s.id, 'the same site (the same id on every computer)');
+    assert.deepEqual(fitSite(s, () => undefined), undefined, 'land not made yet: asked again later');
+    assert.equal(fitSite(s, () => null), null, 'no sea at all');
+    assert.ok(siteVariants(s).length > 20);
+});

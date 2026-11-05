@@ -27,7 +27,7 @@ export const SUNKEN = {
     TEMPLE: 0.0064, // of the cells: the temple tried (rare: as before, ~0.28 a km²)
     WRECK_DEPTH: 8, // m of water over the bottom at least
     TEMPLE_DEPTH: 13,
-    FLAT: 4.5, // m: the bottom under the footprint may rise and fall this much at most
+    FLAT: 6, // m: the bottom under the footprint may rise and fall this much at most (4.5 → 6 with the generation-24 seabed's reefs and canyons)
     NEAR: 230, // m: a site this near is raised (its model, its chests)
     FAR: 300, // m: one this far is put away
     HEEL: [0.22, 0.42], // rad: how far a wreck lies over
@@ -84,6 +84,32 @@ export function footprint(site) {
         out.push({ x: site.x + lx * c + lz * s, z: site.z - lx * s + lz * c });
     }
     return out;
+}
+
+/** (fitSite) where else near its own place a site may lie (m) and how it may be turned: the gen-24 seabed (reefs, canyons) left hardly a
+ *  flat spot right under the cell's point — the author 05.11: «корабли затонувшие никак не могу найти» (2 of 45 sea sites fitted; so: 33). */
+const SHIFTS = [[0, 0], [25, 0], [-25, 0], [0, 25], [0, -25], [25, 25], [-25, -25], [25, -25], [-25, 25], [50, 0], [-50, 0], [0, 50], [0, -50]];
+
+/** The site's tries, in order: shifted near its point, turned (a wreck any way, the temple by quarters). Pure, the same on every computer. */
+export function siteVariants(site) {
+    const turns = site.kind === 'temple' ? [0, Math.PI / 2] : [0, 0.8, 1.6, 2.4], out = [];
+    for (const [dx, dz] of SHIFTS) for (const t of turns) out.push({ ...site, x: site.x + dx, z: site.z + dz, yaw: site.yaw + t });
+    return out;
+}
+
+/**
+ * The first of the site's tries that lies (siteFits) → {site, fit} | null (none) | undefined (some land not made yet — ask again).
+ * `seaAt` may return undefined for land not made yet.
+ */
+export function fitSite(site, seaAt) {
+    let pending = false;
+    const ask = (x, z) => { const w = seaAt(x, z); if (w === undefined) pending = true; return w || null; };
+    for (const v of siteVariants(site)) {
+        const fit = siteFits(v, ask);
+        if (pending) return undefined;
+        if (fit) return { site: v, fit };
+    }
+    return null;
 }
 
 /**
