@@ -159,7 +159,10 @@ class Batch {
         const out = sk.boneMatrices;
         for (const s of this.slots) {
             const o = s.base * 16, B = s.bones;
-            if (s.dead || !s.shape.on || !s.shown) { out.fill(0, o, o + B.length * 16); continue; }
+            // (a person out of the picture keeps its matrices unmade — SceneMatrices matFrozen: a body never posed has identity bones, and
+            // drawn in a batch with the seen ones it stood at the world's origin — the spawn — all the kinds on one spot, then gone;
+            // the author, 01.11. Not seen: not drawn here — it unfreezes and is posed the moment it comes into view)
+            if (s.dead || !s.shape.on || !s.shown || s.shape.root.userData.matFrozen) { out.fill(0, o, o + B.length * 16); continue; }
             for (let i = 0; i < B.length; i++) { const k = o + i * 16; out.set(B[i].matrixWorld.elements, k); out[k + 12] -= this.ox || 0; out[k + 14] -= this.oz || 0; }
         }
         if (sk.boneTexture) sk.boneTexture.needsUpdate = true;
@@ -171,7 +174,7 @@ class Batch {
         if (!m) return;
         let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity, r = 0, any = false;
         for (const s of this.slots) {
-            if (s.dead || !s.shown) continue;
+            if (s.dead || !s.shown || s.shape.root.userData.matFrozen) continue;
             const e = s.shape.root.matrixWorld.elements, x = e[12], y = e[13], z = e[14];
             if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
             if (s.r > r) r = s.r;
@@ -294,4 +297,15 @@ export function updateFarBatches(scene, renderer, dt = 1 / 60) {
         if (!list.length) _pools.delete(k);
     }
     farBatchStats.batches = n; farBatchStats.slots = ns;
+}
+
+/** For tools (tools/startfirst.mjs): every live slot — its bone range, its shape's root name / place — to find who is drawn where. */
+export function farBatchInspect() {
+    const out = [];
+    for (const list of _pools.values()) for (const b of list) for (const s of b.slots) {
+        if (s.dead) continue;
+        const r = s.shape.root, e = r.matrixWorld.elements;
+        out.push({ mesh: b.mesh, base: s.base, n: s.bones.length, shown: s.shown, on: s.shape.on, root: r.name || r.type, ud: Object.keys(r.userData || {}).join(','), parent: r.parent?.name || r.parent?.type || null, at: [e[12], e[13], e[14]], bone0: s.bones[0].matrixWorld.elements.slice(12, 15), bone1: (() => { const o = s.bones[1]; return { mw: Array.from(o.matrixWorld.elements).map((x) => +x.toFixed(2)), pos: o.position.toArray(), scl: o.scale.toArray(), parent: o.parent === r ? 'root' : (o.parent?.name || o.parent?.type), auto: o.matrixAutoUpdate, wau: o.matrixWorldAutoUpdate, verts: o.geometry?.attributes?.position?.count, inRoot: r.children.includes(o) }; })(), bones: s.bones.map((o) => { let up = 0, p = o; while (p.parent) { p = p.parent; up++; } return (o.name || o.type) + (p.isScene ? '' : ' DETACHED(top ' + (p.name || p.type) + ')') + (o.visible ? '' : ' hidden'); }) });
+    }
+    return out;
 }

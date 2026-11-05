@@ -35,7 +35,7 @@ export function installSceneMatrices() {
         for (let i = 0, n = ch.length; i < n; i++) {
             const c = ch[i];
             const ud = c.userData;
-            if ((c.visible || ud.farHid) && !ud.matFrozen) c.updateMatrixWorld(force);
+            if ((c.visible || ud.farHid) && (!ud.matFrozen || !ud.matMade)) { c.updateMatrixWorld(force); if (ud.matFrozen) ud.matMade = true; } // (a frozen branch is made ONCE first: never made, its parts stand at the world's origin — the spawn — with identity matrices: the author's «персонажи накладываются у спавна»)
             else c.matrixWorldNeedsUpdate = true; // (recomputed the moment it is shown again)
         }
     };
