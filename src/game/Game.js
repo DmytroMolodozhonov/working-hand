@@ -4362,6 +4362,7 @@ export class Game {
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         this.underwaterLight?.update(dt); // (the depth of the eyes, the shafts, the caustics — before the haze takes its colour)
         this.swim.applyFog(); // (under the water: murky and blue)
+        this.underwaterLight?.afterFog?.(); // (the background past the surface's edge: the water's own colour, set just now)
         this.world.terrain?.data?.settling?.step(SETTLE_MS); // (what the last changes left too weak gives way: Structure.js)
         this.falling?.update(Math.min(0.05, dt));
         this.destruction?.update(Math.min(0.05, dt));

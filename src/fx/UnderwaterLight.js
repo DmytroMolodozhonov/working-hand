@@ -181,7 +181,7 @@ export class UnderwaterLight {
         const sc = g.scene;
         if (sc && this._hidSky) {
             if (this._bg === undefined) this._bg = sc.background ?? null;
-            if (!sc.background?.isColor || sc.background === this._bg) sc.background = new THREE.Color();
+            if (!sc.background?.isColor || sc.background === this._bg) sc.background = this._waterBg || (this._waterBg = new THREE.Color()); // (one colour kept: no new one a frame)
             if (sc.fog) sc.background.copy(sc.fog.color);
         } else if (sc && this._bg !== undefined) { sc.background = this._bg; this._bg = undefined; }
         const on = this.k > 0.01 && !!this.shafts;
@@ -207,6 +207,15 @@ export class UnderwaterLight {
         S.uEye.value.copy(cam);
         S.uK.value = this.k * (0.25 + 0.55 * day) * (g.renderer?.getPixelRatio?.() > 1.5 ? 1 : 0.8);
         S.uCol.value.copy(_c).lerp(_c2.set(0xffffff), 0.55);
+    }
+
+    /**
+     * After the haze took the water's colour (Game: right after Swimming.applyFog): the background past the surface's edge is that very
+     * colour — before, it was copied from the haze BEFORE the water's colour was set, so it was the sky's air (the author: «под водой мигает мир»).
+     */
+    afterFog() {
+        const sc = this.game.scene;
+        if (this._hidSky && sc?.fog && sc.background?.isColor) sc.background.copy(sc.fog.color);
     }
 
     /** Shader samples for Game.prewarm (made at the loading). */
