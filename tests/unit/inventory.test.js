@@ -78,3 +78,15 @@ test('creative: one eaten → back to five after a pause, not at once; a stack i
     const dead = fake(); dead.game.isDeadLocal = true;
     assert.ok(!dead.ensure(99));
 });
+
+test('creative: a dropped apple lying near me still counts — no «multiplying» (the author); one left far away comes back', () => {
+    const inv = fake();
+    inv.ensure(99);
+    inv.slots.find((s) => s).count = 4;
+    inv.game.character = { group: { position: { x: 0, y: 0, z: 0 } } };
+    const L = { item: { kind: 'apple', count: 1 }, model: { position: { x: 2, y: 0, z: 1 } } };
+    inv.game.items.loose = new Map([['a', L]]);
+    assert.ok(!inv.ensure(99) && total(inv) === 4, 'the apple on the ground at my feet is still one of the five');
+    L.model.position.x = 200;
+    assert.ok(inv.ensure(99) && total(inv) === 5, 'left far behind — the stack refills');
+});

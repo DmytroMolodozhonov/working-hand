@@ -40,7 +40,7 @@ import { handLog } from './HandRelease.js';
 export const SLOT_COUNT = 5;
 export const STACK = 100;
 /** Creative: this many golden apples (`apple`) are always with the hero — eaten, thrown, lost: back after `APPLES_WAIT` s. */
-export const CREATIVE_APPLES = 5, APPLES_WAIT = 1.5;
+export const CREATIVE_APPLES = 5, APPLES_WAIT = 1.5, APPLES_NEAR = 30;
 
 /** A tree's trunk block (shown as a log, not a cube — LogModel.js). */
 const isWood = (b) => TREE_KINDS.some((k) => k.wood === b);
@@ -289,6 +289,15 @@ export class Inventory {
         for (const side of ['left', 'right']) {
             const h = g.items?.held[side]?.item;
             if (h?.kind === 'apple' && !h.shop) { have += h.count || 1; stack = stack || h; }
+        }
+        if (have >= CREATIVE_APPLES) { this._appleT = 0; return false; }
+        // (the author: «яблоко множится — выпало, а в руке осталось столько же»: one dropped or thrown and lying near me still counts —
+        // only an eaten one, or one left far behind, comes back)
+        const me = g.character?.group?.position;
+        if (me && g.items?.loose) for (const L of g.items.loose.values()) {
+            if (L.item?.kind !== 'apple' || L.item.shop || !L.model) continue;
+            const p = L.model.position;
+            if (Math.abs(p.x - me.x) < APPLES_NEAR && Math.abs(p.z - me.z) < APPLES_NEAR) have += L.item.count || 1;
         }
         if (have >= CREATIVE_APPLES) { this._appleT = 0; return false; }
         this._appleT = (this._appleT ?? 0) + dt;

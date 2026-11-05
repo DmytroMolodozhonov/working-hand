@@ -81,6 +81,8 @@ export const TOUCH_MS = 1500;
 const BY_HANDLE = new Set(['wand', 'hammer', 'bow', 'iceRod']);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+/** (Items._nearMouth) the food just taken from the mouth still never falls: the hand comes down with relaxed fingers */
+const MOUTH_HOLD_MS = 700;
 const _n = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
@@ -997,10 +999,13 @@ export class ItemSystem {
             // (nor a wand while a spell is going — swinging it to cast never throws it)
             // (the pawnshop / the shady buyer: the OFF hand held out over his counter and opened lays any thing on it — even a wand)
             if (side === g.off && ch.armState && !holdsFast(ch) && (this._buyerPut(side, h, gt, ch) || this._chestPut(side, h, gt, ch))) continue;
-            if (holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            // (food or a potion at the mouth — or just taken from it: the hand over the mouth looks open to the camera, and
+            // the author's apple fell out while eating — the mouth never lets go)
+            const atMouth = this._nearMouth(side, h, ch, gt);
+            if (atMouth || holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 // (the journal «Предметы»: the fingers open, but something forbids letting go — what)
                 if (ch.isHandTracked?.(side) && (ch.getGripCurl?.(side) ?? 1) < DROP.CLOSED) {
-                    this._dropTry(side, kind, holdsWhy(ch, now)
+                    this._dropTry(side, kind, (atMouth ? 'еда у рта — не выпадает' : null) || holdsWhy(ch, now)
                         || (g.inventory?.pocketCycling?.(side) ? 'листаете ячейки карманов' : null)
                         || (kind === 'wand' && this._touching(side, h, now) ? 'палочка касается земли/стены' : null)
                         || (kind === 'wand' && g.spellBusy?.() ? 'идёт заклинание — палочку не бросить' : null)
@@ -1381,6 +1386,16 @@ export class ItemSystem {
         if (this.auth || !g.sync) this.spawnLoose(item, p, { vel: _v2.set(0, 1, 0) });
         else g.sync.itemThrow?.(item, p, _v2.set(0, 1, 0));
         g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка');
+    }
+
+    /** (the letting-go guard) Is this hand's food / potion at the mouth now, or was it there in the last MOUTH_HOLD_MS (game ms)? */
+    _nearMouth(side, h, ch, t) {
+        const k = h.item.kind;
+        if (!(k === 'apple' || k === 'meat' || k === 'steak' || k === 'potion' || ITEM_INFO[k]?.heal) || !ch.head) return false;
+        const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
+        const m = this._mouthAt || (this._mouthAt = { left: -1e9, right: -1e9 });
+        if (h.model.position.distanceTo(mouth) < 1.0 || this.game.currentPose?.mouthHand?.[side]) m[side] = t;
+        return t - m[side] < MOUTH_HOLD_MS;
     }
 
     _eat(dt, ch) {
