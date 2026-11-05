@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { MODEL_KIT as K } from './AnimalModels.js';
 import { finGeo } from './SeaModels.js';
 import { SWIM } from './SwimStroke.js';
+import { changeHurt, painRed } from './TransformPain.js';
 
 const _sp = new THREE.Vector3(), _sv = new THREE.Vector3();
 
@@ -177,27 +178,10 @@ export class Mermaid {
         }
     }
 
-    _hurt(n) {
-        const g = this.game, c = g.combat;
-        if (g.isDeadLocal || c?.dead) return;
-        g.hud?.damageFlash?.();
-        if (c?.enabled) { c.hp = Math.max(0, (c.hp ?? 0) - n); c._hudKey = ''; if (c.hp <= 0) c.die(null, 'mermaid'); }
-        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(n, 'mermaid');
-    }
+    _hurt(n) { changeHurt(this.game, n, 'mermaid'); }
 
-    /** The pain's red at the edges of the eyes (k 0…1; < 0: gone). */
-    _pain(k) {
-        if (typeof document === 'undefined') return;
-        let el = this._painEl;
-        if (!el) {
-            if (k < 0) return;
-            el = this._painEl = document.createElement('div');
-            el.id = 'mermaid-pain';
-            el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:40;opacity:0;transition:opacity 0.12s;background:radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(150,0,10,0.35) 75%, rgba(110,0,0,0.75) 100%);';
-            document.body.appendChild(el);
-        }
-        el.style.opacity = k < 0 ? '0' : String(Math.max(0, Math.min(1, k)));
-    }
+    /** The pain's red at the edges of the eyes (k 0…1; < 0: gone) — TransformPain. */
+    _pain(k) { painRed(k); }
 
     /** In the water (Swimming._swim calls it): the fish's movement with the arms raised — the tail drives the body on. */
     swim(M, dt) {

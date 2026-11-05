@@ -27,6 +27,7 @@ import { stuffOf } from '../world/Structure.js';
 import { MonsterLook } from '../entities/MonsterBody.js';
 import { BlockSwarmFx, swarmColor } from '../fx/GroundVortexFx.js';
 import { addDark } from './DarkMagic.js';
+import { painRed, changeDizzy, painWave } from './TransformPain.js';
 import { isDivine } from './ProtectionGods.js';
 import { BLOCK, BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
 import { kindOf } from './CreatureImpact.js';
@@ -180,6 +181,7 @@ export class MonsterTransform {
     }
 
     _finish(why) {
+        painRed(-1); this._painted = false; // (the pain's red gone, whatever ended it)
         const g = this.game, ch = g.character, c = g.combat;
         const was = this.phase;
         this._dropAll();
@@ -281,9 +283,16 @@ export class MonsterTransform {
         if (this.phase === 'grow') {
             const k = this.t / MONSTER.GROW_S;
             st = growAt(k);
+            // the pain of it (CLAUDE.md «Превращения… через боль»): the red at the edges in waves, the picture swims; the man's own health
+            // −PAIN (it waits for him: he comes back with that much less)
+            painRed(painWave(this.t, MONSTER.GROW_S));
+            changeDizzy(g, 0.45 * (0.4 + 0.6 * Math.sin(this.t * 2.1) ** 2));
+            if (!this._painted && this.t > 1) { this._painted = true; g.hud?.damageFlash?.(); if (g.config?.mode !== 'creative' || g.combat?.enabled) this.origHp = Math.max(1, (this.origHp || 1) - MONSTER.PAIN); }
+            if (k >= 1) { painRed(-1); this._painted = false; }
             this.roar = k > 0.86 ? Math.min(1, (k - 0.86) / 0.06) * (k < 1 ? 1 : 0) : 0;
             if (k >= 1) { this.phase = 'on'; this.t = 0; st = growAt(1); this.roar = 0.9; this._roarT = 1.2; ch.sizeRun = MONSTER.RUN_K; ch.jumpK = MONSTER.JUMP_K; }
         } else if (this.phase === 'shrink') {
+            painRed(0.5 * painWave(this.t, this._shrinkS || MONSTER.SHRINK_S)); // (the way back aches too — less)
             if (this.carry.left || this.carry.right || g.monsterGrab?.holds('left') || g.monsterGrab?.holds('right')) this._dropAll();
             const k = this.t / (this._shrinkS || MONSTER.SHRINK_S);
             st = growAt(k, true);

@@ -104,7 +104,7 @@ export class PotionEffects {
     update(dt) {
         if (this._dragonLater && this.game.dragonForm && this.game.character && this.game.dragons) { // (loaded in the form: on the ground, the dragon again — the time left)
             const t = this.game.terrain?.data, p = this.game.character.group.position;
-            if (!t?.landMade || t.landMade(p.x, p.z)) { this._dragonLater = false; this.game.dragonForm.restoreLanded(); if (this.has('dragon')) this.game.dragonForm.begin(); }
+            if (!t?.landMade || t.landMade(p.x, p.z)) { this._dragonLater = false; this.game.dragonForm.restoreLanded(); if (this.has('dragon')) this.game.dragonForm.begin({ now: true }); } // (loaded mid-form: no second change — CLAUDE.md)
         }
         for (const id of Object.keys(this.left)) {
             if (!(this.left[id] > 0)) continue;

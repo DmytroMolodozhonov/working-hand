@@ -67,10 +67,28 @@ function world() {
     return g;
 }
 
+/** The potion drunk and the change gone through (CLAUDE.md: a change is never instant — DRAGON_FORM.CHANGE_S, with pain). */
+function drink(g) {
+    g.potionFx.start('dragon');
+    for (let t = 0; t < DRAGON_FORM.CHANGE_S + 0.1; t += 0.05) g.dragonForm.update(0.05);
+}
+
+test('the change takes its time and hurts: no dragon at once; −HP; then the dragon (the author 05.11)', () => {
+    const g = world();
+    const hp0 = g.combat.hp;
+    g.potionFx.start('dragon');
+    g.dragonForm.update(0.05);
+    assert.equal(g.dragonForm.active, false, 'not at once');
+    assert.equal(g.dragons.list.length, 0);
+    for (let t = 0; t < DRAGON_FORM.CHANGE_S + 0.1; t += 0.05) g.dragonForm.update(0.05);
+    assert.ok(g.dragonForm.active, 'a dragon after the change');
+    assert.equal(g.combat.hp, hp0 - DRAGON_FORM.PAIN, 'it hurt');
+});
+
 test('drunk: the hero is a dragon — hidden, carried in it; «стоп» does not end it; the time out — a man where the dragon stands', () => {
     const g = world(), ch = g.character;
     assert.equal(g.dragonForm.cantNow(), null);
-    g.potionFx.start('dragon');
+    drink(g);
     assert.ok(g.dragonForm.active, 'a dragon now');
     const d = g.dragons.list.find((x) => x.form === 'me');
     assert.ok(d, 'the dragon of my body');
@@ -101,7 +119,7 @@ test('drunk: the hero is a dragon — hidden, carried in it; «стоп» does n
 
 test('the potion of resetting ends it too', () => {
     const g = world();
-    g.potionFx.start('dragon');
+    drink(g);
     assert.ok(g.dragonForm.active);
     assert.ok(g.potionFx.resetAll());
     assert.equal(g.dragonForm.active, false);
@@ -110,12 +128,12 @@ test('the potion of resetting ends it too', () => {
 
 test('the dragon killed: a man again with half the health — no wand, no achievement off one\'s own body', () => {
     const g = world();
-    g.potionFx.start('dragon');
+    drink(g);
     const d = g.dragons.list[0];
     g.dragons._die(d, 'someone');
     g.imperius.update(0.016);
     assert.equal(g.dragonForm.active, false);
-    assert.equal(g.combat.hp, 10);
+    assert.equal(g.combat.hp, Math.round((20 - DRAGON_FORM.PAIN) * DRAGON_FORM.HP_AFTER)); // (half of what was left after the change's pain)
     assert.ok(!g._loot && !g._ach, 'nothing drops');
     assert.equal(g.potionFx.has('dragon'), false, 'the clock stopped');
 });

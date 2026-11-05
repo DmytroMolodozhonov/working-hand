@@ -247,7 +247,7 @@ test('10 minutes later: back to a man — the size, the wand in the hand, the ol
     assert.equal(g.monster.look.on, false);
     assert.equal(g.items.held.right.model.visible, true);
     assert.deepEqual(sent.at(-1), ['right', 'wand']);
-    assert.equal(g.combat.hp, 17);
+    assert.equal(g.combat.hp, 17 - MONSTER.PAIN); // (the old health less the change's pain — CLAUDE.md «Превращения… через боль»)
     assert.equal(g.combat.maxHp, 20);
     assert.equal(g._timer[0], null);
     assert.ok(Math.abs(ch.group.position.y - PLAYER_GROUND_OFFSET) < 1e-6, 'feet where the monster stood');
@@ -296,13 +296,13 @@ test('saving or leaving during the form: the man\'s place and health, never the 
     ch.group.position.y = PLAYER_GROUND_OFFSET * 7; // (Character.update stands the ×7 body on its feet)
     const h = g.monster.humanPos();
     assert.ok(Math.abs(h.y - PLAYER_GROUND_OFFSET) < 1e-6);
-    assert.equal(g.monster.origHp, 17);
+    assert.equal(g.monster.origHp, 17 - MONSTER.PAIN); // (the change hurt the man)
     assert.match(src('src/game/WorldSave.js'), /monster\?\.active \? game\.monster\.humanPos\(\)/);
     assert.match(src('src/game/WorldSave.js'), /monster\?\.active \? game\.monster\.origHp/);
     g.monster.dispose(); // (Game.dispose: before the last save)
     assert.equal(g.monster.active, false);
     assert.equal(ch.size, 1);
-    assert.equal(g.combat.hp, 17);
+    assert.equal(g.combat.hp, 17 - MONSTER.PAIN);
 });
 
 test('the body breaks the house it walks into; the ground stays; the enchanted stone stays', () => {

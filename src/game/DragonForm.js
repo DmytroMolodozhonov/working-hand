@@ -28,6 +28,9 @@
  *  - the dragon in the air when it ends → the hero comes down gently (the ground under the dragon), never a fall.
  */
 import * as THREE from 'three';
+import { changeHurt, painRed, changeDizzy, painWave } from './TransformPain.js';
+
+const _w = new THREE.Vector3();
 import { rollDragon, DRAGON_HP } from './DragonKinds.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -39,6 +42,9 @@ export const DRAGON_FORM = {
     HP_AFTER: 0.5, // the dragon killed: the hero has half their health
     STUN: 1.6, // s: …and is stunned a moment, coming out of it
     ASK_T: 5000, // ms: a guest waits for the host's dragon this long
+    // the change (CLAUDE.md «Превращения… не мгновенные, через боль», the author 05.11): heat through the body, scales cracking out of the
+    // skin, the wings tearing out of the back, −PAIN HP — then the dragon bursts out of the man in a ring of fire
+    CHANGE_S: 7, PAIN: 2,
 };
 
 /** On whom / on what the form acts (the dragon's own tables do the rest). */
@@ -96,8 +102,53 @@ export class DragonForm {
         return null;
     }
 
-    /** (PotionEffects.start) The potion drunk: the body becomes a dragon. */
-    begin() {
+    /** (PotionEffects.start) The potion drunk: the change begins (DRAGON_FORM.CHANGE_S), then the body is a dragon (_beginNow). */
+    begin({ now = false } = {}) {
+        if (this.id || this.change != null) return;
+        if (now) { this._beginNow(); return; } // (a save loaded in the form: the dragon again, no second change)
+        this.change = 0;
+        this.game.hud?.setVoice?.('🐉 По телу разливается жар… кровь закипает', true);
+    }
+
+    /** The change, every frame of it (the hero may still move: it is his body yet). */
+    _changing(dt) {
+        const g = this.game, ch = g.character, T = DRAGON_FORM.CHANGE_S, p = ch.group.position;
+        const t0 = this.change, t = (this.change += dt);
+        if (t0 < 2.5 && t >= 2.5) g.hud?.setVoice?.('🐉 Кожа трескается чешуёй, за спиной рвутся крылья…', true);
+        if (t0 < T - 1.5 && t >= T - 1.5) g.hud?.setVoice?.('🐉 Тело раздаётся — вы становитесь драконом!', true);
+        if (t0 < 1.5 && t >= 1.5) changeHurt(g, DRAGON_FORM.PAIN, 'dragonForm');
+        if ((t0 < 0.05 && t >= 0.05) || (t0 < 3.5 && t >= 3.5)) g.sound?.playRumble?.(p, p);
+        painRed(painWave(t, T), '170,45,0'); // (the pain's red, burning orange)
+        changeDizzy(g, 0.5 * (0.45 + 0.55 * Math.sin(t * 1.6) ** 2));
+        const fx = g.fx, k = Math.min(1, t / T);
+        if (fx?.spark) {
+            // embers off the skin, more and more; black scale-flakes; from 3 s the wings' tearing at the back
+            const n = Math.floor((8 + 70 * k) * dt + Math.random());
+            for (let i = 0; i < n; i++) {
+                const a = Math.random() * Math.PI * 2, r = 0.35 + Math.random() * 0.4;
+                _v.set(p.x + Math.cos(a) * r, p.y - 2 + Math.random() * 3.4, p.z + Math.sin(a) * r);
+                fx.spark(_v, Math.random() < 0.25 ? 0x2a1a14 : Math.random() < 0.5 ? 0xff7a1e : 0xffc04a, 0.06 + Math.random() * 0.08, _w.set(Math.cos(a) * 0.8, 0.8 + Math.random() * 1.8, Math.sin(a) * 0.8), 0.9);
+            }
+            if (t > 3) for (let i = 0; i < 2; i++) {
+                const yaw = ch.group.rotation.y, side = i ? 1 : -1, bx = Math.sin(yaw) * 0.35, bz = Math.cos(yaw) * 0.35;
+                _v.set(p.x + bx + Math.cos(yaw) * side * 0.3, p.y + 0.6, p.z + bz - Math.sin(yaw) * side * 0.3);
+                if (Math.random() < dt * 25) fx.spark(_v, 0xff5a10, 0.12, _w.set(Math.cos(yaw) * side * 3, 1.5 + Math.random() * 2, -Math.sin(yaw) * side * 3), 0.7);
+            }
+            if (Math.random() < dt * (1 + 3 * k)) fx.lightFlash?.(_v.set(p.x, p.y, p.z), 0xff6a20, 1.5 + 2 * k, 0.25, 14);
+        }
+        if (t >= T) {
+            this.change = null;
+            painRed(-1);
+            this._beginNow();
+            // the dragon bursts out: a ring of fire round it
+            if (fx?.spark) for (let i = 0; i < 90; i++) { const a = i / 90 * Math.PI * 2; fx.spark(_v.set(p.x, p.y - 1.5, p.z), i % 2 ? 0xff7a1e : 0xffd060, 0.25, _w.set(Math.cos(a) * 14, 2 + Math.random() * 4, Math.sin(a) * 14), 1.1); }
+            fx?.lightFlash?.(_v.set(p.x, p.y, p.z), 0xff8a30, 6, 0.6, 40);
+            g.sound?.playThunder?.(0.5);
+        }
+    }
+
+    /** The body is a dragon now. */
+    _beginNow() {
         const g = this.game;
         if (this.id) return;
         if (g.authority) {
@@ -186,14 +237,16 @@ export class DragonForm {
     /** (PotionEffects._end / resetAll / death) The form ends now. */
     end() {
         const g = this.game;
+        if (this.change != null) { this.change = null; painRed(-1); g.hud?.setVoice?.('🐉 Превращение оборвалось — вы остались человеком', true); return; } // (reset / death mid-change)
         if (this.active) { g.imperius.stop('form'); return; } // (ImperiusControl.stop → _end → ended)
         if (this.id) { const id = this.id; this.id = null; this._wasId = id; this.ended(null); }
         this._ask = 0; this._took = null;
     }
 
     /** Every frame (after the creatures and ImperiusControl.update): the body carried inside the dragon, hidden. */
-    update() {
+    update(dt = 1 / 60) {
         const g = this.game, ch = g.character;
+        if (this.change != null) { if (g.isDeadLocal) { this.change = null; painRed(-1); return; } this._changing(dt); return; }
         if (this._ask && !this.id) {
             if (this._took) {
                 const d = g.dragons?.list.find((x) => x.id === this._took);
