@@ -32,7 +32,8 @@ test('15 mana once, +3 cells for the first one, known from the start (no scroll)
     assert.ok(START_SPELLS.has('Fireworks'));
     assert.ok(knows('Fireworks', { mode: 'survival' }));
     assert.ok(HELD.Fireworks && HELD_SOUND.Fireworks, 'a held spell has its concentration entry and sound entry');
-    assert.equal(mayCast('Fireworks', 'Bombardo'), false, 'no other spell while the salvos go');
+    assert.equal(mayCast('Fireworks', 'Inferno'), false, 'no other spell WITH concentration while the salvos go');
+    assert.equal(mayCast('Fireworks', 'Bombardo'), true, 'one without concentration: free (the author 05.11)');
     assert.equal(mayCast('Fireworks', 'Stop'), true);
     assert.equal(mayCast('Fireworks', 'Lumos'), true);
 });

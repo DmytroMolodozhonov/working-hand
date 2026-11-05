@@ -275,8 +275,9 @@ test('held: 20 mana at once, 1 a second after; «стоп», no mana, death and 
 
 test('concentration: while the cloud is open no other spell works (except «стоп», Люмос, Нокс, Protection); a stun or a fall closes it', () => {
     assert.ok(HELD.VisibleGodi, 'a held spell');
-    assert.equal(mayCast('VisibleGodi', 'Bombardo'), false);
-    assert.equal(mayCast('VisibleGodi', 'Invisibility'), false);
+    // (the author 05.11: only spells WITH concentration are refused while one is held)
+    assert.equal(mayCast('VisibleGodi', 'Inferno'), false);
+    assert.equal(mayCast('VisibleGodi', 'Bombardo'), true);
     assert.equal(mayCast('VisibleGodi', 'VisibleGodi'), false, 'saying it again is not a new spell (the cast says «already on»)');
     for (const free of ['Stand', 'Lumos', 'Nox', 'Protection']) assert.equal(mayCast('VisibleGodi', free), true, free);
     const { data, eye } = worldWithWall(BLOCK.PLANKS, 1);
@@ -286,7 +287,8 @@ test('concentration: while the cloud is open no other spell works (except «ст
     assert.equal(c.held(), null);
     v.cast(true);
     assert.equal(c.held(), 'VisibleGodi');
-    assert.equal(c.gate('Bombardo', false), 'VisibleGodi', 'the gate says «сначала стоп»');
+    assert.equal(c.gate('Inferno', false), 'VisibleGodi', 'the gate says «сначала стоп»');
+    assert.equal(c.gate('Bombardo', false), null, 'no concentration in it: free');
     assert.equal(c.gate('Stand', false), null);
     assert.equal(c.lose('stun'), true, 'a stun breaks the concentration');
     assert.ok(!v.on);

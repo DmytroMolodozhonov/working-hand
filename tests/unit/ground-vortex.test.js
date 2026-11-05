@@ -43,7 +43,8 @@ test('price, first-lift cells, scroll, shop, sound, concentration, codex', () =>
     assert.ok(HELD.GroundVortex);
     assert.equal(mayCast('GroundVortex', 'GroundShield'), true);
     assert.equal(mayCast('GroundVortex', 'Attack'), true);
-    assert.equal(mayCast('GroundVortex', 'Bombardo'), false);
+    assert.equal(mayCast('GroundVortex', 'Inferno'), false);
+    assert.equal(mayCast('GroundVortex', 'Bombardo'), true); // (no concentration in it — the author 05.11)
     assert.equal(mayCast('GroundVortex', 'Protection'), true);
     assert.ok(SPELLS.some((s) => s.name === 'Ground Vortex' && /Shield/.test(s.say)));
 });

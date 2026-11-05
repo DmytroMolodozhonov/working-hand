@@ -28,7 +28,7 @@ test('the words: «Акцентрик», «Пилбидрио», «Электр�
     assert.equal(SPELL_COST.Ice, SPELL_COST.Frozen);
     assert.deepEqual([SPELL_COST.Ice, SPELL_COST.IceMaxima, SPELL_COST.Accentric, SPELL_COST.Pilbidrio, SPELL_COST.Electrum, SPELL_COST.Die], [5, 20, 50, 100, 50, 1000]);
     assert.deepEqual([clashPower('Accentric'), clashPower('Pilbidrio'), clashPower('Die'), clashPower('Electrum'), clashPower('Stupefy')], [1.2, 1.4, 5, 1, 1]);
-    assert.ok(mayCast('Electrum', 'Electrum') && !mayCast('Electrum', 'Bombardo'), '«Электром» is held');
+    assert.ok(mayCast('Electrum', 'Electrum') && !mayCast('Electrum', 'Inferno') && mayCast('Electrum', 'Bombardo'), '«Электром» is held');
 });
 
 test('«Дай» is a spell of the gods: +100 cells, its scroll only in the gods\' temple — never on the Earth; the others from chests (Пилбидрио rarer)', () => {

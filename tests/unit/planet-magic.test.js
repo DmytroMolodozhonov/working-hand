@@ -23,7 +23,7 @@ test('the words: the four spells, never the house / castle / plain Leviosa ones'
     assert.equal(matchSpell('Create a House'), 'CreateHouse');
     assert.equal(matchSpell('Water Vortex Super Maxima'), 'WaterVortexSuperMaxima');
     assert.deepEqual([SPELL_COST.CreatePlanet, SPELL_COST.EnlargePlanet, SPELL_COST.TerraformPlanet, SPELL_COST.LevitationSuperMaxima], [500, 100, 1000, 100]);
-    assert.ok(mayCast('PlanetMove', 'LevitationSuperMaxima') && !mayCast('PlanetMove', 'Bombardo'), 'holding a planet: concentration');
+    assert.ok(mayCast('PlanetMove', 'LevitationSuperMaxima') && !mayCast('PlanetMove', 'Inferno') && mayCast('PlanetMove', 'Bombardo'), 'holding a planet: concentration');
     assert.ok(HELD.PlanetMove);
 });
 

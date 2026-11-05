@@ -8,8 +8,11 @@ test('concentration: nothing held — everything may be cast', () => {
 });
 
 test('concentration: holding the water — another spell does not work, its own words and the exceptions do', () => {
-    assert.equal(mayCast('Waterball', 'FireMaxima'), false);
-    assert.equal(mayCast('Waterball', 'Bombardo'), false);
+    // (the author 05.11: only spells WITH concentration are refused while one is held — rule changed, case B)
+    assert.equal(mayCast('Waterball', 'FireMaxima'), true);
+    assert.equal(mayCast('Waterball', 'Bombardo'), true);
+    assert.equal(mayCast('Waterball', 'Inferno'), false);
+    assert.equal(mayCast('Waterball', 'CreateWall', { isBuild: true }), false);
     assert.equal(mayCast('Waterball', 'Maxima'), true);
     assert.equal(mayCast('Waterball', 'Frozen'), true);
     for (const n of ['Lumos', 'LumosMaxima', 'Nox', 'Stand', 'Protection', 'ProtectionMaxima']) assert.equal(mayCast('Waterball', n), true, n);
@@ -17,8 +20,11 @@ test('concentration: holding the water — another spell does not work, its own 
     assert.equal(mayCast('WaterVortex', 'AirBubble'), true);
     assert.equal(mayCast('WaterVortex', 'Levitation'), false);
     assert.equal(mayCast('Alive', 'Attack'), true);
-    assert.equal(mayCast('Alive', 'Inferno'), false); // (the table entry stays; Concentration.held() no longer returns 'Alive' — the author 05.11)
-    assert.equal(mayCast('Levitation', 'Flight'), false);
+    assert.equal(mayCast('Alive', 'Inferno'), false);
+    assert.equal(mayCast('Alive', 'Bombardo'), true);
+    assert.equal(mayCast('Levitation', 'Flight'), true); // (flying takes no concentration)
+    assert.equal(mayCast('GodsShield', 'Bombardo'), false); // (strict: nothing goes out of the gods' shield)
+    assert.equal(mayCast('Imperius', 'Lumos'), false);
     assert.equal(mayCast('Levitation', 'Flight', { hovering: true }), true);
     assert.ok(FREE.has('Stand'));
 });
@@ -42,11 +48,12 @@ test('concentration: a spell said while holding is refused with a hint (also in 
     g.config = { mode: 'creative' };
     const f = new Concentration(g);
     assert.equal(f.held(), 'Waterball');
-    assert.equal(f.gate('FireMaxima', true), 'Waterball');
+    assert.equal(f.gate('Bombardo', true), null); // (no concentration in it)
+    assert.equal(f.gate('Inferno', true), 'Waterball');
     assert.match(g.said[0], /Сначала «стоп» — вы держите «Водяной шар»/);
     assert.equal(f.gate('Lumos', true), null);
     g.water.active = false; g.livingTrees.n = 0;
-    assert.equal(f.gate('FireMaxima', true), null);
+    assert.equal(f.gate('Inferno', true), null);
 });
 
 test('concentration breaks: stunned / knocked down / dead — the water falls, the living tree stops', () => {
@@ -89,10 +96,18 @@ test('concentration: instant spells hold nothing; the beams\' clash holds', () =
     assert.equal(mayCast('Duel', 'Bombardo'), false);
 });
 
-test('a living tree / the risen dead of «Alive Maxima» do not hold the concentration: other spells work (the author 05.11)', () => {
+test('a living tree / the risen dead: spells without concentration work, one with it is refused with a hint (the author 05.11)', () => {
     const g = fakeGame();
     g.water.active = false; // (only my living tree walks)
     const f = new Concentration(g);
-    assert.equal(f.held(), null);
+    assert.equal(f.held(), 'Alive');
     assert.equal(f.gate('Bombardo', true), null);
+    assert.equal(f.gate('Inferno', true), 'Alive');
+    assert.match(g.said.at(-1), /Сначала «стоп» — вы держите «Живое дерево»/);
+});
+
+test('every spell said to take concentration is a real spell', async () => {
+    const { SPELL_COST } = await import('../../src/game/Combat.js');
+    const { CONC_SPELLS } = await import('../../src/game/Concentration.js');
+    for (const n of CONC_SPELLS) assert.ok(n in SPELL_COST, n);
 });

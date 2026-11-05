@@ -2,8 +2,9 @@
  * Concentration.js — «правило концентрации» (the author's rule).
  *
  *   A spell that acts while it is held (the water in the hands, a thing lifted by «Левиоса», a tree kept
- *   (no longer: a living tree walks by itself — LivingTrees), the fire held on the wand, the beams' clash of a duel while it goes…) takes the caster's concentration. While it is held NO other spell
- *   works — however well its words are said, in every mode, Creative too: first «стоп» (or the spell ends
+ *   alive, the fire held on the wand, the beams' clash of a duel while it goes…) takes the caster's concentration. While it is held no other spell
+ *   THAT TAKES CONCENTRATION (CONC_SPELLS) works — the rest are cast as usual (the author 05.11; strict holds — the duel, the gods' shield,
+ *   Imperius — refuse all) — however well its words are said, in every mode, Creative too: first «стоп» (or the spell ends
  *   by itself: mana, time), then a new one. The held spell's own words stay its part (the vortex's
  *   «Bubble» / «Frozen» / «Fire Maxima», the water ball's «Максима» / «Frozen», «Атака» for a lifted
  *   weapon or a living tree…).
@@ -50,12 +51,12 @@ export const HELD = {
     Ward: { ru: 'Защита дома', icon: '🛡️', own: ['WardGrow', 'Maxima', 'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'WardDispel'] },
     WardBeam: { ru: 'Усиление дома', icon: '🛡️', own: ['StrengthenHouse'] }, // (the beam feeding a sphere with mana: HouseWards.js)
     Build: { ru: 'Стройка', icon: '🧱', own: [] },
-    Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'] }, // (the beams' clash, while it goes: only «Максима» — and the shield)
+    Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'], strict: true }, // (the beams' clash, while it goes: only «Максима» — and the shield)
     Wave: { ru: 'Волна', icon: '🌊', own: ['WaveAttack', 'WaveAttackMaxima'] },
     Lightning: { ru: 'Молния', icon: '⚡', own: ['LightningStrike', 'Hammer'] },
     SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'Furl'] },
     Beam: { ru: 'Луч', icon: '❄️', own: [] },
-    GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima', 'Maxima'] }, // (the gods' shield: held — ProtectionGods.js)
+    GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima', 'Maxima'], strict: true }, // (the gods' shield: held — ProtectionGods.js)
     DragonTame: { ru: 'Дракон (Брейнрот Максима)', icon: '🐉', own: ['BrainrotMaxima', 'Attack'] }, // (the calmed dragon: 0,5 mana a second — DragonRide.js; «Атак» sends it at one it is already angry at)
     GroundVortex: { ru: 'Вихрь земли', icon: '🌪️', own: ['GroundVortex', 'GroundShield', 'Attack'] }, // (blocks circling the hero: 0,5 mana a second — GroundVortex.js)
     SunClouds: { ru: 'To the Sun (тучи горгулий)', icon: '☀️', own: [] }, // (the beam on the black clouds of the gargoyle ritual: 20 mana a second after 5 s — SunContest.js; «стоп» ends it)
@@ -65,6 +66,18 @@ export const HELD = {
     Imperius: { ru: 'Империус', icon: '🌀', own: [], only: true }, // (the mind in another body: nothing of the hero's — not even Lumos or the shield; only «стоп» — ImperiusControl.js)
     Puppet: { ru: 'Под Империусом', icon: '🌀', own: [], only: true, none: true }, // (another's mind holds my body: no spell at all, not even «стоп» — a blow tears me free)
 };
+
+/**
+ * The spells that TAKE concentration (start something held). The author 05.11: «другие не должны [работать] заклинания, что содержат
+ * концентрацию, но те, что не тратят концентрацию, не должны подвергаться запрету; а если заклинание с концентрацией — пишется подсказка».
+ * So while one is held only these (and the building spells) are refused — «Бомбардо», «Акцио», «Даст»… are cast as usual.
+ * Not so under the strict holds (`strict`: the duel's clash, the gods' shield) and in another body (`only` / `none`).
+ */
+export const CONC_SPELLS = new Set(['Waterball', 'WaterVortex', 'WaterVortexSuperMaxima', 'Levitation', 'LevitationMaxima', 'LevitationSuperMaxima',
+    'Alive', 'AliveMaxima', 'Hellfire', 'FireSerpent', 'Inferno', 'Drawdown', 'DrawdownMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle',
+    'IceCastle', 'IceBridge', 'ProtectionHouse', 'ProtectionInvisible', 'WardGrow', 'StrengthenHouse', 'WaveAttack', 'WaveAttackMaxima',
+    'LightningStrike', 'Ice', 'ProtectionGods', 'ProtectionGodsMaxima', 'BrainrotMaxima', 'GroundVortex', 'VisibleGodi', 'Fireworks', 'Electrum',
+    'Imperius', 'ImperiusMaxima']);
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
 export const FREE = new Set(['Lumos', 'LumosMaxima', 'LumosFlashlight', 'LumosAhead', 'LumosFollowing', 'Nox', 'Stand', 'Stop', 'Protection', 'ProtectionMaxima', 'Up', 'Pause']);
@@ -80,7 +93,8 @@ export function mayCast(held, name, ctx = {}) {
     if (FREE.has(name)) return true;
     if (name === 'Flight' && ctx.hovering) return true;
     if (held === 'Build' && ctx.isBuild) return true; // (another «Create a …»: the next piece of the building)
-    return (HELD[held]?.own || []).includes(name);
+    if ((HELD[held]?.own || []).includes(name)) return true;
+    return !HELD[held]?.strict && !ctx.isBuild && !CONC_SPELLS.has(name); // (a spell without concentration: free — the author 05.11)
 }
 
 export class Concentration {
@@ -122,8 +136,7 @@ export class Concentration {
         if (g.ships?.blowing) return 'SailWind';
         const sp = g.spells?.heldBy?.(g.localId);
         if (sp) return sp.kind === 'Inferno' ? 'Inferno' : /^Drawdown/.test(sp.kind || '') ? 'Drawdown' : 'Beam';
-        // (a living tree / the risen dead of «Alive Maxima» walk and fight by themselves: NOT held any more — the author 05.11:
-        //  «заклинания не работают, когда активное Alive или Alive Maxima»; the mana still drains, «стоп» lets them go, «Атак» sends them)
+        if (g.livingTrees?.mine?.().length) return 'Alive';
         if (g.combat?.shield?.gods) return 'GodsShield'; // («Protection Gods» is held — unlike the ordinary shield)
         return null;
     }

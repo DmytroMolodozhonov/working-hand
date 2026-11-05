@@ -146,7 +146,7 @@ export function wandModel(it) {
     if (m === 3 || m === 8) for (let i = 0; i < 3; i++) part(g, KNOT(), wood, (i - 1) * 0.004, 0.3 + i * 0.11, 0, 0, i, 0, 1, 0.8, 1);
     if (m === 5) part(g, SPIRAL(), light, 0, 0, 0); // a carved ridge winding up
     if (m === 8) { part(g, COLLAR(0.031, 0.05), woodMat(0xffffff, runeTex(), 1), 0, 0.27, 0); part(g, RING(0.032), gold, 0, 0.245, 0, Math.PI / 2); part(g, RING(0.032), gold, 0, 0.295, 0, Math.PI / 2); }
-    if (m === 7) part(g, MOON(), gold, 0, 0.215, 0, Math.PI / 2, 0, 0.6); // a crescent guard
+    if (m === 7) part(g, MOON(), gold, 0, 0.48, 0, Math.PI / 2, 0, 0.6); // a crescent guard (above the grip: the fingers and the thumb reach up the shaft to ~0.38 — tests/unit/wand-grip-v5.test.js)
     // the tip
     if (m === 4 || m === 9) {
         if (m === 9) for (let i = 0; i < 3; i++) part(g, PRONG(), gold, Math.cos(i * 2.094) * 0.02, 0.645, Math.sin(i * 2.094) * 0.02, Math.sin(i * 2.094) * 0.35, 0, -Math.cos(i * 2.094) * 0.35);
