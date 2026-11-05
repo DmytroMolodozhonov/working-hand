@@ -167,7 +167,7 @@ export const SPELL_COST = {
     CreateBridge: 10, // planks over a river or a ravine, 2–40 m, +0.5 mana a metre beyond 16 (Bridge.js; no scroll)
     Groundprud: 10, // «Groundprud»: the ground rises into a wall 7×2×5 where the wand points (Groundprud.js; a scroll)
     Fireworks: 15, // once, at the start (the author: «снимается 15 маны»); the 10 s that follow cost nothing (Fireworks.js; no scroll)
-    Invisibility: 150, // nobody sees me; then 1 a second (only from a scroll — Invisibility.js)
+    Invisibility: 250, // nobody sees me; then 2 a second (only from a scroll — Invisibility.js)
     GroundVortex: 20, // «Ground Vortex»: the earth rises and circles; then 1 a second while held (a scroll — GroundVortex.js)
     Nihilis: 40, // «Nihilis Atra»: a cone of light scatters black magic; instant (only from a scroll — Nihilis.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
