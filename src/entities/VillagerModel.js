@@ -25,6 +25,7 @@ import { pickGesture, gesturePose, GESTURES } from './Gestures.js';
 import { ARCHETYPES, archetypeOf, bodyLayer, newLayer } from './Charisma.js';
 import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
+import { OUTFIT_KINDS, OUTFIT_ROLES, outfitLook, outfitBody, outfitSleeve, outfitHeadwear } from './VillagerOutfits.js';
 import { SKIN_TONES } from './Appearance.js';
 import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
 import { slopeLean } from '../game/HillWay.js';
@@ -324,6 +325,8 @@ function wizardLook(L, r, pick) {
         L.beard = 'sage'; L.hair = 'long';
     } else if (role === 'wanderer' && !L.female && r() < 0.7) L.beard = 'long';
     else if (role === 'student') L.beard = 'none';
+    // (the wanderers, the settlements' folk and a hamlet's wizard wear one of five different costumes — VillagerOutfits.js; the tower's own keep the one uniform robe)
+    if (OUTFIT_ROLES.has(role)) outfitLook(L, pick(OUTFIT_KINDS), pick);
 }
 
 // ==================================================================== parts
@@ -619,7 +622,7 @@ function hatBoxes(L, B, cc) {
             for (const sx of [-1, 1]) { b(B, 0.12, 0.12, 0.05, sx * 0.42, 1.33, -0.68, 0x2e86c1); b(B, 0.05, 0.16, 0.2, sx * 0.68, 1.33, 0, RUBY); }
             break;
         }
-        default: break;
+        default: if (L.outfit) outfitHeadwear(L, B); break;
     }
 }
 
@@ -741,7 +744,7 @@ function bodyBoxes(L) {
     }
     b(B, 1.2, 1.5, 0.8, 0, 0, 0, L.shirt);
     b(B, 0.4, 0.12, 0.04, 0, 0.66, -0.41, L.skin); // neckline
-    if (L.dress) dress();
+    if (L.dress && !L.outfit) dress(); // (an outfit has its own layered skirt)
     if (L.role === 'builder') {
         const a = L.accent;
         b(B, 0.9, L.dress ? 2.1 : 1.45, 0.06, 0, L.dress ? -0.68 : -0.35, -0.44, a); // leather apron
@@ -762,6 +765,8 @@ function bodyBoxes(L) {
             b(B, 1.22, 0.45, 0.82, 0, -0.55, 0, p); // the overalls' waist
             b(B, 0.22, 0.22, 0.03, -0.32, -0.55, -0.42, shade(p, 1.3)); // patch
         }
+    } else if (L.wizard && L.outfit) { // one of the five costumes of a wanderer / a town or village wizard
+        outfitBody(L, B);
     } else if (L.wizard) { // a robe: a trimmed front, a sash, a star
         const rc = L.dressColor, tr = RANK_TRIM[L.rank] ?? L.accent;
         b(B, 1.26, 1.4, 0.86, 0, 0.05, 0, rc);
@@ -832,7 +837,8 @@ function armBoxes(L, side) {
         b(B, 0.36, 0.4, 0.36, 0, -1.15, 0, L.skin);
     }
     if (L.role === 'merchant') b(B, 0.44, 0.08, 0.44, 0, 0.1, 0, L.accent); // vest shoulder
-    if (L.wizard && !L.robeOff) {
+    if (L.wizard && !L.robeOff && L.outfit) outfitSleeve(L, B);
+    else if (L.wizard && !L.robeOff) {
         b(B, 0.54, 0.2, 0.54, 0, -0.95, 0, shade(L.dressColor, 0.85)); // a wide robe cuff
         for (let i = 0; i < (RANK_LEVEL[L.rank] ?? 0); i++) b(B, 0.56, 0.05, 0.56, 0, -0.88 - i * 0.07, 0, RANK_TRIM[L.rank]); // his rank: stripes on the cuff
     }
