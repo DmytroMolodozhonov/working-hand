@@ -2908,6 +2908,7 @@ export class CastleLife {
         const killed = v.hp <= 0;
         const pos = { x: v.x, y: v.y, z: v.z };
         if (killed) this._die(v, by);
+        if (!killed && by != null && v.guest && this._guestCharge(v, by)) return; // (the Creative guest: he runs at whoever hit him)
         if (by != null && this.game.arenaDuels?.onHit(v, by, killed, opts)) return; // (a legal duel at the arena — nobody minds it; a foul is the arena's: ArenaDuels.js)
         // the hidden wanted level: a kill, or a real blow (not a bump in a crowd) — only what somebody saw (Blame.js)
         const real = killed || opts.spell || opts.weapon || opts.magic || opts.pierce || opts.fire || dmg > 1;
@@ -2985,8 +2986,25 @@ export class CastleLife {
      * (Blame.js) — the fighters go for him, the others run; he doesn't — the fighters search the place it came
      * from, the others run from it. The ones near hear the cry. `by`: a player's id (others: nothing).
      */
+    /**
+     * The Creative guest Тихон hit by a spell or a blow: he runs AT whoever did it and fights him (GRUDGE_MS) — to try «Отход назад от
+     * нападающих» (ThreatBack.js) on him; the author 05.11: «если я на него использую какое-то заклинание, то он на меня начнёт
+     * бежать… не убежит от меня». «Извините» calms him as anybody (forgive).
+     */
+    _guestCharge(v, by) {
+        if (v.dead || by == null || !this._isPlayer(by)) return false;
+        const now = Date.now();
+        v.grudge = { id: by, until: now + GRUDGE_MS };
+        if (v.foe !== by) { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; v.fear = null; v.seated = false; }
+        v.offended = { by, t: now, hp: v.hp };
+        this._say(v, pick(SHOUT.fightBack), 3);
+        if (by === this.game.localId) this.game.hud?.setVoice?.(`😠 ${v.name} рассердился и бежит на вас — шагайте на месте лицом к нему, и герой будет отходить назад`, true);
+        return true;
+    }
+
     startle(v, by, from, { hit = false, miss = null, loud = false, blocked = false } = {}) {
         if (!this.auth || !v || v.dead || v.servantOf != null || !from || !this._isPlayer(by) || this.game.arenaDuels?.peace?.()) return false;
+        if (v.guest && hit) return this._guestCharge(v, by);
         const cs = v.cs, now = Date.now();
         if (!cs || v.foe || by === this.state(cs.def.id).owner) return false; // (fighting already; the king may do as he likes)
         if (this.game.arenaDuels?.calm(v, by)) return false; // (the arena's legal duel: spells flying there are the show — ArenaDuels.js)
