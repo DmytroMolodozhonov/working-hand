@@ -26,6 +26,30 @@ import { USE, USE_HINT, mendPlan, mendPrice, pairUp } from './PentagramUse.js';
 import { pieceMax } from './ArmorTypes.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { PartnerSearch } from './PentagramWorld.js';
+
+/** (PENT_DRAPE) how far up / down from the circle's own ground a line may follow the land (m): a step, a bump, a low hollow. */
+export const PENT_DRAPE = { UP: 2, DOWN: 3 };
+
+/**
+ * The ground a pentagram's line lies on at (x, z): the surface NEAREST the circle's own level `y` — not the top of the column. The author's shot
+ * 05.11: drawn by a house, its lines ran up the walls and over the roofs (the topmost block was taken). A column with no surface within
+ * PENT_DRAPE of `y` (a wall standing in it, a deep pit) keeps the circle's level: the line stays flat on the plane of the circle.
+ * `d`: anything with solidIn(ix, iz, L0, L1). Pure (tests).
+ */
+export function surfaceNear(d, x, z, y) {
+    if (!d?.solidIn) return d?.topLayer ? d.topLayer(Math.round(x), Math.round(z)) - 0.5 : y; // (a bare test world: the column's top)
+    const ix = Math.round(x), iz = Math.round(z), Lc = Math.round(y + 0.5); // (the top solid layer of the circle's own ground: y = L − 0.5)
+    for (let k = 0; k <= PENT_DRAPE.DOWN; k++) { // (down from the circle's level first: the land it is drawn on, a step lower)
+        const L = Lc - k;
+        if (d.solidIn(ix, iz, L, L) && !d.solidIn(ix, iz, L + 1, L + 1)) return L - 0.5;
+        if (k && d.solidIn(ix, iz, L, L)) break; // (solid with solid over it: a wall — no step down here)
+    }
+    for (let k = 1; k <= PENT_DRAPE.UP; k++) { // (a step or a bump a little higher)
+        const L = Lc + k;
+        if (d.solidIn(ix, iz, L, L) && !d.solidIn(ix, iz, L + 1, L + 1)) return L - 0.5;
+    }
+    return y;
+}
 import { TELEPORT } from '../world/WizardVillages.js';
 import { PENT_STAND_FROM_GEN } from '../world/Terrain.js';
 import { PentagramFx } from '../fx/PentagramFx.js';
@@ -258,7 +282,7 @@ export class Pentagranium {
 
     /** A bright tip runs round the ring and along every line (a ribbon of light behind it), sparks fly off it, a flash lights the ground; at the end the figure fades in. */
     _animStep(m, dt) {
-        const A = m.anim, g = this.game, h = (x, z) => this._height(x, z), fx = g.fx;
+        const A = m.anim, g = this.game, h = (x, z) => this._height(x, z, m.y), fx = g.fx;
         if (!A.plan) { A.plan = this._plan(m); A.i = 0; A.done = 0; this.fx.trailBegin(); this.fx.trailBreak(); g.sound?.playSpellFxAt?.('fxPentagram', _o.set(m.x, m.y, m.z), 0.9, 1.1, 14); }
         A.t += dt;
         const P = A.plan, target = Math.min(1, A.t / PENT.DRAW_T) * P.total;
@@ -530,9 +554,10 @@ export class Pentagranium {
         if (send) g.sync?.pentagram?.({ k: 'fx', kind, x: m.x, y: m.y, z: m.z, r: m.r });
     }
 
-    _height(x, z) {
+    _height(x, z, nearY = null) {
         const d = this.data;
-        return d ? d.topLayer(Math.round(x), Math.round(z)) - 0.5 : 0;
+        if (!d) return nearY ?? 0;
+        return nearY == null ? d.topLayer(Math.round(x), Math.round(z)) - 0.5 : surfaceNear(d, x, z, nearY);
     }
 
     /** (every computer) A pentagram is lit. */
@@ -551,7 +576,7 @@ export class Pentagranium {
         floor.push([Math.round(x), Math.round(z), cl]);
         const m = { id, by, pent, perm: false, pair: null, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0, drawT: anim ? PENT.DRAW_T : 0, anim: anim ? { t: 0, plan: null } : null };
         this.marks.set(id, m);
-        this.fx.add(id, x, y, z, R, m.rot, (px, pz) => (data ? data.topLayer(Math.round(px), Math.round(pz)) - 0.5 : y), pent, !!TABLE[pent]?.dark, TABLE[pent]?.glow ?? 0xffd98a);
+        this.fx.add(id, x, y, z, R, m.rot, (px, pz) => (data ? surfaceNear(data, px, pz, y) : y), pent, !!TABLE[pent]?.dark, TABLE[pent]?.glow ?? 0xffd98a);
         return m;
     }
 
