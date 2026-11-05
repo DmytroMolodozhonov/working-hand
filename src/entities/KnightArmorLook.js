@@ -60,6 +60,24 @@ const leatherTex = () => tex('aleather', 64, 64, (g, W, H, r) => {
     g.strokeStyle = 'rgba(20,10,0,0.5)'; g.lineWidth = 1.6; g.setLineDash([4, 3]); g.strokeRect(5, 6, W - 10, H - 12); g.strokeStyle = '#e8d8a8'; g.lineWidth = 1; g.strokeRect(4.5, 5.5, W - 9, H - 11); g.setLineDash([]);
 }, 83);
 
+/** A knight's surcoat (tabard): woven cloth in the house colours with a cross, a trim along the hem and a stitched edge. kind: 0 plain blue/white, 1 magic blue/silver, 2 named red/gold, 3 cursed black/grey. */
+const TAB = [['#27478c', '#f0f0ea'], ['#1c3768', '#c9d8f4'], ['#8a2424', '#e8c25a'], ['#1c1c20', '#6a6a72']];
+const tabardTex = (k) => tex('tabard' + k, 128, 192, (g, W, H, r) => {
+    const [cloth, cross] = TAB[k];
+    g.fillStyle = cloth; g.fillRect(0, 0, W, H);
+    for (let y = 0; y < H; y += 2) { g.fillStyle = `rgba(0,0,0,${0.06 + 0.04 * ((y >> 1) & 1)})`; g.fillRect(0, y, W, 1); }
+    for (let x = 0; x < W; x += 2) { g.fillStyle = `rgba(255,255,255,${0.04 + 0.04 * ((x >> 1) & 1)})`; g.fillRect(x, 0, 1, H); }
+    for (let i = 0; i < 700; i++) { g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'; g.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2); }
+    // the cross: wide arms, a thin outline and a highlight; stitched along its edge
+    const cx = W / 2, cy = 70, a = 13;
+    g.fillStyle = cross; g.fillRect(cx - a, cy - 46, a * 2, 110); g.fillRect(cx - 38, cy - a, 76, a * 2);
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 2; g.strokeRect(cx - a, cy - 46, a * 2, 110); g.strokeRect(cx - 38, cy - a, 76, a * 2);
+    g.fillStyle = 'rgba(0,0,0,0.14)'; g.fillRect(cx - a + 2, cy - 44, 3, 106);
+    g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(0, H - 22, W, 22); g.fillStyle = cross; g.fillRect(0, H - 20, W, 5); g.fillRect(0, H - 8, W, 2);
+    for (let y = 8; y < H; y += 7) { g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(3, y, 1.6, 3); g.fillRect(W - 5, y, 1.6, 3); }
+    const e = g.createLinearGradient(0, 0, 0, 18); e.addColorStop(0, 'rgba(0,0,0,0.35)'); e.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = e; g.fillRect(0, 0, W, 18);
+}, 84 + k);
+
 // ------------------------------------------------------------------ materials and shapes (shared, bounded)
 const _m = new Map();
 const mk = (k, make) => { if (!_m.has(k)) { const m = make(); m.userData.shared = true; _m.set(k, m); } return _m.get(k); };
@@ -72,6 +90,7 @@ const darkSteel = (code, dk = false) => mk(`k${code}${dk ? 'd' : ''}`, () => new
 /** The trim: dull brass on plain steel, bright blue-white on magic, gold on named. */
 const trim = (code, dk = false) => mk(`t${code}${dk ? 'd' : ''}`, () => new THREE.MeshStandardMaterial(code === 3 ? { color: 0xe0b43c, metalness: 0.8, roughness: 0.32, emissive: 0x6a4a00, emissiveIntensity: 0.3 } : code === 2 ? { color: 0x9fc4ff, metalness: 0.6, roughness: 0.3, emissive: 0x3a6ae0, emissiveIntensity: 0.5 } : { color: dk ? 0x3a3a3e : 0xa88a4a, metalness: 0.7, roughness: 0.4 }));
 const mail = (dk) => mk(`m${dk ? 'd' : ''}`, () => new THREE.MeshLambertMaterial({ color: dk ? 0x55565c : 0xffffff, map: mailTex(), side: THREE.DoubleSide }));
+const tabard = (code, dk) => mk(`tb${code}${dk ? 'd' : ''}`, () => new THREE.MeshLambertMaterial({ map: tabardTex(dk ? 3 : code >= 3 ? 2 : code === 2 ? 1 : 0), side: THREE.DoubleSide }));
 const strap = () => mk('strap', () => new THREE.MeshLambertMaterial({ color: 0x4a2c18, map: leatherTex(), side: THREE.DoubleSide }));
 const rivetMat = (code, dk) => trim(code, dk);
 
@@ -114,23 +133,19 @@ const rivets = (p, mat, list, r, n, x0, x1, y, z) => { for (let i = 0; i < n; i+
 export function helmetParts(p, code, list, dk = false) {
     const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), ml = mail(dk), lt = strap(), rm = rivetMat(code, dk);
     const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
-    // the skull: stepped rounded layers (a dome that wraps a box head), a brow band with rivets all round
-    rb(s, 1.46, 0.5, 1.46, 0, 0.3, 0); rb(s, 1.36, 0.3, 1.36, 0, 0.68, 0); rb(s, 1.04, 0.2, 1.04, 0, 0.9, 0); rb(s, 0.66, 0.12, 0.66, 0, 1.03, 0);
-    rb(t, 1.5, 0.08, 1.5, 0, 0.08, 0);
+    // the skull: a smooth bascinet — many thin rounded layers make one round dome over the box head; a brow band with rivets all round
+    const W = [1.46, 1.46, 1.42, 1.36, 1.26, 1.12, 0.94, 0.72, 0.46];
+    W.forEach((w, i) => rb(s, w, 0.13, w, 0, 0.1 + i * 0.105, 0));
+    rb(t, 1.5, 0.07, 1.5, 0, 0.08, 0);
     for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.74, 0.08, Math.sin(a) * 0.74); }
-    // a comb along the top (magic: a tall blade-like crest) with a seam
-    bx(p, d, list, 0.08, 0.1, 1.2, 0, 1.1, 0); if (code >= 2) bx(p, t, list, 0.06, 0.3, 0.9, 0, 1.22, 0.06, -0.06);
-    // the nasal bar (the face stays open), brow peaks, hinged cheek guards with rivets
+    bx(p, d, list, 0.06, 0.08, 1.0, 0, 0.98, 0); // a seam along the top
+    if (code >= 2) bx(p, t, list, 0.05, 0.22, 0.8, 0, 1.06, 0.04, -0.05); // a thin fin
+    // a Norman nasal and brow peaks (the face stays open)
     bx(p, s, list, 0.12, 0.6, 0.07, 0, -0.1, -0.78);
-    for (const sx of [-1, 1]) {
-        bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.1, -0.78, 0, 0, sx * 0.25);
-        bx(p, s, list, 0.1, 0.78, 0.92, sx * 0.76, -0.2, -0.06); bx(p, d, list, 0.12, 0.1, 0.94, sx * 0.77, -0.56, -0.06);
-        rivet(p, rm, list, 0.06, sx * 0.82, 0.1, 0.2); rivet(p, rm, list, 0.05, sx * 0.82, -0.2, 0.02);
-    }
-    // the neck: lames at the back and a mail aventail under them
-    for (let i = 0; i < 3; i++) bx(p, i % 2 ? d : s, list, 1.4 - i * 0.04, 0.2, 0.12, 0, -0.08 - i * 0.18, 0.72 - i * 0.02);
-    rb(ml, 1.34, 0.3, 1.34, 0, -0.66, 0.02);
-    for (const sx of [-1, 1]) bx(p, lt, list, 0.07, 0.5, 0.05, sx * 0.64, -0.42, -0.6, 0.15, 0, sx * 0.1);
+    for (const sx of [-1, 1]) { bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.1, -0.78, 0, 0, sx * 0.25); bx(p, s, list, 0.07, 0.5, 0.5, sx * 0.76, -0.05, 0.3); rivet(p, rm, list, 0.06, sx * 0.8, 0.1, 0.2); }
+    // the camail: a mail hood hanging from the helm over the neck and the shoulders
+    rb(ml, 1.42, 0.3, 1.4, 0, -0.62, 0.02); rb(ml, 1.66, 0.22, 1.2, 0, -0.84, 0.02); rb(ml, 1.9, 0.16, 1.1, 0, -1.0, 0.02);
+    for (const sx of [-1, 1]) bx(p, lt, list, 0.07, 0.5, 0.05, sx * 0.66, -0.42, -0.62, 0.15, 0, sx * 0.1);
     if (code === 3) { // named: a plume of red horsehair on a gold socket
         put(p, DISK(), t, list, 0, 1.12, 0.05, 0.24, 0.12, 0.24);
         for (let i = 0; i < 6; i++) put(p, SPIKE(), mk('plume', () => new THREE.MeshLambertMaterial({ color: 0xb0202a, emissive: 0x300004 })), list, 0, 1.3 - i * 0.03, 0.12 + i * 0.12, 0.22, 0.6 - i * 0.05, 0.14, 0.5 + i * 0.1);
@@ -145,8 +160,10 @@ export function chestParts(ch, p, code, list, dk = false) {
     rb(s, 1.4, 1.0, 0.98, 0, 0.18, 0);
     bx(p, t, list, 0.07, 0.9, 0.07, 0, 0.2, -0.5);
     rb(t, 1.2, 0.07, 0.8, 0, 0.7, 0);
-    // the waist: lames stacked, each a little wider, rivets at the sides
-    for (let i = 0; i < 4; i++) { const y = -0.42 - i * 0.14, w = 1.4 + i * 0.03; rb(i % 2 ? d : s, w, 0.17, 0.96 + i * 0.02, 0, y, 0); for (const sx of [-1, 1]) rivet(p, rm, list, 0.05, sx * (w / 2), y, 0); }
+    // the surcoat: front and back panels in the house colours with a cross, hanging from the shoulders to the knees under the belt; mail skirt below
+    const tb = tabard(code, dk);
+    bx(p, tb, list, 0.86, 1.95, 0.04, 0, -0.35, -0.5); bx(p, tb, list, 0.86, 1.95, 0.04, 0, -0.35, 0.5);
+    rb(ml, 1.1, 0.34, 0.82, 0, -1.55, 0);
     // the belt with a buckle and leather side straps
     bx(p, lt, list, 1.46, 0.14, 0.96, 0, -0.3, 0); bx(p, t, list, 0.26, 0.18, 0.06, 0, -0.3, -0.5); bx(p, d, list, 0.12, 0.1, 0.07, 0, -0.3, -0.52);
     for (const sx of [-1, 1]) { bx(p, lt, list, 0.07, 0.95, 0.9, sx * 0.72, 0.2, 0); bx(p, t, list, 0.12, 0.08, 0.1, sx * 0.72, 0.5, -0.46); bx(p, t, list, 0.12, 0.08, 0.1, sx * 0.72, 0.0, -0.46); }
@@ -155,9 +172,9 @@ export function chestParts(ch, p, code, list, dk = false) {
     // the pauldrons: a dome over each shoulder, three lames below it, a rim of rivets
     for (const sx of [-1, 1]) {
         const x = sx * 0.82;
-        put(p, DOME(), s, list, x, 0.62, 0, 0.8, 0.5, 0.84, 0, 0, sx * 0.2);
-        rb(t, 0.8, 0.06, 0.84, x, 0.62, 0, 0, 0, sx * 0.2);
-        for (let i = 0; i < 3; i++) rb(i % 2 ? d : s, 0.7 - i * 0.02, 0.15, 0.86, x + sx * (0.04 + i * 0.03), 0.44 - i * 0.13, 0, 0, 0, sx * 0.2);
+        put(p, DOME(), s, list, x, 0.6, 0, 0.7, 0.42, 0.74, 0, 0, sx * 0.25);
+        rb(t, 0.7, 0.05, 0.74, x, 0.6, 0, 0, 0, sx * 0.25);
+        for (let i = 0; i < 2; i++) rb(i % 2 ? d : s, 0.62 - i * 0.02, 0.14, 0.76, x + sx * (0.04 + i * 0.03), 0.46 - i * 0.12, 0, 0, 0, sx * 0.25);
         for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; rivet(p, rm, list, 0.04, x + Math.cos(a) * 0.36, 0.64, Math.sin(a) * 0.38); }
     }
     // the arms: a rerebrace on the upper arm, the couter (elbow cup with a spike), the vambrace on the forearm — rounded sleeves with edge bands
@@ -182,7 +199,7 @@ export function legParts(p, code, list, dk = false) {
     rb(s, 0.66, 0.9, 0.66, 0, -0.52, 0); rb(t, 0.68, 0.06, 0.68, 0, -0.1, 0); bx(p, d, list, 0.06, 0.8, 0.06, 0, -0.52, -0.34);
     // the poleyn: a cup over the knee with a fan plate each side and a rivet
     put(p, DOME(), s, list, 0, -1.04, -0.1, 0.62, 0.5, 0.6, -Math.PI / 2 + 0.2);
-    for (const sx of [-1, 1]) { put(p, DOME(), d, list, sx * 0.31, -1.04, 0, 0.32, 0.28, 0.34, 0, 0, -sx * Math.PI / 2); rivet(p, rm, list, 0.05, sx * 0.34, -1.04, 0); }
+    for (const sx of [-1, 1]) { rb(d, 0.12, 0.34, 0.4, sx * 0.34, -1.04, 0, 0, 0, sx * 0.15); rivet(p, rm, list, 0.05, sx * 0.4, -1.04, -0.1); }
     bx(p, t, list, 0.1, 0.06, 0.1, 0, -1.04, -0.38);
     // the greave: a shell on the shin with a ridge, edge bands, straps at the calf
     rb(s, 0.6, 0.76, 0.6, 0, -1.5, 0); rb(t, 0.62, 0.05, 0.62, 0, -1.12, 0); bx(p, t, list, 0.06, 0.7, 0.07, 0, -1.5, -0.31);
@@ -190,7 +207,7 @@ export function legParts(p, code, list, dk = false) {
     bx(p, t, list, 0.1, 0.1, 0.05, 0, -1.34, -0.33);
     // the sabaton: segmented lames over the foot and a pointed toe
     for (let i = 0; i < 3; i++) bx(p, i % 2 ? d : s, list, 0.58 - i * 0.02, 0.1, 0.22, 0, -1.86 + i * 0.04, -0.16 - i * 0.2, 0.15 * i);
-    bx(p, s, list, 0.52, 0.18, 0.26, 0, -1.84, 0.08); put(p, SPIKE(), s, list, 0, -1.88, -0.78, 0.28, 0.3, 0.28, -Math.PI / 2 - 0.2);
+    bx(p, s, list, 0.52, 0.18, 0.26, 0, -1.84, 0.08); rb(s, 0.34, 0.16, 0.3, 0, -1.86, -0.74);
     bx(p, d, list, 0.54, 0.06, 0.78, 0, -1.94, -0.12);
     if (code >= 2) bx(p, t, list, 0.04, 0.5, 0.03, 0, -1.5, -0.34);
 }
