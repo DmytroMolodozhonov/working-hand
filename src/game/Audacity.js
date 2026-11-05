@@ -136,11 +136,23 @@ export function fightsInMob(p) {
     return (p.brave ?? 0.5) >= R.brave;
 }
 
-/** Бежит из деревни (не бойцы и не «по правилам»). Король/визирь/рыцари/волшебники — по своим правилам. */
-export function leavesVillage(p) {
+/**
+ * Не боец (не «по правилам») — пугается. Король/визирь/рыцари/волшебники — по своим правилам.
+ * Слова автора: слабые бегут В СВОЙ ДОМ и запираются (HomeDefence.js), а не из деревни.
+ */
+export function shelters(p) {
     const R = ROLE_MOB[p.role];
     if (!R || R.rules) return false;
     return !fightsInMob(p);
+}
+
+/**
+ * Уходит из деревни: не боец И дома для него нет (нет своего/сгорел/разрушен — `home: false`). Без сведений о доме (`home` не задан) —
+ * как раньше: не боец. С домом (`home: true`) — не уходит, а бежит домой.
+ */
+export function leavesVillage(p, home) {
+    if (home === true) return false;
+    return shelters(p);
 }
 
 /** Чем бьёт: 'pitchfork' | 'hoe' | 'hammer' | 'knife' | 'none' (кулаки). По месту работы человека. */
@@ -157,7 +169,7 @@ export function weaponFor(p) {
 }
 
 /** Код оружия в битах `fx` жителя (для гостей): (fx >> 2) & 7. 0 — ничего своего. */
-export const MOB_TOOLS = ['', 'pitchfork', 'hoe', 'hammer', 'knife', 'none'];
+export const MOB_TOOLS = ['', 'pitchfork', 'hoe', 'hammer', 'knife', 'none', 'axe'];
 export const FX_MOB_SHIFT = 2, FX_MOB_MASK = 7 << 2;
 export const toolCode = (tool) => Math.max(0, MOB_TOOLS.indexOf(tool));
 export const withTool = (fx, tool) => ((fx | 0) & ~FX_MOB_MASK) | (toolCode(tool) << FX_MOB_SHIFT);

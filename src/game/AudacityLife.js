@@ -17,7 +17,7 @@
  */
 
 import {
-    AUD, deed as deedRec, ease, phaseOf, blank, valueOf, PHASE_NAME, fightsInMob, leavesVillage, weaponFor, withTool, toolOf,
+    AUD, deed as deedRec, ease, phaseOf, blank, valueOf, PHASE_NAME, fightsInMob, shelters, weaponFor, withTool, toolOf,
     MOB, pickLeader, musterSpot, goNow, EXODUS, refugeSpot, mayReturn, NO_POINTS_ROLES,
 } from './Audacity.js';
 import { isForgiven } from './Ranks.js';
@@ -178,12 +178,22 @@ export class AudacityLife {
         for (const v of cs.active.values()) {
             if (n >= JOINS_PER_TICK) break;
             if (v.aud || v.foe || !this._free(v) || v.role === 'knight') continue;
-            if (v.mob) continue;
+            if (v.mob || v.hd) continue; // (already at home on guard: HomeDefenceLife)
             const t = this._traits(v);
-            if (!leavesVillage(t)) continue;
+            if (!shelters(t)) continue;
             if (!this.life.fright._fearful(v) && !v.fear) continue;
             if (Math.max(Math.abs(v.x - cs.def.x), Math.abs(v.z - cs.def.z)) > cs.def.zone + 10) continue; // (already outside: stays there)
-            this._leave(e, v, t, pos);
+            // the author: «слабые бегут В СВОЙ ДОМ и запираются; из деревни — только если дом недоступен/разрушен»
+            if (v.fear && v.fear.level >= 2 && v.fear.state !== 'flee') continue; // (already heading for a house / inside)
+            if (this.life.home.hasHome(v) && this.life.fright.sendHome(v, pos, e.pid)) {
+                this.life.alog?.decision(v, `прячется дома: наглость ${valueOf(e.rec).toFixed(0)}, слабый (${t.elder ? 'старик' : t.child || t.kid ? 'ребёнок' : t.female ? 'женщина' : 'робкий'}) — бежит в свой дом и запрёт дверь`);
+                if (k < 3 || Math.random() < 0.25) this.life._say(v, pick(SHOUT.flee), 3);
+                n++;
+                continue;
+            }
+            if (v.fear?.state === 'shelter') { n++; continue; } // (no own house, but another one is near enough: he is running there)
+            if (this.life.fright.sendHome(v, pos, e.pid)) { n++; continue; }
+            this._leave(e, v, t, pos); // (no house at all / burnt / fallen: out of the village, as before)
             n++;
         }
     }

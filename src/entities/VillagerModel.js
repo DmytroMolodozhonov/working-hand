@@ -1718,12 +1718,17 @@ export class VillagerModel {
                 if (!loco) T.bounce = Math.abs(Math.sin(t * 6.5)) * 0.3;
                 rate = 25;
                 break;
-            case 'flee':
-                T.aLX = 2.6 + Math.sin(this._phase) * 0.3; T.aRX = 2.6 - Math.sin(this._phase) * 0.3;
-                T.aLZ = -0.3; T.aRZ = 0.3;
-                T.headY = Math.sin(t * 3) * 0.3;
+            case 'flee': {
+                // a frightened RUN: the arms pump hard, the body leans forward, the head glances back. The hands go up over the head
+                // only when the person stands (cowers) — never at a walk («поднял руки и идёт» — HomeDefence.js)
+                const k = clamp01((speed - 1.0) / 1.6);
+                T.aLX = lerp(2.6 + Math.sin(t * 9) * 0.3, T.aLX * 1.3 + 0.35, k); T.aRX = lerp(2.6 - Math.sin(t * 9) * 0.3, T.aRX * 1.3 + 0.35, k);
+                T.aLZ = lerp(-0.3, -0.12, k); T.aRZ = lerp(0.3, 0.12, k);
+                T.hx = Math.min(T.hx, -0.3 * k);
+                T.headY = Math.sin(t * 3) * 0.3 * (1 - k) + Math.sin(t * 2.2) * 0.35 * k;
                 T.wrist = -0.4;
                 break;
+            }
             case 'climb': {
                 // hands up on the edge, pulling in turns; legs kicking up the wall
                 const c = Math.sin(t * 7);

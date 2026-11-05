@@ -48,6 +48,7 @@ import { VillagerCommands } from './VillagerCommands.js';
 import { RelationsLife } from './RelationsLife.js';
 import { RebellionLife } from './RebellionLife.js';
 import { AudacityLife } from './AudacityLife.js';
+import { HomeDefence } from './HomeDefenceLife.js';
 import { MOB as MOB_RULES } from './Audacity.js';
 import { SocialLife } from './SocialLife.js';
 import { CourtLife } from './CourtLife.js';
@@ -324,6 +325,7 @@ export class CastleLife {
         this.alog = new ActionLog(this, gameJournal); // the full journal of what the people in dealings do and why (ActionLog.js)
         this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
         this.mfear = new MonsterFearLife(game); // the hero in the monster form: who runs, who fights, who scatters the darkness (MonsterFear.js)
+        this.home = new HomeDefence(this); // afraid → own house → barred in → armed, on guard by the door, fights whoever comes in (HomeDefenceLife.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
         this.chores = new Chores(this); // what the people do all day by their houses, at the well, the market (Chores.js)
@@ -1180,7 +1182,7 @@ export class CastleLife {
     /** Standing is right for it now (asleep, talking, waiting for a player, at its post, in a fight…): not «stuck». */
     _standsFine(v) {
         if (v.dead || v.sleep || v.handLink || v.lev || v.climb || v.seated || v.talking > 0 || v.stunT > 0 || v.bowing > 0 || v.giveT > 0) return 'state';
-        if (v.foe || v.follow || v.investigate || v.fleeT > 0 || v.fireT > 0 || v.order || v.servantOf != null || v.fear || v.chore || v.waitT > 0 || v.aud) return 'busy';
+        if (v.foe || v.follow || v.investigate || v.fleeT > 0 || v.fireT > 0 || v.order || v.servantOf != null || v.fear || v.hd || v.chore || v.waitT > 0 || v.aud) return 'busy';
         if (v.mode !== 'walk' && v.mode !== 'run' && v.mode !== 'idle') return 'mode';
         if (v.job === 'king' || v.job === 'guard' || v.job === 'stall' || (v.post && Math.hypot(v.post.x - v.x, v.post.z - v.z) < 2)) return 'post';
         if (v.wallW?.noWay > 0) return 'wall'; // (it stands off a shut wall on purpose, and lets go of the goal by itself)
@@ -1911,6 +1913,7 @@ export class CastleLife {
     _fight(v, dt) {
         const cs = v.cs;
         const fp = this._playerPos(v.foe);
+        if (v.hd && this.home.leash(v, fp)) return; // (on guard at home: not after him through the village)
         const d = fp ? Math.hypot(fp.x - v.x, fp.z - v.z) : Infinity;
         // they don't stop at the edge of their land: only when the enemy got well
         // away from them (~20 m) beyond it — or very far from the castle
@@ -2769,7 +2772,7 @@ export class CastleLife {
         const sq = v.cs?.squads?.get(v.foe);
         if (sq) sq.blows++;
         // (its sword knocked out by «Экспеллиармус»: fists)
-        const base = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : Math.max(STATS[v.role].dmg, v.mob ? v.mobDmg || 1 : 0); // (the crowd's fork / hammer / knife: 2)
+        const base = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : Math.max(STATS[v.role].dmg, v.mob || v.hd ? v.mobDmg || 1 : 0); // (the crowd's / the house's fork / hammer / knife: 2, an axe 3)
         const dmg = Math.round(base * wantedTactics(this.wantedLevel(v.foe)).dmg); // (a known murderer: they hit harder)
         if (v.foe === this.game.localId) this.struck(dmg, v.x, v.z, v.title);
         else this.game.sync?.villagerStrike?.(v.foe, dmg, v.x, v.z, v.title);
@@ -3955,6 +3958,7 @@ export class CastleLife {
             for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def) && !isGuestSite(cs.def)) { if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
             this.hamlets.update(dt);
             this.fright.update(dt);
+            this.home.update(dt);
             this.mfear.update(dt);
             this.rebuild.update(dt);
             this.night?.update(dt);

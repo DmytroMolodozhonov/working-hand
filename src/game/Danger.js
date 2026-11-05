@@ -133,16 +133,18 @@ export function towards(p, q, dangers) {
  * The house to hide in: the nearest whole one that is not on the danger's side.
  * houses: [{i, x, z, own, broken, burning}] → the chosen index or -1.
  */
+/** Свой дом «стоит» столько метров бега (HomeDefence.HOME.OWN_BONUS) и ищется на столько дальше. */
+const OWN_BONUS = 70, OWN_REACH_PLUS = 40;
 export function pickShelter(p, houses, dangers, { maxDist = 55 } = {}) {
     let best = -1, bs = Infinity;
     for (const h of houses) {
         if (h.broken || h.burning) continue;
         const d = Math.hypot(h.x - p.x, h.z - p.z);
-        if (d > maxDist) continue;
+        if (d > maxDist + (h.own ? OWN_REACH_PLUS : 0)) continue;
         if (!safeFrom(h, dangers, 10)) continue;
         if (towards(p, h, dangers)) continue;
-        // (one's own home is worth a few more steps; farther from the danger is better)
-        let s = d - (h.own ? 15 : 0);
+        // (one's own home is worth a long run — «бежать в свой собственный дом»; farther from the danger is better)
+        let s = d - (h.own ? OWN_BONUS : 0);
         for (const z of dangers) s -= Math.min(20, Math.hypot(h.x - z.x, h.z - z.z) * 0.15);
         if (s < bs) { bs = s; best = h.i; }
     }

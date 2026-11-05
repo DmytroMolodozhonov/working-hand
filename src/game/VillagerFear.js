@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { DANGERS, levelOf, worst, safeFrom, pickShelter, pickEscape, calmNeeded } from './Danger.js';
 import { threatCost, pathPasses, openWay } from './FleePlan.js';
 import { isWizSite } from './WizardLife.js';
+import { HOME, fearRun } from './HomeDefence.js';
 import { GREY_HAIR } from '../entities/VillagerModel.js';
 
 const SENSE = 0.5; // s between looks round
@@ -166,6 +167,7 @@ export class VillagerFear {
 
     /** Can this person be frightened (and run by this system)? */
     _fearful(v) {
+        if (v.hd) return false; // (already at home on guard: HomeDefenceLife leads him)
         if (v.dead || v.wizard || v.servantOf != null || v.handLink || v.lev || v.sleep) return false; // (asleep: NightLife wakes them first)
         if (v.foe || v.order) return false; // (in a fight / under the king's orders)
         if (v.aud || v.mob) return false; // (in the crowd / out of the village: AudacityLife leads them)
@@ -191,6 +193,7 @@ export class VillagerFear {
                 if (v.dead) continue;
                 const w = worst(v, here, (d) => this._sees(v, d));
                 if (!w) continue;
+                if (v.hd) { if (w.level >= 1 && v.fear) v.fear.lastT = this._t; continue; } // (on guard at home: the danger is still about — not calm yet)
                 if (v.role === 'knight') { if (!v.sleep) this._knight(v, w); continue; }
                 if (!this._fearful(v)) continue;
                 this._feel(v, w, here);
@@ -285,9 +288,9 @@ export class VillagerFear {
         let hi = house;
         if (hi == null) {
             const opts = [];
-            const R = 70;
             for (let i = 0; i < H.length; i++) {
                 const h = H[i];
+                const R = i === v.entry.home ? HOME.OWN_REACH : 70; // (one's own house is worth a longer run)
                 if (!h.inside || F.bad.has(i) || Math.abs(h.inside.x - v.x) > R || Math.abs(h.inside.z - v.z) > R) continue;
                 opts.push({ i, x: h.inside.x, z: h.inside.z, own: i === v.entry.home, broken: this._broken(h), burning: this._burning(h) });
             }
@@ -301,7 +304,7 @@ export class VillagerFear {
             const opts = [];
             for (let i = 0; i < H.length; i++) {
                 const h = H[i];
-                if (!h.inside || F.bad.has(i) || Math.abs(h.inside.x - v.x) > 70 || Math.abs(h.inside.z - v.z) > 70) continue;
+                if (!h.inside || F.bad.has(i) || Math.abs(h.inside.x - v.x) > (i === v.entry.home ? HOME.OWN_REACH : 70) || Math.abs(h.inside.z - v.z) > (i === v.entry.home ? HOME.OWN_REACH : 70)) continue;
                 opts.push({ i, x: h.inside.x, z: h.inside.z, own: i === v.entry.home, broken: this._broken(h), burning: this._burning(h) });
             }
             hi = pickShelter(v, opts, here, { maxDist: v.elder ? 40 : 55 });
@@ -310,6 +313,7 @@ export class VillagerFear {
             F.state = 'shelter'; F.house = hi;
             if (!v.path) life._goTo(v, H[hi].homeNode, cost);
             v.pathCost = cost;
+            life.alog?.decision(v, `${v.title || v.role} ${v.name || ''} испугался (${DANGERS[d.kind]?.ru || d.kind}, страх ${level}) → бежит в ${hi === v.entry.home ? 'свой' : 'чужой (своего нет/далеко/небезопасен)'} дом`);
             if (shout) this._shout(v, d, 'hide');
             this._family(v, hi, d, here);
             return;
@@ -393,6 +397,7 @@ export class VillagerFear {
     // ------------------------------------------------------------- acting
     /** One step of a frightened person (from CastleLife._think). true: handled. */
     step(v, dt) {
+        if (v.hd) return this.life.home.step(v, dt); // (at home on guard: bars the door, arms, holds the door, fights, looks out — HomeDefenceLife.js)
         if (v.warned && !v.fear && this._fearful(v) && this._t >= v.warned.at) {
             const d = v.warned.danger;
             v.warned = null;
@@ -405,7 +410,7 @@ export class VillagerFear {
         const life = this.life;
         const calm = this._t - F.lastT;
         const need = calmNeeded(v.brave ?? 0.5, v.elder);
-        const run = RUN * (v.elder ? 0.55 : 1);
+        const run = fearRun({ elder: v.elder }, RUN);
         F.checkT = (F.checkT || 0) - dt;
         switch (F.state) {
             case 'look': {
@@ -448,7 +453,9 @@ export class VillagerFear {
                 if (v.path && v.pathI < v.path.length) {
                     life._followPath(v, dt, F.level >= 3 ? run : run * 0.85);
                     v.mode = F.level >= 3 ? 'flee' : 'run';
-                } else if (F.state === 'shelter') { F.state = 'inside'; F.spot = this._spot(v); }
+                } else if (F.state === 'shelter') {
+                    if (!this.life.home?.arrive(v, F)) { F.state = 'inside'; F.spot = this._spot(v); } // (arrived: HomeDefenceLife leads on)
+                }
                 else { F.state = 'hidden'; v.speed = 0; }
                 break;
             }
@@ -510,6 +517,7 @@ export class VillagerFear {
                 }
                 break;
             }
+            case 'home': if (!v.hd) this._end(v, false); break;
             case 'douse': this._douseStep(v, dt); break;
             default: this._end(v, false);
         }
@@ -529,6 +537,7 @@ export class VillagerFear {
 
     /** It is over: back to what they did. */
     _end(v, said) {
+        if (v.hd) this.life.home.release(v, 'страх кончился', said);
         this._dropBucket(v);
         v.fear = null;
         v.path = null;
@@ -656,6 +665,19 @@ export class VillagerFear {
         const d = this.add(kind, pos, { key: 'atk:' + by, by, ttl: 20 });
         this._traits(v);
         this._decide(v, levelOf(kind, Math.hypot(pos.x - v.x, pos.z - v.z)) >= 3 ? 3 : 2, d, this.near(v.x, v.z, 80), true);
+    }
+
+    /**
+     * (AudacityLife) The player's boldness frightens THIS person (not the whole village): he runs to his own house and bars himself in.
+     * A private danger (not in the list): the others are not frightened by it. → true: heads for a house.
+     */
+    sendHome(v, pos, by) {
+        if (!this._fearful(v)) return false;
+        this._traits(v);
+        const D = DANGERS.attacker;
+        const d = { key: 'pers:' + v.id, kind: 'attacker', x: pos.x, y: (pos.y ?? 0) - 1.95, z: pos.z, r: D.r, by, born: this._t, at: this._t, until: this._t + 20, seen: new Map() };
+        this._decide(v, 2, d, [d], true);
+        return v.fear?.state === 'shelter';
     }
 
     clear() { this.list.clear(); }

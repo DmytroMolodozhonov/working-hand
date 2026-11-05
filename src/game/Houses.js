@@ -189,7 +189,7 @@ export class Houses {
 
     _deactivate(rec) {
         const g = this.game;
-        if (rec.doorId) { const d = g.doors?.list.get(rec.doorId); if (d && !d.moved) g.doors.remove(rec.doorId); }
+        if (rec.doorId) { g.locks?.barred.delete(rec.doorId); const d = g.doors?.list.get(rec.doorId); if (d && !d.moved) g.doors.remove(rec.doorId); }
         for (const id of rec.bedIds) {
             const b = g.beds?.list.get(id);
             if (!b) continue;
@@ -366,7 +366,7 @@ export class Houses {
             if (!d || d.holdSide || d.lifted) continue;
             if (g.locks?.spellLocked?.(d.id)) { rec.auto = false; continue; } // («Lock»: their key doesn't open it — only «Алохомора»)
             let someone = null;
-            for (const v of people) if (!v.dead && Math.abs(v.x - d.x) < 1.9 && Math.abs(v.z - d.z) < 1.9 && !v.sleep) { someone = v; break; }
+            for (const v of people) if (!v.dead && Math.abs(v.x - d.x) < 1.9 && Math.abs(v.z - d.z) < 1.9 && !v.sleep && !v.hd) { someone = v; break; } // (the one on guard at home stands by the door and does not open it: it shuts by itself and he bars it)
             if (someone) {
                 rec.auto = true;
                 rec.doorOpenT = 0;

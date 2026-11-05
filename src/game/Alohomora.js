@@ -34,6 +34,7 @@ import { isSolid, GATE_METAL_FROM_GEN } from '../world/Terrain.js';
 import { gateVariant } from './GateModel.js';
 import { doorHeld } from './Wreck.js';
 import { CHEST_W, LID_LEN } from '../entities/Chest.js';
+import { isForgiven } from './Ranks.js';
 
 export const ALOHOMORA = {
     RANGE: 5.5, // m from the hand to the lock
@@ -210,6 +211,7 @@ export class Alohomora {
         this.lift = { left: null, right: null }; // the chest whose lid each hand lifts
         this.spelled = new Set(); // door ids locked by «Lock» (till «Алохомора»)
         this.closing = new Set(); // … of them, the leaves still swinging shut
+        this.barred = new Map(); // house door id → {def, by: Set(villager ids)}: barred from inside by the frightened family (HomeDefenceLife.js); host only
     }
 
     get auth() { return this.game.authority; }
@@ -219,6 +221,8 @@ export class Alohomora {
     doorLocked(d) {
         if (!d) return false;
         if (this.spelled.has(d.id)) return true; // («Lock»: for everybody, the castle's owner too)
+        const B = this.barred.get(d.id);
+        if (B?.by.size && !this._friendOf(B.def)) return true; // (barred from inside: only «Алохомора» or force; the owner / the king's friends are let in)
         if (d.gate) {
             if (d.ice && this.game.iceCastle?.state?.queenDead) return false; // (the Ice Castle's gates: her magic gone, no lock holds them)
             const st = this.gates.get(d.castle) || {};
@@ -230,9 +234,17 @@ export class Alohomora {
         return !!this.doorLocks.get(d.id) && !this.picked.has(d.id);
     }
 
+    /** Is the local player the owner of the place or a friend of its king (the barred door is not barred for them)? */
+    _friendOf(def) {
+        const g = this.game;
+        const st = g.castleLife?.state?.(def.id);
+        return !!st && (st.owner === g.localId || isForgiven(st.ranks, g.localId));
+    }
+
     /** A house's door locks (the host): some houses do, at night or with nobody of the family at home. */
     _houseLocked(rec) {
         const g = this.game;
+        if (this.barred.get(rec.doorId)?.by.size) return true; // (the family barred it from inside)
         if (rec.def?.kind === 'tower' || rec.def?.kind === 'wizvillage') {
             if (rec.h.kind === 'tower' || rec.h.civic) return !!g.isNight; // (the academy's great door, a settlement's hall / library / cauldron hall: locked for the night)
             if (hash01(rec.h.id) >= ALOHOMORA.WIZ_LOCK_SHARE) return false;
@@ -249,6 +261,7 @@ export class Alohomora {
         if (now - this._hintT < 3500) return;
         this._hintT = now;
         if (this.spelled.has(d.id)) { this.game.hud?.setVoice('🔒 Дверь заперта заклинанием «Lock» — откройте её «Алохоморой»', true); return; }
+        if (this.barred.get(d.id)?.by.size) { this.game.hud?.setVoice('🔒 Заперто изнутри — там кто-то есть и ждёт. Скажите «Алохомора» или выломайте дверь', true); return; }
         this.game.hud?.setVoice(d.gate ? '🔒 Ворота тронного зала заперты. Простая «Алохомора» их не возьмёт — нужна «Алохомора Максима» (или мощный взрыв)' : '🔒 Заперто — скажите «Алохомора», показав рукой на замок', true);
     }
 
@@ -427,6 +440,7 @@ export class Alohomora {
             if (this.auth && c && m.by) this._witness(c, m.by);
         } else if (m.k === 'door') {
             this.picked.add(m.id);
+            this.barred.delete(m.id); // («Алохомора» takes the bar too)
             const d = g.doors?.list.get(m.id);
             if (d) { if (Math.abs(d.a) < 0.2) g.doors._setAngle(d, 0.2 * (Math.sign(d.a) || 1)); this._flash(d.model.userData.knob.getWorldPosition(new THREE.Vector3())); }
             if (this.auth && d && m.by) this._witnessDoor(d, m.by);
