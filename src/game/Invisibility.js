@@ -2,7 +2,7 @@
  * Invisibility.js — «Invisibility» (only from a scroll): the caster can't be seen.
  *
  * The wand is turned at oneself — or raised up (a tracked hand turned back at the chest is seen
- * badly by the camera: WandAim.js) — and «Invisible» / «Invisibility» is said: 20 mana at once, then
+ * badly by the camera: WandAim.js) — and «Invisible» / «Invisibility» is said: 150 mana at once, then
  * 1 every second. Gone when the mana is gone, or by «стоп».
  *   - I see myself a little — as if a bit invisible (the body and what the hands hold, faint).
  *   - The others see nothing of me: other players (their computers hide my hero, what my hands hold,
@@ -20,7 +20,7 @@ import { aimedUpOrSelf, castingHand } from './WandAim.js';
 import { seesInvisible, ghostify, ghostAlpha } from './Invisibles.js';
 
 export const INVIS = {
-    COST: 20, // mana at once (Combat.SPELL_COST)
+    COST: 150, // mana at once (Combat.SPELL_COST)
     DRAIN: 1, // mana a second
     CLUE_T: 4, // s the creatures remember where they last noticed me
     CLUE_NOISE: 1.5, // m: «примерно»
