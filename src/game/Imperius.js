@@ -56,8 +56,14 @@ export const IMPERIUS_MAXIMA = {
     FIRE_EVERY: 7, // s: the dragon's fire, once in this long (the author)
 };
 
-/** The numbers of a spell: 'Imperius' | 'ImperiusMaxima'. */
-export const imperiusOf = (name) => (name === 'ImperiusMaxima' ? IMPERIUS_MAXIMA : IMPERIUS);
+/**
+ * «Зелье превращения в дракона» (DragonForm.js): the mind in a dragon of one's own body — driven as the Maxima, but no mana, no link
+ * that tears (the body is in the dragon), the fire as the Maxima's.
+ */
+export const DRAGON_FORM_MIND = { COST: 0, NEED_MAX: 0, UPKEEP: 0, RANGE: 1e9, CAST_R: 0, FIRST: 0, FIRE_EVERY: IMPERIUS_MAXIMA.FIRE_EVERY };
+
+/** The numbers of a spell: 'Imperius' | 'ImperiusMaxima' | 'DragonForm'. */
+export const imperiusOf = (name) => (name === 'ImperiusMaxima' ? IMPERIUS_MAXIMA : name === 'DragonForm' ? DRAGON_FORM_MIND : IMPERIUS);
 
 /**
  * Who may be taken (the author's rule «кто/что × как»): kind → {ru, plain, magic, boss, fly, why}.
@@ -221,4 +227,4 @@ export function flies(kind, maxima) {
 }
 
 /** The network's short names of the spell. */
-export const NET_SPELL = { Imperius: 0, ImperiusMaxima: 1 };
+export const NET_SPELL = { Imperius: 0, ImperiusMaxima: 1, DragonForm: 2 };

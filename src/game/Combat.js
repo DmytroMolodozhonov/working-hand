@@ -1207,6 +1207,7 @@ export class Combat {
 
     damage(amount, byId, kind) {
         if (this.dead) return;
+        if (this.game.dragonForm?.active) return; // (the body is inside the dragon of the potion: the dragon takes the blows — DragonForm.js)
         if (this.game.darkLord?.lifting) return; // (the rite of a true dark mage: the ball of darkness is round the body — nothing gets in, nothing is half-done; DarkLord.js)
         if (this.godsKeepsOff(kind)) { this._godsFx(null); return; } // (the gods' shield: no spell but the gods' own gets through — ProtectionGods.js)
         if (BLAST_HARM.has(kind) && this.blastProof()) return; // (a dome: no blast, no falling pieces get in — mine either)

@@ -134,7 +134,7 @@
 - `temple.worker.js` — the Temple of the Gods' look and solids (GodsTemple.templePlan: ~0.5 s of work — never in a frame of the game). In: {id, seed}; out: {id, plan} (the mesh arrays moved, not copied).
 - `terrain.worker.js` — makes terrain chunks away from the drawing (TerrainView.js).
 
-### `src/game/` — игра: системы, заклинания, существа, правила и таблицы «кто/что» (397)
+### `src/game/` — игра: системы, заклинания, существа, правила и таблицы «кто/что» (400)
 
 - `Accio.js` — «Акцио»: summon a thing into your hand.
 - `Achievements.js` — the player's achievements («ачивки») and the status «Высший маг».
@@ -256,6 +256,7 @@
 - `DivineSword.js` — «Божественный меч» (the gods' sword): the shared API (rules + `makeDivineSword`; THREE only for a vector).
 - `Doors.js` — «Create a Door», «Stand», opening by the handle.
 - `DragonAggro.js` — когда дракон имеет право напасть (чистые правила, без THREE; тест `tests/unit/dragon-aggro.test.js`).
+- `DragonForm.js` — «Зелье превращения в дракона» (the author 05.11: «превращение в дракона, 10 минут, не чёрная магия: яйцо дракона + перо феникса»). Drunk — the hero's body melts into a dragon's: for DRAGON_FORM.S s the player IS a dragon, then a…
 - `DragonHowl.js` — the dragon's fire in «Империус Максима»: the caster's long «У-у-у» (pure; tests/unit/imperius-flight.test.js).
 - `DragonImperius.js` — the dragon that holds a mind of «Империус Максима»: the rules (pure, no THREE; tests/unit/dragon-imperius.test.js). The game's side: ImperiusFlyers.js (drive), Dragons.js (_breathe), DragonSmash.js (the wings and the body break…
 - `DragonKinds.js` — the dragons' kinds, their strength, the hoard, and the table «на кого и на что» (what touches a dragon and how; what a dragon's flame touches). Pure data and rules: no THREE, Node-testable. The dragons themselves: Dragons.js;…
@@ -283,6 +284,7 @@
 - `FleetMath.js` — the pure part of the orders a king gives to the crew of his own ship (Node-testable, no THREE).
 - `FleetOrders.js` — the king of a sea castle (or whoever took a ship) commands the crew of his own ship.
 - `Flight.js` — the «Флайн» spell: fly like Superman.
+- `Flourish.js` — «Flourish» (the author 05.11: «земля → трава, потом цветочки»). From a scroll; instant (no concentration).
 - `Game.js` — one play session (creative, survival, custom map or camera test).
 - `GargoyleModel.js` — the look of the infernal gargoyle (THREE; the rules are GargoyleRules.js).
 - `GargoyleRitual.js` — what the ritual of the pentagram of the infernal gargoyles LOOKS like (THREE; the numbers are GargoyleRules.js, the rules and the creatures are Gargoyles.js). Cheap by design (CLAUDE.md «Производительность»):
@@ -421,6 +423,7 @@
 - `PlantLife.js` — the creatures of the plant world: rules, numbers and the table of kinds (no THREE: the tests read it).
 - `Plants.js` — the plant creatures of the world (rules and numbers: PlantLife.js; the look: fx/PlantModels.js).
 - `PoseHint.js` — «я вас услышал, но сделайте сначала вот это»: ОДНО место, где написано, какая поза нужна заклинанию и что сказать игроку, если её не хватает.
+- `PotionEffects.js` — the timed effects of the potions (the author 05.11: «скрытие личности 24 минуты, ослепительность 24 минуты, удача на 12 игровых часов, дыхание под водой на игровой день, обнуление эффектов»). Rules and numbers here (pure,…
 - `Potions.js` — what a cauldron does with what goes into it (pure, node-testable).
 - `PouchModel.js` — the coin pouches' 3D models (ItemTypes.makeItemModel, kind 'coins').
 - `ProtectionGods.js` — «Protection Gods» (божественная защита) and «Protection Gods Maxima»: the gods' shield.

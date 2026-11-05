@@ -132,6 +132,7 @@ import { FleetOrders } from './FleetOrders.js';
 import { sampleIceModels, iceQueenModel, snowmanModel, iceMonsterModel } from './IceModels.js';
 import { Dragons } from './Dragons.js';
 import { DragonRide } from './DragonRide.js';
+import { DragonForm } from './DragonForm.js';
 import { ImperiusControl } from './ImperiusControl.js';
 import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
 import { Carriages, cartModel } from './Carriages.js';
@@ -697,6 +698,7 @@ export class Game {
         this.diabolos = new Diabolos(this); // Дьяволос: огромный прикованный дьявол ада (бессмертен; Diabolos.js, DiabolosRules.js)
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.dragonRide = new DragonRide(this); // «Brain Rot Maxima»: the calmed dragon, riding it (DragonRide.js)
+        this.dragonForm = new DragonForm(this); // «Зелье превращения в дракона»: 10 минут драконом (DragonForm.js; the driving — ImperiusControl 'DragonForm')
         this.imperius = new ImperiusControl(this); // «Империус» / «… Максима»: the mind in another body (ImperiusControl.js)
         this.fleet = new FleetOrders(this); // the king commands the crew of his own ship: guns, boarding, sails (FleetOrders.js)
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
@@ -1708,7 +1710,7 @@ export class Game {
 
     damageLocalPlayer(amount, kind = null) {
         if (!this.isDeadLocal && amount > 0) this.imperius?.interruptByDamage?.(amount, kind); // («Империус»: harm to the body — the mind back at once; in Creative too, where nobody is hurt)
-        if (this.isDeadLocal || this.config.mode === 'creative') return;
+        if (this.isDeadLocal || this.config.mode === 'creative' || this.dragonForm?.active) return; // (the dragon form: the body is inside the dragon)
         const mon = this.monster?.active ? this.monster : null; // (the monster form: MonsterForm.spellOnMonster)
         if (mon) { amount = mon.filterDamage(amount, kind, null); if (!(amount > 0)) return; }
         this.playerHP -= amount;
@@ -4075,6 +4077,7 @@ export class Game {
         if (earth && !duelOnly) this.dragons.update(dt);
         this.dragonRide.update(dt, earth);
         this.imperius.update(dt); // (after the creatures moved: the link, the mana, the passage of the mind)
+        this.dragonForm.update(dt); // (the dragon form: the body carried inside the dragon, hidden)
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
         if (earth && !duelOnly) this.iceCastle.update(dt);
         this.temple?.update(dt); // (the Gods' temple: on Venus)
@@ -4325,7 +4328,7 @@ export class Game {
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
         // a fast run on a slow frame: the step is walked in short pieces against the walls, so a
         // thin wall or a door is never jumped over between two frames (the push-out below decides the rest)

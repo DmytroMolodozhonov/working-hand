@@ -385,7 +385,7 @@ export class NetSync {
             if (floating) held.push(floating.serialize());
             this.net.send({
                 t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP,
-                c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, mm: Math.floor(g.combat.maxFatigue || 30), px: (g.potionFx?.has('disguise') ? 1 : 0) | (g.potionFx?.has('dazzle') ? 2 : 0) || undefined, // (the potions the host must know of: PotionEffects) dc: g.duel.myContact(), w: held,
+                c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, mm: Math.floor(g.combat.maxFatigue || 30), px: (g.potionFx?.has('disguise') ? 1 : 0) | (g.potionFx?.has('dazzle') ? 2 : 0) | (g.dragonForm?.netFlag?.() || 0) || undefined, // (the potions the host must know of: PotionEffects) dc: g.duel.myContact(), w: held,
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
                 sc: g.scrolls?.netState() || undefined, // (my scroll open in the hands: ScrollNet.js)
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
@@ -556,6 +556,11 @@ export class NetSync {
     /** «Империус» (ImperiusControl.onNet): a guest asks for / drives / lets go a creature; the host answers. */
     imperius(m) {
         this.net.send({ t: 'imp', ...m, by: this.me });
+    }
+
+    /** «Зелье превращения в дракона» (DragonForm.onNet): a guest asks the host for the dragon of their body / says it is over. */
+    dragonForm(m) {
+        this.net.send({ t: 'dform', ...m, by: this.me });
     }
 
     brainrot(id, k = 'z') {
@@ -1130,6 +1135,7 @@ export class NetSync {
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;
             case 'imp': g.imperius?.onNet(m, this.net.isHost); break;
+            case 'dform': g.dragonForm?.onNet(m, m.from || m.by); break; // (the potion's dragon: DragonForm.js)
             case 'brainrot': if (this.net.isHost) { if (m.k === 'free') g.servants?.freeAll(m.from || m.by); else if (m.k && m.k !== 'z') g.servants?.make(m.k, m.id, m.from || m.by); else g.applyBrainrot(m.id, m.from || m.by); } break;
             case 'ltree': if (!this.net.isHost) { g.livingTrees?.applyNet(m.l); g.servants?.applyNet(m.sv); } break;
             case 'alivehit': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t?.skel && Number.isFinite(+m.dmg)) g.livingTrees.hit(t, Math.min(20, Math.max(0, +m.dmg)), m.kind === 'fist' ? 'fist' : 'melee', m.from); } break;

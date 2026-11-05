@@ -8,6 +8,7 @@
  *   dazzle       24 min: friendship and love bend three times as easily (RelationsLife.bump — only the rises).
  *   luck         12 game hours (= 12 min): every spell of yours +5…85 % stronger, a new roll each time (WandMagic.power).
  *   waterbreath  a game day (= 24 min): under water the air never runs out (Swimming).
+ *   dragon       10 min: the hero IS a dragon (DragonForm.js — run, take off, breathe fire), then a man again where the dragon stands.
  *   reset        every effect of a potion above ends at once (not the cure of the dark mage — that one is no «effect»).
  *
  * What may go wrong (CLAUDE.md): drunk twice — the time starts again (never two at once); the hero dies — every effect ends (death takes all);
@@ -24,6 +25,7 @@ export const POTION_FX = {
     dazzle: { s: 24 * 60, ru: 'Ослепительность', icon: '✨' },
     luck: { s: 12 * GAME_HOUR_S, ru: 'Удача', icon: '🍀' },
     waterbreath: { s: 24 * GAME_HOUR_S, ru: 'Дыхание под водой', icon: '🫧' },
+    dragon: { s: 600, ru: 'Превращение в дракона', icon: '🐉' }, // (DragonForm.js: the body becomes a dragon — 10 min, not dark magic)
 };
 
 /** Friendship / love rise this many times faster under «Ослепительность». */
@@ -60,6 +62,7 @@ export class PotionEffects {
         const was = this.has(id);
         this.left[id] = D.s;
         if (id === 'disguise' && !was) this._disguise(true);
+        if (id === 'dragon' && !was) this.game.dragonForm?.begin?.();
         const min = Math.round(D.s / 60);
         return `${D.icon} ${D.ru} — ${min} мин`;
     }
@@ -74,6 +77,7 @@ export class PotionEffects {
     _end(id, why) {
         this.left[id] = 0;
         if (id === 'disguise') this._disguise(false);
+        if (id === 'dragon') { this.game.dragonForm?.end?.(); return; } // (it says its own line)
         if (why !== 'dead' && why !== 'reset') this.game.hud?.setVoice?.(`${POTION_FX[id]?.icon || '🧪'} ${POTION_FX[id]?.ru || 'Зелье'}: действие закончилось`, true);
     }
 
@@ -92,8 +96,15 @@ export class PotionEffects {
         g.sync?.sendLook?.();
     }
 
+    /** The effect gone without its ending (the dragon of the form killed, the host refused): the clock stops, nothing else. */
+    cancel(id) { if (this.left[id] > 0) this.left[id] = 0; }
+
     /** Every frame. */
     update(dt) {
+        if (this._dragonLater && this.game.dragonForm && this.game.character && this.game.dragons) { // (loaded in the form: on the ground, the dragon again — the time left)
+            const t = this.game.terrain?.data, p = this.game.character.group.position;
+            if (!t?.landMade || t.landMade(p.x, p.z)) { this._dragonLater = false; this.game.dragonForm.restoreLanded(); if (this.has('dragon')) this.game.dragonForm.begin(); }
+        }
         for (const id of Object.keys(this.left)) {
             if (!(this.left[id] > 0)) continue;
             this.left[id] -= dt;
@@ -116,6 +127,7 @@ export class PotionEffects {
     restore(s) {
         if (!s?.left) return;
         for (const [id, v] of Object.entries(s.left)) if (POTION_FX[id] && v > 0) this.left[id] = v;
+        if (this.has('dragon')) this._dragonLater = true;
         if (this.has('disguise') && s.look) this._look = s.look; // (the face under the disguise: back when it ends)
     }
 }

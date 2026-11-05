@@ -58,7 +58,10 @@ test('«Джолт» on a creature: it flies, flips over in the air, lies, gets 
     scene.add(z.group);
     const g = { authority: true, zombies: [z], fx: {} };
     const ci = new CreatureImpact(g);
-    const res = ci.apply(z, { v: new THREE.Vector3(0, 0, JOLT.Jolt.push), spell: 'Jolt', always: { down: JOLT.Jolt.down }, toss: JOLT.Jolt.toss, fly: true, tumble: 1, daze: JOLT.Jolt.daze });
+    // (почему так: у зомби есть малый шанс устоять — Steadiness.creatureHolds бросает Math.random; тест про полёт, а не про этот шанс — без случайности)
+    const rnd = Math.random; Math.random = () => 0.999;
+    let res;
+    try { res = ci.apply(z, { v: new THREE.Vector3(0, 0, JOLT.Jolt.push), spell: 'Jolt', always: { down: JOLT.Jolt.down }, toss: JOLT.Jolt.toss, fly: true, tumble: 1, daze: JOLT.Jolt.daze }); } finally { Math.random = rnd; }
     assert.equal(res, 'knockdown');
     assert.ok(z.vy > 0, 'thrown up');
     let maxTurn = 0;

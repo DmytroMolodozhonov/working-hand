@@ -1446,6 +1446,7 @@ export class ItemSystem {
         const r = recipeById(h.item.rec);
         if (r && !r.effect) { g.hud.setVoice?.(`🧪 ${r.name}: что оно делает, автор скоро расскажет — пока его не выпить`, true); return; }
         const fx = r?.effect || {};
+        if (fx.timed === 'dragon') { const why = g.dragonForm?.cantNow?.(); if (why) { g.hud.setVoice?.(why, true); return; } } // (no room for a dragon here: not drunk — DragonForm.cantNow)
         const said = [];
         let silent = false;
         if (fx.lordCure) { // «Зелье снятия проклятия тёмного мага» (DarkLord.js): the first time at the mouth — the warning (the flask stays); the second — drunk, the cells go

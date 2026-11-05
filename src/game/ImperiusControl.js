@@ -98,7 +98,9 @@ export class ImperiusControl {
     get active() { return !!this.name; }
     /** Where the creature I am in stands (null: none) — «Nihilis Atra» sends the mind home if it is hit (Nihilis.js). */
     bodyPosition(out) { const c = this.creature; return c && BODIES[this.sys] ? BODIES[this.sys].pos(c, out) : null; }
-    get maxima() { return this.name === 'ImperiusMaxima'; }
+    get maxima() { return this.name === 'ImperiusMaxima' || this.name === 'DragonForm'; }
+    /** The mind is in a dragon of one's own body (the potion — DragonForm.js): no mana, no link, «стоп» does not end it. */
+    get form() { return this.name === 'DragonForm'; }
     /** The hero's body is left (no walking, no jumping of its own). */
     get busy() { return !!this.name; }
     get me() { return this.game.localId; }
@@ -226,6 +228,12 @@ export class ImperiusControl {
         const kind = kindOf(sys, c);
         // (a player behind «Protection Maxima» or the gods' shield: the foreign mind meets it)
         const shield = sys === 'pl' && (c.local ? !!(g.combat?.shield && (g.combat.shield.type === 2 || g.combat.shield.gods)) : !!(c.combat?.shield === 2 || c.combat?.gods));
+        if (name === 'DragonForm') { // (the potion's dragon: only one's own)
+            if (sys !== 'D' || c.form !== by) return { ok: false, say: '🐉 Это не ваш дракон' };
+            c.imp = { by, mine: by === this.me, sys, name };
+            this.hosted.set(sys + ':' + id, { sys, id, by, n: null });
+            return { ok: true };
+        }
         const ok = canTake(kind, name === 'ImperiusMaxima', { shield, roll: true, creative: g.config?.mode === 'creative' || g.config?.mode === 'test' });
         if (!ok.ok) return ok;
         if (sys === 'pl' && c.imp) return { ok: false, say: '🌀 Этим игроком уже управляют' };
@@ -258,8 +266,7 @@ export class ImperiusControl {
         const B = BODIES[sys], c = B?.find(g, id);
         if (!c) return;
         if (!g.authority) c.imp = { by: this.me, mine: true, sys, name };
-        g.combat?.pay?.(name);
-        g.mana?.success?.(name);
+        if (name !== 'DragonForm') { g.combat?.pay?.(name); g.mana?.success?.(name); }
         this.name = name; this.sys = sys; this.id = id; this.kind = kindOf(sys, c);
         this.phase = 'in'; this.t = 0;
         this._passT = passTime(B.pos(c, _v).distanceTo(g.character.group.position));
@@ -268,7 +275,7 @@ export class ImperiusControl {
         this._heroYaw = ch.group.rotation.y;
         this._yaw0 = B.face(c);
         this.I.yaw = this._yaw0;
-        this.I.fly = null; this.I.maxima = name === 'ImperiusMaxima'; this.I.fire = null;
+        this.I.fly = null; this.I.maxima = name === 'ImperiusMaxima' || name === 'DragonForm'; this.I.fire = null;
         this.flaps.reset();
         this._flier = flies(this.kind, this.I.maxima);
         this._hp = this._hpNow();
@@ -288,6 +295,13 @@ export class ImperiusControl {
         g.sync?.spell?.(name, origin, to, null);
         g.noteCaster?.(name, this.me);
         if (!g.authority && g.sound?.spellHasCastSound?.(name)) { g.sound.spellCast(name, origin); g.sync?.castSound?.(name, origin); } // (a guest: the host said yes later — its sound now)
+        if (name === 'DragonForm') { // (the potion: no light from the eyes — the body itself turns)
+            ch.setImperiusEyes?.(false);
+            this.phase = 'on'; this.t = 1;
+            g.hud?.setVoice?.('🐉 Вы — дракон на 10 минут! Бегите на месте — он бежит; разбежавшись, машите обеими руками сверху вниз — взлетит; долгое «У-у-у» — огонь', true);
+            g.perf?.note?.(`превращение в дракона (${sys}:${id})`);
+            return;
+        }
         const ru = this.maxima ? 'Империус Максима' : 'Империус';
         const how = this.sys === 'pl' ? 'Шагайте на месте — он идёт, поворот тела — поворот. Он смотрит своими глазами, но тело слушается вас'
             : this.kind === 'dragon' ? 'Бегите на месте — он бежит; разбежавшись, машите обеими руками сверху вниз — взлетит. Долгое «У-у-у» — огонь (громче — больше)'
@@ -420,7 +434,7 @@ export class ImperiusControl {
         }
         // the body struck, knocked down, stunned: the mind is jerked back
         const hp = this._hpNow();
-        if (hp < this._hp - 0.01 || g.knock?.down || cb?.stunned || cb?.frozen) { this._hp = hp; this.stop('hurt'); return; }
+        if (!this.form && (hp < this._hp - 0.01 || g.knock?.down || cb?.stunned || cb?.frozen)) { this._hp = hp; this.stop('hurt'); return; } // (the form: the body is in the dragon — nothing reaches it)
         this._hp = hp;
         // the link: dark from half the range, torn at it
         const d = B.pos(c, _v).distanceTo(_v2.set(this._body.x, this._body.y - 1.95, this._body.z));
@@ -584,6 +598,11 @@ export class ImperiusControl {
     stop(why = 'stop') {
         if (!this.name) return false;
         const g = this.game;
+        if (this.form && why !== 'dead' && why !== 'lost' && why !== 'form') { // (a potion, not a spell: «стоп», a blow on the body do not end it)
+            if (why === 'stop') this._say('🐉 «Стоп» не снимает превращение — оно пройдёт само (или выпейте «Зелье обнуления»)', 'formStop', 4000);
+            return false;
+        }
+        if (this.form) { const c = this.creature; this._release(); this._end(c); return true; } // (no flight back along the light: the hero is where the dragon is)
         if (this.phase === 'out') { if (why === 'dead' && (g.isDeadLocal || g.combat?.dead)) this._end(); return true; } // (killed on the way back: home at once)
         const note = {
             mana: '🌀 Мана кончилась — сознание вернулось в ваше тело',
@@ -621,8 +640,9 @@ export class ImperiusControl {
         this._released = true;
     }
 
-    _end() {
+    _end(formBody = null) {
         const g = this.game, ch = g.character;
+        const wasForm = this.form;
         if (!this._released) this._release();
         this._released = false;
         this.name = null; this.sys = null; this.id = null; this.kind = null; this.phase = ''; this.t = 0;
@@ -632,6 +652,7 @@ export class ImperiusControl {
         ch.setImperiusEyes?.(false);
         ch.setFirstPerson?.(g.cameraMode === 'fpv' ? true : !!this._fpvWas);
         g.perf?.note?.('империус: снова в своём теле');
+        if (wasForm) g.dragonForm?.ended?.(formBody);
     }
 
     // ============================================================ the host's book of minds
@@ -664,6 +685,7 @@ export class ImperiusControl {
         }
         if (isHost) {
             if (m.e === 'take') {
+                if (m.mx === 2) return; // (the potion's dragon: given by the host itself — DragonForm.onNet)
                 const name = m.mx ? 'ImperiusMaxima' : 'Imperius';
                 if (name === 'ImperiusMaxima' && g._godsBanned?.(name)) { g.sync?.imperius?.({ e: 'took', to: from, k: m.k, id: m.id, ok: 0, say: '⚡ Боги наложили запрет на использование божественных заклинаний на Земле' }); return; }
                 const r = this.claim(m.k, m.id, from, name);
@@ -680,6 +702,7 @@ export class ImperiusControl {
             } else if (m.e === 'end') this.unclaim(m.k, m.id);
             return;
         }
+        if (m.e === 'took' && m.to === this.me && m.mx === 2) { g.dragonForm?.took?.(m.id, !!m.ok, m.say); return; }
         if (m.e === 'took' && m.to === this.me && this._pending && this._pending.sys === m.k && this._pending.id === m.id) {
             this.onTaken(m.k, m.id, this._pending.name, { ok: !!m.ok, say: m.say });
         }
@@ -749,7 +772,7 @@ export class ImperiusControl {
      * comes back at once (a short stun). A deadly one is the body's ordinary death (Concentration → stop('dead')).
      */
     interruptByDamage(amount, kind = null) {
-        if (!this.name || !(amount > 0) || this.phase === 'out') return false;
+        if (!this.name || !(amount > 0) || this.phase === 'out' || this.form) return false;
         this.game.perf?.note?.('империус: тело ранено (' + (kind || '?') + ') — сознание вернулось');
         return this.stop('hurt');
     }

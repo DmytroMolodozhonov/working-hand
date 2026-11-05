@@ -348,6 +348,7 @@ export class Dragons {
         d.killer = killer || null;
         const c = dragonCenter(d, new THREE.Vector3());
         for (let i = 0; i < 70; i++) g.fx?.spark(c, i % 3 ? 0xff8a1e : 0x2a0a0a, 0.35, _v2.set((Math.random() - 0.5) * 14, Math.random() * 9, (Math.random() - 0.5) * 14), 1.4);
+        if (d.form) { d.fly = 0; d.deadT = 30; return; } // (a hero's own body in the potion's form: no wand, no mana, no achievement off it — DragonForm.ended; gone soon)
         g.hud?.notify?.(`🐉 ${DRAGON_KINDS[d.kind].name} повержен!`);
         if (d.lair) { const st = this.state[d.lair]; if (st?.d[d.slot]) { st.d[d.slot].dead = true; st.d[d.slot].hp = 0; } }
         if (this.auth) {
@@ -1850,7 +1851,7 @@ export class Dragons {
         const g = this.game, p = g.character?.group.position;
         if (!p) return;
         for (const d of this.list) {
-            if (d.dead || d.fly > 0.5 || g.dragonRide?.riding === d) continue;
+            if (d.dead || d.fly > 0.5 || g.dragonRide?.riding === d || d.form === g.localId) continue; // (my own body in the potion's form is inside it)
             const b = dragonBody(d, _c);
             const ab = _v2.subVectors(b.b, b.a);
             const t = Math.max(0, Math.min(1, _v.subVectors(p, b.a).dot(ab) / ab.lengthSq()));

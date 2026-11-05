@@ -67,6 +67,8 @@ export const RECIPES = [
     { id: 'dazzle', name: 'Зелье ослепительности', ingredients: { brightCore: 1, azure_berry: 1, sun_herb: 1 }, window: 30, effect: { timed: 'dazzle' }, desc: 'Выпейте: 24 минуты дружба и любовь к вам растут втрое быстрее' },
     { id: 'luck', name: 'Зелье удачи', ingredients: { magicPebble: 1, glowcap_mushroom: 1, redApple: 1 }, window: 30, brew: [90, 140], effect: { timed: 'luck' }, desc: 'Выпейте: 12 игровых часов каждое заклинание сильнее — на сколько, решает удача' },
     { id: 'waterbreath', name: 'Зелье дыхания под водой', ingredients: { fern_frond: 1, frost_shard: 1, azure_berry: 1 }, window: 30, effect: { timed: 'waterbreath' }, desc: 'Выпейте: целый игровой день под водой не кончается воздух' },
+    // (the author: «превращение в дракона на 10 минут — не чёрная магия: яйцо дракона + перо феникса»; DragonForm.js)
+    { id: 'dragonform', name: 'Зелье превращения в дракона', ingredients: { dragonEgg: 1, phoenixFeather: 1 }, window: 30, brew: [120, 180], effect: { timed: 'dragon' }, desc: 'Выпейте на открытом месте: на 10 минут вы — дракон (бег, взлёт взмахами рук, огонь долгим «У-у-у»), потом снова человек' },
     { id: 'potionreset', name: 'Зелье обнуления', ingredients: { crystal: 1, telewilpinLeaf: 1, glowcap_mushroom: 1 }, window: 30, effect: { reset: true }, desc: 'Выпейте: снимает действие всех выпитых зелий' },
 ];
 
@@ -80,7 +82,7 @@ export const INGREDIENT_RU = {
     web: 'связка паутины', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
     baksadi_pear: 'груша Баксади', spencerFeather: 'перо птички Спенсера', carnivoreHead: 'головка плотоядной', sun_herb: 'солнечница',
     brightCore: 'сердцевина Ярколета', azure_berry: 'лазурная ягода', magicPebble: 'волшебный камушек', glowcap_mushroom: 'светящийся гриб',
-    redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина',
+    redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина', dragonEgg: 'яйцо дракона',
 };
 
 export const recipeById = (id) => RECIPES.find((r) => r.id === id) || null;
