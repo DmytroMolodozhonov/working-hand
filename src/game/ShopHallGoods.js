@@ -207,7 +207,9 @@ export function parseHallWords(text, kind, spellOf = null) {
     if (good) return { do: 'ask', good, price, where, want, count: good.kind === 'flask' ? countOf(t) : 1 };
     if (LIST.test(t)) return { do: 'list' };
     if (NO.test(t)) return { do: 'no' };
-    if (YES.test(t)) return { do: 'yes' };
+    if (YES.test(t) && !/(купить|покупк|хочу|продай)/.test(t)) return { do: 'yes' };
+    // («хочу купить», «хочу купить зелье», «что-нибудь продайте» — no good made out: the words over every good near — ShopHallLife.labels)
+    if (want || price || /(купить|покупк)/.test(t)) return { do: 'pick' };
     return null;
 }
 
@@ -253,6 +255,7 @@ export const HALL_LINES = {
     levitate: 'Вингардиум Левиоса!',
     onIts: (name, price) => `${name[0].toUpperCase() + name.slice(1)} на прилавке — ${price} монет. Кладите мешочек с монетами на прилавок и скажите «беру».`,
     putCoins: 'Кладите мешочек с монетами на прилавок — сдачу верну.',
+    pick: 'Над каждым товаром — название. Скажите, что именно вам нужно.',
     backToShelf: 'Не берёте — верну на полку.',
     noTouch: ['Не трогайте товар руками — скажите, что нужно, я подам.', 'Товар на полках не трогаем! Скажите, что нужно.'],
     thief: ['Вор! Держи вора!', 'Стой! Товар не оплачен!'],

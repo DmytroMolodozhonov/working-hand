@@ -131,3 +131,73 @@ test('a refusal — a fight; the hero ran into a cave unseen — they lose him; 
     assert.ok(H3.P.members.every((v) => !v.foe), 'nobody broke in or attacked');
     assert.ok(!B3.hunts.size, 'they went away');
 });
+
+test('the memory fades each game day and is gone after 10; nobody alive who knew the face — nobody to tell', async () => {
+    const { memoryOf, policeChance, darkK } = await import('../../src/game/BountyRules.js');
+    assert.equal(memoryOf({ day: 0 }, 0), 1);
+    assert.ok(Math.abs(memoryOf({ day: 0 }, 2) - 0.8) < 1e-9, 'two days later: still remembered');
+    assert.equal(memoryOf({ day: 0 }, 10), 0);
+    assert.ok(darkK(100) === 2 && darkK(0) === 1, 'the darker, the easier to find');
+    assert.equal(policeChance({ heat: 3 }, 1, { disguised: true }), 0);
+    assert.ok(policeChance({ heat: 3 }, 1, { helmet: true }) < policeChance({ heat: 3 }, 1, {}));
+    const { g } = fake();
+    const killed = new Set();
+    g.castleLife.state = () => ({ killed });
+    const B = new Bounty(g);
+    for (let i = 0; i < 3; i++) B.crime(town, 'me', { role: 'farmer' }, true, [{ x: 3, z: 0, idx: 10 + i }]);
+    assert.ok(B._worst('me'));
+    B.days = 9.5;
+    assert.ok(B._worst('me'), 'nine days and a half: still');
+    killed.add(10); killed.add(11); killed.add(12);
+    assert.ok(!B._worst('me'), 'all who knew the face are dead: nobody can tell');
+    for (let i = 0; i < 3; i++) B.crime(town, 'me', { role: 'farmer' }, true, [{ x: 3, z: 0, idx: 20 + i }]);
+    B.days += 10.01;
+    assert.ok(!B._worst('me'), 'ten game days: forgotten');
+});
+
+test('a hunter got away: the record fresh, staying near that place — found twice as easily; the town guard knows the face', () => {
+    const { g, me } = fake();
+    const B = new Bounty(g);
+    for (let i = 0; i < 3; i++) B.crime(town, 'me', { role: 'farmer' }, true, [W(3)]);
+    const H = B._send({ id: 'me', p: me }, B._worst('me'), 'open');
+    H.peaceful = false;
+    for (const v of H.P.members) v.x = 6;
+    B._hunt(H, 0.5);
+    assert.equal(H.phase, 'fight');
+    for (const v of H.P.members.slice(1)) v.dead = true;
+    H.P.members[0].hp = 10; H.P.members[0].maxHp = 100;
+    B.days = 5;
+    B._hunt(H, 0.5);
+    const r = B.recs.get('me').get('c1');
+    assert.ok(r.reported && r.lastSeen && r.day === 5, 'he told them');
+    assert.ok(findChance('open', false, false, { stayed: true }) > findChance('open'));
+    // the town guard
+    const guard = { id: 'k', x: 305, z: 0, foe: null };
+    const cs = { def: { ...town.def, zone: 60 }, awake: true, hostile: new Map(), active: new Map([['k', guard]]) };
+    g.castleLife.castles = new Map([['c1', cs]]);
+    g.castleLife._inLand = () => true;
+    me.x = 300;
+    const R = Math.random; Math.random = () => 0.001;
+    try { B._police(); } finally { Math.random = R; }
+    assert.equal(guard.foe, 'me', 'the guard of that very town knew him');
+});
+
+test('his house: a blue sphere is never touched (they call and go); a plainly black one — the wizards break it', () => {
+    for (const black of [false, true]) {
+        const D = fake();
+        const wards = new Map([['w1', { id: 'w1', owner: 'k', c: { x: 0, y: 10, z: 0 }, r: 8 }]]);
+        let hits = 0;
+        D.g.wards = { keyOf: () => 'k', list: wards, struck() { if (++hits >= 3) wards.delete('w1'); } };
+        D.g.dark = { level: black ? 90 : 0, skin: black ? 90 : 0 };
+        const B = new Bounty(D.g);
+        const mageTown = { def: { ...town.def, kind: 'wizvillage' } };
+        for (let i = 0; i < 3; i++) B.crime(mageTown, 'me', { role: 'farmer' }, true, [W(3)]);
+        const H = B._send({ id: 'me', p: D.me }, B._worst('me'), 'home');
+        assert.equal(H.phase, 'door');
+        D.g.castleLife._sees = () => false;
+        for (const v of H.P.members) { v.x = 0; v.z = 12; }
+        for (let t = 0; t < 100 && B.hunts.size; t += 0.5) B._hunt(H, 0.5);
+        if (black) { assert.ok(hits >= 3 && H.phase === 'fight', 'the black sphere broken, the fight'); }
+        else { assert.equal(hits, 0, 'a blue sphere: not a blow'); assert.ok(H.P.members.every((v) => !v.foe)); }
+    }
+});

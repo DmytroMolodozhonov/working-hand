@@ -28,7 +28,30 @@ export const BOUNTY = {
     HUNT_S: 12 * 60, // s a hunt lasts at most
     SEEN_CAVE_S: 12, // s: the hunters saw one run into a cave this lately — they go in after him
     FIND_R: 12, // m: the hunters stop before the one they found
+    // (the author, the second word: «помнят, даже если 2 игровых дня назад… со временем память ослабевает с каждым днём; полное забытие — через 10 дней»)
+    FORGET_DAYS: 10, // game days: the memory fades day by day; then the record is gone (the hunters' claim too)
+    POLICE: 0.12, // a check (every POLICE_S) of one town guard who sees the wanted one in that town: the chance he knows him (× memory, × heat, × look, × darkness)
+    POLICE_S: 2, POLICE_R: 20,
+    STAYED_R: 250, STAYED_K: 2, // a hunter ran away and told where: staying within this of that place — found this many times easier
+    WARD_BLACK: 81, // the darkness of the skin (DarkMagic.skinOf) from which one's «Protection House» is plainly black magic: the wizards break it
+    WARD_HIT_S: 2.5, // s between a wizard hunter's blows at a black sphere («Бомбардо»)
 };
+
+/** The memory of a record now (1 — fresh … 0 — forgotten): it fades each game day, gone after FORGET_DAYS. */
+export function memoryOf(rec, days) {
+    const age = Math.max(0, days - (rec?.day ?? days));
+    return Math.max(0, 1 - age / BOUNTY.FORGET_DAYS);
+}
+
+/** A dark mage is easier to find — the darker, the easier (the author: «чем больше ты чёрный маг, тем проще тебя найти»): ×1…×2. */
+export const darkK = (skin) => 1 + Math.max(0, Math.min(100, skin || 0)) / 100;
+
+/** A town guard's look at the wanted one in his own town: the chance a check that he knows him. */
+export function policeChance(rec, mem, look = {}, skin = 0) {
+    if (!rec || mem <= 0 || look.invisible || look.disguised) return 0;
+    const heat = Math.min(1.5, rec.heat / BOUNTY.WANTED);
+    return Math.min(0.9, BOUNTY.POLICE * mem * heat * (look.helmet ? BOUNTY.HELMET_KNOWN : 1) * darkK(skin));
+}
 
 /** Kinds of places that keep a record of crimes (a road's travellers belong to no settlement). */
 export const SETTLED = new Set(['castle', 'village', 'wizvillage', 'tower', 'hamlet']);
@@ -58,10 +81,10 @@ export const wanted = (rec) => !!rec && rec.heat >= BOUNTY.WANTED;
 /**
  * A roll's chance that the hunters find one: `where` 'open' | 'home' | 'cave'; `seenInto` — they saw him run into the cave; `mage` — wizards.
  */
-export function findChance(where, mage = false, seenInto = false) {
+export function findChance(where, mage = false, seenInto = false, { mem = 1, skin = 0, stayed = false } = {}) {
     if (where === 'cave' && !seenInto) return 0;
     const k = where === 'home' ? BOUNTY.HOME : BOUNTY.OPEN;
-    return BOUNTY.BASE * k * (mage ? BOUNTY.MAGE : 1);
+    return Math.min(0.9, BOUNTY.BASE * k * (mage ? BOUNTY.MAGE : 1) * mem * darkK(skin) * (stayed ? BOUNTY.STAYED_K : 1));
 }
 
 /** The party sent: {n, mounted, peaceful, kind} (kind — Travelers' kinds: knights / wizards, on foot or riding). */
@@ -92,4 +115,7 @@ export const HUNT_LINES = {
     noCoins: (need) => `Этого мало — не хватает ${need}. Тогда по-плохому!`,
     gaveUp: 'Ушёл… Ничего, найдём в другой раз.',
     leaveDoor: 'Никого… Вернёмся позже.',
+    report: 'Я доложу о тебе! Тебя найдут!',
+    police: ['Это он! Тот, кто убивал наших!', 'Стража! Убийца вернулся!', 'Я узнал тебя, душегуб!'],
+    breakWard: 'Чёрная магия! Ломаем защиту!',
 };

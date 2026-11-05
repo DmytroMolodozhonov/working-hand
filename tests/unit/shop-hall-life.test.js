@@ -147,3 +147,17 @@ test('a good moved inside the shop flies back; the ingredients’ room: prices 1
     assert.match(s3.hear(C.keeper, 'сколько стоит зелье превращения в дракона'), /не продаём/);
     assert.match(s3.hear(C.keeper, 'дайте три колбы'), /60 монет/);
 });
+
+test('«хочу купить» with no good made out: the words over every good near — then the buyer names one', () => {
+    const { g, hall, keeper } = fakeGame();
+    g.character.group.position.set(hall.inside.x, hall.inside.y, hall.inside.z);
+    const sh = new ShopHallLife(g);
+    for (let i = 0; i < 80; i++) sh.update(0.31);
+    const texts = new Map();
+    sh.labels(texts);
+    assert.equal(texts.size, 0, 'no words before asking');
+    assert.match(sh.hear(keeper, 'хочу купить зелье'), /название/);
+    sh.labels(texts);
+    assert.ok(texts.size >= 5, `words over the goods near (${texts.size})`);
+    assert.ok([...texts.values()].every((t) => t && !/^Зелье /.test(t)), 'short names: «Удачи», «Колба»…');
+});

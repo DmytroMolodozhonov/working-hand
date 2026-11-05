@@ -15,7 +15,10 @@
  * Saved: the local player's records (WorldSave `bounty`).
  */
 
-import { BOUNTY, settled, mageSite, knowsFace, crimeHeat, wanted, findChance, partyFor, fineOf, huntAnswer, HUNT_LINES } from './BountyRules.js';
+import { BOUNTY, settled, mageSite, knowsFace, crimeHeat, wanted, findChance, partyFor, fineOf, huntAnswer, HUNT_LINES, memoryOf, policeChance } from './BountyRules.js';
+import { skinOf } from './DarkMagic.js';
+
+const DAY_S = 24 * 60; // s of game a game day (Game.DAY_CYCLE_MS)
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -25,6 +28,8 @@ export class Bounty {
         this.game = game;
         this.recs = new Map(); // pid → Map(defId → {heat, kills, name, x, z, mage, at})
         this.hunts = new Map(); // pid → hunt {P, pid, defId, rec, peaceful, phase, t, lastSeen, home}
+        this.days = 0; // game days passed (the records' memory fades by them — saved)
+        this._policeT = 0;
         this._rollT = rnd(...BOUNTY.ROLL);
         this._tickT = 0;
         this.log = [];
@@ -45,14 +50,16 @@ export class Bounty {
         if (!p) return;
         const hero = this._heroLook(by);
         let known = 0;
-        for (const w of witnesses) if (knowsFace({ dist: Math.hypot(w.x - p.x, w.z - p.z) }, hero)) known++;
+        const knowers = [];
+        for (const w of witnesses) if (knowsFace({ dist: Math.hypot(w.x - p.x, w.z - p.z) }, hero)) { known++; if (w.idx != null) knowers.push(w.idx); }
         const chief = victim && (victim.role === 'king' || victim.role === 'master' || victim.entry?.elder);
         const add = crimeHeat(true, chief, known);
         if (!add) { this._note(`«${def.name || def.id}»: убийство — лица не узнали (${hero.helmet ? 'шлем' : hero.disguised ? 'чужое лицо' : 'далеко'})`); return; }
         let m = this.recs.get(by);
         if (!m) this.recs.set(by, (m = new Map()));
-        const r = m.get(def.id) || { heat: 0, kills: 0, name: def.name || 'поселение', x: def.x, z: def.z, mage: mageSite(def), at: 0 };
-        r.heat += add; r.kills++; r.at = Date.now();
+        const r = m.get(def.id) || { heat: 0, kills: 0, name: def.name || 'поселение', x: def.x, z: def.z, mage: mageSite(def), at: 0, day: this.days, knowers: [], reported: false };
+        r.heat += add; r.kills++; r.at = Date.now(); r.day = this.days; // (a new crime: the memory is fresh again)
+        for (const k of knowers) if (!r.knowers.includes(k)) r.knowers.push(k);
         m.set(def.id, r);
         this._note(`«${r.name}»: убийство при свидетелях, узнали ${known} — жар ${r.heat}${wanted(r) ? ' (РОЗЫСК)' : ''}`);
     }
@@ -68,10 +75,30 @@ export class Bounty {
 
     /** The worst record of a player (the settlement that wants him most). */
     _worst(pid) {
+        this._prune(pid);
         let best = null, id = null;
         for (const [k, r] of this.recs.get(pid) || []) if (wanted(r) && (!best || r.heat > best.heat)) { best = r; id = k; }
         return best ? { id, rec: best } : null;
     }
+
+    /**
+     * Records that no longer stand: forgotten (FORGET_DAYS game days since the last time they knew of him — a new crime, a hunter who ran
+     * home and told), or nobody left alive who knew his face and nobody told anyone (the author: «убил всех — никто не может доложить»).
+     */
+    _prune(pid) {
+        const m = this.recs.get(pid), L = this.life;
+        if (!m) return;
+        for (const [k, r] of m) {
+            if (memoryOf(r, this.days) <= 0) { m.delete(k); this._note(`«${r.name}» забыло (прошло ${BOUNTY.FORGET_DAYS} игровых дней)`); continue; }
+            if (!r.reported && r.knowers?.length && L?.state) {
+                const killed = L.state(k)?.killed;
+                if (killed && r.knowers.every((i) => killed.has(i))) { m.delete(k); this._note(`«${r.name}»: все, кто знал лицо, мертвы — доложить некому`); }
+            }
+        }
+        if (!m.size) this.recs.delete(pid);
+    }
+
+    _skin(pid) { return pid === this.game.localId ? skinOf(this.game.dark || {}) : 0; }
 
     playerDied(pid) {
         this.recs.delete(pid);
@@ -87,6 +114,16 @@ export class Bounty {
         return 'open';
     }
 
+    /** His own «Protection House» sphere he is in (or null). */
+    _wardOf(pid, pos) {
+        const g = this.game, wk = g.wards?.keyOf?.(pid);
+        for (const w of g.wards?.list?.values?.() || []) if (w.owner === wk && Math.hypot(w.c.x - pos.x, w.c.z - pos.z) <= w.r) return w;
+        return null;
+    }
+
+    /** Is his sphere plainly black magic (a dark mage that far gone — or the true dark mage)? */
+    _blackWard(pid) { return this._skin(pid) >= BOUNTY.WARD_BLACK || !!this.game.darkLord?.isLord?.(pid); }
+
     /** His own house he is in (a «Create a House» house, or his «Protection House» sphere) → {x, z, r} or null. */
     _homeOf(pid, pos) {
         const g = this.game;
@@ -100,6 +137,9 @@ export class Bounty {
     // ---------------------------------------------------------------- the loop (host)
     update(dt) {
         if (!this.auth || !this.life?.enabled) return;
+        this.days += dt / DAY_S;
+        this._policeT -= dt;
+        if (this._policeT <= 0) { this._policeT = BOUNTY.POLICE_S; this._police(); }
         this._rollT -= dt;
         if (this._rollT <= 0) { this._rollT = rnd(...BOUNTY.ROLL); this._roll(); }
         this._tickT -= dt;
@@ -115,7 +155,8 @@ export class Bounty {
             const w = this._worst(pl.id);
             if (!w) continue;
             const where = this._where(pl.id, pl.p);
-            const ch = findChance(where, w.rec.mage);
+            const stayed = !!w.rec.lastSeen && Math.hypot(pl.p.x - w.rec.lastSeen.x, pl.p.z - w.rec.lastSeen.z) < BOUNTY.STAYED_R; // (a hunter ran home and told where: one who stays there is found easier)
+            const ch = findChance(where, w.rec.mage, false, { mem: memoryOf(w.rec, this.days), skin: this._skin(pl.id), stayed });
             const hit = Math.random() < ch;
             this._note(`бросок: «${w.rec.name}» ищет (${where}, шанс ${(ch * 100).toFixed(1)} %) — ${hit ? 'НАШЛИ' : 'нет'}`);
             if (hit) this._send(pl, w, where);
@@ -123,6 +164,39 @@ export class Bounty {
     }
 
     /** A party of hunters after player `pl` (from out of sight, as the roads' travellers). */
+    /**
+     * The town guard of the very settlement (the author: «вернулся в тот же город — тебя могут найти прямо в городе, но это уже не охотники,
+     * а стража»): a fighter of that place who sees the wanted one inside its land may know him — the fresher the memory, the heavier the crime,
+     * the darker the mage, the likelier; a helmet hides it from most, another face (the potion) and invisibility — from all.
+     */
+    _police() {
+        const L = this.life;
+        for (const pl of L._players?.() || []) {
+            this._prune(pl.id);
+            const m = this.recs.get(pl.id);
+            if (!m) continue;
+            const look = this._heroLook(pl.id), skin = this._skin(pl.id);
+            for (const [defId, r] of m) {
+                const cs = L.castles?.get(defId);
+                if (!cs?.awake || !L._inLand?.(cs.def, pl.p, 4)) continue;
+                if (cs.hostile.get(pl.id) > Date.now()) continue; // (they are already after him)
+                const ch = policeChance(r, memoryOf(r, this.days), look, skin);
+                if (ch <= 0) continue;
+                for (const v of cs.active.values()) {
+                    if (v.dead || v.foe || v.sleep || !L._fights?.(v)) continue;
+                    if (Math.hypot(v.x - pl.p.x, v.z - pl.p.z) > BOUNTY.POLICE_R || !(L._sees ? L._sees(v, pl.p) : true)) continue;
+                    if (Math.random() >= ch) continue;
+                    cs.hostile.set(pl.id, Date.now() + 180000);
+                    v.foe = pl.id; v.path = null;
+                    L._say(v, pick(HUNT_LINES.police), 4);
+                    if (pl.id === this.game.localId) this.game.hud?.setVoice?.(`🚨 Стража «${r.name}» узнала вас — вас помнят`, true);
+                    this._note(`«${r.name}»: стража узнала (шанс ${(ch * 100).toFixed(0)} %)`);
+                    break;
+                }
+            }
+        }
+    }
+
     _send(pl, w, where) {
         const g = this.game, T = g.travelers;
         if (!T?.spawnNear) return null;
@@ -158,6 +232,22 @@ export class Bounty {
         switch (H.phase) {
             case 'door': { // (at his house: they knock, they never break in)
                 if (where !== 'home') { H.phase = 'track'; H.phaseT = 0; break; }
+                const ward = this._wardOf(H.pid, p);
+                if (ward && this._blackWard(H.pid) && H.rec.mage && Math.hypot(lead.x - ward.c.x, lead.z - ward.c.z) < ward.r + 14) {
+                    // (a plainly black sphere — and they came for him: no doubt who he is; the wizards break it and fall on him. A blue one is never touched)
+                    if (!H.breaking) { H.breaking = true; L._say(lead, HUNT_LINES.breakWard, 4); }
+                    P.state = 'arrived';
+                    if ((H.hitT = (H.hitT || 0) - dt) <= 0) {
+                        H.hitT = BOUNTY.WARD_HIT_S;
+                        for (const v of alive) {
+                            const dx = v.x - ward.c.x, dz = v.z - ward.c.z, dl = Math.hypot(dx, dz) || 1;
+                            v.mode = 'cast'; v.yaw = Math.atan2(dx, dz);
+                            g.wards?.struck?.({ x: ward.c.x + dx / dl * ward.r, y: ward.c.y + 1.5, z: ward.c.z + dz / dl * ward.r }, 0.5, 'Bombardo', null);
+                        }
+                    }
+                    if (!g.wards?.list?.has?.(ward.id)) this._attack(H, 'Защита пала! Взять его!');
+                    break;
+                }
                 if (P.state === 'arrived' || Math.hypot(lead.x - P.dest.x, lead.z - P.dest.z) < P.dest.r + 2) {
                     P.state = 'arrived';
                     if ((H.knockT = (H.knockT || 0) - dt) <= 0) { H.knockT = 10; L._say(lead, pick(HUNT_LINES.knock).replace('{place}', H.rec.name), 4); g.sound?.playDoorKnock?.(lead); }
@@ -188,7 +278,9 @@ export class Bounty {
                 break;
             }
             case 'fight': {
-                if (lostInCave) { this._end(H, HUNT_LINES.gaveUp); return; }
+                if (lostInCave) { this._end(H, HUNT_LINES.gaveUp, true); return; }
+                // (the last one left of several, hurt: he runs home to tell — the record is fresh, the place where he saw him remembered)
+                if (H.P.members.length >= 2 && alive.length === 1 && (alive[0].hp < (alive[0].maxHp || alive[0].hp) * 0.6 || H.phaseT > 40)) { this._end(H, HUNT_LINES.report, true); return; }
                 if (alive.every((v) => v.foe !== H.pid)) for (const v of alive) if (L._fights?.(v)) v.foe = H.pid; // (they don't give up the fight for a step aside)
                 P.cs.hostile.set(H.pid, Date.now() + 120000);
                 break;
@@ -219,9 +311,14 @@ export class Bounty {
     }
 
     /** The hunt is over: they go their way (as ordinary travellers far beyond). */
-    _end(H, line) {
+    _end(H, line, report = false) {
         const P = H.P, L = this.life;
         this.hunts.delete(H.pid);
+        // (one of them got away and tells: the record is fresh again, and where they saw him is known)
+        if (report && P.members.some((v) => !v.dead)) {
+            const r = this.recs.get(H.pid)?.get(H.defId);
+            if (r) { r.day = this.days; r.reported = true; r.lastSeen = { ...H.last }; }
+        }
         P.hunt = null;
         for (const v of P.members) { v.hunter = null; if (v.foe === H.pid) v.foe = null; }
         P.cs.hostile.delete(H.pid);
@@ -252,12 +349,14 @@ export class Bounty {
     snapshot() {
         const m = this.recs.get(this.game.localId);
         if (!m || !m.size) return null;
-        return Object.fromEntries([...m].map(([k, r]) => [k, { ...r }]));
+        return { days: Math.round(this.days * 1000) / 1000, recs: Object.fromEntries([...m].map(([k, r]) => [k, { ...r }])) };
     }
 
     restore(s) {
         if (!s) return;
-        this.recs.set(this.game.localId, new Map(Object.entries(s).map(([k, r]) => [k, { ...r }])));
+        const recs = s.recs || s; // (an older save: the records alone)
+        if (s.recs) this.days = +s.days || 0;
+        this.recs.set(this.game.localId, new Map(Object.entries(recs).map(([k, r]) => [k, { day: this.days, knowers: [], ...r }])));
     }
 
     dispose() { for (const H of [...this.hunts.values()]) this._end(H, null); }

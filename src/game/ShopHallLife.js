@@ -247,13 +247,16 @@ export class ShopHallLife {
         if (!S) return null;
         S.heardAt = this._t;
         const talk = this.life?.talk, purse = talk?._pursePay?.(v);
+        if (S.h.kind === 'scrolls') { const sp = matchSpell(String(text || '').toLowerCase()); if (sp && isDark(sp)) return HALL_LINES.dark; } // (a dark spell asked for)
         const r = parseHallWords(text, S.h.kind, matchSpell);
-        if (!r) {
-            if (S.h.kind === 'scrolls') { const sp = matchSpell(String(text || '').toLowerCase()); if (sp && isDark(sp)) return HALL_LINES.dark; }
-            return null;
-        }
+        if (!r) return null;
         switch (r.do) {
             case 'list': return listLine(S.h.kind, S.stock ? S.stock.map((e) => e.item.spell).filter(Boolean) : null);
+            case 'pick': // (no good made out: the words over every good near for a while — the buyer reads and names one)
+                S.labelsUntil = this._t + 45;
+                if (this.game.castleLife?.talk) this.game.castleLife.talk._scanT = 0;
+                this.game.hud?.setVoice?.('🛒 Над товарами — названия: скажите нужное («хочу …»)', true);
+                return HALL_LINES.pick;
             case 'no':
                 if (this.offer?.S === S) { this.offer = null; return pick(HALL_LINES.no); }
                 return null;
@@ -371,6 +374,30 @@ export class ShopHallLife {
             v.talking = 4; v.talkTo = g.localId;
         }
         return true;
+    }
+
+    /** (CastleTalk, building the words over the goods) The words over every good near of a hall the buyer asked «что купить» in. */
+    labels(texts) {
+        const me = this.game.character?.group.position, items = this.game.items;
+        if (!me || !items) return;
+        for (const S of this.states.values()) {
+            if (!(S.labelsUntil > this._t)) continue;
+            for (const uid of S.goods.values()) {
+                const L = items.loose.get(uid);
+                if (!L?.item.shop || L.item.shop.paid) continue;
+                const p = L.model.position;
+                if (Math.hypot(p.x - me.x, p.z - me.z) > 11) continue;
+                texts.set(uid, this._shortName(L.item));
+            }
+        }
+    }
+
+    _shortName(it) {
+        if (it.kind === 'potion') { const n = recName(it.rec).replace(/^Зелье /, ''); return n[0].toUpperCase() + n.slice(1); }
+        if (it.kind === 'scroll') return spellTitle(it.spell);
+        if (it.kind === 'flask') return 'Колба';
+        const n = ingredientName(it.kind);
+        return n[0].toUpperCase() + n.slice(1);
     }
 
     // ---------------------------------------------------------------- «Вингардиум Левиоса»: shelf → counter

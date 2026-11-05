@@ -129,5 +129,6 @@ test('the buyer’s words: every potion and every scroll is named; «да», «�
     assert.equal(parseHallWords('продайте 3 склянки', 'potions').good.kind, 'flask');
     assert.equal(parseHallWords('почём котёл', 'potions').good.kind, 'cauldron');
     assert.equal(countOf('пару колб'), 2);
-    assert.equal(parseHallWords('сколько стоит авада кедавра', 'scrolls', matchSpell), null, 'a dark spell is not on sale (the keeper says so)');
+    assert.ok(!parseHallWords('сколько стоит авада кедавра', 'scrolls', matchSpell)?.good, 'a dark spell is not a good of the shop (the keeper refuses it before the words — ShopHallLife.hear)');
+    assert.deepEqual(parseHallWords('хочу купить', 'potions'), { do: 'pick' }, 'no good named: the words over the goods');
 });

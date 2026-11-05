@@ -1579,6 +1579,7 @@ export class CastleTalk {
                 this._offerSell(v, stall, key, found);
             });
         }
+        this.game.shopHalls?.labels?.(texts); // (a big shop: the words over every good near, after «хочу купить» with no good named — ShopHallLife)
         this._labelText = texts;
         // walked away with an unpaid good: «Вор!»
         for (const it of this._unpaid()) {
@@ -1676,7 +1677,7 @@ export class CastleTalk {
         const T = this._tagMap || (this._tagMap = new Map());
         const me = g.character.group.position;
         const want = new Set();
-        let made = 0;
+        let made = 0, cards = 0;
         for (const L of g.items.loose.values()) {
             const sh = L.item.shop;
             if (!sh || sh.paid || L.hover) continue;
@@ -1685,21 +1686,32 @@ export class CastleTalk {
             want.add(L.item.uid);
             let t = T.get(L.item.uid);
             if (!t) {
-                const c = document.createElement('canvas');
-                c.width = 128; c.height = 72;
-                const x = c.getContext('2d');
-                x.fillStyle = '#e6d3a3'; x.fillRect(0, 0, 128, 72);
-                x.strokeStyle = '#7a5a2e'; x.lineWidth = 5; x.strokeRect(3, 3, 122, 66);
-                x.fillStyle = '#3a2410'; x.textAlign = 'center';
-                x.font = 'bold 40px sans-serif'; x.fillText(String(sh.price), 64, 42);
-                x.font = '16px sans-serif'; x.fillText('монет', 64, 63);
-                const tex = new THREE.CanvasTexture(c);
+                if (cards >= 6) continue; // (a few new cards a frame: a big shop's shelves hold a hundred goods — ShopHalls)
+                cards++;
+                // (one card per price, shared: a hundred goods of a shop at a few prices are a few textures, not a hundred)
+                const PC = this._priceCards || (this._priceCards = new Map());
+                let pc = PC.get(sh.price);
+                if (!pc) {
+                    const c = document.createElement('canvas');
+                    c.width = 128; c.height = 72;
+                    const x = c.getContext('2d');
+                    x.fillStyle = '#e6d3a3'; x.fillRect(0, 0, 128, 72);
+                    x.strokeStyle = '#7a5a2e'; x.lineWidth = 5; x.strokeRect(3, 3, 122, 66);
+                    x.fillStyle = '#3a2410'; x.textAlign = 'center';
+                    x.font = 'bold 40px sans-serif'; x.fillText(String(sh.price), 64, 42);
+                    x.font = '16px sans-serif'; x.fillText('монет', 64, 63);
+                    const ptex = new THREE.CanvasTexture(c);
+                    pc = { tex: ptex, mat: new THREE.SpriteMaterial({ map: ptex, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), refs: 0 };
+                    PC.set(sh.price, pc);
+                }
+                pc.refs++;
+                const tex = pc.tex;
                 // (never sunk into a bulky good — a robe, an armour: above its top, with its own offset; depth-tested: a wall, a counter or a person in front hides the card — no reading through objects)
-                const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+                const sp = new THREE.Sprite(pc.mat);
                 sp.renderOrder = 30;
                 sp.scale.set(0.46, 0.26, 1);
                 g.scene.add(sp);
-                t = { sp, tex, top: 0.42, topAt: 0 };
+                t = { sp, tex, price: sh.price, top: 0.42, topAt: 0 };
                 T.set(L.item.uid, t);
             }
             if (performance.now() - t.topAt > 1500) { // (the good's real height: a robe or a staff is taller than a flask)
@@ -1720,7 +1732,12 @@ export class CastleTalk {
                 t.lab.sp.visible = t.sp.visible;
             }
         }
-        for (const [uid, t] of T) if (!want.has(uid)) { this._dropLabel(t); g.scene.remove(t.sp); t.tex.dispose(); t.sp.material.dispose(); T.delete(uid); }
+        for (const [uid, t] of T) {
+            if (want.has(uid)) continue;
+            this._dropLabel(t); g.scene.remove(t.sp); T.delete(uid);
+            const PC = this._priceCards, pc = PC?.get(t.price);
+            if (pc && --pc.refs <= 0 && PC.size > 48) { pc.tex.dispose(); pc.mat.dispose(); PC.delete(t.price); } // (the shared card of a price: kept while used; a bounded cache)
+        }
     }
 
     /** A hologram sprite with this text (the texture and material shared by text, counted). */
