@@ -993,6 +993,7 @@ export class ItemSystem {
             const h = this.held[side];
             if (!h) continue;
             const kind = h.item.kind;
+            if (ch.isRunning) this._runAt = gt; // (the bow: the arms swing on a run — it never falls then, nor a moment after)
             this._trkPush(side, ch, tt, fresh);
             // (nor the wand while the hand or the wand rests against the ground, a wall — the author: the ground at the
             // hands' height, the wand touched it and fell — and a moment after: _touching; coins are still laid on a
@@ -1004,7 +1005,7 @@ export class ItemSystem {
             // (food or a potion at the mouth — or just taken from it: the hand over the mouth looks open to the camera, and
             // the author's apple fell out while eating — the mouth never lets go)
             const atMouth = this._nearMouth(side, h, ch, gt);
-            if (atMouth || holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            if (atMouth || holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && (g.gear?.nock || ch.isRunning || (this._runAt != null && gt - this._runAt < 600))) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 // (the journal «Предметы»: the fingers open, but something forbids letting go — what)
                 if (ch.isHandTracked?.(side) && (ch.getGripCurl?.(side) ?? 1) < DROP.CLOSED) {
                     this._dropTry(side, kind, (atMouth ? 'еда у рта — не выпадает' : null) || holdsWhy(ch, now)
@@ -1012,6 +1013,7 @@ export class ItemSystem {
                         || (kind === 'wand' && this._touching(side, h, now) ? 'палочка касается земли/стены' : null)
                         || (kind === 'wand' && g.spellBusy?.() ? 'идёт заклинание — палочку не бросить' : null)
                         || (kind === 'bow' && g.gear?.nock ? 'на тетиве стрела' : null)
+                        || (kind === 'bow' ? 'бег: лук не выпадает, пока вы бежите' : null)
                         || ((kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) ? 'вещь читается' : null)
                         || (this._otherHandTakes(side, h) ? 'вещь закреплена: другая рука держит её (правило двух рук)' : null)
                         || 'руки не готовы');
