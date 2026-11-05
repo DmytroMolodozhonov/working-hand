@@ -55,7 +55,8 @@ test('no audio source outside the volume buses: only SoundManager and Speech mak
     const sm = read('src/audio/SoundManager.js');
     const bare = [...sm.matchAll(/new THREE\.(?:Positional)?Audio\(this\.audioListener\)/g)];
     assert.equal(bare.length, 2, 'only the two music tracks (startTrack, crossfadeTo) may use the bare listener');
-    assert.ok(!/ctx\.destination|context\.destination/.test(sm), 'a source straight into the speakers skips every slider');
+    // (почему с исключением: ключ кеша звуков читает только число каналов колонок — BootCache, SoundManager._soundCacheKey; это не источник звука)
+    assert.ok(!/(?:ctx|context)\.destination(?!\?\.channelCount)/.test(sm), 'a source straight into the speakers skips every slider');
 });
 
 test('probe: every sound method plays through the effects bus, and spell-group ones also scale with the spell slider', () => {

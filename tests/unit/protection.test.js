@@ -75,13 +75,13 @@ test('the dome: proof against a blast (it pays half the spell); out of mana a bl
     const hp = c.hp;
     c.explosion(new THREE.Vector3(1, 1, 1), 3.6, 1, 'enemy');
     assert.equal(c.hp, hp, 'no harm under the dome');
-    assert.equal(c.fatigue, 12.5, 'Bombardo (15): half of it paid');
+    assert.equal(c.fatigue, 10, 'Bombardo (20 — the author 05.11): half of it paid');
     c.damage(5, null, 'collapse');
     c.damage(5, null, 'Bombardo'); // (my own blast)
     assert.equal(c.hp, hp, 'no falling pieces, no own blast');
     c.fatigue = 3;
     c.explosion(new THREE.Vector3(1, 1, 1), 3.6, 1, 'enemy');
-    assert.equal(c.shield, null, 'Bombardo (15) needs 7.5: shattered');
+    assert.equal(c.shield, null, 'Bombardo (20) needs 10: shattered');
     // (почему так: урон взрыва теперь единый и падает с расстоянием — Damage.blastDamage; без купола он приходит целиком)
     const whole = blastDamage(Math.hypot(1, 0.5, 1), 3.6, 1);
     assert.ok(Math.abs(c.hp - (hp - whole)) < 0.5, `the whole blast, not a quarter (hp ${c.hp}, expected ${hp - whole})`);

@@ -128,9 +128,11 @@ export class Servants {
     make(k, id, by) {
         const g = this.game;
         if (k === 'v') return false; // humanoids are immune, including direct guest requests
-        if (k === 'z') { g.applyBrainrot?.(id, by); return true; }
+        // (the author 05.11: one creature at a time — a new one lets the old go)
+        if (k === 'z') { this.freeAll(by, { k, id }); g.applyBrainrot?.(id, by); return true; }
         const c = this.find(k, id);
         if (!c || k === 'p' || k === 's') return false;
+        this.freeAll(by, { k, id });
         const until = performance.now() + SERVANT.TIME;
         if (k === 't') {
             if (c.owner === by && c.master === by) return false;
@@ -141,6 +143,18 @@ export class Servants {
         }
         this._sparkle(this.pos(k, id), 24);
         return true;
+    }
+
+    /** (authority) Every «Брейнрот» servant of `master` is free again (but `keep`; the living trees of «Alive» are not «Брейнрот»'s). */
+    freeAll(master, keep = null) {
+        let n = 0;
+        for (const s of this.of(master)) {
+            if (keep && s.k === keep.k && s.id === keep.id) continue;
+            if (s.k === 't' && s.c.owner === master) continue; // (my own living tree: «Alive», not «Брейнрот»)
+            if (s.k === 'z') s.c.setThrall?.(false); else this._free(s.k, s.c);
+            n++;
+        }
+        return n;
     }
 
     _free(k, c) {

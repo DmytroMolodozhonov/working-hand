@@ -273,6 +273,8 @@ const _q = new THREE.Quaternion();
 
 /** (Game._updateLightning) the hand aimed and still this long (s) before the bolt goes; turning faster than MOVE rad/s is still aiming */
 const LIGHTNING_AIM = { T: 0.6, MOVE: 0.6 };
+/** (Game._brainrotUpkeep) mana a second while a «Брейнрот» servant serves me */
+const BRAINROT_UPKEEP = 1;
 
 export class Game {
     /**
@@ -2645,6 +2647,20 @@ export class Game {
         return 'Brainrot';
     }
 
+    /** (the author 05.11) A «Брейнрот» servant costs BRAINROT_UPKEEP mana a second on top; none left — it is free again. */
+    _brainrotUpkeep(dt) {
+        if (!this.servants || !this.combat?.manaOn) return;
+        const me = this.localId;
+        const mine = this.authority ? this.servants.of(me).some((s) => !(s.k === 't' && s.c.owner === me)) : this.servants._netSv?.some((s) => s[2] === me);
+        if (!mine) return;
+        if (this.combat.drain(BRAINROT_UPKEEP * dt, 0) && this.combat.fatigue > 0) return;
+        const now = performance.now();
+        if (now - (this._brFreed || -1e9) < 2000) return; // (a guest: the host's list comes back a moment later)
+        this._brFreed = now;
+        if (this.authority) this.servants.freeAll(me); else this.sync?.brainrot?.(null, 'free');
+        this.hud?.setVoice?.('🌀 Мана кончилась — «Брейнрот» отпустил существо', true);
+    }
+
     /** «Атак» with servants: the hand points at someone — all my servants go for them. */
     _commandAttack(isFinal) {
         const aim = this.duel.pickSide(false);
@@ -4051,6 +4067,7 @@ export class Game {
         }
         if (earth && !duelOnly) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
+        this._brainrotUpkeep(dt);
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
         // (and the arena duel itself: the author's duel with the tower's head — «Бомбардо», «Фрозен» waited 0.4–0.6 s for a «Максима»)

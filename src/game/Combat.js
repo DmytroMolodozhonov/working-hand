@@ -63,8 +63,8 @@ export const SPELL_COST = {
     ProtectionMaxima: 20,
     ProtectionGods: 100, // the gods' shield: then 3 a second while it holds (ProtectionGods.js; the author: 100 + 3)
     ProtectionGodsMaxima: 300, // … its dome: then 5 a second (the author: 300 + 5)
-    Bombardo: 15,
-    BombardoMaxima: 25,
+    Bombardo: 20, // (the author 05.11: +5)
+    BombardoMaxima: 35, // (the author 05.11: +10)
     Thunderwave: 200, // (the author: 200 a cast — it hits everyone in the zone at once and only Protection Maxima / the gods hold it; 200 mana is easy to reach in 1–2 hours)
     Sapira: 20,
     Inferno: 10,
@@ -76,7 +76,7 @@ export const SPELL_COST = {
     Ice: 5, // «Айс» = «Frozen» (one spell): a charge — 10 s in ice, −3 HP/s (StrongSpells.js)
     IceMaxima: 20, // «Айс Максима» = «Frozen Maxima»: −10 HP/s, at the part of the body pointed at
     Sands: 8,
-    Flight: 10,
+    Flight: 20, // (the author 05.11: twice as much a take-off)
     Up: 7, // get up / leap out of the water
     Waterball: 5,
     Maxima: 4,

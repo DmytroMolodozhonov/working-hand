@@ -50,6 +50,8 @@ export function placesFrom(out, lm, leftHanded = false, aspect = 4 / 3) {
     const shO = lm[leftHanded ? 12 : 11], shL = lm[leftHanded ? 11 : 12];
     if (!hip || !hipO || !shO || !shL) return false;
     if (vis(shO) < MIN_VIS || vis(shL) < MIN_VIS) return false;
+    // (the hips guessed from the shoulders — beltHips `est` — guess «straight down»: the shoulders must lie level then, not one over the other — lying)
+    if (hp.est && Math.abs(shO.y - shL.y) > Math.abs((shO.x - shL.x) * aspect) * 0.6) return false;
     const mx = (hip.x + hipO.x) / 2, my = (hip.y + hipO.y) / 2;
     const sx = (shO.x + shL.x) / 2, sy = (shO.y + shL.y) / 2;
     // (each place measured as the game reads it: the pocket and the pouch as offHip - the other hand's shoulder to the leading

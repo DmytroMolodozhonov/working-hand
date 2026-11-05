@@ -71,16 +71,18 @@ test('fatigue: 30 points, +1 per second, spells cost fatigue, not enough → the
     assert.equal(PVP.MAX_FATIGUE, 30);
     assert.equal(SPELL_COST.Protection, 5);
     assert.equal(SPELL_COST.ProtectionMaxima, 20);
-    assert.equal(SPELL_COST.Bombardo, 15);
-    assert.equal(SPELL_COST.BombardoMaxima, 25);
+    // (the author 05.11: Bombardo +5, its Maxima +10 — 35 is more than the first 30 mana)
+    assert.equal(SPELL_COST.Bombardo, 20);
+    assert.equal(SPELL_COST.BombardoMaxima, 35);
     assert.equal(SPELL_COST.Thunderwave, 200);
-    assert.equal(combat.check('BombardoMaxima'), null);
-    combat.pay('BombardoMaxima');
-    assert.equal(combat.fatigue, 5);
+    assert.match(combat.check('BombardoMaxima'), /Не хватает маны/);
+    assert.equal(combat.check('Bombardo'), null);
+    combat.pay('Bombardo');
+    assert.equal(combat.fatigue, 10);
     assert.match(combat.check("Bombardo"), /Не хватает маны/);
     assert.equal(combat.check('Protection'), null);
     for (let i = 0; i < 10 * 60; i++) combat.update(1 / 60); // 10 s
-    assert.ok(Math.abs(combat.fatigue - 15) < 0.01, `${combat.fatigue}`);
+    assert.ok(Math.abs(combat.fatigue - 20) < 0.01, `${combat.fatigue}`);
     for (let i = 0; i < 60 * 60; i++) combat.update(1 / 60);
     assert.equal(combat.fatigue, 30, 'full again, never above 30');
 });

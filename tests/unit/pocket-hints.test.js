@@ -50,7 +50,9 @@ test('no pose, no hips, lying, off — nothing', () => {
     assert.equal(placesFrom(P, null), false);
     const lm = pose();
     const blind = lm.map((p, i) => (i === 23 || i === 24 ? { ...p, visibility: 0.1 } : p));
-    assert.equal(placesFrom(P, blind), false, 'hips not seen');
+    // (почему не false: бёдра вне кадра теперь угадываются по плечам — PoseInterpreter.beltHips `est`, коммит bebbaa9: карман и
+    // палочку берут и сидя близко к камере; метки стоят там же, где их читает игра)
+    assert.equal(placesFrom(P, blind), true, 'hips not seen: guessed from the shoulders');
     const lying = lm.map((p) => ({ ...p, x: p.y, y: p.x * 0.2 })); // (the torso lies across the picture)
     assert.equal(placesFrom(P, lying), false, 'lying');
     const h = new PocketHints();

@@ -68,6 +68,9 @@ export function leapVelocity(arm, out = { x: 0, y: 0, z: 0 }) {
     return out;
 }
 
+/** (UpSpell.boxedIn) how far round me a wall is looked for (m), how many of the 8 sides must be walled */
+export const UP_STUCK = { R: 1.4, SIDES: 6 };
+
 const _sh = new THREE.Vector3(), _hd = new THREE.Vector3(), _up = new THREE.Vector3(), _q = new THREE.Quaternion();
 
 export class UpSpell {
@@ -126,6 +129,11 @@ export class UpSpell {
             && (!!ch.onGround || !!g.ships?.rigging?.climbing);
         const what = upAction({ down, swimming, armUp, standing });
         if (what !== 'rise' && what !== 'leap') { if (what && isFinal) g.hud.setVoice(what, true); return null; }
+        // (the author 05.11: «Stand Up — только в пещере, в воде или когда реально застрял; на пустой поляне не работает»)
+        if (what === 'leap' && !swimming && !g.ships?.rigging?.climbing && !g._inCave && !this.boxedIn()) {
+            if (isFinal) g.hud.setVoice('⬆️ «Up» подбрасывает только в пещере, в воде или когда вы застряли — здесь можно просто идти', true);
+            return null;
+        }
         // a roof right over the head (a hall, a cave): nowhere to be thrown — said, not paid
         if (what === 'leap' && !swimming && g.collision?.ceilingAt) {
             const p = ch.group.position, feet = p.y - PLAYER_GROUND_OFFSET;
@@ -152,6 +160,22 @@ export class UpSpell {
         }
         try { g.sound?.playWhoosh?.(); if (what === 'leap' && swimming) g.sound?.playSplash?.(); } catch { /* (no sound) */ }
         return 'Up';
+    }
+
+    /**
+     * Am I really stuck — in a pit, a narrow shaft, between walls: a wall two blocks high or more on most sides (≥ UP_STUCK.SIDES of 8,
+     * at UP_STUCK.R m), so walking out is no way?
+     */
+    boxedIn() {
+        const g = this.game, t = g.terrain?.data || g.world?.terrain?.data, p = g.character?.group?.position;
+        if (!t?.solidIn || !p) return false;
+        const feetL = Math.round(p.y - PLAYER_GROUND_OFFSET + 1.5); // (the air layer the feet stand in — as CastleLife._walkable)
+        let n = 0;
+        for (let i = 0; i < 8; i++) {
+            const a = i * Math.PI / 4;
+            if (t.solidIn(Math.round(p.x + Math.cos(a) * UP_STUCK.R), Math.round(p.z + Math.sin(a) * UP_STUCK.R), feetL + 1, feetL + 2)) n++;
+        }
+        return n >= UP_STUCK.SIDES;
     }
 
     /** The arc's sideways part (gravity is the body's own: Character). Before Character.update. */

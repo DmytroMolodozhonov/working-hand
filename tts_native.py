@@ -51,7 +51,12 @@ def model_dir():
 
 
 def model_ready():
-    return all(os.path.isfile(os.path.join(model_dir(), f)) for f in FILES)
+    # (an empty file is no model: an unpacking cut short — the disk full, the game closed — left vocoder.int8.onnx 0 bytes,
+    #  and the voices never started again, «ready» for ever; such a model is downloaded anew)
+    def ok(f):
+        path = os.path.join(model_dir(), f)
+        return os.path.isfile(path) and (f == "LICENSE" or os.path.getsize(path) > 0)
+    return all(ok(f) for f in FILES)
 
 
 # ============================================================== the child process
