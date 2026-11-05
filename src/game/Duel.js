@@ -894,8 +894,8 @@ export class Duel {
         if (isStrongDuel(spell)) {
             const col = this.colors(spell, this.me).glow;
             this._burst(origin, spell === 'Die' ? 0x6a1ab0 : col, 22);
-            if (spell === 'Die') g.strong?.terror(origin, this.me); // (cast near people: they run in terror)
-            else g.fx.lightFlash(origin, col, 2.5, 0.25, 12);
+            // («Дай» cast near people no longer sends everybody running — the author 05.11: «они не должны больше убегать, мы вырежем эту функцию»)
+            if (spell !== 'Die') g.fx.lightFlash(origin, col, 2.5, 0.25, 12);
             return b;
         }
         if (isJolt(spell)) { g.sound?.playJolt?.(spell === 'JoltMaxima', false); this.jolt.hit(origin, dir, false); return b; }

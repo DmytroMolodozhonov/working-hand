@@ -466,26 +466,6 @@ export class StrongMagic {
         }
     }
 
-    /** The «Дай» was cast near people: every ordinary creature near runs in terror (only the bosses stand). */
-    terror(pos, by) {
-        const g = this.game;
-        if (!this.auth) { this._send({ op: 'terror', p: r3a(pos), by }, false); return; }
-        const R = 36;
-        g.castleLife?.alarm?.(pos, 'die', by, 18);
-        for (const v of g.castleLife?.targets?.() || []) {
-            if (v.dead || v.role === 'king' || v.role === 'master' || v.servantOf != null) continue;
-            if (Math.hypot(v.x - pos.x, v.z - pos.z) > R) continue;
-            v.foe = null; v.path = null;
-            v.firePanic = true; v.fireAt = { x: pos.x, z: pos.z }; v.fireT = Math.max(v.fireT || 0, 9);
-            if (Math.random() < 0.4) g.castleLife?._say?.(v, ['Спасайтесь!', 'Чёрная магия!', 'Бегите!', 'Это смерть!'][Math.floor(Math.random() * 4)], 2);
-        }
-        for (const a of g.animals?.list || []) {
-            if (a.dead || a.rider || a.lev || a.form) continue;
-            if (a.group.position.distanceTo(pos) > R) continue;
-            a.state = 'flee'; a.attacker = by; a.stateT = 10;
-        }
-    }
-
     /** A body that is gone (burst or dissolved): hidden here (every computer). */
     _vanish(k, id) {
         const g = this.game;
@@ -609,7 +589,7 @@ export class StrongMagic {
             }
             case 'burst': if (Array.isArray(m.p)) { const bp = _v.fromArray(m.p).clone(), bs = Math.min(4, +m.s || 1), pal = String(m.pal); const parts = this.burstParts(m.k, this._findBody(m.k, m.id), bp, bs, pal); this.burstLook(bp, bs, pal, parts); this._vanish(m.k, m.id); } break;
             case 'dust': if (Array.isArray(m.p)) { this.dustLook(_v.fromArray(m.p), Math.min(12, +m.h || 2), Math.min(4, +m.r || 0.8)); this._vanish(m.k, m.id); } break;
-            case 'terror': if (this.auth && Array.isArray(m.p)) this.terror(_v.fromArray(m.p), sender); break;
+            case 'terror': break; // (an old guest's packet: «Дай» frightens nobody now — the author 05.11)
         }
     }
 
