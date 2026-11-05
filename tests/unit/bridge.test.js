@@ -138,8 +138,11 @@ test('the material is what is around: stone, sandstone, snow, ice, planks, castl
     assert.equal(M(BLOCK.SNOW, BLOCK.SNOW).far, BLOCK.SNOW);
     assert.equal(M(BLOCK.ICE, BLOCK.ICE_SHAPE).far, BLOCK.ICE);
     assert.equal(M(BLOCK.PLANKS, BLOCK.PLANKS).near, BLOCK.PLANKS);
-    assert.equal(M(BLOCK.COBBLE, BLOCK.GRASS).far, BLOCK.COBBLE); // (the wall at one end, grass at the other: the wall's)
-    assert.equal(M(BLOCK.GRASS, BLOCK.CS_WHITE).near, BLOCK.CS_WHITE);
+    // (the author 05.11: each half grows out of ITS end — «прямо из материалов, из которых он создаётся»: the wall's half of the wall, the
+    //  grass's half of grass; it used to take the wall's for both)
+    assert.deepEqual(M(BLOCK.COBBLE, BLOCK.GRASS), { near: BLOCK.COBBLE, far: BLOCK.GRASS });
+    assert.deepEqual(M(BLOCK.GRASS, BLOCK.CS_WHITE), { near: BLOCK.GRASS, far: BLOCK.CS_WHITE });
+    assert.equal(M(BLOCK.GRASS, BLOCK.WATER, [BLOCK.PLANKS, BLOCK.PLANKS, BLOCK.PLANKS]).far, BLOCK.GRASS, 'a house\'s planks about never make it wooden');
     // grass at the ends (the author: «трава рядом — мост из земли-травы, не из дерева»): the ground itself, whatever stands about (stone, planks, logs)
     assert.equal(M(BLOCK.GRASS, BLOCK.DIRT, [BLOCK.GRASS, BLOCK.STONE, BLOCK.STONE, BLOCK.GRASS]).near, BLOCK.GRASS);
     assert.equal(M(BLOCK.GRASS, BLOCK.GRASS, [BLOCK.GRASS, BLOCK.PLANKS, BLOCK.WOOD, BLOCK.WOOD]).near, BLOCK.GRASS);
@@ -164,4 +167,12 @@ test('the material is what is around: stone, sandstone, snow, ice, planks, castl
 test('every material of the bridge has a strength row (Structure.STUFF): it holds, and falls when its anchor is gone', async () => {
     const { stuffOf } = await import('../../src/world/Structure.js');
     for (const m of new Set(Object.values(BRIDGE_MATERIAL_OF))) if (m !== EARTH) assert.ok(stuffOf(m) && stuffOf(m).carry > 0, String(m));
+});
+
+test('a hill in the way: the bridge lands on it and ends there — never goes into the hill and out of it again (the author 05.11)', () => {
+    // ground layer 10 at the start (z ≤ 0), a gap, a hill rising over the deck at z 12…16, a gap again, the target at z 30
+    const get = (x, L, z) => (z <= 0 ? (L <= 10 ? BLOCK.STONE : BLOCK.AIR) : z >= 12 && z <= 16 ? (L <= 12 ? BLOCK.GRASS : BLOCK.AIR) : z >= 30 ? (L <= 10 ? BLOCK.STONE : BLOCK.AIR) : BLOCK.AIR);
+    const p = bridgePlan(get, { x: 0, z: 0, L: 10 }, { x: 0, z: 30, L: 10 });
+    assert.ok(p.cells.length > 0);
+    assert.ok(p.cells.every((c) => c[2] <= 13), `no block past the hill: max z ${Math.max(...p.cells.map((c) => c[2]))}`);
 });

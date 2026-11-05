@@ -67,7 +67,7 @@ export const BRIDGE_TARGETS = {
     ghost: { does: 'none', why: 'не касается: призрак бестелесный' },
     custom: { does: 'none', why: 'не касается' },
     gargoyle: { does: 'none', why: 'не касается' },
-    blocks: { does: 'build', why: 'кладёт блоки материала, что рядом (камень, песчаник, снег, лёд, блок замка; земля — только если вокруг одна земля), только в пустоту и воду; землю, стены, чужие блоки не трогает' },
+    blocks: { does: 'build', why: 'кладёт блоки того, из чего растёт: ближняя половина — из блока под ногами (трава, земля, камень, песок → песчаник, снег, лёд, стена замка), дальняя — из блока, куда указала палочка; только в пустоту и воду; упёрся в холм — там и кончается; землю, стены, чужие блоки не трогает' },
     gap: { does: 'build', why: 'пропасти, ущелья, ямы и пустота: мост ложится в любое пустое место, берега искать не нужно (палочка упирается в твёрдое — туда он и идёт)' },
     water: { does: 'build', why: 'вода — пустая клетка: настил ложится на уровне ног, над водой или в воду' },
     trees: { does: 'none', why: 'деревья не трогает; блок там, где дерево, не кладётся; доски — материал моста только если вокруг доски и брёвна, листва — никогда' },
@@ -110,6 +110,11 @@ export const BRIDGE_MATERIAL_OF = (() => {
  * stone. → {near, far}
  */
 export function bridgeMaterials(nearB, farB, around = []) {
+    // (the author 05.11: «он должен прямо из материалов, из которых он как бы создаётся», not «из каких-то рандомных, из дерева»):
+    // each end's own block — grass grows a grass causeway, dirt a dirt one, stone stone, sand sandstone; only an end that is no
+    // ground at all (air, water, leaves…) borrows the other end's; the blocks about (a house's planks, a tree) never decide it
+    const own = (b) => { const v = BRIDGE_MATERIAL_OF[b]; return v === undefined ? null : v === EARTH ? (b === BLOCK.FARMLAND || b === BLOCK.PATH ? BLOCK.DIRT : b) : v; };
+    { const n = own(nearB), f = own(farB); if (n != null || f != null) return { near: n ?? f, far: f ?? n }; }
     const pick = (b) => { const v = BRIDGE_MATERIAL_OF[b]; return v === undefined || v === EARTH ? null : v; };
     const nm = pick(nearB), fm = pick(farB);
     let a = null;
@@ -165,7 +170,10 @@ export function bridgePlan(get, A, B, known = null, around = []) {
     if (len > BRIDGE.MAX + 0.5) return { why: 'far' };
     const rise = B.L - A.L;
     const fx = dx / len, fz = dz / len, sx = -fz, sz = fx; // (along, across)
-    const { near, far } = bridgeMaterials(get(A.x, A.L, A.z), get(B.x, B.L, B.z), around);
+    // (the ground the bridge grows out of: the block under the feet — or the first one under them, the hero a little up in the air)
+    let nb = get(A.x, A.L, A.z);
+    for (let k = 1; k <= 4 && BRIDGE_MATERIAL_OF[nb] === undefined; k++) { const b = get(A.x, A.L - k, A.z); if (b !== BLOCK.AIR) nb = b; if (BRIDGE_MATERIAL_OF[b] !== undefined) break; }
+    const { near, far } = bridgeMaterials(nb, get(B.x, B.L, B.z), around);
     // the columns of the deck (five wide), sampled finely so a slanting bridge has no holes
     const cols = new Map(); // "x,z" → {x, z, t, lat}
     for (let s = 0; s <= len + 0.01; s += 0.25) {
@@ -181,7 +189,16 @@ export function bridgePlan(get, A, B, known = null, around = []) {
     if (known) for (const c of cols.values()) if (!known(c.x, c.z)) return { why: 'unknown' };
     // a straight line from the feet to the target, 1:1 at the steepest
     const deckAt = (t) => { const m = len * t; return A.L + Math.round(Math.max(-m, Math.min(m, rise * t))); };
-    const foot = (c) => c.m < 3 || c.m > len - 3; // (the first / last 3 blocks)
+    // the bridge ENDS where it first comes down onto ground after its span: a hill in the way is where it lands — it never goes into
+    // the hill and comes out of it again further on (the author 05.11: «создался мост, потом утонул в земле, а потом продолжился»)
+    let end = len, spanned = false;
+    for (let m = 0; m <= len + 0.01; m += 0.5) {
+        const x = Math.round(A.x + fx * m), z = Math.round(A.z + fz * m), L = deckAt(m / len);
+        if (free(get(x, L, z))) { spanned = true; continue; }
+        if (spanned && m > 1.5) { end = m; break; }
+    }
+    if (end < len) for (const [k, c] of cols) if (c.m > end + 0.5) cols.delete(k);
+    const foot = (c) => c.m < 3 || c.m > end - 3; // (the first / last 3 blocks)
     const cells = [];
     const tops = new Map();
     for (const c of cols.values()) tops.set(c.x + ',' + c.z, deckAt(c.t));
