@@ -525,7 +525,9 @@ export class WeaponSystem {
         const thumb = ch.getActiveHands()[side]?.fingerMeshes?.thumb?.[0]?.pivot;
         if (thumb) { thumb.getWorldPosition(_c); thumbS = Math.sign(_c.sub(_P).dot(_X)) || thumbS; }
         const diag = new THREE.Vector3().copy(_X).multiplyScalar(thumbS * Math.cos(GRIP_DIAGONAL)).addScaledVector(_Y, Math.sin(GRIP_DIAGONAL));
-        const s = wY.dot(diag) < -0.3 ? -1 : 1;
+        // (a sword may be held the other way round — a reverse grip, as it was grabbed; an axe never: its head goes over the fist, the
+        //  author: «секира держится перевёрнутой» — grabbed lying head-down, it stayed head-down in the hand)
+        const s = w.type === 'axe' ? 1 : wY.dot(diag) < -0.3 ? -1 : 1;
         // Canonical grip: blade axis = s*diag, edge towards the knuckles (e*Y, square to the blade)
         const axY = diag.multiplyScalar(s).normalize();
         // (an axe has one edge: it always faces where the fist strikes — forward, in line with the knuckles)
