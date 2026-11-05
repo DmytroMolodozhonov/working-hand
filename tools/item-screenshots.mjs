@@ -27,7 +27,7 @@ try {
         scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, 1.0));
         const sun = new THREE.DirectionalLight(0xfff0d8, 1.2); sun.position.set(-3, 6, 5); scene.add(sun);
         kinds.forEach((k, i) => {
-            const m = makeItemModel({ kind: k, uid: 'x' + i }); m.scale.multiplyScalar(ITEM_SCALE?.[k] || 1);
+            const m = makeItemModel({ kind: k, uid: 'x' + i });
             m.position.set((i - (kinds.length - 1) / 2) * 5, 0, 0); m.rotation.set(0.3, -0.5 + i * 0.3, 0); scene.add(m);
         });
         const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 100); cam.position.set(0, 4, 16); cam.lookAt(0, 0, 0);
