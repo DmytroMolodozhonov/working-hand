@@ -44,6 +44,8 @@ test('items dropped over the cauldron fall in; items thrown at its side do not p
         });
         await sleep(9000);
         out.top = top.map((t) => ({ k: t.k, gone: !g.items.loose.has(t.uid), inCaul: !!t.L.inCaul, y: Math.round((t.L.model.position.y - base) * 10) / 10, rest: !!t.L.rest }));
+        { const t = top[0], L = t.L, p = L.model.position;
+          out.dbg = { pos: [p.x - c.x, p.y - base, p.z - c.z].map((v) => Math.round(v * 100) / 100), vel: L.vel.toArray().map((v) => Math.round(v * 100) / 100), hover: !!L.hover, lev: !!L.lev, accio: !!L.accio, wet: !!L.wet, afloat: !!L.afloat, rest: !!L.rest, auth: g.items.auth, upright: g.cauldrons.upright(c), tilt: c.tilt, fall: !!c.fall, lev2: !!c.lev, water: c.st.water, phase: c.st.phase, into: g.cauldrons.intoOpening(L, new THREE.Vector3(p.x, p.y, p.z)), sync: !!L.sentRest, swarm: !!L.swarm, away: !!L.away, remote: !!L.remote }; }
         // from the side: thrown at the belly height at 9 m/s from 4 m away, in a ring
         kinds.forEach((k, i) => {
             const item = { ...k, uid: newUid() };
@@ -76,6 +78,7 @@ test('items dropped over the cauldron fall in; items thrown at its side do not p
     console.log('LOB:', JSON.stringify(r.lob));
     const bad = (r.top || []).filter((t) => !t.gone && !t.inCaul);
     const through = (r.side || []).filter((t) => !t.gone && t.along < -1.2);
+    console.log('DBG:', JSON.stringify(r.dbg));
     console.log('NOT IN:', JSON.stringify(bad));
     console.log('THROUGH:', JSON.stringify(through));
     assert.equal(bad.length, 0, 'everything dropped over the opening went in (dissolved or lay on the bottom)');
