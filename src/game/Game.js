@@ -177,6 +177,7 @@ import { WalkRecorder } from '../core/WalkRecorder.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
 import { Boats } from './Boats.js';
+import { SunkenWorld } from './SunkenWorld.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep, lyingHead } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
@@ -688,6 +689,7 @@ export class Game {
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
+        this.sunken = new SunkenWorld(this); // the wrecks and the sunken temple on the sea's bottom, their chests (SunkenWorld.js)
         this.seaFloor = new SeaFloor(this); // the sea's bottom: kelp, seagrass, corals, glowing anemones and lilies, the fish schools (SeaFloor.js)
         this.oceanStorm = new OceanStorm(this); // the storms over the sea: rain, lightning, waterspouts (OceanStorm.js — the wind's, SeaWind.js)
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
@@ -3791,6 +3793,7 @@ export class Game {
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m);
         for (const m of this.boats?.samples?.() || []) zoo.add(m); // (a boat — BoatModel.js)
+        for (const m of this.sunken?.samples?.() || []) zoo.add(m); // (the sunken temple — SeaTempleModel.js)
         for (const m of this.seaFloor?.samples?.() || []) zoo.add(m); // (the sea's plants, its glowing ones, the fish) // (a waterspout's funnel and its wall cloud — WaterspoutFx.js)
         for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
@@ -4261,6 +4264,7 @@ export class Game {
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
         this._updateWind();
         this.oceanStorm?.update(dt);
+        this.sunken?.update(dt);
         this.seaFloor?.update(dt);
         this.storm.update(dt);
         this.sun.update(dt);

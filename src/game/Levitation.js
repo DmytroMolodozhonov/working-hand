@@ -671,7 +671,7 @@ export class Levitation {
             //  measured now — the chest is then held exactly there, never chasing itself)
             const doll = g.creatureImpact?.levDoll?.(ck, c);
             c.lev.doll = !!doll;
-            if (doll) { const ct = this._centre(ck, c, _h4).y; c.lev.dollOff = doll.at(11)[1] - ct; }
+            if (doll) { this._centre(ck, c, _h4); const off = doll.at(11)[1] - _h4.y; c.lev.dollOff = Number.isFinite(off) ? off : 0.85; } // (_centre returns how high the middle is; the point goes into _h4 — taking `.y` of the number made the goal NaN and the body vanished: the author 05.11)
         }
         this._sparkle(p, 20);
         return true;
@@ -706,7 +706,7 @@ export class Levitation {
             // («centre + 0.7») chased itself — the body sagged far under the hand and swung (the author 05.11: «полностью сломана
             // математика, как я поднимаю его»)
             _h4.copy(L.target);
-            _h4.y += L.dollOff ?? 0.85;
+            _h4.y += Number.isFinite(L.dollOff) ? L.dollOff : 0.85;
             if (!g.creatureImpact.levDollStep(ck, c, _h4, dt)) L.doll = false;
             else {
                 this._centre(ck, c, _h3);

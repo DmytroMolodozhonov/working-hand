@@ -295,6 +295,7 @@ export class CreatureImpact {
         const r = this.levDolls?.get(ck + '|' + c.id);
         if (!r) return false;
         const d = r.doll, x = d.x, o = d.o;
+        if (!Number.isFinite(at.x) || !Number.isFinite(at.y) || !Number.isFinite(at.z)) return true; // (never a NaN into the doll: the body would vanish)
         d.at(11, _pt); // (the chest: the shoulders' middle)
         // the hold carries the whole body along (every point moved alike, its swing kept) — the chest to `at`, smoothly
         const k = 1 - Math.exp(-dt * 14);
@@ -710,8 +711,8 @@ export class CreatureImpact {
             const backY = _fr[7] * -doll.sp.faces; // (the back: right × up for a body looking along −Z, its opposite for one looking along +Z)
             if (backY < 0) { fx = -fx; fz = -fz; } // (on his back: the back looks down — he sits up facing his feet)
             if (Math.hypot(fx, fz) < 0.2) { fx = -Math.sin(c.yaw || 0); fz = -Math.cos(c.yaw || 0); }
-            doll.standUp(sx, fy, sz, fx, fz);
-            s.getUp = { fx, fz, t: 0 };
+            const up = doll.standUp(sx, fy, sz, fx, fz) || { fx, fz }; // (the doll turns up the shortest way: it says where it will face)
+            s.getUp = { fx: up.fx, fz: up.fz, t: 0 };
         }
         if (s.getUp && doll) {
             s.getUp.t += dt;

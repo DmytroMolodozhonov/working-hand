@@ -283,6 +283,7 @@ export class SeaFloor {
         const ix = Math.round(x), iz = Math.round(z);
         if (t.landMade && !t.landMade(ix, iz)) return 0;
         if (!t.isSeaColumn?.(ix, iz)) return 0;
+        if (this.game.sunken?.covers?.(x, z)) return 0; // (no weed through a wreck's hull or the temple's floor — SunkenWorld.js)
         const top = t.topLayer(ix, iz);
         const w = waterAt(t, ix, iz, top + 1);
         return w ? w.depth : 0;

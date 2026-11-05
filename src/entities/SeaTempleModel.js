@@ -34,7 +34,7 @@ export const TEMPLE_CHESTS = [
     { x: 0, z: -4.1, yaw: 0, room: 'seaAltar' },
     { x: -3.4, z: 5.6, yaw: Math.PI / 2, room: 'seaTemple' },
     { x: 3.4, z: 5.6, yaw: -Math.PI / 2, room: 'seaTemple' },
-    { x: 0, z: -12.2, yaw: Math.PI, room: 'seaTemple' }, // (in the back portico, behind the cella)
+    { x: -2, z: -11.3, yaw: Math.PI, room: 'seaTemple' }, // (in the back portico, behind the cella, between two columns)
 ];
 
 const STONE = [0.66, 0.69, 0.63], STONE_D = [0.55, 0.58, 0.53], BRONZE = [0.32, 0.52, 0.46], MOSS = [0.25, 0.36, 0.2], SILT = [0.58, 0.55, 0.44];

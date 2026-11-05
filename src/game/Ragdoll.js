@@ -28,8 +28,10 @@ export const DOLL = {
     SLEEP_V: 0.006, SLEEP_T: 0.4, // (≤ ~0.35 m/s for 0.4 s while it touches something: it lies — the last slow settling of the joints is not seen)
     MAX_MOVE_K: 0.5,    // a ball moves at most this share of its radius per step: no skipping a block
     GOAL_K: 0.09,       // getting up: the share of the way to the standing pose each step (~1 s to stand)
+    RISE_T: 0.85,       // s: getting up — the whole body's turn from lying to standing (Ragdoll.standUp)
     SIM_MAX: 7,         // seconds one doll is computed at the most (then it is put to sleep where it is)
     TONE_K: 0.11,       // a living body (tone 1): the share of the way each limb is pulled a step back to its own shape against the torso
+    TONE_T: 1.6,        // s: the muscles hold while the body lands and rolls; after that it lies as it lies (and can fall asleep)
     TONE_LIVE: 0.5,     // a living one thrown («Джолт», a blast, «Левиоса»): half the slackness of a dead one (the author 05.11: «он же не умер… на 50 % менее выражена»)
 };
 
@@ -37,6 +39,45 @@ export const DOLL = {
 export const P = { HEAD: 0, SHL: 1, SHR: 2, HIPL: 3, HIPR: 4, HNL: 5, HNR: 6, KNL: 7, FTL: 8, KNR: 9, FTR: 10, CHEST: 11, PELVIS: 12 };
 const N = 11;
 const LIMBS = [P.HEAD, P.HNL, P.HNR, P.KNL, P.FTL, P.KNR, P.FTR]; // (the parts a living body's muscles hold — _tone)
+/** The frame (right, up, back — 9 numbers) of points given as [[x, y, z]…] (the rest pose) — as Ragdoll.frame does for the doll. */
+function frameOf(R, out) {
+    let rx = R[P.SHR][0] + R[P.HIPR][0] - R[P.SHL][0] - R[P.HIPL][0], ry = R[P.SHR][1] + R[P.HIPR][1] - R[P.SHL][1] - R[P.HIPL][1], rz = R[P.SHR][2] + R[P.HIPR][2] - R[P.SHL][2] - R[P.HIPL][2];
+    let n = Math.hypot(rx, ry, rz) || 1; rx /= n; ry /= n; rz /= n;
+    let ux = R[P.SHL][0] + R[P.SHR][0] - R[P.HIPL][0] - R[P.HIPR][0], uy = R[P.SHL][1] + R[P.SHR][1] - R[P.HIPL][1] - R[P.HIPR][1], uz = R[P.SHL][2] + R[P.SHR][2] - R[P.HIPL][2] - R[P.HIPR][2];
+    const d = ux * rx + uy * ry + uz * rz; ux -= rx * d; uy -= ry * d; uz -= rz * d;
+    n = Math.hypot(ux, uy, uz) || 1; ux /= n; uy /= n; uz /= n;
+    out[0] = rx; out[1] = ry; out[2] = rz; out[3] = ux; out[4] = uy; out[5] = uz;
+    out[6] = ry * uz - rz * uy; out[7] = rz * ux - rx * uz; out[8] = rx * uy - ry * ux;
+    return out;
+}
+/** The rotation (quaternion [x, y, z, w]) whose columns are the frame's right, up, back. */
+function quatOfFrame(F, q) {
+    const m00 = F[0], m10 = F[1], m20 = F[2], m01 = F[3], m11 = F[4], m21 = F[5], m02 = F[6], m12 = F[7], m22 = F[8];
+    const tr = m00 + m11 + m22;
+    if (tr > 0) { const s = 0.5 / Math.sqrt(tr + 1); q[3] = 0.25 / s; q[0] = (m21 - m12) * s; q[1] = (m02 - m20) * s; q[2] = (m10 - m01) * s; }
+    else if (m00 > m11 && m00 > m22) { const s = 2 * Math.sqrt(1 + m00 - m11 - m22); q[3] = (m21 - m12) / s; q[0] = 0.25 * s; q[1] = (m01 + m10) / s; q[2] = (m02 + m20) / s; }
+    else if (m11 > m22) { const s = 2 * Math.sqrt(1 + m11 - m00 - m22); q[3] = (m02 - m20) / s; q[0] = (m01 + m10) / s; q[1] = 0.25 * s; q[2] = (m12 + m21) / s; }
+    else { const s = 2 * Math.sqrt(1 + m22 - m00 - m11); q[3] = (m10 - m01) / s; q[0] = (m02 + m20) / s; q[1] = (m12 + m21) / s; q[2] = 0.25 * s; }
+    const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1; q[0] /= l; q[1] /= l; q[2] /= l; q[3] /= l;
+    return q;
+}
+function quatMul(a, b) {
+    return [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+}
+function quatRot(q, v) {
+    const [x, y, z, w] = q, ix = w * v[0] + y * v[2] - z * v[1], iy = w * v[1] + z * v[0] - x * v[2], iz = w * v[2] + x * v[1] - y * v[0], iw = -x * v[0] - y * v[1] - z * v[2];
+    return [ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x];
+}
+function quatSlerp(a, b, t) {
+    let bx = b[0], by = b[1], bz = b[2], bw = b[3];
+    let c = a[0] * bx + a[1] * by + a[2] * bz + a[3] * bw;
+    if (c < 0) { c = -c; bx = -bx; by = -by; bz = -bz; bw = -bw; } // (the short way round)
+    let k0 = 1 - t, k1 = t;
+    if (c < 0.9995) { const th = Math.acos(c), s = Math.sin(th); k0 = Math.sin((1 - t) * th) / s; k1 = Math.sin(t * th) / s; }
+    const q = [a[0] * k0 + bx * k1, a[1] * k0 + by * k1, a[2] * k0 + bz * k1, a[3] * k0 + bw * k1], l = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+    return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+}
+
 /**
  * Where each point is on a person standing, in his model's own frame (feet at 0, y up, the model's x and z as they are) — VillagerModel's
  * measures (it looks along −Z: x is his right, z behind him). Other bodies (a zombie, a Taron) give their own `makeSpec`.
@@ -132,9 +173,51 @@ export class Ragdoll {
      * the world still pushes the balls out (last), so a body by a wall gets up along it, never through it. `goalDist` says how far it still is.
      */
     standUp(x, floorY, z, fx, fz) {
+        // The body turns up as a WHOLE by the shortest way from how it lies (the author 05.11: «когда он встал, он перевернулся… сальто»
+        // — every point used to crawl straight to its place standing, and a body lying the «wrong» way round went over itself): its
+        // up (hips → shoulders) is turned to the sky by the shortest arc — on its back it sits up and faces its feet, on its face it
+        // pushes up and faces where its head was, on its side it rolls up — its middle rising from where it lies to (x, floorY, z).
+        // `fx, fz` are only the fallback (a body standing already). → the way it will face {fx, fz}.
+        const sp = this.sp, F = this.frame(this._rf || (this._rf = new Array(9)));
+        const q0 = quatOfFrame(F, [0, 0, 0, 1]);
+        const ux = F[3], uy = F[4], uz = F[5];
+        // the shortest arc from its up to the world's up
+        let ax = -uz, az = ux; const ay = 0, sa = Math.hypot(ax, az), ca = uy;
+        let q1;
+        if (sa < 1e-4) q1 = ca > 0 ? q0.slice() : quatMul([1, 0, 0, 0], q0); // (already up / upside down: over its side)
+        else { const ang = Math.atan2(sa, ca), h = Math.sin(ang / 2) / sa; q1 = quatMul([ax * h, ay * h, az * h, Math.cos(ang / 2)], q0); }
+        // the rest pose's own frame: each point's place against the hips' middle in it
+        const R = sp.rest, RF = frameOf(R, []), rq = quatOfFrame(RF, [0, 0, 0, 1]), ri = [-rq[0], -rq[1], -rq[2], rq[3]];
+        const ph = (R[P.HIPL][1] + R[P.HIPR][1]) / 2;
+        const loc = this._loc || (this._loc = new Float64Array(N * 3));
+        for (let i = 0; i < N; i++) {
+            const v = quatRot(ri, [(R[i][0] - (R[P.HIPL][0] + R[P.HIPR][0]) / 2) * 1, R[i][1] - ph, R[i][2] - (R[P.HIPL][2] + R[P.HIPR][2]) / 2]);
+            loc[i * 3] = v[0]; loc[i * 3 + 1] = v[1]; loc[i * 3 + 2] = v[2];
+        }
+        const p0 = this.at(P.PELVIS, []);
+        this.rise = { t: 0, q0, q1, p0, p1: [x, floorY + ph, z] };
+        // the end: standing so (the goal goalDist measures)
         const g = this.goal || (this.goal = new Float64Array(N * 3));
-        this._place(g, x, floorY, z, fx, fz);
+        this._riseAt(1, g);
         this.asleep = false; this.still = 0; this.age = 0;
+        // where it faces then: forward = −back for a model looking along −Z, +back for one along +Z
+        const bw = quatRot(quatMul(q1, ri), [RF[6], RF[7], RF[8]]);
+        let ox = bw[0] * sp.faces, oz = bw[2] * sp.faces;
+        const ol = Math.hypot(ox, oz);
+        if (ol < 0.2) { ox = fx; oz = fz; } else { ox /= ol; oz /= ol; }
+        return { fx: ox, fz: oz };
+    }
+
+    /** Where every point is at share `s` (0…1) of getting up (into `out`): the rest shape turned by the slerp of q0 → q1, its middle risen. */
+    _riseAt(s, out) {
+        const r = this.rise, q = quatSlerp(r.q0, r.q1, s), loc = this._loc;
+        const lift = Math.sin(Math.min(1, s * 1.15) * Math.PI / 2); // (the hips come up a little ahead of the turn: no feet driven into the floor)
+        const px = r.p0[0] + (r.p1[0] - r.p0[0]) * s, py = r.p0[1] + (r.p1[1] - r.p0[1]) * lift, pz = r.p0[2] + (r.p1[2] - r.p0[2]) * s;
+        for (let i = 0; i < N; i++) {
+            const v = quatRot(q, [loc[i * 3], loc[i * 3 + 1], loc[i * 3 + 2]]);
+            out[i * 3] = px + v[0]; out[i * 3 + 1] = py + v[1]; out[i * 3 + 2] = pz + v[2];
+        }
+        return out;
     }
 
     /** How far (m) the farthest point still is from where getting up takes it. */
@@ -203,8 +286,15 @@ export class Ragdoll {
             }
         }
         if (this.goal) {
-            // getting up: no fall, no swing — each point goes toward its place standing; the bones and the world still hold
-            const gl = this.goal, K = DOLL.GOAL_K;
+            // getting up: no fall, no swing — the body turns up as a whole (rise: the shortest turn, its middle rising), each point pulled
+            // to where that turn has it now; the bones and the world still hold
+            let gl = this.goal, K = DOLL.GOAL_K;
+            if (this.rise && this.rise.t < DOLL.RISE_T) {
+                this.rise.t += dt;
+                const u = Math.min(1, this.rise.t / DOLL.RISE_T);
+                gl = this._riseAt(u * u * (3 - 2 * u), this._rg || (this._rg = new Float64Array(N * 3)));
+                K = 0.35;
+            }
             for (let i = 0; i < N * 3; i++) { o[i] = x[i]; x[i] += (gl[i] - x[i]) * K; }
             this.contacts = 0;
             for (let it = 0; it < DOLL.ITER; it++) {
@@ -225,7 +315,7 @@ export class Ragdoll {
         // (the muscles hold the limbs only while the body touches something — lying, landing, sliding: in the air a living body is as
         //  helpless as a slack one, and its limbs pulled straight there turned the whole body over: the author 05.11 «в воздухе
         //  переворачивается»)
-        if (this.tone > 0 && this.contacts > 0) this._tone();
+        if (this.tone > 0 && this.contacts > 0 && this.age < DOLL.TONE_T) this._tone(); // (and only while it lands and rolls: then it lies still, as a body does — never twitching on)
         this.contacts = 0;
         for (let it = 0; it < DOLL.ITER; it++) {
             for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };

@@ -121,3 +121,25 @@ test('a living body thrown («Джолт») turns in the air exactly as a slack 
     };
     assert.ok(Math.abs(fly(0.5) - fly(0)) < 0.05, `alive ${fly(0.5).toFixed(2)} vs slack ${fly(0).toFixed(2)} rad`);
 });
+
+test('getting up: the body turns up the shortest way — no somersault (the author 05.11: «когда он встал… сделал такое сальто»)', async () => {
+    const { Ragdoll } = await import('../../src/game/Ragdoll.js');
+    const world = { boxes: () => [], solid: () => false, floor: () => 0 };
+    for (const [ax, az] of [[1, 0], [0, -1], [-0.6, 0.8]]) {
+        const d = new Ragdoll(); d.lie(0, 0, 0, ax, az);
+        for (let i = 0; i < 60; i++) d.step(world, 1 / 60);
+        const fr = new Array(9); d.frame(fr);
+        const up = d.standUp(0, 0, 0, 1, 0);
+        // on its back it sits up: it faces its feet (the head lay along a)
+        assert.ok(up.fx * ax + up.fz * az < -0.9, `faces its feet: ${up.fx.toFixed(2)},${up.fz.toFixed(2)}`);
+        let pu = [fr[3], fr[4], fr[5]], pr = [fr[0], fr[1], fr[2]], turnU = 0, turnR = 0;
+        for (let f = 0; f < 120; f++) {
+            d.step(world, 1 / 60); d.frame(fr);
+            turnU += Math.acos(Math.min(1, fr[3] * pu[0] + fr[4] * pu[1] + fr[5] * pu[2])); pu = [fr[3], fr[4], fr[5]];
+            turnR += Math.acos(Math.min(1, fr[0] * pr[0] + fr[1] * pr[1] + fr[2] * pr[2])); pr = [fr[0], fr[1], fr[2]];
+        }
+        assert.ok(turnU < Math.PI / 2 + 0.2, `its up turned ${(turnU * 57.3).toFixed(0)}° — a quarter, not over itself`);
+        assert.ok(turnR < 0.2, `no roll about itself: ${(turnR * 57.3).toFixed(0)}°`);
+        assert.ok(fr[4] > 0.97 && d.goalDist() < 0.1, 'standing at the end');
+    }
+});
