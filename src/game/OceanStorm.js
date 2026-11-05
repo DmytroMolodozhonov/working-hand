@@ -24,6 +24,7 @@ import { spoutsOf, boltsOf, spoutPush, stormWeight, OCEAN } from '../world/Ocean
 import { windLevelSmooth } from '../world/SeaWind.js';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { WaterspoutFx } from '../fx/WaterspoutFx.js';
+import { TornadoSummonFx, TORNADO_FX } from '../fx/TornadoSummonFx.js';
 
 export const OCEAN_STORM = {
     NEAR: 700, // m: the seas whose spouts and bolts concern me
@@ -79,12 +80,19 @@ export class OceanStorm {
         return null;
     }
 
-    /** «Tornado» came (every computer: the spell's packet carries the place): the spout begins to come down there. */
-    summon(at, by = null) {
-        const t = this.game.weatherClock ?? Date.now() / 1000;
+    /** «Tornado» cast (every computer, from the packet): the calling plays (TornadoSummonFx), the spout comes down at its DESCEND s. */
+    call(from, at, by = null) {
+        const spin = Math.random() < 0.5 ? 1 : -1;
+        (this.callFx || (this.callFx = new TornadoSummonFx(this.game))).start(from, at, spin);
+        this.summon(at, by, TORNADO_FX.DESCEND, spin);
+    }
+
+    /** The spout of a «Tornado» begins to come down at (x, z) after `delay` s. */
+    summon(at, by = null, delay = 0, spin = Math.random() < 0.5 ? 1 : -1) {
+        const t = (this.game.weatherClock ?? Date.now() / 1000) + delay;
         const id = 'tornado:' + (by ?? '?') + ':' + Math.round(t * 10);
         if (this.summoned.some((s) => s.id === id)) return;
-        this.summoned.push({ id, x0: at.x, z0: at.z, born: t, life: OCEAN_STORM.SUMMON_LIFE, spin: Math.random() < 0.5 ? 1 : -1, by, ph: Math.random() * 6.28 });
+        this.summoned.push({ id, x0: at.x, z0: at.z, born: t, life: OCEAN_STORM.SUMMON_LIFE, spin, by, ph: Math.random() * 6.28 });
         while (this.summoned.length > OCEAN_STORM.MAX_SUMMONED) this.summoned.shift();
     }
 
@@ -98,7 +106,7 @@ export class OceanStorm {
             const x = s.x0 + Math.sin(age / 41 + s.ph) * rx * Math.min(1, age / 60), z = s.z0 + Math.sin(age / 29 + s.ph * 1.7) * rz * Math.min(1, age / 60);
             const sd = idx ? idx.signedDist(x, z) : 99;
             const shore = Math.max(0, Math.min(1, (sd - (OCEAN.DIE_S - 8)) / 10));
-            const k = Math.max(0, Math.min(1, age / OCEAN.GROW, (s.life - age) / OCEAN.FADE)) * shore;
+            const k = Math.max(0, Math.min(1, age / 5, (s.life - age) / OCEAN.FADE)) * shore; // (called: the funnel comes down out of the eye in 5 s — faster than a storm's)
             out.push({ id: s.id, x, z, k, born: s.born, life: s.life, spin: s.spin, summoned: true });
         }
     }
@@ -106,7 +114,7 @@ export class OceanStorm {
     _fx() { return this.fx || (this.fx = new WaterspoutFx(this.game.scene, this.game.water?.spray || null)); }
 
     /** For Game.prewarm: the spout's funnel and cloud (their shaders compile at the loading screen). */
-    samples() { return this._fx().samples(); }
+    samples() { return [...this._fx().samples(), ...(this.callFx || (this.callFx = new TornadoSummonFx(this.game))).samples()]; }
 
     /** Is (x, z) within `r` + a spout's reach of a spout (the sea's creatures flee)? */
     nearSpout(x, z, r = 0) {
@@ -117,6 +125,7 @@ export class OceanStorm {
     update(dt) {
         const g = this.game, sea = g.sea, ch = g.character;
         const t = g.weatherClock ?? Date.now() / 1000; // (weatherClock: a test's / a tool's fixed moment)
+        this.callFx?.update(dt); // (a «Tornado» being called: the sky turning, the sea spinning)
         if (!sea || !ch || g.space?.realm && g.space.realm !== 'earth' || g.hellGate?.inHell) { this._off(); return; }
         const me = ch.group.position;
         if (me.y > 2000) { this._off(); return; } // (space)

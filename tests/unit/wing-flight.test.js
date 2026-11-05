@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { WingFlight, HERO_FLY, AIR, LAND, thermalAt, landingHurt, wingStep, cloudAt, WING } from '../../src/game/WingFlight.js';
+import { WingFlight, HERO_FLY, AIR, LAND, thermalAt, landingHurt, wingStep, cloudAt, WING, TAKEOFF } from '../../src/game/WingFlight.js';
 import { HeroWings } from '../../src/game/HeroWings.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../../src/entities/Character.js';
 
@@ -62,7 +62,7 @@ test('standing still the strokes only lift the heels; a run and strokes — up i
     g.wings.grant();
     for (let i = 0; i < 90; i++) frame(g, dt, { run: 0, phase: (i * dt) % 0.45 });
     assert.equal(g.wingFlight.airborne, false, 'no run — no take-off');
-    for (let i = 0; i < 30; i++) frame(g, dt, { run: 8 });
+    for (let i = 0; i < 45; i++) frame(g, dt, { run: 8 }); // (a real run first: TAKEOFF.RUN_T)
     let top = 0;
     for (let i = 0; i < 300; i++) { frame(g, dt, { run: 8, phase: (i * dt) % 0.45 }); top = Math.max(top, g.character.group.position.y - PLAYER_GROUND_OFFSET); }
     assert.ok(g.wingFlight.airborne, 'it flies');
@@ -141,4 +141,19 @@ test('dead or knocked down in the air: the wings let go — the body falls by it
     frame(g, dt);
     assert.equal(g.wingFlight.airborne, false);
     assert.equal(ch.flying, false);
+});
+
+// (the author 05.11: «очень легко взлететь… ты должен прям разбежаться; нельзя просто взмахнуть руками и сразу полететь»)
+test('no take-off from a few steps and a stroke: a real run (≥ 6 m/s for over a second) and two strong strokes are needed', () => {
+    const g = world();
+    g.wings.grant();
+    for (let i = 0; i < 12; i++) frame(g, dt, { run: 5 }); // (a few quick steps, slower than a run)
+    for (let i = 0; i < 30; i++) frame(g, dt, { run: 5, phase: (i * dt) % 0.45 });
+    assert.equal(g.wingFlight.airborne, false, 'a jog and strokes: no');
+    const h = world();
+    h.wings.grant();
+    for (let i = 0; i < 15; i++) frame(h, dt, { run: 8 }); // (half a second of running)
+    frame(h, dt, { run: 8, phase: 0.05 });
+    assert.equal(h.wingFlight.airborne, false, 'a short run and one stroke: no');
+    assert.ok(TAKEOFF.RUN_T >= 1 && HERO_FLY.takeoff >= 6);
 });

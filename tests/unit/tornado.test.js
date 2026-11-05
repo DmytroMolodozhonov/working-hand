@@ -53,7 +53,7 @@ test('the spout called: it comes down, wanders round its place, gone after 12 ga
     os.summon(at, 'me'); // (the same packet twice: one spout)
     assert.equal(os.summoned.length, 1);
     const at_ = (t) => { const out = []; os._summonedAt(t, out); return out[0]; };
-    assert.ok(at_(1001).k < 0.2, 'it starts coming down');
+    assert.ok(at_(1000.5).k < 0.2, 'it starts coming down'); // (called: the funnel comes down in 5 s)
     const mid = at_(1000 + 300);
     assert.ok(mid.k > 0.9 && Math.hypot(mid.x - at.x, mid.z - at.z) < 80, 'it stays round its place');
     assert.ok(at_(1000 + OCEAN_STORM.SUMMON_LIFE - 2).k < 0.3, 'it fades at the end');

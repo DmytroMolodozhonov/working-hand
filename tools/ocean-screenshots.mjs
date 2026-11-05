@@ -63,6 +63,23 @@ try {
         await place(sx, sz, S.x, S.z, 8);
         await shoot('sea-' + k);
     }
+    // «Tornado»: the calling — the sky turns, the sea spins, the funnel comes down (TornadoSummonFx)
+    {
+        await page.evaluate((t) => { window.__zns.game.weatherClock = t; }, prep.at.fresh);
+        const bx = S.x + Math.cos(a) * (S.r0 - 60), bz = S.z + Math.sin(a) * (S.r0 - 60);
+        await place(bx, bz, S.x, S.z, 6);
+        await page.evaluate(([bx, bz, sx, sz]) => {
+            const g = window.__zns.game, dx = sx - bx, dz = sz - bz, l = Math.hypot(dx, dz);
+            const at = { x: bx + dx / l * 110, z: bz + dz / l * 110 };
+            g.smoothHead && (g.smoothHead.pitch = 0.32);
+            g.oceanStorm.call(g.character.group.position.clone().setY(g.character.group.position.y + 1), at, 'me');
+            window.__tornadoAt = performance.now();
+        }, [bx, bz, S.x, S.z]);
+        for (const [s, name] of [[1.5, 'tornado-1-call'], [3, 'tornado-2-sky'], [5, 'tornado-3-sea'], [8, 'tornado-4-funnel']]) {
+            await page.evaluate(async (s) => { while (performance.now() - window.__tornadoAt < s * 1000) await new Promise((r) => setTimeout(r, 30)); }, s);
+            await shoot(name);
+        }
+    }
     if (prep.at.spout) {
         const sp = prep.at.spout;
         await page.evaluate((t) => { window.__zns.game.weatherClock = t; }, sp.t);
