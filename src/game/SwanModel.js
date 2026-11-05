@@ -174,20 +174,28 @@ export function swanWingsItemModel(magic = false) {
     const g = new THREE.Group();
     g.name = magic ? 'magicSwanWings' : 'swanWings';
     const feather = magic ? K.wingMat(0xeef3ff, 0x9fc8ff) : K.wingMat(0xf9f8f4);
+    // ONE bundle (the author 06.11: «выглядит ужасно, состоит из двух элементов»): the two wings are laid together, root to root, tips together, back to back
+    // like a closed book, bound with two leather straps with brass buckles and a knot — one object, not two floating wings.
     for (const s of [1, -1]) {
         const w = new THREE.Group();
         w.scale.set(0.42 * s, 0.42, 0.42);
-        w.rotation.set(-Math.PI / 2 + 0.25 * s, 0, 0.18 * s); // (the span along the item's length, the feathers fanned)
+        w.position.x = 0.012 * s;
+        w.rotation.set(-Math.PI / 2 + 0.05 * s, 0, 0.04 * s); // (the span along the item's length, the wings nearly parallel: a slight fan only at the tips)
         const m = new THREE.Mesh(K.pigWingGeo(), feather);
-        m.morphTargetInfluences = [0.45, 0.15];
+        m.morphTargetInfluences = [0.2, 0.05]; // (folded: the feathers close up)
         m.castShadow = true;
         w.add(m);
         g.add(w);
     }
-    // the twine round the two shoulders
-    const twine = new THREE.Mesh(K.cached('swanTwine', () => new THREE.TorusGeometry(0.035, 0.008, 6, 14)), K.lam(0x8a6a3e));
-    twine.rotation.x = Math.PI / 2;
-    g.add(twine);
+    const strap = K.lam(0x6a4a2a), brass = K.lam(0xc9a23a);
+    const band = K.cached('swanBand', () => new THREE.BoxGeometry(0.07, 0.014, 0.05));
+    const buckle = K.cached('swanBuckle', () => new THREE.BoxGeometry(0.02, 0.022, 0.056));
+    for (const z of [-0.06, -0.2]) { // (two straps round the bundle)
+        const b1 = new THREE.Mesh(band, strap); b1.position.set(0, 0, z); b1.scale.set(1.05, 1, 1); g.add(b1);
+        const b2 = new THREE.Mesh(band, strap); b2.position.set(0, 0.02, z); b2.scale.set(0.9, 1, 1); g.add(b2);
+        const bk = new THREE.Mesh(buckle, brass); bk.position.set(0.02, 0.012, z); g.add(bk);
+    }
+    const knot = new THREE.Mesh(K.cached('swanKnot', () => new THREE.SphereGeometry(0.014, 7, 5)), strap); knot.position.set(-0.025, 0.014, -0.06); g.add(knot);
     if (magic) {
         const mote = mat('mote', () => new THREE.MeshBasicMaterial({ color: 0xcfe9ff, transparent: true, opacity: 0.85, depthWrite: false }));
         const r = K.rng(77);
