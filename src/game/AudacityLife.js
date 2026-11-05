@@ -187,7 +187,7 @@ export class AudacityLife {
             if (v.fear && v.fear.level >= 2 && v.fear.state !== 'flee') continue; // (already heading for a house / inside)
             if (this.life.home.hasHome(v) && this.life.fright.sendHome(v, pos, e.pid)) {
                 this.life.alog?.decision(v, `прячется дома: наглость ${valueOf(e.rec).toFixed(0)}, слабый (${t.elder ? 'старик' : t.child || t.kid ? 'ребёнок' : t.female ? 'женщина' : 'робкий'}) — бежит в свой дом и запрёт дверь`);
-                if (k < 3 || Math.random() < 0.25) this.life._say(v, pick(SHOUT.flee), 3);
+                if (Math.random() < 0.3) this.life._say(v, pick(SHOUT.flee), 3);
                 n++;
                 continue;
             }

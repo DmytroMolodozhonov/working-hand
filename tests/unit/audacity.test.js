@@ -147,7 +147,8 @@ function world({ nKnights = 1 } = {}) {
         night: { noise() {} }, index: { near: () => [] }, state: () => st,
         _isPlayer: (id) => id === 'me', _playerPos: (id) => (id === 'me' ? player : null), _sees: () => true,
         _say: (v, t) => said.push([v.id, t]), _fights: (v) => v.role === 'knight' || !!v.mob, _inLand: (d, p, extra = 0) => Math.max(Math.abs(p.x - d.x), Math.abs(p.z - d.z)) <= d.zone + extra,
-        fright: { _traits(v) { if (v.brave == null) { v.brave = v.bravery ?? 0.6; v.elder = !!v.old; } }, _fearful: (v) => !v.dead && !v.sleep && v.role !== 'knight' && !v.foe && !v.aud && !v.mob, _end(v) { v.fear = null; v.path = null; }, _dropBucket() {} },
+        fright: { _traits(v) { if (v.brave == null) { v.brave = v.bravery ?? 0.6; v.elder = !!v.old; } }, _fearful: (v) => !v.dead && !v.sleep && v.role !== 'knight' && !v.foe && !v.aud && !v.mob, _end(v) { v.fear = null; v.path = null; }, _dropBucket() {}, sendHome(v) { if (!life.homeOn) return false; v.fear = { state: 'shelter', level: 2 }; v.homeSent = true; return true; } },
+        home: { hasHome: () => !!life.homeOn }, // (no house in the stub place: the timid go out of the village as before; `life.homeOn` — they run home)
         _steer(v, tx, tz, speed, dt, stop = 0) { const dx = tx - v.x, dz = tz - v.z, d = Math.hypot(dx, dz); if (d <= stop) { v.speed = 0; return d; } const s = Math.min(d - stop, speed * dt); v.x += dx / d * s; v.z += dz / d * s; v.speed = speed; return d; },
         _goTo() { return false; }, _followPath() { return true; }, _ground() {}, _nextTrip(v) { v.nextTrip = (v.nextTrip || 0) + 1; },
     };
@@ -326,4 +327,18 @@ test('game: the journal says who ran and why, with the number', () => {
     w.run(2);
     const line = w.logs.find((l) => l.startsWith(g.id) && l.includes('бежит из деревни'));
     assert.ok(line && line.includes('старик') && /наглость \d+/.test(line), line);
+});
+
+test('game: the weak run to their OWN HOUSE (not out of the village) when they have one; out of the village only without a house', () => {
+    const w = world();
+    w.life.homeOn = true;
+    const weak = [w.add('farmer', { female: true }), w.add('farmer', { old: true })];
+    w.life.aud.deed(w.cs, 'me', 'slay', witnessesOf(w.cs), { victim: { id: 'x', role: 'farmer' } });
+    w.run(3);
+    for (const v of weak) { assert.ok(v.homeSent, 'runs home'); assert.ok(!v.aud, 'not out of the village'); }
+    const w2 = world();
+    const lone = w2.add('farmer', { female: true });
+    w2.life.aud.deed(w2.cs, 'me', 'slay', witnessesOf(w2.cs), { victim: { id: 'x', role: 'farmer' } });
+    w2.run(3);
+    assert.ok(lone.aud && lone.aud.mode, 'no house: out of the village');
 });

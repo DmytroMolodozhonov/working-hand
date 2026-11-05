@@ -340,7 +340,8 @@ export class HomeDefence {
 
     _fightStep(v, hd) {
         // CastleLife._think отдаёт бой в _fight, пока есть v.foe; здесь — только когда врага отпустили (ушёл/привязь)
-        v.foe = null; v.grudge = null;
+        if (v.foe) return; // (the fight itself is CastleLife._fight)
+        v.grudge = null;
         hd.st = hd.fighter ? 'post' : 'hide'; hd.t = 0;
         this.life.alog?.decision(v, `${this._who(v)}: враг ушёл/упал — возвращается на пост`);
     }
