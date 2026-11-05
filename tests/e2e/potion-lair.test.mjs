@@ -12,7 +12,7 @@ let srv, browser;
 test.before(async () => { srv = await startServer(PORT); browser = await launch({}); });
 test.after(async () => { await browser?.close(); srv?.stop(); });
 
-test('the potion-maker\'s lair is built, lit, stocked; the fire goes out and the water cools', { timeout: 900000 }, async () => {
+test('the potion-maker\'s lair is built, lit, stocked; the fire goes out and the water cools', { timeout: 1700000 }, async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
     page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
@@ -53,4 +53,41 @@ test('the potion-maker\'s lair is built, lit, stocked; the fire goes out and the
     assert.ok(r.cauldron && r.water > 3 && r.fire, 'cauldron with water on a fire');
     assert.ok(r.items >= 52, `shelves stocked: ${r.items}`);
     assert.ok(r.heat >= 1 && r.heatAfter < r.heat, 'boiled, then cooled');
+    await masterCheck(page);
 });
+
+// the potion master: stands at the cauldron, answers by the rules, brews a potion with «Levitation» from the shelves and hands a flask over
+async function masterCheck(page) {
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+        const out = { log: [] };
+        g.potionLair.start();
+        for (let i = 0; i < 1800 && (g.potionLair.state || !g.potionLair.plan); i++) await sleep(100);
+        for (let i = 0; i < 1200 && !g.potionMaster.v; i++) await sleep(100);
+        const v = g.potionMaster.v;
+        out.master = !!v; out.title = v?.title; out.name = v?.name;
+        if (!v) return out;
+        out.list = g.potionMaster.hear(v, 'какие зелья ты знаешь').slice(0, 60);
+        out.recipe = g.potionMaster.hear(v, 'как сварить зелье исцеления');
+        out.hint = g.potionMaster.hear(v, 'что дальше класть');
+        out.start = g.potionMaster.hear(v, 'свари зелье исцеления').slice(0, 40);
+        const c = g.cauldrons.list.get('potion_lair_cauldron');
+        const phases = [];
+        for (let i = 0; i < 9000 && g.potionMaster.job; i++) {
+            const j = g.potionMaster.job;
+            if (phases[phases.length - 1] !== j.phase + ':' + j.sub) phases.push(j.phase + ':' + j.sub);
+            if (j.phase === 'brew' && c.st.phase === 'brewing') c.st.t = Math.max(c.st.t, (c.st.dur || 30) - 0.2); // (the brewing time: not waited at 1 frame a second)
+            await sleep(100);
+        }
+        out.phases = phases; out.ings = JSON.stringify(c.st.ings); out.phase = c.st.phase;
+        out.potions = [...g.items.loose.values()].filter((L) => L.item.kind === 'potion' && L.item.rec === 'heal').length;
+        out.por = c.st.por;
+        return out;
+    });
+    console.log(JSON.stringify(r));
+    assert.ok(r.master && /Мастер зелий/.test(r.title), 'the master stands there');
+    assert.ok(r.recipe.includes('золотое яблоко') && r.recipe.includes('кристалл маны'));
+    assert.ok(/Принял|Варим/.test(r.start));
+    assert.ok(r.phases.some((p) => p.startsWith('throw:fly')), 'ingredients flew');
+    assert.ok(r.potions >= 1, 'a flask of the potion was handed over');
+}

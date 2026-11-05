@@ -585,6 +585,7 @@ export class CastleLife {
         this.game.loreLibrary?.wake(cs.def); // (its library's reading stands with the books of the world's history — LoreLibrary.js; on every computer)
         if (!this.auth) return;
         const def = cs.def;
+        if (isGuestSite(def) && def.lair) return; // (the Potion-maker's lair: PotionLair / PotionMasterLife.ensure seat him when the hall stands)
         if (isGuestSite(def)) { const v = this._activate(cs, 1, def.spot, 'stall', { post: def.spot }); if (v) { v.guest = true; v.hp = v.maxHp = 50; } return; } // (50 HP: a spell or two angers him before it kills him — the author 05.11) // (the Creative guest: just him — CreativeGuest.js)
         if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
         if (def.kind === 'hamlet') { this.hamlets.wake(cs); return; } // (the lone houses and the small villages: HamletLife.js)
@@ -1582,6 +1583,7 @@ export class CastleLife {
         if (v.magicPieces && !v.stripped && v.armor < v.maxArmor && v.hp > 0) v.armor = Math.min(v.maxArmor, v.armor + ARMOR.REGEN * (v.maxArmor / 40) * dt); // (magic pieces mend by themselves)
         if (v.foe != null && isLord(v, v.foe, this.lordOf(cs, v.foe))) { v.foe = null; v.grudge = null; v.lesson = null; } // (whatever happened — a shove, a blast, a spell: never at the king)
         if (v.gOwner != null && this.guard.step(v, dt)) return; // (a bodyguard: the king's enemy first, the formation round him)
+        if (v.potionMaster && this.game.potionMaster?.step(v, dt)) return; // (the master of potions at his work: fire, water, ingredients by «Левиоса» — PotionMasterLife)
         if (v.aud && this.aud.step(v, dt)) return; // (the crowd musters / the timid leave the village — AudacityLife.js)
         if (v.foe) { this._fight(v, dt); return; }
         if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)

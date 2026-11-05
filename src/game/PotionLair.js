@@ -89,6 +89,7 @@ export class PotionLair {
         if (!this.data) { this.why = 'мир ещё не готов'; return false; }
         if (this.state) return true;
         this._hook();
+        this.game.potionMaster?.reset(); // (the master stands up again and drops any old work)
         this.state = { phase: 'wait', t: 0, origin: g.character.group.position.clone(), i: 0 };
         return true;
     }
@@ -139,7 +140,7 @@ export class PotionLair {
         this._chkT -= dt;
         if (this._chkT > 0 || !me || Math.hypot(me.x - LAIR.CX, me.z - LAIR.CZ) > LAIR_RULES.KEEP_R) return;
         this._chkT = LAIR_RULES.REFILL_EVERY;
-        if (this._built()) { this._feedFire(); const k = this._shelves(this._fresh); if (k > 0) this._chkT = 0.2; else this._fresh = false; } // (идёт наполнение — следующая порция скоро)
+        if (this._built()) { this._feedFire(); this.game.potionMaster?.ensure(); const k = this._shelves(this._fresh); if (k > 0) this._chkT = 0.2; else this._fresh = false; } // (идёт наполнение — следующая порция скоро)
     }
 
     /** Факелы: пламя рисуют искры (мягкие светящиеся точки из общего пула), свет — три ближайших огня (FireLights.want: новых ламп нет). */
@@ -219,6 +220,7 @@ export class PotionLair {
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
         g.heroApply?._upright?.();
+        g.potionMaster?.greet(); // (he says hello when he is seated: PotionMasterLife.update)
         g.hud?.toast?.('🧪 Логово зельевара: на полках — все ингредиенты, колбы и по зелью каждого вида. «Fire» на котёл — разжечь, «Firefighting» — потушить');
     }
 

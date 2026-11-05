@@ -697,6 +697,20 @@ export class CastleTalk {
                 return true;
             }
         }
+        // (the potion master of the Creative lair: recipes, brewing, hints by the rules at once — PotionMasterLife.hear)
+        if (v.potionMaster && g.authority) {
+            const pr = g.potionMaster?.hear(v, text);
+            if (pr) {
+                const tr = this._traceTurn(v, text, info);
+                this.trace.mark(tr, 'rules');
+                v.talking = 4; v.talkTo = g.localId;
+                if (!v.foe && !g.potionMaster?.job) v.yaw = Math.atan2(-(g.character.group.position.x - v.x), -(g.character.group.position.z - v.z));
+                this.attention?.talkedWith(v.id, performance.now());
+                journal(`разговор: «${text}» → «${pr}» — мастер зелий (правила)`);
+                this._sayReply(v, pr);
+                return true;
+            }
+        }
         // (the king's court: to the vizier — troubles, the treasury, «веди к нему»; to a man with a trouble — a word of help)
         if (this.life.court?.hear(v, text, info)) return true;
         // (a command in plain words — «присядь», «сразитесь друг с другом», «построиться»: the rules, at once)

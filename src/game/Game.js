@@ -80,6 +80,7 @@ import { LanternLights } from './LanternLights.js';
 import { FireLights } from './FireLights.js';
 import { Cauldrons } from './Cauldrons.js';
 import { PotionLair } from './PotionLair.js';
+import { PotionMasterLife, lairDef } from './PotionMasterLife.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
 import { BuildingFx } from './BuildingFx.js';
@@ -737,6 +738,7 @@ export class Game {
         this.caveEyes = new CaveExplorer(this.caveMap);
         this.lanterns = new LanternLights(this); // the houses' lamps shine: lights at the nearest lanterns (made before prewarm too)
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
+        this.potionMaster = new PotionMasterLife(this); // the potion master of the lair: brews, talks, lifts things (PotionMasterLife.js)
         this.potionLair = new PotionLair(this); // «Логово зельевара» (Творческий, «Где появиться»): зал в небе с котлом, ручьём и полками (PotionLair.js)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
@@ -983,6 +985,7 @@ export class Game {
                 this.castleLife.addSite(mdef);
                 // a plain villager to talk to near the start: the quick talk, orders, the net (CreativeGuest.js)
                 this.castleLife.addSite(guestDef(this.collision.groundY(-8, 6)));
+                this.castleLife.addSite(lairDef()); // (the Potion-maker's lair: his place in the sky; he is seated when the hall stands — PotionLair)
                 // a training dummy: a plain zombie that only stands (see _updateDummy)
                 if (this.authority) this.dummyHome = { x: 0, z: -10 };
                 // a tall mirror on its stand by the start: to see oneself, every pose and face (CreativeMirror.js)
@@ -4214,6 +4217,7 @@ export class Game {
         if (earth && !duelOnly) this.lanterns?.update(dt);
         if (earth && !duelOnly) this.cauldrons?.update(dt);
         this.potionLair?.update(dt);
+        this.potionMaster?.update(dt);
         if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         if (earth && !duelOnly) this.crystals?.update(dt);

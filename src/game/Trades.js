@@ -11,6 +11,8 @@
  * Pure data and one cache; no THREE.
  */
 
+import { promptText } from './PotionMaster.js';
+
 /** trade → { m, f: the title for a man / a woman }. */
 export const TRADE_TITLES = {
     smith: { m: 'Кузнец', f: 'Кузнец' },
@@ -21,6 +23,7 @@ export const TRADE_TITLES = {
     miller: { m: 'Мельник', f: 'Мельничиха' },
     stableman: { m: 'Конюх', f: 'Конюх' },
     keeper: { m: 'Амбарщик', f: 'Амбарщица' },
+    potionmaster: { m: 'Мастер зелий', f: 'Мастер зелий' }, // (the Potion-maker's lair in Creative — PotionMaster.js)
 };
 
 /** The stall's `shop` → the trade of its seller. */
@@ -87,6 +90,10 @@ export function applyTradeLook(L, trade) {
         case 'keeper': // a granary's keeper: a cap and a hoe… a sack-cloth smock
             L.shirt = 0xb9a577; L.pants = 0x5d5a3a; L.hat = 'cap'; L.hatColor = 0x8a6d4a; L.tool = 'hoe'; L.apron = 0xa39367;
             break;
+        case 'potionmaster': // a dark robe, a tall wizard's hat, a long beard, an alchemist's apron, a wand (the Potion-maker's lair — PotionMasterLife.masterLook)
+            L.female = false; L.hat = 'wizardTall'; L.hatColor = 0x2d2a52; L.dress = true; L.dressColor = 0x2f2a4a; L.shirt = 0x2f2a4a; L.accent = 0xc9a64a; L.sleeves = 'long'; L.apron = 0x4a3626; L.tool = 'wand';
+            L.beard = 'long'; L.hairColor = 0xd0d0d8;
+            break;
         default: break;
     }
 }
@@ -100,5 +107,6 @@ export const TRADE_PROMPTS = {
     priest: 'Ты священник: служишь в церкви, звонишь в колокол на рассвете, в полдень и на закате, утешаешь людей и советуешь добром. Говоришь мягко, спокойно и неспешно. Ты не воин.',
     miller: 'Ты мельник: ветряная мельница мелет зерно, ты весь в муке; зерно тебе привозят крестьяне. Говоришь добродушно, любишь поговорить о ветре и урожае. Ты не воин.',
     stableman: 'Ты конюх: ухаживаешь за конями, чистишь стойла, кормишь сеном и овсом, знаешь, как подойти к коню — их можно приручить яблоком. Говоришь просто и немногословно.',
+    potionmaster: promptText(), // (всё про рецепты — PotionMaster.js)
     keeper: 'Ты хранитель амбара: следишь за закромами с зерном и сеном, мешками и бочками, считаешь запасы деревни. Говоришь просто, по-деревенски. Ты не воин.',
 };
