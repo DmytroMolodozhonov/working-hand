@@ -34,6 +34,12 @@ export const OCEAN_STORM = {
     FLING_EVERY: 6, // s
     SHIP_HARM: 6, // a second in the core
     DEEP: 3, // m under the water: the spout does not reach
+    // «Tornado» (the spell, 05.11): a spout called down out of the sky over the sea
+    SUMMON_LIFE: 12 * 60, // s: 12 game hours at most (a game hour is a real minute) — no spout stands for ever (the author)
+    SUMMON_AHEAD: 45, // m ahead of the caster it comes down
+    SUMMON_MIN_S: 25, // m off the shore at least (deep water)
+    SUMMON_ROAM: [55, 40], // m: it wanders round where it was called (a slow loop, not off across the sea)
+    MAX_SUMMONED: 4, // at once in the world (the oldest goes first)
 };
 
 const _v = new THREE.Vector3();
@@ -51,6 +57,49 @@ export class OceanStorm {
         this._lastT = 0;
         this._flung = new Map(); // spout id → when I was last flung by it
         this._shipT = 0;
+        this.summoned = []; // «Tornado»: [{id, x0, z0, born, life, spin, by}]
+    }
+
+    /** Is (p) at sea — over the sea's water (on it, under it, on a deck, flying over it)? A lake, a river, the land — no. */
+    seaHere(p) {
+        const sea = this.game.sea;
+        return !!sea && sea.s(p.x, p.z) > 0;
+    }
+
+    /** Where a «Tornado» cast from p facing yaw comes down: {x, z} ahead over deep sea, or null (not at sea / too shallow ahead). */
+    placeFor(p, yaw) {
+        const sea = this.game.sea;
+        if (!sea || !this.seaHere(p)) return null;
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        for (const d of [OCEAN_STORM.SUMMON_AHEAD, 70, 30, 95]) {
+            const x = p.x + fx * d, z = p.z + fz * d;
+            if (sea.index.signedDist(x, z) >= OCEAN_STORM.SUMMON_MIN_S && sea.s(x, z) >= OCEAN_STORM.SUMMON_MIN_S) return { x, z };
+        }
+        return null;
+    }
+
+    /** «Tornado» came (every computer: the spell's packet carries the place): the spout begins to come down there. */
+    summon(at, by = null) {
+        const t = this.game.weatherClock ?? Date.now() / 1000;
+        const id = 'tornado:' + (by ?? '?') + ':' + Math.round(t * 10);
+        if (this.summoned.some((s) => s.id === id)) return;
+        this.summoned.push({ id, x0: at.x, z0: at.z, born: t, life: OCEAN_STORM.SUMMON_LIFE, spin: Math.random() < 0.5 ? 1 : -1, by, ph: Math.random() * 6.28 });
+        while (this.summoned.length > OCEAN_STORM.MAX_SUMMONED) this.summoned.shift();
+    }
+
+    /** The called spouts at time t (they wander slowly round their place; fade at the end of their life or in the shallows). */
+    _summonedAt(t, out) {
+        const idx = this.game.sea?.index;
+        for (let i = this.summoned.length - 1; i >= 0; i--) {
+            const s = this.summoned[i], age = t - s.born;
+            if (age > s.life || age < -5) { this.summoned.splice(i, 1); continue; }
+            const [rx, rz] = OCEAN_STORM.SUMMON_ROAM;
+            const x = s.x0 + Math.sin(age / 41 + s.ph) * rx * Math.min(1, age / 60), z = s.z0 + Math.sin(age / 29 + s.ph * 1.7) * rz * Math.min(1, age / 60);
+            const sd = idx ? idx.signedDist(x, z) : 99;
+            const shore = Math.max(0, Math.min(1, (sd - (OCEAN.DIE_S - 8)) / 10));
+            const k = Math.max(0, Math.min(1, age / OCEAN.GROW, (s.life - age) / OCEAN.FADE)) * shore;
+            out.push({ id: s.id, x, z, k, born: s.born, life: s.life, spin: s.spin, summoned: true });
+        }
     }
 
     _fx() { return this.fx || (this.fx = new WaterspoutFx(this.game.scene, this.game.water?.spray || null)); }
@@ -81,6 +130,7 @@ export class OceanStorm {
         // the spouts and bolts of the seas near
         _list.length = 0;
         let spoutSound = 0;
+        if (this.summoned.length) { this._summonedAt(t, _list); for (const sp of _list) sp.d = Math.hypot(sp.x - me.x, sp.z - me.z); }
         if (W > 0 || this.spouts.length) {
             for (const sea0 of sea.index.near(me.x, me.z, OCEAN_STORM.NEAR)) {
                 for (const sp of spoutsOf(sea.index, sea0, g.seed, t, [])) {
@@ -89,10 +139,13 @@ export class OceanStorm {
                 }
                 if (W > 0 && this._lastT) this._bolts(sea0, this._lastT, t, me);
             }
-            _list.sort((a, b) => a.d - b.d);
         }
+        _list.sort((a, b) => a.d - b.d);
         this.spouts = _list.slice();
         this._lastT = t;
+        // a called spout brings its own dark cloud and rain round it (≤ 400 m)
+        for (const sp of this.spouts) if (sp.summoned) this.seaK = Math.max(this.seaK, sp.k * Math.max(0, 1 - sp.d / 400));
+        if (g.storm) g.storm.seaK = this.seaK;
         const seaY = WATER_LEVEL_Y;
         if (this.spouts.length || this.fx) {
             const light = 1 - 0.75 * (g.world?.nightAmount || 0);

@@ -496,6 +496,7 @@ export class Game {
             quakeShake: (front, power, casterId) => { this.quake.shake(front, power); this.crystals?.hitAt(front, power > 1 ? 5 : 3.5, casterId, 'Earthquake', 30); /* (the rock shakes: crystals in a cave under the wave crack) */ if (this.authority && (this._quakeAlarmT || 0) < performance.now() - 500) { this._quakeAlarmT = performance.now(); this.castleLife?.alarm(front, 'quake', null, power > 1 ? 9 : 6); } }, // (…and shakes under whoever is near the wave; the people near take fright)
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin, by, side) => this.sun?.cast(origin, by, side),
+            tornado: (at, casterId) => this.oceanStorm?.summon(at, casterId), // («Tornado»: the spout comes down there — OceanStorm.summon)
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
@@ -2136,6 +2137,7 @@ export class Game {
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (name === 'GiveMyPower') return this._castGiveMyPower(isFinal);
         if (name === 'LetItRain') return this._castRain(isFinal);
+        if (name === 'Tornado') return this._castTornado(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // «Вингардиум Левиоса Максима»: a group, a tree, a house, a ship (LevitationMaxima.js)
@@ -2922,6 +2924,35 @@ export class Game {
      * «Let it rain» (20): the hand — or the wand in it — pointed up to the sky + the words.
      * A stream of magic goes up from it and a thunderstorm comes for 2 game hours (2 minutes).
      */
+    /**
+     * «Tornado» (the author 05.11): 300 mana; the wand (or the hand) up to the sky; only at sea — on the sea, a ship's deck, swimming or
+     * flying over it (a lake, a river — no: OceanStorm.seaHere); the spout comes down ~45 m ahead where the water is deep, lives up to 12
+     * game hours (OceanStorm.SUMMON_LIFE) and does what a storm's spout does.
+     */
+    _castTornado(isFinal) {
+        const ch = this.character;
+        const w = this.items?.heldOf('wand');
+        let side = null;
+        for (const s of w ? [w.side, w.side === 'left' ? 'right' : 'left'] : ['right', 'left']) {
+            if (!ch.isArmRaised(s)) continue;
+            const d = w && w.side === s ? (this.wandMagic.tip(_v2, _v1), _v1) : ch.getHandDirection(s, _v1);
+            if (aimedAtSky(d)) { side = s; break; }
+        }
+        if (!side) { if (isFinal) this.hud.setVoice('🌪️ Направьте палочку <b>вверх, к небу</b> и скажите «Tornado»', true); return null; }
+        const at = this.oceanStorm?.placeFor(ch.group.position, ch.group.rotation.y);
+        if (!at) { if (isFinal) this.hud.setVoice(at === null && this.oceanStorm?.seaHere(ch.group.position) ? '🌪️ Здесь слишком мелко — смерчу нужна глубокая вода впереди' : '🌪️ Смерч можно вызвать только в море — не на озере и не на суше', true); return null; }
+        const tired = this.combat.check('Tornado');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('Tornado');
+        const o = this.castOrigin(side);
+        _v1.set(at.x, 0, at.z); // (the spout's place goes in the direction: every computer puts it there)
+        this.spells.cast('Tornado', o, _v1, side, this.localId);
+        if (this.sync) this.sync.spell('Tornado', o, _v1, side);
+        this.castleLife?.alarm?.(new THREE.Vector3(at.x, 0, at.z), 'blast', this.localId, 60); // (a waterspout called by the shore: the people fear it)
+        this.hud.setVoice('🌪️ <span style="color:#bcd8ff">Tornado!</span> Из туч над морем спускается смерч', true);
+        return 'Tornado';
+    }
+
     _castRain(isFinal) {
         const ch = this.character;
         const w = this.items?.heldOf('wand');

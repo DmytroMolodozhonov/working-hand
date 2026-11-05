@@ -98,6 +98,7 @@ export const SPELL_COST = {
     GiveMyPower: 30, // your power back from your own skeleton (Legacy.js; the author: 30)
     CreatePlanet: 500, EnlargePlanet: 100, TerraformPlanet: 1000, LevitationSuperMaxima: 100, // the gods' scrolls (PlanetMagic.js; the author: 500, 100, 1000; the Super Maxima then 3 a second)
     LetItRain: 20,
+    Tornado: 300, // (the author 05.11: a waterspout over the sea — OceanStorm.summon)
     Earthquake: 10,
     EarthquakeMaxima: 25,
     WindMaxima: 20,

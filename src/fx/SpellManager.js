@@ -224,6 +224,8 @@ export function matchSpell(text) {
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
     if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';
+    // «Tornado» (a waterspout called out of the sky over the sea — OceanStorm.summon; the author 05.11)
+    if (has('tornado', 'торнадо', 'торнада', 'торнаду', 'тарнадо', 'торнэйдо', 'торнейдо', 'торнейду', 'торнадa')) return 'Tornado';
     // «Let it rain» («Лет ит рейн», heard as «летит рейн», «лед ит рэйн»…): before everything with short tokens
     if ((has('rain', 'reign', 'рейн', 'рэйн', 'рейм', 'рэин', 'реин', 'рейна') && has('let', 'лет', 'лэт', 'лед', 'лит ит', 'лидит')) ||
         has('letitrain', 'летитрейн', 'пусть идёт дождь', 'пусть идет дождь', 'пусть пойдёт дождь', 'пусть пойдет дождь', 'пусть льёт дождь', 'пусть льет дождь')) return 'LetItRain';
@@ -545,6 +547,7 @@ export class SpellManager {
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o, casterId, handSide); break; // (the beam goes with that player's wand)
             case 'LetItRain': this.castLetItRain(o, casterId); break;
+            case 'Tornado': this.castTornado(o, d, casterId); break;
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;
@@ -812,6 +815,37 @@ export class SpellManager {
             this.fx.spark(ringAt, 0xcfe8ff, 0.22, _c, 1.6);
         }
         this.hooks.rain?.(origin, casterId);
+    }
+
+    /**
+     * «Tornado» (the author 05.11): the wand to the sky over the sea — a grey-blue stream of wind goes up, the clouds swirl open in a
+     * ring over the place, the water there begins to turn (a ring of spray), and the funnel comes down out of the cloud (OceanStorm:
+     * the spout itself, the same on every computer). `dir`: where the spout stands (from the caster: x, z — its place).
+     */
+    castTornado(origin, dir, casterId) {
+        const at = _a.set(dir.x, origin.y, dir.z); // (the spout's place — the cast packs it in the direction)
+        const top = _b.copy(origin).add(_c.set(0, 70, 0));
+        this.fx.straightBeam(origin, top, 0.12, 0xb8d4e8, 0.8, 1.8, null, THREE.AdditiveBlending);
+        this.fx.straightBeam(origin, top, 0.4, 0x5c7894, 0.35, 1.8, null, THREE.AdditiveBlending);
+        this.fx.lightFlash(origin, 0xbcd8ff, 5, 0.6, 40);
+        // the wind spirals up the stream
+        for (let i = 0; i < 80; i++) {
+            const a = i * 0.55, r = 0.3 + (i / 80) * 1.4;
+            _c.set(Math.cos(a) * r * 3, 12 + Math.random() * 20, Math.sin(a) * r * 3);
+            this.fx.spark(origin, i % 4 ? 0xd6e6f4 : 0xffffff, 0.1, _c, 1.4 + Math.random() * 0.8);
+        }
+        // over the spout's place: the cloud opens in a turning ring, the water begins to spin
+        const sky = at.clone().setY(origin.y + 60);
+        for (let i = 0; i < 60; i++) {
+            const a = (i / 60) * Math.PI * 2;
+            _c.set(Math.cos(a) * 14 - Math.sin(a) * 6, -1.5, Math.sin(a) * 14 + Math.cos(a) * 6);
+            this.fx.spark(sky, 0x9fb4c8, 0.35, _c, 2.2);
+            _c.set(-Math.sin(a) * 9 + Math.cos(a) * 2, 2 + Math.random() * 3, Math.cos(a) * 9 + Math.sin(a) * 2);
+            this.fx.spark(at, 0xe8f4ff, 0.14, _c, 1.6);
+        }
+        this.fx.lightFlash(sky, 0xcfe0ff, 8, 0.4, 160);
+        this._sound('playThunder');
+        this.hooks.tornado?.(at, casterId);
     }
 
     // ------------------------------------------------------ Lightning Strike

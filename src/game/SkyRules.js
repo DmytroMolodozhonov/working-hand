@@ -43,6 +43,7 @@ export const SKY_SPELLS = {
     LightningStrike: { needs: true, at: 'caster', target: true, why: 'молния падает из туч; цель под крышей не поражается — удар приходится в крышу' },
     ToTheSun: { needs: true, at: 'caster', why: 'луч идёт сквозь тучи к солнцу' },
     LetItRain: { needs: true, at: 'caster', why: 'тучи собираются в небе над вами' },
+    Tornado: { needs: true, at: 'caster', why: 'смерч спускается из туч над морем' },
     Thunderwave: { needs: true, at: 'caster', why: 'удар идёт сверху (ThunderWave.roofAbove защищает тех, кто под крышей)' },
     Fireworks: { needs: true, at: 'caster', why: 'залпы взлетают в небо и рвутся над палочкой' },
     // не заклинание-слово, а ритуал пентаграммы «Pentagranium Gargoyles»: чёрные тучи собираются в небе над кругом

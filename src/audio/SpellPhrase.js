@@ -378,7 +378,7 @@ export const MOUTH_SURE = new Set(['Fire', 'LumosAhead']);
 /** Spells that cost much or do much (a castle out of nothing, a curse that kills): never from a sound only just made out. */
 export const DANGEROUS = new Set(['CreateCastle', 'DivineCreation', 'IceCastle', 'IceBridge', 'CreateHouse', 'ImproveHouse', 'AvadaKedavra', 'Hellfire', 'Frozen', 'Stupefy',
     'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'LightningStrike', 'Earthquake', 'EarthquakeMaxima', 'CircleAttack', 'CircleAttackMaxima',
-    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die', 'Pilbidrio']); // («Дай» kills anyone: never from a sound only just made out)
+    'WaterVortexSuperMaxima', 'LetItRain', 'Tornado', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die', 'Pilbidrio']); // («Дай» kills anyone: never from a sound only just made out)
 
 /**
  * Do the letters the network wrote look like the spell? («лемус» — «люмос», «бам барда» — «бомбардо максима»,
