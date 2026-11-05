@@ -29,6 +29,7 @@ export const DOLL = {
     MAX_MOVE_K: 0.5,    // a ball moves at most this share of its radius per step: no skipping a block
     GOAL_K: 0.09,       // getting up: the share of the way to the standing pose each step (~1 s to stand)
     RISE_T: 2.1,        // s: getting up — a real getting up through its key poses (sit up / push up → knees → one knee → standing: Ragdoll.standUp)
+    SELF_T: 2.2,        // s: the parts are kept out of the body itself while it falls and rolls (after — it lies as it lay: no endless small pushes)
     SIM_MAX: 7,         // seconds one doll is computed at the most (then it is put to sleep where it is)
     TONE_K: 0.11,       // a living body (tone 1): the share of the way each limb is pulled a step back to its own shape against the torso
     TONE_T: 1.6,        // s: the muscles hold while the body lands and rolls; after that it lies as it lies (and can fall asleep)
@@ -38,7 +39,10 @@ export const DOLL = {
 // the points; CHEST and PELVIS are not points of their own (the middle of the shoulders / the hips) — `at` gives them too
 export const P = { HEAD: 0, SHL: 1, SHR: 2, HIPL: 3, HIPR: 4, HNL: 5, HNR: 6, KNL: 7, FTL: 8, KNR: 9, FTR: 10, CHEST: 11, PELVIS: 12 };
 const N = 11;
-const LIMBS = [P.HEAD, P.HNL, P.HNR, P.KNL, P.FTL, P.KNR, P.FTR]; // (the parts a living body's muscles hold — _tone)
+const LIMBS = [P.HEAD, P.HNL, P.HNR, P.KNL, P.FTL, P.KNR, P.FTR];
+const SELF_FROM = 0.35; // s: not in the first moment of the throw (pushed apart then, flung parts carried the body up over walls)
+const SELF_STEP = 0.035; // m a step the self-push moves a part at most
+const SELF_GRIP = (1 << P.HNL) | (1 << P.HNR); // (a hand on a wall / an edge: the self-pushes off — they shoved the caught hand into the wall and the body hung there swinging) // (the parts a living body's muscles hold — _tone)
 /** The frame (right, up, back — 9 numbers) of points given as [[x, y, z]…] (the rest pose) — as Ragdoll.frame does for the doll. */
 function frameOf(R, out) {
     let rx = R[P.SHR][0] + R[P.HIPR][0] - R[P.SHL][0] - R[P.HIPL][0], ry = R[P.SHR][1] + R[P.HIPR][1] - R[P.SHL][1] - R[P.HIPL][1], rz = R[P.SHR][2] + R[P.HIPR][2] - R[P.SHL][2] - R[P.HIPL][2];
@@ -446,13 +450,14 @@ export class Ragdoll {
             for (let b = 0; b < this.sp.limits.length; b++) { const L = this.sp.limits[b]; this._len(L[0], L[1], L[2], L[3], 1); };
             this._knee(P.HIPL, P.KNL, P.FTL); this._knee(P.HIPR, P.KNR, P.FTR);
             this._handsOut();
-            if (it & 1 && this._selfOn !== false) this._selfOut();
+            if (it & 1 && this._selfOn !== false && this.age > SELF_FROM && this.age < DOLL.SELF_T && !(this._hitMask & SELF_GRIP)) { if (this._selfOut() && this.contacts > 0) this._selfFight = (this._selfFight || 0) + 1; else if (it === DOLL.ITER - 1) this._selfFight = 0; if (this._selfFight > 24) this._selfOn = false; } // (while it falls and rolls; if the self-pushes keep fighting the floor / a wall — a knee pushed out of the belly into the floor and back — they stop: lying, the world decides, and it comes to rest)
             // the world last (it wins): every other pass and the final one — the blocks are the dearest question
             if (it & 1 || it === DOLL.ITER - 1) { for (let i = 0; i < N; i++) this._collide(world, i); this._torso(world); }
         }
         this._hitMask = this._hitNow || 0;
         let mv = 0;
         for (let i = 0; i < N * 3; i++) { const d = Math.abs(x[i] - o[i]); if (d > mv) mv = d; }
+        this._mvPrev = mv;
         if (mv < DOLL.SLEEP_V && this.contacts > 0) { this.still += dt; if (this.still >= DOLL.SLEEP_T) this._sleep(); } else this.still = 0;
         if (this.age > DOLL.SIM_MAX) this._sleep();
     }
@@ -573,12 +578,14 @@ export class Ragdoll {
     /** The body's own parts out of each other (makeSpec.self, selfTorso): both moved apart by half — no part pushes the body around. */
     _selfOut() {
         const x = this.x, o = this.o, sp = this.sp, hit = this._hitMask || 0;
+        let moved = false;
         if (sp.self) for (const [a, b, m] of sp.self) {
             if (hit & ((1 << a) | (1 << b))) continue; // (against a wall, the floor, a bed: the world decides where it is)
             const ka = a * 3, kb = b * 3, dx = x[kb] - x[ka], dy = x[kb + 1] - x[ka + 1], dz = x[kb + 2] - x[ka + 2];
             const dd = Math.hypot(dx, dy, dz);
-            if (dd >= m - 0.02 || dd < 1e-6) continue; // (a touch of flesh: let be — only a part really in another is moved)
-            const f = (m - 0.02 - dd) / dd * 0.5;
+            if (dd >= m - 0.06 || dd < 1e-6) continue; // (a touch of flesh: let be — only a part really in another is moved)
+            const f = Math.min((m - 0.06 - dd) * 0.35, SELF_STEP) / dd; // (softly, a few cm a step at most: a bigger push shoved a hand through a wall — out on its far side, the body hung on it)
+            moved = true;
             x[ka] -= dx * f; x[ka + 1] -= dy * f; x[ka + 2] -= dz * f; x[kb] += dx * f; x[kb + 1] += dy * f; x[kb + 2] += dz * f;
             o[ka] -= dx * f; o[ka + 1] -= dy * f; o[ka + 2] -= dz * f; o[kb] += dx * f; o[kb + 1] += dy * f; o[kb + 2] += dz * f; // (moved, not flung: no speed is added)
         }
@@ -590,12 +597,14 @@ export class Ragdoll {
                 const kk = i === P.HEAD && t === 0 ? k * 0.75 : k;
                 const m = (sp.torso[t][4] + sp.r[i]) * kk, j = i * 3;
                 const dx = x[j] - _c[0], dy = x[j + 1] - _c[1], dz = x[j + 2] - _c[2], dd = Math.hypot(dx, dy, dz);
-                if (dd >= m - 0.02 || dd < 1e-6) continue;
-                const f = (m - 0.02 - dd) / dd;
+                if (dd >= m - 0.06 || dd < 1e-6) continue;
+                const f = Math.min((m - 0.06 - dd) * 0.7, SELF_STEP) / dd;
+                moved = true;
                 x[j] += dx * f; x[j + 1] += dy * f; x[j + 2] += dz * f;
                 o[j] += dx * f; o[j + 1] += dy * f; o[j + 2] += dz * f;
             }
         }
+        return moved;
     }
 
     _torsoPoint(t, out) {

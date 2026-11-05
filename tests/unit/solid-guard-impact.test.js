@@ -81,7 +81,7 @@ test('knocked down by the bed he lies ON it as the doll fell — the drawn hips 
     const hip = on.v.model.pelvis.getWorldPosition(new THREE.Vector3());
     assert.ok(hip.y > FLOOR + 1.0 + 0.2 && hip.y < FLOOR + 1.0 + 0.9, `the hips on the bed: ${hip.y.toFixed(2)} (bed top ${FLOOR + 1})`);
     assert.ok(modelDepth(on.v.model, on.H) < 0.25);
-    run(null, on.ci, on.sync, 10);
+    run(null, on.ci, on.sync, 14); // (lying 6 s + 1…5 s more, then a real getting up through its key poses — ~2–3 s since 05.11)
     assert.equal(on.ci.stateOf(on.v), 'up', 'up again by himself');
     assert.ok(!on.v.rag, 'the doll let him go');
     assert.ok(Math.abs(on.v.model.root.quaternion.x) + Math.abs(on.v.model.root.quaternion.z) < 1e-6, 'standing as himself');
