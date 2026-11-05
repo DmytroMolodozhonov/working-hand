@@ -176,7 +176,7 @@ test('look: the menu is one fixed-size window with its own buttons; the pause me
     const size = () => page.$eval('#main-menu > .menu-container', (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), Math.round(r.left), Math.round(r.top)]; });
     const first = await size();
     assert.ok(first[0] < 1366 && first[1] < 768 && first[2] > 0 && first[3] > 0, 'a window inside the screen: ' + first);
-    for (const tab of ['tab-mp', 'tab-character', 'tab-spells', 'tab-items', 'tab-settings', 'tab-editor', 'tab-game']) {
+    for (const tab of ['tab-mp', 'tab-character', 'tab-spells', 'tab-mechanics', 'tab-settings', 'tab-game']) {
         await page.click(`[data-tab="${tab}"]`);
         assert.deepEqual(await size(), first, 'the same size on ' + tab);
     }

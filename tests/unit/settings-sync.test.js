@@ -86,7 +86,7 @@ test('every setting is in ONE place: no id twice, the hand version once', () => 
 });
 test('«Общие настройки»: every sub-tab has its page, every page its tab, none is empty', () => {
     const html = page();
-    const pane = html.slice(html.indexOf('<div id="tab-settings"'), html.indexOf('<div id="tab-editor"'));
+    const pane = html.slice(html.indexOf('<div id="tab-settings"'), html.indexOf('<!-- TEST MODE UI'));
     const tabs = [...pane.matchAll(/data-sub="([\w-]+)"/g)].map((m) => m[1]);
     const panes = [...pane.matchAll(/<div id="(set-[\w-]+)" class="sub-pane/g)].map((m) => m[1]);
     assert.deepEqual(tabs, panes);

@@ -26,14 +26,15 @@ test('menu: maps, modes and the new spell are listed; no errors on load', async 
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await page.waitForSelector('.map-card');
     const cards = await page.$$eval('.map-card .map-name', (els) => els.map((e) => e.textContent));
-    assert.ok(cards.includes('Творческий') && cards.includes('Хардкор') && cards.includes('Выживание'), cards.join(','));
+    assert.ok(cards.includes('Творческий') && cards.includes('Выживание') && cards.includes('Карты'), cards.join(','));
     assert.ok(cards.some((c) => c.startsWith('Карта')), cards.join(','));
-    await page.click('[data-tab="tab-items"]');
+    await page.click('[data-tab="tab-mechanics"]');
+    await page.click('[data-mech="items-list"]');
     const items = await page.$$eval('#items-grid .item-name', (els) => els.map((e) => e.textContent));
     assert.ok(items.includes('Меч') && !items.some((n) => /Волшебн|Мана/.test(n)), 'one card per thing, mana is not an item: ' + items.join(','));
     await page.click('[data-tab="tab-mechanics"]');
     const mech = await page.$$eval('#mechanics-list .mech-title', (els) => els.map((e) => e.textContent));
-    assert.ok(mech.some((n) => n.includes('Мана')) && mech.some((n) => n.includes('Смерть')), mech.join(','));
+    assert.ok(mech.some((n) => n.includes('Мана')) && mech.some((n) => n.includes('смерть')), mech.join(','));
     await page.click('[data-tab="tab-spells"]');
     const spells = await page.$$eval('#spells-grid .item-name', (els) => els.map((e) => e.textContent));
     assert.ok(spells.some((n) => n.startsWith('Бомбардо') && n.includes('Максима')), 'one card with a Maxima badge: ' + spells.join(','));
@@ -570,8 +571,12 @@ test('map editor: draw a map, save it, it appears in the game list, delete it', 
     await fetch(srv.url + 'api/maps?name=' + encodeURIComponent(name), { method: 'DELETE' });
     t.after(() => fetch(srv.url + 'api/maps?name=' + encodeURIComponent(name), { method: 'DELETE' }));
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await page.click('[data-tab="tab-editor"]');
-    await page.waitForSelector('#editor-canvas');
+    await page.waitForSelector('.map-card');
+    await sleep(500);
+    if (await page.isHidden('#create-world') && await page.isVisible('#create-world-btn')) await page.click('#create-world-btn');
+    await page.click('.mode-card.maps');
+    await page.click('text=Создать карту');
+    await page.waitForSelector('#editor-canvas', { state: 'visible' });
     // (pick the tool first: clicking it may scroll the menu, so the canvas is measured after)
     await page.click('[data-tool="wall"]');
     await page.locator('#editor-canvas').scrollIntoViewIfNeeded();

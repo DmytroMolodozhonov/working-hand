@@ -211,12 +211,7 @@ tabBtns.forEach((btn) => {
         const target = $(btn.dataset.tab);
         target.classList.add('active');
         target.style.display = 'block';
-        if (btn.dataset.tab === 'tab-editor') {
-            if (!window.mapEditor) window.mapEditor = new MapEditor();
-            else window.mapEditor.refreshMapList();
-        }
         if (btn.dataset.tab === 'tab-game') { updateGameMapList(); renderSavedWorlds(); }
-        if (btn.dataset.tab === 'tab-items') renderItemsTab();
         if (btn.dataset.tab === 'tab-mechanics') renderMechanicsTab();
         if (btn.dataset.tab === 'tab-spells') renderMagicTab();
         if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
@@ -232,6 +227,7 @@ document.querySelectorAll('#tab-mechanics [data-mech]').forEach((btn) => {
             $(b.dataset.mech).hidden = b !== btn;
         });
         if (btn.dataset.mech === 'bosses-list') renderBossesTab('bosses-list');
+        if (btn.dataset.mech === 'items-list') renderItemsTab();
     });
 });
 // Settings sub-tabs
@@ -456,10 +452,17 @@ async function updateGameMapList(forceRefresh = false) {
     }
     const hint = document.createElement('div');
     hint.className = 'mode-hint';
-    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (их делают в «Редакторе карт»)') : MODES[selectedMode]?.hint || '';
+    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : MODES[selectedMode]?.hint || '';
     mapListDiv.appendChild(hint);
 
     // the maps themselves: only when «Карты» is chosen
+    if (pickingMap) {
+        const mk = document.createElement('button');
+        mk.className = 'mp-btn';
+        mk.textContent = '🛠️ Создать карту';
+        mk.onclick = () => openMapEditor(true);
+        mapListDiv.appendChild(mk);
+    }
     const grid = document.createElement('div');
     grid.className = 'map-list-grid' + (pickingMap ? '' : ' hidden');
     mapListDiv.appendChild(grid);
@@ -506,6 +509,18 @@ async function updateGameMapList(forceRefresh = false) {
     start.disabled = pickingMap && !selectedMap;
     start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : '✨ Создать и играть';
 }
+// «Карты» → «🛠️ Создать карту»: the map editor opens right here (it was a tab of its own)
+function openMapEditor(on) {
+    const box = $('map-editor-box');
+    if (!box) return;
+    box.classList.toggle('hidden', !on);
+    if (on) {
+        if (!window.mapEditor) window.mapEditor = new MapEditor();
+        else window.mapEditor.refreshMapList();
+        box.scrollIntoView?.({ block: 'nearest' });
+    }
+}
+$('map-editor-close')?.addEventListener('click', () => { openMapEditor(false); updateGameMapList(); });
 window.updateGameMapList = updateGameMapList;
 updateGameMapList();
 

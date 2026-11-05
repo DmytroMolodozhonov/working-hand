@@ -16,7 +16,7 @@ try {
         await page.waitForSelector('.map-card');
         await sleep(400);
         await shot(page, `${tag}-01-menu`);
-        for (const [tab, n] of [['tab-mp', '02-mp'], ['tab-character', '03-character'], ['tab-spells', '04-spells'], ['tab-items', '05-items'], ['tab-settings', '06-settings'], ['tab-editor', '07-editor']]) {
+        for (const [tab, n] of [['tab-mp', '02-mp'], ['tab-character', '03-character'], ['tab-spells', '04-spells'], ['tab-mechanics', '05-mechanics'], ['tab-settings', '06-settings']]) {
             await page.click(`[data-tab="${tab}"]`);
             await sleep(500);
             await shot(page, `${tag}-${n}`);

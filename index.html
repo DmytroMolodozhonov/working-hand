@@ -161,9 +161,7 @@
                     <button class="tab-btn" data-tab="tab-mp">🌐 Мультиплеер</button>
                     <button class="tab-btn" data-tab="tab-character">🧙 Персонаж</button>
                     <button class="tab-btn" data-tab="tab-spells">✨ Магия</button>
-                    <button class="tab-btn" data-tab="tab-items">🗡️ Предметы</button>
                     <button class="tab-btn" data-tab="tab-mechanics">🧩 Механика игры</button>
-                    <button class="tab-btn" data-tab="tab-editor">🗺️ Редактор карт</button>
                     <button class="tab-btn" data-tab="tab-settings">⚙️ Общие настройки</button>
                 </div>
                 <div id="game-version-top" class="game-version-top"></div>
@@ -195,6 +193,48 @@
                         </div>
                     </div>
                     <div id="saved-worlds" class="menu-box"></div>
+                    <div id="map-editor-box" class="menu-box hidden">
+                        <div class="sp-head"><h4 class="menu-h4">🗺️ Создание карты</h4><button id="map-editor-close" class="mp-btn">✖ Закрыть</button></div>
+                    <div class="editor-layout">
+                        <div class="editor-sidebar">
+                            <div class="sidebar-section">
+                                <h4>Объекты</h4>
+                                <button class="tool-btn active" data-tool="wall">🧱 Стена</button>
+                                <button class="tool-btn" data-tool="spawn">🧍 Спавн</button>
+                                <button class="tool-btn" data-tool="win">🏁 Финиш</button>
+                                <button class="tool-btn" data-tool="zombie">🧟 Зомби</button>
+                                <button class="tool-btn" data-tool="chest">📦 Сундук</button>
+                                <button class="tool-btn" data-tool="erase">❌ Удалить</button>
+                            </div>
+                            <div class="sidebar-section">
+                                <h4>Файл</h4>
+                                <input type="text" id="map-name" placeholder="Название">
+                                <button id="save-map-btn">💾 Сохранить</button>
+                                <button id="clear-map-btn">🗑️ Очистить</button>
+
+                            </div>
+                        </div>
+                        <div class="editor-canvas-area">
+                            <canvas id="editor-canvas" width="500" height="500"></canvas>
+                            <div id="chest-item-selector" class="hidden">
+                                <label>Предмет:</label>
+                                <select id="chest-item">
+                                    <option value="sword">Меч</option>
+                                    <option value="axe">Топор</option>
+                                </select>
+                                <button id="confirm-chest">OK</button>
+                            </div>
+                        </div>
+
+                    </div>
+                    <!-- Bottom Map Selector -->
+                    <div id="editor-map-selector"
+                        style="margin-top: 20px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                        <div id="editor-map-list" class="horizontal-map-list">
+                            <!-- Maps populated by MapEditor.js -->
+                        </div>
+                    </div>
+                </div>
                 </div>
 
                 <!-- MULTIPLAYER: list of servers -->
@@ -272,20 +312,16 @@
                     <div id="magic-pentagrams" class="magic-layout" hidden><div id="pentagram-cats" class="sub-tabs"></div><div id="pentagrams-grid" class="items-grid"></div></div>
                 </div>
 
-                <!-- ITEMS -->
-                <div id="tab-items" class="tab-pane">
-                    <div id="item-cats" class="sub-tabs"></div>
-                    <div id="items-grid" class="items-grid"></div>
-                </div>
-
                 <!-- GAME MECHANICS: how the game works (not items) -->
                 <div id="tab-mechanics" class="tab-pane">
                     <div class="sub-tabs mech-subtabs">
                         <button class="sub-tab active" data-mech="mechanics-list">🧩 Как игра работает</button>
                         <button class="sub-tab" data-mech="bosses-list">👑 Боссы</button>
+                        <button class="sub-tab" data-mech="items-list">🗡️ Предметы</button>
                     </div>
                     <div id="mechanics-list" class="mech-list"></div>
                     <div id="bosses-list" class="bosses-list" hidden></div>
+                    <div id="items-list" hidden><div id="item-cats" class="sub-tabs"></div><div id="items-grid" class="items-grid"></div></div>
                 </div>
 
                 <!-- SETTINGS with sub-tabs -->
@@ -638,49 +674,6 @@
                     </div>
                     </div>
                 </div>
-
-                <div id="tab-editor" class="tab-pane">
-                    <div class="editor-layout">
-                        <div class="editor-sidebar">
-                            <div class="sidebar-section">
-                                <h4>Объекты</h4>
-                                <button class="tool-btn active" data-tool="wall">🧱 Стена</button>
-                                <button class="tool-btn" data-tool="spawn">🧍 Спавн</button>
-                                <button class="tool-btn" data-tool="win">🏁 Финиш</button>
-                                <button class="tool-btn" data-tool="zombie">🧟 Зомби</button>
-                                <button class="tool-btn" data-tool="chest">📦 Сундук</button>
-                                <button class="tool-btn" data-tool="erase">❌ Удалить</button>
-                            </div>
-                            <div class="sidebar-section">
-                                <h4>Файл</h4>
-                                <input type="text" id="map-name" placeholder="Название">
-                                <button id="save-map-btn">💾 Сохранить</button>
-                                <button id="clear-map-btn">🗑️ Очистить</button>
-
-                            </div>
-                        </div>
-                        <div class="editor-canvas-area">
-                            <canvas id="editor-canvas" width="500" height="500"></canvas>
-                            <div id="chest-item-selector" class="hidden">
-                                <label>Предмет:</label>
-                                <select id="chest-item">
-                                    <option value="sword">Меч</option>
-                                    <option value="axe">Топор</option>
-                                </select>
-                                <button id="confirm-chest">OK</button>
-                            </div>
-                        </div>
-
-                    </div>
-                    <!-- Bottom Map Selector -->
-                    <div id="editor-map-selector"
-                        style="margin-top: 20px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                        <div id="editor-map-list" class="horizontal-map-list">
-                            <!-- Maps populated by MapEditor.js -->
-                        </div>
-                    </div>
-                </div>
-
 
             </div>
         </div>
