@@ -196,6 +196,7 @@ export class ItemSystem {
         this._wearT = 0;
         // when a held thing leaves the hand (HandRelease.js): only the outstretched hand opened, or a real throw
         this._dropChest = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over my own chest: HouseMagic.chestUnderHand)
+        this._dropCaul = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over a cauldron's opening: the thing falls in)
         this._dropBuy = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over a buyer's counter: BuyerDeal.js)
         // (every hand's memory of its moves and fingers — ThrowModel.js: the throw or the opening, and its moment, read back from it)
         this._trk = { right: new HandTrack(), left: new HandTrack() };
@@ -353,6 +354,7 @@ export class ItemSystem {
         // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
         this._dropBuy[side].reset();
         this._dropChest[side].reset();
+        this._dropCaul[side].reset();
         this._trk[side].reset(closed);
         this._thr[side].reset();
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
@@ -1033,7 +1035,7 @@ export class ItemSystem {
             // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
             // (nor a wand while a spell is going — swinging it to cast never throws it)
             // (the pawnshop / the shady buyer: the OFF hand held out over his counter and opened lays any thing on it — even a wand)
-            if (side === g.off && ch.armState && !holdsFast(ch) && (this._buyerPut(side, h, gt, ch) || this._chestPut(side, h, gt, ch))) continue;
+            if (side === g.off && ch.armState && !holdsFast(ch) && (this._buyerPut(side, h, gt, ch) || this._chestPut(side, h, gt, ch) || this._cauldronPut(side, h, gt, ch))) continue;
             // (food or a potion at the mouth — or just taken from it: the hand over the mouth looks open to the camera, and
             // the author's apple fell out while eating — the mouth never lets go)
             const atMouth = this._nearMouth(side, h, ch, gt);
@@ -1129,6 +1131,22 @@ export class ItemSystem {
      * is opened again), else it lies on the shut lid. Only the hand that is not the leading one; nothing else
      * lets a thing go into a chest by hand. true — it did.
      */
+    _cauldronPut(side, h, gt, ch) {
+        // The off hand over a cauldron's opening and opened: the thing is let go there and falls in (the author 05.11: «кладу в казан
+        // левой рукой золотое яблоко — оно остаётся прямо там же, не падает, как с Вингардиум Левиоса»; a hand lowered over a cauldron is
+        // not «held out», so the usual letting go never happened). The same gate as at a buyer's counter / my chest: really opened.
+        const gate = this._dropCaul[side], C = this.game.cauldrons;
+        const at = C?.list.size && ch.getHandWorldPosition(side, _f) && C.openingUnder?.(_f);
+        if (!at) { gate.reset(); return false; }
+        const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
+        const arm = ch.armState(side, this._arm[side]);
+        if (!gate.update({ now: gt, curl, tracked, reach: Math.max(arm.reach, 0.9), forward: Math.max(arm.forward, 0.9), speed: arm.speed, heldMs: performance.now() - h.since })) return false;
+        h.model.position.set(at.x, Math.max(at.y, _f.y), at.z); // (over the opening, never outside its rim: it falls straight in)
+        handLog(`котёл: рука ${side === 'right' ? 'правая' : 'левая'} над котлом, пальцы ${curl.toFixed(2)}, отпускаю — падает в котёл`);
+        this._throw(side, _v.set(0, -0.5, 0), { why: 'вещь опущена в котёл (нерабочая рука разжата над ним)' });
+        return true;
+    }
+
     _chestPut(side, h, gt, ch) {
         const gate = this._dropChest[side];
         const hm = this.game.houseMagic;

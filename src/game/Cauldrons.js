@@ -779,6 +779,21 @@ export class Cauldrons {
         }
     }
 
+    /**
+     * A hand at `p` over an upright cauldron's opening (within its rim, from its brim up to ~2.5 m over it)? → the point straight over
+     * the opening to let a thing go from (pulled inside the rim), or null. (Items._cauldronPut: a thing laid in by hand falls in.)
+     */
+    openingUnder(p) {
+        for (const c of this.list.values()) {
+            if (!this.upright(c) || c.lev || c.fall) continue;
+            const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), y = p.y - this.fy(c);
+            if (d > CAULDRON.R_IN + 0.45 || y < H - 0.5 || y > H + 2.5) continue;
+            const k = d > CAULDRON.R_IN - 0.35 ? (CAULDRON.R_IN - 0.35) / d : 1;
+            return { x: c.x + dx * k, y: this.fy(c) + H + 0.3, z: c.z + dz * k, c };
+        }
+        return null;
+    }
+
     /** An empty flask dipped into a ready cauldron fills with one portion. */
     _dipFlask(dt) {
         const g = this.game, items = g.items;
