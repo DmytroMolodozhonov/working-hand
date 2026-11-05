@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="cf-heat" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#fff2b0"/><stop offset="0.35" stop-color="#ffb347"/><stop offset="0.75" stop-color="#e2531c"/><stop offset="1" stop-color="#7a1c08"/></radialGradient>
+    <radialGradient id="cf-glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffcf70" stop-opacity="0.85"/><stop offset="1" stop-color="#ff7a20" stop-opacity="0"/></radialGradient>
+    <linearGradient id="cf-steel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e3e8ee"/><stop offset="0.5" stop-color="#9aa3ad"/><stop offset="1" stop-color="#5b626c"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="74" r="50" fill="url(#cf-glow)"/>
+  <!-- three armour pieces flying in, glowing at their edges -->
+  <g stroke="#ffb347" stroke-width="2" stroke-linejoin="round">
+    <path d="M10 22 Q18 8 30 12 Q36 20 30 30 L14 32 Z" fill="url(#cf-steel)"/>
+    <path d="M52 4 L76 4 L80 14 L74 30 L54 30 L48 14 Z" fill="url(#cf-steel)"/>
+    <path d="M98 14 L114 14 L116 36 L106 38 L104 26 L100 38 L94 36 Z" fill="url(#cf-steel)"/>
+  </g>
+  <g fill="none" stroke="#ffd27a" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3 5">
+    <path d="M26 34 Q38 50 50 62"/><path d="M64 32 L64 56"/><path d="M104 40 Q92 52 80 62"/>
+  </g>
+  <!-- the cauldron being cast: white-hot molten iron -->
+  <g fill="#3a1e14" stroke="#ff9a3c" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M38 104 L32 122 L41 122 L47 108 Z"/><path d="M90 104 L96 122 L87 122 L81 108 Z"/>
+  </g>
+  <path d="M28 64 C20 90 32 114 64 116 C96 114 108 90 100 64 Z" fill="url(#cf-heat)" stroke="#ffcf70" stroke-width="3"/>
+  <ellipse cx="64" cy="64" rx="38" ry="9" fill="#ffe9a0" stroke="#ff9a3c" stroke-width="3"/>
+  <ellipse cx="64" cy="64" rx="30" ry="6" fill="#ff8a2a"/>
+  <g fill="#fff3c0"><circle cx="50" cy="52" r="2.5"/><circle cx="78" cy="48" r="2"/><circle cx="64" cy="44" r="3"/><circle cx="40" cy="80" r="2"/><circle cx="90" cy="86" r="2.5"/></g>
+  <g fill="#ff7a20"><circle cx="58" cy="122" r="2.5"/><circle cx="72" cy="124" r="2"/></g>
+</svg>

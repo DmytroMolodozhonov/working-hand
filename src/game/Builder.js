@@ -33,7 +33,8 @@ export const BUILD_SPELLS = {
     BuildRoof: { name: 'Build a Roof', ru: 'крыша', cost: 6 },
     CreateDoor: { name: 'Create a Door', ru: 'дверь', cost: 4 },
     CreateBoard: { name: 'Create a Board', ru: 'доска для волн', cost: 6 },
-    CreateBoat: { name: 'Create a Boat', ru: 'лодка', cost: 15 }, // (the author 05.11: 15 mana — Boats.js)
+    CreateBoat: { name: 'Create a Boat', ru: 'лодка', cost: 15 },
+    CreateCauldron: { name: 'Create a Cauldron', ru: 'котёл', cost: 20 }, // (out of the metal of 3 armour pieces — CauldronForge.js; the author 05.11) // (the author 05.11: 15 mana — Boats.js)
     Navigare: { name: 'Navigare', ru: 'заколдовать лодку / доску', cost: 15 }, // (the boat / the surfboard goes where the head looks — Boats.js)
 };
 

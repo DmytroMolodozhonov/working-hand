@@ -232,6 +232,8 @@ export function matchSpell(text) {
     // «Let it rain» («Лет ит рейн», heard as «летит рейн», «лед ит рэйн»…): before everything with short tokens
     if ((has('rain', 'reign', 'рейн', 'рэйн', 'рейм', 'рэин', 'реин', 'рейна') && has('let', 'лет', 'лэт', 'лед', 'лит ит', 'лидит')) ||
         has('letitrain', 'летитрейн', 'пусть идёт дождь', 'пусть идет дождь', 'пусть пойдёт дождь', 'пусть пойдет дождь', 'пусть льёт дождь', 'пусть льет дождь')) return 'LetItRain';
+    // «Create a Cauldron» (cast out of three armour pieces — CauldronForge.js; the author 05.11): «крейт э колдрон», «кодрон»…
+    if (has('cauldron', 'колдрон', 'колдрен', 'кодрон', 'калдрон', 'колдран', 'коулдрон', 'кольдрон', 'котел', 'котёл', 'чан ') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк', 'отлей')) return 'CreateCauldron';
     // «Create a Boat» (a rowing boat for two — Boats.js; the author 05.11) — «боут», «бот» only with «create» (a «бот» alone is talk)
     if ((has('boat', 'боут', 'боат', 'бoут', 'лодк') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк')) ||
         (has('бот ') && has('крейт', 'криейт', 'creat'))) return 'CreateBoat';

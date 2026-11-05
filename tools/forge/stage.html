@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><title>forge stage</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js" } }</script></head>
+<body><script type="module">
+// «Create a Cauldron» (CauldronForge.js): three armour pieces on the ground melted into a cauldron — tools/forge-stage.mjs takes the shots.
+import * as THREE from 'three';
+import { CauldronForge } from '../../src/game/CauldronForge.js';
+import { makeItemModel } from '../../src/game/ItemTypes.js';
+import { ParticlePool } from '../../src/fx/Particles.js';
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x2a3040);
+scene.add(new THREE.HemisphereLight(0xb8c8ff, 0x332a22, 0.6));
+const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(4, 8, 6); scene.add(sun);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshLambertMaterial({ color: 0x4a5a3a })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+const cam = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
+cam.position.set(9, 5.5, 9); cam.lookAt(5.5, 2.2, 0);
+const sparks = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 1500, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, gravity: -3 });
+const loose = new Map();
+for (const [i, it] of [{ kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest', magic: true }, { kind: 'armor', piece: 'legs' }].entries()) {
+    const model = makeItemModel(it); model.position.set(4.5 + i * 1.1, 0.4, (i - 1) * 0.8); scene.add(model); loose.set('u' + i, { item: { uid: 'u' + i, ...it }, model });
+}
+const g = {
+    localId: 'me', authority: true, config: { mode: 'survival' }, scene,
+    character: { group: { position: new THREE.Vector3(0, 2, 0), rotation: { y: -Math.PI / 2 } } },
+    builder: { _hand: () => ({ o: new THREE.Vector3(0, 3, 0), d: new THREE.Vector3(1, -0.55, 0).normalize() }) },
+    terrain: { raycast: () => ({ x: 5.5, y: 0, z: 0 }) }, collision: { groundY: () => 0 },
+    items: { loose, removeLoose: (uid) => { const L = loose.get(uid); if (L) scene.remove(L.model); loose.delete(uid); return L?.item; } },
+    inventory: { slots: [], take() {} }, cauldrons: { list: new Map(), spawn: (r) => r, _send() {} }, hud: { setVoice() {} },
+    fx: { spark: (p, c, sz, v, life) => sparks.spawn(p.x, p.y, p.z, v.x, v.y, v.z, c, sz, life) },
+};
+const F = new CauldronForge(g);
+window.__F = {
+    cast: () => F.cast(),
+    run(t) { for (let k = 0; k < t * 30; k++) { F.update(1 / 30); sparks.update(1 / 30); } renderer.render(scene, cam); },
+    shot() { renderer.render(scene, cam); },
+};
+window.__ready = true;
+</script></body></html>
