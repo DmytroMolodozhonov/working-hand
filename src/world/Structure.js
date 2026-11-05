@@ -463,12 +463,45 @@ function* neck(job, crushed, out, before) {
                 comp[j] = 1; body.push(j); q.push(j);
             }
         }
-        if (!wall && load > STRUCT.NECK_MIN && load > cap && (!before || worse(load, was))) {
+        if (!wall && load > STRUCT.NECK_MIN && load > cap && (!before || worse(load, was)) && !lintel(body, T, NX, NY, NXZ)) {
             for (let k = 0; k < body.n; k++) crushed.push(body.a[k]);
             out.crushed++;
         }
         if (due(body.n + 4)) yield;
     }
+}
+
+/**
+ * (neck) A pier between two windows is no neck: the mass over it is a lintel that runs on, in its layer, to blocks standing on something
+ * else (the wall beside the windows) — it shares the load (the big houses' window piers broke in the test). Up the patch's columns
+ * (≤ LINTEL.UP), the first layer where the column spreads sideways: a run of built blocks (≤ LINTEL.RUN) reaching one with something
+ * under it that is not over the patch. A house on its one column has nothing else under it: still a neck.
+ */
+const LINTEL = { UP: 10, RUN: 24 };
+const _lq = [], _lseen = new Set();
+function lintel(body, T, NX, NY, NXZ) {
+    const cols = new Set();
+    for (let k = 0; k < body.n; k++) cols.add(body.a[k] % NXZ);
+    for (let k = 0; k < body.n; k++) {
+        let c = body.a[k];
+        for (let up = 1; up <= LINTEL.UP; up++) {
+            c += NXZ;
+            if (((c / NXZ) | 0) >= NY - 1 || KIND[T[c]] !== 2) break;
+            _lq.length = 0; _lseen.clear(); _lq.push(c); _lseen.add(c);
+            let spread = false;
+            for (let h = 0; h < _lq.length && _lseen.size <= LINTEL.RUN; h++) {
+                const e = _lq[h];
+                for (let d = 0; d < 4; d++) {
+                    const j = d === 0 ? e + 1 : d === 1 ? e - 1 : d === 2 ? e + NX : e - NX;
+                    if (j < 0 || _lseen.has(j) || KIND[T[j]] !== 2) continue;
+                    _lseen.add(j); _lq.push(j); spread = true;
+                    if (!cols.has(j % NXZ) && KIND[T[j - NXZ]]) return true; // (the lintel rests on the wall beside)
+                }
+            }
+            if (spread) break; // (this column's mass spread here and rests on nothing else: a real neck)
+        }
+    }
+    return false;
 }
 
 /**
