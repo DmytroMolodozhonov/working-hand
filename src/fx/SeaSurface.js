@@ -316,7 +316,7 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
                         // the sun's path: a sharp glitter on every little wave and a broad sheen round it
                         vec3 sH = normalize(sL + sV);
                         float sNH = max(dot(sN, sH), 0.0);
-                        sCol += sSun * (pow(sNH, 700.0) * 9.0 + pow(sNH, 90.0) * 0.45) * (1.0 - seaFoam);
+                        sCol += sSun * (pow(sNH, 700.0) * 9.0 + pow(sNH, 90.0) * 0.45 + pow(sNH, 28.0) * 0.22 * (0.6 + 0.4 * seaN(vSeaWorld.xz * 2.5 + uTime))) * (1.0 - seaFoam); // (a broad shimmering path, sparkling — not a thin line)
                         // the foam: white, lit by the sky and the sun, a little blue in its shadow
                         vec3 sFoamC = vec3(0.92, 0.96, 1.0) * (sLight * 0.75 + 0.25 * dot(sSun, vec3(0.33)));
                         sCol = mix(sCol, sFoamC, clamp(seaFoam * 0.9, 0.0, 1.0));
