@@ -11,7 +11,7 @@ import { isDark } from '../../src/game/DarkMagic.js';
 import { GOD_SPELLS, spellTitle } from '../../src/game/Mana.js';
 import { START_SPELLS } from '../../src/game/SpellBook.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
-import { potionPrice, scrollPrice, hallScrolls, manaOf, potionStock, scrollStock, parseHallWords, HALL_PRICE, POTION_PRICE, countOf } from '../../src/game/ShopHallGoods.js';
+import { potionPrice, scrollPrice, hallScrolls, manaOf, potionStock, scrollStock, parseHallWords, HALL_PRICE, POTION_PRICE, NOT_SOLD, countOf } from '../../src/game/ShopHallGoods.js';
 
 const worlds = new Map();
 function world(seed, wizShops = true) {
@@ -24,8 +24,8 @@ test('the version: the shops come with a new generation (old worlds keep their s
     assert.ok(WORLD_GEN >= WIZ_SHOPS_FROM_GEN);
     const old = world(4242, false).villages.spawnVillage(), now = world(4242, true).villages.spawnVillage();
     assert.equal(old.halls.length, 0, 'an old world: no halls');
-    assert.equal(now.halls.length, 2, 'a new world: the potion hall and the scroll hall');
-    assert.deepEqual(now.halls.map((h) => h.kind).sort(), ['potions', 'scrolls']);
+    assert.equal(now.halls.length, 3, 'a new world: the potion hall (with its ingredients’ room) and the scroll hall');
+    assert.deepEqual(now.halls.map((h) => h.kind).sort(), ['ingredients', 'potions', 'scrolls']);
     for (const h of now.halls) assert.ok(now.stalls[h.stall].hall === h.kind, 'the hall has its stall (its keeper)');
     assert.equal(now.stalls.find((s) => s.hall === 'potions').cauldronPrice, 500);
 });
@@ -79,14 +79,18 @@ test('the potion hall: every potion of the world, priced 700…5000 by its might
     for (const r of RECIPES) {
         const p = potionPrice(r);
         assert.ok(p >= 700 && p <= 5000, `${r.id}: ${p}`);
-        assert.ok(POTION_PRICE[r.id], `${r.id} has its price in the table (a new recipe: add it to POTION_PRICE)`);
+        if (!NOT_SOLD.has(r.id)) assert.ok(POTION_PRICE[r.id], `${r.id} has its price in the table (a new recipe: add it to POTION_PRICE)`);
     }
     assert.ok(potionPrice('heal') < potionPrice('luck') && potionPrice('luck') < potionPrice('wings'), 'the mightier, the dearer');
     assert.equal(potionPrice({ id: 'new', ingredients: { a: 1, b: 1 } }) >= 700, true, 'a new recipe gets a price by itself');
     assert.equal(HALL_PRICE.CAULDRON, 500); assert.equal(HALL_PRICE.FLASK, 20);
     const h = world(4242).villages.spawnVillage().halls.find((x) => x.kind === 'potions');
     const stock = potionStock(h.slots, h.flasks);
-    for (const r of RECIPES) assert.ok(stock.filter((e) => e.item.rec === r.id).length >= 3, `${r.id}: at least 3 on the shelves`);
+    for (const r of RECIPES) {
+        const n = stock.filter((e) => e.item.rec === r.id).length;
+        if (NOT_SOLD.has(r.id)) assert.equal(n, 0, `${r.id}: never sold (the author)`); else assert.ok(n >= 3, `${r.id}: at least 3 on the shelves`);
+    }
+    assert.equal(POTION_PRICE.wings, 4800); assert.equal(POTION_PRICE.mermaid, 3800);
     assert.ok(stock.filter((e) => e.item.kind === 'flask').length >= 5, 'the flasks on their table');
     assert.ok(h.decor.length >= 100, 'the shelves are packed (the show of bottles)');
 });

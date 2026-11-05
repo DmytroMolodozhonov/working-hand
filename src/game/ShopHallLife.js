@@ -27,7 +27,7 @@ import { RECIPES } from './Potions.js';
 import { spellTitle } from './Mana.js';
 import { isDark } from './DarkMagic.js';
 import { matchSpell } from '../fx/SpellManager.js';
-import { potionStock, scrollStock, parseHallWords, listLine, HALL_LINES, HALL_PRICE } from './ShopHallGoods.js';
+import { potionStock, scrollStock, ingredientStock, parseHallWords, listLine, HALL_LINES, HALL_PRICE } from './ShopHallGoods.js';
 import { bottleShow, scrollShow, disposeShow, hallSign } from './ShopHallModels.js';
 
 export const HALL_LIFE = {
@@ -96,7 +96,7 @@ export class ShopHallLife {
     /** The show of bottles / scrolls over the shelves (a few instanced meshes). */
     _showOn(S) {
         const g = this.game, seed = (S.def.gx * 7919 + S.def.gz * 104729 + (S.h.kind === 'potions' ? 1 : 2)) >>> 0;
-        const m = (S.h.kind === 'potions' ? bottleShow(S.h.decor, seed) : scrollShow(S.h.decor, seed)) || new THREE.Group();
+        const m = (S.h.kind !== 'scrolls' ? bottleShow(S.h.decor, seed) : scrollShow(S.h.decor, seed)) || new THREE.Group();
         const sign = hallSign(S.h);
         if (sign) m.add(sign);
         g.scene?.add(m);
@@ -126,7 +126,7 @@ export class ShopHallLife {
         if (!items?.loose) return;
         if (!S.stock) {
             const kf = g.knownScrollFn?.();
-            S.stock = S.h.kind === 'potions' ? potionStock(S.h.slots, S.h.flasks)
+            S.stock = S.h.kind === 'potions' ? potionStock(S.h.slots, S.h.flasks) : S.h.kind === 'ingredients' ? ingredientStock(S.h.slots)
                 : scrollStock(S.h.slots, kf ? (sp) => !!kf({ kind: 'scroll', stat: 'spell', spell: sp }) : null);
         }
         let n = 0;
@@ -154,7 +154,7 @@ export class ShopHallLife {
     /** The state of the hall this keeper keeps (or null). */
     stateOf(v) {
         const st = v?.role === 'seller' ? v.cs?.def?.stalls?.[v.entry?.stall] : null;
-        if (!st?.hall) return null;
+        if (!st?.hall || st.guard) return null;
         return this.states.get(v.cs.def.id + ':' + st.hall) || null;
     }
 
@@ -293,6 +293,7 @@ export class ShopHallLife {
     step(v, dt) {
         const S = this.stateOf(v), g = this.game, life = this.life;
         if (!S || !g.authority) return false;
+        if (v.cs.def.stalls[v.entry.stall]?.guard) return false; // (the guard: at his post by the door for now)
         if (v.foe || v.dead || v.stunT > 0 || v.lev || v.carriedBy || v.pack > 0 || v.sleep || v.fleeT > 0) { this._abort(S); return false; }
         const me = g.character?.group.position;
         const inside = !!me && !g.combat?.dead && this._inRoom(S.h, me);

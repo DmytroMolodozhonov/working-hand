@@ -11,7 +11,7 @@
  * or its title), «да / беру», «нет», «что есть», «колбы ×N», «котёл».
  */
 
-import { RECIPES } from './Potions.js';
+import { RECIPES, INGREDIENT_RU } from './Potions.js';
 import { POTION_WORDS, findRecipe } from './PotionMaster.js';
 import { SPELL_COST } from './Combat.js';
 import { BUILD_SPELLS } from './Builder.js';
@@ -27,11 +27,50 @@ export const HALL_PRICE = {
     SCROLL_MANA: 50, // a scroll's spell costs at most this much mana a cast
 };
 
-/** The potions by their might (the author: 700…5000). A recipe not here — by its ingredients (potionPrice). */
+/** The potions by their might (the author: 700…5000; the transformations dear — the wings 4800, the mermaid 3800). A recipe not here — by its ingredients (potionPrice). */
 export const POTION_PRICE = {
     heal: 700, potionreset: 900, waterbreath: 1200, clearmind: 1500, dazzle: 1800, disguise: 2200,
-    luck: 2600, mermaid: 3000, lordcure: 3500, dragonform: 4500, wings: 5000,
+    luck: 2600, mermaid: 3800, wings: 4800,
 };
+/** Never sold (the author 05.11): the dragon's — «вообще его не будет»; the cure of the dark mage's curse — «лучше вообще его не будет». */
+export const NOT_SOLD = new Set(['dragonform', 'lordcure']);
+export const soldPotions = () => RECIPES.filter((r) => !NOT_SOLD.has(r.id));
+
+/**
+ * The ingredients' room (the author: «элементы для варки зелий — все, которые сейчас доступны, кроме яйца дракона; от 100 до 700 монет,
+ * в зависимости от сложности достать»). A new ingredient: its price here, else by its shelf (INGREDIENT_KIND).
+ */
+export const INGREDIENT_PRICE = {
+    redApple: 100, bread: 100, cheese: 100, pie: 120, wool: 100, meat: 100, steak: 120, glass: 100,
+    sun_herb: 120, fern_frond: 120, azure_berry: 150, glowcap_mushroom: 200, baksadi_pear: 300, telewilpinLeaf: 350, carnivoreHead: 450,
+    owlFeather: 250, web: 250, swanWings: 300, minotaurHorn: 450, glowfinTail: 500, spencerFeather: 550,
+    crystal: 300, frost_shard: 350, magicPebble: 450,
+    apple: 500, brightCore: 600, magicSwanWings: 650, phoenixFeather: 700,
+};
+export const INGREDIENT_NOT_SOLD = new Set(['dragonEgg', 'scroll', 'fish']);
+/** Every ingredient the room sells (the potions' ingredients and every thing a cauldron takes), sorted by price. */
+export function hallIngredients() {
+    const set = new Set([...Object.keys(INGREDIENT_RU), ...RECIPES.flatMap((r) => Object.keys(r.ingredients))]);
+    for (const k of INGREDIENT_NOT_SOLD) set.delete(k);
+    return [...set].sort((a, b) => ingredientPrice(a) - ingredientPrice(b) || (a < b ? -1 : 1));
+}
+export function ingredientPrice(kind) { return Math.max(100, Math.min(700, INGREDIENT_PRICE[kind] ?? 250)); }
+export const ingredientName = (kind) => INGREDIENT_RU[kind] || kind;
+
+/** Which ingredient the words name (by the stems of its Russian name; the fuller name wins: «золотое яблоко» over «яблоко»). */
+export function findIngredient(text) {
+    const t = ' ' + String(text || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9\s]/g, ' ').replace(/\s+/g, ' ') + ' ';
+    let best = null, bs = 0, bw = 0;
+    for (const k of hallIngredients()) {
+        const words = ingredientName(k).toLowerCase().replace(/ё/g, 'е').split(/\s+/).filter((w) => w.length >= 3);
+        let sc = 0, all = true;
+        for (const w of words) { const st = w.slice(0, Math.max(4, w.length - 2)); if (t.includes(' ' + st)) sc += st.length; else all = false; }
+        if (!sc) continue;
+        const score = sc + (all ? 10 : 0);
+        if (score > bs || (score === bs && words.length < bw)) { best = k; bs = score; bw = words.length; }
+    }
+    return best;
+}
 
 const RARE = new Set(['phoenixFeather', 'dragonEgg', 'magicSwanWings', 'brightCore', 'apple', 'spencerFeather', 'glowfinTail', 'carnivoreHead']);
 const round50 = (n) => Math.round(n / 50) * 50;
@@ -89,15 +128,26 @@ export function hallPotionColor(i, n) {
  */
 export function potionStock(slots, flasks) {
     const out = [];
-    const n = RECIPES.length, per = Math.max(1, Math.floor(slots.length / n));
-    RECIPES.forEach((r, i) => {
-        const color = hallPotionColor(i, n);
+    const list = soldPotions(), n = list.length, per = Math.max(1, Math.floor(slots.length / n));
+    list.forEach((r, i) => {
+        const color = hallPotionColor(RECIPES.indexOf(r), RECIPES.length);
         for (let k = 0; k < per; k++) {
             const s = slots[i * per + k];
             if (s) out.push({ slot: s, item: { kind: 'potion', rec: r.id, color }, price: potionPrice(r) });
         }
     });
     for (const s of flasks) out.push({ slot: s, item: { kind: 'flask', count: 1 }, price: HALL_PRICE.FLASK });
+    return out;
+}
+
+/** The ingredients' room: every ingredient, twice where the places allow (the cheap first in line). */
+export function ingredientStock(slots) {
+    const list = hallIngredients(), out = [];
+    for (let i = 0; i < slots.length; i++) {
+        const k = list[i % list.length];
+        if (i >= list.length * 2) break;
+        out.push({ slot: slots[i], item: { kind: k, count: 1 }, price: ingredientPrice(k) });
+    }
     return out;
 }
 
@@ -146,6 +196,9 @@ export function parseHallWords(text, kind, spellOf = null) {
         if (/(колб|склянк|пузыр|флакон|бутыл)/.test(t) && !/(зель|снадоб)/.test(t)) good = { kind: 'flask' };
         else if (/(котел|котл|казан)/.test(t)) good = { kind: 'cauldron' };
         else { const r = findRecipe(t); if (r) good = { kind: 'potion', rec: r.id }; }
+    } else if (kind === 'ingredients') {
+        if (/(драконь|дракона)/.test(t) && /(яйц|яиц)/.test(t)) good = { kind: 'dragonEgg' };
+        else { const k = findIngredient(t); if (k) good = { kind: 'ingredient', item: k }; }
     } else {
         const sp = scrollNamed(t, spellOf);
         if (sp) good = { kind: 'scroll', spell: sp };
@@ -178,28 +231,43 @@ export const potionWords = (id) => POTION_WORDS[id] || [RECIPES.find((r) => r.id
 /** The keeper's lines. */
 export const HALL_LINES = {
     welcome: {
+        ingredients: ['Ингредиенты для зелий — здесь. Травы, перья, кристаллы — что нужно?', 'Заходите! Всё для варки — назовите, перенесу на прилавок.'],
         potions: ['Добро пожаловать в лавку зелий! Проходите, всё на полках — спрашивайте.', 'Заходите, заходите! Любое зелье — у меня. Что ищете?', 'Рад гостю! Зелья, колбы, котлы — всё здесь. Подсказать?'],
         scrolls: ['Добро пожаловать в лавку свитков! Простые заклинания — любое, спрашивайте.', 'Заходите! Свитки на столах и в ячейках. Какое заклинание ищете?', 'Рад гостю! Ищете заклинание? Назовите — покажу.'],
     },
-    call: { potions: ['Подходите сюда, покажу!', 'Сюда, сюда — у меня для вас кое-что есть!'], scrolls: ['Подойдите, помогу выбрать!', 'Сюда, к столам, — покажу!'] },
+    call: { ingredients: ['Подходите к прилавку, помогу подобрать!'], potions: ['Подходите сюда, покажу!', 'Сюда, сюда — у меня для вас кое-что есть!'], scrolls: ['Подойдите, помогу выбрать!', 'Сюда, к столам, — покажу!'] },
     here: ['Вот оно — светится.', 'Вот здесь, смотрите.', 'Вот, на этой полке.'],
     offer: (name, price) => `${name[0].toUpperCase() + name.slice(1)} — ${price} монет. Берёте?`,
     noMoney: (need) => `Не хватает ${need} монет. Приходите, когда будет.`,
     sold: ['Держите! Хорошего дня.', 'Ваше! Пользуйтесь на здоровье.', 'Спасибо за покупку!'],
     onCounter: 'Руки у вас заняты — положил на прилавок, заберите.',
-    nothing: { potions: 'Такого зелья у меня нет — может, назовёте по-другому?', scrolls: 'Такого свитка нет: у меня только простые заклинания — без чёрной магии.' },
+    nothing: { ingredients: 'Такого у нас нет — назовите по-другому?', potions: 'Такого зелья у меня нет — может, назовёте по-другому?', scrolls: 'Такого свитка нет: у меня только простые заклинания — без чёрной магии.' },
     known: 'Это заклинание вы уже знаете — свиток вам ни к чему.',
     soldOut: 'Этого сейчас нет на полке — подвезут чуть позже.',
     no: ['Как скажете. Смотрите ещё.', 'Хорошо, не тороплю.'],
     cauldron: (p) => `Котёл — ${p} монет, стоит вот там. Берёте?`,
     cauldronPaid: 'Котёл ваш — тащите его домой.',
     dark: 'Чёрной магии здесь нет и не будет.',
+    notSold: 'Такого зелья мы не продаём и не варим — даже не просите.',
+    noEgg: 'Яиц дракона не держим: их не достать ни за какие деньги.',
+    levitate: 'Вингардиум Левиоса!',
+    onIts: (name, price) => `${name[0].toUpperCase() + name.slice(1)} на прилавке — ${price} монет. Кладите мешочек с монетами на прилавок и скажите «беру».`,
+    putCoins: 'Кладите мешочек с монетами на прилавок — сдачу верну.',
+    backToShelf: 'Не берёте — верну на полку.',
+    noTouch: ['Не трогайте товар руками — скажите, что нужно, я подам.', 'Товар на полках не трогаем! Скажите, что нужно.'],
+    thief: ['Вор! Держи вора!', 'Стой! Товар не оплачен!'],
+    guardWatch: ['Я за порядком смотрю. Покупки — у продавцов.', 'Всё в порядке? Покупать — у прилавка.'],
+    guardWarn: 'Без глупостей в лавке.',
 };
 
 /** «What do you sell» — a short list with prices. */
 export function listLine(kind, goods) {
+    if (kind === 'ingredients') {
+        const parts = hallIngredients().map((k) => `${ingredientName(k)} — ${ingredientPrice(k)}`);
+        return `Ингредиенты для зелий: ${parts.join(', ')}. Яйца дракона не держим.`;
+    }
     if (kind === 'potions') {
-        const parts = RECIPES.map((r) => `${r.name.replace(/^Зелье /, '').toLowerCase()} — ${potionPrice(r)}`);
+        const parts = soldPotions().map((r) => `${r.name.replace(/^Зелье /, '').toLowerCase()} — ${potionPrice(r)}`);
         return `Все зелья: ${parts.join(', ')}. Колбы — по ${HALL_PRICE.FLASK}, котёл — ${HALL_PRICE.CAULDRON}.`;
     }
     const sp = (goods || hallScrolls()).slice(0, 12).map((k) => `${spellTitle(k)} — ${scrollPrice(k)}`);

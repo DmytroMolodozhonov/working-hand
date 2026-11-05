@@ -26,6 +26,8 @@ export const TRADE_TITLES = {
     potionmaster: { m: 'Мастер зелий', f: 'Мастер зелий' }, // (the Potion-maker's lair in Creative — PotionMaster.js)
     potionhall: { m: 'Хозяин лавки зелий', f: 'Хозяйка лавки зелий' }, // (a wizards' settlement's potion hall — ShopHalls.js, ShopHallLife.js)
     scrollhall: { m: 'Хозяин лавки свитков', f: 'Хозяйка лавки свитков' }, // (…and its scroll hall)
+    ingredienthall: { m: 'Продавец ингредиентов', f: 'Продавщица ингредиентов' }, // (the potion hall's side room)
+    hallguard: { m: 'Маг-охранник', f: 'Маг-охранница' }, // (the potion hall's guard)
 };
 
 /** The stall's `shop` → the trade of its seller. */
@@ -45,7 +47,7 @@ export function withTrade(def, e, homes) {
     let r = e;
     const st = e.stall >= 0 ? def.stalls?.[e.stall] : null;
     if (st?.shop && TRADE_OF_SHOP[st.shop]) r = { ...e, trade: TRADE_OF_SHOP[st.shop], home: st.houseOf != null ? st.houseOf : e.home };
-    else if (st?.hall) r = { ...e, trade: st.hall === 'potions' ? 'potionhall' : 'scrollhall' }; // (the keeper of a settlement's big shop — ShopHalls.js)
+    else if (st?.hall) r = { ...e, trade: st.guard ? 'hallguard' : st.hall === 'potions' ? 'potionhall' : st.hall === 'ingredients' ? 'ingredienthall' : 'scrollhall' }; // (the staff of a settlement's big shop — ShopHalls.js)
     else if (e.home >= 0 && def.houses?.[e.home]?.trade && e.role !== 'knight' && e.role !== 'king' && e.role !== 'advisor') {
         const list = homes(def).get(e.home);
         if (list && list[0] === e.idx) r = { ...e, trade: def.houses[e.home].trade };
@@ -98,12 +100,19 @@ export function applyTradeLook(L, trade) {
             L.beard = 'long'; L.hairColor = 0xd0d0d8;
             break;
         case 'potionhall': // the potion hall's keeper: a bottle-green robe, a leather apron with pockets of vials, a pointed hat, no wand in hand (he hands the goods)
-            L.hat = 'wizard'; L.hatColor = 0x24563a; L.dress = !!L.female; L.dressColor = 0x24563a; L.shirt = 0x2c6a46; L.accent = 0xd8b04a; L.sleeves = 'long'; L.apron = 0x5a3a22; L.tool = 'none';
+            L.hat = 'wizard'; L.hatColor = 0x24563a; L.dress = !!L.female; L.dressColor = 0x24563a; L.shirt = 0x2c6a46; L.accent = 0xd8b04a; L.sleeves = 'long'; L.apron = 0x5a3a22; L.tool = 'wand'; // (the wand: goods fly to the counter by «Вингардиум Левиоса»)
             if (!L.female && L.beard === 'none') L.beard = (s % 2) ? 'full' : 'goatee';
             break;
         case 'scrollhall': // the scroll hall's keeper: a scholar's dark-blue robe with a golden trim, a tall hat, a quill behind no ear — a scroll in hand
-            L.hat = 'wizardTall'; L.hatColor = 0x1f2a5a; L.dress = !!L.female; L.dressColor = 0x1f2a5a; L.shirt = 0x26346e; L.accent = 0xe0c060; L.sleeves = 'long'; L.tool = 'none';
+            L.hat = 'wizardTall'; L.hatColor = 0x1f2a5a; L.dress = !!L.female; L.dressColor = 0x1f2a5a; L.shirt = 0x26346e; L.accent = 0xe0c060; L.sleeves = 'long'; L.tool = 'wand';
             if (!L.female && L.beard === 'none') L.beard = (s % 3) ? 'long' : 'moustache';
+            break;
+        case 'ingredienthall': // the ingredients' seller: an olive robe, a herbalist's apron, a wide hat, a wand
+            L.hat = 'wizardWide'; L.hatColor = 0x5a5a24; L.dress = !!L.female; L.dressColor = 0x5a5a24; L.shirt = 0x6a6a30; L.accent = 0xc8a050; L.sleeves = 'rolled'; L.apron = 0x7a6040; L.tool = 'wand';
+            break;
+        case 'hallguard': // the shop's guard-mage: a dark steel-grey robe with a silver trim, a black wide hat, a stern beard, the wand ready in hand
+            L.hat = 'wizardWide'; L.hatColor = 0x1a1c22; L.dress = false; L.shirt = 0x3a404c; L.pants = 0x24262c; L.accent = 0xc0c8d0; L.boots = 0x15161a; L.sleeves = 'long'; L.tool = 'wand';
+            if (!L.female) L.beard = 'full';
             break;
         default: break;
     }
@@ -120,6 +129,8 @@ export const TRADE_PROMPTS = {
     stableman: 'Ты конюх: ухаживаешь за конями, чистишь стойла, кормишь сеном и овсом, знаешь, как подойти к коню — их можно приручить яблоком. Говоришь просто и немногословно.',
     potionmaster: promptText(), // (всё про рецепты — PotionMaster.js)
     potionhall: 'Ты хозяин большой лавки зелий в поселении волшебников: на полках у тебя все зелья мира, колбы и котёл. Ты сам ходишь по лавке, показываешь зелья и приносишь покупку. Цены называет сама игра (от 700 до 5000 за зелье) — цифр не выдумывай. Говоришь радушно и со знанием дела.',
+    ingredienthall: 'Ты продаёшь ингредиенты для зелий в отдельной комнате лавки зелий: травы, перья, кристаллы, редкие находки — всё, кроме яйца дракона. Товар переносишь на прилавок заклинанием «Вингардиум Левиоса». Цены называет сама игра — цифр не выдумывай.',
+    hallguard: 'Ты маг-охранник большой лавки зелий: следишь, чтобы никто ничего не украл и не навредил продавцам. Говоришь коротко и строго, вежлив с честными покупателями. Сам ничего не продаёшь — покупки у продавцов.',
     scrollhall: 'Ты хозяин лавки свитков в поселении волшебников: продаёшь свитки только простых заклинаний — без чёрной магии, ни за какие деньги. Сам показываешь свиток и приносишь его. Цены называет сама игра — цифр не выдумывай. Говоришь учтиво, как книжник.',
     keeper: 'Ты хранитель амбара: следишь за закромами с зерном и сеном, мешками и бочками, считаешь запасы деревни. Говоришь просто, по-деревенски. Ты не воин.',
 };

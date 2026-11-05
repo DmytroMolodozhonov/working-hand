@@ -223,7 +223,7 @@ function villageRoster(def, idx, seed, rng) {
     const stall = role === 'seller' ? idx - 1 : -1;
     const brave = rng();
     const rr = createRng((seed ^ strHash('rank:' + String(def.wseed ?? ''))) >>> 0);
-    const rank = elder ? 'elder' : role === 'seller' ? 'novice' : villageRank(rr());
+    const rank = elder ? 'elder' : role === 'seller' ? (def.stalls[stall]?.hall ? 'adept' : 'novice') : villageRank(rr()); // (the big shops' sellers and guard: wizards of the middle rank — the author 05.11)
     const mana = rollMana(rank, rr);
     const robe = rank === 'elder' || rng() < 0.15;
     return { idx, role, female, name, home, stall, seed, brave, wizard: true, robe, rank, mana, elder, town: true };

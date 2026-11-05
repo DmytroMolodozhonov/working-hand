@@ -1523,6 +1523,7 @@ export class CastleTalk {
             if (!cs.awake) continue;
             cs.def.stalls.forEach((stall, i) => {
                 const c = stall.counter;
+                if (!c) return; // (a big shop's guard: a post, no counter — ShopHalls.js)
                 const key = this._stallKey(cs.def, i);
                 const dist = Math.hypot((c.x0 + c.x1) / 2 - me.x, (c.z0 + c.z1) / 2 - me.z);
                 const buyer = !!(stall.pawn || stall.fence);

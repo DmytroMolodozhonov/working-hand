@@ -20,7 +20,7 @@ import { BLOCK } from './Terrain.js';
 
 /** The lots the halls take (local rects of the settlement, with their paths) — no house lot may come near them. */
 export const HALL_RECTS = {
-    potions: { u0: -57, u1: -27, v0: -51, v1: -23 },
+    potions: { u0: -70, u1: -27, v0: -51, v1: -23 }, // (with its ingredients' room on the west side)
     scrolls: { u0: 19, u1: 58, v0: 35, v1: 65 },
 };
 
@@ -81,7 +81,7 @@ export function buildPotionHall(p, rng, out, kit) {
     // ---- windows: the front at both sides of the door (lit bottles stand in them), high ones in the side walls (over the shelves)
     const windows = [];
     for (const a of [-52, -48, -36, -32]) kit.windowHole(p, windows, true, v1, a, a + 1, 2, 5);
-    for (const b of [-46, -38, -30]) { kit.windowHole(p, windows, false, u0, b, b + 1, 7, 8); kit.windowHole(p, windows, false, u1, b, b + 1, 7, 8); }
+    for (const b of [-46, -38, -30]) kit.windowHole(p, windows, false, u1, b, b + 1, 7, 8); // (the west wall is the ingredients' room's)
     // ---- inside: a green runner from the door to the counter, the rune circle of the cauldron, lamps and herbs under the roof
     p.box(du - 1, du + 1, -1, -1, -41, v1 - 1, B.CARPET_GREEN);
     p.cyl(-45, -37, 2.6, -1, -1, B.RUNE);
@@ -92,7 +92,9 @@ export function buildPotionHall(p, rng, out, kit) {
     const ups = (list) => new Set(list.map(([a, b]) => a + ',' + b));
     const line = (a0, a1, b0, b1) => { const c = []; for (let a = a0; a <= a1; a++) for (let b = b0; b <= b1; b++) c.push([a, b]); return c; };
     // the west and east walls: v −47…−30, uprights every 6; the back wall: u −54…−30
-    shelfLine(p, line(-55, -55, -47, -30), ups([[-55, -47], [-55, -41], [-55, -35], [-55, -30]]), B.PLANKS_DARK, [1, 0], slots, decor);
+    // (the west wall's shelves leave the doorway to the ingredients' room free: v −39…−35)
+    shelfLine(p, line(-55, -55, -47, -40), ups([[-55, -47], [-55, -44], [-55, -40]]), B.PLANKS_DARK, [1, 0], slots, decor);
+    shelfLine(p, line(-55, -55, -34, -30), ups([[-55, -34], [-55, -30]]), B.PLANKS_DARK, [1, 0], slots, decor);
     shelfLine(p, line(-29, -29, -47, -30), ups([[-29, -47], [-29, -41], [-29, -35], [-29, -30]]), B.PLANKS_DARK, [-1, 0], slots, decor);
     shelfLine(p, line(-54, -30, -49, -49), ups([[-54, -49], [-48, -49], [-42, -49], [-36, -49], [-30, -49]]), B.PLANKS_DARK, [0, 1], decor, decor, 0); // (behind the keeper: only his show — out of the buyer's reach)
     // two islands, two columns each (both sides: one faces each aisle), v −44…−33, uprights at the ends and the middle
@@ -115,8 +117,8 @@ export function buildPotionHall(p, rng, out, kit) {
     const fn = p.node(du, -41, 0, 'stall');
     const cauldron = { ...p.pt(-45, -37, 0), yaw: p.yaw(Math.PI / 2) };
     // ---- the walking graph (CastleLife's paths) and the keeper's own waypoints in the aisles
-    const W = [[du, -29], [-52, -29], [-52, -46], [-47, -46], [du, -46], [-37, -46], [-32, -46], [-32, -29], [du, -41], [du, -34], [-47, -41], [-37, -41]];
-    const links = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 0], [0, 9], [9, 8], [8, 10], [10, 3], [8, 11], [11, 5]];
+    const W = [[du, -29], [-52, -29], [-52, -46], [-47, -46], [du, -46], [-37, -46], [-32, -46], [-32, -29], [du, -41], [du, -34], [-47, -41], [-37, -41], [-52, -37]];
+    const links = [[0, 1], [1, 12], [12, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 0], [0, 9], [9, 8], [8, 10], [10, 3], [8, 11], [11, 5]];
     const door = p.node(du, v1 + 3, 0), inn = p.node(du, -29, 0, 'room:potionHall');
     p.link(door, inn); p.link(inn, p.node(du, -34, 0)); p.link(p.node(du, -34, 0), fn); p.link(door, p.node(du, 0, 0));
     const stall = {
@@ -124,8 +126,13 @@ export function buildPotionHall(p, rng, out, kit) {
         front: p.pt(du, -41, 0), back: p.pt(du, -46, 0), frontNode: fn, counter, yaw: p.yaw(Math.PI), // (the keeper looks at the door)
     };
     out.stalls.push(stall);
+    const mainStall = out.stalls.length - 1;
+    // ---- the guard: a mage of the shop by the door (a «stall» with no counter: his post — ShopHallLife walks him round and watches)
+    out.stalls.push({ hall: 'potions', guard: true, front: p.pt(du + 4, -29, 0), back: p.pt(du + 4, -29, 0), frontNode: inn, yaw: p.yaw(Math.PI) });
+    const guardStall = out.stalls.length - 1;
+    buildIngredientRoom(p, out, kit, windows);
     out.halls.push({
-        kind: 'potions', name: 'Лавка зелий', stall: out.stalls.length - 1, slots, decor, flasks,
+        kind: 'potions', name: 'Лавка зелий', stall: mainStall, guard: guardStall, slots, decor, flasks,
         room: hallRect(p, u0 + 1, u1 - 1, v0 + 1, v1 - 1), door: p.pt(du, v1 + 2, 0), inside: p.pt(du, -29, 0),
         walk: W.map(([a, b]) => p.pt(a, b, 0)), links, home: 4, entry: 0, front: 8,
         sign: { ...p.pt(du, v1 + 1.56, 0), y: p.L(9.5) - 1, face: dir(p, 0, 1), w: 8.6, h: 3.6 },
@@ -133,6 +140,62 @@ export function buildPotionHall(p, rng, out, kit) {
     out.civic.push({
         kind: 'potionHall', civic: true, rich: true, wizard: true, c: p.pt(-42, -38), r: 14, doorRec: kit.civicDoor(p, du, v1, 0, -1, 5, 6), windows,
         chests: [], bedSpots: [], homeNode: inn, doorNode: door, door: p.pt(du, v1 + 3), inside: p.pt(du, -29), beds: 0,
+    });
+}
+
+// ------------------------------------------------------------------ the ingredients' room
+/**
+ * The potion hall's side room on its west (the author 05.11: «отдельная комната, где можно купить элементы для варки зелий»): local u −68…−56
+ * (the hall's west wall shared), v −48…−28, a lean-to roof of slate; the way in — a doorway 3×6 from the hall (v −38…−36). Shelves of three
+ * tiers on the west and the south walls, a long table (2 m) in the middle, a counter (2 m, 2 deep) at the north end with its seller behind it.
+ */
+function buildIngredientRoom(p, out, kit, windows) {
+    const B = BLOCK;
+    const u0 = -68, u1 = -56, v0 = -48, v1 = -28;
+    p.box(u0, u1 - 1, -1, -1, v0, v1, B.PLANKS_DARK);
+    p.walls(u0, u1, v0, v1, 0, 1, B.CS_MOSSY);
+    p.box(u0, u0, 2, 7, v0, v1, B.PLASTER); p.box(u0, u1 - 1, 2, 7, v0, v0, B.PLASTER); p.box(u0, u1 - 1, 2, 7, v1, v1, B.PLASTER);
+    p.box(-62, u1 - 1, 8, 8, v0, v0, B.PLASTER); p.box(-62, u1 - 1, 8, 8, v1, v1, B.PLASTER); // (the walls rise under the higher half of the lean-to)
+    for (let v = v0; v <= v1; v += 4) p.box(u0, u0, 2, 7, v, v, B.PLANKS_DARK);
+    for (let u = u0; u < u1; u += 4) { p.box(u, u, 2, 7, v0, v0, B.PLANKS_DARK); p.box(u, u, 2, 7, v1, v1, B.PLANKS_DARK); }
+    p.walls(u0, u1, v0, v1, 5, 5, B.PLANKS_DARK);
+    p.box(u0 + 1, u1 - 1, 0, 7, v0 + 1, v1 - 1, 0);
+    p.box(-62, u1 - 1, 8, 8, v0 + 1, v1 - 1, 0);
+    // the lean-to roof: two steps of slate leaning on the hall's wall
+    const mark = p.parts.length;
+    p.box(u0 - 1, -63, 8, 8, v0 - 1, v1 + 1, B.ROOF_SLATE);
+    p.box(-62, u1 - 1, 9, 9, v0 - 1, v1 + 1, B.ROOF_SLATE);
+    p.slopeTop(mark, B.ROOF_SLATE);
+    // the doorway from the hall (3 wide, 6 high) with a dark frame
+    p.box(u1, u1, 0, 5, -38, -36, 0);
+    p.box(u1, u1, 6, 6, -39, -35, B.ARCANE_DARK);
+    // windows high in the west wall (over the shelves)
+    for (const b of [-45, -37]) kit.windowHole(p, windows, false, u0, b, b + 1, 6, 7);
+    // lamps hanging from the roof
+    for (const [a, b] of [[-65, -44], [-65, -36], [-59, -44], [-59, -36], [-62, -31]]) p.box(a, a, a <= -63 ? 7 : 8, a <= -63 ? 7 : 8, b, b, B.ARCANE_LAMP);
+    // ---- the shelves: west wall v −46…−34 (the counter's corner left free), south wall u −66…−58
+    const slots = [], decor = [];
+    const ups = (list) => new Set(list.map(([a, b]) => a + ',' + b));
+    const line = (a0, a1, b0, b1) => { const c = []; for (let a = a0; a <= a1; a++) for (let b = b0; b <= b1; b++) c.push([a, b]); return c; };
+    shelfLine(p, line(-67, -67, -46, -34), ups([[-67, -46], [-67, -40], [-67, -34]]), B.PLANKS_DARK, [1, 0], slots, decor);
+    shelfLine(p, line(-66, -58, -47, -47), ups([[-66, -47], [-62, -47], [-58, -47]]), B.PLANKS_DARK, [0, 1], slots, decor);
+    // the long table (2 high, 3 × 6) with a green cloth: herbs and stones lie on it
+    p.box(-63, -61, 0, 1, -43, -38, B.PLANKS_DARK);
+    p.box(-63, -61, 1, 1, -43, -38, B.CARPET_GREEN);
+    for (let a = -63; a <= -61; a++) for (let b = -43; b <= -38; b++) { const q = p.pt(a, b, 0); slots.push({ x: q.x, y: p.L(1) - 0.5, z: q.z, tier: 0, face: { x: 0, z: 0 } }); }
+    // ---- the counter (2 high, 2 deep, 6 long) at the north end; its seller behind it (v −31…−29)
+    p.box(-65, -60, 0, 1, -33, -32, B.PLANKS_DARK);
+    p.box(-65, -60, 1, 1, -33, -32, B.CLOTH_WHITE);
+    const counter = { ...p.rect(-65, -60, -33, -32), top: p.L(1) - 0.5 };
+    const fn = p.node(-62, -35, 0, 'stall');
+    p.link(fn, p.node(-52, -37, 0)); // (into the hall's walking graph)
+    out.stalls.push({ trade: 'ingredienthall', hall: 'ingredients', front: p.pt(-62, -35, 0), back: p.pt(-62, -30, 0), frontNode: fn, counter, yaw: p.yaw(Math.PI) });
+    const W = [[-58, -37], [-58, -45], [-65, -45], [-65, -35], [-58, -34], [-58, -30], [-62, -30], [-62, -35], [-52, -37]];
+    const links = [[0, 1], [1, 2], [2, 3], [3, 7], [7, 4], [4, 0], [4, 5], [5, 6], [0, 8]];
+    out.halls.push({
+        kind: 'ingredients', name: 'Комната ингредиентов', stall: out.stalls.length - 1, slots, decor, flasks: [],
+        room: hallRect(p, u0 + 1, u1 - 1, v0 + 1, v1 - 1), door: p.pt(-54, -37, 0), inside: p.pt(-58, -37, 0),
+        walk: W.map(([a, b]) => p.pt(a, b, 0)), links, home: 6, entry: 0, front: 7, sign: null,
     });
 }
 
