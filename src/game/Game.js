@@ -271,6 +271,9 @@ const _v3 = new THREE.Vector3();
 const _castSnd = new THREE.Vector3(); // (where my spell sounds from: SoundManager.spellCast)
 const _q = new THREE.Quaternion();
 
+/** (Game._updateLightning) the hand aimed and still this long (s) before the bolt goes; turning faster than MOVE rad/s is still aiming */
+const LIGHTNING_AIM = { T: 0.6, MOVE: 0.6 };
+
 export class Game {
     /**
      * @param {object} deps {renderer, camera, poseService, voice, sound, hud, net, ui}
@@ -2906,9 +2909,17 @@ export class Game {
         let side = null;
         const dir = new THREE.Vector3();
         for (const s of [L.side, L.side === 'right' ? 'left' : 'right']) if (this._handLevel(s, dir)) { side = s; break; }
-        L.levelT = side ? (L.levelT || 0) + dt : 0;
-        this.hud.setTimer?.(1 - L.t / HOLD, side ? '🎯' : '⚡', Math.ceil(HOLD - L.t), side ? Math.min(1, L.levelT / 0.25) : 0);
-        if (side && L.levelT >= 0.25) {
+        // (the author: «молния спешит и бьёт выше цели» — it went the moment the lowering hand passed level: now the hand must STAND
+        // aimed ~0.6 s (turning slower than LIGHTNING_AIM.MOVE rad/s), and the bolt goes where it pointed on average while it stood)
+        if (side) {
+            const turn = L.lastDir ? L.lastDir.angleTo(dir) / Math.max(dt, 1e-3) : 0;
+            (L.lastDir ||= new THREE.Vector3()).copy(dir);
+            if (turn > LIGHTNING_AIM.MOVE) { L.levelT = 0; (L.avg ||= new THREE.Vector3()).set(0, 0, 0); }
+            else { L.levelT = (L.levelT || 0) + dt; (L.avg ||= new THREE.Vector3()).addScaledVector(dir, dt); }
+        } else { L.levelT = 0; L.lastDir = null; L.avg?.set(0, 0, 0); }
+        this.hud.setTimer?.(1 - L.t / HOLD, side ? '🎯' : '⚡', Math.ceil(HOLD - L.t), side ? Math.min(1, L.levelT / LIGHTNING_AIM.T) : 0);
+        if (side && L.levelT >= LIGHTNING_AIM.T) {
+            if (L.avg?.lengthSq() > 1e-6) dir.copy(L.avg).normalize();
             this.lightning = null;
             if (L.hammer) this.gear.hammerResult(true);
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
