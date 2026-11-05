@@ -1251,11 +1251,12 @@ export class Inventory {
 
     show(on) {
         if (this.bar) this.bar.style.display = on ? 'flex' : 'none';
-        if (typeof document !== 'undefined') { const b = document.getElementById('back-cells'); if (b) b.style.display = on ? 'flex' : 'none'; }
+        this._shown = on;
+        if (typeof document !== 'undefined') { const b = document.getElementById('back-cells'); if (b) b.style.display = on && this.back?.some(Boolean) ? 'flex' : 'none'; } // (nothing on the back: no cells at all — as the armour's)
         if (on && typeof document !== 'undefined') document.dispatchEvent(new Event('zns-hotbar-built')); // (shown: its width is known now — fitted to the window)
     }
 
-    /** The two cells of the back (the right side, under the armour's): what is on the back, or dashed empty cells. */
+    /** The two cells of the back (the right side, under the armour's): only what is on the back — an empty cell is not shown. */
     _renderBack() {
         if (typeof document === 'undefined' || !this.back) return;
         let el = document.getElementById('back-cells');
@@ -1265,11 +1266,14 @@ export class Inventory {
             el.innerHTML = this.back.map((_, i) => `<div class="back-cell" data-i="${i}"><div class="bc-icon"></div></div>`).join('');
             document.body.appendChild(el);
         }
+        // (the author 05.11: the back's cells are not seen until something is put there — as the armour's appear only when worn)
+        el.style.display = this.back.some(Boolean) && this._shown !== false ? 'flex' : 'none';
         const key = this.back.map((b) => (b ? b.kind + (b.type || '') + (b.uid || b.id || '') : '')).join('|');
         if (key === this._backCellKey) return;
         this._backCellKey = key;
         this.back.forEach((b, i) => {
             const cell = el.querySelector(`[data-i="${i}"]`);
+            cell.style.display = b ? '' : 'none'; // (an empty one: not shown)
             const ic = cell.querySelector('.bc-icon');
             ic.textContent = '';
             cell.classList.toggle('on', !!b);
