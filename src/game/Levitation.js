@@ -666,7 +666,10 @@ export class Levitation {
             if (S.free) c.lev.freeT = S.free[0] + Math.random() * (S.free[1] - S.free[0]);
         }
         this.carried.set(ck + ':' + c.id, { ck, c });
-        if (ck === 'v' || ck === 'z') {
+        // (only a body that cannot hold itself — dead, or lying knocked down — hangs as a rag doll; a living one on its feet kicks and
+        //  flails in the air, its own animation — the author 05.11: «если существо не мёртвое — не как тряпичная кукла, для этого другая анимация»)
+        const limp = c.lev.body || c.dead || c.isDead || !!g.creatureImpact?.isDown?.(c);
+        if ((ck === 'v' || ck === 'z') && limp) {
             // (a humanoid hangs as a rag doll — CreatureImpact.levDoll; `dollOff`: its chest over the body's middle that the hold moves,
             //  measured now — the chest is then held exactly there, never chasing itself)
             const doll = g.creatureImpact?.levDoll?.(ck, c);
