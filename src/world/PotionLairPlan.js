@@ -62,14 +62,22 @@ export function ceilingAt(x, z) {
 export const riverX = (z) => LAIR.RIVER_X + 2.2 * Math.sin(z / 4.5);
 export const inRiver = (x, z) => Math.abs(x - riverX(z)) <= LAIR.RIVER_W && inHall(x, z, -3);
 
-/** Полки: север (ингредиенты ×4), юг (зелья ×2, колбы, книги). x0 — крайний левый блок (стойка). */
+/**
+ * Полки: север (ингредиенты ×4: четыре РАЗНЫХ стеллажа по смыслу), юг (зелья ×2, колбы, книги). x0 — крайний левый блок (стойка).
+ * Автор 06.11: «полки должны быть разнообразными, интересными, магическими… вмещать разные типы ингредиентов».
+ * `style`: herbs — берёзовый стеллаж с сушёными пучками и корзинами; beasts — костяные стойки и железные доски с фиолетовыми лампами; minerals — арканный
+ * камень со светящимися ледяными досками и стеной кристальных ламп; rare — золотой алтарь с рунами; potions — арканный шкаф со стеной бутылок; flasks —
+ * светлый стеллаж с фонарями; books — вишнёвый стеллаж с книгами.
+ */
 export function racks() {
     const L = LAIR.RACK_LEN, out = [];
     const xs = [-17, -10, -3, 4];
+    const styles = { N: ['herbs', 'beasts', 'minerals', 'rare'], S: ['potions', 'potions', 'flasks', 'books'] };
     const roles = { N: ['ing', 'ing', 'ing', 'ing'], S: ['potion', 'potion', 'flask', 'books'] };
+    const titles = { herbs: 'травы и припасы', beasts: 'звериное', minerals: 'камни и кристаллы', rare: 'редкое', potions: 'готовые зелья', flasks: 'пустые колбы', books: 'книги' };
     for (const side of ['N', 'S']) {
         const sg = side === 'N' ? -1 : 1;
-        xs.forEach((x0, i) => out.push({ role: roles[side][i], side, x0, x1: x0 + L - 1, zBack: sg * 13, zFront: sg * 12, front: sg * 12 }));
+        xs.forEach((x0, i) => out.push({ role: roles[side][i], style: styles[side][i], title: titles[styles[side][i]], side, x0, x1: x0 + L - 1, zBack: sg * 13, zFront: sg * 12, front: sg * 12 }));
     }
     return out;
 }
@@ -120,26 +128,70 @@ export function layout() {
             else if (Math.abs(x - xr) <= LAIR.RIVER_W + 1.1 && hash01(x, z, 2, 7) < 0.6) put(x, F, z, BLOCK.HELL_BASALT);
         }
     }
-    // ---- полки
-    const slots = { ing: [], potion: [], flask: [], books: [] };
+    // ---- полки: у каждого вида свои блоки и убранство (слоты — места под вещи — везде на тех же местах: доска на ярусах 2/4/6 м, четыре на ярус)
+    const slots = { ing: [], potion: [], flask: [], books: [], byStyle: { herbs: [], beasts: [], minerals: [], rare: [] } };
+    const PAL = {
+        herbs: { post: BLOCK.BIRCH, board: BLOCK.PLANKS, back: BLOCK.PLANKS, cap: BLOCK.BIRCH },
+        beasts: { post: BLOCK.HELL_BONE, board: BLOCK.HELL_IRON, back: BLOCK.HELL_BASALT, cap: BLOCK.HELL_BONE },
+        minerals: { post: BLOCK.ARCANE_DARK, board: BLOCK.ICE_GLOW, back: BLOCK.ARCANE, cap: BLOCK.ARCANE_DARK },
+        rare: { post: BLOCK.GOLD, board: BLOCK.GOLD, back: BLOCK.ARCANE_DARK, cap: BLOCK.GOLD },
+        potions: { post: BLOCK.ARCANE, board: BLOCK.ARCANE_DARK, back: BLOCK.POTION, cap: BLOCK.ARCANE },
+        flasks: { post: BLOCK.CHERRY, board: BLOCK.PLANKS, back: BLOCK.CLOTH_YELLOW, cap: BLOCK.CHERRY },
+        books: { post: BLOCK.CHERRY, board: BLOCK.PLANKS_DARK, back: BLOCK.PLANKS_DARK, cap: BLOCK.CHERRY },
+    };
+    const topTier = LAIR.TIERS[LAIR.TIERS.length - 1];
+    const torches = [];
+    const bowl = (x, y, z) => { put(x, y, z, BLOCK.HELL_OBSIDIAN); torches.push({ x, y: y - 0.5 + 0.4, z }); };
     for (const r of racks()) {
-        const sg = r.side === 'N' ? -1 : 1;
-        const zs = [r.zBack, r.zFront];
-        const topTier = LAIR.TIERS[LAIR.TIERS.length - 1];
-        for (const z of zs) {
-            for (const x of [r.x0, r.x1]) for (let y = F + 1; y <= F + topTier; y++) put(x, y, z, BLOCK.PLANKS_DARK); // стойки
-            for (const t of LAIR.TIERS) for (let x = r.x0; x <= r.x1; x++) put(x, F + t, z, BLOCK.PLANKS_DARK);
+        const sg = r.side === 'N' ? -1 : 1, P = PAL[r.style];
+        // (the front of a rack looks toward the hall's middle: N racks face +z, S racks face −z; `out` is the step away from the hall's middle)
+        const toMid = -sg;
+        for (const z of [r.zBack, r.zFront]) {
+            for (const x of [r.x0, r.x1]) for (let y = F + 1; y <= F + topTier; y++) put(x, y, z, P.post);
+            for (const t of LAIR.TIERS) for (let x = r.x0; x <= r.x1; x++) put(x, F + t, z, P.board);
         }
-        // книги на одной полке: по блоку книг на ярусах
+        // a back panel between the two rows of each tier: the wall of the rack (each style its own)
+        for (const t of LAIR.TIERS) for (let x = r.x0 + 1; x < r.x1; x++) {
+            for (let y = F + t + 1; y <= F + t + 1; y++) {
+                const k = hash01(x, t, r.zBack, 21);
+                if (r.style === 'minerals') put(x, y, r.zBack, k < 0.5 ? BLOCK.ARCANE_LAMP : BLOCK.ARCANE); // a wall of glowing crystal lamps
+                else if (r.style === 'potions') put(x, y, r.zBack, BLOCK.POTION); // a wall of bottles
+                else if (r.style === 'rare') put(x, y, r.zBack, k < 0.4 ? BLOCK.RUNE : BLOCK.ARCANE_DARK);
+                else if (r.style === 'flasks') put(x, y, r.zBack, k < 0.5 ? BLOCK.CLOTH_YELLOW : BLOCK.CHERRY);
+                else if (r.style === 'beasts') put(x, y, r.zBack, k < 0.3 ? BLOCK.HELL_BONE : BLOCK.HELL_BASALT);
+            }
+        }
+        // the crown of each rack and the floor in front of it
+        for (let x = r.x0; x <= r.x1; x++) {
+            put(x, F + topTier + 3, r.zBack, P.cap); put(x, F + topTier + 3, r.zFront, P.cap);
+            if (r.style === 'herbs') { // a drying beam with hanging bundles (flowers, vegetables, hay) and baskets on the floor
+                if (x > r.x0 && x < r.x1) { put(x, F + topTier + 2, r.zBack, [BLOCK.FLOWERS, BLOCK.VEG, BLOCK.HAY, BLOCK.FLOWERS][(x - r.x0) % 4]); put(x, F + topTier + 1, r.zBack, hash01(x, 3, 3, 4) < 0.5 ? [BLOCK.HAY, BLOCK.FLOWERS][(x + 1) & 1] : AIR); }
+                if (x > r.x0 && x < r.x1 && (x - r.x0) % 2 === 1) put(x, F + 1, r.zFront + toMid * 1, BLOCK.HAY);
+            } else if (r.style === 'beasts') { // bone horns on the crown and violet lamps
+                if (x === r.x0 || x === r.x1) { put(x, F + topTier + 4, r.zFront, BLOCK.HELL_BONE); put(x, F + topTier + 5, r.zFront, BLOCK.HELL_BONE); put(x, F + topTier + 4, r.zBack, BLOCK.HELL_BONE); }
+                else if ((x - r.x0) % 2 === 0) put(x, F + topTier + 4, r.zBack, BLOCK.ARCANE_LAMP_VIOLET);
+            } else if (r.style === 'minerals') { // an arch of arcane stone with lamps
+                if (x === r.x0 + 2 || x === r.x1 - 2) { put(x, F + topTier + 4, r.zBack, BLOCK.ARCANE_LAMP); put(x, F + topTier + 4, r.zFront, BLOCK.ARCANE_LAMP); }
+                else if (x > r.x0 + 1 && x < r.x1 - 1) put(x, F + topTier + 4, r.zBack, BLOCK.ARCANE_DARK);
+            } else if (r.style === 'rare') { // a golden cornice, lamps, a rune floor in front
+                if (x === r.x0 || x === r.x1) put(x, F + topTier + 4, r.zFront, BLOCK.ARCANE_LAMP_VIOLET);
+                if (x > r.x0 && x < r.x1) put(x, F, r.zFront + toMid * 1, hash01(x, 7, 7, 3) < 0.5 ? BLOCK.RUNE : BLOCK.GOLD);
+            } else if (r.style === 'potions') { // a crown of lamps
+                if ((x - r.x0) % 2 === 1) put(x, F + topTier + 4, r.zBack, BLOCK.ARCANE_LAMP_VIOLET);
+            } else if (r.style === 'flasks') { if (x === r.x0 || x === r.x1) put(x, F + topTier + 4, r.zFront, BLOCK.LANTERN); }
+        }
+        // the places for things
         for (const t of LAIR.TIERS) for (let x = r.x0 + 1; x < r.x1; x++) {
             if (r.role === 'books') { if (hash01(x, t, r.zFront, 9) < 0.8) put(x, F + t + 1, r.zFront, BLOCK.BOOKS); }
-            else slots[r.role].push({ x, y: F + t - 0.5 + 0.02, z: r.zFront, rack: r.x0 + r.side, tier: t });
+            else {
+                const sp = { x, y: F + t - 0.5 + 0.02, z: r.zFront, rack: r.x0 + r.side, tier: t, style: r.style };
+                slots[r.role].push(sp);
+                if (r.role === 'ing') slots.byStyle[r.style].push(sp);
+            }
         }
     }
     // ---- факелы: кронштейн из тёмного камня на стене (блок, прижатый к стене) с огнём над ним — кольцо по стене; и чаши на стойках полок.
     // (Свободных столбов и сталагмитов нет: автор — «какие-то тупые столбы, убрать».) Пламя рисует игра над верхней гранью блока-чаши.
-    const torches = [];
-    const bowl = (x, y, z) => { put(x, y, z, BLOCK.HELL_OBSIDIAN); torches.push({ x, y: y - 0.5 + 0.4, z }); };
     for (let i = 0; i < 24; i++) {
         const a = (i / 24) * TAU + 0.13;
         for (let r = LAIR.R - 0.5; r >= LAIR.R - 2.5; r -= 0.5) { // (ближайшая к стене пустая клетка на этом луче)

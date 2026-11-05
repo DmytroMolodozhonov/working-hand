@@ -70,7 +70,7 @@ test('«где лежит …»: яйцо дракона и любой друг�
         assert.ok(e, `нет места для ${k}`);
         const r = whereLine(findThing('где найти ' + (await import('../../src/game/Potions.js')).INGREDIENT_RU[k]), stock, R);
         assert.ok(typeof r !== 'string' && r.found.length >= 1, `не нашёл по названию: ${k}`);
-        assert.ok(/полка слева, (нижний|средний|верхний) ярус/.test(describeSlot(e.slot, R)), describeSlot(e.slot, R));
+        assert.ok(/полка слева( \(«[^»]+»\))?, (нижний|средний|верхний) ярус/.test(describeSlot(e.slot, R)), describeSlot(e.slot, R));
     }
     assert.ok(whereLine(findThing('где яйцо дракона'), stock, R).text.includes('Яйцо дракона'));
     assert.ok(ingredientsLine(lairIngredients()).includes('яйцо дракона'));

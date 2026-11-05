@@ -43,7 +43,7 @@ test('полки: места под вещи — на досках, не в во
     assert.ok(P.slots.potion.length >= 24 && P.slots.flask.length >= 12);
     for (const k of ['ing', 'potion', 'flask']) for (const s of P.slots[k]) {
         const board = get(s.x, Math.round(s.y + 0.5 - 0.02), s.z);
-        assert.equal(board, BLOCK.PLANKS_DARK, `нет доски под вещью ${s.x},${s.y},${s.z}`);
+        assert.ok(board !== undefined && board !== BLOCK.AIR && board !== BLOCK.WATER, `нет доски под вещью ${s.x},${s.y},${s.z}`);
         assert.equal(get(s.x, Math.round(s.y + 1.5 - 0.02), s.z), BLOCK.AIR, 'над вещью свободно');
         assert.ok(s.y - (F - 0.5) <= 6.1, 'выше досягаемости');
     }

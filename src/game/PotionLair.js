@@ -50,10 +50,25 @@ export function potionColor(i, n) {
     return c.getHex();
 }
 
-/** Что лежит на каком месте: слоты плана → [{slot, item}…] (вещи — шаблоны без uid). */
+/** Какой стеллаж чьё хранит (herbs — травы и припасы, beasts — звериное, minerals — камни, rare — редкое); неизвестное — на первый свободный. */
+export const SHELF_OF = {
+    sun_herb: 'herbs', fern_frond: 'herbs', azure_berry: 'herbs', glowcap_mushroom: 'herbs', telewilpinLeaf: 'herbs', baksadi_pear: 'herbs', redApple: 'herbs',
+    bread: 'herbs', cheese: 'herbs', pie: 'herbs', carnivoreHead: 'herbs',
+    owlFeather: 'beasts', spencerFeather: 'beasts', wool: 'beasts', meat: 'beasts', steak: 'beasts', minotaurHorn: 'beasts', web: 'beasts', glowfinTail: 'beasts', swanWings: 'beasts',
+    crystal: 'minerals', magicPebble: 'minerals', glass: 'minerals', frost_shard: 'minerals',
+    apple: 'rare', phoenixFeather: 'rare', dragonEgg: 'rare', magicSwanWings: 'rare', brightCore: 'rare',
+};
+
+/** Что лежит на каком месте: слоты плана → [{slot, item}…] (вещи — шаблоны без uid): каждая вещь на своём стеллаже, лишнее — на любом со свободным местом. */
 export function stockFor(slots) {
     const ing = lairIngredients(), out = [];
-    ing.forEach((k, i) => slots.ing[i] && out.push({ slot: slots.ing[i], item: { kind: k } }));
+    const free = Object.fromEntries(Object.entries(slots.byStyle || { all: slots.ing }).map(([k, v]) => [k, v.slice()]));
+    const rest = [];
+    for (const k of ing) {
+        const st = SHELF_OF[k];
+        if (st && free[st]?.length) out.push({ slot: free[st].shift(), item: { kind: k } }); else rest.push(k);
+    }
+    for (const k of rest) { const st = Object.keys(free).find((q) => free[q].length); if (st) out.push({ slot: free[st].shift(), item: { kind: k } }); }
     RECIPES.forEach((r, i) => slots.potion[i] && out.push({ slot: slots.potion[i], item: { kind: 'potion', rec: r.id, color: potionColor(i, RECIPES.length) } }));
     slots.flask.forEach((s) => out.push({ slot: s, item: { kind: 'flask', count: 1 } }));
     return out;

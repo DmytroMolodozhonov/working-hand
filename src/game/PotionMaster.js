@@ -178,7 +178,7 @@ export function describeSlot(slot, racks) {
     const idx = north ? same.indexOf(r) : same.length - 1 - same.indexOf(r); // (считая слева, когда стоите к полкам лицом)
     const n = north ? slot.x - r.x0 : r.x1 - slot.x;
     const wall = north ? 'у дальней стены, напротив входа' : 'у стены за вашей спиной, у входа';
-    return `${wall}: ${NTH_RACK[idx] || (idx + 1) + '-я'} полка слева, ${TIER[slot.tier] || 'средний'} ярус, ${NTH[n] || n + '-е'} место слева`;
+    return `${wall}: ${NTH_RACK[idx] || (idx + 1) + '-я'} полка слева${r.title ? ` («${r.title}»)` : ''}, ${TIER[slot.tier] || 'средний'} ярус, ${NTH[n] || n + '-е'} место слева`;
 }
 
 /** Ответ на «где …». `stock` — [{slot, item}] (PotionLair), `racks` — план. */
