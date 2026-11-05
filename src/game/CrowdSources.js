@@ -57,7 +57,7 @@ export function crowdOf(g) {
             push({ x: p.x, y: p.y, z: p.z, r: p.kind === 'carnivore' ? 4.5 : p.kind === 'brightflower' ? 1.8 : 1.1, ref: p, id: p.id, kind: 'plant', still: true, vx: 0, vz: 0 });
         }
         for (const t of g.livingTrees?.list || []) {
-            if (!t.alive || !t.model) continue;
+            if (!(t.phase === 'alive' || t.phase === 'rise') || !t.model || t.lev) continue; // (it had `!t.alive` — never set: no tree and no skeleton was ever in the crowd, all walked through them — the author 05.11)
             const p = t.model.position, s = t.model.userData?.s || 1;
             push({ x: p.x, y: p.y, z: p.z, r: t.skel ? BODY_R.skeleton : BODY_R.tree * s, ref: t, id: t.id, kind: t.skel ? 'skeleton' : 'tree' }); // (a skeleton: a man's size)
         }

@@ -15,6 +15,7 @@
  */
 
 import * as THREE from 'three';
+import { UNDEAD, raidMeans, leashPoint } from './UndeadOrders.js';
 
 export const SERVANT = {
     TIME: 45000, // ms a «Брейнрот» lasts
@@ -177,10 +178,28 @@ export class Servants {
         return true;
     }
 
+    /**
+     * The master's spoken order to their dead / living trees (UndeadOrders.js): {kind: 'raid', who, x, z} — every one the raid means round
+     * (x, z); 'stay' — each stands where it is; 'guard' — round the master, any enemy near him; 'follow' / 'stop' — no order (back to the
+     * master). The «Атак» target / the point («that», «go») go through command / commandPoint.
+     */
+    order(master, o) {
+        if (!o || !o.kind) return false;
+        if (o.kind === 'follow' || o.kind === 'stop') { this.orders.delete(master); return true; }
+        this.orders.set(master, { k: null, id: null, kind: o.kind, who: o.who, x: o.x, z: o.z, until: performance.now() + UNDEAD.ORDER_TIME });
+        return true;
+    }
+
+    /** The order of this kind `master` has now, or null. */
+    spoken(master, kind) {
+        const o = this.orders.get(master);
+        return o && o.kind === kind && performance.now() < o.until ? o : null;
+    }
+
     /** The point `master` showed, if their order is one and `self` has not come there yet: {x, z} | null. */
     pointFor(master, me) {
         const o = this.orders.get(master);
-        if (!o || o.k != null || performance.now() >= o.until) return null;
+        if (!o || o.k != null || o.kind || performance.now() >= o.until) return null;
         return Math.hypot(o.x - me.x, o.z - me.z) > SERVANT.POINT_R ? { x: o.x, z: o.z } : null;
     }
 
@@ -201,8 +220,24 @@ export class Servants {
         }
         const mp = this._masterPos(master);
         let best = null, bd = Infinity;
-        // (a living tree never hunts: it fights what its master points at; otherwise only what is at its master's body)
-        const guard = self.k === 't';
+        // a spoken raid (UndeadOrders): everybody it means round the place — the nearest to this one first, never beyond the leash
+        const raid = self.k === 't' ? this.spoken(master, 'raid') : null;
+        if (raid) {
+            const take = (k, id, p, c) => {
+                if (!raidMeans(raid.who, k, c)) return;
+                if (Math.hypot(p.x - raid.x, p.z - raid.z) > UNDEAD.RAID_R) return;
+                if (mp && Math.hypot(p.x - mp.x, p.z - mp.z) > UNDEAD.LEASH) return; // (it keeps inside its master's reach)
+                const d = Math.hypot(p.x - me.x, p.z - me.z);
+                if (d < bd) { bd = d; best = { k, id, x: p.x, z: p.z }; }
+            };
+            if (raid.who === 'zombies') for (const z of g.zombies || []) { if (!z.isDead && !z.isDying && !(z.isThrall && z.thrallOwner === master)) take('z', z.id, z.group.position, z); }
+            else if (raid.who === 'animals') for (const a of g.animals?.list || []) { if (!a.dead && a.servantOf !== master) take('a', a.id, a.group.position, a); }
+            else for (const v of g.castleLife?.byId.values() || []) { if (!v.dead && v.servantOf !== master && !v.ghost && !v.isSailor) take('v', v.id, _v.set(v.x, v.y, v.z), v); }
+            if (best) return best;
+        }
+        // (a living tree never hunts: it fights what its master points at; otherwise only what is at its master's body —
+        //  unless told to guard: then any enemy near its master)
+        const guard = self.k === 't' && !this.spoken(master, 'guard');
         const consider = (k, id, p) => {
             if (k === self.k && id === self.id) return;
             const d = Math.hypot(p.x - me.x, p.z - me.z);
@@ -243,6 +278,13 @@ export class Servants {
         // (the hand showed a spot, not a creature: a tree goes there)
         const pt = !enemy && k === 't' ? this.pointFor(master, me) : null;
         if (pt) plan = { mode: 'chase', point: true, x: pt.x, z: pt.z, d: Math.hypot(pt.x - me.x, pt.z - me.z) };
+        // «стойте здесь»: each stands where it is (its enemy at its very body is still fought — enemyFor's guard round its master is not it)
+        if (!enemy && k === 't' && this.spoken(master, 'stay')) plan = { mode: 'stay', hold: true, x: me.x, z: me.z, d: 0 };
+        // (the dead and the trees keep inside their master's reach: a goal beyond it is taken onto its edge — UndeadOrders.LEASH)
+        if (k === 't' && mp && (plan.mode === 'chase' || plan.mode === 'follow')) {
+            const q = leashPoint(plan.x, plan.z, mp.x, mp.z);
+            if (q.x !== plan.x || q.z !== plan.z) { plan.x = q.x; plan.z = q.z; plan.d = Math.hypot(q.x - me.x, q.z - me.z); plan.leash = true; }
+        }
         plan.enemy = enemy;
         plan.master = master;
         return plan;

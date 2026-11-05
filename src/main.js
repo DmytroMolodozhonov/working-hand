@@ -798,6 +798,11 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             journal(command, isFinal, meta, null, false, 'достаю вещь из магического рюкзака');
             return;
         }
+        // my raised dead / living trees understand words as a villager does (they say nothing): «атакуйте всё село», «стойте здесь»… (UndeadOrders.js)
+        if (isFinal && game.livingTrees?.hearOrder?.(command)) {
+            journal(command, isFinal, meta, null, false, 'приказ моим мертвецам / деревьям');
+            return;
+        }
         if (game.owls?.claims?.(command)) {
             if (isFinal) game.owls.hear(command);
             journal(command, isFinal, meta, null, false, 'слова для совы рядом');

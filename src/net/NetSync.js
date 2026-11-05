@@ -887,6 +887,7 @@ export class NetSync {
     aliveEnd(id, why) { this.net.send({ t: 'aliveend', id, why }, true); }
     /** (guest) «Атак»: my servants go for this one. */
     servantAttack(k, id, x, z) { this.net.send({ t: 'svatk', k, id, x, z }, true); }
+    servantOrder(o) { this.net.send({ t: 'svord', o: { kind: o.kind, who: o.who, x: o.x, z: o.z } }, true); } // (a spoken order to my raised dead — UndeadOrders)
     /** (host) A servant's blow (a living tree's branch) lands on player `to`. */
     servantHit(to, dmg, dir, by, kind) { this.net.send({ t: 'svhit', to, dmg, d: [Math.round(dir.x * 100) / 100, Math.round(dir.z * 100) / 100], by, k: kind }, true); }
 
@@ -1126,6 +1127,7 @@ export class NetSync {
             case 'ltlook': if (!this.net.isHost) g.livingTrees?.setLook(m.id, m); break; // (what tree a living tree is: its blocks / its model)
             case 'aliveend': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t && t.owner === m.from) g.livingTrees.end(t, m.why === 'mana' || m.why === 'far' || m.why === 'focus' ? m.why : 'stop'); } break;
             case 'svatk': if (this.net.isHost) { if (m.k) g.servants?.command(m.from, { k: m.k, id: m.id }); else if (typeof m.x === 'number') g.servants?.commandPoint(m.from, m.x, m.z); } break;
+            case 'svord': if (this.net.isHost && m.o && typeof m.o.kind === 'string') g.servants?.order(m.from, { kind: m.o.kind, who: m.o.who, x: +m.o.x, z: +m.o.z }); break;
             case 'svhit': if (m.to === this.me && Array.isArray(m.d)) g.servants?.hitMe(Math.min(10, +m.dmg || 1), new THREE.Vector3(+m.d[0] || 0, 0, +m.d[1] || 1), m.by, m.k === 'tree' ? 'tree' : 'servant'); break;
             case 'lev': if (m.by !== this.me) g.levitation?.onNetLev(m); break;
             case 'lift': if (m.to !== this.me) g.levitation?.onNetLift(m); break;

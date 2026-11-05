@@ -32,6 +32,7 @@ import { BLOCK, TREE_KINDS, BASE_COLORS } from '../world/Terrain.js';
 import { creditKill } from './Mana.js';
 import { avoidStep } from './Avoid.js';
 import { crowdNear } from './CrowdSources.js';
+import { parseUndeadOrder, leashPoint, ORDER_SAID } from './UndeadOrders.js';
 import { FACE, facesTarget } from './FaceTarget.js';
 import { skeletonModel, skeletonDamage, graveOnRay, graveClosed, SKEL, layInGrave, assembleSkeleton, wholeSkeleton, scatterSkeleton, straighten } from './Skeletons.js';
 import { voxelGeometry, voxelMaterial, felledOf } from './LevitationMaxima.js';
@@ -815,6 +816,7 @@ export class LivingTrees {
                 t.walkT += dt * t.speed * 1.6;
             }
         }
+        if (this.auth) this._separate();
         for (const t of this.list) { t.age = (t.age || 0) + dt; this._pose(t, dt); }
         this._solid();
         this._sendNet(dt);
@@ -905,7 +907,7 @@ export class LivingTrees {
         let plan = g.servants?.plan('t', t, p, reach) || { mode: 'stay', x: p.x, z: p.z };
         // (no enemy: a big tree keeps a comfortable distance from its master — never comes up close)
         const mp = g.servants?._masterPos?.(t.master);
-        if (!plan.enemy && mp && !plan.point) plan = treeFollowPlan(p, mp, s, t.skel ? SKEL.KEEP : undefined);
+        if (!plan.enemy && mp && !plan.point && !plan.hold) plan = treeFollowPlan(p, mp, s, t.skel ? SKEL.KEEP : undefined); // (hold: «стойте здесь» — UndeadOrders)
         t.nextSwing -= dt;
         let speed = 0, face = null;
         if (plan.mode === 'strike') {
@@ -943,14 +945,14 @@ export class LivingTrees {
                 const people = this._people(t, mp);
                 // (and every other creature on its way: villagers, beasts, zombies, other trees — Crowd.js)
                 for (const b of crowdNear(g, p.x, p.y, p.z, 6 + 3 * s, t, 3, this._crowdNear || (this._crowdNear = []))) if (b.kind !== 'player') people.push(b);
-                if (people.length) { const a = avoidStep(p, to, people, { r: ALIVE.BODY_R * s, look: 3 + 2 * s, maxF: d }); if (!a.wait) to.set(a.x, 0, a.z); else to.set(0, 0, 0); }
+                if (people.length) { const a = avoidStep(p, to, people, { r: this._rad(t), look: 3 + 2 * s, maxF: d }); if (!a.wait) to.set(a.x, 0, a.z); else to.set(0, 0, 0); }
                 p.addScaledVector(to, step);
                 g.collision?.resolveCylinder?.(p, 0.95 * s, p.y, 3.0, 1.05);
             } else speed = 0;
         }
         // its body never goes into a player (a guard, whatever it is doing)
         for (const o of this._people(t, mp)) {
-            const dx = p.x - o.x, dz = p.z - o.z, dd = Math.hypot(dx, dz), min = ALIVE.BODY_R * s + o.r;
+            const dx = p.x - o.x, dz = p.z - o.z, dd = Math.hypot(dx, dz), min = this._rad(t) + o.r;
             if (dd >= min) continue;
             if (dd > 1e-4) { p.x = o.x + dx / dd * min; p.z = o.z + dz / dd * min; } else p.x = o.x + min;
         }
@@ -1208,6 +1210,71 @@ export class LivingTrees {
     }
 
     /** It is solid: I can't walk through it. */
+    /**
+     * The master's words to their raised dead / living trees (UndeadOrders.js — they understand as a villager does, but say nothing):
+     * «атакуйте всё село», «убейте его», «идите туда», «за мной», «стойте здесь», «охраняйте меня», «отставить». → true if it was an order
+     * to them (the words go no further: not a spell, not a word to a villager).
+     */
+    hearOrder(text) {
+        const g = this.game;
+        if (!this.mine().length) return false;
+        const o = parseUndeadOrder(text);
+        if (!o) return false;
+        const me = g.character?.group?.position;
+        let ok = true;
+        if (o.do === 'that') ok = !!g._commandAttack?.(true); // (as the spell «Атак»: the one the hand shows)
+        else if (o.do === 'go') {
+            const d = g.duel, oo = new THREE.Vector3(), dd = new THREE.Vector3();
+            d?._myRay?.(g.magicHand || g.lastMagicHand || g.dom || 'right', oo, dd);
+            const cell = g.builder?._hitCell?.(oo, dd, 60);
+            if (!cell?.point || !me) { g.hud?.setVoice?.('✋ Покажите рукой, куда им идти', true); return true; }
+            const q = leashPoint(cell.point.x, cell.point.z, me.x, me.z);
+            if (this.auth) g.servants?.commandPoint(g.localId, q.x, q.z); else g.sync?.servantAttack?.(null, null, q.x, q.z);
+        } else {
+            const ord = { kind: o.do, who: o.who, x: me?.x, z: me?.z };
+            if (this.auth) g.servants?.order(g.localId, ord); else g.sync?.servantOrder?.(ord);
+        }
+        if (ok) { const said = ORDER_SAID[o.do]; g.hud?.setVoice?.(typeof said === 'string' ? said : said?.[o.who] || '💀', true); }
+        return true;
+    }
+
+    /** Its body's round (m): a skeleton is a man's size, a tree as its trunk with its root legs. */
+    _rad(t) { return t.skel ? SKEL.BODY_R : ALIVE.BODY_R * (t.model.userData.s || 1); }
+
+    /**
+     * (authority) Bodies are solid (the author 05.11: «скелеты… проходили сквозь друг друга»): a skeleton / a tree never stands inside
+     * another, nor inside a villager, a beast, a zombie (Crowd bodies) — pushed apart every frame (the two halves each; a person is not
+     * moved by it: the walker steps aside); never through a wall (resolveCylinder).
+     */
+    _separate() {
+        const g = this.game, L = this._sepList || (this._sepList = []);
+        L.length = 0;
+        for (const t of this.list) if ((t.phase === 'alive' || t.phase === 'rise') && !t.lev) L.push(t);
+        let moved = false;
+        for (let i = 0; i < L.length; i++) {
+            const a = L[i], pa = a.model.position, ra = this._rad(a);
+            for (let j = i + 1; j < L.length; j++) {
+                const b = L[j], pb = b.model.position, min = ra + this._rad(b);
+                const dx = pb.x - pa.x, dz = pb.z - pa.z, d2 = dx * dx + dz * dz;
+                if (d2 >= min * min || Math.abs(pa.y - pb.y) > 3) continue;
+                const d = Math.sqrt(d2), push = (min - d) / 2;
+                const nx = d > 1e-4 ? dx / d : Math.cos(i * 2.4 + j), nz = d > 1e-4 ? dz / d : Math.sin(i * 2.4 + j);
+                pa.x -= nx * push; pa.z -= nz * push; pb.x += nx * push; pb.z += nz * push;
+                a._sep = b._sep = true; moved = true;
+            }
+            // the other creatures of the world (villagers, beasts, zombies): the skeleton steps out of them
+            for (const o of crowdNear(g, pa.x, pa.y, pa.z, ra + 3, a, 3, this._sepNear || (this._sepNear = []))) {
+                if (o.kind === 'player' || o.ref === a) continue;
+                const dx = pa.x - o.x, dz = pa.z - o.z, d = Math.hypot(dx, dz), min = ra + (o.r || 0.5);
+                if (d >= min) continue;
+                if (d > 1e-4) { pa.x = o.x + dx / d * min; pa.z = o.z + dz / d * min; } else pa.x = o.x + min;
+                a._sep = true; moved = true;
+            }
+        }
+        if (!moved) return;
+        for (const t of L) if (t._sep) { t._sep = false; const p = t.model.position; g.collision?.resolveCylinder?.(p, this._rad(t), p.y, 3.0, 1.05); }
+    }
+
     _solid() {
         const g = this.game;
         const me = g.character?.group.position;

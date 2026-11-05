@@ -42,6 +42,7 @@ export const SKEL = {
     SPEED: 2.4, RUN: 4.0,
     REACH: 5.4, // m its arms reach
     KEEP: 7, // m from its master (it is as big as a man)
+    BODY_R: 0.62, // m: its body round (a man's shoulders): skeletons, trees and people never walk through one another (LivingTrees._separate)
     AIM: 42, // m: the grave pointed at (three times the first 14, as far as a tree: the author had to stand too close)
     BONE: 0xe6dcc0,
 };
