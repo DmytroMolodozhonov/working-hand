@@ -4138,7 +4138,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0), choreCode(shownChore(v), v.choreSide)]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0) | (v.steward && v.arena?.kind === 'steward' ? 8 : 0), choreCode(shownChore(v), v.choreSide)]);
         g.sync.villagers?.(list);
     }
 
@@ -4154,9 +4154,14 @@ export class CastleLife {
                 const [cid, n] = id.split(':');
                 const cs = [...this.castles.values()].find((c) => c.def.id === cid) || this._runtimeById(cid);
                 if (!cs) continue;
-                v = this._activate(cs, +n, { x, y, z, yaw }, 'net');
+                // (the arena's steward in his robe on a guest too: the look is made at the activation — ArenaDuels.netSteward)
+                v = this._activate(cs, +n, { x, y, z, yaw }, 'net', (disarmed & 8) ? (this.game.arenaDuels?.netStewardLook?.(cs) || {}) : {});
                 if (!v) continue;
             }
+            // (bit 8: he is the arena's steward — a guest needs v.arena too, or his words go to the villagers' talk and he only chats:
+            // the author's friend got «a plain villager», the host got the sign-up)
+            if (disarmed & 8) { if (v.arena?.kind !== 'steward') this.game.arenaDuels?.netSteward?.(v); }
+            else if (v.steward && v.arena?.kind === 'steward') { v.arena = null; v.steward = false; }
             v.net = { x, y, z, yaw };
             v.mode = mode;
             [v.chore, v.choreSide] = choreOf(chore); // (what they are doing: Chores.js)

@@ -20,6 +20,8 @@ export const STEWARD = {
     LEAVE_R: 40, // m: a signed-up player further than this from the steward (waiting) is struck off
     RING: 1.8, // m: the radius of the lit ring (ArenaMarkFx)
     MARK_R: 3.5, // m: standing on the lit place
+    PAY_T: 75, // s: a stake named and not laid on the counter in this time is dropped
+    PAY_R: 2.6, // m: a pouch this near the book / the counter's front pays the stake
     MARK_AWAY: 5.5, // m: a player stepping this far off his lit place before «3-2-1» has gone — struck off
 };
 
@@ -47,6 +49,8 @@ export const STEWARD_LINES = {
     off: 'Хорошо, запись снята, ставка возвращена.',
     none: 'Вы ни на что не записаны.',
     night: 'Ночью дуэлей нет — приходите днём.',
+    closing: 'Ночь — арена закрывается. Ставки возвращены, приходите днём!',
+    put: 'Положите {n} монет на прилавок — и я вас запишу.',
     wand: 'Возьмите палочку в руку — без неё дуэль не начать.',
     call: 'Ваш черёд! Встаньте на светящееся место на арене.',
     go: 'Соперник на месте — отсчёт!',
@@ -183,7 +187,7 @@ export const onPlace = (d, phase) => (phase === 'call' ? true : d <= STEWARD.MAR
  * An older world / the round arena: in a row on little stones past the lectern, on the side AWAY from the gate's lane (the lane stays free), 1,8 m apart.
  * → [{tier, x, y, z, yaw, onCounter}], every one at its own point (`FIG.GAP` m from the next at least).
  */
-export const FIG = { H: 1.0, GAP: 1.4, TOUCH_R: 0.55 };
+export const FIG = { H: 0.5, GAP: 1.4, TOUCH_R: 0.45 }; // (the author: «фигурки вдвое меньше» — 1 m → 0,5 m)
 export function dollSpots(def) {
     const S = def?.desk?.stand;
     if (!S || !def.axis) return [];

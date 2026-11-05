@@ -43,6 +43,7 @@ import { DUEL_SPELLS } from './Duel.js';
 import { PVP } from './Combat.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { newUid } from './ItemTypes.js';
+import { makeMagicPouch } from './CoinBelt.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { ArenaQueue, STEWARD, STEWARD_LINES, TIERS, tierCoins, dollSpots, duelSpots, stewardIntent, stewardTier, settleStake, FIG } from './ArenaSteward.js';
 import { ArenaBoardFx } from '../fx/ArenaBoardFx.js';
@@ -138,6 +139,7 @@ export class ArenaDuels {
             this._signUp(A, dt);
         }
         this._countdown(dt);
+        this._payStep(dt);
         this._dollsT = (this._dollsT || 0) - dt;
         if (this._dollsT <= 0) { this._dollsT = 1; this.dollsFx.update([...this.list.values()]); }
         this.dollsFx.face();
@@ -298,7 +300,10 @@ export class ArenaDuels {
         }
         A.sayT -= dt;
         // a player signed up who has walked away is struck off
-        for (const id of A.queue.prune((id) => { const q = this._here(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) {
+        // (waiting in the stands or at the arena's gate is not «walked away»: the author's friend was struck off on the big ×2 arena —
+        // only one far from the steward AND from the arena is gone)
+        const away = (q) => { const S = A.def.desk.stand; return !S || (Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R && Math.hypot(q.x - A.def.x, q.z - A.def.z) > (A.def.outer || 40) + 15); };
+        for (const id of A.queue.prune((id) => { const q = this._here(id); return !q ? !this._inGame(id) : away(q); })) {
             A.tiers.delete(id);
             this._refund(A, id, 'left');
             this._tell(id, { e: 'off', id: A.id, why: 'left' });
@@ -315,11 +320,37 @@ export class ArenaDuels {
         if (!A.def.desk?.stand) return;
         const s = A.steward;
         if (s && (s.dead || !L.byId.has(s.id) || s.arena?.kind !== 'steward')) A.steward = null;
+        // night: the arena closes — the ones still waiting get their stakes back, he says so and goes home (the author: «ночью он
+        // должен уходить: всё, закрываемся»; a duel already on is fought to its end first)
+        if (this.game.isNight && !this.mode && !A.duel && A.queue.length) {
+            for (const id of A.queue.prune(() => true)) { A.tiers.delete(id); this._refund(A, id, 'night'); this._tell(id, { e: 'off', id: A.id, why: 'night' }); }
+            this._say(A, 'closing');
+            this._send(A);
+        }
         if (live && !A.steward) {
             A.stewT -= dt;
             if (A.stewT <= 0) { A.stewT = 4; A.steward = this._recruitSteward(A, cs); }
         } else if (!live && A.steward && !A.duel && !A.queue.length) { this._release(A.steward); A.steward = null; }
         if (A.steward) this._ask(A);
+    }
+
+    /** (guest, CastleLife.applyNet) The look of the steward for a guest's copy of him (his robe). */
+    netStewardLook(cs) {
+        return { look: (look, e) => Object.assign(look, stewardLook(e.seed, e.female, cs.def.color)) };
+    }
+
+    /** (guest, CastleLife.applyNet) The host says this villager is an arena's steward: the nearest arena with a counter is his. */
+    netSteward(v) {
+        let best = null, bd = 30;
+        for (const A of this.list.values()) {
+            const S = A.def.desk?.stand;
+            if (!S) continue;
+            const d = Math.hypot(v.x - S.x, v.z - S.z);
+            if (d < bd) { bd = d; best = A; }
+        }
+        if (!best) return;
+        v.arena = { id: best.id, kind: 'steward', leg: 0 };
+        v.steward = true;
     }
 
     _recruitSteward(A, cs) {
@@ -1204,15 +1235,66 @@ export class ArenaDuels {
         if (!g.items?.wand) return L.wand;
         // the stake (Creative: free — everything there is)
         const free = g.config?.mode === 'creative' || !!this.mode, fee = tierCoins(tier);
-        if (!free && (g.inventory?.coins?.() ?? 0) < fee) return L.poor;
         if (this.auth && A.queue.length >= ARENA_QUEUE_MAX) return L.full;
-        if (!free && !g.inventory.spendCoins(fee)) return L.poor;
         this.choosingAt = -1e9; this.askedAt = -1e9;
-        const stake = free ? 0 : fee;
+        // the stake is paid BY HAND, as at any counter (the author: «монетка не должна автоматически списываться»): he names it and waits
+        // for a pouch laid on his counter / book (_payStep), the coins are taken out of it there and the change is left
+        if (!free) {
+            this.pay = { aid: A.id, tier, fee, t: 0, short: null };
+            return `${L['terms_' + tier]} ${L.put.replace('{n}', fee)}`;
+        }
+        const stake = 0;
         if (this.auth) this._join(A, g.localId, tier, stake); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id, tier, stake }); }
         g.sound?.playCoins?.();
         const busy = this.auth ? !!A.duel : A.ph !== 'idle';
         return `${L[(free ? 'terms_free_' : 'terms_') + tier]} ${busy ? L.wait : L.soon}`;
+    }
+
+    /**
+     * (this computer's player, every frame) A stake named and not paid yet: a pouch of mine lying still on the steward's counter / book
+     * pays it — the coins are taken out (all the pouches lying there count), the change is left where it lay, and I am signed up.
+     * Walked away / night / a minute without paying — the choice is dropped (nothing was taken).
+     */
+    _payStep(dt) {
+        const P = this.pay, g = this.game;
+        if (!P) return;
+        const A = this.list.get(P.aid), me = g.character?.group?.position;
+        P.t += dt;
+        const S = A?.def.desk?.stand;
+        if (!A || !S || !me || g.isNight || P.t > STEWARD.PAY_T || Math.hypot(me.x - S.x, me.z - S.z) > STEWARD.LEAVE_R) {
+            this.pay = null;
+            if (A && P.t > 0.5) g.hud?.setVoice?.(g.isNight ? '🌙 Ночью дуэлей нет — приходите днём' : '📜 Ставку не заплатили — запись не состоялась', true);
+            return;
+        }
+        if ((P.look = (P.look || 0) - dt) > 0) return;
+        P.look = 0.25;
+        const I = g.items, spots = [A.def.desk.book, A.def.desk.front, S].filter(Boolean), mine = g.coinDeal?.mine;
+        const purses = [];
+        for (const L of I.loose.values()) {
+            const it = L.item;
+            if (it.kind !== 'coins' || it.shop || L.hover || L.accio || L.vel.lengthSq() > 0.05) continue;
+            if (mine?.size && !mine.has(it.uid)) continue; // (another player's pouch on the counter is not my stake)
+            const p = L.model.position;
+            if (spots.some((q) => Math.hypot(p.x - q.x, p.z - q.z) < STEWARD.PAY_R && Math.abs(p.y - q.y) < 2.5)) purses.push(L);
+        }
+        if (!purses.length) return;
+        const have = purses.reduce((n, L) => n + (L.item.count || 0), 0);
+        if (have < P.fee) {
+            if (P.short !== have) { P.short = have; g.hud?.setVoice?.(`💰 На прилавке ${have} монет, а ставка — ${P.fee}. Добавьте ещё ${P.fee - have}`, true); }
+            return;
+        }
+        // the coins are taken out: a magic pouch stays lying with the change in it, a plain one is taken and the change left in its place
+        const at = purses[0].model.position.clone(), magic = purses.find((L) => L.item.magic), mAt = magic?.model.position.clone();
+        for (const L of purses) I.pickUp(L.item.uid, '#merchant', 'right');
+        const rest = have - P.fee;
+        if (magic) I.spawnLoose(makeMagicPouch(newUid(), rest), mAt);
+        else if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
+        g.sound?.playCoins?.();
+        this.pay = null;
+        if (this.auth) this._join(A, g.localId, P.tier, P.fee); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id, tier: P.tier, stake: P.fee }); }
+        const busy = this.auth ? !!A.duel : A.ph !== 'idle';
+        g.hud?.setVoice?.(`💰 Ставка ${P.fee} монет принята. ${busy ? STEWARD_LINES.wait : STEWARD_LINES.soon}`, true);
+        this.log.push('stake-paid:' + P.fee);
     }
 
     /** (host) A player signs up. */
@@ -1264,7 +1346,7 @@ export class ArenaDuels {
             case 'call': this.dropTrophyWands(); this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
             case 'pay': this._credit(m.coins | 0, m.why); break;
             case 'full': this.myQueue = null; hud?.setVoice?.('📜 Очередь на арену полна — подойдите позже, ставка возвращена', true); break;
-            case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : '📜 Запись снята', true); break;
+            case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : m.why === 'night' ? '🌙 Ночь — арена закрылась, ставка возвращена. Приходите днём' : '📜 Запись снята', true); break;
             case 'count': this.dropTrophyWands(); this.count = { t: 0 }; break;
             case 'frole': this._friendRole(m); break;
             case 'fstart': this._friendStart(m); break;

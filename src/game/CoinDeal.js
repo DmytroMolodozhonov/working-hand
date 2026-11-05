@@ -80,8 +80,9 @@ export class CoinDeal {
         if (life && me) {
             const talk = life.talk, night = life.night;
             for (const v of life.byId.values()) {
-                if (!dealer(v, me) || !talk?._trader?.(v)) continue;
-                if (night?.closed?.() && !(v.entry?.stall != null && night.dealHeld(v.cs, v.entry.stall))) continue; // (the market is shut; only a deal already held open goes on)
+                const steward = v.steward && v.arena?.kind === 'steward'; // (the arena's steward takes the duel's stake by hand: ArenaDuels._payStep)
+                if (!dealer(v, me) || !(talk?._trader?.(v) || (steward && !g.isNight))) continue;
+                if (!steward && night?.closed?.() && !(v.entry?.stall != null && night.dealHeld(v.cs, v.entry.stall))) continue; // (the market is shut; only a deal already held open goes on)
                 open = true;
                 const dx = v.x - me.x, dz = v.z - me.z;
                 this._near = Math.min(this._near, dx * dx + dz * dz);
