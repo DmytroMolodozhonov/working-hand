@@ -393,7 +393,7 @@ export class MagicFloraLife {
     dispose() {
         for (const pl of [...this.byId.values()]) this._drop(pl, false);
         this.groups.clear();
-        this.group.removeFromParent();
+        this.group.parent?.remove(this.group);
         if (this.meshes) { for (const kind of FLORA_ORDER) { for (const m of this.meshes.body[kind]) m.dispose?.(); this.meshes.pick[kind].dispose?.(); } }
     }
 }

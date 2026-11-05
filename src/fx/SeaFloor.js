@@ -10,8 +10,10 @@
  *             with winding grooves) — each one tinted a little its own way;
  *   glow      anemones (a ring of tentacles glowing cyan / violet / green) and sea lilies (a bell of light on a stalk): they light
  *             the dark water, brighter at night, their light breathing.
- * Fish: a few schools (FISH.SCHOOLS × FISH.PER) of small fish of one look each (silver-blue, yellow-striped, red), swimming together,
- * turning together, darting off from a person who comes near, their tails beating (the video card bends them).
+ *   (since 05.11, the author: «коралловые рифы… максимально подробное интересное дно») reef patches thick with corals of every kind —
+ *   table corals (a broad plate on a stalk), tube sponges, soft corals (clusters of polyps) —, seagrass meadows on the sand, sea urchins
+ *   bristling with spines and starfish lying on the bottom.
+ * Fish: a hundred kinds in schools, pairs and loners (ReefFish.js); turtles, crabs, lobsters, shrimps (SeaCritters.js).
  *
  * Cheap: one draw per kind (InstancedMesh; ~8 draws in all), the sway and the tails moved by the video card, the plants placed a few
  * cells a frame (≤ BUDGET ms) when the player has moved CELL·1.5 m, round him only (R m); shapes made once; nothing grows with time.
@@ -20,9 +22,10 @@ import * as THREE from 'three';
 import { MODEL_KIT as K } from '../game/AnimalModels.js';
 import { mergeParts } from '../core/MergeGeometry.js';
 import { waterAt } from '../game/CreatureSwim.js';
+import { ReefFish } from './ReefFish.js';
+import { SeaCritters } from './SeaCritters.js';
 
-export const FLOOR = { R: 56, CELL: 8, PER_CELL: 6, BUDGET: 1.2, CAP: { kelp: 500, grass: 1400, staghorn: 260, fan: 200, brain: 200, anemone: 260, lily: 160 } };
-export const FISH = { SCHOOLS: 5, PER: 36, R: 48, NEAR: 9 };
+export const FLOOR = { R: 56, CELL: 8, PER_CELL: 12, REEF_CELL: 26, BUDGET: 1.2, CAP: { kelp: 600, grass: 2600, staghorn: 520, fan: 340, brain: 340, anemone: 360, lily: 160, table: 200, tube: 280, soft: 320, urchin: 320, star: 220 } };
 
 function h01(a, b, c) {
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0;
@@ -38,7 +41,12 @@ function h01(a, b, c) {
 export function cellPlants(cx, cz, seed, depthOf) {
     const out = [];
     const C = FLOOR.CELL;
-    const n = Math.floor(h01(cx, cz, seed + 501) * (FLOOR.PER_CELL + 1));
+    // the reefs: patches of the bottom (a few cells across) thick with corals of every kind, between them sand with seagrass meadows,
+    // stones with urchins and starfish (the author 05.11: «коралловые рифы… интересная трава… максимально подробное интересное дно»)
+    const R = FLOOR.REEF_CELL / C;
+    const reef = h01(Math.floor(cx / R), Math.floor(cz / R), seed + 509) < 0.45;
+    const meadow = !reef && h01(Math.floor(cx / 3), Math.floor(cz / 3), seed + 511) < 0.5;
+    const n = Math.floor(h01(cx, cz, seed + 501) * (FLOOR.PER_CELL + 1) * (reef ? 1.6 : meadow ? 1.4 : 0.7));
     for (let i = 0; i < n; i++) {
         const r = (q) => h01(cx * 13 + i * 7 + q, cz * 17 + q, seed + 502);
         const x = cx * C + r(1) * C, z = cz * C + r(2) * C;
@@ -46,9 +54,11 @@ export function cellPlants(cx, cz, seed, depthOf) {
         if (d < 2) continue;
         const k = r(3);
         let kind;
-        if (d <= 5) kind = k < 0.55 ? 'grass' : k < 0.72 ? 'staghorn' : k < 0.82 ? 'brain' : k < 0.9 ? 'fan' : 'anemone';
-        else kind = k < 0.4 ? 'kelp' : k < 0.58 ? 'grass' : k < 0.68 ? 'staghorn' : k < 0.76 ? 'fan' : k < 0.82 ? 'brain' : k < 0.92 ? 'anemone' : 'lily';
-        const s = kind === 'kelp' ? Math.max(2, d - 1 - r(4) * 2.5) : kind === 'grass' ? 0.6 + r(4) * 0.9 : kind === 'lily' ? 1 + r(4) * 1.2 : 0.7 + r(4) * 0.9;
+        if (reef && d <= 12) kind = k < 0.2 ? 'staghorn' : k < 0.32 ? 'brain' : k < 0.42 ? 'table' : k < 0.53 ? 'soft' : k < 0.63 ? 'tube' : k < 0.72 ? 'fan' : k < 0.82 ? 'anemone' : k < 0.9 ? 'urchin' : k < 0.95 ? 'star' : 'grass';
+        else if (d <= 5) kind = k < (meadow ? 0.8 : 0.5) ? 'grass' : k < 0.86 ? 'star' : k < 0.92 ? 'urchin' : k < 0.96 ? 'staghorn' : 'anemone';
+        else if (meadow) kind = k < 0.65 ? 'grass' : k < 0.8 ? 'kelp' : k < 0.9 ? 'star' : 'lily';
+        else kind = k < 0.38 ? 'kelp' : k < 0.5 ? 'grass' : k < 0.58 ? 'urchin' : k < 0.64 ? 'star' : k < 0.7 ? 'tube' : k < 0.76 ? 'fan' : k < 0.82 ? 'soft' : k < 0.92 ? 'anemone' : 'lily';
+        const s = kind === 'kelp' ? Math.max(2, d - 1 - r(4) * 2.5) : kind === 'grass' ? 0.6 + r(4) * 0.9 : kind === 'lily' ? 1 + r(4) * 1.2 : kind === 'table' ? 0.8 + r(4) * 1.4 : kind === 'urchin' || kind === 'star' ? 0.8 + r(4) * 0.6 : 0.7 + r(4) * 1.1;
         out.push({ kind, x, z, s, rot: r(5) * Math.PI * 2, tint: r(6) });
     }
     return out;
@@ -171,7 +181,78 @@ function lilyGeo() {
     for (let i = 0; i < 6; i++) { const f = new THREE.CylinderGeometry(0.002, 0.006, 0.3, 3, 3); f.translate(0, -0.15, 0); const a = i / 6 * Math.PI * 2; parts.push({ geo: paint(f, () => [0.9, 0.95, 1]), pos: [Math.cos(a) * 0.07, 0.96, Math.sin(a) * 0.07], rot: [Math.sin(a) * 0.2, 0, -Math.cos(a) * 0.2] }); }
     return mergeParts(parts);
 }
-const SHAPES = { kelp: kelpGeo, grass: grassGeo, staghorn: staghornGeo, fan: fanGeo, brain: brainGeo, anemone: anemoneGeo, lily: lilyGeo };
+function colorBy(g, f) { const P = g.getAttribute('position'), a = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++) { const k = f(P.getX(i), P.getY(i), P.getZ(i)); a[i * 3] = k[0]; a[i * 3 + 1] = k[1]; a[i * 3 + 2] = k[2]; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; }
+function tableGeo() {
+    // a table coral: a short stout stalk and a broad flat plate, its rim ragged, ridged rays from the middle, the edge paler
+    const stalk = colorBy(new THREE.CylinderGeometry(0.06, 0.1, 0.3, 8, 2).translate(0, 0.15, 0), () => [0.75, 0.7, 0.6]);
+    const plate = new THREE.CylinderGeometry(0.6, 0.45, 0.06, 36, 1);
+    const P = plate.getAttribute('position');
+    for (let i = 0; i < P.count; i++) { const x = P.getX(i), z = P.getZ(i), a = Math.atan2(z, x), rr = Math.hypot(x, z); const rag = 1 + 0.08 * Math.sin(a * 9) + 0.05 * Math.sin(a * 23); P.setXYZ(i, x * rag, P.getY(i) + 0.03 * Math.sin(a * 5) * rr, z * rag); }
+    plate.translate(0, 0.32, 0);
+    plate.computeVertexNormals();
+    colorBy(plate, (x, y, z) => { const a = Math.atan2(z, x), rr = Math.hypot(x, z); const ray = Math.abs(Math.sin(a * 40)) > 0.8 ? 0.82 : 1; return [ray * (0.85 + 0.25 * rr), ray * (0.85 + 0.25 * rr), ray * (0.8 + 0.3 * rr)]; });
+    return mergeParts([{ geo: stalk }, { geo: plate }]);
+}
+function tubeGeo() {
+    // tube sponges: a cluster of open tubes of different heights, ribbed, their mouths flared, dark inside
+    const parts = [];
+    for (let i = 0; i < 6; i++) {
+        const h = 0.35 + (i * 37 % 7) / 10, r = 0.06 + (i % 3) * 0.015;
+        const g = new THREE.CylinderGeometry(r * 1.25, r, h, 14, 6, true);
+        const P = g.getAttribute('position');
+        for (let k = 0; k < P.count; k++) { const a = Math.atan2(P.getZ(k), P.getX(k)), y = P.getY(k); const rib = 1 + 0.06 * Math.sin(a * 7 + y * 14); P.setX(k, P.getX(k) * rib); P.setZ(k, P.getZ(k) * rib); }
+        g.translate(0, h / 2, 0);
+        g.computeVertexNormals();
+        colorBy(g, (x, y) => [0.8 + 0.4 * y / h, 0.8 + 0.4 * y / h, 0.8 + 0.4 * y / h]);
+        const inner = colorBy(new THREE.CircleGeometry(r * 1.15, 12).rotateX(-Math.PI / 2).translate(0, h - 0.06, 0), () => [0.2, 0.15, 0.2]);
+        const a = i / 6 * Math.PI * 2, d = i ? 0.12 : 0;
+        parts.push({ geo: g, pos: [Math.cos(a) * d, 0, Math.sin(a) * d], rot: [Math.cos(a) * 0.15, 0, Math.sin(a) * 0.15] });
+        parts.push({ geo: inner, pos: [Math.cos(a) * d, 0, Math.sin(a) * d], rot: [Math.cos(a) * 0.15, 0, Math.sin(a) * 0.15] });
+    }
+    return mergeParts(parts);
+}
+function softGeo() {
+    // a soft coral: thick fleshy branches ending in clusters of little polyps (a cauliflower of colour)
+    const parts = [], rng = K.rng(91);
+    for (let b = 0; b < 6; b++) {
+        const a = b / 6 * Math.PI * 2 + rng(), lean = 0.3 + rng() * 0.4, len = 0.35 + rng() * 0.3;
+        const br = colorBy(new THREE.CylinderGeometry(0.03, 0.05, len, 7).translate(0, len / 2, 0), () => [0.95, 0.9, 0.95]);
+        parts.push({ geo: br, rot: [Math.cos(a) * lean, 0, Math.sin(a) * lean] });
+        const tip = [Math.sin(Math.sin(a) * lean) * len * 0.0 + Math.cos(a) * Math.sin(lean) * len, Math.cos(lean) * len, Math.sin(a) * Math.sin(lean) * len];
+        for (let k = 0; k < 7; k++) {
+            const bud = colorBy(new THREE.SphereGeometry(0.04 + rng() * 0.03, 8, 6), () => [1.15, 1.15, 1.15]);
+            parts.push({ geo: bud, pos: [tip[0] + (rng() - 0.5) * 0.12, tip[1] + (rng() - 0.3) * 0.1, tip[2] + (rng() - 0.5) * 0.12] });
+        }
+    }
+    return mergeParts(parts);
+}
+function urchinGeo() {
+    // a sea urchin: a dark round test bristling with long spines
+    const parts = [{ geo: colorBy(new THREE.SphereGeometry(0.08, 12, 8).scale(1, 0.75, 1).translate(0, 0.05, 0), () => [0.5, 0.45, 0.55]) }];
+    const N = 46;
+    for (let i = 0; i < N; i++) {
+        const y = 1 - (i + 0.5) / N * 1.3, rr = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.399;
+        if (y < -0.25) continue;
+        const sp = colorBy(new THREE.ConeGeometry(0.006, 0.2, 4).translate(0, 0.1, 0), (x, yy) => [0.35 + yy, 0.3 + yy * 0.8, 0.4 + yy]);
+        const dir = new THREE.Vector3(Math.cos(a) * rr, y, Math.sin(a) * rr).normalize();
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        const m = new THREE.Matrix4().compose(new THREE.Vector3(dir.x * 0.07, 0.05 + dir.y * 0.06, dir.z * 0.07), q, new THREE.Vector3(1, 1, 1));
+        parts.push({ geo: sp, matrix: m });
+    }
+    return mergeParts(parts);
+}
+function starGeo() {
+    // a starfish: five fat tapering arms, bumpy, lying on the bottom
+    const sh = new THREE.Shape();
+    for (let i = 0; i <= 10; i++) { const a = i / 10 * Math.PI * 2 + Math.PI / 2, rr = i % 2 ? 0.07 : 0.22; const x = Math.cos(a) * rr, y = Math.sin(a) * rr; if (i) sh.lineTo(x, y); else sh.moveTo(x, y); }
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.025, bevelSegments: 2, steps: 1 });
+    g.rotateX(-Math.PI / 2);
+    g.deleteAttribute('uv');
+    colorBy(g, (x, y, z) => { const bump = Math.abs(Math.sin(x * 70) * Math.sin(z * 70)) > 0.7 ? 1.25 : 1; return [bump, bump * 0.95, bump * 0.9]; });
+    g.computeVertexNormals();
+    return g;
+}
+const SHAPES = { kelp: kelpGeo, grass: grassGeo, staghorn: staghornGeo, fan: fanGeo, brain: brainGeo, anemone: anemoneGeo, lily: lilyGeo, table: tableGeo, tube: tubeGeo, soft: softGeo, urchin: urchinGeo, star: starGeo };
 const shape = (k) => _geo[k] || (_geo[k] = SHAPES[k]());
 /** The tint of a kind (rgb, the instance's colour; × the shape's own colours). */
 function tintOf(kind, t) {
@@ -182,6 +263,11 @@ function tintOf(kind, t) {
         case 'brain': return pick([[0.9, 0.85, 0.6], [0.6, 0.85, 0.55], [0.95, 0.65, 0.5]]);
         case 'anemone': return pick([[0.3, 1, 0.95], [0.75, 0.45, 1], [0.45, 1, 0.5], [1, 0.5, 0.85]]);
         case 'lily': return pick([[0.55, 0.9, 1], [0.85, 0.7, 1], [0.6, 1, 0.8]]);
+        case 'table': return pick([[0.72, 0.62, 0.45], [0.55, 0.7, 0.6], [0.8, 0.55, 0.65], [0.6, 0.6, 0.78]]);
+        case 'tube': return pick([[0.62, 0.3, 0.75], [0.95, 0.55, 0.2], [0.9, 0.8, 0.3], [0.35, 0.55, 0.85], [0.85, 0.3, 0.35]]);
+        case 'soft': return pick([[1, 0.45, 0.65], [0.95, 0.75, 0.3], [0.65, 0.5, 1], [1, 0.6, 0.35], [0.5, 0.95, 0.75]]);
+        case 'urchin': return pick([[0.35, 0.2, 0.45], [0.18, 0.15, 0.2], [0.55, 0.25, 0.3]]);
+        case 'star': return pick([[1, 0.45, 0.2], [0.9, 0.2, 0.25], [0.3, 0.45, 0.95], [0.95, 0.75, 0.3], [0.75, 0.35, 0.8]]);
         default: return [0.85 + 0.3 * t, 0.9 + 0.2 * t, 0.85 + 0.25 * t];
     }
 }
@@ -210,40 +296,6 @@ function swayMaterial(base, amp) {
     return base;
 }
 
-// ------------------------------------------------------------------ the fish
-function fishGeo() {
-    // a small fish ~0.45 m: a deep sweep of a body, the tail fin forked, a dorsal — its nose at −z (the tail bends in the shader)
-    const body = K.sweep([K.v3(0, 0, -0.22), K.v3(0, 0.005, 0.0), K.v3(0, 0, 0.17)], K.keys([[0, 0.005, 0.01, 0], [0.18, 0.04, 0.06, 0], [0.5, 0.045, 0.075, 0], [0.85, 0.02, 0.03, 0], [1, 0.008, 0.012, 0]]), {
-        rings: 14, sides: 10, color: (t, ang) => { const s = Math.sin(ang); const back = s > 0.2 ? 0.55 : 1; const stripe = Math.abs(Math.sin(t * 22)) > 0.85 && Math.abs(s) < 0.6 ? 0.6 : 1; return [back * stripe, back * stripe, back * stripe]; },
-    });
-    const tail = new THREE.Shape();
-    tail.moveTo(0, 0); tail.lineTo(0.12, 0.08); tail.lineTo(0.09, 0); tail.lineTo(0.12, -0.08); tail.lineTo(0, 0);
-    const tg = new THREE.ShapeGeometry(tail);
-    tg.rotateY(-Math.PI / 2);
-    tg.translate(0, 0, 0.16);
-    const tc = new Float32Array(tg.getAttribute('position').count * 3).fill(0.85);
-    tg.setAttribute('color', new THREE.BufferAttribute(tc, 3));
-    tg.deleteAttribute('uv');
-    body.deleteAttribute?.('uv');
-    return mergeParts([{ geo: body }, { geo: tg }]);
-}
-function fishMaterial() {
-    const m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side: THREE.DoubleSide });
-    const U = { uTime: { value: 0 } };
-    m.onBeforeCompile = (sh) => {
-        sh.uniforms.uTime = U.uTime;
-        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
-            .replace('#include <begin_vertex>', `#include <begin_vertex>
-                float fid = float(gl_InstanceID);
-                float back = smoothstep(-0.05, 0.25, position.z);
-                transformed.x += sin(uTime * 14.0 + fid * 1.7 - position.z * 12.0) * 0.06 * back;`);
-    };
-    m.customProgramCacheKey = () => 'seafish';
-    m.userData.U = U;
-    return m;
-}
-const FISH_LOOKS = [[0.75, 0.85, 1.0], [1.0, 0.86, 0.3], [1.0, 0.45, 0.32], [0.55, 1.0, 0.85], [0.85, 0.7, 1.0]];
-
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _c = new THREE.Color();
 
 export class SeaFloor {
@@ -256,7 +308,7 @@ export class SeaFloor {
         for (const [k, cap] of Object.entries(FLOOR.CAP)) {
             const glow = k === 'anemone' || k === 'lily';
             const mat = swayMaterial(glow ? new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: k === 'lily', opacity: 0.9 })
-                : new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side: k === 'kelp' || k === 'grass' ? THREE.DoubleSide : THREE.FrontSide }), k === 'kelp' ? 0.05 : k === 'grass' ? 0.12 : k === 'lily' ? 0.06 : 0.015);
+                : new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side: k === 'kelp' || k === 'grass' ? THREE.DoubleSide : THREE.FrontSide }), k === 'kelp' ? 0.05 : k === 'grass' ? 0.12 : k === 'lily' ? 0.06 : k === 'soft' ? 0.05 : k === 'urchin' || k === 'star' || k === 'table' ? 0 : 0.015);
             const m = new THREE.InstancedMesh(shape(k), mat, cap);
             m.count = 0;
             m.frustumCulled = false;
@@ -265,17 +317,17 @@ export class SeaFloor {
             game.scene.add(m);
             this.meshes[k] = m;
         }
-        // the fish
-        this.fish = new THREE.InstancedMesh(fishGeo(), fishMaterial(), FISH.SCHOOLS * FISH.PER);
-        this.fish.count = 0;
-        this.fish.frustumCulled = false;
-        this.fish.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FISH.SCHOOLS * FISH.PER * 3), 3);
-        game.scene.add(this.fish);
+        // the fish: a hundred kinds, one draw (ReefFish.js); the turtles, the crabs, the lobsters, the shrimps (SeaCritters.js)
+        this.reef = new ReefFish(game);
+        this.critters = new SeaCritters(game);
         this.schools = [];
     }
 
     /** For Game.prewarm: one of each kind (the shaders at the loading screen). */
-    samples() { return [...Object.values(this.meshes), this.fish].map((m) => { const s = new THREE.Mesh(m.geometry, m.material); return s; }); }
+    samples() { return [...Object.values(this.meshes).map((m) => new THREE.Mesh(m.geometry, m.material)), this.reef.sample(), ...this.critters.samples()]; }
+
+    /** The fish drawn now ({count}: tests). */
+    get fish() { return { count: this.reef.count, positions: () => this.reef.positions() }; }
 
     _depth(x, z) {
         const t = this.game.terrain?.data;
@@ -294,14 +346,21 @@ export class SeaFloor {
         this.t += dt;
         const near = !!me && !!sea && sea.s(me.x, me.z) > -40 && me.y < 120 && !g.hellGate?.inHell && (!g.space?.realm || g.space.realm === 'earth');
         for (const m of Object.values(this.meshes)) m.visible = near;
-        this.fish.visible = near;
+        this.reef.mesh.visible = near;
+        this.critters.visible(near);
         if (!near) { this.center = null; this.job = null; return; }
         const night = g.world?._night || 0;
         for (const [k, m] of Object.entries(this.meshes)) { const U = m.material.userData.U; U.uTime.value = this.t; U.uGlow.value = (k === 'anemone' || k === 'lily') ? (0.75 + 0.25 * Math.sin(this.t * 1.3)) * (1 + 0.6 * night) : 1; }
         // the plants: laid anew round the player when he has moved far enough (a few cells a frame)
         if (!this.job && (!this.center || Math.hypot(me.x - this.center.x, me.z - this.center.z) > FLOOR.CELL * 1.5)) this._startJob(me);
         if (this.job) this._runJob();
-        this._fishStep(dt, me);
+        const t = g.terrain?.data;
+        if (t) {
+            const wat = (x, z, y) => { const ix = Math.round(x), iz = Math.round(z); if (!t.isSeaColumn?.(ix, iz) || (t.landMade && !t.landMade(ix, iz))) return null; return waterAt(t, ix, iz, y ?? t.topLayer(ix, iz) + 1); };
+            const day = g.underwaterLight?.day ?? (1 - night);
+            this.reef.update(dt, me, wat, day, night);
+            this.critters.update(dt, me, wat, (x, z) => this._depth(x, z) > 0 ? t.topLayer(Math.round(x), Math.round(z)) + 0.5 : null, day, night);
+        }
     }
 
     _startJob(me) {
@@ -346,59 +405,5 @@ export class SeaFloor {
         this.job = null;
     }
 
-    /** The schools: each round a centre that wanders in the deep water near the player; a person near — it darts off. */
-    _fishStep(dt, me) {
-        const t = this.game.terrain?.data;
-        if (!t) return;
-        for (let k = 0; k < FISH.SCHOOLS; k++) {
-            let S = this.schools[k];
-            if (!S || Math.hypot(S.x - me.x, S.z - me.z) > FISH.R * 1.6) {
-                // a new school somewhere round the player where the sea is deep
-                const a = Math.random() * Math.PI * 2, d = 15 + Math.random() * (FISH.R - 15);
-                const x = me.x + Math.cos(a) * d, z = me.z + Math.sin(a) * d, ix = Math.round(x), iz = Math.round(z);
-                if (!t.isSeaColumn?.(ix, iz) || (t.landMade && !t.landMade(ix, iz))) { this.schools[k] = null; continue; }
-                const w = waterAt(t, ix, iz, t.topLayer(ix, iz) + 1);
-                if (!w || w.depth < 3) { this.schools[k] = null; continue; }
-                S = this.schools[k] = { x, z, y: w.bottom + 1 + Math.random() * Math.max(0.5, w.depth - 3), yaw: Math.random() * 6.28, look: FISH_LOOKS[k % FISH_LOOKS.length], tx: x, tz: z, ty: 0, fast: 0, seed: Math.random() * 100 };
-                S.ty = S.y;
-            }
-            // wander; flee a person near
-            const dm = Math.hypot(S.x - me.x, S.z - me.z, S.y - me.y);
-            if (dm < FISH.NEAR) { S.fast = 1; const l = Math.hypot(S.x - me.x, S.z - me.z) || 1; S.tx = S.x + (S.x - me.x) / l * 20; S.tz = S.z + (S.z - me.z) / l * 20; }
-            else if (Math.hypot(S.tx - S.x, S.tz - S.z) < 3) { const a = Math.random() * 6.28; S.tx = S.x + Math.cos(a) * 18; S.tz = S.z + Math.sin(a) * 18; }
-            S.fast = Math.max(0, S.fast - dt * 0.3);
-            const want = Math.atan2(-(S.tx - S.x), -(S.tz - S.z));
-            let dy = want - S.yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283;
-            S.yaw += Math.max(-dt * 1.5, Math.min(dt * 1.5, dy)) * (1 + S.fast * 2);
-            const sp = 1.4 + S.fast * 5;
-            const nx = S.x - Math.sin(S.yaw) * sp * dt, nz = S.z - Math.cos(S.yaw) * sp * dt;
-            const ix = Math.round(nx), iz = Math.round(nz);
-            const w = t.isSeaColumn?.(ix, iz) ? waterAt(t, ix, iz, S.y) : null;
-            if (w && w.depth >= 2) { S.x = nx; S.z = nz; S.y = Math.max(w.bottom + 0.8, Math.min(w.surface - 0.8, S.y)); }
-            else { S.yaw += 1.2; S.tx = S.x - (nx - S.x) * 10; S.tz = S.z - (nz - S.z) * 10; }
-        }
-        // the fish of each school round its centre, turning with it, each a little its own way
-        let n = 0;
-        for (let k = 0; k < FISH.SCHOOLS; k++) {
-            const S = this.schools[k];
-            if (!S) continue;
-            const spread = 1.6 + S.fast * 2.5;
-            for (let i = 0; i < FISH.PER; i++) {
-                const a = i * 2.399 + S.seed, r = spread * Math.sqrt((i + 0.5) / FISH.PER);
-                const wob = Math.sin(this.t * 1.3 + i) * 0.3;
-                const ox = Math.cos(a + this.t * 0.25) * r, oz = Math.sin(a + this.t * 0.25) * r * 1.8, oy = Math.sin(a * 1.7 + this.t * 0.8) * spread * 0.35;
-                const c = Math.cos(S.yaw), s = Math.sin(S.yaw);
-                _p.set(S.x + ox * c + oz * s, S.y + oy, S.z - ox * s + oz * c);
-                _m.compose(_p, _q.setFromEuler(_e.set(wob * 0.2, S.yaw + wob * 0.3, 0)), _s.setScalar(0.85 + (i % 5) * 0.08));
-                this.fish.setMatrixAt(n, _m);
-                _c.setRGB(S.look[0], S.look[1], S.look[2]);
-                this.fish.setColorAt(n, _c);
-                n++;
-            }
-        }
-        this.fish.count = n;
-        this.fish.instanceMatrix.needsUpdate = true;
-        if (this.fish.instanceColor) this.fish.instanceColor.needsUpdate = true;
-        this.fish.material.userData.U.uTime.value = this.t;
-    }
+    dispose() { this.reef.dispose(); this.critters.dispose(); for (const m of Object.values(this.meshes)) m.parent?.remove(m); }
 }

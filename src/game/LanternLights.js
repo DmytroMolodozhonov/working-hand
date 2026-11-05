@@ -115,7 +115,7 @@ export class LanternLights {
     }
 
     dispose() {
-        for (const l of this.lights) l.removeFromParent();
+        for (const l of this.lights) l.parent?.remove(l);
         this.lights = [];
     }
 }

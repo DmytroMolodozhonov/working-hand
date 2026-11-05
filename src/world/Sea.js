@@ -185,6 +185,39 @@ export function seaDepth(s, jitter = 0) {
     return Math.max(3, Math.min(SEA.MAX_DEPTH, 3 + Math.round((s - SEA.SHELF) / (SEA.DEEP - SEA.SHELF) * (SEA.MAX_DEPTH - 3)) + jitter));
 }
 
+/**
+ * Generation 24: the sea's bottom as a landscape (Terrain SEABED_FROM_GEN). `s` m out from the shore, `d0` the plain depth there
+ * (seaDepth), `noise(x, z)` the world's 2-D noise (−1…1). Out on the deep: rolling sand hills and dunes, plateaus with canyons winding
+ * between them down to the deepest floor (their walls rock), narrow crevices, rock ridges and lone pinnacles rising high, and on the
+ * shelf the reef mounds where the corals grow (SeaFloor). Near the shore the plain shelf is kept (the beach, the ports, the ships'
+ * ways): it all fades in past SHELF. Never shallower than 2 layers of water out there, never under the floor (MAX_DEPTH). Pure.
+ */
+export function seabedDepth(ix, iz, s, d0, noise) {
+    const k = smooth01((s - SEA.SHELF) / 50); // (how far into the open sea: the relief grows in)
+    if (k <= 0) return d0;
+    const n = (x, z) => noise(x, z);
+    // the plateaus and rolling hills: the open bottom lifted in broad swells
+    const swell = n(ix / 90 + 31.7, iz / 90 - 12.1) * 0.6 + n(ix / 37 - 5.2, iz / 37 + 8.9) * 0.4;
+    let d = d0 - 3.2 * k * (0.55 + 0.45 * swell);
+    // dunes: long low waves of sand
+    d += 0.7 * k * Math.sin((ix * 0.8 + iz * 0.55) / 9 + n(ix / 30, iz / 30) * 3);
+    // canyons: winding channels where the ridged noise is near zero, cut down to the deep floor
+    const c = 1 - Math.abs(n(ix / 120 + 77.3, iz / 120 - 41.6) + 0.35 * n(ix / 41 - 3.3, iz / 41 + 19.4));
+    const canyon = smooth01((c - 0.86) / 0.08) * smooth01((s - SEA.SHELF - 40) / 60);
+    d += (SEA.MAX_DEPTH + 0.5 - d) * canyon;
+    // crevices: narrow cracks in the plateaus
+    const cr = 1 - Math.abs(n(ix / 26 + 140.1, iz / 26 - 60.7));
+    d += 3 * k * smooth01((cr - 0.94) / 0.04) * (1 - canyon);
+    // rock ridges and lone pinnacles
+    const rg = n(ix / 47 - 90.5, iz / 47 + 33.3);
+    d -= 9 * k * smooth01((rg - 0.48) / 0.3) * (0.6 + 0.4 * (1 - Math.abs(n(ix / 11 + 2.2, iz / 11 - 7.7)))) * (1 - canyon);
+    // the reef mounds on the shelf (round, a few metres high)
+    const rf = n(ix / 19 + 210.4, iz / 19 - 88.8);
+    const shelf = 1 - smooth01((s - SEA.SHELF - 70) / 60);
+    d -= 2.6 * k * shelf * smooth01((rf - 0.35) / 0.3);
+    return Math.max(2, Math.min(SEA.MAX_DEPTH, Math.round(d)));
+}
+
 // ------------------------------------------------------------------ waves
 const PERIOD = 600; // s: every wave repeats exactly within it (the clock may wrap)
 const om = (turns) => TAU * turns / PERIOD; // an angular frequency of whole turns per PERIOD

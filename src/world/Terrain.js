@@ -30,7 +30,7 @@ import { HamletIndex } from './Hamlets.js';
 import { ArenaIndex, ARENA_BIG } from './DuelArenas.js';
 import { DungeonIndex } from './Dungeons.js';
 import { GhostCastleIndex } from './GhostCastle.js';
-import { SeaIndex, SEA, seaDepth } from './Sea.js';
+import { SeaIndex, SEA, seaDepth, seabedDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
@@ -279,7 +279,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 23;
+export const WORLD_GEN = 24;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -382,6 +382,13 @@ export const QUEEN_MAP_FROM_GEN = 22;
  */
 export const CAVE_LAKE_FROM_GEN = 23;
 export const CAVE_LAKE = { GAP: 2 };
+/**
+ * The first generation whose sea bottom is a landscape of its own (Sea.seabedDepth, the author 05.11: «дно невероятно скучное… должно быть
+ * разное, рельефное, интересное… коралловые рифы… ущелья, расщелины»): rolling sand hills and dunes, rock ridges and pinnacles (bare rock),
+ * reef mounds on the shelf, deep canyons winding between plateaus, narrow crevices; and the steps of the bottom smoothed with ramps
+ * under the water (Terrain._slopeLand, `seabed`). Older worlds keep their flat bottom.
+ */
+export const SEABED_FROM_GEN = 24;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -491,7 +498,7 @@ export function chunkKey(cx, cz) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains, seas = null, test = false, lush = false) {
+export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -556,7 +563,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
             if (s > -SEA.TAPER) {
                 if (s > 0) {
                     const j = s > SEA.SHELF ? Math.round(noise(ix / 37 + 91, iz / 37 - 13) * 1.2) : 0;
-                    const d = seaDepth(s, j);
+                    const d = seabed ? seabedDepth(ix, iz, s, seaDepth(s, 0), noise) : seaDepth(s, j); // (generation 24: the bottom a landscape)
                     fn.water = d; fn.sea = true;
                     return -d;
                 }
@@ -677,7 +684,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false } = {}) {
         this.seed = seed;
         this.hell = !!hell; // (hell: a far map of this world — HellMap.js; in every world, the Earth's land is not touched)
         this._hellPlan = null;
@@ -689,6 +696,7 @@ export class TerrainData {
         this.buildings = !!(mountains && buildings); // (generation 17: different buildings in the settlements — Buildings.js)
         this.apart = !!(mountains && test && apart); // (generation 11: the bosses' places apart — SPAWN_MAPS_FROM_GEN)
         this.queenMap = !!(this.apart && queenMap); // (generation 22: the Ice Queen on a map of her own — QueenMap.js, QUEEN_MAP_FROM_GEN)
+        this.seabed = !!(mountains && seas && lush && seabed); // (generation 24: the sea's bottom a landscape — Sea.seabedDepth, SEABED_FROM_GEN)
         this.caveLake = !!(mountains && deepCaves && caveLake); // (generation 23: a cave never opens into a lake's side — CAVE_LAKE_FROM_GEN)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
         this.bigHouses = !!(mountains && furnish && bigHouses); // (generation 14: the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig; the castles' villages are laid wider)
@@ -699,7 +707,7 @@ export class TerrainData {
         const spot = mountains && seas && test ? testSeaCastleSpot(seed, this.bigHouses) : null;
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
-        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
+        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
         this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = null;
@@ -1026,7 +1034,7 @@ export class TerrainData {
                     let type;
                     if (L <= bedrock) type = BLOCK.BEDROCK;
                     else if (wet && L === h) type = BLOCK.SAND;
-                    else if (sea && L >= h - 3) type = BLOCK.SAND; // the seabed
+                    else if (sea && L >= h - 3) type = this.seabed && (slope >= 2 || r < 0.04) ? (r < 0.15 ? BLOCK.GRAVEL : BLOCK.STONE) : BLOCK.SAND; // the seabed (generation 24: the canyons' walls, the ridges bare rock, scattered stones)
                     else if (L === h && beach) type = BLOCK.SAND; // the beach
                     else if (L === h && bank && h >= 0 && surf === BLOCK.GRASS) type = BLOCK.SAND; // the river's sandy bank
                     else if (L === h) type = surf;
@@ -1066,14 +1074,19 @@ export class TerrainData {
         let sh = c.shape;
         for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
             const col = lz * CHUNK + lx, i0 = (lz + 1) * P + lx + 1, h = hh[i0];
-            if (c.top[col] !== h || h + 1 > MAX_LAYER || h <= this.bedrockTop || wp[i0] > -32768) continue;
+            // (generation 24: the sea's bottom too — under the water, a ramp's empty half is water like the rest: seen from below
+            //  nothing shows dry; only where the ramp's top stays a layer under the surface)
+            const under = this.seabed && c.sea && c.sea[col] && wp[i0] >= h + 2;
+            if (c.top[col] !== h || h + 1 > MAX_LAYER || h <= this.bedrockTop || (wp[i0] > -32768 && !under)) continue;
             const ti = (h - MIN_LAYER) * A + col, t = B[ti];
-            if (!SLOPED_LAND.has(t) || B[ti + A] !== BLOCK.AIR) continue;
-            // (the water beside the cell at its height: none)
-            if (wp[i0 + 1] > h || wp[i0 - 1] > h || wp[i0 + P] > h || wp[i0 - P] > h) continue;
-            // (…nor the water a cave or a castle let in: the chunk's own cells round it)
-            const ai = ti + A, W = BLOCK.WATER;
-            if ((lx < MASK && B[ai + 1] === W) || (lx > 0 && B[ai - 1] === W) || (lz < MASK && B[ai + CHUNK] === W) || (lz > 0 && B[ai - CHUNK] === W)) continue;
+            if (!SLOPED_LAND.has(t) || B[ti + A] !== (under ? BLOCK.WATER : BLOCK.AIR)) continue;
+            if (!under) {
+                // (the water beside the cell at its height: none)
+                if (wp[i0 + 1] > h || wp[i0 - 1] > h || wp[i0 + P] > h || wp[i0 - P] > h) continue;
+                // (…nor the water a cave or a castle let in: the chunk's own cells round it)
+                const ai = ti + A, W = BLOCK.WATER;
+                if ((lx < MASK && B[ai + 1] === W) || (lx > 0 && B[ai - 1] === W) || (lz < MASK && B[ai + CHUNK] === W) || (lz > 0 && B[ai - CHUNK] === W)) continue;
+            }
             const e = hh[i0 + 1] - h, w = hh[i0 - 1] - h, so = hh[i0 + P] - h, n = hh[i0 - P] - h;
             const ue = e >= 1, uw = w >= 1, us = so >= 1, un = n >= 1, up = ue + uw + us + un;
             let shape = 0;

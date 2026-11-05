@@ -38,6 +38,15 @@ test('it builds and lays the plants round the player within the caps; the fish s
     assert.ok(n > 50, `plants laid: ${n}`);
     for (let i = 0; i < 60; i++) F.update(1 / 30);
     assert.ok(F.fish.count > 0, 'fish');
-    const m = new THREE.Matrix4(), p = new THREE.Vector3();
-    for (let i = 0; i < F.fish.count; i++) { F.fish.getMatrixAt(i, m); p.setFromMatrixPosition(m); assert.ok(p.y > 0 && p.y < 11, `a fish in the water: ${p.y}`); }
+    for (const p of F.fish.positions()) assert.ok(p.y > 0 && p.y < 11, `a fish in the water: ${p.y}`);
+    assert.ok(F.critters.count('crab') > 0, 'crabs on the bottom');
+});
+
+test('a hundred kinds of fish: twenty shapes × five colourings, ten of them magic; all different', async () => {
+    const { FISH_SPECIES } = await import('../../src/fx/ReefFish.js');
+    assert.equal(FISH_SPECIES.length, 100);
+    assert.equal(FISH_SPECIES.filter((s) => s.magic).length, 10);
+    const looks = new Set(FISH_SPECIES.map((s) => s.arch + ':' + s.cols.map((c) => c.getHexString()).join(',') + ':' + s.pat));
+    assert.equal(looks.size, 100, 'each its own look');
+    assert.equal(new Set(FISH_SPECIES.map((s) => s.name)).size, 100, 'each its own name');
 });

@@ -27,7 +27,8 @@ export const SEA_LIFE = {
     CELL: 80, // the herd cells (Animals' own size)
     SITE_CHANCE: 0.2, // of the cells: a sea creature's place is tried (it stays only where the sea is deep)
     GLOW_CHANCE: 0.07, // of the places: a glowfin
-    SHARK_CHANCE: 0.38, // of the places: sharks (the rest dolphins)
+    SHARK_CHANCE: 0.12, // of the places: sharks (the rest dolphins) — rare (the author 05.11: «сразу приплыли ко мне акулы… нафига? лучше пусть интересные рыбки»)
+    SHARK_SHY: 16, // m: a shark not angry keeps this far from a swimmer — it turns away
     DEPTH: 6, // water layers at least
     GLOW_DEPTH: 9,
     WANDER: 45, // m round home
@@ -206,7 +207,15 @@ export class SeaLife {
         a.hunt = !!prey;
         a.biteT = (a.biteT || 0) - dt;
         a.biteK = Math.max(0, (a.biteK || 0) - dt * 3);
-        if (!prey) return null;
+        if (!prey) {
+            // (left alone it keeps its distance: a swimmer near — it turns and glides off, never circles him)
+            const me = g.character?.group?.position;
+            if (me && !g.isDeadLocal) {
+                const dx = p.x - me.x, dz = p.z - me.z, d = Math.hypot(dx, dz);
+                if (d < SEA_LIFE.SHARK_SHY && Math.abs(p.y - me.y) < 10) return { x: p.x + dx / (d || 1) * 20, y: p.y, z: p.z + dz / (d || 1) * 20, speed: SEA_LIFE.SPEED.shark[0] * 1.4 };
+            }
+            return null;
+        }
         const q = prey.p;
         // out of the water now: it loses them
         const wq = waterAt(this.T, q.x, q.z, q.y);

@@ -204,6 +204,6 @@ export class UnderwaterLight {
     }
 
     dispose() {
-        for (const m of [this.shafts, this.snow]) if (m) { m.removeFromParent(); m.geometry.dispose(); m.material.dispose(); }
+        for (const m of [this.shafts, this.snow]) if (m) { m.parent?.remove(m); m.geometry.dispose(); m.material.dispose(); }
     }
 }
