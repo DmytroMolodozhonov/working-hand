@@ -474,6 +474,7 @@ export class PoseInterpreter {
             if (this.shoulderHistory.length >= 3) {
                 let total = 0;
                 for (let i = 1; i < this.shoulderHistory.length; i++) total += Math.abs(this.shoulderHistory[i] - this.shoulderHistory[i - 1]);
+                data.bob = total; // (the shoulders' bob over 8 pictures — «ходьба назад»: steps leaning back bob weakly, Game._weakSteps)
                 data.runIntensity = Math.max(0, Math.min(1, (total - 0.02) / 0.13));
                 data.isRunning = data.runIntensity > 0.1;
             }

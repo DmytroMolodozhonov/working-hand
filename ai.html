@@ -65,6 +65,7 @@
                         zns: 'result', ts: p.ts, cost: performance.now() - p.t0,
                         poseLandmarks: pts(r.poseLandmarks), faceLandmarks: pts(r.faceLandmarks),
                         leftHandLandmarks: pts(r.leftHandLandmarks), rightHandLandmarks: pts(r.rightHandLandmarks),
+                        poseWorldLandmarks: pts(r.poseWorldLandmarks || r.za), // (the 3-D body in metres: «ходьба назад» — PoseInterpreter.torsoTiltOf)
                     });
                 });
                 await holistic.initialize();

@@ -352,6 +352,8 @@ function leanBack(st, torso, dt, stepping = true) {
     return st.on ? 1 : 0;
 }
 export { leanBack as _leanBack };
+/** (Game._weakSteps) the shoulders' bob over 8 pictures (in the picture's height) that is a weak step; the share of the last T s it must hold. Steps forward: 0.05–0.11; leaning back: 0.022–0.035; standing: ≤ 0.02. */
+export const WEAK_BOB = { MIN: 0.022, T: 0.7, SHARE: 0.55 };
 
 export class Game {
     /**
@@ -4432,6 +4434,10 @@ export class Game {
             ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
             ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
             const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning) : 0;
+            // (the author's F8 records of 05.11: stepping while leaning back, the shoulders bob 3–10 times weaker than stepping forward —
+            // the steps went unseen, the hero stood. Leaning back (against its own upright) with a weak but lasting bob — steps back.)
+            const weak = this._weakSteps(pose, dt);
+            if (back && !ch.isRunning && weak && !flying && !down) ch.setRunning(true, 0);
             ch.backward = !!(back && ch.isRunning);
             if (this.config.walkBack) this._walkBackLog(back, pose, dt);
             if (this.walkRec?.on) {
@@ -4655,6 +4661,13 @@ export class Game {
      * when it should not: every change of the state, and once a second while stepping on the spot — what the camera saw (the shoulders'
      * and the hips' depth, the lean over the body's own upright, the shoulders' width, the hips seen) and what the hero did.
      */
+    /** Weak steps (the shoulders' bob over WEAK_BOB, most of the last ~0.7 s) — only for «ходьба назад» leaning back. */
+    _weakSteps(pose, dt) {
+        const on = Number.isFinite(pose.bob) && pose.bob > WEAK_BOB.MIN ? 1 : 0;
+        this._weakBob = (this._weakBob || 0) + (on - (this._weakBob || 0)) * Math.min(1, dt / WEAK_BOB.T);
+        return this._weakBob > WEAK_BOB.SHARE;
+    }
+
     _walkBackLog(back, pose, dt) {
         const L = this._lean || {}, t = pose.torso || {};
         const f = (v) => (Number.isFinite(v) ? v.toFixed(2) : '—');

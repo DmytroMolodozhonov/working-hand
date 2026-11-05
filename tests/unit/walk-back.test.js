@@ -182,3 +182,14 @@ test('the author\'s own F8 record of 05.11 (camera to the waist, no 3-D body): f
     assert.equal(wrong, 0, 'stepping forward with a straight back: never back');
     assert.ok(st.moved >= 1, 'walking away from / to the camera (its start and end): its own posture measured anew');
 });
+
+test('steps leaning back bob weakly (the F8 record of 05.11, 14:09: 0.022–0.035 against 0.05–0.11 forward): a lasting weak bob counts, standing does not', async () => {
+    const { Game, WEAK_BOB } = await import('../../src/game/Game.js');
+    const g = {};
+    let on = false;
+    for (let i = 0; i < 30; i++) on = Game.prototype._weakSteps.call(g, { bob: 0.012 }, 1 / 30);
+    assert.equal(on, false, 'standing: a small sway');
+    for (let i = 0; i < 30; i++) on = Game.prototype._weakSteps.call(g, { bob: i % 4 ? 0.03 : 0.015 }, 1 / 30);
+    assert.equal(on, true, 'stepping leaning back');
+    assert.ok(WEAK_BOB.MIN > 0.02);
+});
