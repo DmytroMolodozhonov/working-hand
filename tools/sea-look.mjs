@@ -48,6 +48,19 @@ try {
     await at(mx, mz, 6, 'away', -0.15); await shoot('5-gale');
     await page.evaluate(() => { const g = window.__zns.game; g.sea.storm = 0.2; g._updateWind = () => { g.sea.storm = 0.2; }; });
     await at(mx, mz, -6, 'away', 0.9); await shoot('6-under-looking-up');
+    // the sky: noon looking up, the sunset against the sun over the sea, the night
+    const setPhase = (want) => page.evaluate(async (want) => {
+        const g = window.__zns.game, W = await import('/src/world/World.js');
+        let best = 0, bd = 9;
+        for (let p = 0; p < 1; p += 0.001) { const e = W.sunAt(p, new (await import('three')).Vector3()); const d = Math.abs(e - want.elev) + (want.rising === undefined ? 0 : 0); if (d < bd && (want.after == null || p > want.after)) { bd = d; best = p; } }
+        g.dayPhase = () => best; g.world.setDayPhase(best);
+        return best;
+    }, want);
+    await page.evaluate(() => { const g = window.__zns.game; g.sea.storm = 0.3; g._updateWind = () => { g.sea.storm = 0.3; }; });
+    await setPhase({ elev: 0.9 }); await at(mx, mz, 4, 'away', 0.75); await shoot('7-sky-noon-up');
+    await setPhase({ elev: 0.06, after: 0.4 }); await at(mx, mz, 4, 'sun', 0.05); await shoot('8-sunset-sea');
+    await at(mx, mz, 4, 'away', 0.25); await shoot('9-sunset-away');
+    await setPhase({ elev: -0.6 }); await at(mx, mz, 4, 'away', 0.5); await shoot('10-night');
 } finally {
     clearTimeout(killer);
     await browser.close();

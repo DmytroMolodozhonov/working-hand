@@ -20,6 +20,7 @@ import { SPACE } from '../world/Planets.js';
 import { boomReach } from '../world/BoomCarve.js';
 import { ULTRA_PARS, addUltraUniforms } from './UltraUniforms.js';
 
+const BODIES = 8, RINGS = 8; // (what the water answers: bodies in it, rings running out from a splash)
 const TEX = 256; // texels per side
 const TEXEL = 5; // m per texel → 1280 m covered
 const SLICE = 4096; // texels computed per frame while rebuilding
@@ -41,6 +42,10 @@ export class SeaSurface {
             uShallow: { value: new THREE.Color(0x3fc4c4) }, // (turquoise over the sand)
             uDeep: { value: new THREE.Color(0x0a3550) }, // (the open sea's body: deep blue-green, nearly black far down)
             uWind: { value: new THREE.Vector2(1, 0) }, // (the wind's direction: the small waves run with it — Game.wind)
+            // what is in the water (SeaSurface.update): up to BODIES bodies {x, z, r, speed} and their headings, up to RINGS rings {x, z, age, k}
+            uBodies: { value: Array.from({ length: BODIES }, () => new THREE.Vector4(0, 0, 0, -1)) },
+            uBodyDir: { value: Array.from({ length: BODIES }, () => new THREE.Vector2(0, 1)) },
+            uRings: { value: Array.from({ length: RINGS }, () => new THREE.Vector4(0, 0, -1, 0)) },
         };
         this.data = new Uint8Array(TEX * TEX * 4);
         this.texture = new THREE.DataTexture(this.data, TEX, TEX, THREE.RGBAFormat);
@@ -57,6 +62,56 @@ export class SeaSurface {
         this.mesh.visible = false;
         this.mesh.position.y = WATER_LEVEL_Y;
         game.scene.add(this.mesh);
+    }
+
+    /**
+     * A splash on the sea (a body falling in, a spell hitting the water, a thing thrown in): rings run out from (x, z) — `k` 0…1.5
+     * how big. Every computer draws its own (Swimming, Boats… call it).
+     */
+    ring(x, z, k = 1) {
+        const R = this.uniforms.uRings.value;
+        let slot = R.find((r) => r.z < 0) || R.reduce((a, b) => (b.z > a.z ? b : a));
+        slot.set(x, z, 0, Math.min(1.5, Math.max(0.2, k)));
+    }
+
+    /** What is in the water now: the swimmers, the boats, the ships — nearest the camera first (uniforms, no garbage). */
+    _touches(dt) {
+        const g = this.game, U = this.uniforms, me = g.character?.group?.position;
+        for (const r of U.uRings.value) if (r.z >= 0) { r.z += dt; if (r.z > 5) r.z = -1; }
+        const B = U.uBodies.value, D = U.uBodyDir.value;
+        let n = 0;
+        const wl = WATER_LEVEL_Y;
+        const add = (x, z, r, vx, vz) => {
+            if (n >= BODIES) return;
+            const sp = Math.hypot(vx, vz);
+            B[n].set(x, z, r, sp);
+            if (sp > 0.05) D[n].set(vx / sp, vz / sp);
+            n++;
+        };
+        // (a body counts while it is at the surface: swimming, wading, a boat's hull)
+        const atSurface = (y, h) => y - h < wl + 0.6 && y > wl - 1.6;
+        if (me && this.sea.s(me.x, me.z) > -2) {
+            const feet = me.y - 2.0;
+            if (atSurface(me.y - 0.8, 1.6) || (feet < wl + 0.3 && me.y > wl)) {
+                const lp = this._lastMe || (this._lastMe = me.clone());
+                const vx = (me.x - lp.x) / Math.max(dt, 1e-3), vz = (me.z - lp.z) / Math.max(dt, 1e-3);
+                lp.copy(me);
+                add(me.x, me.z, 0.55, Math.abs(vx) < 30 ? vx : 0, Math.abs(vz) < 30 ? vz : 0);
+            } else this._lastMe = null;
+        }
+        for (const b of g.boats?.list?.values?.() || []) {
+            if (b.st !== 'float' || !Number.isFinite(b.x)) continue;
+            if (me && Math.hypot(b.x - me.x, b.z - me.z) > 220) continue;
+            const u = b.u || 0;
+            add(b.x, b.z, 1.4, -Math.sin(b.yaw) * u, -Math.cos(b.yaw) * u);
+        }
+        for (const s of g.ships?.awake || []) {
+            const st = s.st;
+            if (!st || (me && Math.hypot(st.x - me.x, st.z - me.z) > 400) || s.flooded) continue;
+            const u = st.u || 0;
+            add(st.x, st.z, (s.cls?.B || 12) * 0.5, -Math.sin(st.yaw) * u, -Math.cos(st.yaw) * u);
+        }
+        for (let i = n; i < BODIES; i++) B[i].w = -1;
     }
 
     /** Wave size at a shore distance (for tests and effects). */
@@ -135,6 +190,9 @@ uniform float uTexSize;
 uniform sampler2D uShore;
 uniform float uStorm;
 uniform vec2 uWind;
+uniform vec4 uBodies[${BODIES}];
+uniform vec2 uBodyDir[${BODIES}];
+uniform vec4 uRings[${RINGS}];
 varying float vSeaS;
 varying float vSeaDepth;
 varying vec3 vSeaWorld;
@@ -170,7 +228,7 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
                 diffuseColor.rgb = mix(uShallow, uDeep, seaK);
                 // foam: the little waves breaking on the sand, white caps on high crests out at sea
                 float seaFoam = (1.0 - smoothstep(0.0, 6.0, seaS)) * smoothstep(0.35, 0.9, sin(${WAVES.shore.k.toFixed(4)} * seaS + ${WAVES.shore.omega.toFixed(7)} * uTime));
-                seaFoam = max(seaFoam, smoothstep(0.55, 0.95, vSeaWorld.y - ${WATER_LEVEL_Y.toFixed(2)}) * 0.6);
+                seaFoam = max(seaFoam, smoothstep(0.55, 0.95, vSeaWorld.y - ${WATER_LEVEL_Y.toFixed(2)}) * 0.6 * smoothstep(0.5, 1.4, uStorm)); // (white crests only in a strong wind)
                 // the wind (SeaWind.js, 10 levels → uStorm): from a fresh breeze white horses on the crests, torn into streaks by
                 // the wind; in a gale and a storm the sea goes slate-grey and the foam lies in long bands
                 float seaWind = clamp(uStorm, 0.0, 2.4);
@@ -182,7 +240,7 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
                 // (foam is no flat white: it is torn into lacy patches and bubbles)
                 vec2 seaLp = vSeaWorld.xz * 1.6 + vec2(uTime * 0.3, -uTime * 0.2);
                 float seaLace = seaN(seaLp) * 0.55 + seaN(seaLp * 2.3 + 7.0) * 0.3 + seaN(seaLp * 5.1 - 3.0) * 0.15;
-                seaFoam *= smoothstep(0.3, 0.62, seaLace + seaFoam * 0.25);
+                seaFoam *= smoothstep(0.42, 0.7, seaLace + seaFoam * 0.2);
                 float seaGrey = seaOpen * smoothstep(0.6, 2.0, seaWind) * 0.55;`)
                 .replace('#include <fog_fragment>', `
                 // ——— THE SEA'S OWN LIGHT (all qualities): the water's body, the sky in it, the sun, the foam ———
@@ -195,11 +253,47 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
                     float sDet = 1.0 - smoothstep(60.0, 600.0, sDist);
                     vec2 sSl = seaRipples(vSeaWorld.xz, uTime, normalize(uWind + vec2(1e-4)), (0.55 + 0.6 * clamp(uStorm, 0.0, 2.0)) * sDet, sDist);
                     if (uUltraOn > 0.5) sSl += ultraRain(vSeaWorld.xz, uUltraTime) * 0.12 * uUltraWet;
+                    // the water answers what is in it: rings running out from a splash; round a body a lap of little waves and a
+                    // collar of foam; behind a moving one its wake — the V of a boat's (Kelvin's ~19°) and the churned white of its track
+                    float sTouch = 0.0;
+                    vec2 sP = vSeaWorld.xz;
+                    for (int i = 0; i < ${RINGS}; i++) {
+                        vec4 R = uRings[i];
+                        if (R.z < 0.0) continue;
+                        vec2 q = sP - R.xy; float d = length(q), front = 0.6 + R.z * 3.2;
+                        float w = exp(-abs(d - front) * 1.6) * (1.0 - smoothstep(1.5, 4.5, R.z)) * R.w;
+                        sSl += q / max(d, 1e-3) * cos((d - front) * 7.0) * w * 0.22;
+                        sTouch += w * 0.35 * (1.0 - smoothstep(0.0, 1.2, R.z));
+                    }
+                    for (int i = 0; i < ${BODIES}; i++) {
+                        vec4 B = uBodies[i];
+                        if (B.w < 0.0) continue;
+                        vec2 q = sP - B.xy; float d = length(q), e = max(0.0, d - B.z);
+                        float sp = B.w;
+                        // the lap round it
+                        sSl += q / max(d, 1e-3) * sin(e * 5.5 - uTime * (4.0 + sp)) * exp(-e * 0.6) * (0.05 + 0.03 * min(sp, 4.0));
+                        sTouch += exp(-e * (2.2 - min(sp, 6.0) * 0.18)) * (0.45 + 0.1 * min(sp, 5.0));
+                        if (sp > 0.4) {
+                            vec2 f = uBodyDir[i];
+                            float along = -dot(q, f), lat = dot(q, vec2(-f.y, f.x));
+                            if (along > 0.0) {
+                                float reach = 14.0 + sp * 9.0 + B.z * 3.0;
+                                float fade = exp(-along / reach);
+                                float arm = abs(abs(lat) - along * 0.36 - B.z * 0.6);
+                                float k = min(1.0, sp / 4.0);
+                                sTouch += exp(-arm * 0.9) * fade * k * 0.8;
+                                sTouch += exp(-abs(lat) / (B.z * 0.7 + 0.4)) * exp(-along / (6.0 + sp * 2.5 + B.z)) * k;
+                                sSl += vec2(-f.y, f.x) * sign(lat) * cos(arm * 3.0 - uTime * 3.0) * exp(-arm * 0.7) * fade * k * 0.12;
+                            }
+                        }
+                    }
+                    // (the touch makes foam — torn by the lace like the rest)
+                    seaFoam = max(seaFoam, clamp(sTouch, 0.0, 1.0) * smoothstep(0.25, 0.6, seaLace + 0.15));
                     vec3 sN = normalize(sN0 + vec3(-sSl.x, 0.0, -sSl.y));
                     vec3 sL = normalize(uUltraSunDir);
                     vec3 sSun = uUltraSunCol * uUltraSunVis;
                     vec3 sAmb = mix(uUltraHorizon, uUltraZenith, 0.5);
-                    float sLight = clamp(dot(sAmb, vec3(0.3, 0.5, 0.2)) * 1.3 + dot(sSun, vec3(0.3, 0.5, 0.2)) * 0.6, 0.04, 1.3);
+                    float sLight = clamp(dot(sAmb, vec3(0.3, 0.5, 0.2)) * 0.9 + dot(sSun, vec3(0.3, 0.5, 0.2)) * 0.45, 0.04, 1.0);
                     bool sUnder = cameraPosition.y < seaWL - 0.2;
                     if (!sUnder) {
                         // the water's body: turquoise over the sand, deepening to the open sea's blue-green; darker in a storm
@@ -217,8 +311,8 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
                         // (far off a sea mirrors the sky higher up than the bright horizon — the far faces of the waves tilt to it: the
                         //  far sea a deep blue under a pale horizon, not white)
                         sR.y = max(sR.y, 0.18 + 0.25 * smoothstep(80.0, 900.0, sDist)); sR = normalize(sR);
-                        vec3 sSky = ultraSky(sR) * 0.9;
-                        vec3 sCol = mix(sBody, sSky, clamp(sF, 0.0, 0.62));
+                        vec3 sSky = ultraSky(sR) * 0.78;
+                        vec3 sCol = mix(sBody, sSky, clamp(sF * 0.85, 0.0, 0.5));
                         // the sun's path: a sharp glitter on every little wave and a broad sheen round it
                         vec3 sH = normalize(sL + sV);
                         float sNH = max(dot(sN, sH), 0.0);
@@ -307,6 +401,7 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
         this.uniforms.uTime.value = this.sea.time();
         this.uniforms.uStorm.value = this.sea.storm || 0;
         if (g.wind && (g.wind.x || g.wind.z)) this.uniforms.uWind.value.set(g.wind.x, g.wind.z).normalize();
+        this._touches(dt);
         if ((this._checkT -= dt) <= 0) {
             this._checkT = 0.5;
             const view = g.world?.terrain?.viewDistance || 112;

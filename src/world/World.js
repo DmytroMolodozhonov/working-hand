@@ -97,7 +97,7 @@ const _pm = new THREE.Matrix4(), _pc = new THREE.Color(); // (the pedestals' cop
 import { CollisionWorld } from './Collision.js';
 import { Flora } from './Flora.js';
 import { WorldTrees } from './Trees.js';
-import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
+import { Sky, SKY_DAY, SKY_NIGHT, airColor } from './Sky.js';
 import { applyTreeDetail, applySkyComp, SKY_LIGHT } from './VoxelShading.js';
 import { lightBoost, fogBoost, caveDim, darkness } from '../game/SightRules.js';
 import '../core/Shadows.js'; // (the sun shadow's soft edge: patched into the shaders before they compile)
@@ -321,6 +321,15 @@ export class VoxelWorld {
         // the haze at the horizon takes the sunset's warm colour, then the twilight's violet
         fogCol.lerp(_c1.setRGB(0.86, 0.54, 0.46), 0.65 * glow * (1 - k * 0.6));
         fogCol.lerp(_c1.setRGB(0.16, 0.18, 0.34), 0.5 * ss(0.2, 0.55, k) * (1 - ss(0.75, 1, k)));
+        // by day the haze is the very air of the horizon (the sky's own model — Sky.airColor): the far land and sea melt into the
+        // sky above them, no band between; the average of a look across the sun's way (half towards it, half away)
+        if (elev > -0.2) {
+            const sl = Math.hypot(sun.x, sun.z) || 1, sx = sun.x / sl, sz = sun.z / sl, se = Math.max(elev, -0.2);
+            const sd = [sun.x, Math.max(sun.y, -0.25), sun.z], n = Math.hypot(sd[0], sd[1], sd[2]) || 1; sd[0] /= n; sd[1] /= n; sd[2] /= n;
+            const a = airColor([-sz, 0.04, sx], sd, this._air1 || (this._air1 = [0, 0, 0])), b = airColor([sx * 0.7 - sz * 0.7, 0.04, sz * 0.7 + sx * 0.7], sd, this._air2 || (this._air2 = [0, 0, 0]));
+            const w = ss(-0.2, 0.04, se) * 0.75;
+            fogCol.lerp(_c1.setRGB((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), w);
+        }
         if (!this.scene.fog) this.scene.fog = new THREE.Fog(fogCol, 25, 90);
         this.scene.fog.color.copy(fogCol);
         if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(fogCol);

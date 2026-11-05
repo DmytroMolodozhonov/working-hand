@@ -22,6 +22,39 @@ export const SKY_DAY = {
     fog: 0xc3e0fb,
 };
 
+/**
+ * The air's colour in a direction `d` with the sun at `s` (unit vectors) — the same model as the sky's shader (skyAir), tone-mapped
+ * the same way: for the fog at the horizon, so the far land and sea melt into the very sky above them. → out [r, g, b] 0…1. Light:
+ * a few hundred exp a call, once per change of the day (World.setDayPhase).
+ */
+export function airColor(d, s, out = [0, 0, 0]) {
+    const Re = 6360, Ra = 6420, Hr = 8, Hm = 1.2, bR = [5.8e-3, 13.5e-3, 33.1e-3], bM = 4e-3, bO = [0.65e-3, 1.881e-3, 0.085e-3];
+    const sphere = (ox, oy, oz, dx, dy, dz, r) => { const b = ox * dx + oy * dy + oz * dz, c = ox * ox + oy * oy + oz * oz - r * r, q = b * b - c; return q < 0 ? -1 : -b + Math.sqrt(q); };
+    const oy = Re + 0.2, L = sphere(0, oy, 0, d[0], d[1], d[2], Ra), seg = L / 12;
+    let odR = 0, odM = 0;
+    const sumR = [0, 0, 0], sumM = [0, 0, 0];
+    for (let i = 0; i < 12; i++) {
+        const t = seg * (i + 0.5), px = d[0] * t, py = oy + d[1] * t, pz = d[2] * t;
+        const hh = Math.hypot(px, py, pz) - Re, hr = Math.exp(-hh / Hr) * seg, hm = Math.exp(-hh / Hm) * seg;
+        odR += hr; odM += hm;
+        const Ls = sphere(px, py, pz, s[0], s[1], s[2], Ra), seg2 = Ls / 5;
+        let lR = 0, lM = 0, lit = true;
+        for (let j = 0; j < 5; j++) {
+            const u = seg2 * (j + 0.5), h2 = Math.hypot(px + s[0] * u, py + s[1] * u, pz + s[2] * u) - Re;
+            if (h2 < 0) { lit = false; break; }
+            lR += Math.exp(-h2 / Hr) * seg2; lM += Math.exp(-h2 / Hm) * seg2;
+        }
+        if (!lit) continue;
+        for (let c = 0; c < 3; c++) { const att = Math.exp(-((bR[c] + bO[c]) * (odR + lR) + bM * 1.1 * (odM + lM))); sumR[c] += att * hr; sumM[c] += att * hm; }
+    }
+    const mu = d[0] * s[0] + d[1] * s[1] + d[2] * s[2], g = 0.76;
+    const pR = 3 / (16 * Math.PI) * (1 + mu * mu), pM = 3 / (8 * Math.PI) * ((1 - g * g) * (1 + mu * mu)) / ((2 + g * g) * Math.pow(1 + g * g - 2 * g * mu, 1.5));
+    for (let c = 0; c < 3; c++) out[c] = Math.pow(1 - Math.exp(-22 * (sumR[c] * bR[c] * pR + sumM[c] * bM * pM) * 1.3), 1 / 2.2);
+    const l = (out[0] + out[1] + out[2]) / 3, tint = [0.97, 0.99, 1.07];
+    for (let c = 0; c < 3; c++) out[c] = Math.max(0, Math.min(1, (l + (out[c] - l) * 1.5) * tint[c]));
+    return out;
+}
+
 export const SKY_NIGHT = {
     zenith: new THREE.Color(0x02040a),
     horizon: new THREE.Color(0x0b1424),
@@ -70,14 +103,58 @@ float fbm6(vec2 p) {
 }
 float down(float a, float b, float x) { return 1.0 - smoothstep(a, b, x); } // (1 below a … 0 above b)
 
+// ——— the air itself (every quality): the sunlight scattered in a real atmosphere — the blue overhead from the small molecules
+// (Rayleigh), the white haze and the glow round the sun from the dust (Mie), the light reddened by the long way through the air when
+// the sun is low (the sunset comes out of it by itself). km; 12 steps along the look, 5 towards the sun.
+vec2 skySphere(vec3 o, vec3 d, float r) { float b = dot(o, d), c = dot(o, o) - r * r, q = b * b - c; if (q < 0.0) return vec2(-1.0); q = sqrt(q); return vec2(-b - q, -b + q); }
+vec3 skyAir(vec3 d, vec3 s) {
+    const float Re = 6360.0, Ra = 6420.0, Hr = 8.0, Hm = 1.2;
+    const vec3 bR = vec3(5.8e-3, 13.5e-3, 33.1e-3);
+    const float bM = 4e-3; // (clean air: a little dust — the haze, the glow round the sun)
+    const vec3 bO = vec3(0.65e-3, 1.881e-3, 0.085e-3); // (the ozone: it drinks the orange, the deep blue overhead and in the twilight)
+    vec3 o = vec3(0.0, Re + 0.2, 0.0);
+    float L = skySphere(o, d, Ra).y;
+    float seg = L / 12.0, odR = 0.0, odM = 0.0;
+    vec3 sumR = vec3(0.0), sumM = vec3(0.0);
+    for (int i = 0; i < 12; i++) {
+        vec3 p = o + d * (seg * (float(i) + 0.5));
+        float hh = length(p) - Re;
+        float hr = exp(-hh / Hr) * seg, hm = exp(-hh / Hm) * seg;
+        odR += hr; odM += hm;
+        float Ls = skySphere(p, s, Ra).y, seg2 = Ls / 5.0, lR = 0.0, lM = 0.0;
+        bool lit = true;
+        for (int j = 0; j < 5; j++) {
+            vec3 q = p + s * (seg2 * (float(j) + 0.5));
+            float h2 = length(q) - Re;
+            if (h2 < 0.0) { lit = false; break; }
+            lR += exp(-h2 / Hr) * seg2; lM += exp(-h2 / Hm) * seg2;
+        }
+        if (lit) { vec3 att = exp(-((bR + bO) * (odR + lR) + bM * 1.1 * (odM + lM))); sumR += att * hr; sumM += att * hm; }
+    }
+    float mu = dot(d, s), g = 0.76;
+    float pR = 3.0 / (16.0 * 3.14159) * (1.0 + mu * mu);
+    float pM = 3.0 / (8.0 * 3.14159) * ((1.0 - g * g) * (1.0 + mu * mu)) / ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * mu, 1.5));
+    return 22.0 * (sumR * bR * pR + sumM * bM * pM);
+}
+
 void main() {
     vec3 d = normalize(vDir);
     float h = d.y;
     vec3 sd = normalize(uSunDir);
     float se = sd.y; // the sun's height (< 0: under the horizon)
     float clear = 1.0 - uOvercast;
-    // Sky gradient (a little brighter and warmer right at the horizon)
+    // the painted gradient (it carries the night, the rain's grey, the world's own colours) …
     vec3 col = mix(uHorizon, uZenith, pow(max(h, 0.0), 0.55));
+    // … under the real air by day: the scattered sunlight (tone-mapped; at the horizon and below it the air of the horizon)
+    {
+        vec3 ad = normalize(vec3(d.x, max(h, 0.04), d.z)); // (right at the horizon the long way through the air reddened it into a sunset at noon: the air of a little higher)
+        vec3 air = skyAir(ad, normalize(vec3(sd.x, max(se, -0.25), sd.z)));
+        air = pow(1.0 - exp(-air * 1.3), vec3(1.0 / 2.2));
+        float airL = dot(air, vec3(0.3333));
+        air = clamp(airL + (air - airL) * 1.5, 0.0, 1.0) * vec3(0.97, 0.99, 1.07); // (the eye sees the sky's blue deeper than the plain numbers)
+        float dayW = smoothstep(-0.2, 0.04, se) * (1.0 - uOvercast * 0.88);
+        col = mix(col, air, dayW);
+    }
     col = mix(col, uGround, down(-0.25, 0.0, h));
     // --- Sunset / sunrise: the colours come in as the sun gets low, peak as it touches the horizon,
     //     and fade through the twilight while it sinks
@@ -102,7 +179,7 @@ void main() {
     vec3 farSide = mix(violet, pink * 0.85, band * 0.6);         // away from the sun: a pink belt over violet
     vec3 tint = mix(farSide, sunSide, sideSun) * dim;
     float amt = glow * (0.3 + 0.7 * band) * mix(0.45, 1.0, sideSun) * smoothstep(-0.12, 0.02, h);
-    col = mix(col, tint, clamp(amt, 0.0, 0.92));
+    col = mix(col, tint, clamp(amt * 0.4, 0.0, 0.5)); // (a touch of pink and violet on top of the air's own sunset)
     // twilight: deep blue-violet overhead, before the night's black-blue
     float tw = down(-0.12, 0.0, se) * smoothstep(-0.5, -0.25, se) * clear;
     col = mix(col, vec3(0.13, 0.12, 0.34), tw * 0.55 * sqrt(hb));
@@ -120,7 +197,7 @@ void main() {
     col += moonCol * (pow(moonAmt, 8.0) * 0.08 + pow(moonAmt, 64.0) * 0.15) * uNight * clear;
     col = mix(col, moonCol * 0.9, smoothstep(0.9985, 0.9992, moonAmt) * uNight * smoothstep(-0.01, 0.01, h) * mix(1.0, 0.3, uOvercast));
     // Clouds: projected on a high flat layer, drifting (more and greyer under rain clouds)
-    if (uUltra > 0.5 && h > 0.01) {
+    if (uClouds > 0.5 && h > 0.01) {
         // «Ультра»: soft, thick clouds lit from the sun's side (a look a little towards the sun: where the
         // cloud thins that way its edge glows — a silver lining), darker and fuller under rain
         vec2 uv = d.xz / (h + 0.1) * 1.3 + vec2(uTime * 0.01, uTime * 0.0035);
@@ -143,7 +220,7 @@ void main() {
             cloudCol += sunCol * edge * pow(sunAmt, 6.0) * 1.4 * clear * smoothstep(-0.1, 0.05, se);
             col = mix(col, cloudCol, c * mix(mix(0.92, 0.55, uNight), 0.97, uOvercast));
         }
-    } else if (uClouds > 0.5 && h > 0.01) {
+    } else if (false) {
         vec2 uv = d.xz / (h + 0.08) * 1.6 + vec2(uTime * 0.012, uTime * 0.004);
         float c = fbm(uv);
         c = smoothstep(mix(0.48, 0.3, uOvercast), mix(0.78, 0.62, uOvercast), c) * smoothstep(0.01, 0.22, h);
@@ -177,7 +254,7 @@ void main() {
         float s = step(0.9975, hash(floor(sp)));
         float tw2 = 0.6 + 0.4 * sin(uTime * 3.0 + hash(floor(sp)) * 40.0);
         col += vec3(s * tw2) * starK * smoothstep(0.0, 0.3, h);
-        if (uUltra > 0.5) {
+        {
             // many more stars, of different brightness and colour, and the Milky Way across the sky
             vec2 sp2 = d.xz / (h + 0.3) * 260.0;
             float hs = hash(floor(sp2));
