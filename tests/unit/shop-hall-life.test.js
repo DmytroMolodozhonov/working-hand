@@ -1,11 +1,12 @@
-// Хозяин большой лавки (ShopHallLife): раскладывает товары по полкам, на «сколько стоит…» идёт к полке и называет цену, на «да» берёт монеты,
-// несёт покупку и отдаёт в руку; денег мало — не продаёт; гость ушёл — покупка остаётся на прилавке; выученный свиток не продаёт.
+// Большая лавка (ShopHallLife): полки заполняются; продавец на названный товар идёт к полке и «Вингардиум Левиоса» переносит его на свой
+// прилавок; оплата — мешочек на прилавке и «беру» (обычная оплата CastleTalk.pay со сдачей); неоплаченное возвращается на полку, когда герой
+// ушёл; вынесенный без оплаты товар — кража (охранник зовёт); купленное место пополняется только на следующий день; комната ингредиентов.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { TerrainData } from '../../src/world/Terrain.js';
 import { ShopHallLife } from '../../src/game/ShopHallLife.js';
-import { potionPrice } from '../../src/game/ShopHallGoods.js';
+import { potionPrice, ingredientPrice } from '../../src/game/ShopHallGoods.js';
 
 let site = null;
 function village() {
@@ -13,29 +14,42 @@ function village() {
     return site;
 }
 
-function fakeGame({ coins = 10000, known = null } = {}) {
+function fakeGame({ kind = 'potions', known = null } = {}) {
     const def = village();
-    const loose = new Map(), said = [], got = [];
+    const loose = new Map(), said = [], crimes = [], paid = [];
     const g = {
-        authority: true, localId: 'me', now: () => 0,
+        authority: true, localId: 'me', isNight: false,
         character: { group: { position: new THREE.Vector3() } },
         hud: { setVoice() {} },
-        inventory: { c: coins, coins() { return this.c; }, spendCoins(n) { if (this.c < n) return false; this.c -= n; return true; }, _render() {} },
+        inventory: { c: 10000, coins() { return this.c; }, spendCoins(n) { if (this.c < n) return false; this.c -= n; return true; }, _render() {} },
         knownScrollFn: () => known,
         cauldrons: { list: new Map(), paid() {} },
         items: {
             loose, held: { right: null, left: null },
             spawnLoose(item, pos) { const L = { item, model: { position: pos.clone() }, vel: new THREE.Vector3(), spin: new THREE.Vector3() }; loose.set(item.uid, L); return L; },
             removeLoose(uid) { const L = loose.get(uid); loose.delete(uid); return L?.item; },
-            pickUp(uid, to, side) { const L = loose.get(uid); if (!L) return; if (L.item.shop && !L.item.shop.paid) return; loose.delete(uid); delete L.item.shop; got.push({ item: L.item, side }); },
+            pickUp(uid) { loose.delete(uid); },
         },
     };
     const cs = { def, awake: true, active: new Map() };
+    const hall = def.halls.find((h) => h.kind === kind);
+    const st = def.stalls[hall.stall];
+    const mk = (id, stall) => ({ id, role: 'seller', job: 'stall', cs, entry: { stall }, x: def.stalls[stall].back.x, y: def.stalls[stall].back.y, z: def.stalls[stall].back.z, yaw: 0, model: {} });
+    const keeper = mk('k', hall.stall);
+    const potions = def.halls.find((h) => h.kind === 'potions');
+    const guard = mk('g', potions.guard);
+    let purse = null;
+    const talk = {
+        stalls: new Map(),
+        _merchantOf: (d, i) => (i === keeper.entry.stall ? keeper : null),
+        _pursePay: () => purse,
+        pay(coinUid, goodUid) { paid.push(goodUid); const L = loose.get(goodUid); L.item.shop.paid = true; },
+    };
     const life = {
-        castles: new Map([[def.id, cs]]),
+        castles: new Map([[def.id, cs]]), byId: new Map([['k', keeper], ['g', guard]]), talk,
         _say(v, t) { said.push(t); },
         _ground() {},
-        _steer(v, tx, tz, speed, dt, stopAt = 0) { // (straight on, as fast as asked)
+        _steer(v, tx, tz, speed, dt, stopAt = 0) {
             const dx = tx - v.x, dz = tz - v.z, d = Math.hypot(dx, dz);
             v.yaw = Math.atan2(-dx, -dz);
             if (d <= stopAt) { v.speed = 0; return d; }
@@ -44,79 +58,92 @@ function fakeGame({ coins = 10000, known = null } = {}) {
             return d - s;
         },
         rel: { bump() {} },
-        talk: { _merchantOf: (d, i) => (i === keeper.entry.stall ? keeper : null) },
+        reportCrime(v, by, k) { crimes.push([v.id, by, k]); },
     };
     g.castleLife = life;
-    const hall = def.halls.find((h) => h.kind === 'potions');
-    const st = def.stalls[hall.stall];
-    const keeper = { id: 'k', role: 'seller', job: 'stall', cs, entry: { stall: hall.stall }, x: st.back.x, y: st.back.y, z: st.back.z, yaw: 0, model: {} };
-    return { g, def, hall, keeper, said, got, st };
+    return { g, def, hall, keeper, guard, said, crimes, paid, st, setPurse: (p) => { purse = p; } };
 }
 
-function run(life, keeper, sec, g) { for (let t = 0; t < sec; t += 0.05) { life.update(0.05); life.step(keeper, 0.05); } void g; }
+function run(sh, people, sec) { for (let t = 0; t < sec; t += 0.05) { sh.update(0.05); for (const v of people) sh.step(v, 0.05); } }
+const onCounter = (st, p) => p.x >= st.counter.x0 - 0.7 && p.x <= st.counter.x1 + 0.7 && p.z >= st.counter.z0 - 0.7 && p.z <= st.counter.z1 + 0.7;
 
-test('the shelves fill with every potion, the keeper shows the asked one, names its price, sells it and brings it into the hand', () => {
-    const { g, hall, keeper, said, got } = fakeGame();
+test('a potion asked: «Левиоса» to the counter, paid with the pouch on the counter; its place refills only the next day', () => {
+    const { g, hall, keeper, guard, said, paid, st, setPurse } = fakeGame();
     const me = g.character.group.position;
     me.set(hall.inside.x, hall.inside.y, hall.inside.z);
-    const life = new ShopHallLife(g);
-    for (let i = 0; i < 80; i++) life.update(0.31); // (a few goods a look)
-    const goods = [...g.items.loose.values()].filter((L) => L.item.shop?.stall === g.castleLife.castles.values().next().value.def.id + ':s' + hall.stall); // (the scroll hall near fills too)
-    assert.ok(goods.length >= 40, `goods on the shelves (${goods.length})`);
-    const odd = goods.find((L) => !(L.rest && L.item.shop?.hall === 'potions')); assert.ok(!odd, 'lying still, priced, the hall’s: ' + JSON.stringify(odd?.item));
-    // the hero came in: the keeper greets him and comes up
-    run(life, keeper, 8, g);
-    assert.ok(said.length >= 1, 'a greeting'); // (any of the welcome lines — they are picked at random)
-    assert.ok(Math.hypot(keeper.x - me.x, keeper.z - me.z) < 3.5, 'the keeper came up');
-    // «сколько стоит зелье удачи»: the price, the good shown
-    const r = life.hear(keeper, 'сколько стоит зелье удачи');
+    const sh = new ShopHallLife(g);
+    for (let i = 0; i < 80; i++) sh.update(0.31);
+    run(sh, [keeper, guard], 6);
+    assert.ok(said.length >= 1, 'greeted');
+    const r = sh.hear(keeper, 'хочу купить зелье удачи');
     assert.match(r, new RegExp(String(potionPrice('luck'))));
-    assert.equal(life.offer.kind, 'good');
-    const L = g.items.loose.get(life.offer.uids[0]);
-    assert.equal(L.item.rec, 'luck');
-    run(life, keeper, 12, g);
-    assert.ok(Math.hypot(keeper.x - L.model.position.x, keeper.z - L.model.position.z) < 2.6, 'he went to its shelf');
-    // «да»: the coins taken, he brings it into the hand
-    const r2 = life.hear(keeper, 'да, беру');
-    assert.ok(r2);
-    assert.equal(g.inventory.c, 10000 - potionPrice('luck'));
-    run(life, keeper, 25, g);
-    assert.equal(got.length, 1, 'given into the hand');
-    assert.equal(got[0].item.rec, 'luck');
-    assert.ok(!got[0].item.shop, 'his: no price on it');
+    const uid = sh.offer.uids[0], L = g.items.loose.get(uid);
+    run(sh, [keeper, guard], 20);
+    assert.ok(said.includes('Вингардиум Левиоса!'), 'the spell said');
+    assert.ok(L.onCounter && onCounter(st, L.model.position), 'the potion lies on his counter');
+    assert.ok(g.castleLife.talk.stalls.get(`${village().id}:s${hall.stall}`).goods.includes(uid), 'a good of his stall: the usual payment');
+    assert.equal(sh.hear(keeper, 'беру'), 'Кладите мешочек с монетами на прилавок — сдачу верну.', 'no pouch yet');
+    setPurse({ item: { uid: 'pouch' } });
+    assert.equal(sh.hear(keeper, 'да'), true, 'paid the usual way (CastleTalk.pay: the change on the counter)');
+    assert.deepEqual(paid, [uid]);
+    g.items.loose.delete(uid); // (the hero takes it)
+    const count = () => [...g.items.loose.values()].filter((x) => x.item.rec === 'luck').length;
+    for (let i = 0; i < 10; i++) sh.update(0.31);
+    const before = count();
+    for (let i = 0; i < 40; i++) sh.update(0.31);
+    assert.equal(count(), before, 'not refilled the same day');
+    g.isNight = true; sh.update(0.1); g.isNight = false; // (a night passes — the morning)
+    for (let i = 0; i < 40; i++) sh.update(0.31);
+    assert.equal(count(), before + 1, 'refilled the next day');
 });
 
-test('not enough coins: nothing sold; flasks by number; the hero gone — the paid good lies on the counter', () => {
-    const { g, hall, keeper, got, st } = fakeGame({ coins: 30 });
+test('not paid and the hero left: back on its shelf; a good carried out of the shop — a theft', () => {
+    const { g, hall, keeper, guard, crimes, said } = fakeGame();
     const me = g.character.group.position;
     me.set(hall.inside.x, hall.inside.y, hall.inside.z);
-    const life = new ShopHallLife(g);
-    for (let i = 0; i < 80; i++) life.update(0.31);
-    assert.match(life.hear(keeper, 'почём зелье исцеления'), /700/);
-    assert.match(life.hear(keeper, 'да'), /Не хватает 670/);
-    assert.equal(g.inventory.c, 30, 'no coin taken');
-    assert.match(life.hear(keeper, 'дайте одну колбу'), /20 монет/);
-    life.hear(keeper, 'да');
-    assert.equal(g.inventory.c, 10);
-    me.set(hall.door.x + 30, hall.door.y, hall.door.z + 30); // (went away)
-    run(life, keeper, 20, g);
-    assert.equal(got.length, 0);
-    const onCounter = [...g.items.loose.values()].filter((L) => L.item.kind === 'flask' && !L.item.shop);
-    assert.equal(onCounter.length, 1, 'the paid flask lies on the counter');
-    const p = onCounter[0].model.position;
-    assert.ok(p.x >= st.counter.x0 - 0.5 && p.x <= st.counter.x1 + 0.5 && p.z >= st.counter.z0 - 0.5 && p.z <= st.counter.z1 + 0.5);
+    const sh = new ShopHallLife(g);
+    for (let i = 0; i < 80; i++) sh.update(0.31);
+    sh.hear(keeper, 'дайте зелье исцеления');
+    const L = g.items.loose.get(sh.offer.uids[0]), home = L.model.position.clone();
+    run(sh, [keeper, guard], 20);
+    assert.ok(L.onCounter);
+    me.set(hall.door.x + 40, hall.door.y, hall.door.z + 40); // (went away)
+    run(sh, [keeper, guard], 4);
+    assert.ok(!L.onCounter && L.model.position.distanceTo(home) < 0.3, 'back on its shelf');
+    // something (Акцио) carried a good out of the shop
+    const X = [...g.items.loose.values()].find((x) => x.item.shop && !x.onCounter);
+    X.model.position.set(hall.door.x + 20, hall.door.y, hall.door.z + 20);
+    me.set(hall.inside.x, hall.inside.y, hall.inside.z);
+    run(sh, [keeper, guard], 1);
+    assert.equal(crimes.length, 1, 'the guard calls it a theft');
+    assert.equal(crimes[0][0], 'g');
+    assert.ok(said.some((t) => /Вор|Стой/.test(t)));
 });
 
-test('the scroll hall: a known scroll is not sold, a dark spell is refused', () => {
-    const def = village();
-    const { g, keeper } = fakeGame({ known: (it) => it.spell === 'ToTheSun' });
-    const hall = def.halls.find((h) => h.kind === 'scrolls');
-    keeper.entry.stall = hall.stall;
-    g.character.group.position.set(hall.inside.x, hall.inside.y, hall.inside.z);
-    const life = new ShopHallLife(g);
-    for (let i = 0; i < 80; i++) life.update(0.31);
-    assert.ok([...g.items.loose.values()].every((L) => L.item.spell !== 'ToTheSun'), 'a scroll the stocker knows is not laid out');
-    assert.match(life.hear(keeper, 'покажите свиток ту зе сан'), /уже знаете/);
-    assert.match(life.hear(keeper, 'продайте авада кедавра'), /Чёрной магии/);
-    assert.match(life.hear(keeper, 'сколько стоит свиток лайтнинг страйк'), /монет/);
+test('a good moved inside the shop flies back; the ingredients’ room: prices 100…700, no dragon egg; a dark spell and a known scroll refused', () => {
+    const A = fakeGame({ kind: 'ingredients' });
+    A.g.character.group.position.set(A.hall.inside.x, A.hall.inside.y, A.hall.inside.z);
+    const sh = new ShopHallLife(A.g);
+    for (let i = 0; i < 80; i++) sh.update(0.31);
+    const ing = [...A.g.items.loose.values()].filter((x) => x.item.shop?.hall === 'ingredients');
+    assert.ok(ing.length >= 28, `every ingredient on the shelves (${ing.length})`);
+    assert.ok(ing.every((x) => x.item.kind !== 'dragonEgg' && x.item.shop.price >= 100 && x.item.shop.price <= 700));
+    assert.match(sh.hear(A.keeper, 'сколько стоит перо феникса'), new RegExp(String(ingredientPrice('phoenixFeather'))));
+    assert.match(sh.hear(A.keeper, 'продайте яйцо дракона'), /не держим/);
+    const X = ing.find((x) => x.item.kind === 'wool'), home = X.model.position.clone();
+    X.model.position.x += 2; // (pushed off its place)
+    run(sh, [A.keeper, A.guard], 7);
+    assert.ok(X.model.position.distanceTo(home) < 0.3, 'back on its place');
+    const B = fakeGame({ kind: 'scrolls', known: (it) => it.spell === 'ToTheSun' });
+    B.g.character.group.position.set(B.hall.inside.x, B.hall.inside.y, B.hall.inside.z);
+    const s2 = new ShopHallLife(B.g);
+    for (let i = 0; i < 80; i++) s2.update(0.31);
+    assert.match(s2.hear(B.keeper, 'покажите свиток ту зе сан'), /уже знаете/);
+    assert.match(s2.hear(B.keeper, 'продайте авада кедавра'), /Чёрной магии/);
+    const C = fakeGame();
+    C.g.character.group.position.set(C.hall.inside.x, C.hall.inside.y, C.hall.inside.z);
+    const s3 = new ShopHallLife(C.g);
+    for (let i = 0; i < 80; i++) s3.update(0.31);
+    assert.match(s3.hear(C.keeper, 'сколько стоит зелье превращения в дракона'), /не продаём/);
+    assert.match(s3.hear(C.keeper, 'дайте три колбы'), /60 монет/);
 });

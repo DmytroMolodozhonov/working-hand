@@ -725,8 +725,8 @@ export class CastleTalk {
                 this.trace.mark(tr, 'rules');
                 v.talking = 4; v.talkTo = g.localId;
                 this.attention?.talkedWith(v.id, performance.now());
-                journal(`разговор: «${text}» → «${hr}» — хозяин лавки (правила)`);
-                this._sayReply(v, hr);
+                journal(`разговор: «${text}» → «${hr === true ? '(оплата у прилавка)' : hr}» — лавка (правила)`);
+                if (typeof hr === 'string') this._sayReply(v, hr); // (true: the payment at the counter speaks for itself — pay())
                 return true;
             }
         }

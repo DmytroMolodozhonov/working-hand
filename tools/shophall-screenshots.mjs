@@ -31,7 +31,7 @@ try {
             const { TerrainData, mergeBuffers, CHUNK } = await import('/src/world/Terrain.js');
             const { applyVoxelDetail } = await import('/src/world/VoxelShading.js');
             const { bottleShow, scrollShow, hallSign } = await import('/src/game/ShopHallModels.js');
-            const { potionStock, scrollStock } = await import('/src/game/ShopHallGoods.js');
+            const { potionStock, scrollStock, ingredientStock } = await import('/src/game/ShopHallGoods.js');
             const { makeItemModel } = await import('/src/game/ItemTypes.js');
             const d = window.__hallWorld || (window.__hallWorld = (() => { const t = new TerrainData(); t.generate({ seed, mountains: true, seas: true, deepCaves: true, lush: true, slopes: true, wizHuts: true, furnish: true, bigHouses: true, buildings: true, wizShops: true }); return t; })());
             const site = d.villages.spawnVillage();
@@ -53,7 +53,7 @@ try {
             sun.shadow.mapSize.set(2048, 2048);
             scene.add(sun, sun.target);
             if (view !== 'out') { const lamp = new THREE.PointLight(0xffe6b0, 1.1, 40); lamp.position.set(cx, fy + 8, cz); scene.add(lamp); }
-            const planes = view === 'in' ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), fy + 9.4)] : [];
+            const planes = view === 'in' || view === 'corner' ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), fy + (kind === 'ingredients' ? 7.4 : 9.4))] : [];
             const mat = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111, clippingPlanes: planes }));
             const ccx = Math.floor(cx / CHUNK), ccz = Math.floor(cz / CHUNK);
             for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
@@ -71,18 +71,19 @@ try {
                 m.castShadow = m.receiveShadow = true;
                 scene.add(m);
             }
-            const show = kind === 'potions' ? bottleShow(h.decor, 5) : scrollShow(h.decor, 5);
+            const show = kind !== 'scrolls' ? bottleShow(h.decor, 5) : scrollShow(h.decor, 5);
             if (show) scene.add(show);
             const sg = hallSign(h); if (sg) scene.add(sg);
-            const stock = kind === 'potions' ? potionStock(h.slots, h.flasks) : scrollStock(h.slots);
+            const stock = kind === 'potions' ? potionStock(h.slots, h.flasks) : kind === 'ingredients' ? ingredientStock(h.slots) : scrollStock(h.slots);
             for (const e of stock) { const m = makeItemModel({ ...e.item, uid: 'x' }); m.position.set(e.slot.x, e.slot.y + 0.1, e.slot.z); scene.add(m); }
             const st = site.stalls[h.stall];
             const hero = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.5, 0.5), new THREE.MeshLambertMaterial({ color: 0xd03030 }));
             hero.position.set(st.back.x, fy + 1.75, st.back.z); scene.add(hero);
-            const camera = new THREE.PerspectiveCamera(view === 'in' ? 62 : 50, 1400 / 800, 0.3, 700);
+            const camera = new THREE.PerspectiveCamera(view === 'in' || view === 'corner' ? 70 : 50, 1400 / 800, 0.3, 700);
             const door = h.door, fx = door.x - cx, fz = door.z - cz, fl = Math.hypot(fx, fz) || 1;
             if (view === 'out') { camera.position.set(cx + fx / fl * 40 + fz / fl * 18, fy + 22, cz + fz / fl * 40 - fx / fl * 18); camera.lookAt(cx, fy + 5, cz); }
             else if (view === 'in') { const i = h.walk[h.entry]; camera.position.set(i.x + fx / fl * 2, fy + 3.4, i.z + fz / fl * 2); camera.lookAt(st.back.x, fy + 2.5, st.back.z); }
+            else if (view === 'corner') { const R = h.room; camera.position.set(R.x0 + 0.8, fy + 7.2, R.z0 + 0.8); camera.lookAt(cx, fy + 1, cz); }
             else { camera.position.set(cx + 0.01, fy + 42, cz); camera.lookAt(cx, fy, cz); }
             r.render(scene, camera);
             const u = cv.toDataURL('image/png');

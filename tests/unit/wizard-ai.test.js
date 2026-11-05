@@ -18,7 +18,8 @@ test('wizards look like wizards: robes, pointed hats, wands (a wanderer too), th
             assert.ok(L.wizard && L.dress, `${role} robe`);
             // (the wanderers and the settlements' wizards wear one of five costumes now — a cowl, a wreath, an ice crown among them:
             //  VillagerOutfits.js, the author's request; the tower's own keep the pointed hat)
-            assert.ok(L.hat.startsWith('wizard') || (L.outfit && ['cowl', 'wreath', 'icecrown'].includes(L.hat)), `${role} hat ${L.hat}`);
+            // (the tower's students wear four uniforms now — one of them a soft floppy hat with the work robe: TowerUniforms.js, the author's decision)
+            assert.ok(L.hat.startsWith('wizard') || (L.outfit && ['cowl', 'wreath', 'icecrown'].includes(L.hat)) || (role === 'student' && ['floppy', 'beret', 'mortar'].includes(L.hat)), `${role} hat ${L.hat}`);
             assert.equal(L.tool, 'wand');
             const m = new VillagerModel(L);
             if (L.hat.startsWith('wizard')) assert.ok(m.hat && m.hatTop, 'the pointed hat is its own mesh (it folds under a low ceiling)'); // (a cowl / a wreath / an ice crown is low: part of the head)
@@ -33,7 +34,9 @@ test('wizards look like wizards: robes, pointed hats, wands (a wanderer too), th
 
 test('a pointed hat folds back under a low ceiling (and stands up again)', () => {
     for (const role of ['student', 'master', 'wanderer']) {
-        const m = new VillagerModel(villagerLook(5, role));
+        let seed = 5;
+        while (!villagerLook(seed, role).hat.startsWith('wizard') && seed < 60) seed++; // (a pointed hat: the floppy one of a student's work robe is soft — it does not stand up to fold)
+        const m = new VillagerModel(villagerLook(seed, role));
         run(m, 0.2, { mode: 'idle' });
         const up = top(m);
         m.setHatTilt(1);
