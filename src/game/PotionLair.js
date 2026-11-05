@@ -248,6 +248,17 @@ export class PotionLair {
         if (f && f.left > 0 && f.left < LAIR_RULES.FIRE_LEFT * 0.5) f.left = LAIR_RULES.FIRE_LEFT;
     }
 
+    /** Вещи с полок, оказавшиеся на полу зала (скатились в прежней версии / сохранены в мире), убираются при наполнении: на полках им место. */
+    _sweepFloor() {
+        const items = this.game.items, R = this.rect;
+        if (!items?.loose || !R) return;
+        for (const [uid, L] of [...items.loose]) {
+            const p = L.model?.position;
+            if (!L.item?.lair || !p || p.x < R.x0 || p.x > R.x1 || p.z < R.z0 || p.z > R.z1) continue;
+            if (p.y < LAIR.F + 0.4 && !L.inCaul && !L.hover) items.removeLoose(uid);
+        }
+    }
+
     /** Полки: пустое место получает такую же вещь (после REFILL_DELAY); первый раз — сразу. */
     _shelves(first = false) {
         let n = 0;
@@ -263,6 +274,7 @@ export class PotionLair {
             (cell.get(k) || cell.set(k, []).get(k)).push(p.y);
         }
         const pos = new THREE.Vector3();
+        if (first) this._sweepFloor();
         for (const e of this.stock) {
             const sx = LAIR.CX + e.slot.x, sz = LAIR.CZ + e.slot.z;
             if (!d.landMade(sx, sz)) continue;
@@ -278,7 +290,9 @@ export class PotionLair {
             }
             this._emptyAt.delete(id);
             if (++n > 12) break; // (по несколько за кадр: модели вещей не делаются все разом)
-            items.spawnLoose({ ...e.item, uid: newUid() }, pos.set(sx, e.slot.y + 0.3, sz), { broadcast: false });
+            // (стоит на доске сразу и неподвижно: падая с 0,3 м, круглые вещи — золотое яблоко — скатывались с края доски на пол, и полка казалась пустой, а мест «пусто» — вещи сыпались снова)
+            const L0 = items.spawnLoose({ ...e.item, uid: newUid(), lair: 1 }, pos.set(sx, e.slot.y + 0.1, sz), { broadcast: false });
+            if (L0) { L0.rest = true; L0.vel?.set(0, 0, 0); L0.spin?.set(0, 0, 0); }
         }
         return n;
     }

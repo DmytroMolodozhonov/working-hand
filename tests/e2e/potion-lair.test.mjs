@@ -38,6 +38,10 @@ test('the potion-maker\'s lair is built, lit, stocked; the fire goes out and the
         const count = () => [...g.items.loose.values()].filter((L) => Math.abs(L.model.position.x - 1400) < 30 && Math.abs(L.model.position.z + 1400) < 30).length;
         for (let i = 0; i < 600 && count() < 52; i++) await sleep(100); // (the shelves fill in portions, a few per frame)
         out.items = count();
+        await sleep(3000);
+        const lairItems = [...g.items.loose.values()].filter((L) => L.item.lair);
+        out.floor = lairItems.filter((L) => L.model.position.y < 96.6).length; // (nothing rolled off the shelves onto the floor)
+        out.apple = lairItems.filter((L) => L.item.kind === 'apple').map((L) => Math.round(L.model.position.y * 10) / 10);
         for (let i = 0; i < 300 && !(c.st.heat >= 1); i++) await sleep(100);
         out.heat = c?.st.heat;
         await window.__shotHook?.('north');
@@ -52,6 +56,8 @@ test('the potion-maker\'s lair is built, lit, stocked; the fire goes out and the
     assert.ok(r.started && r.inLair, 'hero is in the lair');
     assert.ok(r.cauldron && r.water > 3 && r.fire, 'cauldron with water on a fire');
     assert.ok(r.items >= 52, `shelves stocked: ${r.items}`);
+    assert.equal(r.floor, 0, 'no shelf item on the floor');
+    assert.equal(r.apple.length, 1, `exactly one golden apple on its shelf: ${JSON.stringify(r.apple)}`);
     assert.ok(r.heat >= 1 && r.heatAfter < r.heat, 'boiled, then cooled');
     await masterCheck(page);
 });

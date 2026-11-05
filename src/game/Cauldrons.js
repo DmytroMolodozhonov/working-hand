@@ -235,6 +235,7 @@ export class Cauldrons {
         if (g.currentPose && !g.combat?.dead && !g.isDeadLocal) this._hands(dt);
         else this._prev.right = this._prev.left = null;
         this._dipFlask(dt);
+        if (this.auth) this._rimAssist(dt);
         const now = performance.now();
         for (const c of this.list.values()) {
             if (this.auth) this._hostStep(c, dt, now);
@@ -753,6 +754,29 @@ export class Cauldrons {
         c._infA = 0;
         this._hint(c, '💨 Вода выкипела, котёл пуст — можно варить заново', 'dry', 4000);
         this._send(c, 'water');
+    }
+
+    /**
+     * A thing lying on the rim over the opening (it was let go slowly / came to rest on the cauldron's solid box, «застывал над казаном» — the author 06.11) is
+     * nudged to fall in: the same as a thing let go over the opening. Twice a second, only loose things near an upright cauldron.
+     */
+    _rimAssist(dt) {
+        this._rimT = (this._rimT || 0) - dt;
+        if (this._rimT > 0 || !this.game.items?.loose.size) return;
+        this._rimT = 0.4;
+        for (const c of this.list.values()) {
+            if (!this.upright(c)) continue;
+            const base = this.fy(c);
+            for (const L of this.game.items.loose.values()) {
+                const p = L.model?.position;
+                if (!p || L.hover || L.lev || L.accio || L.inCaul || L.away) continue;
+                const dx = c.x - p.x, dz = c.z - p.z, d = Math.hypot(dx, dz), y = p.y - base;
+                if (d > CAULDRON.R_IN + 0.7 || y < H - 0.4 || y > H + 0.8) continue;
+                L.rest = false; L.sentRest = false;
+                L.vel.set(d > 0.05 ? (dx / d) * 1.2 : 0, 0.4, d > 0.05 ? (dz / d) * 1.2 : 0); // (towards the middle, up a little and down it goes into the opening)
+                if (d < CAULDRON.R_IN - 0.2) p.set(c.x + (p.x - c.x) * 0.5, base + H + 0.45, c.z + (p.z - c.z) * 0.5);
+            }
+        }
     }
 
     /** An empty flask dipped into a ready cauldron fills with one portion. */
