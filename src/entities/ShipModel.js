@@ -231,6 +231,8 @@ function shared() {
         ball: new THREE.SphereGeometry(0.32, 10, 8),
         // the black ship (Blackbeard.js): tarred black deck, green fire in its lanterns, the black flag
         deckBlack: new THREE.MeshLambertMaterial({ map: deckTex, color: 0x5e4c40, side: THREE.DoubleSide }),
+        // a sunken ship (SunkenWrecks.js): the deck grey-green with silt and weed
+        deckSunk: new THREE.MeshLambertMaterial({ map: deckTex, color: 0x6f7a5e, side: THREE.DoubleSide }),
         greenFire: new THREE.MeshBasicMaterial({ color: 0x6dff8a }),
         greenDim: new THREE.MeshBasicMaterial({ color: 0x2c7a3c }),
         jolly: new THREE.MeshLambertMaterial({ map: dom ? new THREE.CanvasTexture(jollyCanvas()) : null, color: 0xffffff, side: THREE.DoubleSide }),
@@ -248,7 +250,21 @@ const WOOD = 0x8a5a33, DARK = 0x4a3020, BOTTOM = 0x5a3b2a, WALE = 0x2b1d14, GOLD
  */
 export const SHIP_LOOKS = {
     black: { band: 0x6e141a, gold: 0x7d6230, bone: 0xd8cfb4, sail: 0x37323a, ragged: true, deck: 'deckBlack' },
+    // a ship long at the bottom of the sea (SunkenWrecks.js): its wood grey-green with silt and weed (each plank's own grain kept),
+    // the brass gone green, the sails rotted to rags; no curse, no skulls
+    sunk: { band: 0x45503f, gold: 0x5f7a56, bone: 0xb9c0a4, sail: 0x5d6a58, ragged: true, deck: 'deckSunk', sunk: true },
 };
+/** A sunken ship's wood: every colour pulled towards the sea's silt green-grey, a little darker (the hue of its wood still shows). */
+function siltTint(look) {
+    const cache = new Map();
+    return (c) => {
+        if (c === 0xffffff || c === 0x050302 || c === 0x161008) return c;
+        if (c === GOLD) return look.gold;
+        let t = cache.get(c);
+        if (t === undefined) { _tc.set(c); _tc.lerp(_tc.clone().set(0x4c5a46), 0.55).multiplyScalar(0.85); t = _tc.getHex(); cache.set(c, t); }
+        return t;
+    };
+}
 const _tc = new THREE.Color();
 /** The black ship's planks: every colour pulled down to near-black (a hint of its own hue kept). */
 function blackTint(band, gold, bone) {
@@ -464,7 +480,7 @@ export class ShipModel {
         // (opts.look: 'black' — Captain Black Moustache's ship, SHIP_LOOKS)
         this.look = opts.look ? SHIP_LOOKS[opts.look] || null : null;
         if (this.look) this.color = this.look.band;
-        this.cursed = !!this.look; // (its green fires burn while the curse holds: setCursed)
+        this.cursed = !!this.look && !this.look.sunk; // (its green fires burn while the curse holds: setCursed)
         this.group = new THREE.Group();
         this.group.rotation.order = 'YXZ';
         this.near = new THREE.Group(); // rigging, interior, guns: hidden far away
@@ -500,7 +516,7 @@ export class ShipModel {
         const L = this.L, S = shared();
         const hw = (z, y) => hullHalfWidth(L, z, y);
         const look = this.look;
-        const tint = look ? blackTint(look.band, look.gold, look.bone) : null;
+        const tint = look ? (look.sunk ? siltTint(look) : blackTint(look.band, look.gold, look.bone)) : null;
         const hull = new Batch(tint);
         const near = new Batch(tint);
         const D = L.deck, R = L.rail;
@@ -584,7 +600,7 @@ export class ShipModel {
         const bz = -L.L / 2;
         hull.boxAt(0, D - 0.6, bz - 2.2, 0.8, 1.2, 5, DARK, 0.25);
         hull.cyl(0.55, 0.3, L.L * 0.32, 0, D + 2.6, bz - L.L * 0.1, WOOD, -Math.PI / 2 + 0.32);
-        if (look) this._blackDetail(hull, glow, L, D, R, hw, top, bz);
+        if (look && !look.sunk) this._blackDetail(hull, glow, L, D, R, hw, top, bz);
         // gun ports: dark squares on the outside at every gun, lids hinged up
         for (const g of L.cannons) {
             const s = g.side, w = hw(g.z, g.muzzle.y);
@@ -862,7 +878,7 @@ export class ShipModel {
         for (const m of L.masts) {
             const fg = new THREE.PlaneGeometry(4.5, 2.6, 6, 1);
             fg.translate(2.25, 0, 0);
-            const flag = new THREE.Mesh(fg, look ? S.jolly : new THREE.MeshLambertMaterial({ color: this.color, side: THREE.DoubleSide }));
+            const flag = new THREE.Mesh(fg, look && !look.sunk ? S.jolly : look ? S.bundleBlack : new THREE.MeshLambertMaterial({ color: this.color, side: THREE.DoubleSide }));
             flag.position.set(0, m.top + 1.2, m.z);
             const pt = parts.get(m.id);
             if (pt) pt.up.cyl(0.08, 0.08, 2.6, 0, m.top + 1.0 - pt.by, 0, DARK);
@@ -876,7 +892,7 @@ export class ShipModel {
             hull.box(s * 2.4 - 0.05, s * 2.4 + 0.05, top + L.rail, y, L.L / 2 - 0.6, L.L / 2 - 0.5, DARK);
             glow.box(s * 2.4 - 0.4, s * 2.4 + 0.4, y, y + 0.8, L.L / 2 - 0.95, L.L / 2 - 0.15, 0xffffff);
         }
-        this.glow = new THREE.Mesh(glow.build(), look ? S.greenFire : S.glass);
+        this.glow = new THREE.Mesh(glow.build(), look && !look.sunk ? S.greenFire : S.glass);
         this.group.add(this.glow);
 
         // the masts above their stumps (each turns about its break when it falls)
@@ -1284,7 +1300,7 @@ export class ShipModel {
         }
         // the taffrail: the castle's arms (a shield in its colour) under a gilt crown, scrolls either side
         const tw = hw(zt - 0.1, crownY) * 0.85;
-        if (this.look) { this._sternSkull(hull, glow, zt, crownY, tw); return; }
+        if (this.look && !this.look.sunk) { this._sternSkull(hull, glow, zt, crownY, tw); return; }
         hull.box(-tw, tw, crownY - 0.35, crownY, zt - 0.2, zt + 0.2, GOLD);
         hull.box(-1.3, 1.3, crownY, crownY + 2.0, zt - 0.05, zt + 0.15, this.color); // the shield
         hull.box(-1.45, 1.45, crownY, crownY + 0.15, zt - 0.1, zt + 0.25, GOLD);
@@ -1371,7 +1387,7 @@ export class ShipModel {
                 if (o.geometry !== shared().ball && o.geometry !== this._barrelGeo && o.geometry !== BARRIER?.shell && o.geometry !== BARRIER?.ring) o.geometry.dispose();
                 const m = o.material;
                 const S = shared();
-                if (m && m !== S.solid && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.deckBlack && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundleBlack) m.dispose();
+                if (m && m !== S.solid && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.deckBlack && m !== S.deckSunk && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundleBlack) m.dispose();
             }
         });
         for (const s of this.sails.values()) s.dispose?.();

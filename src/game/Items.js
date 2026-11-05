@@ -43,7 +43,7 @@ function oneShape(model) {
 }
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { seesInvisible, isGhostItem } from './Invisibles.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollGhostLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollWreckLoot, rollSeaTempleLoot, rollGhostLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
@@ -282,6 +282,8 @@ export class ItemSystem {
         const boss = chest?.room;
         const bossItems = boss === 'dragon' ? rollDragonLoot(rng)
             : boss === 'iceQueen' ? rollIceQueenLoot(rng, String(chest.id).endsWith('0')) // (her own robe in the first chest)
+            : boss === 'wreck' || boss === 'wreckCaptain' ? rollWreckLoot(rng, boss === 'wreckCaptain', Math.max(1, CHEST_THINGS - extra.length)) // (a sunken ship's chest — SunkenSites.js; the room's name goes to the host too: NetSync chest-ask)
+            : boss === 'seaTemple' || boss === 'seaAltar' ? rollSeaTempleLoot(rng, boss === 'seaAltar') // (the sunken temple's offerings)
             : boss === 'diabolos' ? rollGhostLoot(rng, 4).concat(rollKeyItem(rng)) // (Дьяволос, убитый божественным мечом: сильнейшие пентаграммы, высшие волшебные вещи, ключ — самое ценное в игре)
             : boss === 'study' && chest.castle ? rollWizardHouseLoot(rng, true).concat(rollKeyItem(rng), rollKeyItem(rng)) : null; // (the Master's study: rare scrolls, a strong wand, a robe, potions)
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)

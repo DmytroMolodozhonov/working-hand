@@ -599,6 +599,39 @@ export function rollShipLoot(r = Math.random, captain = false, count = 0) {
     return count > 0 ? fitThings(out, count, r) : out;
 }
 
+/**
+ * A sunken ship's chest (SunkenSites.js — a wreck on the sea's bottom): what the drowned crew left — tarnished coins, a sailor's sabre
+ * gone green, cannonballs, the sea's scrolls, and more often than on a living ship something precious (it was never looted). The
+ * captain's cabin: more gold, two precious things and a scroll of the sea. No food (it rotted), no fishing rod for the cabin.
+ */
+export function rollWreckLoot(r = Math.random, captain = false, count = 0) {
+    const out = [];
+    out.push(rollKeyItem(r));
+    if (captain) { out.push(rollKeyItem(r), spellScroll(pick(r, SEA_SCROLLS))); return count > 0 ? fitThings(out, count, r, true) : out; }
+    const n = randInt(r, 1, 2);
+    for (let i = 0; i < n; i++) {
+        const x = r();
+        if (x < 0.22) out.push(spellScroll(pick(r, SEA_SCROLLS)));
+        else if (x < 0.4) out.push({ kind: 'cannonball', uid: newUid() });
+        else if (x < 0.55) out.push({ kind: 'weapon', type: r() < 0.6 ? 'sword' : 'axe', magic: r() < 0.3, bonus: randInt(r, 5, 50), uid: newUid() });
+        else if (x < 0.62 && LOOT_EXTRA.fishingRod) out.push(LOOT_EXTRA.fishingRod(r));
+        else out.push(rollPlainItem(r, true));
+    }
+    return count > 0 ? fitThings(out, count, r, true) : out;
+}
+
+/**
+ * The chests of the sunken temple (SunkenSites.js — the temple of the sea's old faith, deep down): the offerings brought to the sea —
+ * precious things (wands, magic shields and weapons…), the sea's scrolls, the glowing tails of the deep's magic fish (the mermaid's
+ * potion wants one). The altar's chest: two precious things and a scroll; the side chests: one of each.
+ */
+export function rollSeaTempleLoot(r = Math.random, altar = false) {
+    const out = [rollKeyItem(r), spellScroll(pick(r, SEA_SCROLLS))];
+    if (altar) out.push(rollKeyItem(r));
+    if (r() < (altar ? 0.8 : 0.5)) out.push({ kind: 'glowfinTail', uid: newUid(), count: 1 });
+    return out;
+}
+
 /** How many things an ordinary chest holds, the coin pouch (if it has one) among them (author: three, not four). */
 export const CHEST_THINGS = 3;
 
