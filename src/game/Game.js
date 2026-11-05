@@ -278,6 +278,21 @@ const LIGHTNING_AIM = { T: 0.6, MOVE: 0.6 };
 /** (Game._brainrotUpkeep) mana a second while a «Брейнрот» servant serves me */
 const BRAINROT_UPKEEP = 1;
 
+/**
+ * (Settings «Ходьба назад») Is the body leaning back now? The shoulders' depth against the hips (torsoMetrics.depth) over this player's
+ * own upright one — learned slowly while they do not lean (st.base); LEAN_BACK more is «back», with a little hysteresis.
+ */
+const LEAN_BACK = { ON: 0.07, OFF: 0.045, LEARN: 0.4 };
+function leanBack(st, torso, dt) {
+    const d = torso?.depth;
+    if (d == null || !Number.isFinite(d)) { st.on = false; return false; }
+    if (st.base == null) st.base = d;
+    const x = d - st.base;
+    st.on = st.on ? x > LEAN_BACK.OFF : x > LEAN_BACK.ON;
+    if (!st.on && Math.abs(x) < LEAN_BACK.OFF) st.base += (d - st.base) * Math.min(1, dt * LEAN_BACK.LEARN); // (its own upright: slowly, only near it)
+    return st.on;
+}
+
 export class Game {
     /**
      * @param {object} deps {renderer, camera, poseService, voice, sound, hud, net, ui}
@@ -4283,6 +4298,7 @@ export class Game {
             ch.setCrouching(flying || down ? false : pose.isCrouching);
             ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
             ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
+            ch.backward = !!(this.config.walkBack && ch.isRunning && leanBack(this._lean || (this._lean = {}), pose.torso, dt));
         }
         // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
         const J = this._jolt = this.impact.step(dt);
