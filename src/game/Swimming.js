@@ -34,6 +34,8 @@ const EYES = 2.1; // eyes above the body's origin
 const FEET = 1.95;
 /** The leap out of the water (a fish's breach): from this speed up (m/s; a strong human stroke straight up ≈ 3, the mermaid's tail up
  *  to ×5), the body flies on with K × its speed (capped), water at least DEPTH deep (no leaping out of a puddle). */
+/** How fast the water's haze comes and goes as the eyes cross the surface (1/s: ~0.3 s). */
+const FOG_FADE = 3.2;
 export const BREACH = { MIN_UP: 2.6, K: 1.4, BOOST: 2, MAX_VY: 16, MAX_FW: 16, DEPTH: 4 };
 
 const _v = new THREE.Vector3();
@@ -342,21 +344,35 @@ export class Swimming {
         const fog = this.game.scene?.fog;
         if (!fog) return;
         // (the haze is about the CAMERA — the same judgement as the blue overlay: judged at the body, a wave crossing the eyes
-        //  turned the haze on and off frame by frame — the author 05.11: «под водой мир мигает»)
-        if (this.eyeUnder) {
-            if (!this._fogSaved || fog.color.getHex() !== this._fogSet) this._fogSaved = fog.color.clone();
-            // the water's own colour by the depth of the eyes (the red goes first, the deep is blue and dark — UnderwaterLight.waterTint)
-            const L = this.game.underwaterLight;
-            const day = L?.day ?? Math.min(1, 0.15 + 2.2 * (0.299 * this._fogSaved.r + 0.587 * this._fogSaved.g + 0.114 * this._fogSaved.b));
-            const t = waterTint(L?.depth ?? 2, day, _tint, !!this.game.potionFx?.has?.('mermaid'));
-            fog.color.copy(t.color);
-            this._fogSet = fog.color.getHex();
-            fog.near = 0.5;
-            fog.far = Math.min(fog.far, this.bubble ? t.far * 1.3 : t.far);
-        } else if (this._fogSaved) {
-            if (fog.color.getHex() === this._fogSet) fog.color.copy(this._fogSaved);
-            this._fogSaved = null;
+        //  turned the haze on and off frame by frame — the author 05.11: «под водой мир мигает»; and again: «мерцание… связано с
+        //  туманом» — the switch itself was instant: the whole picture jumped from the sky's haze to the water's in one frame whenever
+        //  the eyes crossed the surface. Now the water's haze fades in and out over ~0.3 s: colour, near and far together.)
+        const now = performance.now();
+        const dt = Math.min(0.1, Math.max(0, (now - (this._fogT ?? now)) / 1000));
+        this._fogT = now;
+        const want = this.eyeUnder ? 1 : 0;
+        if (this._uw == null) this._uw = want;
+        this._uw += Math.max(-dt * FOG_FADE, Math.min(dt * FOG_FADE, want - this._uw));
+        // the world's own haze this frame (World resets it now and then): what is not ours is the sky's
+        const S = this._sky || (this._sky = { c: new THREE.Color(), near: 1, far: 100, set: false });
+        if (!S.set || fog.color.getHex() !== this._fogSet) S.c.copy(fog.color);
+        if (!S.set || fog.near !== this._nearSet) S.near = fog.near;
+        if (!S.set || fog.far !== this._farSet) S.far = fog.far;
+        S.set = true;
+        const k = this._uw * this._uw * (3 - 2 * this._uw); // (eased)
+        if (k <= 0) {
+            if (this._fogSet != null) { fog.color.copy(S.c); fog.near = S.near; fog.far = S.far; this._fogSet = this._nearSet = this._farSet = null; }
+            return;
         }
+        // the water's own colour by the depth of the eyes (the red goes first, the deep is blue and dark — UnderwaterLight.waterTint)
+        const L = this.game.underwaterLight;
+        const day = L?.day ?? Math.min(1, 0.15 + 2.2 * (0.299 * S.c.r + 0.587 * S.c.g + 0.114 * S.c.b));
+        const t = waterTint(L?.depth ?? 2, day, _tint, !!this.game.potionFx?.has?.('mermaid'));
+        fog.color.copy(S.c).lerp(t.color, k);
+        fog.near = S.near + (0.5 - S.near) * k;
+        const wf = Math.min(S.far, this.bubble ? t.far * 1.3 : t.far);
+        fog.far = S.far * Math.pow(wf / Math.max(1e-3, S.far), k); // (the far edge glides in proportion: no jump of the horizon)
+        this._fogSet = fog.color.getHex(); this._nearSet = fog.near; this._farSet = fog.far;
     }
 
     // ---------------------------------------------------------- Air Bubble
@@ -453,7 +469,7 @@ export class Swimming {
         // the blue haze is about where the CAMERA is: a wave passing over it is under water, a trough over it is air
         // (judged at the body, the view and the haze disagreed when the sea's waves rose and fell around the head)
         const eyeUnder = this.eyeUnder = this._cameraUnderwater();
-        const op = eyeUnder ? (this.bubble || this.game.potionFx?.has?.('mermaid') ? '0.12' : '0.24') : '0'; // (clear water: a light vignette; a mermaid's eyes — hardly any)
+        const op = eyeUnder ? (this.bubble || this.game.potionFx?.has?.('mermaid') ? '0.12' : '0.24') : '0'; // (clear water: a light vignette; a mermaid's eyes — hardly any; its CSS fades it like the haze)
         if (op !== this._op) { this._op = op; this.overlay.style.opacity = op; } // (a style written only when it changes)
     }
 
@@ -492,6 +508,13 @@ export class Swimming {
         this._eyeSurface = w.surface;
         // (a margin both ways: the eyes right at the surface, a small wave, never flips it frame by frame)
         const under = this.eyeUnder ? p.y < w.surface + 0.1 : p.y < w.surface - (w.sea ? 0.06 : 0.15); // (a lake's top is drawn a little lower)
+        // (and in time: a wave washing over the eyes for a moment does not switch the world under and back — 0.12 s at least, unless
+        //  the eyes are clearly far from the surface)
+        const now = performance.now();
+        if (under === this.eyeUnder || this.eyeUnder == null || Math.abs(p.y - w.surface) > 0.6) { this._eyeFlipAt = null; return under; }
+        if (this._eyeFlipAt == null) this._eyeFlipAt = now;
+        if (now - this._eyeFlipAt < 120) return this.eyeUnder;
+        this._eyeFlipAt = null;
         return under;
     }
 

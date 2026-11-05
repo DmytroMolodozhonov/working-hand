@@ -1541,7 +1541,7 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #air-bar i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.08); }
 #air-bar i.on { background: radial-gradient(circle at 35% 35%, #ffffff, #8fdcff 55%, #2f8fd0); }
 #air-bar .air-txt { color: #bff3ff; font-size: 12px; margin-right: 6px; text-shadow: 0 0 3px #000; }
-#underwater-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.18s; background: radial-gradient(ellipse 75% 70% at 50% 42%, rgba(60, 170, 190, 0) 35%, rgba(8, 50, 80, 0.55) 80%, rgba(2, 20, 40, 0.95)); }
+#underwater-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.3s ease-in-out; background: radial-gradient(ellipse 75% 70% at 50% 42%, rgba(60, 170, 190, 0) 35%, rgba(8, 50, 80, 0.55) 80%, rgba(2, 20, 40, 0.95)); }
 #bleed-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0; transition: opacity 0.2s; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(160, 0, 20, 0.75)); }
 /* ---------------- Character editor ---------------- */
 .ce-layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; text-align: left; }
