@@ -648,10 +648,14 @@ export class Cauldrons {
         if (b.frozen) return false;
         for (const c of this.list.values()) {
             if (!this.upright(c)) continue;
-            const dx = b.pos.x - c.x, dz = b.pos.z - c.z;
-            if (Math.hypot(dx, dz) > CAULDRON.R_IN + b.r * 0.4) continue;
+            const dx = b.pos.x - c.x, dz = b.pos.z - c.z, d = Math.hypot(dx, dz);
             const y = b.pos.y - this.fy(c);
-            if (y - b.r > H + 0.3 || y < CAULDRON.BOTTOM - 0.3 || b.vel.y > 1) continue; // (its bottom at the rim: in it goes)
+            // (its bottom at the rim, over the opening: in it goes) — or (the author: «котёл на огне — вода из Waterbollow не наливается»:
+            // hung over the fire its rim is at the hero's eyes, and the ball from the hand met its side, under the rim, and splashed) a ball
+            // whose water reaches over the rim, at the rim's edge, pours over it
+            const over = d <= CAULDRON.R_IN + b.r * 0.4 && y - b.r <= H + 0.3 && y >= CAULDRON.BOTTOM - 0.3;
+            const atRim = d <= CAULDRON.R_IN + b.r * 0.95 && y + b.r >= H - 0.2 && y - b.r <= H + 0.3;
+            if (!(over || atRim) || b.vel.y > 1) continue;
             const g = this.game;
             const vol = (4 / 3) * Math.PI * b.r ** 3;
             g.water?._splash?.(_v.set(b.pos.x, this.fy(c) + surfaceY(c.st) + 0.1, b.pos.z), 1 + b.r * 0.6, 20 + b.r * 12);

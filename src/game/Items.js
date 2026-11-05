@@ -83,6 +83,8 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 /** (Items._nearMouth) the food just taken from the mouth still never falls: the hand comes down with relaxed fingers */
 const MOUTH_HOLD_MS = 700;
+/** (Items: the leading hand's wand swung to throw) the hint «put it in the pocket, take it with the other hand» at most this often (game ms) */
+const WAND_TRY_HINT_MS = 5 * 60 * 1000;
 const _n = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
@@ -1027,7 +1029,12 @@ export class ItemSystem {
                 const td = this._thr[side];
                 if (td.why) { handLog(`бросок не засчитан (${this._handName(side)}): ${td.why}`); td.why = null; }
                 // (the author 02.11: from the leading hand the wand never falls or flies off - only into the belt, WandBelt.js)
-                if (thr) { handLog(`бросок палочки из ведущей руки отключён (замах ${thr.speed.toFixed(1)} м/с)`); continue; }
+                if (thr) {
+                    handLog(`бросок палочки из ведущей руки отключён (замах ${thr.speed.toFixed(1)} м/с)`);
+                    // (the author 05.11: one who really tries to throw it is told how — not more often than once in WAND_TRY_HINT_MS)
+                    if (gt - (this._wandTryHint ?? -1e12) > WAND_TRY_HINT_MS) { this._wandTryHint = gt; g.hud?.setVoice?.('🪄 Из основной руки палочку не выбросить. Положите её в карман и возьмите дочерней рукой — оттуда можно бросить', true); }
+                    continue;
+                }
                 if (false) { this._letGo(side, tk.swing(tt), `бросок палочки (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)`); continue; }
                 this._dropTry(side, kind, curl < DROP.CLOSED && tracked ? 'палочка в ведущей руке не выпадает из разжатой руки — только бросок' : null);
                 continue;
