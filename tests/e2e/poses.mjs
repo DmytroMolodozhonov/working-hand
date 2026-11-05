@@ -190,7 +190,7 @@ export function frame({ crossedArms = false, arms = 'forward', raise = null, poc
 
 /**
  * The camera's 478 face points (MediaPipe's face mesh; only the ones the game reads are placed) round the point
- * (cx, cy) between the eyes: {smile, close (the eyes), jaw, brow, wide (− an «о»), gaze, roll} — FaceExpr.js reads them.
+ * (cx, cy) between the eyes: {smile, close (the eyes), jaw, brow, wide (− an «о»), gaze, roll}
  */
 export function faceMesh(cx, cy, { smile = 0, close = 0, jaw = 0, brow = 0, wide = 0, gaze = 0, roll = 0, size = 1 } = {}) {
     const P = Array.from({ length: 478 }, () => ({ x: cx, y: cy, z: 0 }));

@@ -90,8 +90,8 @@ test('«Общие настройки»: every sub-tab has its page, every page 
     const tabs = [...pane.matchAll(/data-sub="([\w-]+)"/g)].map((m) => m[1]);
     const panes = [...pane.matchAll(/<div id="(set-[\w-]+)" class="sub-pane/g)].map((m) => m[1]);
     assert.deepEqual(tabs, panes);
-    assert.deepEqual(tabs.slice(0, 5), ['set-view', 'set-graphics', 'set-audio', 'set-voice', 'set-hero']);
-    for (const [id, must] of [['set-view', 'handedness'], ['set-view', 'hand-version-v2'], ['set-view', 'cam-smooth'], ['set-graphics', 'minimap-size'], ['set-graphics', 'hotbar-size'], ['set-graphics', 'view-distance'], ['set-audio', 'music-vol'], ['set-voice', 'voice-engine'], ['set-voice', 'set-voicechat'], ['set-hero', 'hero-model']]) {
+    assert.deepEqual(tabs.slice(0, 5), ['set-view', 'set-graphics', 'set-audio', 'set-voice', 'set-log']);
+    for (const [id, must] of [['set-view', 'handedness'], ['set-view', 'hand-version-v2'], ['set-view', 'cam-smooth'], ['set-graphics', 'minimap-size'], ['set-graphics', 'hotbar-size'], ['set-graphics', 'view-distance'], ['set-audio', 'music-vol'], ['set-voice', 'voice-engine'], ['set-voice', 'set-voicechat']]) {
         const from = pane.indexOf(`<div id="${id}"`);
         const next = panes[panes.indexOf(id) + 1];
         const part = pane.slice(from, next ? pane.indexOf(`<div id="${next}"`) : undefined);

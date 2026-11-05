@@ -48,7 +48,6 @@ import { Inventory } from './Inventory.js';
 import { CoinDeal } from './CoinDeal.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
-import { LegFilter, legLog } from '../input/LegSafe.js';
 import { PerfLog } from '../core/PerfLog.js';
 import { HandsLog } from './HandsLog.js';
 import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID, WARD_PEDESTAL_ID } from './BookBirds.js';
@@ -249,7 +248,6 @@ import { spellPhrase } from '../audio/SpellPhrase.js';
 import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 import { restartsCreative } from './CreativeRestart.js';
-import { RealisticBody, realSamples } from '../entities/RealisticBody.js';
 import { CreativeMirror, mirrorSamples } from './CreativeMirror.js';
 import { PotionEffects } from './PotionEffects.js';
 import { Flourish } from './Flourish.js';
@@ -624,7 +622,6 @@ export class Game {
         this.armLog = armLog;
         this.character.stepBoxes = true; // (my hero walks up onto a low box — a stone foot, a chest — as onto a step)
         this.character.setHandVersion(config.handVersion || 'v3');
-        if (config.heroModel === 'real') this.character.setHeroModel('real'); // (the «Реалистичный» test model, chosen in the settings)
         this.character.setHandQuality(config.handQuality || 'high');
         this.character.setFirstPerson(this.cameraMode === 'fpv' && !isTest);
         this.character.setShowHands(!!config.showHands);
@@ -3820,7 +3817,7 @@ export class Game {
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), ...(this.diabolos?.sampleModels() || []), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
-        for (const m of [...(this.config?.heroModel === 'real' ? realSamples() : []), ...mirrorSamples()]) zoo.add(m); // (the realistic skin's shaders only when it is chosen: the driver of an RTX 3050 dropped the whole context on them at every start — journal 30.10) // (the «Реалистичный» hero's skin, hair and shadow; the Creative mirror's glass and frame)
+        for (const m of mirrorSamples()) zoo.add(m); // (the Creative mirror's glass and frame)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
         for (const m of [...darkLordSamples(), ...lordSamples()]) zoo.add(m); // («настоящий тёмный маг»: шар тьмы, воронка, круг рун, наряд — DarkLordFx.js, DarkLordLook.js)
         zoo.add(monsterSamples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js)
@@ -4384,7 +4381,6 @@ export class Game {
         this.ultra?.update(deltaTime); // («Ультра качество»: nothing when off)
         for (const f of this._handOnes || []) f.check(); // (a finger hidden, a thing taken into the hand: the hand's one shape follows)
         updateFarBatches(this.scene, this.renderer, dt); // (people, animals, bodies, things of one look near each other: one draw — FarBatch)
-        RealisticBody.poseAll(this.camera, dt); // (the «Реалистичный» heroes on their game bones — nothing when nobody has one)
         this.mirror?.render(); // (Творческий: the mirror's picture, when it is seen — CreativeMirror.js)
         if (!this.space?.render()) this._draw(); // (space: its own picture first — Space.render)
         mark('графика');
@@ -4438,10 +4434,6 @@ export class Game {
                 this._headBase.pitch = hb.pitch;
             }
             ch.updateArmsLookAt(pose, dt);
-            // (for the «Реалистичный» hero: the face, the shoulders' own tilt, a knee lifted / a heel kicked up — RealisticBody)
-            if (pose.face) { ch.face = pose.face; ch.faceAt = performance.now(); }
-            ch.torsoLean = pose.torso && !flying ? pose.torso.lateral || 0 : 0;
-            ch.legLift = (this._legFilter ??= new LegFilter(legLog)).step(pose.legs, dt); // (clamped, a flicker thrown out, none when the legs are not in the picture: LegSafe)
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
             ch.setCrouching(flying || down ? false : pose.isCrouching);
             ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || (this.boards?.mounted || this.boats?.riding) ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)

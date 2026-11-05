@@ -46,14 +46,12 @@
 import { breaking } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
-import { encodeFace, faceDiff } from '../entities/FaceExpr.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 import { PlayerPresence, noticeText } from './PlayerPresence.js';
 import { netLog } from './Network.js';
 import { keepIn } from '../game/HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { LUMOS } from '../game/WandMagic.js';
-import { safeRaise } from '../input/LegSafe.js';
 import { applyCredit } from '../game/Mana.js';
 import { normalizeHero, LEGACY_HERO } from '../game/HeroSetup.js';
 
@@ -90,7 +88,6 @@ export class NetSync {
         this._screenOpen = false; // my loading screen closed (main.js → markScreenOpen)
         this._gotWelcome = false; // the host's world state applied (it carries where I stood last time)
         this.looks = new Map(); // id → how the player looks (comes before his avatar does)
-        this.models = new Map();
         this._ready = false; // I told the others «ready»: only from now my pose goes out
         this._off = [
             net.on('message', (m) => this._onMessage(m)),
@@ -129,7 +126,6 @@ export class NetSync {
         const av = new RemoteAvatar(g.scene, id, e.name, e.color); av.log = (t) => g.perf?.note?.(t); av.collision = g.collision;
         av.character.group.visible = false; // (shown by its first update(), when it already stands where it is)
         av.setLook(this.looks.get(id));
-        av.setHeroModel(this.models?.get(id));
         av.applyState(e.pose);
         const p = e.pose.s.p;
         av.character.group.position.set(p[0], p[1], p[2]);
@@ -158,7 +154,6 @@ export class NetSync {
     _onLeave(id, fromPresence = false) {
         if (!fromPresence) this.presence.leave(id, performance.now());
         this.looks?.delete(id);
-        this.models?.delete(id);
         const r = this.game.remotes.get(id);
         if (r) {
             this.game.bleeding?.clearCuts(r.character);
@@ -343,29 +338,6 @@ export class NetSync {
         this.net.send({ t: 'pstate', name: this.net.name, s: playerSnapshot(this.game) });
     }
 
-    /** My face for the others (FaceExpr: 14 letters every 2 s, between them only the changed ones; '-' — no face seen any more). */
-    _faceNet() {
-        const ch = this.game.character, now = performance.now();
-        if (ch.heroModel !== 'real' || !ch.face || now - (ch.faceAt || 0) > 600) {
-            if (this._fcLast) { this._fcLast = null; return '-'; }
-            return undefined;
-        }
-        const s = encodeFace(ch.face);
-        if (!this._fcLast || now - (this._fcFull || 0) > 2000) { this._fcLast = s; this._fcFull = now; return s; }
-        const d = faceDiff(this._fcLast, s, 1);
-        this._fcLast = s;
-        return d ? '+' + d : undefined;
-    }
-
-    _legsNet() {
-        const ch = this.game.character;
-        if (ch.heroModel !== 'real') return undefined;
-        const L = ch.legLift, lean = Math.round((ch.torsoLean || 0) * 100) / 100;
-        if (!L && !lean) return undefined;
-        const r = (v) => Math.round(safeRaise(v) * 100) / 100; // (clamped before it is sent: the friend draws no rubbish)
-        return [r(L?.l), L?.lh ? 1 : 0, r(L?.r), L?.rh ? 1 : 0, lean];
-    }
-
     /** Send my pose (with the shield) on the next frame, not in up to 50 ms (the crossed arms' shield: CrossedArms.js). */
     poseSoon() { this.pTimer = 1; }
 
@@ -406,8 +378,6 @@ export class NetSync {
                 sk: this._knownKeys(), // (the scrolls I already know: a chest I open gives me none of them — SpellBook.knownScroll)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
                 mo: g.monster?.netFlag(), // (the monster form: [size, how far changed, the roar] — MonsterForm.js)
-                fc: this._faceNet(), // (the «Реалистичный» hero's face: whole now and then, else only what changed — a few letters)
-                rl: this._legsNet(), // (… a knee lifted / a heel kicked up as the camera sees, the shoulders' own tilt)
             }, true);
         }
         // Water ball in my hand
@@ -932,8 +902,7 @@ export class NetSync {
 
     sendLook() {
         const look = this.game.character.look;
-        // (hm: how my hero is drawn — the «Реалистичный» test model or the standard one; the others draw me so)
-        if (look) this.net.send({ t: 'look', by: this.me, look, hm: this.game.character.heroModel === 'real' ? 'real' : undefined }, true);
+        if (look) this.net.send({ t: 'look', by: this.me, look }, true);
         this.game.armor?.resend(); // (and what armour I wear: Armor.js)
         // (and what is in my hands, the backpack, the coin pouch: a newcomer saw empty hands until I took something anew)
         const it = this.game.items;
@@ -1245,9 +1214,7 @@ export class NetSync {
                 if (m.by === this.me || !m.look) break;
                 if (typeof m.by !== 'string') break;
                 this.looks.set(m.by, m.look);
-                this.models.set(m.by, m.hm === 'real' ? 'real' : 'std');
                 g.remotes.get(m.by)?.setLook(m.look);
-                g.remotes.get(m.by)?.setHeroModel(m.hm);
                 this.presence.gotLook(m.by);
                 this._tryShow(m.by);
                 break;

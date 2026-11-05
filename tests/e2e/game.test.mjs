@@ -544,13 +544,12 @@ test('map with chest: opens without crash, lid animates, faces away from walls, 
     }
 });
 
-test('settings: third-person camera, V2 hands, hidden hands — all run without errors', async () => {
-    for (const variant of ['tpv', 'v2', 'nohands']) {
+test('settings: third-person camera, V2 hands — all run without errors', async () => {
+    for (const variant of ['tpv', 'v2']) {
         const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
         await page.click('[data-tab="tab-settings"]');
         if (variant === 'tpv') { await page.evaluate(() => { window.__ZNS_ALLOW_TPV__ = true; document.getElementById('camera-mode-toggle').checked = false; }); }
         if (variant === 'v2') await page.check('#hand-version-v2');
-        if (variant === 'nohands') await page.uncheck('#show-hands-toggle');
         await page.click('[data-tab="tab-game"]');
         await startFromMenu(page, 'creative');
         await waitHudVisible(page);
@@ -561,7 +560,6 @@ test('settings: third-person camera, V2 hands, hidden hands — all run without 
         });
         if (variant === 'tpv') assert.equal(st.mode, 'tpv');
         if (variant === 'v2') { assert.equal(st.version, 'v2'); assert.ok(st.v2count > 100, `voxel hand drawn (${st.v2count})`); }
-        if (variant === 'nohands') assert.equal(st.shown, false);
         assert.deepEqual(realErrors(errors), [], variant);
         await page.close();
     }

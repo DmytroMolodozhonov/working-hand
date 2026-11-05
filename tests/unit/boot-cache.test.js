@@ -52,8 +52,8 @@ test('битая запись не читается: любой байт, обр
 test('дерево с массивами: туда и обратно', () => {
     const t = { lods: [{ body: { pos: new Float32Array([1, 2, 3]), idx: new Uint32Array([0, 1, 2]) }, head: null }], rest: [new Float32Array(16).fill(1)], n: 3, s: 'x' };
     const p = packTree(t);
-    const buf = encodeRecord('realbody', 'realbody/v1', p.json, p.arrays);
-    const r = decodeRecord(buf, 'realbody', 'realbody/v1');
+    const buf = encodeRecord('icon', 'icon/v1', p.json, p.arrays);
+    const r = decodeRecord(buf, 'icon', 'icon/v1');
     const back = unpackTree(r.meta, r.arrays);
     assert.deepEqual([...back.lods[0].body.pos], [1, 2, 3]);
     assert.ok(back.lods[0].body.idx instanceof Uint32Array);
@@ -133,13 +133,6 @@ test('выключатель: настройка «0» и параметр за�
     assert.equal(bootCacheWanted(null, '?nocacheX=1'), true);
 });
 
-test('тело «Детальной» модели героя строится бит в бит одинаково (его можно хранить)', async () => {
-    const { buildRealBody } = await import('../../src/entities/real/RealBuild.js');
-    const sum = (o) => { let h = 0x811c9dc5; const w = (x) => { if (ArrayBuffer.isView(x)) h = fnv1a(new Uint8Array(x.buffer, x.byteOffset, x.byteLength), h); else if (x && typeof x === 'object') for (const k of Object.keys(x).sort()) { h = fnv1a(new TextEncoder().encode(k), h); w(x[k]); } }; w(o); return h; };
-    const a = sum(buildRealBody()), b = sum(buildRealBody());
-    assert.equal(a, b);
-});
-
 test('таймер этапов загрузки: строка в журнал', () => {
     let t = 0;
     const B = new BootTimer(() => t);
@@ -155,15 +148,13 @@ test('таймер этапов загрузки: строка в журнал',
 
 test('обновление игры: стирается только тот вид, чей код изменился; старая версия записи удаляется', async () => {
     const st = memStore();
-    const v1 = new BootCache({ store: st, build: 'b1', kinds: { sound: 's1', realbody: 'r1' } });
+    const v1 = new BootCache({ store: st, build: 'b1', kinds: { sound: 's1', icon: 'r1' } });
     await v1.put('sound', 'sound/w', null, [new Uint8Array(8)]);
-    await v1.put('realbody', 'realbody/v1', null, [new Uint8Array(8)]);
-    await v1.put('icon', 'icon/g', null, [new Uint8Array(8)]);
-    // (обновление: изменились файлы звуков и что-то ещё в игре, тело героя — нет)
-    const v2 = new BootCache({ store: st, build: 'b2', kinds: { sound: 's2', realbody: 'r1' } });
+    await v1.put('icon', 'icon/v1', null, [new Uint8Array(8)]);
+    // (обновление: изменились файлы звуков и что-то ещё в игре, этот вид — нет)
+    const v2 = new BootCache({ store: st, build: 'b2', kinds: { sound: 's2', icon: 'r1' } });
     assert.equal(await v2.get('sound', 'sound/w'), null, 'код звуков другой — заново');
-    assert.ok(await v2.get('realbody', 'realbody/v1'), 'код тела тот же — из кеша');
-    assert.equal(await v2.get('icon', 'icon/g'), null, 'у иконок нет своей версии — вся сборка');
+    assert.ok(await v2.get('icon', 'icon/v1'), 'код вида тот же — из кеша');
     await v2.put('sound', 'sound/w', null, [new Uint8Array(8)]);
     await new Promise((r) => setTimeout(r, 0));
     assert.ok(st.m.has('sound/w@s2') && !st.m.has('sound/w@s1'), 'старая версия записи удалена: ' + [...st.m.keys()]);

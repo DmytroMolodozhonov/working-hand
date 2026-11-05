@@ -29,7 +29,7 @@ export const BOOT = {
     MAGIC: 0x424e535a, // ('ZNSB')
     // (what may be kept: a kind not here is never read nor written — a kind that tools/bootcheck.mjs finds different with the
     // cache and without is taken out of this list until it is fixed)
-    KINDS: ['sound', 'realbody', 'realwear', 'icon'],
+    KINDS: ['sound', 'icon'],
 };
 
 // ------------------------------------------------------------------ hashes
@@ -264,10 +264,10 @@ export class BootCache {
         } catch (e) { return 0; }
     }
 
-    /** One line for the journal: «⚡ Кеш: звуки 120/0, тело героя 1/0 … 34 МБ прочитано, 0,4 с». */
+    /** One line for the journal: «⚡ Кеш: звуки 120/0, иконки 34/0 … 34 МБ прочитано, 0,4 с». */
     line() {
         if (!this.enabled) return `⚡ Кеш: ${this.why || 'выключен'}`;
-        const NAMES = { sound: 'звуки', realbody: 'тело героя', realwear: 'одежда героя', icon: 'иконки' };
+        const NAMES = { sound: 'звуки', icon: 'иконки' };
         const parts = [];
         let bytes = 0, ms = 0;
         for (const [k, s] of Object.entries(this.stats)) {

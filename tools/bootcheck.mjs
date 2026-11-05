@@ -11,7 +11,6 @@
  *   - звуки: every synthesized sound's length, channels, rate — in all three the same; the warm start's samples ARE the cold
  *     start's (bit for bit: what was written is what is read);
  *   - иконки: the pixels of every slot picture made on the loading screen — warm = cold;
- *   - тело героя: the «Детальная» model's shapes — all three bit for bit;
  *   - мир: the blocks of the chunks round the start and the hero's place, the inventory — all three the same (the cache never
  *     holds the land, a save or the network: this proves it is untouched).
  * A difference in a kind → take it out of BOOT.KINDS (src/core/BootCache.js) until it is fixed; --check fails.
@@ -36,7 +35,7 @@ async function run(label, query) {
         const t0 = Date.now();
         await page.evaluate(() => {
             const z = window.__zns;
-            z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: 20261015, zombieCount: 0, heroModel: 'std', hero: { ...(z.readConfig().hero || {}), spawn: 'start' } });
+            z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: 20261015, zombieCount: 0, hero: { ...(z.readConfig().hero || {}), spawn: 'start' } });
         });
         // (the cache's parts are all done before the shaders: waiting for the game's start is enough)
         await page.waitForFunction(() => window.__zns.game?.active, null, { timeout: 900000, polling: 500 });
@@ -45,7 +44,7 @@ async function run(label, query) {
             const g = window.__zns.game;
             const h = (bytes, s = 0x811c9dc5) => { for (let i = 0; i < bytes.length; i++) { s ^= bytes[i]; s = Math.imul(s, 0x01000193) >>> 0; } return s >>> 0; };
             const hx = (a) => h(new Uint8Array(a.buffer, a.byteOffset, a.byteLength)).toString(16);
-            const out = { sounds: {}, soundShape: {}, icons: {}, body: null, world: null, state: null, cache: null };
+            const out = { sounds: {}, soundShape: {}, icons: {}, world: null, state: null, cache: null };
             const kept = new Set([...(g.sound?._synthed || []), ...(g.sound?._fromCache || [])]); // (what the cache may hold)
             for (const [k, b] of Object.entries(g.sound?.sounds || {})) {
                 if (!(b instanceof AudioBuffer) || !kept.has(k)) continue;
@@ -61,11 +60,6 @@ async function run(label, query) {
                 cx.clearRect(0, 0, 80, 80); cx.drawImage(img, 0, 0);
                 out.icons[k] = h(cx.getImageData(0, 0, 80, 80).data).toString(16);
             }
-            const rb = await import('/src/entities/RealisticBody.js');
-            const lib = await rb.realLibrary();
-            let s = 0x811c9dc5;
-            for (const l of lib.lods) for (const part of [l.body, l.head]) for (const a of Object.values(part.attributes)) s = h(new Uint8Array(a.array.buffer, a.array.byteOffset, a.array.byteLength), s);
-            out.body = (s >>> 0).toString(16);
             const t = g.terrain?.data, p = g.character.group.position;
             let w = 0x811c9dc5, n = 0;
             const cx0 = Math.floor(p.x / 16), cz0 = Math.floor(p.z / 16);
@@ -109,7 +103,6 @@ try {
     const diffR = Object.keys(warm.icons).filter((k) => k in ref.icons && k in cold.icons && ref.icons[k] === cold.icons[k] && ref.icons[k] !== warm.icons[k]);
     cmp('иконки вещей: тёплый = без кеша по пикселям (кроме случайных по природе)', diffR.length === 0, diffR.slice(0, 6).join(', '));
     if (randI.length) console.log(`  (иконки со случайной текстурой — разные и без кеша: ${randI.join(', ')})`);
-    cmp('тело «Детальной» модели: бит в бит во всех трёх', ref.body === cold.body && cold.body === warm.body, `${ref.body} / ${cold.body} / ${warm.body}`);
     cmp('мир у старта: те же блоки', ref.world === cold.world && cold.world === warm.world, `${ref.world} / ${cold.world} / ${warm.world}`);
     cmp('состояние игры (место героя, вещи, сид, поколение)', ref.state === cold.state && cold.state === warm.state, `${ref.state} / ${warm.state}`);
     console.log('  кеш без кеша:', ref.cache);

@@ -350,17 +350,8 @@ camSensInput.addEventListener('input', (e) => updateSensitivity(e.target.value))
 updateSmoothness(camSmoothInput.value);
 updateSensitivity(camSensInput.value);
 
-// «Подсказки карманов в окне камеры» (PocketHints.js): включено, пока галочка не снята
-const pocketHintsToggle = $('pocket-hints-toggle');
-pocketHintsToggle?.addEventListener('change', (e) => { poseService.hintsOn = !!e.target.checked; });
-poseService.hintSource = () => (game?.active && game.inventory ? game.inventory.pocketHintInfo(poseService.hintsOn !== false) : null);
-
-const showHandsToggle = $('show-hands-toggle');
-showHandsToggle?.addEventListener('change', (e) => {
-    if (game) game.character.setShowHands(e.target.checked);
-    const preview = $('webcam-preview');
-    if (preview) preview.style.display = e.target.checked ? 'block' : 'none';
-});
+// «Подсказки карманов в окне камеры» (PocketHints.js) и кисти рук — всегда включены (решение автора, 05.11: настройки убраны)
+poseService.hintSource = () => (game?.active && game.inventory ? game.inventory.pocketHintInfo(true) : null);
 
 // The minimap's size (settings → «Размер мини-карты»)
 const minimapSize = $('minimap-size');
@@ -393,9 +384,8 @@ function readConfig() {
         viewDistance: $('view-distance')?.value || 'medium',
         resolution: $('camera-res').value,
         cameraMode: (window.__ZNS_ALLOW_TPV__ && !$('camera-mode-toggle').checked) ? 'tpv' : 'fpv', // игра только от первого лица; «tpv» — лишь для проверок
-        showHands: showHandsToggle ? showHandsToggle.checked : false,
+        showHands: true, // (the hands are always shown)
         handVersion: document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
-        heroModel: $('hero-model')?.value === 'real' ? 'real' : 'std', // (the «Реалистичный» test model — RealisticBody.js)
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
         walkBackThreat: !!$('walk-back-threat')?.checked, // (the author 05.11: stepping with a foe coming at me in front — the hero steps back facing it: ThreatBack.js)
@@ -1516,14 +1506,6 @@ $('graphics-quality')?.addEventListener('change', (e) => {
 });
 $('ultra-quality')?.addEventListener('change', (e) => { game?.ultra?.set(e.target.value === 'on'); });
 $('fps-limit')?.addEventListener('change', (e) => { if (game?.config) game.config.fpsLimit = parseInt(e.target.value, 10) || 0; });
-// the hero's model changes the running game at once: mine is drawn so, and the others are told (NetSync.sendLook)
-$('hero-model')?.addEventListener('change', () => {
-    const v = $('hero-model').value === 'real' ? 'real' : 'std';
-    if (!game?.character) return;
-    game.character.setHeroModel(v);
-    if (game.config) game.config.heroModel = v;
-    game.sync?.sendLook?.();
-});
 // the hand version changes the running game at once (settings or pause menu)
 for (const r of document.querySelectorAll('input[name="hand-version"]')) {
     r.addEventListener('change', () => {
@@ -1948,7 +1930,7 @@ for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'wal
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'hero-model', 'show-hands-toggle', 'pocket-hints-toggle', 'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
+        'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
