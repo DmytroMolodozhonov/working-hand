@@ -73,7 +73,7 @@ try {
             });
             const span = N * gap;
             const cam = new THREE.PerspectiveCamera(26, W / H, 0.1, 100);
-            const dist = Math.max(18, span * 0.95);
+            const dist = Math.max(20, span * 1.25);
             cam.position.set(0, 4.3, dist); cam.lookAt(0, 3.3, 0);
             r.render(scene, cam);
             const out = document.createElement('canvas'); out.width = W; out.height = H;
