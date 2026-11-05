@@ -247,11 +247,16 @@ export class RemoteAvatar {
         ch.head.rotation.y = stepAngle(ch.head.rotation.y, nk.head, k); // (the short way round: an angle sent past ±π must not spin the head the long way)
         this._neck(dt);
         ch.head.rotation.x += (s.s.hp - ch.head.rotation.x) * k;
-        const slerp = (obj, arr) => { if (arr) obj.quaternion.slerp(_q.set(arr[0], arr[1], arr[2], arr[3]), k); };
+        // (normalised: the packet's numbers are rounded, and a slerp toward a quaternion that is not quite unit stops a few degrees short
+        // — the friend's arm was ~3° off and his hand ~2 cm off where it is on his own screen)
+        const slerp = (obj, arr) => { if (arr && _q.set(+arr[0] || 0, +arr[1] || 0, +arr[2] || 0, +arr[3] || 0).lengthSq() > 1e-6) obj.quaternion.slerp(_q.normalize(), k); };
         slerp(ch.leftArmAnchor, s.s.la);
         slerp(ch.leftElbowAnchor, s.s.le);
         slerp(ch.rightArmAnchor, s.s.ra);
         slerp(ch.rightElbowAnchor, s.s.re);
+        const gl = Array.isArray(s.s.gl) ? s.s.gl : null; // (the shoulder girdle, as on his own screen; an old client — the shoulders at rest)
+        const girdle = (a, i) => { const gy = gl ? +gl[i] || 0 : 0, gz = gl ? +gl[i + 1] || 0 : 0; a.position.y += (0.5 + gy - a.position.y) * k; a.position.z += (gz - a.position.z) * k; };
+        girdle(ch.leftArmAnchor, 0); girdle(ch.rightArmAnchor, 2);
         ch.setRunning(s.s.run >= 0, Math.max(0, s.s.run));
         // (a squat; a little stoop under a low roof: how much lower) — but the standard body has no knees: a «crouch» is both legs
         // swung back, and the friend's camera guesses one whenever he leans to the monitor (the author: «ноги друга выворачиваются

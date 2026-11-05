@@ -1268,6 +1268,9 @@ export class VoxelCharacter {
             hp: r3(this.head.rotation.x),
             la: q(this.leftArmAnchor), le: q(this.leftElbowAnchor),
             ra: q(this.rightArmAnchor), re: q(this.rightElbowAnchor),
+            // (the shoulder girdle: ArmSolver lifts / pulls back / pushes forward the shoulders by up to ~14 cm — without it the friend's
+            // hands were that far off where they are on his own screen)
+            gl: [r3(this.leftArmAnchor.position.y - 0.5), r3(this.leftArmAnchor.position.z), r3(this.rightArmAnchor.position.y - 0.5), r3(this.rightArmAnchor.position.z)],
             run: this.isRunning || this.stepping > 0 ? r2(this.isRunning ? this.runIntensity : 0.6) : -1,
             cr: this.lowK > 0.01 ? r2(this.lowK) : 0, // (how much lower: a squat is 1)
             jp: this.jumpAir ? (this.verticalVelocity > 0 ? 2 : 1) : undefined, // (up in a jump: the legs tucked)
