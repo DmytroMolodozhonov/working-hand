@@ -42,6 +42,9 @@ const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _m4 = new THREE.Matri
 const _pf = {};
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
+/** (SurfBoards.windPush) the speed «Wind» / «Wind Maxima» behind the rider adds (m/s), the brake of a wind ahead, the board's top speed */
+export const WIND_BOARD = { PLAIN: 6, MAXIMA: 14, BRAKE: 3, MAX: 24 };
+
 export class SurfBoards {
     constructor(game) {
         this.game = game;
@@ -67,6 +70,30 @@ export class SurfBoards {
 
     get auth() { return !this.game.sync || !!this.game.authority; }
     get mounted() { return !!this.ride; }
+
+    /**
+     * «Wind» / «Wind Maxima» on a board (the author 05.11: «ветер за спину — доска ускоряется, Максима сильнее, эпично»): the wand
+     * pointed back, the wind blows into the rider's back and the board shoots forward (the more straight back, the more); pointed
+     * forward it brakes a little. → true when the board took it.
+     */
+    windPush(dir, maxima) {
+        const r = this.ride, b = r?.body;
+        if (!b || b.fallen || !dir) return false;
+        const hx = -Math.sin(b.yaw), hz = -Math.cos(b.yaw);
+        const L = Math.hypot(dir.x, dir.z) || 1;
+        const back = -(dir.x * hx + dir.z * hz) / L; // (1: the wand straight back)
+        if (back > 0.3) b.u = Math.min(WIND_BOARD.MAX, b.u + (maxima ? WIND_BOARD.MAXIMA : WIND_BOARD.PLAIN) * back);
+        else if (back < -0.3) b.u = Math.max(0, b.u - WIND_BOARD.BRAKE * -back);
+        else return false;
+        const g = this.game, fx = g.fx;
+        if (fx) for (let i = 0; i < (maxima ? 60 : 30); i++) { // (the spray thrown up behind the board, the wake)
+            const t = Math.random();
+            fx.spark(_v3.set(b.x - hx * (1 + t * 3) + (Math.random() - 0.5), b.y + 0.2, b.z - hz * (1 + t * 3) + (Math.random() - 0.5)), i % 3 ? 0xe8f8ff : 0x9fd8ff, 0.1 + Math.random() * 0.08, _v.set(-hx * 4 + (Math.random() - 0.5) * 3, 2 + Math.random() * 3, -hz * 4 + (Math.random() - 0.5) * 3), 0.8);
+        }
+        g.sound?.playSplash?.();
+        if (back > 0.3) g.hud?.setVoice?.(maxima ? '🌬️🏄 Ветер Максима в спину — доска летит по волнам!' : '🌬️🏄 Ветер в спину — доска ускоряется', true);
+        return true;
+    }
     get riding() { return this.ride?.body.riding ? this.ride : null; }
     handBusy(side) { return !!this.hold?.grips[side]; }
     get me() { return this.game.localId; }

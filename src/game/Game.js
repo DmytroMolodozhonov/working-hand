@@ -2587,6 +2587,7 @@ export class Game {
         const dir = ch.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
+        if (!over && this.boards?.mounted) this.boards.windPush(dir, name === 'WindMaxima'); // (on a surfboard: the wind behind drives it — SurfBoards.windPush)
         this.combat.pay(name);
         this[key] = now;
         this._interimCast = isFinal ? null : { name, at: now };
