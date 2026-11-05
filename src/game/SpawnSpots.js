@@ -36,6 +36,7 @@ export const SPAWN_SPOTS = Object.freeze([
     { id: 'magehut', label: 'У одинокого волшебника', hint: 'Рядом с домом одинокого волшебника.' },
     { id: 'spider', label: 'Логово паучихи (ночью, на природе)', hint: 'Вы стоите на открытом месте в нескольких десятках метров от логова гигантской паучихи, на улице, и сразу её видите. Наступает ночь — она выходит только в тёмное время. Она не нападёт, пока вы не нападёте первым. Если до логова далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
     { id: 'hellmap', label: 'Ад', hint: 'Вы сразу оказываетесь в аду, на плато прибытия у метки возврата: реки и фонтаны лавы, горы, мосты, лагеря Таронов и горгульи в небе, а меньше чем в километре — огромный прикованный Дьяволос (его видно издалека). Чтобы вернуться на Землю, встаньте на метку — вы окажетесь на начальной площадке. Подождите несколько секунд, пока загрузится земля ада.' },
+    { id: 'sea', label: 'В море', hint: 'Вы в воде посреди ближнего моря, на глубине: можно сразу плыть, нырять, смотреть подводный мир, проверять зелье русалки, лодки и «Navigare».' },
     { id: 'blackship', label: 'На корабле в море (встреча с Чёрными Усами)', hint: 'Вы на палубе обычного корабля посреди открытого моря. Через какое-то время рядом появится чёрный корабль капитана Чёрные Усы. Хотите без капитана и скелетов — включите «Корабли без моряков».' },
 ]);
 
@@ -91,7 +92,9 @@ export function farTarget(id, data, ctx = {}) {
     if (id === 'tower') {
         const t = S?.towers?.only?.();
         if (!t || !fin(t.gate)) return null;
-        return { x: Math.round(t.gate.x), z: Math.round(t.gate.z), yaw: Number.isFinite(t.gateYaw) ? t.gateYaw : 0 };
+        // (`ground`: on the ground at the door — the gate's column holds the tower's eaves over it: its top block was the ROOF, the author
+        //  05.11: «спавнюсь прямо на крыше»)
+        return { x: Math.round(t.gate.x), z: Math.round(t.gate.z), yaw: Number.isFinite(t.gateYaw) ? t.gateYaw : 0, ground: true };
     }
     if (id === 'arena') { // (the player's own place on the floor, facing the opponent's: the duel mode — ArenaDuels.startDuelMode)
         const a = S?.arenas?.ofTower?.(S.towers?.only?.()) || S?.arenas?.ofVillage?.(S?.villages?.spawnVillage?.());

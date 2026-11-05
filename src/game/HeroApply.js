@@ -77,6 +77,14 @@ export class HeroApply {
             if (g.spiders) g.spiders.lairMode = true; // (Creative: the night spiders are off, but at her place she comes out)
             return;
         }
+        if (id === 'sea') { // («В море»: in the water out on the nearest sea, deep — HeroApply.step lands him swimming)
+            const me = g.character.group.position, sea = g.sea?.index?.nearest?.(me.x, me.z, 8);
+            if (!sea) { this._fail('в этом мире нет моря — вы на начальной площадке', id); return; }
+            const a = Math.atan2(me.z - sea.z, me.x - sea.x), r = Math.max(0, (sea.r0 || 300) * 0.35);
+            this.pending.t = { x: Math.round(sea.x + Math.cos(a) * r), z: Math.round(sea.z + Math.sin(a) * r), yaw: Math.atan2(sea.x - me.x, sea.z - me.z), sea: true };
+            this._far(this.pending.t);
+            return;
+        }
         const iceApproach = () => { const P = data?.apart ? data.iceCastle?.plan : null; return P && !P.test ? queenApproach(P) : null; };
         const t = ['tower', 'arena', 'village', 'magevillage', 'magehut', 'port'].includes(id) ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate, iceApproach, apart: !!data?.apart });
         if (!t) { this._fail(`в этом мире такого места нет — вы на начальной площадке`, id); return; }
@@ -245,6 +253,18 @@ export class HeroApply {
                 if (!p.t.boss) { this._fail('в пещере нет места', p.id); return; }
                 return; // (next frame: its own ground made too)
             }
+            if (t.sea) { // (in the water, deep: the swimming takes him from there)
+                this.pending = null;
+                const me = g.character.group.position;
+                me.set(t.x, WATER_LEVEL_Y - 1.2, t.z);
+                g.faceYaw((t.yaw || 0) + Math.PI);
+                g.character.verticalVelocity = 0;
+                g.knockback?.set?.(0, 0, 0);
+                this._upright();
+                g.hud?.toast?.('🌊 Вы в море. Гребите руками — плывёте; посмотрите вниз и гребите — нырнёте');
+                return;
+            }
+            if (t.ground && t.layer == null && data.heightAt) { t.layer = Math.round(data.heightAt(t.x, t.z)); t.up = 3; t.down = 4; } // (the tower: its door on the ground, not its roof)
             const dry = this._dry(data);
             const at = t.layer != null
                 ? safeNear(t, (x, z) => data.landMade(x, z) && this._stand(data, x, z, t) != null && !data.isSeaColumn(Math.round(x), Math.round(z)), { rings: [0, 2, 4, 6], around: 8 })

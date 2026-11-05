@@ -173,7 +173,7 @@ import { SPAWN_SPOTS, SPAWN_IDS, spotTarget, safeNear, normalizeSpawn, pointTowa
 import { TEST_CAVE, TEST_DRAGON_SPOT } from '../../src/world/Terrain.js';
 
 test('точки появления: список, по умолчанию «Начальная площадка», безопасность, сохранение', () => {
-    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle', 'port', 'tower', 'arena', 'village', 'magevillage', 'magehut', 'spider', 'hellmap', 'blackship']);
+    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle', 'port', 'tower', 'arena', 'village', 'magevillage', 'magehut', 'spider', 'hellmap', 'sea', 'blackship']); // («В море» — the author 05.11)
     assert.equal(normalizeHero({}).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'nope' }).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'dragon' }).spawn, 'dragon');
@@ -208,7 +208,7 @@ test('точки появления: список, по умолчанию «Н�
 test('дальние места старта: башня, арена, поселение, порт, паучиха; «без моряков»', () => {
     const tower = { gate: { x: 100.4, z: -50.2 }, gateYaw: 2 };
     const sites = { towers: { only: () => tower }, arenas: { ofTower: () => ({ id: 'ar1', gates: [{ mark: { x: 10, z: 0 } }, { mark: { x: 10, z: 30 } }] }) }, villages: { spawnVillage: () => ({ gx: 1, gz: 2, x: 500, z: 600 }), tpSpot: () => ({ x: 490, z: 600 }) } };
-    assert.deepEqual(farTarget('tower', { sites }), { x: 100, z: -50, yaw: 2 });
+    assert.deepEqual(farTarget('tower', { sites }), { x: 100, z: -50, yaw: 2, ground: true }); // (ground: on the ground at the door, not the eaves over it — the author 05.11: «спавнюсь на крыше»)
     const a = farTarget('arena', { sites });
     assert.equal(a.x, 10); assert.ok(Math.abs(a.yaw) < 1e-9); // (on his own mark, facing the opponent's: +z)
     assert.ok(a.duel && a.arenaId === 'ar1');
