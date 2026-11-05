@@ -92,7 +92,7 @@ async function masterCheck(page) {
     console.log(JSON.stringify(r));
     assert.ok(r.master && /Мастер зелий/.test(r.title), 'the master stands there');
     assert.ok(r.listener && r.dist >= 5, `he hears from ${r.dist} m`);
-    assert.ok(/Яйцо дракона — .*полка слева/.test(r.where), r.where);
+    assert.ok(/покажу|Идёмте|вот сюда/i.test(r.where), `он должен показать, а не рассказывать: ${r.where}`);
     assert.ok(r.fixed && r.metMe, 'the cauldron is fastened; he knows the guest');
     assert.ok(r.recipe.includes('золотое яблоко') && r.recipe.includes('кристалл маны'));
     assert.ok(/Принял|Варим/.test(r.start));

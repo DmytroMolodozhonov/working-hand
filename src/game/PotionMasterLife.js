@@ -102,6 +102,7 @@ export class PotionMasterLife {
             if (v && me && Math.hypot(v.x - me.x, v.z - me.z) < 22) { this.welcome = false; this.life._say(v, LINES.welcome, 8); }
         }
         if (this.job && !this.v) this._end(); // (место уснуло / убит: всё сброшено)
+        if (this.show && !this.v) this.show = null;
     }
 
     // ------------------------------------------------------------------ речь (CastleTalk._hear)
@@ -116,16 +117,17 @@ export class PotionMasterLife {
             case 'list': return knownLine();
             case 'ingredients': return ingredientsLine(lairIngredients());
             case 'where': {
+                // («не рассказывать, где, а подойти к полке, указать и подсветить» — the author 06.11): он идёт к полке, ведёт туда палочкой, вещь светится
                 const lair = this.game.potionLair;
                 if (!lair?.plan) return 'Подойдите к полкам — сам покажу.';
                 const stock = lair.stock || (lair.stock = stockFor(lair.plan.slots));
                 const r = whereLine(it.things, stock, lairRacks());
                 if (typeof r === 'string') return r;
-                this._point(r.found.map((e) => ({ x: LAIR.CX + e.slot.x, y: e.slot.y + 0.4, z: LAIR.CZ + e.slot.z })));
-                return r.text + ' Смотрите — я подсвечу.';
+                if (!r.found.length) return r.text;
+                if (this.job) return LINES.busy(this.job.rec.name);
+                this._show(r.found.map((e) => ({ x: LAIR.CX + e.slot.x, y: e.slot.y + 0.4, z: LAIR.CZ + e.slot.z })));
+                return pick(['Сейчас покажу.', 'Идёмте, покажу.', 'Минутку — вот сюда.']);
             }
-            case 'recipe': return recipeAnswer(it.rec);
-            case 'know': return `Конечно знаю — ${recipeAnswer(it.rec)}`;
             case 'hint': return c ? hintLine(c.st.ings) : LINES.noCauldron;
             case 'stop': if (!this.job) return LINES.idle; this._end(); return LINES.stopped;
             case 'fire': if (!c) return LINES.noCauldron; this._castFire(v, c); return 'Готово, огонь горит.';
@@ -161,7 +163,7 @@ export class PotionMasterLife {
     step(v, dt) {
         const j = this.job;
         if (!v.potionMaster || v.dead) return false;
-        if (!j) return this._idle(v, dt);
+        if (!j) return this.show ? this._showStep(v, dt) : this._idle(v, dt);
         const g = this.game, life = this.life, c = this.cauldron;
         if (!c) { life._say(v, LINES.noCauldron, 5); this._end(); return false; }
         if (v.stunT > 0 || v.lev || v.carriedBy || v.foe) { this._end(); return false; }
@@ -241,6 +243,46 @@ export class PotionMasterLife {
     }
 
     _point(list) { this.pointAt = list; this.pointT = 5; }
+
+    /** Показать вещи на полке: подойти, указать палочкой (вещь светится), вернуться на место. */
+    _show(list) {
+        const p = list[0], north = p.z - LAIR.CZ < 0;
+        this.show = { list, phase: 'walk', t: 0, stand: { x: p.x, z: p.z + (north ? 3.4 : -3.4) } };
+        this.pointT = 0;
+    }
+
+    _showStep(v, dt) {
+        const g = this.game, life = this.life, S = this.show, me = g.character?.group.position;
+        S.t += dt;
+        if (v.foe || v.stunT > 0 || v.lev || v.carriedBy || !me || !g.potionLair?.inLair) { this.show = null; return false; }
+        v.speed = 0;
+        if (S.phase === 'walk') {
+            const d = life._steer(v, S.stand.x, S.stand.z, 3.6, dt, 0.7);
+            v.mode = v.speed > 3 ? 'run' : v.speed > 0 ? 'walk' : 'idle';
+            if (d < 1.1 || S.t > 14) { S.phase = 'point'; S.t = 0; this.pointAt = S.list; this.pointT = 8; life._say(v, pick(['Вот он!', 'Здесь.', 'Смотрите — светится.']), 3); }
+        } else if (S.phase === 'point') {
+            this.pointT -= dt;
+            const p = S.list[0];
+            this._face(v, p.x, p.z, dt);
+            this._aim(v, _a.set(p.x, p.y, p.z));
+            v.mode = 'cast';
+            if (this._t - (this._markT || 0) > 0.05) {
+                this._markT = this._t;
+                for (const q of S.list) {
+                    g.fx?.spark?.(_b.set(q.x + (Math.random() - 0.5) * 0.4, q.y + Math.random() * 1.4, q.z + (Math.random() - 0.5) * 0.4), 0xffd86a, 0.14, _c.set(0, 0.7, 0), 0.9);
+                    g.fireLights?.want(q.x, q.y + 0.6, q.z, 0.5);
+                }
+            }
+            if (this.pointT <= 0) { S.phase = 'back'; S.t = 0; }
+        } else { // back
+            const post = this.cs?.def.spot;
+            const d = post ? life._steer(v, post.x, post.z, 3.0, dt, 0.5) : 0;
+            v.mode = v.speed > 0 ? 'walk' : 'idle';
+            if (d < 0.9 || S.t > 14) this.show = null;
+        }
+        life._ground(v);
+        return true;
+    }
 
     // ---- «Вингардиум Левиоса»: ингредиент с полки → над котёл
     _throwStep(v, c, j, dt) {

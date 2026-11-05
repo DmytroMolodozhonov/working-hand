@@ -56,6 +56,8 @@ const BALANCE = 0.55; // rad: lifted past this, it stands up by itself
 const r2 = (v) => Math.round(v * 100) / 100;
 /** Hung over a campfire: its feet this high over the ground (the flames lick its bottom, not its legs). */
 const HANG = 0.75;
+/** The lair's fixed cauldron (no holder: it stands on its own feet over the fire) sits lower: its rim ~13 % lower than on the holder (the author 06.11: «чуть ниже, процентов на 15»). */
+const HANG_FIXED = 0.22;
 /** The holder over a campfire: a tripod of three poles, its top this high over the ground, its feet this far out. */
 const TRIPOD = { TOP: HANG + H + 3.6, FOOT: 3.4 };
 
@@ -214,7 +216,7 @@ export class Cauldrons {
     }
 
     /** Its feet's height: on the ground — or hung in its holder over a campfire. */
-    fy(c) { return c.y + (c.fire ? HANG : 0); }
+    fy(c) { return c.y + (c.fire ? (c.fixed ? HANG_FIXED : HANG) : 0); }
 
     /** Is it standing on its feet (open side up)? */
     upright(c) { return !c.lev && !c.fall && c.tilt < 0.2; }
@@ -333,7 +335,7 @@ export class Cauldrons {
 
     /** The holder over a campfire (every computer): three poles lashed at the top, two chains down to the handles. */
     _holder(c) {
-        if (!c.fire) { if (c.tripod) c.tripod.visible = false; return; }
+        if (!c.fire || c.fixed) { if (c.tripod) c.tripod.visible = false; return; } // (the lair's cauldron has no holder: the poles were in the way — the author 06.11)
         if (!c.tripod) {
             const t = new THREE.Group();
             const wood = new THREE.MeshLambertMaterial({ color: 0x5a3c22 }), iron = new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.6, metalness: 0.6 });
@@ -714,6 +716,45 @@ export class Cauldrons {
         return null;
     }
 
+    /**
+     * «Инферно» into a cauldron (Game.birdRay): the water boils away — steam rises, the level falls and in ~1.6 s of the stream the cauldron is DRY and
+     * empty (what was brewing is gone; things that never dissolve stay on its bottom) — a new potion can be started (the author 06.11).
+     * The stream is asked every frame while it burns: `_infA` is how long it has been on THIS cauldron (it cools down in a moment without the stream).
+     */
+    infernoRay(o, d, len, width = 1) {
+        const g = this.game, now = performance.now();
+        for (const c of this.list.values()) {
+            if (c.lev || c.fall || (c.st.water < 0.05 && c.st.phase === 'empty')) continue;
+            // (the ray's nearest point to the cauldron's middle)
+            _v.copy(c.pos).sub(o);
+            const t = Math.max(0, Math.min(len, _v.dot(d)));
+            if (_v2.copy(o).addScaledVector(d, t).distanceTo(c.pos) > CAULDRON.R_BODY + 0.3 + width * 0.5) continue;
+            const dt = Math.min(0.25, c._infT ? (now - c._infT) / 1000 : 0.05);
+            c._infT = now;
+            c._infA = (now - (c._infLast || 0) > 500 ? 0 : (c._infA || 0)) + dt;
+            c._infLast = now;
+            // steam: white puffs from the surface, thicker the longer it burns
+            const k = Math.min(1, c._infA / 1.6), y = this.fy(c) + (c.st.water > 0.3 ? surfaceY(c.st) : CAULDRON.BOTTOM + 0.3);
+            for (let i = 0; i < 3; i++) g.fx?.spark?.(_v3.set(c.x + (Math.random() - 0.5) * 1.8, y, c.z + (Math.random() - 0.5) * 1.8), 0xf2f6fa, 0.22 + 0.2 * k, new THREE.Vector3((Math.random() - 0.5) * 0.6, 1.6 + Math.random() * 1.8 + k * 1.5, (Math.random() - 0.5) * 0.6), 1.1 + k * 0.5);
+            if (!c._hiss || now - c._hiss > 700) { c._hiss = now; if (this._near(c, 30)) g.sound?.playSplash?.(); }
+            if (!this.auth) { if (!c._dryAsk || now - c._dryAsk > 600) { c._dryAsk = now; g.sync?.cauldron?.({ t: 'cauldry', id: c.id, a: Math.round(c._infA * 100) / 100 }); } continue; }
+            this._evaporate(c, dt);
+        }
+    }
+
+    /** (host) The water boils away by `dt` s of the stream; at the end the cauldron is empty. */
+    _evaporate(c, dt) {
+        const st = c.st;
+        st.water = Math.max(0, st.water - CAULDRON.FULL * dt / 1.6);
+        st.heat = Math.max(0, (st.heat || 0) - dt * 0.2);
+        if (st.water > 0.04) { if ((c._syncT = (c._syncT || 0) + dt) > 0.4) { c._syncT = 0; this._send(c); } return; }
+        // dry: whatever was in it is gone (a thing that never dissolves lies on its bottom as it was)
+        c.st = newBrew();
+        c._infA = 0;
+        this._hint(c, '💨 Вода выкипела, котёл пуст — можно варить заново', 'dry', 4000);
+        this._send(c, 'water');
+    }
+
     /** An empty flask dipped into a ready cauldron fills with one portion. */
     _dipFlask(dt) {
         const g = this.game, items = g.items;
@@ -1038,6 +1079,11 @@ export class Cauldrons {
             c.moverId = m.from; c.moverAt = performance.now();
             this._place(c);
             c.moved = true;
+        } else if (m.t === 'cauldry') { // (a guest's «Инферно» stream on a cauldron: the host boils it away)
+            if (!this.auth) return;
+            const c = this.list.get(m.id);
+            if (!c) return;
+            this._evaporate(c, 0.35);
         } else if (m.t === 'caulfill') {
             if (!this.auth) return;
             const c = this.list.get(m.id);

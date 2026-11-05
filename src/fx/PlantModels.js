@@ -611,7 +611,9 @@ export function carnivoreHeadItemModel() {
     const g = new THREE.Group(), mat = plantMaterials().itemHead, k = 0.085;
     const top = new THREE.Mesh(_headItem.a, mat), low = new THREE.Mesh(_headItem.b, mat);
     for (const m of [top, low]) { m.scale.setScalar(k); m.position.set(0, 0.04, -0.2); }
-    top.rotation.x = -0.35; low.rotation.x = Math.PI - 0.35; low.position.y = 0.04;
+    // (the lower jaw is the upper one MIRRORED across the horizontal plane — as the living plant's, Plants._buildHead: scale.y −1, the opening angle mirrored;
+    // it was turned over by π about x, which also pointed it BACKWARDS — «нижняя челюсть перевёрнута» — the author 06.11)
+    top.rotation.x = -0.35; low.scale.y = -k; low.rotation.x = 0.35; low.position.y = 0.04;
     g.add(top, low);
     const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.16, 8), new THREE.MeshStandardMaterial({ color: 0x3f7a2a, roughness: 0.7 }));
     stalk.rotation.x = Math.PI / 2; stalk.position.set(0, 0.04, -0.26);

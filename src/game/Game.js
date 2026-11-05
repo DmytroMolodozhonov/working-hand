@@ -562,7 +562,7 @@ export class Game {
                 }
                 this.books?.hitRay(o, d, len, width);
                 this.houses?.hitRay(o, d, len, width);
-                if (name === 'Inferno') this.burning?.igniteRay(o, d, len, width, this.localId); // (the stream sets whoever it touches alight: Burning.js)
+                if (name === 'Inferno') { this.burning?.igniteRay(o, d, len, width, this.localId); this.cauldrons?.infernoRay(o, d, len, width); } // (the stream sets whoever it touches alight: Burning.js; a cauldron in it boils dry — Cauldrons.infernoRay)
                 this.animals?.hitRay(o, d, len, width, 3, this.localId, name);
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
                 if (this.authority) { this.dragons?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); if (name === 'Thunderwave') this.dragons?.noise(o); } // (dragons: fire does nothing — DragonKinds.ON_DRAGON)

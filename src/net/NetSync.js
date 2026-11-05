@@ -1215,7 +1215,7 @@ export class NetSync {
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
             case 'cart': if (!this.net.isHost) g.carriages?.onNet({ ...m, l: rows(m.l) }); break; // (carts on the roads: Carriages.js)
             case 'liq': if (!g.authority) g.liquidation?.onNet(m); break; // («Liquidation»: what the host saw crumble)
-            case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
+            case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': case 'cauldry': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
             case 'flr': g.flourish?.onNet(m); break; // («Flourish»: the flowers on these columns)
             case 'bed': g.beds?.onNet(m); break;
