@@ -26,7 +26,7 @@ import { ARCHETYPES, archetypeOf, bodyLayer, newLayer } from './Charisma.js';
 import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
 import { OUTFIT_KINDS, OUTFIT_ROLES, outfitLook, outfitBody, outfitSleeve, outfitHeadwear } from './VillagerOutfits.js';
-import { uniformBody, uniformSleeve, uniformHeadwear } from './TowerUniforms.js'; // (a PREVIEW of the tower's uniforms: L.uniform is set only by tools/tower-uniforms-screenshots.mjs for now)
+import { uniformLook, uniformBody, uniformSleeve, uniformHeadwear } from './TowerUniforms.js'; // (a PREVIEW of the tower's uniforms: L.uniform is set only by tools/tower-uniforms-screenshots.mjs for now)
 import { SKIN_TONES } from './Appearance.js';
 import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
 import { slopeLean } from '../game/HillWay.js';
@@ -328,6 +328,9 @@ function wizardLook(L, r, pick) {
     else if (role === 'student') L.beard = 'none';
     // (the wanderers, the settlements' folk and a hamlet's wizard wear one of five different costumes — VillagerOutfits.js; the tower's own keep the one uniform robe)
     if (OUTFIT_ROLES.has(role)) outfitLook(L, pick(OUTFIT_KINDS), pick);
+    // (the tower: the students wear one of four uniforms with short rolled sleeves — the «vest and school robe» was not chosen; the Master — the High Mage's mantle; the author, 05.11)
+    if (role === 'student') { uniformLook(L, pick(['u1', 'u3', 'u4', 'u5'])); L.sleeves = 'rolled'; }
+    else if (role === 'master') { uniformLook(L, 'm1'); L.hairColor = GREY_HAIR; }
 }
 
 // ==================================================================== parts
@@ -456,15 +459,16 @@ function headBoxes(L) {
             b(B, 0.1, 0.55, 0.8, -0.62, 0.35, -0.15, bc); b(B, 0.1, 0.55, 0.8, 0.62, 0.35, -0.15, bc);
             b(B, 0.62, 0.12, 0.08, 0, 0.38, -0.67, shade(bc, 0.9));
         } else if (L.beard === 'sage') {
-            // the Master's beard (as Dumbledore's): white, broad at the cheeks, down past the chest to the belt
-            b(B, 1.22, 0.42, 0.12, 0, 0.18, -0.6, bc);
-            b(B, 0.96, 0.55, 0.14, 0, -0.27, -0.6, bc);
-            b(B, 0.78, 0.5, 0.14, 0, -0.78, -0.62, bc);
-            b(B, 0.56, 0.5, 0.14, 0, -1.26, -0.64, shade(bc, 0.97));
-            b(B, 0.34, 0.4, 0.12, 0, -1.7, -0.66, shade(bc, 0.94));
-            b(B, 0.18, 0.12, 0.13, 0, -1.55, -0.72, 0xd8b04a); // (a little gold clasp near its end)
-            b(B, 0.1, 0.55, 0.8, -0.62, 0.35, -0.15, bc); b(B, 0.1, 0.55, 0.8, 0.62, 0.35, -0.15, bc);
-            b(B, 0.62, 0.12, 0.08, 0, 0.38, -0.67, shade(bc, 0.9));
+            // the Master's beard — a great old sage's: white, thick and broad at the cheeks, a full moustache, long side whiskers, flowing in tiers down past the belt to the knees
+            b(B, 1.3, 0.46, 0.14, 0, 0.18, -0.6, bc);
+            b(B, 1.12, 0.6, 0.16, 0, -0.3, -0.61, bc);
+            b(B, 0.98, 0.6, 0.17, 0, -0.86, -0.63, shade(bc, 0.98));
+            b(B, 0.8, 0.6, 0.17, 0, -1.42, -0.65, shade(bc, 0.96));
+            b(B, 0.6, 0.55, 0.16, 0, -1.96, -0.67, shade(bc, 0.94));
+            b(B, 0.36, 0.45, 0.14, 0, -2.42, -0.68, shade(bc, 0.92));
+            for (const sx of [-1, 1]) { b(B, 0.1, 0.9, 0.9, sx * 0.67, 0.2, -0.12, bc); b(B, 0.12, 0.6, 0.2, sx * 0.5, -0.3, -0.62, shade(bc, 1.03)); b(B, 0.34, 0.14, 0.2, sx * 0.26, 0.32, -0.7, bc, 0, 0, sx * -0.25); }
+            b(B, 0.78, 0.16, 0.2, 0, 0.36, -0.7, shade(bc, 1.04)); // (the moustache)
+            b(B, 0.18, 0.12, 0.17, 0, -1.6, -0.76, 0xd8b04a); // (a little gold clasp)
         } else if (L.beard === 'blackbeard') {
             // Captain Black Moustache: a great black beard down onto the chest, plaited at the end with red
             // ribbons, and the moustache that gave him his name — thick, curled up at both ends

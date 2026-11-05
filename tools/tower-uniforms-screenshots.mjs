@@ -30,11 +30,11 @@ try {
             const sun = new THREE.DirectionalLight(0xfff0d8, 1.25); sun.position.set(-4, 8, -9); scene.add(sun);
             const sun2 = new THREE.DirectionalLight(0xfff0d8, 0.9); sun2.position.set(3, 6, 9); scene.add(sun2);
             const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 30), new THREE.MeshLambertMaterial({ color: 0x3a3a44 })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
-            const kinds = which === 'students' ? U.STUDENT_UNIFORMS : U.MASTER_LOOKS;
+            const kinds = which === 'students' ? ['u1', 'u3', 'u4', 'u5'] : ['m1'];
             const gap = which === 'students' ? 5 : 7;
             kinds.forEach((k, i) => {
                 const L = M.villagerLook(3 + i * 7, which === 'students' ? 'student' : 'master', which === 'students' ? i % 2 === 1 : false);
-                U.uniformLook(L, k);
+                U.uniformLook(L, k); if (which === 'students') L.sleeves = 'rolled';
                 const v = new M.VillagerModel(L, { tool: 'none' });
                 v.update(1 / 60, { mode: 'idle' });
                 v.group.position.set((i - (kinds.length - 1) / 2) * gap, 1.95, 0);

@@ -46,7 +46,7 @@ export function uniformBody(L, B) {
     const top = -0.6, h = (top - S.hem) / S.N;
     bx(B, 1.3, 1.5, 0.9, 0, 0.04, 0, rc);
     for (let i = 0; i < S.N; i++) { const t = (i + 0.5) / S.N; bx(B, 1.34 + t * S.flare, h + 0.02, 0.96 + t * S.flare * 0.55, 0, top - (i + 0.5) * h, 0, i % 2 ? shade(rc, 0.9) : rc); }
-    for (let q = -2; q <= 2; q++) bx(B, 0.06, (top - S.hem) * 0.9, 0.04, q * 0.26, (top + S.hem) / 2, -(0.52 + S.flare * 0.27), shade(rc, 0.72));
+    for (let q = -2; q <= 2; q++) if (k[0] !== 'm' || Math.abs(q) === 2) bx(B, 0.06, (top - S.hem) * 0.9, 0.04, q * 0.26, (top + S.hem) / 2, -(0.52 + S.flare * 0.27), shade(rc, 0.72));
     const hb = k[0] === 'm' ? 0.34 : 0.2, wb = 1.34 + S.flare + 0.04, db = 0.96 + S.flare * 0.55 + 0.04;
     bx(B, wb, hb, db, 0, S.hem + hb / 2, 0, k === 'm2' ? GOLD : tr);
     bx(B, wb + 0.03, 0.05, db + 0.03, 0, S.hem + hb + 0.02, 0, k === 'u2' ? 0xffffff : GOLD);
@@ -105,6 +105,7 @@ export function uniformBody(L, B) {
 /** Sleeves: a cuff in the trim colour, rank stripes, and the uniform's own sleeve. */
 export function uniformSleeve(L, B) {
     const k = L.uniform, rc = L.dressColor, tr = L.trim;
+    if (L.sleeves === 'rolled') { bx(B, 0.46, 0.07, 0.46, 0, -0.43, 0, tr); return; } // (a short rolled sleeve: only a thin trim band at the elbow)
     if (k === 'u5') { bx(B, 0.46, 0.5, 0.46, 0, -0.5, 0, shade(rc, 0.95)); bx(B, 0.44, 0.1, 0.44, 0, -0.76, 0, shade(rc, 0.8)); return; } // rolled sleeves
     if (k === 'u2') { bx(B, 0.46, 0.14, 0.46, 0, -0.94, 0, 0xf2efe6); return; }
     bx(B, k[0] === 'm' ? 0.7 : 0.58, k[0] === 'm' ? 0.46 : 0.3, k[0] === 'm' ? 0.7 : 0.58, 0, -0.92, 0, shade(rc, 0.9)); bx(B, k[0] === 'm' ? 0.72 : 0.6, 0.07, k[0] === 'm' ? 0.72 : 0.6, 0, -0.76, 0, tr);
