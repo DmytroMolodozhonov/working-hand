@@ -353,6 +353,12 @@ export class SeaFloor {
     /** The fish drawn now ({count}: tests). */
     get fish() { return { count: this.reef.count, positions: () => this.reef.positions() }; }
 
+    /** The bottom's surface at (x, z): the top of the top block (L − 0.5), a ramp's slope where there is one. */
+    _bottomY(t, x, z) {
+        if (t.surfaceY) { const y = t.surfaceY(x, z); if (Number.isFinite(y)) return y; }
+        return t.topLayer(Math.round(x), Math.round(z)) - 0.5;
+    }
+
     _depth(x, z) {
         const t = this.game.terrain?.data;
         if (!t) return 0;
@@ -383,7 +389,7 @@ export class SeaFloor {
             const wat = (x, z, y) => { const ix = Math.round(x), iz = Math.round(z); if (!t.isSeaColumn?.(ix, iz) || (t.landMade && !t.landMade(ix, iz))) return null; return waterAt(t, ix, iz, y ?? t.topLayer(ix, iz) + 1); };
             const day = g.underwaterLight?.day ?? (1 - night);
             this.reef.update(dt, me, wat, day, night);
-            this.critters.update(dt, me, wat, (x, z) => this._depth(x, z) > 0 ? t.topLayer(Math.round(x), Math.round(z)) + 0.5 : null, day, night);
+            this.critters.update(dt, me, wat, (x, z) => this._depth(x, z) > 0 ? this._bottomY(t, x, z) : null, day, night);
         }
     }
 
@@ -405,7 +411,7 @@ export class SeaFloor {
             for (const p of cellPlants(cx, cz, seed, (x, z) => this._depth(x, z))) {
                 const list = J.out[p.kind];
                 if (list.length >= FLOOR.CAP[p.kind]) continue;
-                p.y = t.topLayer(Math.round(p.x), Math.round(p.z)) + 0.5;
+                p.y = this._bottomY(t, p.x, p.z) + 0.04; // (rooted IN the sand: was a metre over it — a layer L's top is at L − 0.5, the author 05.11)
                 list.push(p);
             }
         }
