@@ -112,6 +112,7 @@ export function armsHigh(ch) {
     return a.up > TAKEOFF.HIGH_UP && b.up > TAKEOFF.HIGH_UP;
 }
 const _armL = {}, _armR = {};
+const dz0 = (v, d) => (Math.abs(v) < d ? 0 : v - Math.sign(v) * d);
 /** The air's currents over the land. */
 export const AIR = { THERMAL_FROM: 14, THERMAL_FULL: 40, CALM: 0.6, CEIL: 320 };
 /** The landing. */
@@ -176,7 +177,7 @@ export class WingFlight {
         const st = this.st;
         const wasAir = st.air;
         if (!st.air && !ch.onGround && (ch.verticalVelocity || 0) < -6 && alt > 3) { st.air = true; st.vf = this._gs; st.vy = ch.verticalVelocity || 0; } // (falling off a cliff: the wings catch the air; an ordinary jump stays a jump)
-        const steer = this._steer(pose?.torso || null, g.smoothHead?.pitch || 0, dt);
+        const steer = this._steer(pose?.torso || null, g.smoothHead?.pitch || 0, dt, g._headBase?.yaw ?? g.smoothHead?.yaw ?? 0);
         // the run before the take-off: how long the hero has run fast; the strong strokes lately
         this._runT = this._gs >= HERO_FLY.takeoff && ch.onGround !== false ? (this._runT || 0) + dt : Math.max(0, (this._runT || 0) - dt * 3);
         const now = this.t;
@@ -228,8 +229,8 @@ export class WingFlight {
         this._pose(true, arms, dt, stroke);
     }
 
-    /** The torso's lean from its pose at the take-off → {turn, dive} (Flight.steering's rule); the head is free to look anywhere. */
-    _steer(torso, headPitch, dt) {
+    /** The torso's lean from its pose at the take-off → {turn, dive} (Flight.steering's rule); the head turned sideways turns it too; its tilt up / down is free. */
+    _steer(torso, headPitch, dt, headYaw = 0) {
         const st = this.st;
         if (!st.air) { this.neutral = null; this._samples = 0; }
         const n = this.neutral;
@@ -246,12 +247,15 @@ export class WingFlight {
         //  pitch and the nose no longer steer; only the torso: its 3-D lean forward / back (degrees) or the shoulders' depth, and sideways)
         let turn = 0, dive = 0;
         if (torso && n) {
-            turn = Math.max(-1, Math.min(1, (torso.lateral - n.lateral) * 2.2));
+            turn = (torso.lateral - n.lateral) * 2.2;
             if (Number.isFinite(torso.tilt) && Number.isFinite(n.tilt)) dive += (n.tilt - torso.tilt) / 14; // (leaning forward 14° — a full dive)
             else if (torso.depth != null && n.depth != null) dive += (n.depth - torso.depth) * 6;
         }
+        // the head turned left / right turns the flight that way (the author 05.11: «голова может управлять полётом… вопрос поднять голову
+        // вверх или вниз, а не влево или вправо») — its tilt up / down stays free to look
+        turn += Math.max(-1, Math.min(1, dz0(headYaw, 0.12) * 1.4));
         const dz = (v, d) => (Math.abs(v) < d ? 0 : v - Math.sign(v) * d);
-        return { turn: dz(turn, 0.12), dive: Math.max(-1, Math.min(1, dz(dive, 0.08))) };
+        return { turn: Math.max(-1, Math.min(1, dz(turn, 0.12))), dive: Math.max(-1, Math.min(1, dz(dive, 0.08))) };
     }
 
     /** The wings let go in the air (busy, knocked, dead): the body falls by itself (Character's own gravity). */

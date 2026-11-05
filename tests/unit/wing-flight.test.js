@@ -109,6 +109,8 @@ test('the torso steers as in «Флайн»: leaning forward — down (faster), 
     assert.ok(Math.abs(wf._steer({ lateral: 0.3, noseRel: 0.5, depth: null, tilt: 0 }, 0, dt).turn) > 0.3, 'sideways: a turn');
     assert.equal(wf._steer({ lateral: 0, noseRel: 0.1, depth: null, tilt: 0 }, -0.8, dt).dive, 0, 'looking down at the land (the head bowed, the nose low): no dive');
     assert.equal(wf._steer({ lateral: 0, noseRel: 0.9, depth: null, tilt: 0 }, 0.4, dt).dive, 0, 'looking ahead / a little up: no climb');
+    assert.ok(wf._steer({ lateral: 0, noseRel: 0.5, depth: null, tilt: 0 }, 0, dt, 0.6).turn > 0.4, 'the head turned left: it turns left');
+    assert.ok(wf._steer({ lateral: 0, noseRel: 0.5, depth: null, tilt: 0 }, 0, dt, -0.6).turn < -0.4, 'right: right');
 });
 
 test('a soft landing with the arms spread does not hurt; a dive with the wings folded into the ground hurts', () => {
