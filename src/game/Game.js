@@ -82,6 +82,7 @@ import { FireLights } from './FireLights.js';
 import { CauldronForge } from './CauldronForge.js';
 import { GlassBlowing } from './GlassBlowing.js';
 import { ShopHallLife } from './ShopHallLife.js';
+import { Bounty } from './Bounty.js';
 import { hallSamples } from './ShopHallModels.js';
 import { Cauldrons } from './Cauldrons.js';
 import { PotionLair } from './PotionLair.js';
@@ -751,6 +752,7 @@ export class Game {
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.glassBlowing = new GlassBlowing(this); // «Create a Flask»: empty flasks of sand or glass (GlassBlowing.js)
         this.cauldronForge = new CauldronForge(this); // «Create a Cauldron»: a cauldron cast out of three armour pieces (CauldronForge.js)
+        this.bounty = new Bounty(this); // the hunters for one's head: a settlement's record of heavy crimes, the parties it sends (Bounty.js)
         this.shopHalls = new ShopHallLife(this); // a wizards' settlement's potion hall and scroll hall: the shelves, the keeper who serves (ShopHallLife.js)
         this.potionMaster = new PotionMasterLife(this); // the potion master of the lair: brews, talks, lifts things (PotionMasterLife.js)
         this.potionLair = new PotionLair(this); // «Логово зельевара» (Творческий, «Где появиться»): зал в небе с котлом, ручьём и полками (PotionLair.js)
@@ -4252,6 +4254,7 @@ export class Game {
         this.potionLair?.update(dt);
         this.potionMaster?.update(dt);
         this.shopHalls?.update(dt);
+        this.bounty?.update(dt);
         if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         if (earth && !duelOnly) this.crystals?.update(dt);
@@ -5398,6 +5401,7 @@ export class Game {
         this.cauldrons?.dispose();
         this.potionLair?.dispose();
         this.shopHalls?.dispose();
+        this.bounty?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
         this.buildingFx?.dispose();

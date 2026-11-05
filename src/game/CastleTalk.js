@@ -717,6 +717,11 @@ export class CastleTalk {
                 return true;
             }
         }
+        // (a hunter for my head asking the ransom: «заплачу» / «нет» — Bounty.hear)
+        if (v.hunter && g.authority) {
+            const br = g.bounty?.hear(v, text);
+            if (br) { v.talking = 4; v.talkTo = g.localId; journal(`разговор: «${text}» → «${br}» — охотник за головами (правила)`); this._sayReply(v, br); return true; }
+        }
         // (the keeper of a settlement's potion hall / scroll hall: a good named, «да», «что есть» — by the rules at once, ShopHallLife.hear)
         if (g.shopHalls?.isKeeper(v)) {
             const hr = g.shopHalls.hear(v, text);

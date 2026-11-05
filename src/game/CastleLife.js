@@ -3482,6 +3482,7 @@ export class CastleLife {
         const was = cs.hostile.get(by) > Date.now();
         cs.hostile.set(by, Date.now() + HOSTILE_MS);
         this.aud?.deed(cs, by, killed ? 'slay' : victim ? 'hurt' : 'rob', witnesses, { victim }); // (the player's audacity in this place: those who saw it and knew him — Audacity.js)
+        this.game.bounty?.crime(cs, by, victim, killed, witnesses); // (a killing before eyes that knew the face: the settlement's record — the hunters for his head, Bounty.js)
         const kingHit = victim && victim.role === 'king';
         for (const w of witnesses) {
             if (this._fights(w)) { w.foe = by; if (Math.random() < 0.6) this._say(w, pick(w.wizard ? WIZ_SHOUT.fight : w.role === 'king' ? SHOUT.king : SHOUT.knight)); }
@@ -3846,6 +3847,7 @@ export class CastleLife {
     /** A player died: the castles forget them. */
     playerDied(id) {
         this.aud?.playerDied(id);
+        this.game.bounty?.playerDied(id); // (a new life: the hunters forget him — Bounty.js)
         for (const cs of this.castles.values()) {
             cs.hostile.delete(id);
             for (const v of cs.active.values()) if (v.foe === id) { v.foe = null; v.grudge = null; }

@@ -382,6 +382,7 @@ export class WorldKeeper {
             planets: g.space?.planets.toJSON() || null, // the planets: made by players, changed by spells (Planets.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
+            bounty: g.bounty?.snapshot?.() || null, // (the settlements that want my head — Bounty.js)
             rebuild: g.castleLife?.rebuild.snapshot() || null, // what the builders put back (Rebuild.js)
             bodies: g.death?.snapshot() || [],
             crystals: g.crystals?.snapshot() || [],
@@ -457,6 +458,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.wards) g.wards?.restore(save.wards); // houses' spheres of protection
     if (save.beds) g.beds?.restore(save.beds);
     if (save.castles) g.castleLife?.restore(save.castles);
+    if (save.bounty) g.bounty?.restore(save.bounty);
     if (save.enchantCircles) g.enchantCircles?.restore(save.enchantCircles);
     if (save.gargoyleScorch) g.gargoyles?.restore(save.gargoyleScorch);
     if (save.bodies) g.death?.restore(save.bodies);

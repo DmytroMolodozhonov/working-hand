@@ -157,7 +157,7 @@ export class Travelers {
             // under the cart and the horses, and on ahead (a cart needs room to start); high enough for the riders
             // and the hood (never in a tree, its crown, a rock, a wall, a house or water — the author)
             if (!this._placeFree(x, z, yaw, cart, dest)) continue;
-            return this._make(kind, x, z, yaw, dest);
+            return this._make(kind, x, z, yaw, dest, o.n);
         }
         return false;
     }
@@ -219,7 +219,7 @@ export class Travelers {
     }
 
     /** A party on the road. */
-    _make(kind, x, z, yaw, dest) {
+    _make(kind, x, z, yaw, dest, n0 = null) {
         const g = this.game, L = this.life, idx = L.index;
         const type = TYPE[kind];
         // (their own site: a 700 m cell not used by another party of the same kind just now)
@@ -228,7 +228,7 @@ export class Travelers {
         const def = idx.towers.wanderDef(gx, gz, type);
         const cs = L._runtime(def);
         def.x = x; def.z = z;
-        const n = kind === 'folkCart' || kind === 'wizCart' ? 2 + (Math.random() < 0.5 ? 1 : 0) : 1 + (Math.random() < 0.5 ? 1 : 0);
+        const n = n0 || (kind === 'folkCart' || kind === 'wizCart' ? 2 + (Math.random() < 0.5 ? 1 : 0) : 1 + (Math.random() < 0.5 ? 1 : 0)); // (n0: the hunters for one's head — 2–3, Bounty.js)
         const killed = L.state(def.id).killed;
         const nums = [];
         for (let i = 1; i < 400 && nums.length < n; i++) if (!cs.active.has(i) && !killed.has(i)) nums.push(i);
