@@ -4870,7 +4870,7 @@ export class Game {
             seen: !!(this.currentPose && this.currentPose.hasPose) || this.config?.mode === 'test',
             lost: r.lost, raise: { left: r.left, right: r.right },
             flying: !!this.flight.active,
-            grace: Date.now() - (this._armsFullAt || 0) < 1500,
+            grace: Date.now() - (this._armsFullAt || 0) < 3000, // (the word comes after the arms: they may have dropped a little by then)
         };
     }
 
