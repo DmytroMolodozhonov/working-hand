@@ -21,13 +21,19 @@ import * as THREE from 'three';
 
 export const CAP_MAX_TILT = 0.61; // rad (35°): the cut face follows the blade, at most this far from square
 
-const FLESH = new THREE.MeshLambertMaterial({ color: 0x8a0b14 });
+const FLESH = new THREE.MeshPhongMaterial({ color: 0xa3121c, shininess: 60, specular: 0x552222 }); // (wet: it glistens)
 FLESH.name = 'stump-flesh';
+const FLESH_DARK = new THREE.MeshLambertMaterial({ color: 0x4e050a }); // (the clotted rim round the wound)
+FLESH_DARK.name = 'stump-rim';
+const FAT = new THREE.MeshLambertMaterial({ color: 0xe8c9a0 }); // (the thin layer under the skin)
+FAT.name = 'stump-fat';
 const BONE = new THREE.MeshLambertMaterial({ color: 0xefe6d2 });
 BONE.name = 'stump-bone';
+const MARROW = new THREE.MeshLambertMaterial({ color: 0x7a1a14 });
+MARROW.name = 'stump-marrow';
 const UNIT = new THREE.BoxGeometry(1, 1, 1);
 UNIT.userData.keep = true;
-export const STUMP_MATERIALS = { flesh: FLESH, bone: BONE };
+export const STUMP_MATERIALS = { flesh: FLESH, bone: BONE, rim: FLESH_DARK, fat: FAT, marrow: MARROW };
 
 const _m = new THREE.Matrix4();
 const _mi = new THREE.Matrix4();
@@ -265,19 +271,24 @@ function addCap(root, mesh, Pm, Nm, rec) {
     return cap;
 }
 
-/** A cap of w × h (in the plane, +Y = out of the stump). */
+/**
+ * A wound of w × h (in the plane, +Y = out of the stump) — seen from any side, not a red line (the author 05.11: «разрез работал
+ * ужасно»): a clotted dark rim just proud of the cut edge, a pale layer of fat inside it, the wet red flesh bulging a little, the
+ * bone sticking out of its middle with the dark marrow in its end. Shared shapes (one unit box), five small meshes.
+ */
 export function makeCap(w, h) {
     const cap = new THREE.Group();
     cap.name = 'stump';
     cap.userData.stump = true;
-    const flesh = new THREE.Mesh(UNIT, FLESH);
-    flesh.scale.set(Math.max(0.05, w * 0.98), 0.04, Math.max(0.05, h * 0.98));
-    flesh.userData.stump = true;
-    cap.add(flesh);
-    const bone = new THREE.Mesh(UNIT, BONE);
-    bone.scale.set(Math.max(0.03, w * 0.3), 0.07, Math.max(0.03, h * 0.3));
-    bone.userData.stump = true;
-    cap.add(bone);
+    const W = Math.max(0.05, w), Hh = Math.max(0.05, h), m = Math.min(W, Hh);
+    const box = (mat, sx, sy, sz, y) => { const b = new THREE.Mesh(UNIT, mat); b.scale.set(sx, sy, sz); b.position.y = y; b.userData.stump = true; cap.add(b); return b; };
+    box(FLESH_DARK, W * 1.04, 0.06, Hh * 1.04, 0.0); // (the rim, a hair wider than the cut: the edge of the cloth / the skin is bloodied)
+    box(FAT, W * 0.92, 0.075, Hh * 0.92, 0.012);
+    box(FLESH, W * 0.84, 0.1, Hh * 0.84, 0.025); // (the flesh, a little proud)
+    box(FLESH, W * 0.6, 0.12, Hh * 0.6, 0.04);
+    const bw = Math.max(0.035, m * 0.26);
+    box(BONE, bw, 0.16 + m * 0.12, bw, 0.07 + m * 0.03); // (the bone sticks out)
+    box(MARROW, bw * 0.5, 0.02, bw * 0.5, 0.15 + m * 0.09);
     return cap;
 }
 
@@ -337,7 +348,63 @@ function buildPiece(limb, d, P, N, attach) {
     piece.userData.cutEnd = P.clone();
     piece.userData.own = own;
     piece.userData.limb = limb.name;
+    // the wound on the piece's own cut end (facing back toward where the body was): it is seen as it tumbles and lies
+    if (!first.whole) {
+        const sz = capSizeOn(first, P, N) || [0.35, 0.35];
+        const cap = makeCap(sz[0], sz[1]);
+        cap.position.copy(P);
+        cap.quaternion.setFromUnitVectors(_v.set(0, 1, 0), N.clone().negate());
+        piece.add(cap);
+    }
     return piece;
+}
+
+/** The size of a segment's cut face at the plane (P, N in the segment's frame): its meshes' extent across the bone there. */
+function capSizeOn(seg, P, N) {
+    let w = 0, h = 0;
+    const t1 = new THREE.Vector3(1, 0, 0); if (Math.abs(t1.dot(N)) > 0.9) t1.set(0, 0, 1);
+    t1.addScaledVector(N, -t1.dot(N)).normalize();
+    const t2 = new THREE.Vector3().crossVectors(N, t1);
+    for (const so of segObjs(seg)) so.traverse((o) => {
+        if (!o.isMesh || o.userData.stump || !o.geometry?.attributes?.position) return;
+        relMatrix(o, so, _m);
+        const A = o.geometry.attributes.position.array;
+        for (let i = 0; i < A.length; i += 3) {
+            _v.set(A[i], A[i + 1], A[i + 2]).applyMatrix4(_m).sub(P);
+            if (Math.abs(_v.dot(N)) > 0.25) continue; // (near the plane)
+            w = Math.max(w, Math.abs(_v.dot(t1)) * 2); h = Math.max(h, Math.abs(_v.dot(t2)) * 2);
+        }
+    });
+    return w > 0 && h > 0 ? [w, h] : null;
+}
+
+// ============================================================ the one shape off
+/**
+ * A model drawn as ONE shape by the video card (FarShape: the near and far people, the animals…) hides its own parts — and a cut
+ * on hidden parts changed nothing on the screen: the arm stayed on, the cut-off piece (a copy of the hidden part) was invisible,
+ * «Пилбидрио» flung a whole body (the author 05.11: «разрез персонажа работал невероятно ужасно»). Before any cut the shape is
+ * turned off and BLOCKED: the parts themselves are drawn, as they are cut, until the body is put back whole (restoreAll).
+ */
+function farShapes(root, body, out = []) {
+    const seen = new Set();
+    const add = (o) => { const f = o?.userData?.farShape; if (f && !seen.has(f)) { seen.add(f); out.push(f); } };
+    const objs = [root, root?.group, root?.model, root?.model?.group, body?.root, body?.root?.group];
+    for (const o of objs) {
+        if (!o?.isObject3D) continue;
+        let p = o;
+        while (p) { add(p); p = p.parent; } // (the shape may sit on the model's group above the cut parts)
+        o.traverse?.((c) => add(c));
+    }
+    return out;
+}
+function unFar(root, body) {
+    for (const f of farShapes(root, body)) { f.blocked = true; f.set(false); }
+    root._farBlocked = true;
+}
+function reFar(root) {
+    if (!root._farBlocked) return;
+    root._farBlocked = false;
+    for (const f of farShapes(root, null)) f.blocked = false; // (the game turns it on again when it wants it)
 }
 
 // ============================================================ the public cut
@@ -349,6 +416,7 @@ function buildPiece(limb, d, P, N, attach) {
 export function cutLimb(root, body, name, d, nSeg = null, { piece = true } = {}) {
     const limb = body.limbs.find((l) => l.name === name);
     if (!limb) return { changed: false, piece: null, d };
+    unFar(root, body);
     const st = root.limbs || (root.limbs = {});
     const sv = saved(root);
     if (limb.kind === 'head') {
@@ -464,6 +532,13 @@ function buildHeadPiece(limb) {
     piece.userData.cutEnd = a;
     piece.userData.own = [];
     piece.userData.limb = 'head';
+    // the wound under the head (the neck's cut end), facing down the neck
+    const bb = _w.fromArray(L.b).applyMatrix4(L.obj.matrixWorld).applyMatrix4(_mi);
+    const down = a.clone().sub(bb).normalize();
+    const cap = makeCap((L.w || 0.9) * 0.8, (L.h || 0.7) * 0.8);
+    cap.position.copy(a);
+    cap.quaternion.setFromUnitVectors(_v.set(0, 1, 0), down);
+    piece.add(cap);
     return piece;
 }
 
@@ -498,6 +573,7 @@ export function restoreAll(root) {
     }
     root.limbs = {};
     root._cutBody?.afterCut?.();
+    reFar(root); // (whole again: it may be drawn as one shape again)
 }
 
 /** World position of a stump's end (null when that limb is whole). */

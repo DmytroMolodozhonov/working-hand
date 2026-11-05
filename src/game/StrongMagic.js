@@ -382,9 +382,10 @@ export class StrongMagic {
             const out = at.sub(p); out.y = Math.max(0.15, out.y) + 0.4;
             if (out.lengthSq() < 1e-4) out.set(Math.random() - 0.5, 1, Math.random() - 0.5);
             out.normalize();
-            const v = (head ? 11 : 8) + Math.random() * 6;
-            const vel = out.multiplyScalar(v * Math.min(1.6, Math.max(0.7, s)));
-            vel.y += 3 + Math.random() * 4;
+            // (torn off and flung 4–10 m round where it stood — not out of sight: the author 05.11 saw only a few drops left)
+            const v = (head ? 6 : 4.5) + Math.random() * 3;
+            const vel = out.multiplyScalar(v * Math.min(1.3, Math.max(0.7, s)));
+            vel.y += 2.5 + Math.random() * 3;
             const spin = new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18);
             const list = D.props || (D.props = []);
             while (list.length >= 24) list.shift().dispose();
@@ -396,14 +397,21 @@ export class StrongMagic {
             try { r = cutLimb(root, who.body, limb.name, 0, null, { piece: true }); } catch { r = null; }
             if (r?.piece) { fling(r.piece, limb.kind === 'head'); n++; }
         }
-        // the trunk: what is left of the body, flung up and back
+        // the trunk: what is left of the body, flung up and back. Copied part by part — never the one-shape skinned mesh of the video
+        // card (FarShape: its clone failed, and the trunk was lost — the body just vanished), never what is hidden (the cut limbs)
         try {
-            const trunk = obj.clone(true);
+            const trunk = new THREE.Group();
             obj.matrixWorld.decompose(trunk.position, trunk.quaternion, trunk.scale);
+            const copy = (o) => {
+                if (!o.visible || o.isSkinnedMesh || o.userData.farOne) return null;
+                const c = o.clone(false);
+                for (const ch of o.children) { const cc = copy(ch); if (cc) c.add(cc); }
+                return c;
+            };
+            for (const ch of obj.children) { const c = copy(ch); if (c) trunk.add(c); }
             trunk.userData = { limb: 'trunk', own: [] };
-            fling(trunk);
-            n++;
-        } catch { /* (a body that cannot be copied: its limbs fly alone) */ }
+            if (trunk.children.length) { fling(trunk); n++; }
+        } catch (e) { console.warn('Пилбидрио: туловище не скопировано —', e?.message); }
         return n;
     }
 

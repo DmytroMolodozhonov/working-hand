@@ -123,6 +123,7 @@ export class FarShape {
      *  `visible` stays the truth, read every check — the hero's hands, shown and hidden by the game every frame) */
     constructor(root, { cache = true, hide = 'visible', batch = true } = {}) {
         this.root = root;
+        root.userData.farShape = this; // (found from the model: a blade's cut turns it off — LimbSurgery)
         this.cache = cache;
         this.byLayers = hide === 'layers';
         this.on = false;
@@ -154,6 +155,7 @@ export class FarShape {
     }
 
     set(on) {
+        if (on && this.blocked) on = false; // (cut: the parts themselves are drawn, as they are now — LimbSurgery)
         if (on === this.on) return;
         this.on = on;
         if (!on) {
