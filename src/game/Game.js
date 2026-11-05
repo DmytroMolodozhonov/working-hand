@@ -286,30 +286,25 @@ const LIGHTNING_AIM = { T: 0.6, MOVE: 0.6 };
 const BRAINROT_UPKEEP = 1;
 
 /**
- * (Settings «Ходьба назад») Is the body leaning back now? Two signs, each against this player's own upright, learned slowly while they
- * do not lean: the shoulders' depth against the hips (torsoMetrics.depth — only when the hips are in the frame) and the shoulders' width
- * in the frame (they narrow as the body goes back away from the camera — works sitting at the monitor too, the hips unseen). The author
- * 05.11: «сильно наклонял спину, но никак не уходит» — the depth alone was missing whenever the hips were out of the frame, and leaning
- * alone did not walk: now `strong` (a clear lean back) walks backwards by itself, a smaller lean while stepping on the spot too.
- * Returns 0 (no), 1 (leaning back), 2 (strongly).
+ * (Settings «Ходьба назад») Is the body leaning back now? The shoulders' depth behind the hips in shoulder widths (torsoMetrics.back:
+ * the camera network's own depth, measured from the hips' middle even when the hips are out of the frame), smoothed (~0.25 s) and
+ * against this player's own upright one — learned slowly while they stand near it. The author 05.11 (twice): «сильно наклонял спину,
+ * но никак не уходит». Found: the old sign was the shoulders' depth against the hips only when the hips were clearly in the frame —
+ * seated at the monitor never; the shoulders' width in the frame (tried next) changes as much by stepping away from the camera.
+ * Returns 0 (no), 1 (leaning back: walks back while stepping on the spot), 2 (strongly: walks back by itself).
  */
-const LEAN_BACK = { ON: 0.07, OFF: 0.045, W_ON: 0.07, W_OFF: 0.045, STRONG: 1.8, LEARN: 0.4 };
+export const LEAN_BACK = { ON: 0.2, OFF: 0.12, STRONG: 0.5, SMOOTH: 4, LEARN: 0.25, NEAR: 0.1 }; // (in shoulder widths: ~0.021 a degree — ON ≈ 10°, STRONG ≈ 24°; the network's depth may run smaller than the real one: room left)
 function leanBack(st, torso, dt) {
-    if (!torso) { st.on = false; return 0; }
-    const d = Number.isFinite(torso.depth) ? torso.depth : null;
-    const w = Number.isFinite(torso.sw) && torso.sw > 0.02 && !((torso.twist || 0) > 0.3) ? torso.sw : null; // (turned round, the shoulders narrow too — not a lean)
-    if (d == null && w == null) { st.on = false; return 0; }
-    if (d != null && st.base == null) st.base = d;
-    if (w != null && st.wBase == null) st.wBase = w;
-    const xd = d != null ? (d - st.base) / LEAN_BACK.ON : 0; // (1 = just enough)
-    const xw = w != null ? (st.wBase - w) / st.wBase / LEAN_BACK.W_ON : 0;
-    const x = Math.max(xd, xw);
-    st.on = st.on ? x > LEAN_BACK.OFF / LEAN_BACK.ON : x > 1;
-    if (!st.on) { // (its own upright: slowly, only near it)
-        const k = Math.min(1, dt * LEAN_BACK.LEARN);
-        if (d != null && Math.abs(d - st.base) < LEAN_BACK.OFF) st.base += (d - st.base) * k;
-        if (w != null && Math.abs(st.wBase - w) / st.wBase < LEAN_BACK.W_OFF) st.wBase += (w - st.wBase) * k;
-    }
+    const b = torso && Number.isFinite(torso.back) ? torso.back : null;
+    if (b == null) { st.on = false; st.k = null; return 0; }
+    st.k = st.k == null ? b : st.k + (b - st.k) * Math.min(1, dt * LEAN_BACK.SMOOTH);
+    if (st.base == null) st.base = Math.min(st.k, 0.1); // (the network's depth is from the hips: upright is near 0 — a game started already leaning back is not taken for «upright»)
+    const x = st.k - st.base;
+    st.x = x;
+    st.on = st.on ? x > LEAN_BACK.OFF : x > LEAN_BACK.ON;
+    if (!st.on && Math.abs(x) < LEAN_BACK.NEAR) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN); // (its own upright: slowly, only near it)
+    else if (!st.on && x > 0 && x < LEAN_BACK.ON) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN * 0.3); // (a posture a little back: learned more slowly still)
+    if (!st.on && x < -LEAN_BACK.NEAR) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN * 0.5); // (leaning forward for long: the upright follows down, never up into a lean)
     return st.on ? (x > LEAN_BACK.STRONG ? 2 : 1) : 0;
 }
 export { leanBack as _leanBack };
@@ -4389,6 +4384,12 @@ export class Game {
             const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt) : 0;
             if (back === 2 && !ch.isRunning) ch.setRunning(true, 0.4); // (a clear lean back walks backwards by itself)
             ch.backward = !!(back && ch.isRunning);
+            if (this.config.walkBack && back !== (this._backWas ?? 0)) { // (the journal: what the camera saw, to find why if it does not go — «Тело»)
+                const L = this._lean || {};
+                this.perf?.note?.(`ходьба назад: ${back ? (back === 2 ? 'сильный наклон назад' : 'наклон назад') : 'прямо'} (плечи за бёдрами ${(L.k ?? 0).toFixed(2)}, своё «прямо» ${(L.base ?? 0).toFixed(2)})`);
+                if (back && !this._backTold) { this._backTold = true; this.hud.setVoice('↩️ Наклон назад: герой идёт спиной вперёд', true); }
+                this._backWas = back;
+            }
         }
         // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
         const J = this._jolt = this.impact.step(dt);
