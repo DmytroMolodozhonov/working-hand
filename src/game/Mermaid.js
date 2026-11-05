@@ -230,7 +230,7 @@ export class Mermaid {
         // the speed the wriggle makes now: a slower one — a lower speed, eased down to it; none — the water slows her (SwimMotion's drag)
         const want = r > 0.4 ? top * Math.min(1, 0.35 + 0.65 * Math.min(1, (r - 0.4) / 1.2)) : 0;
         if (want > M.speed) M.speed = Math.min(want, M.speed + MERMAID.THRUST * (1 + 6 * f) * Math.min(2, Math.max(0.5, r)) * dt);
-        else if (want > 0) M.speed = Math.max(want, M.speed * Math.exp(SWIM.DRAG * 0.6 * dt)); // (slower waves: eased down, streamlined)
+        else if (want > 0) M.speed = Math.max(want, M.speed * Math.exp(-SWIM.DRAG * 0.6 * dt)); // (slower waves: eased down, streamlined)
         M.fish = true; // (SwimMotion: her way follows the head, she hardly floats up)
         if (on && M.speed > 1) M.sinceStroke = 0;
     }

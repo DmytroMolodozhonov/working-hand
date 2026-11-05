@@ -74,3 +74,27 @@ test('in the water: the waves build up speed — the more and the faster, the fa
     for (let i = 0; i < 300; i++) { g.mermaid.swim(N, 1 / 30); N.step(1 / 30, { under: true, look: 0 }); }
     assert.ok(N.speed < 0.1, 'the arms down: nothing');
 });
+
+test('the wriggle of the torso (no hands up) drives the tail; the longer, the faster — up to five times the start', async () => {
+    // (the author 05.11: «не нужно руки вверх поднимать… достаточно просто туловищем туда-сюда водить… до 5 раз больше… при условии, что
+    //  он немало времени потратил на то, чтобы петлять»)
+    const { Mermaid, MERMAID } = await import('../../src/game/Mermaid.js');
+    const { SWIM } = await import('../../src/game/SwimStroke.js');
+    assert.equal(MERMAID.TAIL_TOP / MERMAID.TAIL_MAX, 5);
+    const g = { currentPose: null, character: { areBothHandsUp: () => false, handRelVelocity: null } };
+    const m = Object.create(Mermaid.prototype);
+    m.game = g; m.wave = 0; m.flow = 0;
+    const M = { speed: 0 };
+    let t = 0;
+    const run = (secs, sway) => { for (let k = 0; k < secs * 30; k++) { t += 1 / 30; const off = sway ? Math.sin(t * 2 * Math.PI * 0.8) * 0.25 : 0; g.currentPose = { aspect: 4 / 3, leftShoulder: { x: 0.6 + off * 0.3, y: 0.4 + off * 0.1 }, rightShoulder: { x: 0.4 + off * 0.3, y: 0.4 - off * 0.1 } }; m.swim(M, 1 / 30); } };
+    run(3, true);
+    const early = M.speed;
+    assert.ok(early > SWIM.MAX_SPEED * 0.8, `the tail drives at once: ${early.toFixed(2)}`);
+    run(45, true);
+    assert.ok(M.speed > early * 3, `long wriggling: much faster ${M.speed.toFixed(1)} vs ${early.toFixed(1)}`);
+    assert.ok(M.speed <= SWIM.MAX_SPEED * MERMAID.TAIL_TOP + 1e-6);
+    const fast = M.speed;
+    run(6, false);
+    assert.ok(m.flow < 0.2, 'stops wriggling: the rhythm falls away');
+    void fast;
+});
