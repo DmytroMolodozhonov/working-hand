@@ -1015,7 +1015,7 @@ export const SPELL_SOUND = {
     Imperius: { cast: 'fxImperius', theme: 'thImperius' }, ImperiusMaxima: { cast: 'fxImperiusMaxima', theme: 'thImperiusMaxima' }, // (the mind into another body — ImperiusControl.js)
     Brainrot: { own: ['fxBrainrot'] }, BrainrotMaxima: { cast: 'fxBrainrotMaxima', theme: 'thDragonCalm' }, WallRise: { own: ['fxStone'] }, WallRiseMaxima: { own: ['fxStone'] },
     Drawdown: { own: ['explosion', 'rumble'] }, DrawdownMaxima: { own: ['explosion', 'rumble'] },
-    Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] }, CreateBridge: { cast: 'fxCreate' }, Groundprud: { own: ['fxStone', 'rumble'] },
+    Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] }, CreateBridge: { cast: 'fxCreate' }, Groundprud: { own: ['fxStone', 'rumble'] }, Flourish: { cast: 'fxCreate' }, // (the earth turns green: the creation chime)
     Alohomora: { own: ['clang'] }, AlohomoraMaxima: { own: ['clang'] }, Lock: { own: ['clang'] },
     Unfurl: { own: ['sand'] }, Furl: { own: ['sand'] }, Up: { own: ['splash', 'sand'] },
     Accio: { own: ['fxAccio'] }, SuitUp: { own: ['fxSuitUp'] },

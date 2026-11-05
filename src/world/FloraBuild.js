@@ -6,6 +6,9 @@ import { BLOCK, CHUNK, MIN_LAYER, chunkKey } from './Terrain.js';
 import { BIOMES, hashLand } from './Landscape.js';
 import { shapeTop } from './BlockShapes.js';
 
+/** («Flourish» on a meadow with no flowers of its own) the chance and the colours: poppy, cornflower, buttercup, daisy, clover, bellflower */
+const BLOOM_FLOWERS = [1, 0xe8392c, 0x4f7fe0, 0xf5d23a, 0xf4f0e6, 0xd86aa8, 0x8a6ad8];
+
 const _buf = { pos: null, nor: null, col: null, sway: null, glow: null };
 
 /**
@@ -22,6 +25,7 @@ export function buildFlora(data, c) {
     const P = _buf.pos, N = _buf.nor, C = _buf.col, S = _buf.sway, G = _buf.glow;
     let v = 0, count = 0;
     const hidden = data._hidden?.get(chunkKey(c.cx, c.cz)) || null;
+    const bloom = data._bloom?.get(chunkKey(c.cx, c.cz)) || null; // («Flourish»: a flower on these columns, whatever the meadow)
     // one vertex: position, an upward normal (lit like the ground under it), colour, sway, glow
     const vert = (x, y, z, r, g, b, s, gl) => {
         P[v * 3] = x; P[v * 3 + 1] = y; P[v * 3 + 2] = z;
@@ -41,13 +45,14 @@ export function buildFlora(data, c) {
             const x = x0 + lx, z = z0 + lz;
             const bio = BIOMES[c.bio ? c.bio[col] : 0];
             const r = hashLand(x, z, seed + 501);
-            const fl = bio.flowers, tall = bio.tall;
+            const blooms = !!(bloom && bloom.has(col));
+            const fl = blooms && !(bio.flowers?.length > 1) ? BLOOM_FLOWERS : bio.flowers, tall = bio.tall;
             const sh = c.shape ? c.shape[i] : 0; // (a slab, a ramp — BlockShapes.js: the grass grows on its slope)
             const rootY = (px, pz) => (sh ? L - 1.58 + shapeTop(sh, px - x + 0.5, pz - z + 0.5) : L - 0.5);
             let y = L - 0.5; // (the block's top face)
             const g = c.grass ? c.grass[col] : 0x4caf50;
             const gr = ((g >> 16) & 255) / 255, gg = ((g >> 8) & 255) / 255, gb = (g & 255) / 255;
-            if (r < fl[0] * (0.3 + 1.5 * patch(x - 77, z + 41, seed))) { // (flowers grow in drifts)
+            if (blooms || r < fl[0] * (0.3 + 1.5 * patch(x - 77, z + 41, seed))) { // (flowers grow in drifts; «Flourish» — always)
                 // a flower: a thin stem and a small head of two crossed petals' quads
                 const k = 1 + Math.floor(hashLand(x, z, seed + 502) * (fl.length - 1));
                 const fc = fl[k], fr = ((fc >> 16) & 255) / 255, fg = ((fc >> 8) & 255) / 255, fb = (fc & 255) / 255;

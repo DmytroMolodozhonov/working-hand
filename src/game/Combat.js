@@ -102,6 +102,7 @@ export const SPELL_COST = {
     EarthquakeMaxima: 25,
     WindMaxima: 20,
     Overgrown: 10, // creatures thrown apart (Overgrown.js)
+    Flourish: 12, // the earth turns green, then flowers (Flourish.js; the author 05.11)
     OvergrownMaxima: 20,
     Stupefy: 12,
     Expelliarmus: 12, // the wand flies out of the target's hand (Expelliarmus.js)

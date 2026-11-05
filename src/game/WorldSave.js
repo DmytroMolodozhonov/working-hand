@@ -366,6 +366,7 @@ export class WorldKeeper {
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
+            bloom: g.flourish?.snapshot() || null, // («Flourish»: the flowers asked on the grass — Flourish.js)
             liquidated: g.liquidation?.snapshot() || [], // cauldrons, chests, beds, doors, boards crumbled by «Liquidation» (they never come back)
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
@@ -447,6 +448,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.boards) g.boards?.restore(save.boards);
     if (save.campfires) g.campfires?.restore(save.campfires);
     if (save.cauldrons) g.cauldrons?.restore(save.cauldrons);
+    if (save.bloom) g.flourish?.restore(save.bloom);
     if (save.houses) g.houses?.restore(save.houses);
     if (save.wards) g.wards?.restore(save.wards); // houses' spheres of protection
     if (save.beds) g.beds?.restore(save.beds);

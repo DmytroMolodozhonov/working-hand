@@ -1228,6 +1228,7 @@ export class NetSync {
             case 'liq': if (!g.authority) g.liquidation?.onNet(m); break; // («Liquidation»: what the host saw crumble)
             case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
+            case 'flr': g.flourish?.onNet(m); break; // («Flourish»: the flowers on these columns)
             case 'bed': g.beds?.onNet(m); break;
             case 'arm': if (m.by !== this.me) g.armor?.onNet(m, m.by || m.from); break;
             case 'look': {

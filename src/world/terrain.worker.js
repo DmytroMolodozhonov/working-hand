@@ -76,7 +76,7 @@ self.onmessage = (e) => {
     if (m.type === 'flora' && data) {
         // the tall grass and flowers of a chunk (Flora.js) — the chunk as generated
         if (m.use) m.chunk = takeShared(m)[0] || null;
-        const out = m.chunk ? buildFlora({ seed: data.seed, _hidden: m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null }, m.chunk) : buildFlora(data, data.chunk(m.cx, m.cz));
+        const out = m.chunk ? buildFlora({ seed: data.seed, _hidden: m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null, _bloom: m.bloom ? new Map([[m.key, new Set(m.bloom)]]) : null }, m.chunk) : buildFlora(data, data.chunk(m.cx, m.cz));
         self.postMessage({ type: 'flora', id: m.id, key: m.key, out, rev: m.rev }, [out.pos.buffer, out.nor.buffer, out.col.buffer, out.sway.buffer, out.glow.buffer]);
         return;
     }

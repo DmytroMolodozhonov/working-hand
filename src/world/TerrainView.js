@@ -259,10 +259,10 @@ export class Terrain {
         const id = ++this._jobId;
         this._floraAsked.set(key, id);
         // (a chunk changed here: its own data goes along, and its rev — an answer for an older one is not used)
-        let chunk = null, hidden = null, rev;
+        let chunk = null, hidden = null, bloom = null, rev;
         let share = null;
-        if (changed) { share = this._share(w, [changed]); rev = changed.rev || 0; const h = this.data._hidden?.get(key); hidden = h ? [...h] : null; }
-        w.postMessage({ type: 'flora', id, key, cx, cz, chunk, hidden, rev, ...share });
+        if (changed) { share = this._share(w, [changed]); rev = changed.rev || 0; const h = this.data._hidden?.get(key); hidden = h ? [...h] : null; const b = this.data._bloom?.get(key); bloom = b ? [...b] : null; }
+        w.postMessage({ type: 'flora', id, key, cx, cz, chunk, hidden, bloom, rev, ...share });
     }
 
     /** Grass made but not put in this frame: first next time. */

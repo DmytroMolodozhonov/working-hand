@@ -241,6 +241,7 @@ import { restartsCreative } from './CreativeRestart.js';
 import { RealisticBody, realSamples } from '../entities/RealisticBody.js';
 import { CreativeMirror, mirrorSamples } from './CreativeMirror.js';
 import { PotionEffects } from './PotionEffects.js';
+import { Flourish } from './Flourish.js';
 import { randomLook as _rollLook, cleanLook as _cleanLook } from '../entities/Appearance.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -721,6 +722,7 @@ export class Game {
         this.crossedShield = new CrossedShield(this); // «Protection» by crossing the arms before the chest (CrossedArms.js)
         this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
+        this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
         this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
         this.potionFx._randomLook = () => _cleanLook(_rollLook());
         this.lightning = null; // my «Lightning Strike» in progress
@@ -2120,6 +2122,7 @@ export class Game {
         if (name === 'Stitching') return this.stitching.cast(isFinal);
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
+        if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
         if (name === 'Pentagranium') return this.pentagranium.cast(isFinal, text); // («Pentagranium <Name>»: the pentagram named in the phrase, laid where the wand points — Pentagranium.js)
@@ -4091,6 +4094,7 @@ export class Game {
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._brainrotUpkeep(dt);
         this.potionFx?.update(dt);
+        this.flourish?.update(dt);
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
         // (and the arena duel itself: the author's duel with the tower's head — «Бомбардо», «Фрозен» waited 0.4–0.6 s for a «Максима»)

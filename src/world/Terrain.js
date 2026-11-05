@@ -853,6 +853,23 @@ export class TerrainData {
         return c;
     }
 
+    /**
+     * «Flourish» (Flourish.js): flowers asked to grow on this column's grass (FloraBuild draws one there). Kept per chunk, as `_hidden`;
+     * the chunk's rev goes up so its grass is made again (here or in a worker — the list goes along: TerrainView.askFlora).
+     */
+    setBloom(ix, iz) {
+        const cx = ix >> SHIFT, cz = iz >> SHIFT, k = chunkKey(cx, cz);
+        this._bloom = this._bloom || new Map();
+        let s = this._bloom.get(k);
+        if (!s) this._bloom.set(k, s = new Set());
+        const col = (iz & MASK) * CHUNK + (ix & MASK);
+        if (s.has(col)) return false;
+        s.add(col);
+        const c = this.chunks.get(k);
+        if (c) { c.rev = (c.rev || 0) + 1; c.modified = true; }
+        return true;
+    }
+
     hasChunk(cx, cz) {
         return this.chunks.has(chunkKey(cx, cz));
     }

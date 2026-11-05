@@ -148,6 +148,8 @@ export function matchSpell(text) {
     if (bridgeWords(s)) return 'CreateBridge';
     // «Groundprud» («граунтпруд»): one word, before the plain «Protection»
     if (groundprudWords(s)) return 'Groundprud';
+    // «Flourish» («флориш», «флариш», «флёриш»): one word of its own — the earth turns green (Flourish.js)
+    if (/(?:^|[^а-яa-z])(?:флориш|флорищ|флариш|флёриш|флериш|флоуриш|флориж|flourish|florish|flurish)(?:$|[^а-яa-z])/.test(s)) return 'Flourish';
     // «Visible Godi» («визибл годи»): both words together, before «Invisible» and the short tokens (VisibleGodiWords.js)
     if (visibleGodiWords(s)) return 'VisibleGodi';
     // «Protection Gods» / «… Maxima» («Протекшн Гадс», «Божественная защита»): the gods' shield — the long phrase first,
