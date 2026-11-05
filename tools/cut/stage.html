@@ -52,5 +52,7 @@ window.__C.burst = function () {
     return n;
 };
 window.__C.run = function (t) { for (let k = 0; k < t * 60; k++) { for (const pr of game.dismember.props || []) pr.step(1 / 60); debris.update(1 / 60); sparks.update(1 / 60); } };
+window.__C.props = () => (game.dismember.props || []).map((pr) => { const b = new THREE.Box3().setFromObject(pr.obj); return { y0: +b.min.y.toFixed(2), y1: +b.max.y.toFixed(2), sleep: pr.body?.sleeping, limb: pr.limb }; });
+window.__C.parts = (limb) => { const pr = (game.dismember.props || []).find((q) => q.limb === limb); const out = []; pr?.obj.traverse((o) => { if (!o.isMesh || !o.visible) return; const b = new THREE.Box3().setFromObject(o), sz = b.getSize(new THREE.Vector3()); out.push({ skinned: !!o.isSkinnedMesh, inst: !!o.isInstancedMesh, verts: o.geometry.attributes.position.count, far: !!o.userData.farOne, pname: o.parent?.name, ud: Object.keys(o.userData).join('|'), name: o.name || o.parent?.name || '', col: o.material?.color?.getHexString?.(), sz: sz.toArray().map((v) => +v.toFixed(2)) }); }); return out; };
 window.__ready = true;
 </script></body></html>

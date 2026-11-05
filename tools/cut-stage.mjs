@@ -30,5 +30,8 @@ try {
     await shot('p3-0.4s', "C.run(0.25)", 0.4, 14, 5);
     await shot('p4-1s', "C.run(0.6)", 0.4, 16, 6);
     await shot('p5-3s', "C.run(2)", 0.4, 18, 8);
+    await shot('p6-6s-side', "C.run(3); return (window.__C.props?.() || [])", 1.6, 12, 3);
+    console.log('head parts', JSON.stringify(await page.evaluate(() => window.__C.parts('head'))));
+    console.log('near head parts', JSON.stringify(await page.evaluate(() => { const C = window.__C; C.reset(4, 'farmer', false); C.anim(0.2); C.burst(); C.run(1); return C.parts('head'); })));
     await shot('7-stump-close', "C.reset(3); C.cut('leftArm', 0.5); C.anim(); return true", 1.0, 3.5, 3.6);
 } finally { clearTimeout(killer); await browser.close(); srv.stop(); }
