@@ -17,7 +17,7 @@ test('concentration: holding the water — another spell does not work, its own 
     assert.equal(mayCast('WaterVortex', 'AirBubble'), true);
     assert.equal(mayCast('WaterVortex', 'Levitation'), false);
     assert.equal(mayCast('Alive', 'Attack'), true);
-    assert.equal(mayCast('Alive', 'Inferno'), false);
+    assert.equal(mayCast('Alive', 'Inferno'), false); // (the table entry stays; Concentration.held() no longer returns 'Alive' — the author 05.11)
     assert.equal(mayCast('Levitation', 'Flight'), false);
     assert.equal(mayCast('Levitation', 'Flight', { hovering: true }), true);
     assert.ok(FREE.has('Stand'));
@@ -87,4 +87,12 @@ test('concentration: instant spells hold nothing; the beams\' clash holds', () =
     assert.equal(mayCast('Duel', 'Maxima'), true);
     assert.equal(mayCast('Duel', 'Protection'), true);
     assert.equal(mayCast('Duel', 'Bombardo'), false);
+});
+
+test('a living tree / the risen dead of «Alive Maxima» do not hold the concentration: other spells work (the author 05.11)', () => {
+    const g = fakeGame();
+    g.water.active = false; // (only my living tree walks)
+    const f = new Concentration(g);
+    assert.equal(f.held(), null);
+    assert.equal(f.gate('Bombardo', true), null);
 });

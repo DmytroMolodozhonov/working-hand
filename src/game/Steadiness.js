@@ -99,11 +99,18 @@ export class Steadiness {
     constructor(game) {
         this.game = game;
         this.skill = STEADY.MIN;
-        this.absolute = false; // «Pentagranium Firmitas»: never knocked down by anything (FirmRules.js)
+        this.gift = false; // «Pentagranium Firmitas»: never knocked down by anything (FirmRules.js) — the gift for good (saved)
         this.acc = 0; // metres of rough running towards the next +1
         this.rough = 0; // smoothed roughness under the feet now, 0 … 1
         this._x = null; this._z = null; this._gy = null;
     }
+
+    /**
+     * Absolute steadiness now: the gift of the pentagram Firmitas — or Creative by default (the author 05.11: «в творческом режиме игрок не
+     * должен падать, у него должна быть абсолютная устойчивость по умолчанию»; the hero's setting «Устойчивость» below 100 lets him fall again).
+     */
+    get absolute() { return this.gift || (this.game.config?.mode === 'creative' && (this.game.hero?.steady ?? STEADY.MAX) >= STEADY.MAX); }
+    set absolute(on) { this.gift = !!on; }
 
     /** The skill as the rules see it (Creative: the hero's setting «Устойчивость», 100 by default — HeroSetup.js). */
     get effective() { return this.absolute ? STEADY.MAX : this._plain; }
@@ -180,22 +187,22 @@ export class Steadiness {
         return true;
     }
 
-    onDeath() { this._windAt = null; this.skill = STEADY.MIN; this.acc = 0; this.rough = 0; this.absolute = false; }
+    onDeath() { this._windAt = null; this.skill = STEADY.MIN; this.acc = 0; this.rough = 0; this.gift = false; }
 
     /** The gift of the pentagram Firmitas is given (true) / taken (false). */
-    setAbsolute(on) { this.absolute = !!on; }
+    setAbsolute(on) { this.gift = !!on; }
 
     snapshot() {
-        if (!(this.skill > STEADY.MIN || this.acc > 0 || this.absolute)) return null;
+        if (!(this.skill > STEADY.MIN || this.acc > 0 || this.gift)) return null;
         const o = { skill: this.skill, acc: Math.round(this.acc) };
-        if (this.absolute) o.ab = 1; // (the pentagram Firmitas's gift)
+        if (this.gift) o.ab = 1; // (the pentagram Firmitas's gift)
         return o;
     }
 
     /** Put a saved / legacy value on (REPLACES: the new life's growth is given up). */
     restore(s) {
         this.skill = clampSkill(s?.skill);
-        this.absolute = !!s?.ab;
+        this.gift = !!s?.ab;
         this.acc = this.skill >= STEADY.MAX ? 0 : clamp(Number(s?.acc) || 0, 0, needFor(this.skill) - 1);
     }
 }

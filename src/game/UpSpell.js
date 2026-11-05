@@ -68,8 +68,25 @@ export function leapVelocity(arm, out = { x: 0, y: 0, z: 0 }) {
     return out;
 }
 
-/** (UpSpell.boxedIn) how far round me a wall is looked for (m), how many of the 8 sides must be walled */
-export const UP_STUCK = { R: 1.4, SIDES: 6 };
+/** (UpSpell.boxedIn) where a wall is looked for on each of the 8 sides (m, outwards from me: a wide shallow pit
+ * has its walls a few metres away — the author: «Stand Up должен работать, когда упал в неглубокую яму»), how many sides must be walled */
+export const UP_STUCK = { STEPS: [1.2, 2, 3, 4, 5, 6, 7, 8], SIDES: 6 };
+
+/** Pure: is a body whose feet are at `feetY` at (x, z) walled in (see UpSpell.boxedIn)? `t`: anything with solidIn(ix, iz, L0, L1). */
+export function boxedAt(t, x, z, feetY) {
+    if (!t?.solidIn) return false;
+    const feetL = Math.round(feetY + 1.5); // (the air layer the feet stand in — as CastleLife._walkable)
+    let n = 0;
+    for (let i = 0; i < 8; i++) {
+        const c = Math.cos(i * Math.PI / 4), s = Math.sin(i * Math.PI / 4);
+        // outwards along this side: the first column two blocks above the feet is the pit's wall
+        for (const d of UP_STUCK.STEPS) {
+            if (t.solidIn(Math.round(x + c * d), Math.round(z + s * d), feetL + 1, feetL + 2)) { n++; break; }
+        }
+        if (n + (7 - i) < UP_STUCK.SIDES) return false; // (no way to reach it now)
+    }
+    return n >= UP_STUCK.SIDES;
+}
 
 const _sh = new THREE.Vector3(), _hd = new THREE.Vector3(), _up = new THREE.Vector3(), _q = new THREE.Quaternion();
 
@@ -163,19 +180,12 @@ export class UpSpell {
     }
 
     /**
-     * Am I really stuck — in a pit, a narrow shaft, between walls: a wall two blocks high or more on most sides (≥ UP_STUCK.SIDES of 8,
-     * at UP_STUCK.R m), so walking out is no way?
+     * Am I really stuck — in a pit (a shallow one too: two blocks deep is more than a step), a narrow shaft, between walls: a rise of
+     * two blocks or more (more than a step can take) on most sides (≥ UP_STUCK.SIDES of 8) within a few metres, so walking out is no way?
      */
     boxedIn() {
-        const g = this.game, t = g.terrain?.data || g.world?.terrain?.data, p = g.character?.group?.position;
-        if (!t?.solidIn || !p) return false;
-        const feetL = Math.round(p.y - PLAYER_GROUND_OFFSET + 1.5); // (the air layer the feet stand in — as CastleLife._walkable)
-        let n = 0;
-        for (let i = 0; i < 8; i++) {
-            const a = i * Math.PI / 4;
-            if (t.solidIn(Math.round(p.x + Math.cos(a) * UP_STUCK.R), Math.round(p.z + Math.sin(a) * UP_STUCK.R), feetL + 1, feetL + 2)) n++;
-        }
-        return n >= UP_STUCK.SIDES;
+        const g = this.game, p = g.character?.group?.position;
+        return !!p && boxedAt(g.terrain?.data || g.world?.terrain?.data, p.x, p.z, p.y - PLAYER_GROUND_OFFSET);
     }
 
     /** The arc's sideways part (gravity is the body's own: Character). Before Character.update. */

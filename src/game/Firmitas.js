@@ -32,7 +32,7 @@ export class Firmitas {
     }
 
     /** Does the hero stand firm for good? */
-    get has() { return !!this.game.steady?.absolute; }
+    get has() { return !!this.game.steady?.absolute; } // (Creative with «Устойчивость» 100: firm already — Steadiness.absolute)
 
     /** Death: the picture stops (the gift itself goes with Steadiness.onDeath; it lies in the body: Legacy.js). */
     onDeath() { const had = this.has; this._end(); if (had) this.game.perf?.note?.('🗿 неколебимость: дар забрала смерть'); }

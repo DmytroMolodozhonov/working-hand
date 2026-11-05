@@ -43,3 +43,28 @@ test('«Up» heard as it really is said: again and again, «Stand up», the shor
     assert.equal(matchSpell('стенд ап'), 'Up');
     assert.equal(matchSpell('стенд'), 'Stand');
 });
+
+test('«Stand Up» throws me out of a shallow wide pit (walls a few metres away), not on an open field', async () => {
+    const { boxedAt } = await import('../../src/game/UpSpell.js');
+    // a pit 2 blocks deep, 9×9 m: floor layer at feetL−1 (feet at 0 → feetL 2), walls up to layer 3 outside |x|,|z| > 4
+    const pit = (half, depth) => ({ solidIn: (ix, iz, L0, L1) => {
+        const top = Math.max(Math.abs(ix), Math.abs(iz)) > half ? 1 + depth : 1;
+        return L0 <= top && L1 >= L0;
+    } });
+    assert.ok(boxedAt(pit(4, 2), 0, 0, 0), 'a shallow pit 9 m wide');
+    assert.ok(boxedAt(pit(1, 2), 0, 0, 0), 'a narrow shaft');
+    assert.ok(!boxedAt(pit(4, 1), 0, 0, 0), 'one block deep: a step — walk out');
+    assert.ok(!boxedAt(pit(12, 2), 0, 0, 0), 'a wide hollow: just walk');
+    assert.ok(!boxedAt({ solidIn: (ix, iz, L0) => L0 <= 1 }, 0, 0, 0), 'open field');
+});
+
+test('Creative: absolute steadiness by default (setting «Устойчивость» 100); lower — may fall; the gift is saved apart', async () => {
+    const { Steadiness } = await import('../../src/game/Steadiness.js');
+    const g = { config: { mode: 'creative' }, hero: { steady: 100 } };
+    const s = new Steadiness(g);
+    assert.ok(s.absolute);
+    assert.equal(s.snapshot(), null, 'Creative firmness is not the saved gift');
+    g.hero.steady = 60; assert.ok(!s.absolute);
+    g.config.mode = 'survival'; g.hero.steady = 100; assert.ok(!s.absolute);
+    s.setAbsolute(true); assert.ok(s.absolute); assert.equal(s.snapshot().ab, 1);
+});

@@ -2,7 +2,7 @@
  * Concentration.js — «правило концентрации» (the author's rule).
  *
  *   A spell that acts while it is held (the water in the hands, a thing lifted by «Левиоса», a tree kept
- *   alive, the fire held on the wand, the beams' clash of a duel while it goes…) takes the caster's concentration. While it is held NO other spell
+ *   (no longer: a living tree walks by itself — LivingTrees), the fire held on the wand, the beams' clash of a duel while it goes…) takes the caster's concentration. While it is held NO other spell
  *   works — however well its words are said, in every mode, Creative too: first «стоп» (or the spell ends
  *   by itself: mana, time), then a new one. The held spell's own words stay its part (the vortex's
  *   «Bubble» / «Frozen» / «Fire Maxima», the water ball's «Максима» / «Frozen», «Атака» for a lifted
@@ -122,7 +122,8 @@ export class Concentration {
         if (g.ships?.blowing) return 'SailWind';
         const sp = g.spells?.heldBy?.(g.localId);
         if (sp) return sp.kind === 'Inferno' ? 'Inferno' : /^Drawdown/.test(sp.kind || '') ? 'Drawdown' : 'Beam';
-        if (g.livingTrees?.mine?.().length) return 'Alive';
+        // (a living tree / the risen dead of «Alive Maxima» walk and fight by themselves: NOT held any more — the author 05.11:
+        //  «заклинания не работают, когда активное Alive или Alive Maxima»; the mana still drains, «стоп» lets them go, «Атак» sends them)
         if (g.combat?.shield?.gods) return 'GodsShield'; // («Protection Gods» is held — unlike the ordinary shield)
         return null;
     }
