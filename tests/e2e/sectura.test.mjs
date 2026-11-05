@@ -31,8 +31,9 @@ test('Sectura: a slash from another player hits me (10–15 HP or a limb), bleed
         const f = new THREE.Vector3(0, 0, 1);
         const o = new THREE.Vector3(p.x, p.y + 0.4, p.z - 6);
         g.slash.fire(o, packDir(f, 0.5), 'remote1', 'right');
+        out.hp1 = c.hp; // (at once: nothing heals it in between)
         await sleep(400);
-        out.hp1 = c.hp; out.lost = Object.keys(g.character.limbs || {}); out.bleed = g.bleeding.rate;
+        out.hpLater = c.hp; out.lost = Object.keys(g.character.limbs || {}); out.bleed = g.bleeding.rate;
         out.flights = g.slash.flights.length;
         await sleep(SLASH.BLEED_TIME * 1000 + 3000);
         out.bleedAfter = g.bleeding.rate;
