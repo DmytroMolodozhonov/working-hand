@@ -43,4 +43,9 @@ try {
     // as the hero sees it: from his eyes, 3.4 m up
     await page.evaluate(() => { const S = window.__S, s = S.fs.mine; S.cam.position.set(0, 3.4, 0); S.cam.lookAt(s.head.x, 6, s.head.z); S.draw(); });
     await page.screenshot({ path: path.join(OUT, '6-hero-eyes.png') });
+    // right at it (the author's shot: bitten / held — the camera almost in its body): nothing may white the screen out
+    await page.evaluate(() => { const S = window.__S, s = S.fs.mine, k = Math.max(s.i0, s.p.length - 12), q = s.p[k]; S.cam.position.set(q.x + 4, q.y + 3, q.z + 4); S.cam.lookAt(s.head); S.draw(); });
+    await page.screenshot({ path: path.join(OUT, '8-close.png') });
+    await page.evaluate(() => { const S = window.__S, s = S.fs.mine; S.cam.position.set(s.head.x + s.face.x * 3, s.head.y + 1, s.head.z + s.face.z * 3); S.cam.lookAt(s.head.x - s.face.x * 10, s.head.y, s.head.z - s.face.z * 10); S.draw(); });
+    await page.screenshot({ path: path.join(OUT, '9-in-jaws.png') });
 } finally { clearTimeout(killer); await browser.close(); srv.stop(); }

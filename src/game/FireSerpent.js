@@ -29,7 +29,7 @@ import * as THREE from 'three';
 import { SERPENT, serpentBlock, serpentHit, serpentRadius, serpentResponse } from './FireSerpentRules.js';
 import { addDark } from './DarkMagic.js';
 import { mergeParts } from '../core/MergeGeometry.js';
-import { ParticlePool } from '../fx/Particles.js';
+import { GlowPool } from '../fx/Particles.js';
 
 const N = SERPENT.SEGS;
 const NB = N - SERPENT.NECK; // rings lying on the ground; the last of them (NB − 1) is where the neck rises: the «lead»
@@ -122,6 +122,7 @@ void main(){
   // the tongues: hot at their roots, thin and red at their tips, torn by the noise
   float al = smoothstep(0.32, 0.75, n2 + n * 0.4) * (1.0 - smoothstep(0.4, 1.6, vTip)) * (0.35 + 0.65 * facing) * 0.75;
   al *= smoothstep(-0.2, 0.25, vUpN); // (none off its underside: no skirt of flame lying round it on the ground)
+  al *= smoothstep(2.0, 11.0, length(vV)); // (right at the camera — held in its jaws, swallowed — the added-up shell would white the screen out)
   vec3 col = ramp((0.55 + 0.6 * n - vTip * 0.35) * uHeat);
 #else
   // the body: SOLID fire (the author 05.11: «змей не похож на змея» — a see-through glow had no shape): a body of living flame —
@@ -269,7 +270,7 @@ uniform float uTime; uniform float uFade; uniform float uHeadS;
 uniform vec4 uC[${N}]; uniform vec3 uN[${N}]; uniform vec3 uB[${N}];
 uniform mat4 uHeadM; uniform mat4 uJawM;
 attribute float aRing; attribute float aAng; attribute float aRad; attribute float aSeed; attribute float aKind; attribute vec3 aHead;
-varying vec2 vUv; varying float vPh; varying float vSeed; varying float vHot;
+varying vec2 vUv; varying float vPh; varying float vSeed; varying float vHot; varying float vNear;
 void main(){
   float ph = fract(uTime * (0.85 + aSeed * 0.9) + aSeed * 7.13);
   vec3 c; float size; float hot;
@@ -297,12 +298,15 @@ void main(){
   mv.x += position.x * size;
   mv.y += (position.y + 0.25) * size * 1.6; // (tall: a flame is taller than wide, its root at the point)
   vUv = position.xy + 0.5; vPh = ph; vSeed = aSeed; vHot = hot;
+  // (a tongue right at the camera — bitten, held, swallowed, or just close — would fill the screen and, added up, white it out:
+  //  it fades out as the eye comes into it; seen from a few of its own sizes away it burns as usual)
+  vNear = smoothstep(size * 0.5 + 0.6, size * 2.2 + 3.0, -mv.z);
   gl_Position = projectionMatrix * mv;
 }`;
 const FL_FRAG = `
 ${NOISE}
 uniform float uTime; uniform float uFade; uniform float uHeat;
-varying vec2 vUv; varying float vPh; varying float vSeed; varying float vHot;
+varying vec2 vUv; varying float vPh; varying float vSeed; varying float vHot; varying float vNear;
 vec3 ramp(float h){
   vec3 c = mix(vec3(0.5, 0.05, 0.0), vec3(1.0, 0.3, 0.02), smoothstep(0.1, 0.45, h));
   c = mix(c, vec3(1.0, 0.68, 0.18), smoothstep(0.45, 0.8, h));
@@ -318,7 +322,7 @@ void main(){
   float body = smoothstep(w, w * 0.25, abs(x)) * smoothstep(1.0, 0.55, uv.y + (n2 - 0.5) * 0.35) * smoothstep(0.0, 0.12, uv.y);
   float life = smoothstep(0.0, 0.12, vPh) * (1.0 - smoothstep(0.55, 1.0, vPh));
   float heat = (body * (0.95 - uv.y * 0.6) * (1.0 - vPh * 0.6) * vHot + 0.12) * uHeat;
-  float al = body * life * uFade * 0.3;
+  float al = body * life * uFade * 0.3 * vNear;
   if (al < 0.004) discard;
   gl_FragColor = vec4(ramp(heat) * al, al);
 }`;
@@ -361,7 +365,10 @@ const basics = () => _basic || (_basic = {
     eye: new THREE.MeshBasicMaterial({ color: 0xfff6b0 }),
     slit: new THREE.MeshBasicMaterial({ color: 0x1a0300 }),
     dark: new THREE.MeshBasicMaterial({ color: 0x3a0800 }),
-    throat: new THREE.MeshBasicMaterial({ color: 0xffd060, side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+    // (the glowing throat: fades out as the eye comes into it — held in the jaws the camera is inside it, and it washed the screen pale yellow)
+    throat: new THREE.ShaderMaterial({ side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+        vertexShader: 'varying float vD; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vD = -mv.z; gl_Position = projectionMatrix * mv; }',
+        fragmentShader: 'varying float vD; void main(){ gl_FragColor = vec4(vec3(1.0, 0.816, 0.376) * smoothstep(3.0, 12.0, vD), 1.0); }' }),
 });
 
 // ------------------------------------------------------------------ one serpent (mine or another computer's)
@@ -657,7 +664,9 @@ export class FireSerpent {
         this._acc = { flame: 0, head: 0, ember: 0, smoke: 0, spit: 0 };
         this._tmpE = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
         // its own pool of the Hellfire's flame cubes (the same material: no new shader; the Hellfire's own pool stays for its fire)
-        this.pool = game.scene ? new ParticlePool(game.scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 3000, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }) : null;
+        // (sparks and embers: soft round glowing points — the author's shot 05.11: flat cubes of sparks right at the camera (bitten, held)
+        //  grew into huge flat panes over the whole screen; a point is never bigger than the card's largest point and has no faces)
+        this.pool = game.scene ? new GlowPool(game.scene, { capacity: 3000 }) : null;
     }
 
     get me() { return this.game.localId; }
@@ -774,8 +783,16 @@ export class FireSerpent {
             s.draw(dt);
         }
         if (this.heldMe) this._heldMeStep(dt);
-        this.pool?.update(dt);
+        if (this.pool) { this._poolView(); this.pool.update(dt); }
         if (g.authority) this._wizards(dt);
+    }
+
+    /** How big a metre looks now for the sparks (as FireworksFx._view). */
+    _poolView() {
+        const g = this.game, pool = this.pool;
+        if (!g.renderer || !g.camera) return;
+        if (this._maxPx == null) { try { const gl = g.renderer.getContext(); this._maxPx = Math.min(96, gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1] || 64); } catch { this._maxPx = 64; } }
+        pool.view(g.renderer.domElement?.height || 720, g.camera.fov || 75, this._maxPx);
     }
 
     _updateMine(dt) {
