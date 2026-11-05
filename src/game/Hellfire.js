@@ -60,7 +60,9 @@ export const HELLFIRE = {
     R_MAX: 6.5,
     FOLLOW: 6, // 1/s: how quickly the blaze flows after the wand
     SPEED: 16, // m/s at most
-    RING_RATE: 0.25, // turns a second of the hand that mean «it goes round»
+    RING_RATE: 0.25, // turns a second of the hand that mean «it goes round» (keeping a ring that is already there)
+    RING_START: 0.75, // turns the hand must really go round (within ~2 s) before the fire becomes a ring at all (the author 05.11: «чуть дёрнул палочку — вокруг меня вихрь; вихрь — когда реально покрутил огнём вокруг себя»)
+    RING_START_SPEED: 0.7, // m/s: …at least this fast (a twitch of the wrist is not a turn of the arm)
     RING_IN: 1.4, // 1/s: the fire flows into the ring
     RING_OUT: 0.7, // 1/s: …and back to the wand's point when the hand stops
     RING_HOLD: 0.7, // s the hand may pause without the ring falling apart
@@ -382,7 +384,11 @@ export class Hellfire {
         const hand = ch.getHandWorldPosition(side, _b).sub(body);
         this.meter.push(this._t, hand);
         const rate = this.meter.rate;
-        if (rate > HELLFIRE.RING_RATE && this.meter.speed > 0.4) s.ringT = HELLFIRE.RING_HOLD;
+        // the turns the hand really made lately (they fade over ~2 s): a ring starts only after most of a full turn round the body
+        s.circ = (s.circ || 0) * Math.exp(-dt / 2) + Math.max(0, this.meter.last);
+        const going = rate > HELLFIRE.RING_RATE && this.meter.speed > 0.4;
+        const starting = s.k > 0.05 || (s.circ >= HELLFIRE.RING_START && this.meter.speed > HELLFIRE.RING_START_SPEED);
+        if (going && starting) s.ringT = HELLFIRE.RING_HOLD;
         else s.ringT -= dt;
         const k0 = s.k;
         s.k = s.ringT > 0 ? Math.min(1, s.k + HELLFIRE.RING_IN * dt) : Math.max(0, s.k - HELLFIRE.RING_OUT * dt);
