@@ -85,3 +85,15 @@ test('варит ТОЛЬКО по просьбе: вопрос «как при�
     assert.equal(parseIntent('помоги сварить зелье удачи')?.kind, 'help');
     assert.notEqual(parseIntent('как мне помочь сварить зелье удачи')?.kind, 'help');
 });
+
+test('«знаешь ли ты зелье удачи» — он знает все зелья и отвечает рецептом, а не общей заготовкой; про постороннее — своя фраза', async () => {
+    const { FALLBACK } = await import('../../src/game/PotionMaster.js');
+    for (const r of RECIPES) {
+        const w = (POTION_WORDS[r.id] || [r.name])[0];
+        const it = parseIntent(`знаешь ли ты зелье ${w}`);
+        assert.ok(it && (it.kind === 'know' || it.kind === 'recipe') && it.rec.id === r.id, `знаешь ли ты ${w}: ${JSON.stringify(it)}`);
+    }
+    assert.equal(parseIntent('а ты знаешь зелье удачи?')?.kind, 'know');
+    assert.equal(parseIntent('умеешь варить зелье русалки')?.kind, 'know');
+    assert.ok(FALLBACK.length >= 3 && FALLBACK.every((l) => /зель/.test(l)));
+});

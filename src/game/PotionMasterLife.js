@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { LAIR, racks as lairRacks } from '../world/PotionLairPlan.js';
 import { CAULDRON, addWater, addIngredient, surfaceY, takePortion, boiling, newBrew, potionItem } from './Potions.js';
 import { newUid } from './ItemTypes.js';
-import { MASTER, LINES, parseIntent, planOf, recipeLine, recipeAnswer, knownLine, hintLine, ingName, whereLine, ingredientsLine } from './PotionMaster.js';
+import { MASTER, LINES, FALLBACK, parseIntent, planOf, recipeLine, recipeAnswer, knownLine, hintLine, ingName, whereLine, ingredientsLine } from './PotionMaster.js';
 import { lairIngredients, stockFor } from './PotionLair.js';
 
 export const LAIR_SITE_ID = 'potionlair';
@@ -109,8 +109,8 @@ export class PotionMasterLife {
     hear(v, text) {
         if (!this.auth || !v?.potionMaster) return null;
         const it = parseIntent(text);
-        if (!it) return null;
         const g = this.game, c = this.cauldron;
+        if (!it) return g.castleLife?.talk?.llm?.ready ? null : pick(FALLBACK); // (без нейросети — его собственная фраза, а не общая заготовка жителя; с нейросетью отвечает она по его описанию)
         switch (it.kind) {
             case 'hello': return pick(LINES.hello);
             case 'list': return knownLine();
@@ -125,6 +125,7 @@ export class PotionMasterLife {
                 return r.text + ' Смотрите — я подсвечу.';
             }
             case 'recipe': return recipeAnswer(it.rec);
+            case 'know': return `Конечно знаю — ${recipeAnswer(it.rec)}`;
             case 'hint': return c ? hintLine(c.st.ings) : LINES.noCauldron;
             case 'stop': if (!this.job) return LINES.idle; this._end(); return LINES.stopped;
             case 'fire': if (!c) return LINES.noCauldron; this._castFire(v, c); return 'Готово, огонь горит.';
