@@ -134,7 +134,7 @@ export function helmetParts(p, code, list, dk = false) {
     const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), ml = mail(dk), lt = strap(), rm = rivetMat(code, dk);
     const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
     // the skull: a smooth bascinet — many thin rounded layers make one round dome over the box head; a brow band with rivets all round
-    const W = [1.46, 1.46, 1.42, 1.36, 1.26, 1.12, 0.94, 0.72, 0.46];
+    const W = [1.48, 1.48, 1.48, 1.46, 1.44, 1.4, 1.32, 1.2, 1.0, 0.7]; // (wide to the top: it covers the hair slab, 1.3 wide at the crown)
     W.forEach((w, i) => rb(s, w, 0.13, w, 0, 0.1 + i * 0.105, 0));
     rb(t, 1.5, 0.07, 1.5, 0, 0.08, 0);
     for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.74, 0.08, Math.sin(a) * 0.74); }
