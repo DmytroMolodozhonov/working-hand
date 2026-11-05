@@ -374,7 +374,19 @@ export class Ragdoll {
 
     /** Advance by `dt` seconds (fixed inner steps, at most 4 a call). → true while it still moves. */
     step(world, dt) {
-        if (this.asleep) return false;
+        if (this.asleep) {
+            // (a body lying still: now and then it looks under itself — the ground blown away under it («Бомбардо», a crater, a floor
+            //  knocked down) → it wakes and falls; never left lying on air. .claude/skills/physics/SKILL.md)
+            this._chk = (this._chk || 0) + Math.min(dt, 0.1);
+            if (this._chk < 0.4 || !world?.floor) return false;
+            this._chk = 0;
+            for (let i = 0; i < N; i++) {
+                const k = i * 3, r = this.sp.r[i];
+                if (this.x[k + 1] - r - world.floor(this.x[k], this.x[k + 2], this.x[k + 1] - r + 0.15) < 0.2) return false; // (one point still lies on something)
+            }
+            this.wake();
+            return true;
+        }
         this.acc += Math.min(dt, 0.1);
         let n = 0;
         while (this.acc >= DOLL.DT && n < 4) { this.acc -= DOLL.DT; this._tick(world); n++; }

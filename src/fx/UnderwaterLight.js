@@ -160,7 +160,10 @@ export class UnderwaterLight {
         const cam = g.camera?.position || g.character?.group?.position;
         if (!cam) return;
         const surf = sw?._eyeSurface ?? WATER_LEVEL_Y;
-        this.depth = Math.max(0, surf - cam.y);
+        // (smoothed: the waves over the head move the surface every frame — the water's colour followed them and the whole picture
+        //  shimmered, the author: «под водой мигает мир»; tools/under-flicker.mjs showed the haze's colour jumping frame to frame)
+        const raw = Math.max(0, surf - cam.y);
+        this.depth = this.depth == null || Math.abs(raw - this.depth) > 6 ? raw : this.depth + (raw - this.depth) * Math.min(1, dt * 1.5);
         // the day: the sun's height and the clouds (the shafts need the sun; the colour dims at dusk and night)
         const sky = g.world?.sky?.uniforms;
         const sd = sky?.uSunDir?.value;

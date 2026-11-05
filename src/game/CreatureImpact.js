@@ -686,7 +686,7 @@ export class CreatureImpact {
         const g = this.game, doll = s.rag, rig = s.rig;
         s.vx = s.vz = 0; s.airT = 0; s.rest = 0;
         if (doll) {
-            if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
+            if (doll.asleep || performance.now() < this._budget) doll.step(guardWorld(g), dt); // (asleep: only a cheap look under it — Ragdoll.step)
             if (this.auth) {
                 // the body's place goes with its hips (the AI, the others' computers, the targets see it there)
                 doll.at(12, _pt);
@@ -795,14 +795,14 @@ export class CreatureImpact {
                 // a zombie / a Taron: until its body is gone (sunk, unloaded)
                 const gone = (r.ck === 'z' ? !c.group?.parent || c.removable || !c.group.visible : !c.model?.parent) || c.lev;
                 if (gone) { this.deadRags.delete(key); continue; }
-                if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
+                if (doll.asleep || performance.now() < this._budget) doll.step(guardWorld(g), dt); // (asleep: only a cheap look under it — Ragdoll.step)
                 let dy = 0;
                 if (doll.asleep) { if (r.feet0 == null) r.feet0 = rig.feet(c); dy = Math.min(0, rig.feet(c) - r.feet0); } // (the corpse sinking at the end: the drawn body goes down with it)
                 this._ragDraw(c, doll, rig, dy);
                 continue;
             }
             if (!c.group || !c.group.parent || !c.model?.root || !c.dead || c.lev || c.bodyMoved) { this.deadRags.delete(key); if (!c.dead) c.rag = false; continue; } // (carried off by «Левиоса», gone from the world, raised: the doll is done)
-            if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
+            if (doll.asleep || performance.now() < this._budget) doll.step(guardWorld(g), dt); // (asleep: only a cheap look under it — Ragdoll.step)
             RagPose.toModel(doll, c.model);
             if (doll.asleep && c.model.isDeadDone) {
                 c.model.group.updateMatrixWorld(true);

@@ -218,7 +218,25 @@ export class Weapon {
             this._followRemote(dt);
             return;
         }
-        if (this.sleeping && !this.drive) return;
+        if (this.sleeping && !this.drive) {
+            // (asleep on the ground: now and then it looks under itself — the ground blown away by «Бомбардо», a wall knocked down
+            //  under it → it falls; never left hanging in the air. Not one floating over a pedestal / stuck in a body / in a rite —
+            //  .claude/skills/physics/SKILL.md)
+            if (!this.hover && !this.stuckIn && !this.ritual && !this.remoteTarget && collision) {
+                this._chk = (this._chk || 0) + dt;
+                if (this._chk >= 0.4) {
+                    this._chk = 0;
+                    let held = false;
+                    for (const s of this.samples) {
+                        _v1.copy(s.local).applyQuaternion(this.quaternion).add(this.position);
+                        _v1.y -= 0.15;
+                        if (contactAgainstWorld(_v1, s.radius, collision, _n) > 0) { held = true; break; }
+                    }
+                    if (!held) this.wake();
+                }
+            }
+            return;
+        }
 
         // Sub-step for stability with fast swings
         const sub = this.drive ? 3 : 2;
