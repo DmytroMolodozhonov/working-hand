@@ -3554,6 +3554,7 @@ export class Game {
         for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'magicPebble', 'gargoyleHead', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'canaryHide', 'taronAxe', 'taronIron', 'redStone', 'bone']) out.push({ kind });
         out.push({ kind: 'coins', magic: true }, { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
         for (const s of this.inventory?.slots || []) if (s) out.push(s);
+        for (const s of this.inventory?.back || []) if (s) out.push(s);
         for (const sd of ['left', 'right']) { const h = this.items?.held[sd]; if (h) out.push(h.item); }
         return out;
     }

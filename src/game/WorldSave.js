@@ -170,6 +170,7 @@ export function playerSnapshot(game) {
     return {
         slots,
         extraSlots: inv ? Math.max(0, inv.slots.length - 5) : 0,
+        back: inv?.back ? inv.back.map((s) => (s ? { ...s } : null)) : undefined, // the two cells on the back (a bow, a sword…)
         purse: inv?.purse?.count || 0, // the coins in the pouch on the belt (CoinBelt)
         purseMagic: inv?.purse?.magic ? inv.purse.magicUid || true : undefined, // the pouch is on the belt (all the coins in it)
         ownWand: inv?.ownWand || undefined, // my own wand (lying on the ground when the game was left: «Акцио» brings it back, the stand-in goes — Inventory.gotWand)
@@ -209,6 +210,7 @@ export function applyPlayerSnapshot(game, s) {
     if (inv && Array.isArray(s.slots)) {
         if (s.extraSlots && inv.setExtraSlots) inv.setExtraSlots(s.extraSlots);
         for (let i = 0; i < inv.slots.length; i++) inv.slots[i] = s.slots[i] ? { ...s.slots[i] } : null;
+        if (inv.back) { inv.back.fill(null); if (Array.isArray(s.back)) s.back.forEach((b, i) => { if (b && i < inv.back.length) inv.back[i] = { ...b }; }); inv.migrateBack?.(); } // (an old save: the back things from the pockets' cells onto the back)
         inv.selected = -1;
         if (typeof s.ownWand === 'string') inv.ownWand = s.ownWand;
         if (inv.purse) { inv.purse.count = 0; inv.purse.magic = false; inv.purse.magicUid = null; }

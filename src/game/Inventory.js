@@ -131,6 +131,8 @@ function pocketHintMesh() {
     m.name = 'pocket-hint'; m.visible = false; m.frustumCulled = false; m.renderOrder = 5;
     return m;
 }
+/** How many things go on the back (the author: two cells, on the right like the armour's) */
+export const BACK_COUNT = 2;
 export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield', 'dragonEgg', 'iceRod']); // (a dragon's egg is too big for a pocket)
 
 /** The hand is over the shoulder, behind the head, and keeps still there. */
@@ -161,6 +163,7 @@ export class Inventory {
     constructor(game) {
         this.game = game;
         this.slots = new Array(SLOT_COUNT).fill(null);
+        this.back = new Array(BACK_COUNT).fill(null); // (the author 05.11: two cells «за спиной», apart from the pockets: a bow, a sword, an axe, a hammer, a shield…)
         this.selected = -1; // -1: the «hand» cell (free right hand)
         this.inHand = null; // {slot, kind, weapon?, side}: what of the selected slot is in a hand
         this._look = { on: false, t: 0 }; // (looking down at the pocket / the pouches: lookSteady)
@@ -381,7 +384,7 @@ export class Inventory {
     /** Is the thing with this uid mine already (in a slot or a hand)? (one thing — one place: never twice) */
     hasUid(uid) {
         if (!uid) return false;
-        if (this.slots.some((x) => x?.uid === uid)) return true;
+        if (this.slots.some((x) => x?.uid === uid) || this.back?.some((x) => x?.uid === uid)) return true;
         const h = this.game.items?.held;
         return !!(h && (h.right?.item.uid === uid || h.left?.item.uid === uid));
     }
@@ -389,6 +392,7 @@ export class Inventory {
     /** Is there room in the slots for this thing (a free slot, or room on a stack of it)? */
     canStore(item) {
         if (!item) return false;
+        if (BACK_KINDS.has(item.kind) && this.back?.includes(null)) return true; // (a back thing: its own cells first)
         if (this.slots.some((x) => !x)) return true;
         const max = item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack;
         if (!max) return false;
@@ -417,7 +421,9 @@ export class Inventory {
     store(item) {
         retireScroll(item); // (an old health / mana scroll from an old save or client: an apple now)
         if (item && !this.slots.includes(item) && item.uid && this.hasUid(item.uid)) handLog(`вещь не добавлена в ячейку: такой id уже есть у меня (${item.kind}, id ${item.uid})`);
-        if (item && (this.slots.includes(item) || (item.uid && this.hasUid(item.uid)))) { this._render(); return true; } // (already mine: never a second entry of it)
+        if (item && (this.slots.includes(item) || this.back?.includes(item) || (item.uid && this.hasUid(item.uid)))) { this._render(); return true; } // (already mine: never a second entry of it)
+        // (a bow, a sword, a shield… found or given: onto the back while it has room — the pockets only when both back cells are taken)
+        if (item && BACK_KINDS.has(item.kind) && this.back) { const b = this.back.indexOf(null); if (b >= 0) { this.back[b] = item; this._render(); return true; } }
         let i = this.selected >= 0 && !this.slots[this.selected] ? this.selected : this.slots.findIndex((s) => !s);
         if (i < 0) { this.game.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return false; }
         this.slots[i] = item;
@@ -957,29 +963,75 @@ export class Inventory {
         const g = this.game;
         const t = this._backThing(side);
         if (t) {
-            // on the back (and into a slot)
+            // on the back — into one of its own two cells (never the pockets'); both taken: it stays in the hand
+            if (!this.back) this.back = new Array(BACK_COUNT).fill(null);
+            const b = this.back.indexOf(null);
+            if (b < 0) { g.hud.toast?.('🎒 За спиной уже две вещи — сначала достаньте одну'); return; }
             if (t.kind === 'weapon') {
                 if (this.inHand?.weapon === t.w) this.inHand = null;
-                if (!this._storeWeapon(t.w)) return; // (no free cell: it stays in the hand, the toast says why)
+                this.back[b] = this._weaponItem(t.w);
+                for (const sd of ['left', 'right']) if (g.weapons.hands[sd].held === t.w) g.weapons._forget(sd, g.character.getActiveHands()[sd]);
+                if (g.sync) g.sync.weaponGone?.(t.w);
+                g.weapons.remove(t.w);
                 this._fx((t.w.type === 'axe' ? '🪓 Топор' : '🗡️ Меч') + ' за спиной', side);
             } else {
-                if (!this.canStore(t.h.item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return; } // (it stays in the hand)
                 const it = g.items.releaseHand(side);
                 if (this.inHand?.item === it) this.inHand = null;
-                if (this.storeItem(it)) this._fx(`${ITEM_INFO[it.kind]?.icon || '🎒'} ${ITEM_INFO[it.kind]?.name || 'Предмет'} за спиной`, side);
+                this.back[b] = it;
+                this._fx(`${ITEM_INFO[it.kind]?.icon || '🎒'} ${ITEM_INFO[it.kind]?.name || 'Предмет'} за спиной`, side);
             }
             this.selected = -1;
             this._render();
             return;
         }
-        // an empty hand over the shoulder takes what is on the back (the bow hand's other hand takes arrows instead)
+        // an empty hand over the shoulder takes what is on the back — the last put there first (the bow hand's other hand takes arrows instead)
         const other = side === 'right' ? 'left' : 'right';
         if (g.items?.held[side] || g.weapons.hands[side].held || g.items?.held[other]?.item.kind === 'bow') return;
-        const i = this.slots.findIndex((s) => s && BACK_KINDS.has(s.kind));
-        if (i < 0) return;
-        if (this._fromSlot(i, side)) this._fx('✋ Достали со спины', side);
+        let i = -1;
+        for (let k = (this.back?.length || 0) - 1; k >= 0; k--) if (this.back[k]) { i = k; break; }
+        if (i < 0) {
+            // (an old save: a back thing still in a pocket's cell)
+            const j = this.slots.findIndex((s) => s && BACK_KINDS.has(s.kind));
+            if (j >= 0 && this._fromSlot(j, side)) this._fx('✋ Достали со спины', side);
+            this._render();
+            return;
+        }
+        if (this._fromBack(i, side)) this._fx('✋ Достали со спины', side);
         this._render();
     }
+
+    /** A weapon in the world as a cell's record. */
+    _weaponItem(w) {
+        return { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0, ench: w.ench || undefined, ...(w.godGift ? { godGift: true } : {}) };
+    }
+
+    /** The back cell's thing into the hand (as from a slot: _fromSlot). */
+    _fromBack(i, side) {
+        if (this.monsterShut()) return false;
+        const s = this.back[i];
+        if (!s) return false;
+        this.slots.push(s); // (borrow a cell for a moment: the same way out as a slot's — the weapon spawned into the hand, the thing taken)
+        const k = this.slots.length - 1;
+        const ok = this._fromSlot(k, side);
+        this.slots.splice(k, 1);
+        if (ok) this.back[i] = null;
+        return ok;
+    }
+
+    /** Back things left in the pockets' cells (an old save, a full back once) go onto the back while it has room. */
+    migrateBack() {
+        if (!this.back) return;
+        for (let i = 0; i < this.slots.length; i++) {
+            const it = this.slots[i];
+            if (!it || !BACK_KINDS.has(it.kind)) continue;
+            const b = this.back.indexOf(null);
+            if (b < 0) break;
+            this.back[b] = it; this.slots[i] = null;
+        }
+    }
+
+    /** Is a thing like this anywhere in the cells — the pockets' or the back's? */
+    hasAnywhere(pred) { return this.slots.some((x) => x && pred(x)) || !!this.back?.some((x) => x && pred(x)); }
 
     /** The weapon's own id, unless another weapon of the world has it (two with one id: one's removal took the other's record). */
     _freeWeaponId(id) {
@@ -988,7 +1040,7 @@ export class Inventory {
 
     /** Is a weapon with this id kept in a cell? (a chest or a save must not put a second one into the world) */
     hasWeaponId(id) {
-        return !!id && this.slots.some((s) => s && s.kind === 'weapon' && s.id === id);
+        return !!id && this.hasAnywhere((s) => s.kind === 'weapon' && s.id === id);
     }
 
     /** A slot's thing into a hand (weapon, bow, shield, hammer…). */
@@ -1021,7 +1073,7 @@ export class Inventory {
     _updateBack() {
         const g = this.game;
         const ch = g.character;
-        const want = this.slots.filter((s) => s && BACK_KINDS.has(s.kind)).slice(0, 3);
+        const want = [...(this.back || []).filter(Boolean), ...this.slots.filter((s) => s && BACK_KINDS.has(s.kind))].slice(0, 3);
         const key = want.map((s) => s.kind + (s.type ?? '') + (s.uid || s.id || '')).join('|');
         if (key !== this._backKey) {
             this._backKey = key;
@@ -1199,11 +1251,36 @@ export class Inventory {
 
     show(on) {
         if (this.bar) this.bar.style.display = on ? 'flex' : 'none';
+        if (typeof document !== 'undefined') { const b = document.getElementById('back-cells'); if (b) b.style.display = on ? 'flex' : 'none'; }
         if (on && typeof document !== 'undefined') document.dispatchEvent(new Event('zns-hotbar-built')); // (shown: its width is known now — fitted to the window)
+    }
+
+    /** The two cells of the back (the right side, under the armour's): what is on the back, or dashed empty cells. */
+    _renderBack() {
+        if (typeof document === 'undefined' || !this.back) return;
+        let el = document.getElementById('back-cells');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'back-cells';
+            el.innerHTML = this.back.map((_, i) => `<div class="back-cell" data-i="${i}"><div class="bc-icon"></div></div>`).join('');
+            document.body.appendChild(el);
+        }
+        const key = this.back.map((b) => (b ? b.kind + (b.type || '') + (b.uid || b.id || '') : '')).join('|');
+        if (key === this._backCellKey) return;
+        this._backCellKey = key;
+        this.back.forEach((b, i) => {
+            const cell = el.querySelector(`[data-i="${i}"]`);
+            const ic = cell.querySelector('.bc-icon');
+            ic.textContent = '';
+            cell.classList.toggle('on', !!b);
+            if (b) this._pic(ic, b, Inventory.emojiOf(b));
+            cell.title = b ? `За спиной: ${b.kind === 'weapon' ? (b.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[b.kind]?.name || 'вещь').toLowerCase()} — заведите свободную руку за плечо, чтобы достать` : 'Спина свободна: заведите руку с луком, мечом, топором, молотом или щитом за плечо — вещь окажется за спиной';
+        });
     }
 
     _render() {
         if (!this.cells) return;
+        this._renderBack();
         this._renderPouch();
         this.handCell?.classList.toggle('sel', this.selected < 0);
         if (this.handCell) {
@@ -1271,5 +1348,6 @@ export class Inventory {
         if (this._hint?.mesh) { this._hint.mesh.parent?.remove(this._hint.mesh); this._hint.mesh.material.dispose(); this._hint.mesh = null; } // (the ring's form is shared)
         if (this._handBlock) { this.game.scene.remove(this._handBlock); this._handBlock.geometry.dispose(); this._handBlock.material.dispose(); }
         this.show(false);
+        if (typeof document !== 'undefined') document.getElementById('back-cells')?.remove();
     }
 }

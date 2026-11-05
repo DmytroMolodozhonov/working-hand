@@ -887,7 +887,7 @@ export class IceCastleLife {
         const g = this.game;
         if (g.items?.heldOf('iceRod')) return true;
         const has = (x) => !!x && (x.kind === 'iceRod' || x.item?.kind === 'iceRod' || (Array.isArray(x.items) && x.items.some(has)) || (Array.isArray(x.contents) && x.contents.some(has)));
-        return !!g.inventory?.slots?.some(has);
+        return !!g.inventory?.slots?.some(has) || !!g.inventory?.back?.some(has);
     }
 
     _remoteRod(id) {

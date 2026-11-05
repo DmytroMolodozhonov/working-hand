@@ -1718,6 +1718,30 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
     100% { transform: none; }
 }
 /* armour worn (Armor.js): cells on the right, one above the other — only while something is worn */
+/* the two cells of the back (Inventory._renderBack): under the armour's, on the right */
+#back-cells {
+    position: fixed;
+    right: 10px;
+    top: calc(50% + 128px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 1200;
+    pointer-events: none;
+}
+.back-cell {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    background: rgba(12, 12, 22, 0.62);
+    border: 2px dashed rgba(255, 255, 255, 0.22);
+    border-radius: 8px;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
+}
+.back-cell::after { content: '🎒'; position: absolute; right: 2px; bottom: 0; font-size: 11px; opacity: 0.55; }
+.back-cell .bc-icon { position: absolute; inset: 6px; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.back-cell .bc-icon img { width: 100%; height: 100%; object-fit: contain; }
+.back-cell.on { border-style: solid; border-color: rgba(255, 220, 150, 0.6); }
 #armor-cells {
     position: fixed;
     right: 10px;

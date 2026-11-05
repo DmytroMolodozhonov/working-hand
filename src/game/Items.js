@@ -1363,7 +1363,7 @@ export class ItemSystem {
         // arrows go straight into a bow's quiver (in a hand or in a slot), up to 25
         if (item.kind === 'arrows' && !item.shop) { // (unpaid arrows stay in the hand until paid)
             const g = this.game;
-            const bow = this.heldOf('bow')?.item || g.inventory.slots.find((s) => s && s.kind === 'bow');
+            const bow = this.heldOf('bow')?.item || g.inventory.back?.find((s) => s && s.kind === 'bow') || g.inventory.slots.find((s) => s && s.kind === 'bow');
             if (bow && (bow.arrows || 0) < 25) {
                 const n = Math.min(25 - (bow.arrows || 0), item.count || 1);
                 bow.arrows = (bow.arrows || 0) + n;

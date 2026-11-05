@@ -23,13 +23,16 @@ test('back: an axe goes into a cell, the world copy is removed', () => {
     const { g, w, removed } = game();
     assert.ok(g.inventory._storeWeapon(w));
     assert.deepEqual(removed, [w]);
-    assert.equal(g.inventory.slots.filter((s) => s?.kind === 'weapon').length, 1);
+    // (почему back, а не slots: у спины теперь свои две ячейки — автор 05.11, Inventory.back)
+    assert.equal(g.inventory.back.filter((s) => s?.kind === 'weapon').length, 1);
+    assert.equal(g.inventory.slots.filter((s) => s?.kind === 'weapon').length, 0);
     assert.ok(g.inventory.hasWeaponId('cX'));
 });
 
 test('back: no free cell — the axe STAYS in the hand (not forgotten, not removed), with a toast', () => {
     const { g, w, forgot, removed, toasts } = game();
     g.inventory.slots.fill({ kind: 'meat', count: 10, from: 'pig' });
+    g.inventory.back.fill({ kind: 'shield', uid: 'sh' }); // (the back's own two cells taken too)
     assert.equal(g.inventory._storeWeapon(w), false);
     assert.equal(forgot.length, 0);
     assert.equal(removed.length, 0);

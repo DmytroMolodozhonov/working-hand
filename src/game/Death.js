@@ -281,7 +281,7 @@ export class DeathSystem {
         if (it) for (const side of ['right', 'left']) if (it.held[side]) held.push(it.releaseHand(side));
         // the pouch on the belt drops too: whole, with all its coins in it (CoinBelt); the reborn hero gets a new empty one
         if (inv?.purse?.any) held.push(...inv.purse.takeAll());
-        const slots = inv ? [...inv.slots] : [];
+        const slots = inv ? [...inv.slots, ...(inv.back || [])] : []; // (the back's two cells drop too)
         held.push(...(g.armor?.takeOffAll({ suit: true }) || [])); // (the armour, the robe and the suit worn drop too)
         let backpack = null;
         if (it?.worn.backpack) {
@@ -294,6 +294,7 @@ export class DeathSystem {
         }
         if (inv) {
             inv.slots.fill(null);
+            inv.back?.fill(null);
             inv.inHand = null;
             inv.selected = -1;
             if (backpack) inv.setExtraSlots(0);
