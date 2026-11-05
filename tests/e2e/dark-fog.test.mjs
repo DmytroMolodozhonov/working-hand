@@ -34,7 +34,7 @@ test('Caligo: the dome grows, the picture inside is black, the minds lose a play
         // the picture: a few frames inside
         const fog = g.scene.fog; const near0 = fog.near, far0 = fog.far;
         let farIn = null;
-        for (let i = 0; i < 40; i++) { g.darkFog.begin(); farIn = g.scene.fog.far; g.darkFog.end(); }
+        for (let i = 0; i < 200; i++) { g.darkFog.begin(); farIn = g.scene.fog.far; g.darkFog.end(); }
         out.farIn = farIn; out.farBack = g.scene.fog.far === far0 && g.scene.fog.near === near0;
         // the minds: a player of mine standing outside, then inside
         const here = { x: p.x, y: p.y, z: p.z };
