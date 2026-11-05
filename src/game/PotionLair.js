@@ -24,12 +24,14 @@ import { INGREDIENT_RU, RECIPES, CAULDRON, newBrew } from './Potions.js';
 import { newUid } from './ItemTypes.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
+const _v = new THREE.Vector3(), _w = new THREE.Vector3();
+
 export const LAIR_RULES = {
     WAIT_MAX: 40, // с ждать землю
     SLICE: 2600, // блоков за кадр
     KEEP_R: 70, // м от зала: полки и огонь поддерживаются
     FIRE_LEFT: 420, // с, на сколько подкидывается костёр, пока он горит (потушили — не разжигаем)
-    DARK: 0.72, // насколько затемнён зал (0 — день, 1 — глубокая пещера): «светло, но затемнено»
+    DARK: 0.5, // насколько затемнён зал (0 — день, 1 — глубокая пещера): «светло, но затемнено»
     REFILL_EVERY: 2, // с
     REFILL_DELAY: 2.5, // с: пустое место ждёт, прежде чем получить новую вещь (чтобы вещь в руке успели рассмотреть)
     HOVER: 8, // м над полом
@@ -112,7 +114,7 @@ export class PotionLair {
     /** Герой в зале (по границам и высоте): свет затемняется. */
     inside(p) {
         if (!this.rect) return false;
-        return p.x >= this.rect.x0 && p.x <= this.rect.x1 && p.z >= this.rect.z0 && p.z <= this.rect.z1 && p.y > LAIR.F - 4 && p.y < LAIR.F + 16;
+        return p.x >= this.rect.x0 && p.x <= this.rect.x1 && p.z >= this.rect.z0 && p.z <= this.rect.z1 && p.y > LAIR.F - 4 && p.y < LAIR.F + 22;
     }
 
     darkness() { return this.inLair ? LAIR_RULES.DARK : 0; }
@@ -129,6 +131,7 @@ export class PotionLair {
         this._t += dt;
         const me = g.character?.group.position;
         if (me) this.inLair = this.inside(me) && !!this.rect;
+        if (me && this.plan?.torches && Math.hypot(me.x - LAIR.CX, me.z - LAIR.CZ) < LAIR_RULES.KEEP_R && this._built()) this._flames(dt, me);
         const s = this.state;
         if (s) { this._step(s, dt); return; }
         if (!this.plan) return;
@@ -137,6 +140,27 @@ export class PotionLair {
         if (this._chkT > 0 || !me || Math.hypot(me.x - LAIR.CX, me.z - LAIR.CZ) > LAIR_RULES.KEEP_R) return;
         this._chkT = LAIR_RULES.REFILL_EVERY;
         if (this._built()) { this._feedFire(); const k = this._shelves(this._fresh); if (k > 0) this._chkT = 0.2; else this._fresh = false; } // (идёт наполнение — следующая порция скоро)
+    }
+
+    /** Факелы: пламя рисуют искры (мягкие светящиеся точки из общего пула), свет — три ближайших огня (FireLights.want: новых ламп нет). */
+    _flames(dt, me) {
+        const g = this.game, fx = g.fx;
+        const T = this.plan.torches, v = _v, w = _w;
+        this._flameT = (this._flameT || 0) + dt;
+        for (const t of T) {
+            const x = LAIR.CX + t.x, z = LAIR.CZ + t.z, d = Math.hypot(x - me.x, z - me.z);
+            if (d > 48) continue;
+            const flick = 0.75 + 0.25 * Math.sin(this._t * 11 + x * 1.7 + z) + 0.1 * Math.sin(this._t * 27 + z);
+            g.fireLights?.want(x, t.y, z, 0.55 * flick);
+            if (!fx?.spark || d > 34) continue;
+            // (пламя: ~14 искр в секунду на факел, в двух цветах — жёлтое ядро и оранжевый язык)
+            const n = dt * 14 + (Math.random() < (dt * 14) % 1 ? 1 : 0);
+            for (let i = 0; i < Math.floor(n); i++) {
+                v.set(x + (Math.random() - 0.5) * 0.35, t.y + Math.random() * 0.3, z + (Math.random() - 0.5) * 0.35);
+                w.set((Math.random() - 0.5) * 0.25, 1.1 + Math.random() * 1.1, (Math.random() - 0.5) * 0.25);
+                fx.spark(v, i % 3 ? 0xff8a20 : 0xffd36a, 0.16 + Math.random() * 0.1, w, 0.45 + Math.random() * 0.25);
+            }
+        }
     }
 
     _step(s, dt) {

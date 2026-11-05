@@ -43,7 +43,7 @@ test('полки: места под вещи — на досках, не в во
     assert.ok(P.slots.potion.length >= 24 && P.slots.flask.length >= 12);
     for (const k of ['ing', 'potion', 'flask']) for (const s of P.slots[k]) {
         const board = get(s.x, Math.round(s.y + 0.5 - 0.02), s.z);
-        assert.equal(board, BLOCK.PLANKS, `нет доски под вещью ${s.x},${s.y},${s.z}`);
+        assert.equal(board, BLOCK.PLANKS_DARK, `нет доски под вещью ${s.x},${s.y},${s.z}`);
         assert.equal(get(s.x, Math.round(s.y + 1.5 - 0.02), s.z), BLOCK.AIR, 'над вещью свободно');
         assert.ok(s.y - (F - 0.5) <= 6.1, 'выше досягаемости');
     }
@@ -52,10 +52,15 @@ test('полки: места под вещи — на досках, не в во
     assert.equal(new Set(all.map(key)).size, all.length, 'два места в одной точке');
 });
 
-test('свет и герой: фонари на своде и полках; герой стоит внутри на полу лицом к очагу', () => {
-    assert.ok(P.lamps.length >= 20);
-    for (const l of P.lamps) assert.equal(get(l.x, l.y, l.z), BLOCK.LANTERN);
+test('свет и герой: факелы на каменных стойках (чаша внизу пламени); весь зал из тёмного камня; герой стоит внутри на полу', () => {
+    assert.ok(P.torches.length >= 24, `факелов ${P.torches.length}`);
+    for (const t of P.torches) { assert.equal(get(t.x, Math.floor(t.y - 0.35 - 0.5 + 0.0), t.z), BLOCK.HELL_OBSIDIAN, 'чаша под пламенем'); assert.equal(get(t.x, F + 3, t.z), BLOCK.HELL_BASALT, 'стойка'); }
+    const light = new Set([BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.COBBLE, BLOCK.CS_WHITE, BLOCK.CS_GREY, BLOCK.CS_SAND, BLOCK.GRAVEL]);
+    for (const b of P.blocks) if (!(b[0] === LAIR.MARKER.x && b[2] === LAIR.MARKER.z && b[1] === F)) assert.ok(!light.has(b[3]), `светлый камень ${b[3]} в ${b[0]},${b[1]},${b[2]}`);
+    for (let y = F + 1; y <= F + 12; y++) assert.ok(get(0, y, 0) !== undefined);
     assert.ok(inHall(P.hero.x, P.hero.z, -3));
+    // купол: гладкий — выше посередине, ниже к краю, без выбоин (соседние столбцы отличаются не больше чем на 1 слой)
+    for (let x = -24; x < 24; x++) for (let z = -24; z < 24; z++) if (inHall(x, z, -1) && inHall(x + 1, z, -1)) assert.ok(Math.abs(ceilingAt(x, z) - ceilingAt(x + 1, z)) <= 1, `ступенька свода ${x},${z}`);
     for (let y = F + 1; y <= F + 6; y++) assert.equal(get(P.hero.x, y, P.hero.z), BLOCK.AIR);
     assert.ok(P.rect.x1 > LAIR.A && P.rect.z1 > LAIR.B);
 });

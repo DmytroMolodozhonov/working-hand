@@ -13,12 +13,15 @@ test.before(async () => { srv = await startServer(PORT); browser = await launch(
 test.after(async () => { await browser?.close(); srv?.stop(); });
 
 test('the potion-maker\'s lair is built, lit, stocked; the fire goes out and the water cools', { timeout: 900000 }, async () => {
-    const { page } = await openPage(browser, srv.url, { noCamera: true });
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
+    page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
     await startFromMenu(page, 'creative', { smooth: true }).catch(async (e) => {
         if (!/Timeout/.test(e.message)) throw e;
         await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 420000 });
     });
     await waitHudVisible(page, 120000);
+    if (errors?.length) console.log('PAGEERR', JSON.stringify(errors.slice(0, 5)));
     await page.exposeFunction('__shotHook', async (n) => { await page.screenshot({ path: `docs/media/potion-lair-${n}.png` }); });
     const r = await page.evaluate(async () => {
         const g = window.__zns.game, sleep = (ms) => new Promise((res) => setTimeout(res, ms));

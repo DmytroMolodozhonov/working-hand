@@ -252,7 +252,7 @@ class Serpent {
     }
 
     dispose() {
-        this.group.removeFromParent();
+        this.group.parent?.remove(this.group); // (three r128 has no removeFromParent)
         for (const m of [this.coreMat, this.shellMat, this.headMat, this.headShellMat]) m.dispose(); // (the geometries are shared)
     }
 
@@ -795,7 +795,7 @@ export class FireSerpent {
     sample() {
         const s = new Serpent(this, '__prewarm', new THREE.Vector3(0, -500, 0));
         s.grow = 1;
-        s.group.removeFromParent();
+        s.group.parent?.remove(s.group); // (three r128 has no removeFromParent)
         for (let i = 0; i < N; i++) s.p[i].set(0, -500 + i * 0.5, 0);
         s.r.fill(1);
         s.draw(0.016);
