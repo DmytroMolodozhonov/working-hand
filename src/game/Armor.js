@@ -547,6 +547,7 @@ export class ArmorSystem {
         const steel = v.role === 'knight' || v.role === 'king' || !!v.magicPieces;
         if (!steel && !v.wizard) return 'none';
         if (v.wizard && v.robe) return 'magic'; // (a magic robe stays on)
+        if (v.magicPieces) return 'magic'; // (the author: «магическое остаётся всегда» — the king's / the advisor's magic plates stay on)
         const drops = steel ? this._villagerSteel(v) : [makeRobe(false)];
         if (steel) { v.armor = 0; v.maxArmor = 0; }
         this._restyle(v);

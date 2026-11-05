@@ -1267,7 +1267,7 @@ export class Duel {
         if (!opts?.clash && c.isVillager && ((c.robe && ROBE_BLOCKS.has(spell)) || (c.magicSet && !c.stripped && MAGIC_SET_BLOCKS.has(spell)))) {
             this._burst(p, 0xc39bff, 20);
             // («Disarmor»: the robe stays on, but the bolt still throws him back as a «Джолт» does)
-            if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._joltCreature(c, 'Jolt', src, byId); }
+            if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._disarmorMiss(byId, c.robe ? 'robe' : 'set'); this._joltCreature(c, 'Jolt', src, byId); }
             return;
         }
         // «Liquidation» (duel): −3 as the splash, and what a humanoid holds in his hand crumbles (HeldBreak.js) — before the
@@ -1338,9 +1338,17 @@ export class Duel {
         } else if (spell === 'Disarmor') {
             // a knight's / the king's plates, a wizard's plain robe fly off as things (Armor.js); the others only reel
             // …and the bolt throws the one it hit back off the feet, tumbling, as «Джолт» does (the author: «так реалистичнее»)
-            if (c.isVillager && !c.isSailor) g.armor?.stripVillager(c, byId);
+            const r = c.isVillager && !c.isSailor ? g.armor?.stripVillager(c, byId) : 'none';
+            if (r === 'magic') this._disarmorMiss(byId, c.robe ? 'robe' : 'set');
             if (!c.dead) this._joltCreature(c, 'Jolt', src, byId);
         }
+    }
+
+    /** My «Disarmor» hit a magic robe / magic plates: they stay — say so to me (the author: «попал в магическую вещь — подсказка «не сработало»»). */
+    _disarmorMiss(byId, what) {
+        const g = this.game;
+        if (byId !== 'local' && byId !== g.localId) return;
+        g.hud?.setVoice?.(what === 'robe' ? '✨ «Disarmor» не сработал: волшебную мантию не снять — только обычную одежду и доспехи' : '✨ «Disarmor» не сработал: волшебные доспехи не снять — только обычные', true);
     }
 
     /** Where the caster's hand is (for the way a spell pushes): their hand, or a step before the target. */
