@@ -237,6 +237,18 @@ export class CustomPlants {
         if (this.auth) this._spread(dt);
         // the instances of the kinds that changed (and the far ones not drawn)
         const me = g.character?.group?.position;
+        // (host) nothing hangs in the air: the ground under a plant blown away / dug out — it breaks and falls (twice a second, near the hero)
+        this._groundT = (this._groundT || 0) - dt;
+        if (this.auth && me && this._groundT <= 0 && this.list.length) {
+            this._groundT = 0.5;
+            const gone = [];
+            for (const p of this.list) {
+                if (Math.abs(p.x - me.x) > 150 || Math.abs(p.z - me.z) > 150) continue;
+                const y = this._ground(p.x, p.z);
+                if (y != null && y < p.y - 0.8) gone.push(p);
+            }
+            this._kill(gone, false);
+        }
         for (const S of this.species.values()) {
             const near = !me || this.list.some((p) => p.sp === S.key && Math.abs(p.x - me.x) < 300 && Math.abs(p.z - me.z) < 300);
             S.mesh.visible = near; if (S.glowMesh) S.glowMesh.visible = near; if (S.haloMesh) S.haloMesh.visible = near;

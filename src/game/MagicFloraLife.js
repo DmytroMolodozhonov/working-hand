@@ -112,7 +112,7 @@ export class MagicFloraLife {
             if (Math.abs(t.topLayer(x + 2, z) - top) > 2 || Math.abs(t.topLayer(x, z + 2) - top) > 2 || Math.abs(t.topLayer(x - 2, z) - top) > 2 || Math.abs(t.topLayer(x, z - 2) - top) > 2) continue; // (a steep slope: nothing grows)
             const foot = plantFoot(t, e.kind, x, z, m.scale, (ix, tl, iz) => t.get(ix, tl, iz) === BLOCK.WATER || t.get(ix, tl + 1, iz) === BLOCK.WATER);
             if (!foot) continue; // (no solid ground under the whole foot: a hollow, water, a cliff — it does not grow here)
-            const pl = { ...m, kind: e.kind, y: foot.y, picks: [], boxId: null, burn: 0, group: out };
+            const pl = { ...m, kind: e.kind, y: foot.y, topL: top, picks: [], boxId: null, burn: 0, group: out }; // (topL: the block it grows on — gone, it falls: _grounded)
             const spots = floraBody(e.kind, m.variant).userData.picks;
             const was = this.picked.get(m.id);
             for (let i = 0; i < spots.length; i++) {
@@ -300,6 +300,8 @@ export class MagicFloraLife {
                 g.items?.spawnLoose?.({ kind: K.item, uid: newUid(), count: 1 }, _p.set(pk.wp[0], pk.wp[1], pk.wp[2]), { vel: _s.set((Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3) });
                 n++;
             }
+            // (the author: something always comes off a plant — even one picked bare leaves one)
+            if (!n && how !== 'ash' && K.item) g.items?.spawnLoose?.({ kind: K.item, uid: newUid(), count: 1 }, _p.set(pl.x, pl.y + 1, pl.z), { vel: _s.set((Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2) });
             g.sync?.floraKill?.(pl.id, how);
         }
         const at = _v.set(pl.x, pl.y + 1.5, pl.z);
@@ -347,6 +349,16 @@ export class MagicFloraLife {
             if (this.picked.size > 600) for (const [id, u] of this.picked) if (!u.some((x) => x > now)) this.picked.delete(id);
         }
 
+        // (host) nothing hangs in the air: the block a plant grows on is gone (a blast, «Gather», digging) — it breaks and falls
+        this._groundT = (this._groundT || 0) - dt;
+        if (this.auth && this._groundT <= 0) {
+            this._groundT = 0.5;
+            for (const kind of FLORA_ORDER) for (const pl of [...this.list[kind]]) {
+                if (pl.topL == null || Math.abs(pl.x - me.x) + Math.abs(pl.z - me.z) > 120) continue;
+                const b = t.get(Math.round(pl.x), pl.topL, Math.round(pl.z));
+                if (b === BLOCK.AIR || b === BLOCK.WATER) this.kill(pl, 'destroy');
+            }
+        }
         // burning plants: embers, then ash
         for (let i = this.burning.length - 1; i >= 0; i--) {
             const pl = this.burning[i];
