@@ -2463,6 +2463,8 @@ export class Game {
                 const edits = [];
                 for (const c of W.cols) {
                     const type = L === W.height - 1 ? BLOCK.DIRT : BLOCK.STONE;
+                    const cur = this.builder.data?.get(c.x, c.base + L, c.z);
+                    if (cur !== undefined && cur !== BLOCK.AIR && cur !== BLOCK.WATER) continue; // (rock under a low ceiling stays: the wall stops there)
                     edits.push([c.x, c.base + L, c.z, type]);
                     this.builder.data?.set(c.x, c.base + L, c.z, type);
                     if (Math.random() < 0.5) this.fx.spark(new THREE.Vector3(c.x, c.base + L - 1, c.z), 0x8a7a5a, 0.2, new THREE.Vector3((Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3), 0.9);
@@ -2472,6 +2474,20 @@ export class Game {
             }
             if (W.done >= W.height) B.rising = null;
         }
+    }
+
+    /**
+     * Where «Breakthrough»'s wall stands in this column: on the floor the hero stands on (a cave: the floor under the
+     * ceiling — it was the SURFACE above the cave, the author's «в пещере пыль есть, стены нет»); a step or a rock ahead
+     * — on what is up to 4 layers higher; a pit or a wall too high — no wall in that column (null).
+     */
+    _wallBase(x, z, heroL) {
+        const d = this.terrain.data;
+        const open = (L) => { const b = d.get(x, L, z); return b === BLOCK.AIR || b === BLOCK.WATER; };
+        const L = heroL + 1;
+        if (open(L)) { const f = d.floorBelow(x, z, L); return f < heroL - 3 ? null : f + 1; }
+        for (let k = 1; k <= 4; k++) if (open(L + k)) return L + k;
+        return null;
     }
 
     _raiseWall(max) {
@@ -2485,6 +2501,7 @@ export class Game {
         this.castleLife?.alarm({ x: cx, y: ch.group.position.y - 1.95, z: cz }, 'quake', this.localId, width / 2); // (earth rising out of the ground: the people near run)
         const cols = [];
         const seen = new Set();
+        const heroL = Math.round(ch.group.position.y - 1.5); // (the layer the hero's feet stand on — in a cave too: not the surface above it)
         for (let i = 0; i < width; i++) {
             const o = i - (width - 1) / 2;
             for (const t of [0, 0.5]) { // two cells thick where it runs diagonally
@@ -2492,9 +2509,11 @@ export class Game {
                 const k = x + ',' + z;
                 if (seen.has(k)) continue;
                 seen.add(k);
-                cols.push({ x, z, base: this.terrain.data.topLayer(x, z) + 1 });
+                const base = this._wallBase(x, z, heroL);
+                if (base != null) cols.push({ x, z, base });
             }
         }
+        if (!cols.length) { this.hud.setVoice('🪨 Здесь негде поднять стену', true); return; }
         this._bt.rising = { cols, height, done: 0, t: 0 };
         this.fx.explosion?.(new THREE.Vector3(cx, ch.group.position.y - 1.5, cz), 1.5, 0.4);
         if (this.sound) this.sound.playExplosion?.(new THREE.Vector3(cx, ch.group.position.y, cz), ch.group.position, 0.3);
