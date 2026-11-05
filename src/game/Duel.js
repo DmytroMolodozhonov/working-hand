@@ -1336,8 +1336,8 @@ export class Duel {
             this._sand(p);
             if (!c.dead) g.creatureImpact?.spellHit(c, 'SandsDuel', src, byId);
         } else if (spell === 'Expelliarmus') {
-            // a wizard's wand / a knight's sword flies off; everybody else (animals, sailors,
-            // villagers with tools, an unarmed one) is only jolted back a little
+            // a wizard's wand / a knight's sword / a villager's tool (a farmer's pitchfork…) flies off; everybody else (animals,
+            // an unarmed one) is only jolted back a little
             // (the crews' blades fly out too: the captain's rapier, a skeleton's cutlass — Sailors.disarm)
             const out = c.isSailor ? g.ships.crew.disarm(c, src, byId) : !c.isAnimal ? disarmVillager(g, c, wizardWandOf) : null;
             // knocking the wand / the sword out is an attack: he (and whoever saw it) fights the one who did it —

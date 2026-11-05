@@ -687,7 +687,6 @@ export class Levitation {
         const L = c.lev;
         if (!L || (!L.body && (c.dead || c.isDead || c.isDying))) { if (L) this.letGo(ck, c, false); else this.carried.delete(ck + ':' + c.id); return; }
         L.age += dt;
-        g.death?.liftedDrop?.(c, L, dt); // (off its feet: its hands open, the pitchfork / the sword falls — Death.liftedDrop)
         const centre = _h1;
         const up = this._centre(ck, c, centre);
         const ground = floorUnder(g.collision, centre.x, centre.z, centre.y);

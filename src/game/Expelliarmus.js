@@ -13,7 +13,9 @@
  *     the wand is the player's. Stuck on the way for long — he calls it back with «Акцио».
  *   - a knight / the king: the sword flies off (a real weapon, anyone can take it); without it
  *     he fights with his fists (half the damage) and drops no sword when he falls.
- *   - zombies, animals, sailors, villagers with tools: nothing to disarm — a small push.
+ *   - a villager with a tool (a farmer's pitchfork, a hoe, a smith's hammer, a kitchen knife, a bucket): the tool flies out of the hand —
+ *     a thing of its own (ItemTypes 'tool', the same shape it had in the hand), anyone can take it (the author 05.11: «у фермера должна
+ *     выпасть вила» — it was only a push). Zombies, animals: nothing to disarm — a small push.
  *   - a book-bird: knocked out of the air like by any charge (it falls as a book).
  *   - a living tree, the giant spider, a dragon: no effect (nothing in their «hands» to knock out).
  *   - the Ice Queen: her Ice Rod stays in her hand — «Экспеллиармус» is a simple spell without a scroll
@@ -24,7 +26,8 @@
  */
 
 import * as THREE from 'three';
-import { starterWand, rollWand } from './ItemTypes.js';
+import { starterWand, rollWand, newUid } from './ItemTypes.js';
+import { DROP_TOOLS } from '../entities/VillagerModel.js';
 import { handLog } from './HandRelease.js';
 
 export const EXPELLIARMUS = {
@@ -186,6 +189,14 @@ export function disarmVillager(game, v, makeWand = wizardWandOf) {
         w.wake?.();
         if (g.sync) { g.sync.weaponAppeared?.(w); g.sync._localRelease?.(w); }
         return 'sword';
+    }
+    // a tool in a person's hand: it flies out (a pitchfork, a hoe, a hammer, a knife, a bucket — ItemTypes 'tool')
+    if (DROP_TOOLS.includes(kind) && !v.toolGone && g.items) {
+        const f = pickFlight(g, hand);
+        m.setHeldTool('none');
+        v.toolGone = true; // (the hand stays empty — sent to the guests as the «tool gone» bit, CastleLife)
+        g.items.spawnLoose({ kind: 'tool', uid: newUid(), tool: kind }, hand, { vel: f.vel, spin: f.spin });
+        return 'tool';
     }
     return null;
 }
