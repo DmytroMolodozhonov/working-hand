@@ -1,23 +1,34 @@
 /**
  * TornadoSummonFx.js — the calling of «Tornado» (the author 05.11: «анимация вызова — какой-то луч, примитивный… чтобы небо
- * развернулось и так далее, чтобы реально эпично было»). Every computer plays it from the spell's packet; the spout itself comes down
- * at its end (OceanStorm.summon with a delay of DESCEND s).
+ * развернулось и так далее, чтобы реально эпично было»; then, seeing it in the game: «должен быть луч… электрический, как будто я
+ * заклинание электро кидаю… потихоньку небеса разверзнутся… чувствуется мощь, звуки интересные… палочка чуть-чуть подёргивается»).
+ * Every computer plays it from the spell's packet; the spout itself comes down at its end (OceanStorm.summon with a delay of DESCEND s).
  *
- *   0 – 2 s   the call: round the caster a spiral of wind goes up from the wand into the sky, a ring of dust and spray runs out from
- *             the feet; a low rumble swells (SeaSounds 'gale', the thunder far off);
- *   0.5 – 5   the sky turns: over the place a vast cloud vortex opens (up to RADIUS m) — dark spiral arms wheeling round an eye
- *             that glows from within, lightning flickering inside it (one shared light flash), its edge torn and ragged; the world
- *             darkens and it rains (Storm.start);
- *   2 – 6     the sea answers: under the eye the water begins to turn — a disc of foam spiralling in (its own shader on the water),
- *             a ring of spray racing round and closing in, bolts striking the sea round it;
- *   DESCEND   the funnel comes down out of the eye (WaterspoutFx — the spout of OceanStorm), the vortex cloud thins into the spout's
- *             own wall cloud over the next seconds.
- * Two meshes a calling (the cloud vortex, the foam disc), shared geometries, shaders compiled at the loading screen (samples()).
+ *   0 – BEAM s  the call: a branching ELECTRIC beam crackles out of the wand tip up into the sky — first along the wand, then bent
+ *               up to the clouds over the place — re-struck many times a second (never the same path twice), side branches
+ *               forking off it, sparks spitting from the tip, the light flickering blue-white; a rising electric whine, crackles
+ *               every fraction of a second, thunder answering from above; the caster's wand shudders in the hand (Items.tremble)
+ *               and the view trembles a little;
+ *   0.9 – 6     the heavens open SLOWLY where the beam strikes: a glowing tear in the cloud widens into a vast vortex (up to RADIUS m) —
+ *               dark spiral arms wheeling round an eye that glows from within, lightning flickering inside it, its edge torn; the world
+ *               darkens and it rains (Storm.start); a low rumble swells;
+ *   3 – 8       the sea answers: under the eye the water begins to turn — a disc of foam spiralling in, a ring of spray racing round
+ *               and closing in, bolts striking the sea round it;
+ *   DESCEND     the funnel comes down out of the eye (WaterspoutFx — the spout of OceanStorm), the vortex cloud thins into the spout's
+ *               own wall cloud over the next seconds.
+ * Two meshes a calling (the cloud vortex, the foam disc), shared geometries, shaders compiled at the loading screen (samples()); the
+ * beam is the shared bolt pool (Effects.bolts) — no new meshes.
  */
 import * as THREE from 'three';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 
-export const TORNADO_FX = { DESCEND: 3.6, LIFE: 11, RADIUS: 260, HEIGHT: 150, MAX: 2, DARK_R: 700 };
+export const TORNADO_FX = {
+    DESCEND: 6, LIFE: 14, RADIUS: 260, HEIGHT: 150, MAX: 2, DARK_R: 700,
+    BEAM: 2.8, // s: the electric beam from the wand into the sky
+    RESTRIKE: 0.07, // s between the beam's new paths (it crackles, never the same twice)
+    OPEN_AT: 0.9, OPEN_T: 5, // s: the heavens start opening where the beam strikes, and take this long to open wide
+    TREMBLE: 0.05, // rad: how much the caster's wand shudders while the beam goes
+};
 
 const NOISE = /* glsl */ `
 float tH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -104,7 +115,8 @@ void main() {
     });
 }
 
-const _p = new THREE.Vector3(), _v = new THREE.Vector3();
+const _p = new THREE.Vector3(), _v = new THREE.Vector3(), _c = new THREE.Vector3();
+const _tip = new THREE.Vector3(), _dir = new THREE.Vector3(), _sky = new THREE.Vector3(), _mid = new THREE.Vector3();
 
 export class TornadoSummonFx {
     /** game: the Game (its fx sparks, light flash, the storm, the sound, the spells' bolts). */
@@ -134,10 +146,10 @@ export class TornadoSummonFx {
 
     samples() { const s = this.slots[0]; return [new THREE.Mesh(s.cloud.geometry, s.cloud.material), new THREE.Mesh(s.foam.geometry, s.foam.material)]; }
 
-    /** A calling starts: from the caster at `from` (the wand), the spout's place `at` {x, z}. */
-    start(from, at, spin = 1) {
+    /** A calling starts: from the caster at `from` (the wand), the spout's place `at` {x, z}; `by` the caster's id, `side` the hand. */
+    start(from, at, spin = 1, by = null, side = null) {
         const S = this.slots.find((s) => !s.on) || this.slots[0];
-        Object.assign(S, { on: true, t: 0, from: from.clone(), at: { x: at.x, z: at.z }, spin, bolts: 0, sparkT: 0 });
+        Object.assign(S, { on: true, t: 0, ended: false, from: from.clone(), at: { x: at.x, z: at.z }, spin, bolts: 0, sparkT: 0, by, side, strikeT: 0, zapT: 0.15, thunderAt: 0.6 + Math.random() * 0.5, rumbled: false });
         S.cloud.visible = S.foam.visible = true;
         S.cloud.position.set(at.x, WATER_LEVEL_Y + TORNADO_FX.HEIGHT, at.z);
         S.cloud.scale.setScalar(TORNADO_FX.RADIUS);
@@ -145,8 +157,51 @@ export class TornadoSummonFx {
         S.foam.scale.setScalar(30);
         const g = this.game;
         g.storm?.start?.(new THREE.Vector3(at.x, 0, at.z), 30); // (the sky darkens, it rains — near: Storm.start)
+        const me = g.character?.group?.position;
+        g.sound?.playInspiriusCast?.(from, me); // (the rising electric whine as the beam leaves the wand)
         g.sound?.playSea?.(from, 'tail', 0.6);
-        g.sound?.playThunder?.(0.5);
+        if (this._mine(S)) g.items?.tremble?.(S.side, TORNADO_FX.BEAM + 0.4, TORNADO_FX.TREMBLE);
+    }
+
+    /** Is this calling mine (my wand shudders, my view trembles)? */
+    _mine(S) { const g = this.game; return S.by == null || S.by === 'local' || S.by === g.localId; }
+
+    /** Where the beam starts now: the caster's live wand tip and where it points (it follows the hand), else where it was cast. */
+    _tip(S, out, dir) {
+        const hp = S.side ? this.game.spells?.hooks?.handPose?.(S.by ?? 'local', S.side) : null;
+        if (hp?.origin) { out.copy(hp.origin); if (hp.dir) dir.copy(hp.dir).normalize(); else dir.set(0, 1, 0); }
+        else { out.copy(S.from); dir.set(0, 1, 0); }
+        if (dir.y < 0.25) { dir.y = 0.25; dir.normalize(); } // (it goes up into the sky whatever)
+        return out;
+    }
+
+    /**
+     * One path of the electric beam: from the wand tip along the wand, then bent up to where it strikes the clouds (over the place,
+     * a little towards the caster) — jagged, with forks. Shared bolt pool (Effects.bolts): only segments, no meshes.
+     */
+    _beam(S, k) {
+        const g = this.game, sm = g.spells, fx = g.fx;
+        if (!sm?._jagged || !fx) return;
+        const tip = this._tip(S, _tip, _dir);
+        const sky = _sky.set(S.at.x + (tip.x - S.at.x) * 0.25, WATER_LEVEL_Y + TORNADO_FX.HEIGHT - 6, S.at.z + (tip.z - S.at.z) * 0.25);
+        // the first leg along the wand (14 m), then up to the clouds
+        const mid = _mid.copy(tip).addScaledVector(_dir, 14);
+        sm._jagged(tip.clone(), mid.clone(), 7, 0.55, TORNADO_FX.RESTRIKE * 1.6);
+        sm._jagged(mid.clone(), sky.clone(), 14, 6 + 4 * k, TORNADO_FX.RESTRIKE * 1.6);
+        if (Math.random() < 0.7) sm._jagged(tip.clone(), sky.clone(), 18, 4, TORNADO_FX.RESTRIKE * 1.3); // (a second strand twisting round the first)
+        // forks: short branches off the beam into the air
+        for (let f = 0; f < 2; f++) {
+            const u = 0.15 + Math.random() * 0.6;
+            _p.lerpVectors(mid, sky, u);
+            _v.copy(_p).add(_c.set((Math.random() - 0.5) * 24, -4 - Math.random() * 10, (Math.random() - 0.5) * 24));
+            sm._jagged(_p.clone(), _v.clone(), 5, 2, TORNADO_FX.RESTRIKE * 1.2);
+        }
+        // the tip spits sparks; the light flickers blue-white at the wand and up in the clouds where it strikes
+        for (let i = 0; i < 6; i++) {
+            _v.set((Math.random() - 0.5) * 7, Math.random() * 5, (Math.random() - 0.5) * 7);
+            fx.spark?.(tip, i % 3 ? 0xffffff : 0x8fd0ff, 0.12 + Math.random() * 0.1, _v, 0.35);
+        }
+        fx.lightFlash?.(tip, 0xbfe0ff, 3 + Math.random() * 3, 0.1, 40);
     }
 
     update(dt) {
@@ -160,10 +215,30 @@ export class TornadoSummonFx {
             const t = S.t, cu = S.cloud.material.uniforms, fu = S.foam.material.uniforms;
             // the sky turns: the vortex opens, wheels, flickers; thins out at the end into the spout's own cloud
             cu.uT.value = t; cu.uSpin.value = S.spin; cu.uLight.value = light;
-            cu.uOpen.value = Math.min(1, Math.max(0, (t - 0.4) / 3.2)) ** 0.7;
+            // (slowly: a glowing tear where the beam strikes, widening — «потихоньку небеса разверзнутся»)
+            const op = Math.min(1, Math.max(0, (t - TORNADO_FX.OPEN_AT) / TORNADO_FX.OPEN_T));
+            cu.uOpen.value = op * op * (3 - 2 * op) * 0.94 + 0.06 * Math.min(1, Math.max(0, (t - TORNADO_FX.OPEN_AT) * 2));
             cu.uFade.value = Math.max(0, Math.min(1, (TORNADO_FX.LIFE - t) / 4));
             cu.uFlash.value = Math.max(0, cu.uFlash.value - dt * 5);
-            if (t > 1 && t < TORNADO_FX.LIFE - 2 && Math.random() < dt * 2.2) {
+            // the beam: re-struck many times a second while it goes, then dies in a last great crack
+            if (t < TORNADO_FX.BEAM) {
+                const k = Math.min(1, t / TORNADO_FX.BEAM);
+                S.strikeT -= dt;
+                if (S.strikeT <= 0) { S.strikeT = TORNADO_FX.RESTRIKE * (0.7 + Math.random() * 0.6); this._beam(S, k); cu.uFlash.value = Math.max(cu.uFlash.value, 0.35 + 0.5 * k); }
+                S.zapT -= dt;
+                if (S.zapT <= 0) { S.zapT = 0.18 + Math.random() * 0.22; g.sound?.playInspiriusZap?.(this._tip(S, _tip, _dir)); }
+                if (S.thunderAt && t > S.thunderAt) { S.thunderAt = t < 1.6 ? t + 0.9 + Math.random() * 0.6 : 0; g.sound?.playThunder?.(0.4 + 0.4 * k); }
+                if (this._mine(S) && fx) fx.shake = Math.max(fx.shake || 0, 0.25 + 0.35 * k); // (the power felt: the view trembles a little)
+            } else if (!S.ended) {
+                S.ended = true; // (the last crack: the whole beam at once, a flash, the thunder rolls — the sky is open)
+                for (let i = 0; i < 2; i++) this._beam(S, 1);
+                cu.uFlash.value = 1.6;
+                _p.set(S.at.x, WATER_LEVEL_Y + TORNADO_FX.HEIGHT - 8, S.at.z);
+                fx?.lightFlash?.(_p, 0xdde8ff, 12, 0.5, 320);
+                g.sound?.playThunder?.(0.9);
+            }
+            if (!S.rumbled && t > 1.4) { S.rumbled = true; const me = g.character?.group?.position; if (me) g.sound?.playRumble?.(_p.set(S.at.x, me.y, S.at.z), me); }
+            if (t > TORNADO_FX.BEAM && t < TORNADO_FX.LIFE - 2 && Math.random() < dt * 2.2) {
                 cu.uFlash.value = 0.8 + Math.random() * 0.6;
                 _p.set(S.at.x + (Math.random() - 0.5) * 80, S.cloud.position.y - 5, S.at.z + (Math.random() - 0.5) * 80);
                 fx?.lightFlash?.(_p, 0xcfe0ff, 6, 0.25, 260);
@@ -171,18 +246,21 @@ export class TornadoSummonFx {
             }
             // the sea answers: the foam disc spins up, the spray ring closes in
             fu.uT.value = t; fu.uSpin.value = S.spin; fu.uLight.value = light;
-            fu.uK.value = Math.max(0, Math.min(1, (t - 1.8) / 2)) * Math.max(0, Math.min(1, (TORNADO_FX.LIFE - t) / 3));
-            S.foam.scale.setScalar(30 - Math.min(14, Math.max(0, t - 2) * 3));
+            fu.uK.value = Math.max(0, Math.min(1, (t - 3) / 2.5)) * Math.max(0, Math.min(1, (TORNADO_FX.LIFE - t) / 3));
+            S.foam.scale.setScalar(30 - Math.min(14, Math.max(0, t - 3) * 3));
             if (fx?.spark) {
                 // the call: wind spiralling up from the wand (the first 2 s)
                 S.sparkT += dt * 70;
                 while (S.sparkT >= 1) {
                     S.sparkT -= 1;
-                    if (t < 2.4) {
-                        const a = t * 9 + Math.random() * 6.28, r = 0.6 + Math.random() * 1.6;
-                        _p.set(S.from.x + Math.cos(a) * r, S.from.y + Math.random() * 2, S.from.z + Math.sin(a) * r);
-                        _v.set(-Math.sin(a) * 9 * S.spin, 14 + Math.random() * 14, Math.cos(a) * 9 * S.spin);
-                        fx.spark(_p, Math.random() < 0.3 ? 0xffffff : 0xb9cfe2, 0.12, _v, 1.5);
+                    if (t < TORNADO_FX.BEAM) {
+                        // (the air round the caster pulled up along the beam, and a ring of dust and spray from the feet)
+                        if (Math.random() < 0.35) {
+                            const a = t * 9 + Math.random() * 6.28, r = 0.6 + Math.random() * 1.6;
+                            _p.set(S.from.x + Math.cos(a) * r, S.from.y + Math.random() * 2, S.from.z + Math.sin(a) * r);
+                            _v.set(-Math.sin(a) * 6 * S.spin, 10 + Math.random() * 10, Math.cos(a) * 6 * S.spin);
+                            fx.spark(_p, Math.random() < 0.5 ? 0xd6ecff : 0x9cc6ff, 0.1, _v, 1.2);
+                        }
                         if (t < 1.2 && Math.random() < 0.4) { // (the ring of dust and spray from the feet)
                             const b = Math.random() * 6.28;
                             _p.set(S.from.x + Math.cos(b) * 0.8, S.from.y - 1.6, S.from.z + Math.sin(b) * 0.8);
@@ -191,8 +269,8 @@ export class TornadoSummonFx {
                         }
                     }
                     // the spray racing round the place and closing in (from 2 s on)
-                    if (t > 2 && t < TORNADO_FX.LIFE - 1) {
-                        const b = Math.random() * 6.28, r = Math.max(6, 26 - (t - 2) * 4) * (0.85 + Math.random() * 0.3);
+                    if (t > 3 && t < TORNADO_FX.LIFE - 1) {
+                        const b = Math.random() * 6.28, r = Math.max(6, 26 - (t - 3) * 4) * (0.85 + Math.random() * 0.3);
                         _p.set(S.at.x + Math.cos(b) * r, WATER_LEVEL_Y + 0.4, S.at.z + Math.sin(b) * r);
                         _v.set(-Math.sin(b) * 16 * S.spin - Math.cos(b) * 3, 2 + Math.random() * 6, Math.cos(b) * 16 * S.spin - Math.sin(b) * 3);
                         fx.spark(_p, Math.random() < 0.5 ? 0xffffff : 0xdff2ff, 0.16 + Math.random() * 0.1, _v, 1.4);
@@ -200,7 +278,7 @@ export class TornadoSummonFx {
                 }
             }
             // bolts into the sea round the place (only drawn: the storm's own bolts do the harm)
-            if (t > 2.2 && S.bolts < 4 && Math.random() < dt * 1.4) {
+            if (t > TORNADO_FX.BEAM + 0.4 && S.bolts < 5 && Math.random() < dt * 1.4) {
                 S.bolts++;
                 const b = Math.random() * 6.28, r = 20 + Math.random() * 50;
                 _p.set(S.at.x + Math.cos(b) * r, WATER_LEVEL_Y, S.at.z + Math.sin(b) * r);

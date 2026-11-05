@@ -82,9 +82,9 @@ export class OceanStorm {
     }
 
     /** «Tornado» cast (every computer, from the packet): the calling plays (TornadoSummonFx), the spout comes down at its DESCEND s. */
-    call(from, at, by = null) {
+    call(from, at, by = null, side = null) {
         const spin = Math.random() < 0.5 ? 1 : -1;
-        (this.callFx || (this.callFx = new TornadoSummonFx(this.game))).start(from, at, spin);
+        (this.callFx || (this.callFx = new TornadoSummonFx(this.game))).start(from, at, spin, by, side);
         this.summon(at, by, TORNADO_FX.DESCEND, spin);
     }
 

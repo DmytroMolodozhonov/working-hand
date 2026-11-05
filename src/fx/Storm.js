@@ -24,8 +24,11 @@ export const RAIN_SECONDS = 120;
 export const GATHER_SECONDS = 90;
 /** «Let it rain» needs the hand / wand pointed up to the sky: at least ~45° above the horizon. */
 export const SKY_AIM = 0.7;
-export function aimedAtSky(dir) {
-    return !!dir && dir.y >= SKY_AIM;
+/** «Tornado»: the wand only has to point into the sky — aslant is enough (the author 05.11: «можно чуть под наклоном, главное, чтобы
+ *  ты в небеса попадал»): about 20° over the horizon and up. */
+export const SKY_TILT = 0.35;
+export function aimedAtSky(dir, min = SKY_AIM) {
+    return !!dir && dir.y >= min;
 }
 
 const _p = new THREE.Vector3();

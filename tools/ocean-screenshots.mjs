@@ -72,17 +72,17 @@ try {
             const g = window.__zns.game, dx = sx - bx, dz = sz - bz, l = Math.hypot(dx, dz);
             const at = { x: bx + dx / l * 110, z: bz + dz / l * 110 };
             g.smoothHead && (g.smoothHead.pitch = 0.32);
-            g.oceanStorm.call(g.character.group.position.clone().setY(g.character.group.position.y + 1), at, 'me');
+            g.oceanStorm.call(g.character.group.position.clone().setY(g.character.group.position.y + 1), at, 'local', 'right'); // (mine: the beam leaves my wand)
             window.__tornadoAt = performance.now();
             // (the weather's clock moves with the GAME's time from now: the called spout ages as the calling plays)
             const os = g.oceanStorm, up = os.update.bind(os);
             os.update = (dt) => { if (g.weatherClock != null) g.weatherClock += dt; return up(dt); };
         }, [bx, bz, S.x, S.z]);
         // (the GAME's seconds of the calling, not the clock's: in a slow container a frame is clamped and 8 s of the clock are ~2 of the game)
-        for (const [s, name] of [[1.5, 'tornado-1-call'], [3, 'tornado-2-sky'], [5, 'tornado-3-sea'], [9, 'tornado-4-funnel'], [14, 'tornado-5-spout']]) {
+        for (const [s, name] of [[0.8, 'tornado-0-beam'], [2, 'tornado-1-call'], [4, 'tornado-2-sky'], [6, 'tornado-3-sea'], [10, 'tornado-4-funnel'], [16, 'tornado-5-spout']]) {
             await page.evaluate(async (s) => {
                 const g = window.__zns.game, t0 = performance.now();
-                const age = () => { const sl = g.oceanStorm.callFx?.slots?.find((x) => x.on); if (sl) return sl.t; const sm = g.oceanStorm.summoned[0]; return sm ? (g.weatherClock ?? Date.now() / 1000) - sm.born + 3.6 : -1; };
+                const age = () => { const sl = g.oceanStorm.callFx?.slots?.find((x) => x.on); if (sl) return sl.t; const sm = g.oceanStorm.summoned[0]; return sm ? (g.weatherClock ?? Date.now() / 1000) - sm.born + 6 : -1; /* (TORNADO_FX.DESCEND) */ };
                 while (age() < s && performance.now() - t0 < 120000) await new Promise((r) => setTimeout(r, 30));
             }, s);
             await shoot(name);

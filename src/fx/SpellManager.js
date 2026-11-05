@@ -552,7 +552,7 @@ export class SpellManager {
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o, casterId, handSide); break; // (the beam goes with that player's wand)
             case 'LetItRain': this.castLetItRain(o, casterId); break;
-            case 'Tornado': this.castTornado(o, direction.clone(), casterId); break; // (the direction is the spout's PLACE {x, 0, z} — never normalised: it came down by the world's middle, far from anyone — the author: «не появился»)
+            case 'Tornado': this.castTornado(o, direction.clone(), casterId, handSide); break; // (the direction is the spout's PLACE {x, 0, z} — never normalised: it came down by the world's middle, far from anyone — the author: «не появился»)
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;
@@ -827,8 +827,8 @@ export class SpellManager {
      * funnel comes down out of the eye (TornadoSummonFx via OceanStorm.call; every computer plays it from the packet).
      * `place`: the spout's place {x, 0, z} (the packet's direction — not a direction).
      */
-    castTornado(origin, place, casterId) {
-        this.hooks.tornado?.(origin, place, casterId);
+    castTornado(origin, place, casterId, side = null) {
+        this.hooks.tornado?.(origin, place, casterId, side); // (side: the electric beam leaves that hand's wand — TornadoSummonFx)
     }
 
     // ------------------------------------------------------ Lightning Strike

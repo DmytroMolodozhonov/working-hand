@@ -164,6 +164,7 @@ const _fwd = new THREE.Vector3();
 const _g = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _UPY = new THREE.Vector3(0, 1, 0);
+const _eul = new THREE.Euler();
 const _hq = new THREE.Quaternion();
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
 /**
@@ -897,6 +898,29 @@ export class ItemSystem {
     }
 
     // ------------------------------------------------------------- frame
+    /**
+     * The wand shudders in the hand for `sec` s (a great spell's power going through it — «Tornado»'s electric beam: the author
+     * 05.11 «палочка чуть-чуть подёргивается»). Only how it is DRAWN: where it points (aim, h.q) is untouched, so the spell's aim
+     * does not wander. `side` null — whichever hand holds it.
+     */
+    tremble(side, sec, amp = 0.05) {
+        this._trem = { side: side ?? undefined, until: performance.now() + sec * 1000, sec, amp };
+    }
+
+    _trembleWand(side, h) {
+        const T = this._trem, now = performance.now();
+        if (now > T.until) { this._trem = null; return; }
+        if (T.side && T.side !== side) return;
+        // (stronger as the power builds, easing off at the very end; small fast twitches — not a smooth wobble)
+        const left = (T.until - now) / 1000, k = T.amp * Math.min(1, (T.sec - left) / (T.sec * 0.6) + 0.3) * Math.min(1, left / 0.3);
+        _e.set((Math.random() - 0.5) * 2 * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * 2 * k);
+        _q.setFromEuler(_eul.set(_e.x, _e.y, _e.z));
+        h.model.quaternion.multiply(_q);
+        h.model.position.x += (Math.random() - 0.5) * k * 0.12;
+        h.model.position.y += (Math.random() - 0.5) * k * 0.12;
+        h.model.position.z += (Math.random() - 0.5) * k * 0.12;
+    }
+
     update(dt) {
         const g = this.game;
         const ch = g.character;
@@ -948,6 +972,7 @@ export class ItemSystem {
                 grip.getWorldQuaternion(_q);
                 h.model.quaternion.copy(_q);
             }
+            if (kind === 'wand' && this._trem) this._trembleWand(side, h); // (a great spell's power shaking it: tremble())
             // (its lowest point from the hand: HandBlocks keeps it out of a counter with the hand — a pouch
             // hanging from the fist lies on the counter, never goes into it)
             const S = h.shape;

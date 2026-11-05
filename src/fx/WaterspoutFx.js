@@ -63,12 +63,12 @@ float spN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
 float spF(vec2 p) { return spN(p) * 0.55 + spN(p * 2.1 + 7.3) * 0.3 + spN(p * 4.3 - 3.1) * 0.15; }
 `;
 
-function funnelMaterial() {
+function funnelMaterial(shell = 0) {
     return new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide,
-        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uBend: { value: new THREE.Vector2() }, uSpin: { value: 1 }, uSeed: { value: 0 }, uLight: { value: 1 } },
+        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uBend: { value: new THREE.Vector2() }, uSpin: { value: 1 }, uSeed: { value: 0 }, uLight: { value: 1 }, uShell: { value: shell } },
         vertexShader: /* glsl */ `
-uniform float uTime, uK, uSpin, uSeed;
+uniform float uTime, uK, uSpin, uSeed, uShell;
 uniform vec2 uBend;
 varying vec2 vUv;
 varying float vRim;
@@ -84,8 +84,12 @@ void main() {
     float bulge = spF(vec2(ang * 1.2 + uTime * 0.8 * uSpin, u * 7.0 - uTime * 0.9)) - 0.5;
     float lump = spF(vec2(ang * 3.1 - uTime * 1.3 * uSpin, u * 17.0 - uTime * 1.7)) - 0.5;
     p.xz *= 1.0 + (0.55 * bulge + 0.3 * lump) * (0.4 + 0.6 * (1.0 - u));
+    // the outer shell: a looser sleeve of torn mist and flung spray round the core — wider, billowing more, turning slower
+    // (two layers of mist read as a body of whirling air; one read as a pipe — the author: «топорный»)
+    float shellB = spF(vec2(ang * 0.8 - uTime * 0.5 * uSpin, u * 4.0 - uTime * 0.6)) - 0.5;
+    p.xz *= 1.0 + uShell * (0.5 + 0.9 * shellB + 0.35 * (1.0 - u));
     // the spin: faster low down, the mist wound round
-    float spin = uTime * uSpin * (2.4 - 1.6 * u);
+    float spin = uTime * uSpin * (2.4 - 1.6 * u) * (1.0 - 0.45 * uShell);
     float c = cos(spin), s = sin(spin);
     p.xz = mat2(c, -s, s, c) * p.xz;
     // thin while it is still forming / fading: the funnel reaches down as it grows
@@ -105,13 +109,25 @@ void main() {
     gl_Position = projectionMatrix * viewMatrix * w;
 }`,
         fragmentShader: /* glsl */ `
-uniform float uTime, uK, uSpin, uLight;
+uniform float uTime, uK, uSpin, uLight, uShell;
 varying vec2 vUv;
 varying float vRim;
 varying vec3 vW;
 ${NOISE}
 void main() {
     float u = vUv.y;
+    if (uShell > 0.5) {
+        // the shell: rags of mist torn off and whirled round, holes where the core shows through, thicker low (the spray) and up
+        // in the cloud; lighter than the core (lit mist), see-through
+        vec2 q = vec2(vUv.x * 6.0 + u * 2.5 * uSpin - uTime * 0.7 * uSpin, u * 4.0 - uTime * 0.8);
+        float rag = spF(q) * 0.65 + spF(vec2(vUv.x * 17.0 - uTime * 1.4 * uSpin, u * 9.0 - uTime * 1.2)) * 0.35;
+        float torn = smoothstep(0.42, 0.75, rag);
+        float body = 0.55 + 0.45 * (1.0 - smoothstep(0.0, 0.3, u)) + 0.35 * smoothstep(0.7, 1.0, u);
+        float a = torn * body * mix(0.12, 0.5, pow(vRim, 1.5)) * smoothstep(0.0, 0.03, u) * (1.0 - smoothstep(0.9, 1.0, u)) * uK;
+        vec3 col = mix(vec3(0.84, 0.88, 0.92), vec3(0.42, 0.46, 0.5), smoothstep(0.2, 0.95, u)) * (0.8 + 0.3 * rag) * uLight;
+        gl_FragColor = vec4(col, clamp(a, 0.0, 0.6));
+        return;
+    }
     // the streaks wound round the tube (spiralling up), torn by the noise
     // condensation: long streaks wound steeply round the tube (spiralling up fast), billows climbing, a darker core seen through
     vec2 q = vec2(vUv.x * 9.0 + u * 4.0 * uSpin - uTime * 1.3 * uSpin, u * 5.0 - uTime * 1.1);
@@ -119,7 +135,7 @@ void main() {
     float billow = spF(vec2(vUv.x * 4.0 + uTime * 0.2, u * 9.0 - uTime * 1.6));
     float bands = smoothstep(0.3, 0.8, streak) * (0.6 + 0.6 * billow);
     // a tube of mist: thicker seen edge-on
-    float a = mix(0.35, 0.92, pow(vRim, 1.2)) * (0.6 + 0.55 * bands);
+    float a = mix(0.45, 0.95, pow(vRim, 1.2)) * (0.65 + 0.5 * bands);
     a *= smoothstep(0.0, 0.05, u) * (1.0 - smoothstep(0.86, 1.0, u)); // (the foot torn into spray; the top melts into the cloud)
     a *= uK;
     vec3 low = vec3(0.78, 0.82, 0.86), high = vec3(0.32, 0.35, 0.39);
@@ -232,6 +248,9 @@ export class WaterspoutFx {
         this.slots = [];
         for (let i = 0; i < SPOUT_FX.MAX; i++) {
             const funnel = new THREE.Mesh(funnelGeometry(), funnelMaterial());
+            const shell = new THREE.Mesh(funnelGeometry(), funnelMaterial(1));
+            shell.visible = false; shell.frustumCulled = false; shell.renderOrder = 5; shell.userData.keep = true;
+            scene.add(shell);
             const cloud = new THREE.Mesh(cloudGeometry(), cloudMaterial());
             funnel.visible = cloud.visible = false;
             funnel.frustumCulled = false;
@@ -241,7 +260,7 @@ export class WaterspoutFx {
             sheath.visible = foam.visible = false; sheath.frustumCulled = foam.frustumCulled = false;
             sheath.renderOrder = 4; foam.renderOrder = 1;
             scene.add(funnel); scene.add(cloud); scene.add(sheath); scene.add(foam);
-            this.slots.push({ funnel, cloud, sheath, foam, id: null, sprayT: 0 });
+            this.slots.push({ funnel, shell, cloud, sheath, foam, id: null, sprayT: 0 });
         }
     }
 
@@ -254,9 +273,9 @@ export class WaterspoutFx {
         const wl = Math.hypot(wind?.x || 0, wind?.z || 0) || 1;
         for (let i = 0; i < SPOUT_FX.MAX; i++) {
             const S = this.slots[i], sp = i < n ? spouts[i] : null;
-            if (!sp || sp.k <= 0.01) { S.funnel.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = false; S.id = null; continue; }
+            if (!sp || sp.k <= 0.01) { S.funnel.visible = S.shell.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = false; S.id = null; continue; }
             S.id = sp.id;
-            S.funnel.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = true;
+            S.funnel.visible = S.shell.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = true;
             // the spray sheath boiling at the foot, the foam spiralling on the sea under it (they follow the funnel's bent foot)
             const bx = sp.x - (wind?.x || 0) / wl * 0.6 * 30 * 0.92, bz = sp.z - (wind?.z || 0) / wl * 0.6 * 30 * 0.92;
             S.sheath.position.set(bx, seaY - 0.5, bz);
@@ -269,6 +288,10 @@ export class WaterspoutFx {
             fu.uTime.value = t; fu.uK.value = sp.k; fu.uSpin.value = sp.spin; fu.uLight.value = light;
             fu.uSeed.value = (sp.born || 0) % 100;
             fu.uBend.value.set(-(wind?.x || 0) / wl * 0.6, -(wind?.z || 0) / wl * 0.6);
+            // (the shell: the same funnel's place and bend, its own material — WaterspoutFx funnelMaterial(1))
+            S.shell.position.copy(S.funnel.position);
+            const su = S.shell.material.uniforms;
+            su.uTime.value = t; su.uK.value = sp.k; su.uSpin.value = sp.spin; su.uLight.value = light; su.uSeed.value = fu.uSeed.value; su.uBend.value.copy(fu.uBend.value);
             const cr = 70 + 50 * sp.k;
             S.cloud.position.set(sp.x, seaY + OCEAN.HEIGHT * 0.97, sp.z);
             S.cloud.scale.set(cr, 1, cr);
@@ -293,5 +316,5 @@ export class WaterspoutFx {
     }
 
     /** For Game.prewarm: the meshes to draw once at the loading screen. */
-    samples() { const s = this.slots[0]; return [s.funnel, s.cloud, s.sheath, s.foam].map((m) => new THREE.Mesh(m.geometry, m.material)); }
+    samples() { const s = this.slots[0]; return [s.funnel, s.shell, s.cloud, s.sheath, s.foam].map((m) => new THREE.Mesh(m.geometry, m.material)); }
 }

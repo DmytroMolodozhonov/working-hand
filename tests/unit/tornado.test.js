@@ -63,3 +63,12 @@ test('the spout called: it comes down, wanders round its place, gone after 12 ga
     assert.ok(OCEAN.LIFE[1] <= 12 * 60);
     for (let t = 0; t < 86400; t += 600) for (const s of spoutsOf(idx, s0, 777, t)) assert.ok(s.life <= 12 * 60);
 });
+
+test('Tornado: the wand only has to point into the sky — aslant is enough (the author 05.11: «можно чуть под наклоном»)', async () => {
+    const { aimedAtSky, SKY_AIM, SKY_TILT } = await import('../../src/fx/Storm.js');
+    const dir = (deg) => new THREE.Vector3(Math.cos(deg * Math.PI / 180), Math.sin(deg * Math.PI / 180), 0);
+    assert.ok(aimedAtSky(dir(30), SKY_TILT), '30° over the horizon calls it');
+    assert.ok(aimedAtSky(dir(85), SKY_TILT), 'straight up too');
+    assert.ok(!aimedAtSky(dir(10), SKY_TILT), 'nearly level is not «into the sky»');
+    assert.ok(!aimedAtSky(dir(30)) && SKY_AIM > SKY_TILT, 'the other sky spells keep their own (steeper) aim');
+});
