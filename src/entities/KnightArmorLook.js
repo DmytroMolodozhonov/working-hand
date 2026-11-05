@@ -65,10 +65,10 @@ const _m = new Map();
 const mk = (k, make) => { if (!_m.has(k)) { const m = make(); m.userData.shared = true; _m.set(k, m); } return _m.get(k); };
 /** The steel of a piece. code 1 plain, 2 magic (cool blue, a faint glow), 3 named; dk — blackened by the curse. */
 const steel = (code, dk = false) => mk(`s${code}${dk ? 'd' : ''}`, () => new THREE.MeshStandardMaterial({
-    color: dk ? 0x2a2c32 : code >= 2 ? 0xcfdcff : 0xbcc4ce, map: steelTex(), metalness: 0.5, roughness: 0.42, side: THREE.DoubleSide,
+    color: dk ? 0x2e3036 : code >= 2 ? 0xdce6ff : 0xdde2ea, map: steelTex(), metalness: 0.3, roughness: 0.3, side: THREE.DoubleSide,
     emissive: code >= 2 && !dk ? 0x2f5fd0 : 0x000000, emissiveIntensity: code >= 2 ? 0.22 : 0,
 }));
-const darkSteel = (code, dk = false) => mk(`k${code}${dk ? 'd' : ''}`, () => new THREE.MeshStandardMaterial({ color: dk ? 0x16171a : code >= 2 ? 0x8aa0cc : 0x8a94a0, map: steelTex(), metalness: 0.5, roughness: 0.5, side: THREE.DoubleSide, emissive: code >= 2 && !dk ? 0x1a3a90 : 0x000000, emissiveIntensity: code >= 2 ? 0.2 : 0 }));
+const darkSteel = (code, dk = false) => mk(`k${code}${dk ? 'd' : ''}`, () => new THREE.MeshStandardMaterial({ color: dk ? 0x1a1b1e : code >= 2 ? 0x9ab0dc : 0xa4aebc, map: steelTex(), metalness: 0.3, roughness: 0.38, side: THREE.DoubleSide, emissive: code >= 2 && !dk ? 0x1a3a90 : 0x000000, emissiveIntensity: code >= 2 ? 0.2 : 0 }));
 /** The trim: dull brass on plain steel, bright blue-white on magic, gold on named. */
 const trim = (code, dk = false) => mk(`t${code}${dk ? 'd' : ''}`, () => new THREE.MeshStandardMaterial(code === 3 ? { color: 0xe0b43c, metalness: 0.8, roughness: 0.32, emissive: 0x6a4a00, emissiveIntensity: 0.3 } : code === 2 ? { color: 0x9fc4ff, metalness: 0.6, roughness: 0.3, emissive: 0x3a6ae0, emissiveIntensity: 0.5 } : { color: dk ? 0x3a3a3e : 0xa88a4a, metalness: 0.7, roughness: 0.4 }));
 const mail = (dk) => mk(`m${dk ? 'd' : ''}`, () => new THREE.MeshLambertMaterial({ color: dk ? 0x55565c : 0xffffff, map: mailTex(), side: THREE.DoubleSide }));
