@@ -53,6 +53,17 @@ test('items dropped over the cauldron fall in; items thrown at its side do not p
             side.push({ k: k.kind + (k.type !== undefined ? ':' + k.type : ''), uid: item.uid, L, dx, dz });
         });
         await sleep(9000);
+        // fast (25 m/s) and lobbed from above onto the belly's slope (down at 6 m/s, aimed at 1.5 m from the axis, i.e. outside the opening)
+        const fast = [], lob = [];
+        kinds.forEach((k, i) => {
+            const a = (i / kinds.length) * 6.283 + 0.2, dx = Math.cos(a), dz = Math.sin(a);
+            const i1 = { ...k, uid: newUid() }, i2 = { ...k, uid: newUid() };
+            fast.push({ k: k.kind, uid: i1.uid, L: g.items.spawnLoose(i1, new THREE.Vector3(c.x + dx * 9, base + 1.6, c.z + dz * 9), { vel: new THREE.Vector3(-dx * 25, 0, -dz * 25), broadcast: false }), dx, dz });
+            lob.push({ k: k.kind, uid: i2.uid, L: g.items.spawnLoose(i2, new THREE.Vector3(c.x + dx * 3.5, base + 6, c.z + dz * 3.5), { vel: new THREE.Vector3(-dx * 3.4, -6, -dz * 3.4), broadcast: false }), dx, dz });
+        });
+        await sleep(9000);
+        const rep = (arr) => arr.map((t) => { const p = t.L.model.position; return { k: t.k, gone: !g.items.loose.has(t.uid), along: Math.round(((p.x - c.x) * t.dx + (p.z - c.z) * t.dz) * 10) / 10, y: Math.round((p.y - base) * 10) / 10 }; });
+        out.fast = rep(fast); out.lob = rep(lob);
         out.side = side.map((t) => {
             const p = t.L.model.position, along = (p.x - c.x) * t.dx + (p.z - c.z) * t.dz; // >0: still on the thrower's side; <−1: passed through to the far side
             return { k: t.k, gone: !g.items.loose.has(t.uid), along: Math.round(along * 10) / 10, y: Math.round((p.y - base) * 10) / 10 };
@@ -60,10 +71,14 @@ test('items dropped over the cauldron fall in; items thrown at its side do not p
         return out;
     });
     console.log(JSON.stringify(r));
+    const thru2 = [...(r.fast || []), ...(r.lob || [])].filter((t) => !t.gone && t.along < -1.2 && t.y < 2.5);
+    console.log('FAST/LOB THROUGH:', JSON.stringify(thru2));
+    console.log('LOB:', JSON.stringify(r.lob));
     const bad = (r.top || []).filter((t) => !t.gone && !t.inCaul);
     const through = (r.side || []).filter((t) => !t.gone && t.along < -1.2);
     console.log('NOT IN:', JSON.stringify(bad));
     console.log('THROUGH:', JSON.stringify(through));
     assert.equal(bad.length, 0, 'everything dropped over the opening went in (dissolved or lay on the bottom)');
     assert.equal(through.length, 0, 'nothing thrown at the side passed through');
+    assert.equal(thru2.length, 0, 'nothing fast or lobbed passed through');
 });

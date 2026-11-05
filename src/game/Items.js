@@ -765,7 +765,10 @@ export class ItemSystem {
         let floor = col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);
         // furniture with a solid box (a bed, a chest, a stool…): its top is a floor too — a thing let go over a bed lies on the
         // mattress, it does not hover in it or sink through it (the author: a bow thrown on a bed went through it)
-        floor = Math.max(floor, boxTopUnder(col, p.x, p.z, p.y));
+        // (but NOT over a cauldron's opening: its solid box is no floor there — a thing let go slowly over it used to be lifted back onto the box top and
+        //  hang above the water instead of falling in; the author 06.11: «золотые яблоки не падают в казан»)
+        const cs = this.game.cauldrons;
+        if (!(cs?.list.size && cs.overOpening(p.x, p.z))) floor = Math.max(floor, boxTopUnder(col, p.x, p.z, p.y));
         // a good laid out on a stall's counter: the counter itself is its floor, as long as the counter stands
         // (the ground under it is no judge of that — a good that sank once below the top would never come up again)
         return L?.perch && this._perched(L.perch, p, 1) ? Math.max(floor, L.perch.top) : floor;

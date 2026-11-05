@@ -676,6 +676,16 @@ export class Cauldrons {
         return false;
     }
 
+    /** Is the point (x, z) right over the opening of a standing cauldron (Items._floorUnder: the box top is no floor there)? */
+    overOpening(x, z) {
+        for (const c of this.list.values()) {
+            if (!this.upright(c)) continue;
+            const dx = x - c.x, dz = z - c.z;
+            if (dx * dx + dz * dz <= (CAULDRON.R_IN - 0.15) ** 2) return true;
+        }
+        return false;
+    }
+
     /**
      * (from Items' physics) A loose thing at `p` inside a standing cauldron's opening:
      * 'in' — it falls on through the opening (the walls round it don't stop it);
