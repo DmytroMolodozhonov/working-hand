@@ -83,6 +83,8 @@ test('raised near the player: a wreck (solid, her chests in her) and the temple 
     // the temple's floor round its middle covers the weed; a chest opened is remembered when it is put away
     assert.ok(sw.covers(temple.x, temple.z));
     T.chests[0].isOpen = true;
+    // (far off over land: wrecks are dense now — the author 05.11: «в 2 раза реже, чем пещеры» — the sea far away would raise its own)
+    sw._seaAt = () => null;
     g.character.group.position.set(1e5, 0, 1e5);
     sw.update(0.05);
     assert.equal(sw.sites.size, 0, 'put away far off');

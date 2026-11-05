@@ -32,6 +32,9 @@ export const AIR_MAX = 20;
 const SWIM_DEPTH = 3.2; // water this deep (blocks) lifts you off your feet
 const EYES = 2.1; // eyes above the body's origin
 const FEET = 1.95;
+/** The leap out of the water (a fish's breach): from this speed up (m/s; a strong human stroke straight up ≈ 3, the mermaid's tail up
+ *  to ×5), the body flies on with K × its speed (capped), water at least DEPTH deep (no leaping out of a puddle). */
+export const BREACH = { MIN_UP: 2.6, K: 1.4, BOOST: 2, MAX_VY: 16, MAX_FW: 16, DEPTH: 4 };
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -97,6 +100,7 @@ export class Swimming {
 
         // on a surfboard: the board holds you up (SurfBoards places the body)
         if (g.boards?.mounted) { this.swimming = false; this.underwater = false; this._leave(dt); this.air = Math.min(AIR_MAX, this.air + dt * 5); this._renderHud(); return; }
+        if (this.breach && this._breachStep(dt, w)) { this.swimming = false; this.underwater = false; this._updateRipples(dt); this._renderHud(); return; } // (out of the water in a leap)
         this.swimming = !!w && w.depth >= SWIM_DEPTH * S && p.y - FEET * S < w.surface && !g.up?.rising && !g.levitation?.lifted && !g.ledge?.active; // («Up»: thrown up out of it; «Левиоса»: the caster's hand lifts me out of the water; the palms on the bank: the arms pull me out — LedgeClimb)
         if (this.swimming) this._swim(dt, w, pose);
         else this._leave(dt);
@@ -158,6 +162,9 @@ export class Swimming {
             if (this.y < floatY - 0.6) this.atTop = false;
         } else {
             this.y += m.up * dt;
+            // swimming up fast, the body breaks out of the water in an arc, as a fish leaps (the author 05.11: «быстро плывёшь вверх —
+            // выпрыгиваешь из воды дугой, как рыба»): the speed carries it on into the air, the water takes it back
+            if (this.y >= floatY - 0.3 && m.up >= BREACH.MIN_UP && w.depth >= BREACH.DEPTH && !g.boards?.mounted && !g.flight?.active) { this._breachOut(m, w); return; }
             if (this.y >= floatY) { this.y = floatY; this.atTop = true; M.pitch = 0; } // up at the light: swimming on top again
         }
         this.y = Math.max(bottomY, Math.min(floatY, this.y));
@@ -173,6 +180,45 @@ export class Swimming {
         ch.swimVel = { x: -Math.sin(yaw) * m.forward, z: -Math.cos(yaw) * m.forward };
         this._setTilt(m.tilt);
         this._waterFx(dt, w);
+    }
+
+    /** The leap out of the water: the body leaves it with its speed — up and on along where it swims. */
+    _breachOut(m, w) {
+        const g = this.game, ch = g.character, p = ch.group.position, yaw = ch.group.rotation.y;
+        const vy = Math.min(BREACH.MAX_VY, m.up * BREACH.K + BREACH.BOOST); // (the tail's / the legs' last kick through the surface)
+        const fw = Math.min(BREACH.MAX_FW, Math.max(1.5, m.forward) * BREACH.K);
+        this._leave(0);
+        this.breach = { t: 0, vy0: vy, fw, yaw, splashed: false };
+        ch.swimY = null; ch.swimming = false;
+        ch.verticalVelocity = vy; ch.jumpAir = true; ch.onGround = false; ch._jumpT = 0; ch._jumpS = 1; ch.airTop = p.y;
+        ch.jumpVel.x = -Math.sin(yaw) * fw; ch.jumpVel.z = -Math.cos(yaw) * fw;
+        this._splash(_v.set(p.x, w.surface, p.z), Math.min(2.5, 0.8 + vy / 5));
+        this._splash(_v.set(p.x - Math.sin(yaw) * 1.2, w.surface, p.z - Math.cos(yaw) * 1.2), Math.min(2, 0.5 + vy / 7));
+        g.sound?.playSplashAt?.(_v.set(p.x, w.surface, p.z), Math.min(1, vy / 10));
+    }
+
+    /** In the leap: the body arcs like a fish (head up out of the water, flat at the top, head down into it). true: still in the air. */
+    _breachStep(dt, w) {
+        const g = this.game, ch = g.character, p = ch.group.position, B = this.breach;
+        B.t += dt;
+        const S = ch.size || 1;
+        const down = ch.verticalVelocity < 0;
+        if ((down && w && p.y - FEET * S < w.surface) || ch.onGround || B.t > 6) {
+            // back into the water: a splash, the swim goes on, under the surface (it dives in head first)
+            if (w) this._splash(_v.set(p.x, w.surface, p.z), Math.min(2.5, 0.6 + Math.abs(ch.verticalVelocity) / 5));
+            if (w) g.sound?.playSplashAt?.(_v.set(p.x, w.surface, p.z), Math.min(1, Math.abs(ch.verticalVelocity) / 10));
+            ch.jumpAir = false; ch.verticalVelocity = 0; ch.jumpVel.x = 0; ch.jumpVel.z = 0;
+            this.breach = null;
+            if (w) { this.y = Math.min(p.y, w.surface - 1); this.atTop = false; this.motion.pitch = -0.5; this.motion.speed = Math.max(this.motion.speed, B.fw * 0.6); }
+            return false;
+        }
+        // the body along its flight: nose up leaving, level at the top, nose down falling (tilt from upright)
+        const tilt = Math.atan2(B.fw, ch.verticalVelocity);
+        this._setTilt(Math.max(0.15, Math.min(2.9, tilt)));
+        // water streaming off it as it rises
+        if (!B.splashed && B.t > 0.15) { B.splashed = true; if (w) this._splash(_v.set(p.x, w.surface, p.z), 0.7); }
+        ch.speedScale = 1;
+        return true;
     }
 
     /** Out of the deep water: the body stands up again (smoothly), nothing swims it any more. */

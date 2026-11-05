@@ -508,6 +508,29 @@ float snowflakeAt(vec2 uv) {
             if (sp > 0.988) col = mix(col, vec3(0.95, 0.9, 0.82), 0.6 * kFine);
             else if (sp < 0.01) col *= 1.0 - 0.35 * kFine;
             col = mix(col, vec3(0.42, 0.5, 0.32) * (0.8 + 0.4 * m2), smoothstep(0.66, 0.85, m3) * 0.35); // (a film of green algae in the hollows)
+            // the sand is not one colour (the author 05.11: «песок разный: оттенки, пятна камня и земли»): wide drifts of pale white,
+            // golden and grey-brown sand; fields of pebbles and cobbles; dark patches of silt and mud with worm holes
+            float big = vnoise(wp / 47.0 + 13.0), big2 = vnoise(wp / 23.0 - 31.0);
+            vec3 tone = mix(vec3(1.1, 1.08, 1.06), vec3(1.04, 0.95, 0.74), smoothstep(0.25, 0.6, big));
+            tone = mix(tone, vec3(0.8, 0.76, 0.7), smoothstep(0.62, 0.85, big)); // (grey-brown, shell grit)
+            col *= tone;
+            float pebF = smoothstep(0.6, 0.72, vnoise(wp / 13.0 + 71.0) * 0.7 + big2 * 0.3);
+            if (pebF > 0.0) {
+                // a field of pebbles and cobbles: rounded stones of different greys, a dark gap between them
+                vec2 pc = wp * 2.2, pi = floor(pc), pf = fract(pc) - 0.5;
+                float ph = vhash(vec3(pi, 47.0));
+                vec2 off = (vec2(ph, vhash(vec3(pi, 53.0))) - 0.5) * 0.3;
+                float pr = 0.28 + 0.16 * vhash(vec3(pi, 59.0));
+                float stone = 1.0 - smoothstep(pr - 0.06, pr, length(pf - off));
+                vec3 sc = mix(vec3(0.42, 0.42, 0.4), vec3(0.62, 0.58, 0.52), ph) * (0.85 + 0.25 * (1.0 - length(pf - off) / pr));
+                col = mix(col, mix(col * 0.7, sc, stone), pebF * mix(0.5, 1.0, kFine));
+            }
+            float mud = smoothstep(0.66, 0.8, vnoise(wp / 17.0 - 91.0) * 0.75 + (1.0 - big) * 0.25);
+            if (mud > 0.0) {
+                vec3 mc = vec3(0.34, 0.28, 0.2) * (0.85 + 0.25 * m2);
+                float hole = vhash(vec3(floor(wp * 3.0), 67.0)) > 0.985 ? 0.55 : 1.0; // (worm holes)
+                col = mix(col, mc * mix(1.0, hole, kFine), mud * 0.85);
+            }
         } else {
             float al = smoothstep(0.5, 0.78, m2 * 0.55 + m1 * 0.45);
             col = mix(col, vec3(0.2, 0.31, 0.15) * (0.75 + 0.5 * m2), al * 0.6); // (algae)

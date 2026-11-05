@@ -50,3 +50,15 @@ test('a hundred kinds of fish: twenty shapes × five colourings, ten of them mag
     assert.equal(looks.size, 100, 'each its own look');
     assert.equal(new Set(FISH_SPECIES.map((s) => s.name)).size, 100, 'each its own name');
 });
+
+test('kelp never reaches out of the water: ≤ depth − 3 and ≤ KELP_MAX (the author 05.11: «водоросли выходят выше моря»)', async () => {
+    const { KELP_MAX } = await import('../../src/fx/SeaFloor.js');
+    const depth = (x, z) => 4 + (((Math.floor(x) * 7 + Math.floor(z) * 3) % 50) + 50) % 50;
+    let n = 0;
+    for (let cx = -30; cx < 30; cx++) for (let cz = -30; cz < 30; cz++) for (const p of cellPlants(cx, cz, 11, depth)) {
+        if (p.kind !== 'kelp') continue;
+        n++;
+        assert.ok(p.s <= depth(p.x, p.z) - 3 + 1e-9 && p.s <= KELP_MAX && p.s >= 2, `kelp ${p.s.toFixed(2)} m in ${depth(p.x, p.z)} m of water`);
+    }
+    assert.ok(n > 100, 'there is kelp');
+});
