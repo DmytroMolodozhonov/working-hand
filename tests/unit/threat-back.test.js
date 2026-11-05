@@ -38,3 +38,12 @@ test('to the side: within FACE° — back; past it — forward', () => {
     assert.equal(run({}, 2, (t) => { const d = 14 - t * 4; return { x: -Math.sin(a) * d, z: -Math.cos(a) * d }; }).back, true);
     assert.equal(run({}, 2, (t) => { const d = 14 - t * 4; return { x: -Math.sin(b) * d, z: -Math.cos(b) * d }; }).back, false);
 });
+
+test('the author 05.11: walking up to somebody who stands — no attack (only HIS movement counts); one angry at me — a foe at once', () => {
+    const st = {};
+    let r = null;
+    for (let i = 1; i <= 60; i++) r = threatStep(st, { x: 0, z: -i * 0.15, yaw: 0 }, [{ id: 'v', x: 0, z: -12 }], 1 / 30, i / 30); // (I walk at 4.5 m/s towards him)
+    assert.equal(r.back, false);
+    r = threatStep({}, { x: 0, z: 0, yaw: 0 }, [{ id: 'v', x: 0, z: -8, hostile: true }], 1 / 30, 1);
+    assert.equal(r.back, true, 'he is after me');
+});

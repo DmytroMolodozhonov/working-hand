@@ -8,6 +8,8 @@
  *     that had come at me; it stays a foe HOLD s after it stopped coming (it stands and strikes), while within R;
  *   - stepping on the spot with a foe IN FRONT (within FACE° of where the hero looks) — the hero steps backwards, facing it;
  *   - turned away from it (past FACE°) — the steps go forward as always: running away.
+ *   - only ITS movement counts: walking up to somebody who stands still is no attack; a body that is after me (`hostile`: a villager
+ *     angry at me, a zombie hunting me) is a foe at once.
  * Pure (Node-testable): the game gives the bodies and the hero's place and yaw each frame.
  */
 
@@ -24,7 +26,7 @@ const D2R = Math.PI / 180;
 
 /**
  * One frame. st: this player's memory ({}), me: {x, z, yaw} (the hero's yaw: it looks along (−sin yaw, −cos yaw)), bodies: [{id, x, z}]
- * (without me), dt s, now s. → {back: bool, foe: {id, d, ang} | null}.
+ * (without me; `hostile`: it is after me), dt s, now s. → {back: bool, foe: {id, d, ang} | null}.
  */
 export function threatStep(st, me, bodies, dt, now) {
     const T = THREAT_BACK;
@@ -35,14 +37,17 @@ export function threatStep(st, me, bodies, dt, now) {
         const dx = b.x - me.x, dz = b.z - me.z, d = Math.hypot(dx, dz);
         if (d > T.R) { seen.delete(b.id); continue; }
         let s = seen.get(b.id);
-        if (!s) { s = { d, v: 0, until: -1 }; seen.set(b.id, s); }
+        if (!s) { s = { x: b.x, z: b.z, v: 0, until: -1 }; seen.set(b.id, s); }
         else if (dt > 0) {
-            const v = (s.d - d) / dt;
+            // ITS OWN speed towards me — not the distance shrinking: me walking up to somebody standing is no attack (the author 05.11:
+            // «когда я подошёл к нему, он ещё не был нападающим»)
+            const ux = -dx / (d || 1e-6), uz = -dz / (d || 1e-6);
+            const v = ((b.x - s.x) * ux + (b.z - s.z) * uz) / dt;
             s.v += (v - s.v) * Math.min(1, dt * T.SMOOTH);
-            s.d = d;
+            s.x = b.x; s.z = b.z;
         }
         s.at = now;
-        if (s.v >= T.CLOSE) s.until = now + T.HOLD;
+        if (b.hostile || s.v >= T.CLOSE) s.until = now + T.HOLD; // (hostile: it is after me — a villager angry at me, a knight, a zombie…)
         if (s.until > 0 && d <= T.NEAR && s.v > -T.CLOSE) s.until = Math.max(s.until, now + 0.2); // (standing at me, striking: still a foe)
         if (now > s.until) continue;
         const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx + dz * fz) / (d || 1e-6)))) / D2R;

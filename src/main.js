@@ -399,7 +399,7 @@ function readConfig() {
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
         walkBackThreat: !!$('walk-back-threat')?.checked, // (the author 05.11: stepping with a foe coming at me in front — the hero steps back facing it: ThreatBack.js)
-        walkBack: !!$('walk-back')?.checked, // (the author 05.11: stepping on the spot leaning back — the hero walks backwards; off by default)
+        walkBack: !!$('walk-back')?.checked && !$('walk-back-threat')?.checked, // (the author 05.11: stepping on the spot leaning back — the hero walks backwards; off by default)
         leftHanded: $('handedness')?.value === 'left',
         look: activeLook(), // the hero from the «Персонаж» tab
         villagerVoice: ($('villager-voice')?.value ?? '1') !== '0',
@@ -1931,8 +1931,15 @@ function escapeHtml(s) {
 }
 
 // «Ходьба назад» changed in the middle of a game: at once (it was read only at the start — the author turned it on and nothing happened)
-document.getElementById('walk-back-threat')?.addEventListener('change', (e) => { const g = window.__zns?.game || null; if (g?.config) g.config.walkBackThreat = !!e.target.checked; });
-document.getElementById('walk-back')?.addEventListener('change', (e) => { const g = window.__zns?.game || null; if (g?.config) g.config.walkBack = !!e.target.checked; });
+// («Ходьба назад» and «Отход назад от нападающих»: one or the other, never both — the author 05.11)
+for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'walk-back-threat']]) {
+    document.getElementById(id)?.addEventListener('change', (e) => {
+        const o = document.getElementById(other);
+        if (e.target.checked && o?.checked) { o.checked = false; o.dispatchEvent(new Event('change')); }
+        const g = window.__zns?.game || null;
+        if (g?.config) { g.config.walkBackThreat = !!document.getElementById('walk-back-threat')?.checked; g.config.walkBack = !!document.getElementById('walk-back')?.checked; }
+    });
+}
 
 // Hooks for automated tests (read-only helpers + pose injection)
 // ------------------------------------------------------------------ remembered settings

@@ -585,7 +585,7 @@ export class CastleLife {
         this.game.loreLibrary?.wake(cs.def); // (its library's reading stands with the books of the world's history — LoreLibrary.js; on every computer)
         if (!this.auth) return;
         const def = cs.def;
-        if (isGuestSite(def)) { const v = this._activate(cs, 1, def.spot, 'stall', { post: def.spot }); if (v) v.guest = true; return; } // (the Creative guest: just him — CreativeGuest.js)
+        if (isGuestSite(def)) { const v = this._activate(cs, 1, def.spot, 'stall', { post: def.spot }); if (v) { v.guest = true; v.hp = v.maxHp = 50; } return; } // (50 HP: a spell or two angers him before it kills him — the author 05.11) // (the Creative guest: just him — CreativeGuest.js)
         if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
         if (def.kind === 'hamlet') { this.hamlets.wake(cs); return; } // (the lone houses and the small villages: HamletLife.js)
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)

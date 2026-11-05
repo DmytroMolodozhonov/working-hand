@@ -4674,11 +4674,13 @@ export class Game {
         bodies.length = 0;
         for (const b of crowdNear(this, p.x, p.y - 1.95, p.z, THREAT_BACK.R, ch, 6, this._tbNear || (this._tbNear = []))) {
             if (b.id === 'me' || b.ref === ch || b.kind === 'plant' || b.ref?.owner === this.localId || b.ref?.tamedBy === this.localId) continue;
-            bodies.push({ id: b.id, x: b.x, z: b.z });
+            const r = b.ref, me = this.localId;
+            const hostile = b.kind === 'man' ? r?.foe === me || r?.grudge?.id === me : b.kind === 'zombie' ? !r?.servantOf && !r?.brainrot : b.kind === 'animal' ? r?.foe === me || r?.target === me : false;
+            bodies.push({ id: b.id, x: b.x, z: b.z, hostile: !!hostile && Math.hypot(b.x - p.x, b.z - p.z) < THREAT_BACK.R });
         }
-        const r = threatStep(this._tb || (this._tb = {}), { x: p.x, z: p.z, yaw: ch.group.rotation.y }, bodies, dt, now);
-        if (r.back && ch.isRunning && now - (this._tbSaid || 0) > 20) { this._tbSaid = now; this.hud?.setVoice?.('↩️ Отхожу назад — лицом к нападающему', true); }
-        return r.back;
+        const res = threatStep(this._tb || (this._tb = {}), { x: p.x, z: p.z, yaw: ch.group.rotation.y }, bodies, dt, now);
+        if (res.back && ch.isRunning && now - (this._tbSaid || 0) > 20) { this._tbSaid = now; this.hud?.setVoice?.('↩️ Отхожу назад — лицом к нападающему', true); }
+        return res.back;
     }
 
     /** Weak steps (the shoulders' bob over WEAK_BOB, most of the last ~0.7 s) — only for «ходьба назад» leaning back. */
