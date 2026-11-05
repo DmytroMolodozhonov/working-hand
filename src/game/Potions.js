@@ -71,6 +71,8 @@ export const RECIPES = [
     { id: 'wings', name: 'Зелье крыльев', ingredients: { magicSwanWings: 1, apple: 1 }, window: 30, brew: [120, 180], portions: 1, crumble: 6, effect: { wings: true }, desc: 'Выпейте: за 10 минут у вас вырастут крылья — навсегда, до смерти. Будет больно (−1 HP каждые полминуты, 20 минут) и мутить. Летать — взмахами рук' },
     // (the author: «превращение в дракона на 10 минут — не чёрная магия: яйцо дракона + перо феникса»; DragonForm.js)
     { id: 'dragonform', name: 'Зелье превращения в дракона', ingredients: { dragonEgg: 1, phoenixFeather: 1 }, window: 30, brew: [120, 180], effect: { timed: 'dragon' }, desc: 'Выпейте на открытом месте: на 10 минут вы — дракон (бег, взлёт взмахами рук, огонь долгим «У-у-у»), потом снова человек' },
+    // (the author: «Русалка (12 мин): хвост магического водного существа + груша Баксади» — the glowfin's tail, SeaLife; Mermaid.js)
+    { id: 'mermaid', name: 'Зелье русалки', ingredients: { glowfinTail: 1, baksadi_pear: 1 }, window: 30, brew: [100, 150], effect: { timed: 'mermaid' }, desc: 'Выпейте: на 12 минут вместо ног — рыбий хвост: под водой дышите, с поднятыми руками и движениями волной плывёте вдвое быстрее; по суше только ползёте' },
     { id: 'potionreset', name: 'Зелье обнуления', ingredients: { crystal: 1, telewilpinLeaf: 1, glowcap_mushroom: 1 }, window: 30, effect: { reset: true }, desc: 'Выпейте: снимает действие всех выпитых зелий' },
 ];
 
@@ -84,7 +86,7 @@ export const INGREDIENT_RU = {
     web: 'связка паутины', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
     baksadi_pear: 'груша Баксади', spencerFeather: 'перо птички Спенсера', carnivoreHead: 'головка плотоядной', sun_herb: 'солнечница',
     brightCore: 'сердцевина Ярколета', azure_berry: 'лазурная ягода', magicPebble: 'волшебный камушек', glowcap_mushroom: 'светящийся гриб',
-    redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина', dragonEgg: 'яйцо дракона', magicSwanWings: 'магические крылья лебедя', swanWings: 'крылья лебедя',
+    redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина', dragonEgg: 'яйцо дракона', magicSwanWings: 'магические крылья лебедя', swanWings: 'крылья лебедя', glowfinTail: 'хвост светлохвоста',
 };
 
 export const recipeById = (id) => RECIPES.find((r) => r.id === id) || null;

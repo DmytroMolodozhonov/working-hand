@@ -171,6 +171,7 @@ import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDIN
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
+import { Mermaid } from './Mermaid.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
@@ -752,6 +753,7 @@ export class Game {
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
         this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
+        this.mermaid = new Mermaid(this); // «Зелье русалки»: a fish's tail for 12 min (Mermaid.js)
         this.wings = new HeroWings(this); // «Зелье крыльев»: the wings grow on the back, for good (HeroWings.js; the flight — WingFlight.js)
         this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
         this.potionFx._randomLook = () => _cleanLook(_rollLook());
@@ -4115,6 +4117,7 @@ export class Game {
         this.itemIcons?.update(1.5); // (a new look's picture: one by one, ~1.5 ms a frame at most)
         this.builder.update(dt);
         this.swim.update(dt);
+        this.mermaid?.update(dt); // («Зелье русалки»: the tail, the drag on the land — after the swimming set its pace)
         if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();

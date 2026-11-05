@@ -105,7 +105,7 @@ export class Swimming {
         const now = performance.now();
         if (this.bubble && now > this.bubble.until) this._popBubble();
         if (this.underwater && !this.bubble) {
-            if (!g.potionFx?.has?.('waterbreath')) this.air = Math.max(0, this.air - dt); // («Зелье дыхания под водой»: the air never runs out)
+            if (!g.potionFx?.has?.('waterbreath') && !g.potionFx?.has?.('mermaid')) this.air = Math.max(0, this.air - dt); // (and the mermaid's: Mermaid.js) // («Зелье дыхания под водой»: the air never runs out)
             if (this.air <= 0) {
                 this._drownT += dt;
                 if (this._drownT >= 1) {
@@ -147,6 +147,7 @@ export class Swimming {
             M.stroke(ev, { under, look });
             this._strokeFx(ev, w, under);
         }
+        if (g.mermaid?.active) g.mermaid.swim(M, dt); // («Зелье русалки»: the tail drives the body on — Mermaid.js)
         const m = M.step(dt, { under, look });
         if (this.atTop) {
             if (m.up < -0.05) this.y += m.up * dt; // diving

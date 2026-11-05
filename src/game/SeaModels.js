@@ -30,7 +30,7 @@ export const GLOW = { mats: [] };
  * A fin: a thin blade from an outline (x, y pairs in the model's units), its edge rounded; `paint(x, y, edge01)` → rgb.
  * The blade lies in its own XY plane, its thickness along z (centred).
  */
-function finGeo(key, outline, thick, paint) {
+export function finGeo(key, outline, thick, paint) {
     return K.cached('seaFin' + key, () => {
         const sh = new THREE.Shape();
         sh.moveTo(outline[0][0], outline[0][1]);

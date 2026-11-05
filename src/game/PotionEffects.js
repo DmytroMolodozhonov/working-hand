@@ -25,7 +25,8 @@ export const POTION_FX = {
     dazzle: { s: 24 * 60, ru: 'Ослепительность', icon: '✨' },
     luck: { s: 12 * GAME_HOUR_S, ru: 'Удача', icon: '🍀' },
     waterbreath: { s: 24 * GAME_HOUR_S, ru: 'Дыхание под водой', icon: '🫧' },
-    dragon: { s: 600, ru: 'Превращение в дракона', icon: '🐉' }, // (DragonForm.js: the body becomes a dragon — 10 min, not dark magic)
+    dragon: { s: 600, ru: 'Превращение в дракона', icon: '🐉' },
+    mermaid: { s: 12 * 60, ru: 'Русалка', icon: '🧜' }, // (Mermaid.js: a fish's tail for the legs, breath under the water, the tail drives the body — «стоп» does not end it: no spell) // (DragonForm.js: the body becomes a dragon — 10 min, not dark magic)
 };
 
 /** Friendship / love rise this many times faster under «Ослепительность». */
