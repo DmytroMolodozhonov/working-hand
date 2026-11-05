@@ -10,6 +10,7 @@
  *   - turned away from it (past FACE°) — the steps go forward as always: running away.
  *   - only ITS movement counts: walking up to somebody who stands still is no attack; a body that is after me (`hostile`: a villager
  *     angry at me, a zombie hunting me) is a foe at once.
+ *   - a foe knocked down / lying (`down`) is no threat at all while it lies: one may walk up to it (the author 05.11).
  * Pure (Node-testable): the game gives the bodies and the hero's place and yaw each frame.
  */
 
@@ -51,7 +52,7 @@ export function threatStep(st, me, bodies, dt, now) {
         // only one that is AFTER me (angry at me, hunting me) and coming at me — or already at me, striking (the author 05.11: «включается
         // только если на меня какое-то существо заагрилось и идёт на меня»; walking up to a calm Тихон must never start it)
         if (b.hostile && (s.v >= T.COME || d <= T.NEAR)) s.until = now + T.HOLD;
-        if (!b.hostile) s.until = -1;
+        if (!b.hostile || b.down) s.until = -1; // (lying, knocked down: no threat while it is down — one may walk up to it; it counts again once it gets up and comes)
         if (now > s.until) continue;
         const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx + dz * fz) / (d || 1e-6)))) / D2R;
         if (!best || d < best.d) best = { id: b.id, d, ang };

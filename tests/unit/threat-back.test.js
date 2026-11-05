@@ -50,3 +50,17 @@ test('the author 05.11: walking up to somebody who stands — no attack (only HI
     for (let i = 1; i <= 30; i++) r = threatStep(st2, { x: 0, z: 0, yaw: 0 }, [{ id: 'v', x: 0, z: -10 + i * 0.1, hostile: true }], 1 / 30, i / 30);
     assert.equal(r.back, true, 'he is after me and coming');
 });
+
+test('a foe lying knocked down is no threat: one walks up to it forward (the author 05.11: «если он загрен, но лежит… можно подойти»)', () => {
+    const st = {};
+    const me = { x: 0, z: 0, yaw: 0 }; // (looks along −z)
+    let r;
+    for (let i = 0; i < 30; i++) r = threatStep(st, me, [{ id: 'v1', x: 0, z: -3, hostile: false, down: true }], 1 / 30, i / 30);
+    assert.equal(r.back, false);
+    // angry at me, but lying: still no threat
+    for (let i = 30; i < 60; i++) r = threatStep(st, me, [{ id: 'v1', x: 0, z: -3, hostile: true, down: true }], 1 / 30, i / 30);
+    assert.equal(r.back, false);
+    // gets up, angry and right there: a threat again
+    for (let i = 60; i < 70; i++) r = threatStep(st, me, [{ id: 'v1', x: 0, z: -3, hostile: true, down: false }], 1 / 30, i / 30);
+    assert.equal(r.back, true);
+});

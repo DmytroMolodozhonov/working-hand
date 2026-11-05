@@ -1480,7 +1480,8 @@ export class Game {
             for (let i = 0; i < (!this.authority || chest.localOnly ? 1 : players.length); i++) { // (a ghosts' chest: only my own hero opens it — the first of `players` is mine)
                 const p = players[i];
                 const dx = p.x - cp.x, dz = p.z - cp.z;
-                if (dx * dx + dz * dz < (chest.ship ? 2.6 * 2.6 : 4.5 * 4.5 + 9)) { // (a ship's chest: only when you really stand by it — walking past the deck did «open» it and the crew cried «thief»)
+                if (chest.sunk && p.y != null && Math.abs(p.y - cp.y) > 4.5) continue; // (a chest on the sea's bottom: a swimmer up at the surface over it does not open it — SunkenSites.js)
+                if (dx * dx + dz * dz < (chest.ship || chest.sunk ? 2.6 * 2.6 : 4.5 * 4.5 + 9)) { // (a ship's chest: only when you really stand by it — walking past the deck did «open» it and the crew cried «thief»)
                     if (!this.authority && !chest.localOnly) { if (!(performance.now() - (chest._askAt || 0) < 900)) { chest._askAt = performance.now(); this.sync?.chestAsk?.(chest, ids[i]); } break; }
                     this.openChest(chest, null, ids[i]);
                     break;
@@ -4684,7 +4685,10 @@ export class Game {
             if (b.id === 'me' || b.ref === ch || b.kind === 'plant' || b.ref?.owner === this.localId || b.ref?.tamedBy === this.localId) continue;
             const r = b.ref, me = this.localId;
             const hostile = b.kind === 'man' ? r?.foe === me || r?.grudge?.id === me : b.kind === 'zombie' ? !r?.servantOf && !r?.brainrot : b.kind === 'animal' ? r?.foe === me || r?.target === me : false;
-            bodies.push({ id: b.id, x: b.x, z: b.z, hostile: !!hostile && Math.hypot(b.x - p.x, b.z - p.z) < THREAT_BACK.R });
+            // (knocked down, lying, held up by «Левиоса», stunned or frozen: no threat — the author 05.11: «если он загрен, но лежит… тогда
+            //  игрок может подойти к нему»; a player lying too)
+            const down = !!r && (this.creatureImpact?.isDown?.(r) || r.rag === true || !!r.lev || !!r.stunned || !!r.knocked || !!r.down || !!r.ragdoll || r.frozen > 0 || !!r.petrified);
+            bodies.push({ id: b.id, x: b.x, z: b.z, down, hostile: !down && !!hostile && Math.hypot(b.x - p.x, b.z - p.z) < THREAT_BACK.R });
         }
         const res = threatStep(this._tb || (this._tb = {}), { x: p.x, z: p.z, yaw: ch.group.rotation.y }, bodies, dt, now);
         if (res.back && ch.isRunning && now - (this._tbSaid || 0) > 20) { this._tbSaid = now; this.hud?.setVoice?.('↩️ Отхожу назад — лицом к нападающему', true); }
