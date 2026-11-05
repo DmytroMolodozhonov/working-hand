@@ -84,7 +84,15 @@ test('the vortex: the things wind round the hero at ring radii, turning as fast 
 test('the hand circling decides the mode; the shield and the volley are not changed by it', () => {
     const k = new ModeKeeper();
     assert.equal(k.next('train', 0.2, 0.1), 'train');
-    assert.equal(k.next('train', 1.2, 0.1), 'orbit');
+    // (the author 05.11: a vortex only after a good circling — a passing wave of the hand is not one)
+    assert.equal(k.next('train', 1.2, 0.1), 'train', 'one moment of circling: still the train');
+    let w = 'train'; for (let t = 0; t < 0.6; t += 0.1) w = k.next(w, 1.2, 0.1);
+    assert.equal(w, 'train', 'under SPIN_TURNS turns');
+    for (let t = 0; t < 1.1 && w === 'train'; t += 0.1) w = k.next(w, -1.2, 0.1);
+    assert.equal(w, 'train', 'the other way round: counted anew');
+    const k2 = new ModeKeeper(); let v = 'train', T = 0;
+    for (; T < 5 && v === 'train'; T += 0.1) v = k2.next(v, 1.2, 0.1);
+    assert.equal(v, 'orbit'); assert.ok(T >= 1.2, 'about a turn and a half of the hand: ' + T.toFixed(1) + ' s');
     assert.equal(k.next('orbit', 0.05, 0.3), 'orbit', 'a short pause');
     let m = 'orbit'; for (let t = 0; t < 1.5; t += 0.1) m = k.next(m, 0.05, 0.1);
     assert.equal(m, 'train', 'the hand stops: back to the train');

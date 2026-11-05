@@ -45,13 +45,8 @@ export class ItemSwarm {
         this._scan = 0;
         this._dwell = null; // {uid, t}
         this._bodies = [];
-        // the magic cord joining the things of the train: one line, no lights (shader warmed in Game.prewarm)
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SWARM.MAX_ITEMS + 1) * 2 * 3), 3));
-        geo.setDrawRange(0, 0);
-        this.cord = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xc9a8ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
-        this.cord.frustumCulled = false;
-        this.cord.visible = false;
+        // (no cord between the things: the author 05.11 — «ниточка» was a figure of speech; they hang on the magic alone)
+        this._spin = 0; // 0…1: the vortex winding up (SWARM.SPIN_UP)
     }
 
     get active() { return !!this.sim; }
@@ -61,7 +56,7 @@ export class ItemSwarm {
     get extraDrain() { return this.sim ? swarmDrain(this.sim.size) : 0; }
     get auth() { const g = this.game; return !!g.items?.auth; }
 
-    sampleModels() { return [this.cord]; }
+    sampleModels() { return []; }
 
     // ================================================================ aim
     _hand(side) {
@@ -121,7 +116,6 @@ export class ItemSwarm {
         this._t = 0;
         this._scan = 0;
         this._take(L);
-        if (!this.cord.parent) g.scene?.add(this.cord);
         return true;
     }
 
@@ -140,9 +134,8 @@ export class ItemSwarm {
         const sim = this.sim;
         if (!sim) return;
         this.sim = null;
-        this.cord.visible = false;
-        this.cord.geometry.setDrawRange(0, 0);
-        this.game.scene?.remove(this.cord);
+        this._spin = 0;
+        this.keeper.acc = 0;
         for (const e of sim.drop(gentle)) this._free(e.m.id, e.vx, e.vy, e.vz);
     }
 
@@ -307,32 +300,22 @@ export class ItemSwarm {
         I.head.x = o.x + d.x * SWARM.HOLD; I.head.y = o.y + d.y * SWARM.HOLD; I.head.z = o.z + d.z * SWARM.HOLD;
         I.body.x = body.x; I.body.y = body.y + 0.6; I.body.z = body.z;
         const ay = this.meter.axis.y;
-        I.omega = (rate * TAU) * (ay > 0.05 ? -1 : 1);
+        this._spin = sim.mode === 'orbit' ? Math.min(1, this._spin + dt / SWARM.SPIN_UP) : 0;
+        I.omega = (rate * TAU) * (ay > 0.05 ? -1 : 1) * (0.15 + 0.85 * this._spin * this._spin); // (winds up slowly — not a sudden whirl)
         I.wandYaw = Math.atan2(d.x, d.z);
         I.selfId = this._selfId();
         I.bodies = sim.mode === 'launch' || sim.flying().length ? this._bodyList() : this._bodies;
         const ev = sim.step(dt, I);
         // the things in their places
-        let k = 0;
-        const arr = this.cord.geometry.attributes.position.array;
-        let prevP = null;
         for (const m of sim.members) {
             const L = g.items.loose.get(m.id);
             if (!L) continue;
             const mp = L.model.position;
             mp.set(m.x, m.y, m.z);
             this._pose(L, m, dt);
-            if (sim.mode === 'train' && !m.fly && !m.out) {
-                if (!prevP) { arr[k++] = o.x; arr[k++] = o.y; arr[k++] = o.z; arr[k++] = mp.x; arr[k++] = mp.y; arr[k++] = mp.z; }
-                else { arr[k++] = prevP.x; arr[k++] = prevP.y; arr[k++] = prevP.z; arr[k++] = mp.x; arr[k++] = mp.y; arr[k++] = mp.z; }
-                prevP = mp;
-            }
             if (m.kick) m.kick = Math.max(0, m.kick - dt * 4);
             if (Math.random() < dt * 2.5) g.fx?.spark(_b.set(mp.x + (Math.random() - 0.5) * 0.6, mp.y + (Math.random() - 0.5) * 0.6, mp.z + (Math.random() - 0.5) * 0.6), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.07, _w.set(0, 0.5, 0), 0.6);
         }
-        this.cord.visible = k > 0;
-        this.cord.geometry.setDrawRange(0, k / 3);
-        this.cord.geometry.attributes.position.needsUpdate = true;
         for (const e of ev) this._event(e);
         // finished things fall by themselves from here
         for (let i = sim.members.length - 1; i >= 0; i--) {
@@ -373,8 +356,13 @@ export class ItemSwarm {
         if (!best) { this._dwell = null; return; }
         if (!this._dwell || this._dwell.uid !== best.id) { this._dwell = { uid: best.id, t: 0 }; return; }
         this._dwell.t += 0.1;
-        if (this._dwell.t < SWARM.DWELL) return;
         const L = g.items.loose.get(best.id);
+        if (this._dwell.t < SWARM.DWELL) {
+            // (the wand rests on it: it stirs — sparks gather on it, more and more, so the caster sees which thing is being taken)
+            const k = this._dwell.t / SWARM.DWELL, p = L?.model?.position;
+            if (p) for (let i = 0; i < 1 + Math.floor(k * 4); i++) g.fx?.spark(_b.set(p.x + (Math.random() - 0.5) * 0.8, p.y + Math.random() * 0.5, p.z + (Math.random() - 0.5) * 0.8), i % 2 ? 0xffe9a8 : 0xc9a8ff, 0.05 + 0.06 * k, _w.set(0, 0.6 + k, 0), 0.5);
+            return;
+        }
         this._dwell = null;
         if (L && !itemRefusal(L)) {
             this._take(L);
@@ -418,7 +406,5 @@ export class ItemSwarm {
 
     dispose() {
         this.release(false);
-        this.cord.geometry.dispose();
-        this.cord.material.dispose();
     }
 }

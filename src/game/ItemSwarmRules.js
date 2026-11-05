@@ -25,8 +25,8 @@ export const SWARM = {
     PER_ITEM: 0.3, // mana a second for each thing after the first …
     CAP: 8, // … but never more than this extra a second in all (the spell's own 2 a second comes on top)
     RANGE: 40, // m the wand reaches for a thing to take
-    CONE: 0.3, // rad round the wand's line (a thing is easy to point at)
-    DWELL: 0.3, // s the wand rests on a thing before it joins (sweeping across the ground takes nothing)
+    CONE: 0.13, // rad round the wand's line (the author 05.11: «более точечно» — things beside the one meant must not join; was 0.3)
+    DWELL: 1.4, // s the wand rests on a thing before it joins (the author 05.11: «сконцентрировать палочку секунды полторы»; was 0.3)
     HOLD: 5.5, // m: the head of the train hangs this far in front of the hand
     SPACING: 1.6, // m between the things of the train
     FOLLOW: 6.5, // 1/s: how fast a thing closes on its place (smaller = a longer lag)
@@ -39,7 +39,9 @@ export const SWARM = {
     RING_H: 1.3, // m of height between rings
     OMEGA_MIN: 1.6, // rad/s: the ring turns this slowly at least while the vortex holds
     OMEGA_MAX: 13, // rad/s
-    TURN_ON: 0.55, // turns a second of the hand that make it a vortex
+    TURN_ON: 0.6, // turns a second of the hand that count as circling …
+    SPIN_TURNS: 1.6, // … whole turns of the hand that make it a vortex (the author 05.11: «хорошенько прокрутить», not a passing wave)
+    SPIN_UP: 2.2, // s: the vortex winds up from the train to its full speed («потихоньку закручиваться»)
     TURN_OFF: 0.2, // below this …
     TURN_OFF_T: 0.9, // … for this long → back to the train
     SHIELD_D: 5, // m: the wall hangs this far from the hero's middle
@@ -440,12 +442,24 @@ export class SwarmSim {
 
 /** The hand's turn rate decides the mode: a vortex on a fast steady circle, back to the train when it stops. */
 export class ModeKeeper {
-    constructor() { this.off = 0; }
-    /** → 'orbit' | 'train' for a swarm that is in `mode` (shield / launch are not changed by the hand), given the hand's turns a second. */
+    constructor() { this.off = 0; this.acc = 0; this.sign = 0; }
+    /**
+     * → 'orbit' | 'train' for a swarm that is in `mode` (shield / launch are not changed by the hand), given the hand's turns a second.
+     * The vortex needs SPIN_TURNS whole turns of circling (≥ TURN_ON a second, one way round); slower, the count runs down; the other way — anew.
+     */
     next(mode, rate, dt) {
         if (mode === 'shield' || mode === 'launch') return mode;
-        const r = Math.abs(rate);
-        if (mode === 'train') { this.off = 0; return r >= SWARM.TURN_ON ? 'orbit' : 'train'; }
+        const r = Math.abs(rate), sg = Math.sign(rate);
+        if (mode === 'train') {
+            this.off = 0;
+            if (r >= SWARM.TURN_ON) {
+                if (sg !== this.sign) { this.sign = sg; this.acc = 0; }
+                this.acc += r * dt;
+            } else this.acc = Math.max(0, this.acc - dt * (r < SWARM.TURN_ON * 0.5 ? 1.2 : 0.4));
+            if (this.acc < SWARM.SPIN_TURNS) return 'train';
+            this.acc = 0;
+            return 'orbit';
+        }
         if (r < SWARM.TURN_OFF) { this.off += dt; if (this.off >= SWARM.TURN_OFF_T) { this.off = 0; return 'train'; } } else this.off = 0;
         return 'orbit';
     }
