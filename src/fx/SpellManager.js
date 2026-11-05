@@ -294,7 +294,7 @@ export function matchSpell(text) {
     // «Alive»: a tree comes alive (its sounds before the short Ice / Sands / Flight tokens)
     if (has('alive', 'a live', 'alife', 'алайв', 'алаив', 'алайф', 'элайв', 'элаив', 'элайф', 'эллайв', 'аллайв', 'олайв', 'алив', 'элив', 'алайве', 'оживи', 'оживай', 'оживл')) return has('макс', 'max', 'мах', 'maks', 'мекс', 'мэкс') ? 'AliveMaxima' : 'Alive'; // («…Максима»: everything near comes alive)
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
-    if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return has('макс', 'max', 'мах', 'maks', 'мекс', 'мэкс') ? 'LevitationMaxima' : 'Levitation'; // («…Максима»: LevitationMaxima.js)
+    if (has('вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард', 'гардиум', 'гардиюм', 'гардеум', 'гардием', 'gardium')) return has('макс', 'max', 'мах', 'maks', 'мекс', 'мэкс') ? 'LevitationMaxima' : 'Levitation'; // («…Максима»: LevitationMaxima.js)
     if (has('паузин', 'паузен', 'паузи', 'пауза', 'паузу', 'pausin', 'pauzin', 'pause', 'повзин')) return 'Pause';
     // Ships' sails: «Анфёрл» (unfurl) lets them down, «Фёрл» (furl) rolls them up (before Wind: «Вайнд» goes into the sails after)
     if (has('убрать парус', 'убери парус', 'уберите парус', 'свернуть парус', 'сверни парус', 'сверните парус', 'спусти парус', 'furl the sail')) return 'Furl';
@@ -310,7 +310,9 @@ export function matchSpell(text) {
     if (has('атак', 'attack', 'аттак', 'атэк', 'этак', 'атака', 'в атаку', 'атек', 'аттек', 'эттек', 'этек', 'аттэк', 'эттэк', 'атык', 'attac', 'atack')) return 'Attack';
     if (has('earthquake', 'earth quake', 'earthcake', 'эрсквейк', 'эртквейк', 'ерсквейк', 'эрскейк', 'эрткейк', 'эрс квейк', 'квейк', 'quake', 'землетряс', 'эрскейп', 'escape', 'эскейп', 'искейп', 'ескейп', 'скейп', 'эскейт', 'skype', 'скайп')) return has('макс', 'max', 'мах') ? 'EarthquakeMaxima' : 'Earthquake';
     if (has('брейнрот', 'брейн рот', 'брейнрод', 'брэйнрот', 'brainrot', 'brain rot', 'брейн', 'брэйн', 'brain')) return has('максим', 'maxim', 'макс', 'max', 'мах') ? 'BrainrotMaxima' : 'Brainrot'; // («Brain Rot Maxima»: the dragons — DragonTame.js)
-    if (has('вайнд', 'вайнт', 'ваинт', 'винд', 'вайн', 'уинд', 'уайнд', 'wind', 'wine', 'whined', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
+    // («вин-» is also the start of «Вингардиум»: «виндгардиум», «вайнгардиум» — a «гар/гад» after it is the levitation's, never the wind —
+    //  the author 05.11: «Вингардиум Левиоса путается с заклинанием Wind»; SpellPhrase.VINGARDIUM_HEARD does the same for the spotter)
+    if (!/га[рдт]|нгад|гад[иы]/.test(s) && has('вайнд', 'вайнт', 'ваинт', 'винд', 'вайн', 'уинд', 'уайнд', 'wind', 'wine', 'whined', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
     // «Fire Maxima» (before the lone «Максима» and the campfire «Fire»)
     if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер') && has('макс', 'max', 'мах', 'maks')) return 'FireMaxima';

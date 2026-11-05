@@ -296,11 +296,16 @@ export class CreatureImpact {
         if (!r) return false;
         const d = r.doll, x = d.x, o = d.o;
         d.at(11, _pt); // (the chest: the shoulders' middle)
-        const k = Math.min(1, dt * 9);
+        // the hold carries the whole body along (every point moved alike, its swing kept) — the chest to `at`, smoothly
+        const k = 1 - Math.exp(-dt * 14);
         const dx = (at.x - _pt[0]) * k, dy = (at.y - _pt[1]) * k, dz = (at.z - _pt[2]) * k;
-        for (const i of [1, 2]) { x[i * 3] += dx; x[i * 3 + 1] += dy; x[i * 3 + 2] += dz; o[i * 3] += dx * 0.6; o[i * 3 + 1] += dy * 0.6; o[i * 3 + 2] += dz * 0.6; }
+        for (let i = 0; i < 11; i++) { const q = i * 3; x[q] += dx; x[q + 1] += dy; x[q + 2] += dz; o[q] += dx; o[q + 1] += dy; o[q + 2] += dz; }
+        // the shoulders are where the magic grips: pinned (no fall, no spin of their own), the torso, arms and legs hang from them
+        const S = this._pinS || (this._pinS = new Float64Array(6));
+        for (let j = 0; j < 2; j++) for (let q = 0; q < 3; q++) S[j * 3 + q] = x[(1 + j) * 3 + q];
         d.asleep = false; d.age = Math.min(d.age, 1);
         d.step(guardWorld(this.game), dt);
+        for (let j = 0; j < 2; j++) for (let q = 0; q < 3; q++) { x[(1 + j) * 3 + q] = S[j * 3 + q]; o[(1 + j) * 3 + q] = S[j * 3 + q]; }
         this._ragDraw(c, d, r.rig);
         d.at(12, _pt);
         if (r.rig) r.rig.place(c, _pt[0], _pt[1] - 1.9, _pt[2]);

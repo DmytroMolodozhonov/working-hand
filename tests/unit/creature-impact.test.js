@@ -208,3 +208,21 @@ test('a horse hit by Expelliarmus keeps its FarShape on the root and never blink
     assert.equal(farBatchStats.why.parent || 0, parentLeaves0, 'never kicked out of FarBatch because of parent');
     resetFarBatches();
 });
+
+test('«Левиоса» holds a body as a rag doll right where the magic holds it — no sagging under the hand, no spinning (the author 05.11)', () => {
+    const { v, ci } = world();
+    const doll = ci.levDoll('v', v);
+    assert.ok(doll, 'a villager hangs as a doll');
+    const at = new THREE.Vector3(10, 6, 0);
+    for (let i = 0; i < 90; i++) ci.levDollStep('v', v, at, 1 / 30);
+    const ch = doll.at(11), sl = doll.at(1), sr = doll.at(2), pv = doll.at(12);
+    assert.ok(Math.hypot(ch[0] - at.x, ch[1] - at.y, ch[2] - at.z) < 0.15, `the chest is held at the point: ${ch.map((n) => n.toFixed(2))}`);
+    assert.ok(pv[1] < ch[1] - 0.8, 'the body hangs below the chest');
+    // carried along: the chest follows, the body does not lag metres behind nor turn round and round
+    const yaw0 = Math.atan2(sr[2] - sl[2], sr[0] - sl[0]);
+    for (let i = 0; i < 60; i++) { at.x += 0.1; ci.levDollStep('v', v, at, 1 / 30); }
+    const c2 = doll.at(11), l2 = doll.at(1), r2 = doll.at(2);
+    assert.ok(Math.hypot(c2[0] - at.x, c2[1] - at.y) < 0.6, 'it follows the hand');
+    const yaw1 = Math.atan2(r2[2] - l2[2], r2[0] - l2[0]);
+    assert.ok(Math.abs(yaw1 - yaw0) < 0.05, 'the grip does not spin it');
+});

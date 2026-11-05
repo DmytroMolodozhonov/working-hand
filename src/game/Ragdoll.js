@@ -222,7 +222,10 @@ export class Ragdoll {
             o[k] = x[k]; o[k + 1] = x[k + 1]; o[k + 2] = x[k + 2];
             x[k] += vx; x[k + 1] += vy; x[k + 2] += vz;
         }
-        if (this.tone > 0) this._tone();
+        // (the muscles hold the limbs only while the body touches something — lying, landing, sliding: in the air a living body is as
+        //  helpless as a slack one, and its limbs pulled straight there turned the whole body over: the author 05.11 «в воздухе
+        //  переворачивается»)
+        if (this.tone > 0 && this.contacts > 0) this._tone();
         this.contacts = 0;
         for (let it = 0; it < DOLL.ITER; it++) {
             for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
@@ -260,15 +263,36 @@ export class Ragdoll {
         const rd = Rr[0] * Ru[0] + Rr[1] * Ru[1] + Rr[2] * Ru[2]; Rr = [Rr[0] - Ru[0] * rd, Rr[1] - Ru[1] * rd, Rr[2] - Ru[2] * rd];
         const rrl = Math.hypot(Rr[0], Rr[1], Rr[2]) || 1; Rr = [Rr[0] / rrl, Rr[1] / rrl, Rr[2] / rrl];
         const Rf = [Rr[1] * Ru[2] - Rr[2] * Ru[1], Rr[2] * Ru[0] - Rr[0] * Ru[2], Rr[0] * Ru[1] - Rr[1] * Ru[0]];
-        const K = DOLL.TONE_K * this.tone;
+        const K = DOLL.TONE_K * this.tone, D = this._toneD || (this._toneD = new Float64Array(N * 3));
+        D.fill(0);
         for (const i of LIMBS) {
             const a = R[i][0] - RH[0], b = R[i][1] - RH[1], c = R[i][2] - RH[2];
             const lr = a * Rr[0] + b * Rr[1] + c * Rr[2], lu = a * Ru[0] + b * Ru[1] + c * Ru[2], lf = a * Rf[0] + b * Rf[1] + c * Rf[2];
             const tx = hx + rx * lr + ux * lu + fx * lf, ty = hy + ry * lr + uy * lu + fy * lf, tz = hz + rz * lr + uz * lu + fz * lf;
             const k = i * 3;
-            const dx = (tx - x[k]) * K, dy = (ty - x[k + 1]) * K, dz = (tz - x[k + 2]) * K;
+            D[k] = (tx - x[k]) * K; D[k + 1] = (ty - x[k + 1]) * K; D[k + 2] = (tz - x[k + 2]) * K;
+        }
+        // Muscles are INSIDE the body: they move the limbs against the torso, never the whole. Pulling the limbs alone gave the body a
+        // push and a turn out of nothing — thrown by «Джолт» it somersaulted in the air (the author 05.11: «в воздухе переворачивается…
+        // сильно сломана математика»: the torso turned 86° where a slack body turns 41°). So the pull's own drift and its turn about the
+        // body's middle are taken back from every point: the body as a whole flies and spins exactly as a slack one would.
+        let cx = 0, cy = 0, cz = 0, mx = 0, my = 0, mz = 0;
+        for (let i = 0; i < N; i++) { const k = i * 3; cx += x[k]; cy += x[k + 1]; cz += x[k + 2]; mx += D[k]; my += D[k + 1]; mz += D[k + 2]; }
+        cx /= N; cy /= N; cz /= N; mx /= N; my /= N; mz /= N;
+        let Lx = 0, Ly = 0, Lz = 0, I = 0;
+        for (let i = 0; i < N; i++) {
+            const k = i * 3, px = x[k] - cx, py = x[k + 1] - cy, pz = x[k + 2] - cz;
+            D[k] -= mx; D[k + 1] -= my; D[k + 2] -= mz;
+            Lx += py * D[k + 2] - pz * D[k + 1]; Ly += pz * D[k] - px * D[k + 2]; Lz += px * D[k + 1] - py * D[k];
+            I += px * px + py * py + pz * pz;
+        }
+        // (the turn taken back: ω = L / I — the body as a ball of its points, close enough for a step this small)
+        const wx = Lx / (I || 1), wy = Ly / (I || 1), wz = Lz / (I || 1);
+        for (let i = 0; i < N; i++) {
+            const k = i * 3, px = x[k] - cx, py = x[k + 1] - cy, pz = x[k + 2] - cz;
+            const dx = D[k] - (wy * pz - wz * py), dy = D[k + 1] - (wz * px - wx * pz), dz = D[k + 2] - (wx * py - wy * px);
             x[k] += dx; x[k + 1] += dy; x[k + 2] += dz;
-            // (the swinging calmed too: part of the step's motion is the limb's own effort, not the fall)
+            // (the limbs' swinging calmed too — by the same internal field, so this takes nothing from the flight either)
             o[k] += dx * 0.5; o[k + 1] += dy * 0.5; o[k + 2] += dz * 0.5;
         }
     }

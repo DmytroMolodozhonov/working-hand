@@ -133,3 +133,8 @@ test('everyday talk builds nothing: a «стена», «дверь», «доро
     assert.equal(matchSpell('построй крышу'), 'BuildRoof');
     assert.equal(matchSpell('создай потолок'), 'CreateCeiling');
 });
+
+test('«Вингардиум» heard with a «вин-д»/«вайн» start is the levitation, never the wind (the author 05.11: «путается с Wind»)', () => {
+    for (const t of ['виндгардиум', 'вайнгардиум', 'виндгардиум левиоса', 'вайнгардиум левиоса']) assert.equal(matchSpell(t), 'Levitation', t);
+    for (const t of ['вайнд', 'винд', 'уинд', 'ветер']) assert.equal(matchSpell(t), 'Wind', t);
+});

@@ -107,3 +107,17 @@ for (const kind of ['z', 'T']) {
         assert.equal(up, dolls, `${up} of ${dolls} got up by themselves`);
     });
 }
+
+test('a living body thrown («Джолт») turns in the air exactly as a slack one: its muscles never spin it (the author 05.11)', async () => {
+    const { Ragdoll } = await import('../../src/game/Ragdoll.js');
+    const world = { boxes: () => [], solid: () => false, floor: () => -100 };
+    const fly = (tone) => {
+        const d = new Ragdoll(); d.lie(0, 50, 0, 1, 0);
+        d.set(7, d.x[21] + 0.6, d.x[22], d.x[23] + 0.8); d.set(8, d.x[24] + 0.4, d.x[25], d.x[26] + 1.4); // (sprawled)
+        d.launch(0, 12, -6, 0); d.tone = tone;
+        const fr = new Array(9); let prev = null, turned = 0;
+        for (let f = 0; f < 60; f++) { d.step(world, 1 / 60); d.frame(fr); if (prev) turned += Math.acos(Math.max(-1, Math.min(1, fr[3] * prev[0] + fr[4] * prev[1] + fr[5] * prev[2]))); prev = [fr[3], fr[4], fr[5]]; }
+        return turned;
+    };
+    assert.ok(Math.abs(fly(0.5) - fly(0)) < 0.05, `alive ${fly(0.5).toFixed(2)} vs slack ${fly(0).toFixed(2)} rad`);
+});

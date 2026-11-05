@@ -666,7 +666,13 @@ export class Levitation {
             if (S.free) c.lev.freeT = S.free[0] + Math.random() * (S.free[1] - S.free[0]);
         }
         this.carried.set(ck + ':' + c.id, { ck, c });
-        if (ck === 'v' || ck === 'z') c.lev.doll = !!g.creatureImpact?.levDoll?.(ck, c); // (a humanoid hangs as a rag doll — CreatureImpact.levDoll)
+        if (ck === 'v' || ck === 'z') {
+            // (a humanoid hangs as a rag doll — CreatureImpact.levDoll; `dollOff`: its chest over the body's middle that the hold moves,
+            //  measured now — the chest is then held exactly there, never chasing itself)
+            const doll = g.creatureImpact?.levDoll?.(ck, c);
+            c.lev.doll = !!doll;
+            if (doll) { const ct = this._centre(ck, c, _h4).y; c.lev.dollOff = doll.at(11)[1] - ct; }
+        }
         this._sparkle(p, 20);
         return true;
     }
@@ -695,9 +701,12 @@ export class Levitation {
         L.vel.lerp(_h3.multiplyScalar(4), Math.min(1, dt * 6));
         if (!L.body && !L.lower && this._struggle(ck, c, L, dt)) return;
         if (L.doll) {
-            // a rag doll in the hold: its chest goes where the magic holds it (the target is its middle; the chest ~0.7 above it)
-            _h4.copy(centre).addScaledVector(L.vel, dt);
-            _h4.y += 0.7;
+            // a rag doll in the hold: its chest is held where the magic holds the body (the target is the body's middle — the chest
+            // `dollOff` over it), the rest hangs from it. The goal is the TARGET, not where the body is now: aiming from its own place
+            // («centre + 0.7») chased itself — the body sagged far under the hand and swung (the author 05.11: «полностью сломана
+            // математика, как я поднимаю его»)
+            _h4.copy(L.target);
+            _h4.y += L.dollOff ?? 0.85;
             if (!g.creatureImpact.levDollStep(ck, c, _h4, dt)) L.doll = false;
             else {
                 this._centre(ck, c, _h3);
