@@ -961,6 +961,7 @@ export class CastleTalk {
      *    knight of my castle within a shout hears it (the order goes to the whole army: VillagerOrders).
      */
     _listener(text = null) {
+        { const pm = this.game.potionMaster?.v; if (pm && this.game.potionLair?.inLair) return pm; } // (in the Potion-maker's lair his master hears the hero all over the hall — not only up close)
         // (the one I address — looked at, walked to, just talked with; across a yard if I shout — Attention.js;
         // in a crowd the one I look at, not whoever stands nearest)
         const id = this.attention?.addressee((i) => { const v = this.life.byId.get(i); return !!v && !v.dead && Math.abs(v.y - (this.game.character.group.position.y - 1.95)) < 8 && this.life._sees(v, this.game.character.group.position); }, this._shouting()); // (a wall between us: he does not hear that I speak to him — no matter how near)
@@ -1739,6 +1740,7 @@ export class CastleTalk {
         for (const v of this.life.byId.values()) {
             // (one who just noticed me stands facing me — that is no talk yet: he may greet me)
             const noticed = now - (v.noticedAt || -1e9) < 400;
+            if (v.potionMaster) continue; // (his one welcome is PotionMasterLife.update; no more «привет» after it)
             if (v.dead || v.foe || (v.talking > 0 && !noticed) || now - (v.talkedAt || -1e9) < 600000 || this.inTalk()) continue; // (no new «привет» from one I talked with lately, nor in the middle of a talk)
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             // (near — or he noticed me looking at him and coming: a greeting from across the street, not at the door — Attention.js)

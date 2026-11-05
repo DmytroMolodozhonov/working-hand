@@ -98,6 +98,14 @@ export function parseIntent(text) {
     if (!t) return null;
     const rec = findRecipe(t);
     if (/(^| )(стоп|отмена|отставить|хватит|не надо|не нужно|прекрати)( |$)/.test(t)) return { kind: 'stop' };
+    if (/(^| )(где|покажи|показать|найти|найду|найдём|найдем|лежит|лежат|находится|находятся|куда делся)( |$)/.test(t)) {
+        const th = findThing(t);
+        if (th.length) return { kind: 'where', things: th };
+        if (/(колб|склян|флакон)/.test(t)) return { kind: 'where', things: [{ type: 'flask' }] };
+        if (/(ингредиент|все вещи|полк)/.test(t)) return { kind: 'ingredients' };
+        return { kind: 'where', things: [] };
+    }
+    if (/(какие|что за|перечисли|назови) .*ингредиент/.test(t) || /(^| )ингредиенты( |$)/.test(t) && !/(как|рецепт|что нужно|что надо)/.test(t)) return { kind: 'ingredients' };
     if (/(разожги|зажги|подожги|включи огонь|огонь под котл)/.test(t)) return { kind: 'fire' };
     if (/(налей|добавь|долей|набери|плесни) .*вод/.test(t) || /(^| )воды( |$)/.test(t) && /(налей|дай)/.test(t)) return { kind: 'water' };
     if (/(как|рецепт|из чего|что нужно|что надо|что класть|что положить|что бросить|ингредиент|состав)/.test(t) && !/(^| )(свари|сварим|сделай|приготовь|завари)( |$)/.test(t)) return rec ? { kind: 'recipe', rec } : { kind: 'list' };
@@ -109,6 +117,72 @@ export function parseIntent(text) {
     if (/(привет|здравствуй|добрый|здорово|приветствую|hello)/.test(t) && t.length < 40) return { kind: 'hello' };
     if (rec && t.split(' ').length <= 4) return { kind: 'recipe', rec }; // (просто «зелье удачи» — расскажет рецепт)
     return null;
+}
+
+// ------------------------------------------------------------------------------------------------ где что лежит
+const STEM = 5;
+const STOP = new Set(['для', 'что', 'как', 'где', 'мне', 'или', 'это', 'все', 'вот']);
+const stems = (name) => norm(name).split(' ').filter((w) => w.length >= 3 && !STOP.has(w)).map((w) => w.slice(0, STEM));
+
+/** Какие вещи называют слова: ингредиенты по названию, «зелье …» — зелья, колбы. → [{type:'ing', kind} | {type:'potion', rec} | {type:'flask'}] (лучшие по совпадению). */
+export function findThing(text, kinds = Object.keys(INGREDIENT_RU)) {
+    const t = norm(text);
+    const out = [];
+    if (/(колб|склян|флакон)/.test(t)) out.push({ type: 'flask' });
+    if (/зелье|зелья|зелий/.test(t)) {
+        const r = findRecipe(t);
+        if (r) { out.push({ type: 'potion', rec: r }); return out; }
+    }
+    let best = 0, list = [];
+    for (const k of kinds) {
+        if (k === 'scroll' || k === 'fish') continue;
+        const st = stems(INGREDIENT_RU[k]);
+        let s = 0;
+        for (const w of st) if (t.split(' ').some((x) => x.startsWith(w))) s += w.length;
+        if (s <= 0) continue;
+        if (s > best) { best = s; list = [k]; } else if (s === best) list.push(k);
+    }
+    for (const k of list.slice(0, 3)) out.push({ type: 'ing', kind: k });
+    return out;
+}
+
+const NTH = ['', 'первое', 'второе', 'третье', 'четвёртое'];
+const NTH_RACK = ['первая', 'вторая', 'третья', 'четвёртая'];
+const TIER = { 2: 'нижний', 4: 'средний', 6: 'верхний' };
+
+/** Где на полках место `slot` (смещения плана) — словами: стена, какая полка и место слева, ярус. `racks` — из PotionLairPlan.racks(). */
+export function describeSlot(slot, racks) {
+    const r = racks.find((q) => slot.x >= q.x0 && slot.x <= q.x1 && Math.abs(q.zFront - slot.z) < 0.6);
+    if (!r) return 'на одной из полок';
+    const north = r.zFront < 0;
+    const same = racks.filter((q) => (q.zFront < 0) === north).sort((a, b) => a.x0 - b.x0);
+    const idx = north ? same.indexOf(r) : same.length - 1 - same.indexOf(r); // (считая слева, когда стоите к полкам лицом)
+    const n = north ? slot.x - r.x0 : r.x1 - slot.x;
+    const wall = north ? 'у дальней стены, напротив входа' : 'у стены за вашей спиной, у входа';
+    return `${wall}: ${NTH_RACK[idx] || (idx + 1) + '-я'} полка слева, ${TIER[slot.tier] || 'средний'} ярус, ${NTH[n] || n + '-е'} место слева`;
+}
+
+/** Ответ на «где …». `stock` — [{slot, item}] (PotionLair), `racks` — план. */
+export function whereLine(things, stock, racks) {
+    if (!things.length) return 'Чего ищете? Назовите ингредиент, например «где яйцо дракона», или «где колбы».';
+    const lines = [], found = [];
+    for (const th of things.slice(0, 3)) {
+        let e;
+        if (th.type === 'flask') e = stock.find((x) => x.item.kind === 'flask');
+        else if (th.type === 'potion') e = stock.find((x) => x.item.kind === 'potion' && x.item.rec === th.rec.id);
+        else e = stock.find((x) => x.item.kind === th.kind);
+        const name = th.type === 'flask' ? 'Пустые колбы' : th.type === 'potion' ? th.rec.name : ingName(th.kind);
+        if (!e) { lines.push(`${name.charAt(0).toUpperCase()}${name.slice(1)} на полках не вижу — скажите, и я его принесу…`); continue; }
+        lines.push(`${name.charAt(0).toUpperCase()}${name.slice(1)} — ${describeSlot(e.slot, racks)}.`);
+        found.push(e);
+    }
+    return { text: lines.join(' '), found };
+}
+
+/** Все ингредиенты по названиям (для «какие ингредиенты есть»). */
+export function ingredientsLine(kinds) {
+    const names = kinds.map(ingName);
+    return `На полках у дальней стены — все ингредиенты мира: ${names.join(', ')}. Спросите «где …» — покажу место.`;
 }
 
 /** Что в котле → какое зелье ближе всего и чего не хватает. */

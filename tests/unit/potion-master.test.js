@@ -54,3 +54,24 @@ test('подсказка по котлу: пусто / верно / не хва�
     assert.ok(/[Нн]е хватает/.test(hintLine({ apple: 1 })));
     assert.equal(listRu(['apple', 'apple', 'crystal']), 'золотое яблоко ×2 и кристалл маны');
 });
+
+test('«где лежит …»: яйцо дракона и любой другой ингредиент находятся на полках; ответ — стена, полка, ярус, место; колбы и зелья тоже', async () => {
+    const { findThing, describeSlot, whereLine, ingredientsLine } = await import('../../src/game/PotionMaster.js');
+    const { layout, racks } = await import('../../src/world/PotionLairPlan.js');
+    const { stockFor, lairIngredients } = await import('../../src/game/PotionLair.js');
+    const P = layout(), R = racks(), stock = stockFor(P.slots);
+    assert.equal(parseIntent('где яйцо дракона')?.kind, 'where');
+    assert.deepEqual(findThing('где яйцо дракона'), [{ type: 'ing', kind: 'dragonEgg' }]);
+    assert.equal(parseIntent('покажи колбы')?.things[0].type, 'flask');
+    assert.equal(parseIntent('где зелье удачи')?.things[0].rec.id, 'luck');
+    // каждый ингредиент мира находится по своему названию и имеет место на полках
+    for (const k of lairIngredients()) {
+        const e = stock.find((x) => x.item.kind === k);
+        assert.ok(e, `нет места для ${k}`);
+        const r = whereLine(findThing('где найти ' + (await import('../../src/game/Potions.js')).INGREDIENT_RU[k]), stock, R);
+        assert.ok(typeof r !== 'string' && r.found.length >= 1, `не нашёл по названию: ${k}`);
+        assert.ok(/полка слева, (нижний|средний|верхний) ярус/.test(describeSlot(e.slot, R)), describeSlot(e.slot, R));
+    }
+    assert.ok(whereLine(findThing('где яйцо дракона'), stock, R).text.includes('Яйцо дракона'));
+    assert.ok(ingredientsLine(lairIngredients()).includes('яйцо дракона'));
+});

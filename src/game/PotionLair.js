@@ -140,7 +140,7 @@ export class PotionLair {
         this._chkT -= dt;
         if (this._chkT > 0 || !me || Math.hypot(me.x - LAIR.CX, me.z - LAIR.CZ) > LAIR_RULES.KEEP_R) return;
         this._chkT = LAIR_RULES.REFILL_EVERY;
-        if (this._built()) { this._feedFire(); this.game.potionMaster?.ensure(); const k = this._shelves(this._fresh); if (k > 0) this._chkT = 0.2; else this._fresh = false; } // (идёт наполнение — следующая порция скоро)
+        if (this._built()) { const cc = this.game.cauldrons?.list.get('potion_lair_cauldron'); if (cc) cc.fixed = true; this._feedFire(); this.game.potionMaster?.ensure(); const k = this._shelves(this._fresh); if (k > 0) this._chkT = 0.2; else this._fresh = false; } // (идёт наполнение — следующая порция скоро)
     }
 
     /** Факелы: пламя рисуют искры (мягкие светящиеся точки из общего пула), свет — три ближайших огня (FireLights.want: новых ламп нет). */
@@ -230,6 +230,8 @@ export class PotionLair {
         const cx = LAIR.CX + LAIR.CAULDRON.x, cz = LAIR.CZ + LAIR.CAULDRON.z, y = LAIR.F - 0.5;
         const st = { ...newBrew(), phase: 'water', water: CAULDRON.FULL, heat: 1 };
         if (!g.cauldrons.list.has('potion_lair_cauldron')) g.cauldrons.spawn({ id: 'potion_lair_cauldron', x: cx, y, z: cz, yaw: 0, st });
+        const cc = g.cauldrons.list.get('potion_lair_cauldron');
+        if (cc) cc.fixed = true; // (fastened on its holder over the fire: no «Левиоса», no pushing, no blast moves it)
         const fire = this._fire(cx, cz);
         if (!fire) { const f = g.campfires?.kindle(cx, y, cz); if (f) f.left = LAIR_RULES.FIRE_LEFT; }
         this._chkT = 0; this._fresh = true; // (полки наполняются порциями — update)

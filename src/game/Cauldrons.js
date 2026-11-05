@@ -489,6 +489,7 @@ export class Cauldrons {
 
     /** Move it along the ground by (dx, dz), if nothing is in the way. Returns true if it moved. */
     _slide(c, dx, dz) {
+        if (c.fixed) return false; // (the lair's cauldron on its holder: hands cannot push it off)
         const col = this.game.collision;
         const x = c.x + dx, z = c.z + dz;
         const r = c.tilt > 0.6 ? CAULDRON.R_BODY * 0.8 : CAULDRON.R_BODY * 0.85;
@@ -772,6 +773,7 @@ export class Cauldrons {
     // ================================================================= magic, blasts
     /** (host) «Вингардиум Левиоса» takes it. */
     levStart(c) {
+        if (c.fire || c.fixed) return; // (fastened in its holder over the fire: it does not fly off)
         c.lev = true;
         c.fall = null;
         c.q = c.group.quaternion.clone();
@@ -862,7 +864,7 @@ export class Cauldrons {
     blast(pos, radius, power = 1) {
         if (!this.auth) return;
         for (const c of this.list.values()) {
-            if (c.lev) continue;
+            if (c.lev || c.fixed) continue;
             const d = Math.hypot(c.pos.x - pos.x, c.pos.z - pos.z);
             if (d > radius + 3) continue;
             const k = Math.max(0, 1 - d / (radius + 3)) * Math.sqrt(power);

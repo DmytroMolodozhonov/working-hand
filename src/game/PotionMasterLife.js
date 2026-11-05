@@ -18,10 +18,11 @@
  */
 
 import * as THREE from 'three';
-import { LAIR } from '../world/PotionLairPlan.js';
+import { LAIR, racks as lairRacks } from '../world/PotionLairPlan.js';
 import { CAULDRON, addWater, takePortion, boiling, newBrew, potionItem } from './Potions.js';
 import { newUid } from './ItemTypes.js';
-import { MASTER, LINES, parseIntent, planOf, recipeLine, knownLine, hintLine, ingName } from './PotionMaster.js';
+import { MASTER, LINES, parseIntent, planOf, recipeLine, knownLine, hintLine, ingName, whereLine, ingredientsLine } from './PotionMaster.js';
+import { lairIngredients, stockFor } from './PotionLair.js';
 
 export const LAIR_SITE_ID = 'potionlair';
 const CAULDRON_ID = 'potion_lair_cauldron';
@@ -79,7 +80,8 @@ export class PotionMasterLife {
     }
 
     _mark(v) {
-        v.potionMaster = true; v.guest = true; v.hp = v.maxHp = MASTER.HP;
+        v.potionMaster = true; v.guest = true; v.metMe = true; // (он помнит гостя: не здоровается заново, не «не узнаёт»)
+        v.hp = v.maxHp = MASTER.HP;
         v.model?.setHeldTool?.('wand');
     }
 
@@ -112,6 +114,16 @@ export class PotionMasterLife {
         switch (it.kind) {
             case 'hello': return pick(LINES.hello);
             case 'list': return knownLine();
+            case 'ingredients': return ingredientsLine(lairIngredients());
+            case 'where': {
+                const lair = this.game.potionLair;
+                if (!lair?.plan) return 'Подойдите к полкам — сам покажу.';
+                const stock = lair.stock || (lair.stock = stockFor(lair.plan.slots));
+                const r = whereLine(it.things, stock, lairRacks());
+                if (typeof r === 'string') return r;
+                this._point(r.found.map((e) => ({ x: LAIR.CX + e.slot.x, y: e.slot.y + 0.4, z: LAIR.CZ + e.slot.z })));
+                return r.text + ' Смотрите — я подсвечу.';
+            }
             case 'recipe': return recipeLine(it.rec);
             case 'hint': return c ? hintLine(c.st.ings) : LINES.noCauldron;
             case 'stop': if (!this.job) return LINES.idle; this._end(); return LINES.stopped;
@@ -147,7 +159,8 @@ export class PotionMasterLife {
     // ------------------------------------------------------------------ работа (CastleLife._think → true: ход этого кадра его)
     step(v, dt) {
         const j = this.job;
-        if (!j || !v.potionMaster || v.dead) return false;
+        if (!v.potionMaster || v.dead) return false;
+        if (!j) return this._idle(v, dt);
         const g = this.game, life = this.life, c = this.cauldron;
         if (!c) { life._say(v, LINES.noCauldron, 5); this._end(); return false; }
         if (v.stunT > 0 || v.lev || v.carriedBy || v.foe) { this._end(); return false; }
@@ -197,6 +210,36 @@ export class PotionMasterLife {
         life._ground(v);
         return true;
     }
+
+    /**
+     * Без дела: он видит героя во всём зале (не только вплотную): поворачивается к нему, а когда показывает место на полке, ведёт
+     * туда палочкой, и вещь светится искрами (4 с). Вне зала — стоит на своём месте (false: обычный житель).
+     */
+    _idle(v, dt) {
+        const g = this.game, me = g.character?.group.position;
+        if (!me || !g.potionLair?.inLair || v.foe || v.stunT > 0 || v.lev || v.carriedBy) return false;
+        if (this.pointT > 0 && this.pointAt?.length) {
+            this.pointT -= dt;
+            const p = this.pointAt[0];
+            this._face(v, p.x, p.z, dt);
+            this._aim(v, _a.set(p.x, p.y, p.z));
+            v.mode = 'cast'; v.speed = 0;
+            if (this._t - (this._markT || 0) > 0.05) {
+                this._markT = this._t;
+                for (const q of this.pointAt) {
+                    g.fx?.spark?.(_b.set(q.x + (Math.random() - 0.5) * 0.4, q.y + Math.random() * 1.4, q.z + (Math.random() - 0.5) * 0.4), 0xffd86a, 0.14, _c.set(0, 0.7, 0), 0.9);
+                    if (g.fireLights) g.fireLights.want(q.x, q.y + 0.6, q.z, 0.5);
+                }
+            }
+        } else {
+            this._face(v, me.x, me.z, dt * 0.7); // (смотрит на гостя, пока тот в зале)
+            v.mode = v.talking > 0 ? 'talk' : 'idle'; v.speed = 0;
+        }
+        this.life._ground(v);
+        return true;
+    }
+
+    _point(list) { this.pointAt = list; this.pointT = 5; }
 
     // ---- «Вингардиум Левиоса»: ингредиент с полки → над котёл
     _throwStep(v, c, j, dt) {

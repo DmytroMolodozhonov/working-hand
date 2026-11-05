@@ -67,6 +67,11 @@ async function masterCheck(page) {
         const v = g.potionMaster.v;
         out.master = !!v; out.title = v?.title; out.name = v?.name;
         if (!v) return out;
+        out.listener = g.castleLife.talk._listener('привет') === v; // (he hears the hero all over the hall, not only up close)
+        out.dist = Math.round(Math.hypot(v.x - g.character.group.position.x, v.z - g.character.group.position.z));
+        out.where = g.potionMaster.hear(v, 'где яйцо дракона');
+        out.fixed = g.cauldrons.list.get('potion_lair_cauldron').fixed === true;
+        out.metMe = v.metMe === true;
         out.list = g.potionMaster.hear(v, 'какие зелья ты знаешь').slice(0, 60);
         out.recipe = g.potionMaster.hear(v, 'как сварить зелье исцеления');
         out.hint = g.potionMaster.hear(v, 'что дальше класть');
@@ -86,6 +91,9 @@ async function masterCheck(page) {
     });
     console.log(JSON.stringify(r));
     assert.ok(r.master && /Мастер зелий/.test(r.title), 'the master stands there');
+    assert.ok(r.listener && r.dist >= 5, `he hears from ${r.dist} m`);
+    assert.ok(/Яйцо дракона — .*полка слева/.test(r.where), r.where);
+    assert.ok(r.fixed && r.metMe, 'the cauldron is fastened; he knows the guest');
     assert.ok(r.recipe.includes('золотое яблоко') && r.recipe.includes('кристалл маны'));
     assert.ok(/Принял|Варим/.test(r.start));
     assert.ok(r.phases.some((p) => p.startsWith('throw:fly')), 'ingredients flew');

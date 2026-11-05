@@ -159,7 +159,7 @@ export class Levitation {
         }
         for (const b of g.water?.resting || []) out.push({ kind: 'ice', obj: b, pos: b.pos });
         // a big cauldron (heavy: it floats slowly; tilted in the air it pours out) — the host's, like things
-        if (g.cauldrons && (g.authority || !g.sync)) for (const c of g.cauldrons.list.values()) if (!c.lev) out.push({ kind: 'cauldron', obj: c, pos: c.pos, r: 1.6 });
+        if (g.cauldrons && (g.authority || !g.sync)) for (const c of g.cauldrons.list.values()) if (!c.lev && !c.fire && !c.fixed) out.push({ kind: 'cauldron', obj: c, pos: c.pos, r: 1.6 }); // (one hung over a fire in its holder, or the lair's fixed one, is fastened: not lifted)
         // a surfboard («Create a Board»): lifted like a thing; not one in hands or under feet (SurfBoards.levTargets)
         for (const b of g.boards?.levTargets() || []) out.push({ kind: 'board', obj: { id: b.id }, pos: b.pos, r: 1.6 });
         for (const b of g.boats?.levTargets() || []) out.push({ kind: 'boat', obj: { id: b.id }, pos: b.pos, r: 3.2 }); // (an empty boat — Boats.js: carried to the water)
