@@ -27,6 +27,8 @@ import { kindOf } from './CreatureImpact.js';
 import { isGodGift } from './ItemTypes.js';
 import { isCold } from './IceQueen.js';
 import { WARD } from './HouseWards.js';
+import { cutLimb } from '../entities/LimbSurgery.js';
+import { SeveredPart } from './SeveredPart.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3();
 const STRONG_OR_ICE = (spell) => isStrongDuel(spell) || isIceCharge(spell);
@@ -311,7 +313,8 @@ export class StrongMagic {
         const pal = this._palette(k, c);
         c.burst = true; // (Death: no body — the pieces are it)
         this._kill(k, c, 'Pilbidrio', by);
-        this.burstLook(p, s, pal);
+        const parts = this.burstParts(k, c, p, s, pal);
+        this.burstLook(p, s, pal, parts);
         this._vanish(k, c.id);
         this._send({ op: 'burst', p: r3a(p), s: Math.round(s * 100) / 100, pal, k, id: c.id });
         this._note({ ev: 'burst', k, id: c.id });
@@ -342,16 +345,79 @@ export class StrongMagic {
         }
     }
 
-    /** The look of a body blown apart (every computer): pieces of it in its colours, blood, a white flash. */
-    burstLook(p, s = 1, pal = 'flesh') {
+    /** A creature by its kind and id (the burst's packet: every computer finds its own copy of the body). */
+    _findBody(k, id) {
+        const g = this.game;
+        if (k === 'z') return g.zombieById?.get(id) || null;
+        if (k === 'v') return g.castleLife?.byId?.get(id) || null;
+        if (k === 'c') return g.ships?.crew?.byId?.get(id) || null;
+        if (k === 'a') return g.animals?.byId?.get(id) || null;
+        if (k === 't') return g.livingTrees?.byId?.get(id) || null;
+        if (k === 's') return g.spiders?.list?.find?.((x) => x.id === id) || null;
+        return null;
+    }
+
+    /**
+     * The body torn apart into ITS OWN PARTS (the author 05.11: «как кубики разбрасываются — я хочу именно части тела»): the head,
+     * the arms, the legs (an animal's legs, a tree's branches, a spider's legs) cut off its own model where they join — their real
+     * shape, colours and clothes (LimbSurgery.cutLimb, as a blade cuts them) — and what is left, the trunk, flung out from the
+     * middle, tumbling, falling, bleeding on the ground for a while (SeveredPart; the blade's pieces share their limit). → how many.
+     * A body with no parts to cut (a dragon, an ice giant, a player's avatar) → 0: the old pieces of colour.
+     */
+    burstParts(k, c, p, s = 1, pal = 'flesh') {
+        const g = this.game, D = g.dismember;
+        if (!c || !D?.which || !g.scene) return 0;
+        let who = null;
+        try { who = D.which(c); } catch { who = null; }
+        if (!who?.body?.limbs?.length || who.k === 'p') return 0;
+        const root = who.body.root || c.model?.group || c.model || c.group; // (what the cuts are made on: the creature or its model)
+        if (!root) return 0;
+        const pick = (o) => (o?.isObject3D ? o : null);
+        const obj = pick(root) || pick(root.group) || pick(root.model?.group) || pick(c.group) || pick(c.model?.group) || pick(c.model); // (its drawing)
+        obj?.updateMatrixWorld?.(true);
+        const blood = pal === 'flesh' || pal === 'zombie' || pal === 'spider' ? 30 : 0;
+        const fling = (piece, head = false) => {
+            piece.updateMatrixWorld(true);
+            const at = new THREE.Box3().setFromObject(piece).getCenter(new THREE.Vector3());
+            const out = at.sub(p); out.y = Math.max(0.15, out.y) + 0.4;
+            if (out.lengthSq() < 1e-4) out.set(Math.random() - 0.5, 1, Math.random() - 0.5);
+            out.normalize();
+            const v = (head ? 11 : 8) + Math.random() * 6;
+            const vel = out.multiplyScalar(v * Math.min(1.6, Math.max(0.7, s)));
+            vel.y += 3 + Math.random() * 4;
+            const spin = new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18);
+            const list = D.props || (D.props = []);
+            while (list.length >= 24) list.shift().dispose();
+            list.push(new SeveredPart(g, piece, { vel, spin, blood }));
+        };
+        let n = 0;
+        for (const limb of who.body.limbs) {
+            let r = null;
+            try { r = cutLimb(root, who.body, limb.name, 0, null, { piece: true }); } catch { r = null; }
+            if (r?.piece) { fling(r.piece, limb.kind === 'head'); n++; }
+        }
+        // the trunk: what is left of the body, flung up and back
+        try {
+            const trunk = obj.clone(true);
+            obj.matrixWorld.decompose(trunk.position, trunk.quaternion, trunk.scale);
+            trunk.userData = { limb: 'trunk', own: [] };
+            fling(trunk);
+            n++;
+        } catch { /* (a body that cannot be copied: its limbs fly alone) */ }
+        return n;
+    }
+
+    /** The look of a body blown apart (every computer): its parts (burstParts) or pieces in its colours, blood, a white flash. */
+    burstLook(p, s = 1, pal = 'flesh', parts = 0) {
         const fx = this.game.fx;
         if (!fx) return;
         const cols = PALETTE[pal] || PALETTE.flesh;
         fx.lightFlash?.(p, 0xfff6c8, 4, 0.3, 24);
-        const n = Math.round(10 + 6 * Math.min(3, s));
+        // (its real parts flew: only small torn bits and spray with them; no parts — the old pieces of colour)
+        const n = parts ? Math.round(6 + 3 * Math.min(3, s)) : Math.round(10 + 6 * Math.min(3, s));
         for (let i = 0; i < n; i++) {
             // (the head, the arms, the legs, pieces of the trunk: bigger cubes first)
-            const size = (i < 5 ? 0.42 : 0.16 + Math.random() * 0.22) * s;
+            const size = (parts ? 0.07 + Math.random() * 0.1 : i < 5 ? 0.42 : 0.16 + Math.random() * 0.22) * s;
             fx.debris?.spawn?.(p.x + (Math.random() - 0.5) * s, p.y + (Math.random() - 0.3) * s, p.z + (Math.random() - 0.5) * s,
                 (Math.random() - 0.5) * 14, 4 + Math.random() * 9, (Math.random() - 0.5) * 14, cols[i % cols.length], size, 4 + Math.random() * 2, { shrink: 0.05, fade: false, spin: 12 });
         }
@@ -541,7 +607,7 @@ export class StrongMagic {
                 if (this.auth) this._tickCreature(sender, m.tk, m.tid, dmg);
                 break;
             }
-            case 'burst': if (Array.isArray(m.p)) { this.burstLook(_v.fromArray(m.p), Math.min(4, +m.s || 1), String(m.pal)); this._vanish(m.k, m.id); } break;
+            case 'burst': if (Array.isArray(m.p)) { const bp = _v.fromArray(m.p).clone(), bs = Math.min(4, +m.s || 1), pal = String(m.pal); const parts = this.burstParts(m.k, this._findBody(m.k, m.id), bp, bs, pal); this.burstLook(bp, bs, pal, parts); this._vanish(m.k, m.id); } break;
             case 'dust': if (Array.isArray(m.p)) { this.dustLook(_v.fromArray(m.p), Math.min(12, +m.h || 2), Math.min(4, +m.r || 0.8)); this._vanish(m.k, m.id); } break;
             case 'terror': if (this.auth && Array.isArray(m.p)) this.terror(_v.fromArray(m.p), sender); break;
         }
