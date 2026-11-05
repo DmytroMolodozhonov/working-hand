@@ -3726,6 +3726,7 @@ export class Game {
         for (let m = 0; m < 10; m++) out.push({ ...rollWand(), model: m }); // (every shape of wand; a new wood's colour is made in play)
         out.push({ kind: 'wand', plain: true, model: 0, color: 0x8b5a2b }, { kind: 'weapon', type: 'sword' }, { kind: 'weapon', type: 'axe' }, spellScroll('Bombardo'));
         for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'magicPebble', 'gargoyleHead', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'canaryHide', 'taronAxe', 'taronIron', 'redStone', 'bone']) out.push({ kind });
+        for (const t of ['pitchfork', 'hoe', 'hammer', 'knife', 'bucket']) out.push({ kind: 'tool', tool: t }); // (a person's tool fallen from the hand)
         out.push({ kind: 'coins', magic: true }, newMagicBackpack(), { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
         for (const s of this.inventory?.slots || []) if (s) out.push(s);
         for (const s of this.inventory?.back || []) if (s) out.push(s);

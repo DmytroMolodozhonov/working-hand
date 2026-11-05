@@ -135,6 +135,7 @@ const GRIPPED = {
     magicPebble: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a smooth pebble cupped in the fingers)
     canaryHide: { axis: 'body', pose: 'block', at: [0.17, -0.214] }, // (a folded hide in the fingers)
     bone: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true }, // (a bone across the palm, like an arrow)
+    tool: { axis: 'y', handle: 0.1, pose: 'power', at: [0.13, -0.148] }, // (a person's pitchfork / hoe / hammer: the grip at the origin, along +Y — as in their hand)
     taronAxe: { axis: 'y', handle: 0.1, pose: 'power', at: [0.13, -0.148] }, // (a Taron's axe-hammer: held like Thor's hammer)
     taronIron: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
     redStone: { axis: 'body', pose: 'ball', at: [0.2, -0.272] },

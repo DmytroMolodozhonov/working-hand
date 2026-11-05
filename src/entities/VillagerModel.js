@@ -971,6 +971,22 @@ function wandBoxes(B, n) {
     else b(B, w * 0.6, 0.09, w * 0.6, 0, top, 0, wood);
 }
 
+/** The tools a person can drop as a thing of the world (Death.HELD_DROP 'tool'): the pitchfork, the hoe, the hammer, the kitchen knife, the bucket. */
+export const DROP_TOOLS = ['pitchfork', 'hoe', 'hammer', 'knife', 'bucket'];
+const _toolGeos = new Map(); // (one per kind of DROP_TOOLS: bounded)
+/** A person's tool as a thing on the ground / in the hero's hand: the very shape it had in the person's hand (the grip at the origin). */
+export function villagerToolModel(kind) {
+    const k = DROP_TOOLS.includes(kind) ? kind : 'pitchfork';
+    let geo = _toolGeos.get(k);
+    if (!geo) { geo = partGeometry(toolBoxes(k)); geo.userData.shared = true; _toolGeos.set(k, geo); }
+    MAT.userData.shared = true;
+    const g = new THREE.Group();
+    const m = new THREE.Mesh(geo, MAT);
+    m.castShadow = true;
+    g.add(m);
+    return g;
+}
+
 /** Tools: the grip is at the origin, the tool goes along +Y. */
 function toolBoxes(kind) {
     const B = [];

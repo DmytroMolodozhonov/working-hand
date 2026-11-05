@@ -1720,6 +1720,7 @@ export class LevitationMaxima {
             const { ck, c } = b;
             const Lv = c.lev;
             if (!Lv || !this._creature(ck, c.id)) { if (Lv) c.lev = null; L.bodies.splice(i, 1); continue; }
+            if (this.auth) g.death?.liftedDrop?.(c, Lv, dt); // (off its feet: what it held falls — Death.liftedDrop)
             const up = this.centre(ck, c, _v1);
             if (Lv.off) Lv.off.dp *= Math.exp(-dt * 2.5);
             const want = g.levitation?.holdPoint(Lv.by, Lv.side, Lv.hold, up, _v2, Lv.off, Lv.steady || (Lv.steady = {}), dt);

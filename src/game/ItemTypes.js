@@ -32,6 +32,7 @@ import { telewilpinLeafModel, carnivoreHeadItemModel } from '../fx/PlantModels.j
 import { brightCoreModel } from '../fx/BrightFlowerModel.js';
 import { canaryHideModel, boneModel, magicPebbleModel } from '../fx/CanaryModel.js';
 import { taronAxeItemModel, taronIronModel, redStoneModel } from '../fx/TaronModel.js';
+import { villagerToolModel } from '../entities/VillagerModel.js';
 import { gargoyleHeadModel } from '../fx/GargoyleHeadModel.js';
 import { spencerFeatherItem, beslanBundleItem } from '../fx/InvisibleModels.js';
 import * as THREE from 'three';
@@ -188,6 +189,7 @@ export const ITEM_INFO = {
     canaryHide: { name: 'Кожа канарика', icon: '🟫', weight: 0.5, stack: 10 },
     bone: { name: 'Кость', icon: '🦴', weight: 0.3, stack: 20 },
     // the Tarons' spoils (Taron.js)
+    tool: { name: 'Инструмент', icon: '🔱', weight: 3 }, // (a person's pitchfork, hoe, hammer, knife, bucket — dropped from the hand: Death.dropHeld)
     taronAxe: { name: 'Топор-молот Тарона', icon: '🪓', weight: 8 }, // (a huge two-handed axe-hammer: heavy, slow, a trophy)
     taronIron: { name: 'Тароново железо', icon: '⛓️', weight: 1.2, stack: 10 },
     redStone: { name: 'Красный камень', icon: '🔴', weight: 0.4, stack: 10 },
@@ -262,6 +264,7 @@ function baseValue(it) {
         case 'carnivoreHead': return 140 * (it.count || 1);
         case 'brightCore': return 180 * (it.count || 1);
         case 'canaryHide': return 20 * (it.count || 1);
+        case 'tool': return 6;
         case 'taronAxe': return 260;
         case 'taronIron': return 30 * (it.count || 1);
         case 'redStone': return 45 * (it.count || 1);
@@ -924,6 +927,7 @@ function describeItemBase(it) {
         case 'telewilpinLeaf': return { title: '🍁 Листок телевильпина', color: 0xff3a1c, lines: [`Листков: <b>${it.count || 1}</b>`, 'Красный светящийся листок с колючего цветка телевильпина', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
         case 'gargoyleHead': return { title: '🗿 Голова горгульи', color: 0xff6a2a, lines: ['Отбитая каменная голова горгульи: в глазницах ещё тлеет огонь', 'Если вы окажетесь в аду, положите её на метку, через которую пришли, — и врата откроются обратно на Землю'] };
         case 'magicPebble': return { title: '🔮 Волшебный камушек', color: 0xf0b25a, lines: [`Камушков: <b>${it.count || 1}</b>`, 'Гладкий тёмный камушек с янтарной руной, тёплый на ощупь. Его носят болотные карлики — канарики', 'Нужен для пентаграммы абсолютной устойчивости («Pentagranium Firmitas»): положите его на круг — при обряде он растворится светом'] };
+        case 'tool': { const T = { pitchfork: ['🔱 Вилы', 'Деревянные вилы с тремя железными зубьями — ими ворошат сено'], hoe: ['⛏️ Мотыга', 'Мотыга огородника: длинный черенок и железное лезвие'], hammer: ['🔨 Молоток', 'Тяжёлый молоток кузнеца'], knife: ['🔪 Кухонный нож', 'Широкий кухонный нож с деревянной ручкой на заклёпках'], bucket: ['🪣 Ведро', 'Деревянное ведро с железными обручами'] }[it.tool] || ['🔱 Инструмент', 'Инструмент жителя']; return { title: T[0], color: 0x9a7a4e, lines: [T[1], 'Выпал из рук жителя'] }; }
         case 'taronAxe': return { title: '🪓 Топор-молот Тарона', color: 0xb8523c, lines: ['Огромный двуручный топор: лезвие с одной стороны, молот с другой', 'Очень тяжёлый — с ним не побегаешь. Трофей тех, кто победил Тарона'] };
         case 'taronIron': return { title: '⛓️ Тароново железо', color: 0x7a6a58, lines: [`Кусков: <b>${it.count || 1}</b>`, 'Ржавое тяжёлое железо с доспехов Тарона'] };
         case 'redStone': return { title: '🔴 Красный камень', color: 0xc43a22, lines: [`Камней: <b>${it.count || 1}</b>`, 'Тёмно-красный камень с огненной жилой — будто остывшая лава'] };
@@ -1263,6 +1267,7 @@ function buildItemModel(it) {
         case 'carnivoreHead': return carnivoreHeadItemModel();
         case 'brightCore': return brightCoreModel();
         case 'canaryHide': return canaryHideModel();
+        case 'tool': return villagerToolModel(it.tool);
         case 'taronAxe': return taronAxeItemModel();
         case 'taronIron': return taronIronModel();
         case 'redStone': return redStoneModel();

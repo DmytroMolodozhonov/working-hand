@@ -123,7 +123,9 @@ export function lootOfVillager(role, { shield = false, coins = null, rank = null
  * a builder's hammer (the hammer item is the magic one), a basket, a pouch, a bucket, a paddle, a pistol.
  * The Ice Queen's Rod falls by her own death (IceQueen._die); a player's hands — playerDied (everything drops).
  */
-export const HELD_DROP = { wand: 'wand', sword: 'sword', bigsword: 'sword', rapier: 'sword', cutlass: 'sword', axe: 'axe', longbow: 'bow' };
+/** s a lifted creature flails before what it held falls from its hands (liftedDrop). */
+export const LIFT_DROP_T = 0.6;
+export const HELD_DROP = { wand: 'wand', sword: 'sword', bigsword: 'sword', rapier: 'sword', cutlass: 'sword', axe: 'axe', longbow: 'bow', pitchfork: 'tool', hoe: 'tool', hammer: 'tool', knife: 'tool', bucket: 'tool' }; // ('tool': a farmer's pitchfork, a smith's hammer… a thing of its own — ItemTypes 'tool')
 
 /** The thing that falls from creature `c`'s hand (its model's tool), or null. Never twice: knocked out already — nothing. */
 export function heldDrop(c) {
@@ -133,6 +135,7 @@ export function heldDrop(c) {
     if (what === 'wand') return WAND_TOOLS.has(kind) && !c.noWand ? { ...wizardWand(c) } : null;
     if (c.disarmed) return null; // (its sword knocked out by «Экспеллиармус» already lies somewhere)
     if (what === 'bow') return { kind: 'bow', uid: newUid(), type: 0, magic: false, bonus: 0, arrows: 6 };
+    if (what === 'tool') return c.toolGone ? null : { kind: 'tool', uid: newUid(), tool: kind };
     return { kind: 'weapon', type: what, magic: c.role === 'king', bonus: c.role === 'king' ? 25 : 0 };
 }
 
@@ -355,8 +358,24 @@ export class DeathSystem {
             this.dropItem(d, p, vel);
         }
         if (d.kind === 'weapon') c.disarmed = true;
+        if (d.kind === 'tool') c.toolGone = true; // (its pitchfork lies on the ground now: the hand stays empty — CastleLife sends it, 4)
         this._emptyHand(c);
         return d;
+    }
+
+    /**
+     * (authority) A living creature lifted off its feet by «Левиоса» / «Левиоса Максима»: after a moment of flailing (LIFT_DROP_T) its
+     * hands open and what it held falls — a farmer's pitchfork, a smith's hammer, a knight's sword (the author 05.11: «у фермера должна
+     * выпасть вила»). A wizard grips his wand (the lift is a duel of wills for him — Levitation), a dead body has dropped it already.
+     * `lev` is the creature's lift record (c.lev): it is marked so this happens once. → the dropped thing or null.
+     */
+    liftedDrop(c, lev, dt) {
+        if (!lev || lev.body || lev.shook || c.dead || c.isDead) return null;
+        lev.flail = (lev.flail || 0) + dt;
+        if (lev.flail < LIFT_DROP_T) return null;
+        lev.shook = true;
+        if (c.wizard || c.potionMaster || c.isWizard) return null;
+        return this.dropHeld(c);
     }
 
     /** The hand of a dead creature lets go (its model): the thing is on the ground (or never was one of the world's). */
