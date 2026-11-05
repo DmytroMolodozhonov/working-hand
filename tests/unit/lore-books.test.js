@@ -10,7 +10,8 @@ import { isDivine } from '../../src/game/ProtectionGods.js';
 import { howLearned } from '../../src/game/SpellBook.js';
 
 test('lore books: the author\'s seven, no spells, every picture painted, the text fits the pages', () => {
-    assert.deepEqual(LORE_BOOKS.map((b) => b.id), ['coprus', 'jovalilius', 'liliazina', 'gods', 'iceQueen', 'blackbeard', 'flyingMaxima', 'diabolos']);
+    // (почему длиннее: автор 05.11 добавил книги о драконах, о королях и тайную книгу о главе башни — она только у магов-одиночек)
+    assert.deepEqual(LORE_BOOKS.map((b) => b.id), ['coprus', 'jovalilius', 'liliazina', 'gods', 'iceQueen', 'blackbeard', 'dragons', 'kings', 'towerSecret', 'flyingMaxima', 'diabolos']);
     const measure = (font, s) => s.length * (font.includes('19px') ? 10 : 7.5); // (about a serif's width)
     for (const b of LORE_BOOKS) {
         const it = loreItem(b.id, 'u1');
@@ -37,11 +38,14 @@ test('lore books: on the desk of the one tower\'s library; a site gives its own 
         assert.equal(list.length, Math.min(w.lore.length, LORE_BOOKS.length), `seed ${seed}: a book on every stand`);
         for (const { at } of list) assert.ok(Math.hypot(at.x - w.x, at.z - w.z) < 15 && at.y > w.F + 5, 'inside the tower, on an upper floor');
     }
-    assert.deepEqual(loreForSite({ lore: [{ x: 1, y: 2, z: 3 }] }).map((b) => b.id), ['coprus']);
+    // (one stand: one book of the window by place — 05.11 the books are shared out among the libraries)
+    const one = loreForSite({ lore: [{ x: 1, y: 2, z: 3 }] });
+    assert.equal(one.length, 1);
+    assert.ok(LORE_BOOKS.some((b) => b.id === one[0].id && !b.secret));
     assert.deepEqual(loreForSite({}), []);
 });
 
-test('lore books: the god in chains reaches the libraries by place (7 stands, 8 books), no book twice', () => {
+test('lore books: every book reaches the libraries by place (7 stands, 10 books), no book twice; the secret one never', () => {
     const seen = new Set();
     for (let i = 0; i < 40; i++) {
         const spots = Array.from({ length: 7 }, () => ({ x: 0, y: 0, z: 0 }));
@@ -49,6 +53,7 @@ test('lore books: the god in chains reaches the libraries by place (7 stands, 8 
         assert.equal(ids.length, 7);
         assert.equal(new Set(ids).size, 7);
         if (ids.includes('diabolos')) seen.add(i);
+        assert.ok(!ids.includes('towerSecret'), 'the secret book is not on a library stand');
     }
     assert.ok(seen.size >= 20 && seen.size < 40, 'a part of the libraries has it: ' + seen.size);
     const book = LORE_BOOKS.find((b) => b.id === 'diabolos');

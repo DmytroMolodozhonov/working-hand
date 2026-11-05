@@ -50,6 +50,9 @@ const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _ch = new THREE.Vector
 
 /** (WizardFight._spellFor) a foe with a wand in his hand: how often each rank goes first for the wand («Экспеллиармус»), and how often a
  *  teacher / the master breaks it instead when the foe is very dangerous */
+/** (WizardFight._spellFor) the head of the tower's rage: below this share of health, this often a black curse */
+export const HEAD_RAGE = { HP: 0.4, P: 0.35 };
+const role0 = (v) => v.skillRole || v.role;
 export const DISARM = { FIRST: { student: 0.75, teacher: 0.6, master: 0.45 }, BREAK: 0.12 };
 
 export class WizardFight {
@@ -584,7 +587,10 @@ export class WizardFight {
         if (spell === 'LevitateDuel' || spell === 'AvadaKedavra') spell = 'Stupefy'; // (they don't lift a man to hold him)
         if (T.soft && spell === 'SapiraDuel') spell = v.role !== 'student' && Math.random() < 0.4 ? 'IceDuel' : 'Stupefy'; // (calm: only stun, freeze)
         if (T.heavy && (spell === 'Stupefy' || spell === 'Jolt') && Math.random() < T.heavy) spell = 'SapiraDuel';
-        if (T.avada && Math.random() < T.avada) spell = 'AvadaKedavra'; // (a mass murderer: they mean to kill)
+        // (the head of the tower in a real rage — hurt badly or facing a murderer — forgets his own ban: the black curses, «Тайна главы
+        //  башни» — LoreBooks.towerSecret; the author 05.11)
+        if (role0(v) === 'master' && !v.lesson && (v.hp < (v.maxHp || 100) * HEAD_RAGE.HP || T.avada) && Math.random() < HEAD_RAGE.P) spell = Math.random() < 0.5 ? 'AvadaKedavra' : 'SapiraDuel';
+        else if (T.avada && Math.random() < T.avada) spell = 'AvadaKedavra'; // (a mass murderer: they mean to kill)
         // (the author 05.11: «главная цель — обезоружить и забрать палочку»; a very dangerous one — now and then the wand is destroyed,
         //  by one who knows how: a teacher or the master, «Liquidation» in a duel crumbles what the hand holds — HeldBreak.js)
         else if (foe != null && this._foeArmed(foe)) {

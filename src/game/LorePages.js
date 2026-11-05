@@ -353,6 +353,73 @@ export const PICTURES = {
         x.strokeStyle = 'rgba(160,190,220,0.5)'; x.lineWidth = 2;
         for (let r = 0; r < 4; r++) { x.beginPath(); for (let i = 0; i <= 20; i++) { const px = X + i * 10, py = Y + 200 + r * 16 + Math.sin(i * 1.3 + r) * 3; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.stroke(); }
     },
+    /** A dragon over a burning town: dusk, roofs and a church tower, the flames under its wings, people running. */
+    dragonRaid(x, X, Y, W, H) {
+        x.fillStyle = grad(x, 0, Y, 0, Y + H, [[0, '#2a1a30'], [0.45, '#8a3a2a'], [0.7, '#e07a3a'], [1, '#3a1a10']]); x.fillRect(X, Y, W, H);
+        stars(x, X, Y, W, 60, 20, '#ffe8c8');
+        // the town: roofs, a church spire, windows lit
+        for (let i = 0; i < 7; i++) {
+            const hx = X + 6 + i * 28, hh = 34 + ((i * 37) % 22), hy = Y + H - 44 - hh * 0.4;
+            x.fillStyle = '#1a0e0a'; x.fillRect(hx, hy, 24, H - (hy - Y));
+            poly(x, [[hx - 3, hy], [hx + 12, hy - 16], [hx + 27, hy]], '#120806');
+            x.fillStyle = i % 2 ? '#ffb040' : '#ffd070'; x.fillRect(hx + 8, hy + 10, 6, 7);
+        }
+        x.fillStyle = '#140a08'; x.fillRect(X + 150, Y + 120, 16, 120); poly(x, [[X + 146, Y + 120], [X + 158, Y + 78], [X + 170, Y + 120]], '#140a08');
+        // the fire: tongues over the roofs
+        for (let i = 0; i < 9; i++) {
+            const fx = X + 14 + i * 21, fy = Y + H - 70 - (i % 3) * 8;
+            poly(x, [[fx - 8, fy + 20], [fx - 2, fy - 18 - (i % 2) * 10], [fx + 3, fy + 2], [fx + 8, fy - 12], [fx + 11, fy + 20]], i % 2 ? 'rgba(255,140,40,0.9)' : 'rgba(255,200,80,0.85)');
+        }
+        // the dragon: body, long neck, wings spread, tail, the breath of fire down
+        x.fillStyle = '#1a0806';
+        poly(x, [[X + 60, Y + 70], [X + 100, Y + 58], [X + 130, Y + 66], [X + 112, Y + 80], [X + 74, Y + 84]], '#1a0806');
+        poly(x, [[X + 100, Y + 62], [X + 70, Y + 14], [X + 40, Y + 30], [X + 18, Y + 20], [X + 46, Y + 54], [X + 84, Y + 70]], '#2a0c08');
+        poly(x, [[X + 110, Y + 64], [X + 150, Y + 10], [X + 176, Y + 24], [X + 196, Y + 14], [X + 168, Y + 52], [X + 124, Y + 72]], '#2a0c08');
+        x.strokeStyle = '#1a0806'; x.lineWidth = 7; x.beginPath(); x.moveTo(X + 128, Y + 68); x.quadraticCurveTo(X + 150, Y + 80, X + 160, Y + 96); x.stroke();
+        ell(x, X + 162, Y + 100, 8, 6, '#1a0806');
+        x.lineWidth = 5; x.beginPath(); x.moveTo(X + 62, Y + 74); x.quadraticCurveTo(X + 30, Y + 90, X + 12, Y + 80); x.stroke();
+        x.fillStyle = radial(x, X + 168, Y + 130, 50, [[0, 'rgba(255,240,160,0.95)'], [0.5, 'rgba(255,140,40,0.7)'], [1, 'rgba(255,80,20,0)']]);
+        poly(x, [[X + 164, Y + 104], [X + 150, Y + 170], [X + 196, Y + 170], [X + 172, Y + 104]], x.fillStyle);
+        // little people running away
+        for (let i = 0; i < 5; i++) { const px = X + 20 + i * 14; ell(x, px, Y + H - 22, 2.5, 3, '#0a0404'); x.fillStyle = '#0a0404'; x.fillRect(px - 1.5, Y + H - 19, 3, 9); }
+    },
+    /** A fat king on his throne among the gold; behind the window the people leave for their own free villages. */
+    kings(x, X, Y, W, H) {
+        x.fillStyle = grad(x, 0, Y, 0, Y + H, [[0, '#3a2014'], [1, '#160a06']]); x.fillRect(X, Y, W, H);
+        // the window: a road to free villages under the sky
+        x.fillStyle = grad(x, 0, Y + 20, 0, Y + 120, [[0, '#7ab0e0'], [1, '#d8e8c0']]); x.fillRect(X + 130, Y + 20, 58, 100);
+        poly(x, [[X + 130, Y + 120], [X + 188, Y + 120], [X + 188, Y + 96], [X + 160, Y + 90], [X + 130, Y + 100]], '#5a8a3a');
+        x.strokeStyle = '#c8b080'; x.lineWidth = 3; x.beginPath(); x.moveTo(X + 140, Y + 120); x.lineTo(X + 168, Y + 92); x.stroke();
+        for (let i = 0; i < 4; i++) { const px = X + 142 + i * 7, py = Y + 114 - i * 6; x.fillStyle = '#2a2a2a'; x.fillRect(px, py, 2, 5); }
+        x.fillStyle = '#5a3a20'; x.fillRect(X + 128, Y + 18, 62, 4); x.fillRect(X + 157, Y + 20, 3, 100);
+        // the throne and the king — round as his money bags
+        poly(x, [[X + 30, Y + 60], [X + 110, Y + 60], [X + 104, Y + 230], [X + 36, Y + 230]], '#6a1a1a');
+        x.strokeStyle = '#d4a840'; x.lineWidth = 3; x.strokeRect(X + 34, Y + 64, 72, 160);
+        ell(x, X + 70, Y + 170, 40, 46, '#8a1a2a'); // (the belly in a red robe)
+        x.strokeStyle = '#e8c860'; x.lineWidth = 3; x.beginPath(); x.ellipse(X + 70, Y + 170, 40, 46, 0, 0, Math.PI * 2); x.stroke();
+        bust(x, X + 70, Y + 110, 0.62, { skin: '#e8b090', robe: '#8a1a2a', trim: '#e8c860', hair: '#a07040', beard: '#a07040', beardLen: 22, eyes: '#3a2a1a', proud: true, smile: true });
+        poly(x, [[X + 52, Y + 92], [X + 56, Y + 76], [X + 63, Y + 86], [X + 70, Y + 72], [X + 77, Y + 86], [X + 84, Y + 76], [X + 88, Y + 92]], '#f0c840');
+        // gold heaped at his feet
+        for (let i = 0; i < 14; i++) ell(x, X + 20 + (i * 17) % 110, Y + 236 - (i % 4) * 4, 7, 4, i % 2 ? '#f0c840' : '#c8a030');
+        ell(x, X + 120, Y + 222, 12, 14, '#7a5a2a'); x.fillStyle = '#f0c840'; x.fillRect(X + 116, Y + 206, 8, 4);
+    },
+    /** The head of the tower: half of his face in the light of the tower, half in a shadow where black magic smokes. */
+    towerHead(x, X, Y, W, H) {
+        x.fillStyle = grad(x, X, 0, X + W, 0, [[0, '#2a3a6a'], [0.5, '#1a1a2a'], [1, '#0a0408']]); x.fillRect(X, Y, W, H);
+        stars(x, X, Y, W * 0.5, H * 0.6, 26, '#e8f0ff');
+        bust(x, X + 100, Y + 120, 0.95, { skin: '#e0c0a0', robe: '#2a3a8a', trim: '#e8d080', hair: '#d8d8e0', beard: '#e8e8f0', beardLen: 46, hat: 'wizard', hatCol: '#2a3a8a', eyes: '#2a3a6a', proud: true });
+        // the shadow over his right half, and in it the dark: red eye, black smoke
+        x.fillStyle = 'rgba(8,2,6,0.72)'; x.fillRect(X + 100, Y, W - 100, H);
+        ell(x, X + 111, Y + 116, 3, 2.6, '#ff2a2a');
+        x.fillStyle = radial(x, X + 111, Y + 116, 14, [[0, 'rgba(255,40,40,0.6)'], [1, 'rgba(255,40,40,0)']]); x.fillRect(X + 96, Y + 100, 30, 30);
+        x.strokeStyle = 'rgba(60,20,40,0.85)'; x.lineWidth = 5;
+        for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(X + 130 + i * 14, Y + 250); x.bezierCurveTo(X + 110 + i * 18, Y + 190, X + 170 + i * 6, Y + 160, X + 140 + i * 10, Y + 90); x.stroke(); }
+        // in his light hand: the wand with a star; in the dark one: a black pentagram's point
+        x.strokeStyle = '#8a6a3a'; x.lineWidth = 3; x.beginPath(); x.moveTo(X + 30, Y + 230); x.lineTo(X + 52, Y + 170); x.stroke();
+        x.fillStyle = '#fff2a0'; star(x, X + 53, Y + 166, 7, 3, 5);
+        x.strokeStyle = '#8a0f24'; x.lineWidth = 2;
+        x.beginPath(); for (let i = 0; i <= 5; i++) { const a = -Math.PI / 2 + i * 4 * Math.PI / 5, px = X + 168 + Math.cos(a) * 16, py = Y + 222 + Math.sin(a) * 16; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.stroke();
+    },
     /** Flying Maxima: a wizard flying up through space, a golden trail, the planets below. */
     flyingMaxima(x, X, Y, W, H) {
         x.fillStyle = grad(x, 0, Y, 0, Y + H, [[0, '#02030a'], [0.7, '#141a40'], [1, '#2a5a9a']]); x.fillRect(X, Y, W, H);

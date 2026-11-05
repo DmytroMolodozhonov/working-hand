@@ -120,6 +120,55 @@ export const LORE_BOOKS = [
         ],
     },
     {
+        id: 'dragons',
+        title: 'Драконы',
+        sub: 'Огонь над крышами',
+        cover: 0x5a1a10, trim: 0xe8a040,
+        pages: [
+            { pic: 'dragonRaid', caption: 'Налёт на город' },
+            { h: 'Хозяева гор' },
+            { p: 'Драконы живут в логовах высоко в горах и спят на своём золоте. Пока их не тревожат, они облетают свои земли и никого не трогают.' },
+            { p: 'Но обычные города их боятся. Когда дракону не хватает добычи, он прилетает к людям: уносит скот, жжёт амбары и крыши, а потом улетает в горы.' },
+            { h: 'Налёты на замки' },
+            { p: 'Изредка дракон нападает и на замок. Ему нужен не человек, а сам замок: золото короля, его сокровищница, его стены, которые так хорошо горят.' },
+            { p: 'Рыцари выходят на стены, лучники стреляют, но против дракона стрелы почти бесполезны. Обычно замок просто ждёт, пока дракон насытится и улетит.' },
+            { p: 'Старые волшебники говорят: дракона нельзя заставить служить. Его можно только успокоить — и только тому, на кого он ещё не зол.' },
+        ],
+    },
+    {
+        id: 'kings',
+        title: 'Короли и вольные земли',
+        sub: 'Почему мир разделился',
+        cover: 0x6a1a2a, trim: 0xf0c840,
+        pages: [
+            { pic: 'kings', caption: 'Король среди золота' },
+            { h: 'Сытые короли' },
+            { p: 'Когда-то все земли подчинялись королям. Короли собирали налоги, держали рыцарей и строили замки.' },
+            { p: 'Но с годами короли зажрались. Налоги росли, золото копилось в сокровищницах, а простым людям доставалось всё меньше.' },
+            { h: 'Уход волшебников' },
+            { p: 'Первыми ушли волшебники. Им не нравилось, что король распоряжается магией, которой не владеет. Они построили свою башню и свои города, где правят сами.' },
+            { p: 'За ними ушли простые люди: фермеры, кузнецы, пекари. Они поставили свои деревни без стен и без королей — вольные поселения.' },
+            { p: 'Короли до сих пор считают эти земли своими. Но рыцарей мало, а земель много, и вольные люди живут как хотят.' },
+        ],
+    },
+    {
+        id: 'towerSecret',
+        title: 'Тайна главы башни',
+        sub: 'Записано теми, кто ушёл из башни',
+        cover: 0x140a14, trim: 0x8a0f24,
+        secret: true, // (not in the libraries: only in the huts of the lone mages — Items.lootChest; the tower would burn it)
+        pages: [
+            { pic: 'towerHead', caption: 'Глава башни' },
+            { h: 'Лицемер' },
+            { p: 'Глава башни волшебников учит всех, что чёрная магия — зло. Он запрещает её ученикам и наказывает тех, кого поймает.' },
+            { p: 'Мы, ушедшие из башни, знаем правду. Глава сам владеет чёрной магией — и владеет ею лучше всех.' },
+            { h: 'Когда он в гневе' },
+            { p: 'Пока он спокоен, он колдует, как все учителя. Но если довести его до настоящего гнева, он забывает о своих же запретах.' },
+            { p: 'Тогда в его руке оживает то, чему он никогда не учит: проклятия, которые не прощают.' },
+            { p: 'Не верьте его доброму лицу. И не доводите его до ярости.' },
+        ],
+    },
+    {
         id: 'flyingMaxima',
         title: 'Flying Maxima',
         sub: 'Заклинание богов',
@@ -161,7 +210,7 @@ export const LORE_BOOKS = [
 ];
 
 export const LORE_BY_ID = new Map(LORE_BOOKS.map((b) => [b.id, b]));
-export const LORE_IDS = LORE_BOOKS.map((b) => b.id);
+export const LORE_IDS = LORE_BOOKS.filter((b) => !b.secret).map((b) => b.id); // (the secret ones: not on the libraries' stands)
 
 /** The book an item is (null: not a book of history). */
 export const loreOf = (item) => (item?.kind === 'book' && item.lore ? LORE_BY_ID.get(item.lore) || null : null);
@@ -178,13 +227,11 @@ export function loreItem(id, uid) {
 export function loreForSite(def) {
     const spots = def?.lore || [];
     let ids = def?.loreBooks || LORE_IDS;
-    // a library with fewer stands than there are books: the newest book (the god in chains) takes the place of
-    // one of the older ones, which one — by the site's own coordinates (so the books are spread over the libraries)
+    // a library with fewer stands than there are books (7 stands, 10 books): a window of the list, where it starts — by the site's own
+    // coordinates (every book is in some library of the world; the oldest ones and the newest ones alike)
     if (!def?.loreBooks && spots.length && spots.length < ids.length) {
-        const old = ids.filter((i) => i !== ROTATING);
-        const h = (Math.abs(Math.floor((def.x || 0) * 73856093) ^ Math.floor((def.z || 0) * 19349663)) + 3) % LORE_IDS.length;
-        ids = old.slice(0, spots.length);
-        if (h < ids.length) ids[h] = ROTATING;
+        const h = (Math.abs(Math.floor((def.x || 0) * 73856093) ^ Math.floor((def.z || 0) * 19349663)) + 3) % ids.length;
+        ids = Array.from({ length: spots.length }, (_, k) => ids[(h + k) % ids.length]);
     }
     const out = [];
     for (let i = 0; i < spots.length && i < ids.length; i++) if (LORE_BY_ID.has(ids[i])) out.push({ id: ids[i], at: spots[i] });

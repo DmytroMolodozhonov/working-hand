@@ -20,6 +20,7 @@
  * sees what the others hold.
  */
 
+import { loreItem } from './LoreBooks.js';
 import { enchantAdd } from './Enchant.js';
 import * as THREE from 'three';
 import { darkMageHead, HEAD } from './HellRules.js';
@@ -83,6 +84,8 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 /** (Items._nearMouth) the food just taken from the mouth still never falls: the hand comes down with relaxed fingers */
 const MOUTH_HOLD_MS = 700;
+/** (Items.lootChest) how often a lone mage's chest keeps «Тайна главы башни» */
+const SECRET_BOOK_CHANCE = 0.3;
 /** (Items: the leading hand's wand swung to throw) the hint «put it in the pocket, take it with the other hand» at most this often (game ms) */
 const WAND_TRY_HINT_MS = 5 * 60 * 1000;
 const _n = new THREE.Vector3();
@@ -283,6 +286,8 @@ export class ItemSystem {
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)
         const items = (bossItems || (chest?.dungeonFlavor ? rollDungeonLoot(rng, chest.dungeonFlavor, want, chest.dungeonSize) : chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house?.flavor ? rollStoreLoot(rng, house.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
         freshScrolls(items, rng); // (a scroll the opener already knows never comes again)
+        // (the lone mages keep what the tower would burn: «Тайна главы башни» — sometimes in a hermit's chest; LoreBooks.towerSecret)
+        if ((house?.def?.type === 'magehut' || (house?.def?.kind === 'hamlet' && house.def.mage)) && rng() < SECRET_BOOK_CHANCE) items.push(loreItem('towerSecret', newUid()));
         { const d = house?.def; if (d?.kind === 'hamlet' && d.people?.length === 1 && darkMageHead(darkOfEntry(d, d.people[0], d.id + ':0') > 0, rng())) items.push({ kind: HEAD.KIND, uid: newUid() }); } // (a lone black mage's chest: 0.5 % a gargoyle's head — HellRules.darkMageHead)
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
