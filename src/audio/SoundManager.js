@@ -12,6 +12,7 @@
  */
 
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
+import { MusicDirector } from './MusicDirector.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
 import { synthSwan, SWAN_SOUNDS } from './SwanSounds.js';
 import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
@@ -40,9 +41,8 @@ const FILES = [
     { key: 'ice', path: 'sounds/Заморозка.wav' },
     { key: 'sand', path: 'sounds/Рассыпаться в песок.wav' },
     { key: 'shatter', path: 'sounds/Разбитие зомби.wav' },
-    { key: 'm1', path: 'music/Музыка1.mp3' },
-    { key: 'm2', path: 'music/Музыка2.mp3' },
-    { key: 'battle', path: 'music/Музыка для начала битвы.mp3' },
+    // (the old music — music/Музыка1.mp3, Музыка2.mp3, «для начала битвы» — is off: the author 05.11 — the game's own forty tunes play now,
+    //  MusicDirector.js / MusicCatalog.js; the files stay in the folder, not loaded)
 ];
 
 /** Runs a sound-making generator to its end (when it is needed now). */
@@ -66,6 +66,7 @@ export class SoundManager {
         this._fromCache = new Set(); // (and the ones read back from it)
         this.sounds = { death: null, thunder: null, inferno: null, sapira: null, hits: [], ice: null, sand: null, shatter: null };
         this.music = { ambient: [], battle: null, current: null, currentIndex: 0, state: 'idle', volume: 0.2 };
+        this.musicDirector = new MusicDirector(this); // (the game's own music: what plays when — MusicDirector.js)
         this.battleTimer = 0;
         this.isBattleMode = false;
         this.ambientPool = [];
@@ -267,6 +268,30 @@ export class SoundManager {
         const gain = val / 100;
         this.music.volume = gain;
         if (this.music.current) this.music.current.setVolume(gain);
+        if (this._musicBus && !this._spaceQuiet) this._musicBus.gain.setTargetAtTime(gain, this.context.currentTime, 0.05);
+    }
+
+    /** The bus every tune of the game's music goes through (its gain: the «музыка» slider; space — quiet). */
+    musicBus() {
+        if (!this.context) return null;
+        if (!this._musicBus) {
+            this._musicBus = this.context.createGain();
+            this._musicBus.gain.value = this.music.volume;
+            this._musicBus.connect(this.audioListener.getInput());
+        }
+        return this._musicBus;
+    }
+
+    /** A tune of the game's music on the music bus (MusicDirector): its source and its own gain (for the crossfades); not started. */
+    musicSource(buffer, loop = false) {
+        const bus = this.musicBus();
+        if (!bus || !buffer) return null;
+        const src = this.context.createBufferSource();
+        src.buffer = buffer;
+        src.loop = !!loop;
+        const gain = this.context.createGain();
+        src.connect(gain); gain.connect(bus);
+        return { src, gain };
     }
 
     /** Volume of the spell sounds (0..100), separate from zombies and music. */
@@ -291,6 +316,7 @@ export class SoundManager {
 
     // ----------------------------------------------------------------- music
     playAmbientMusic() {
+        this.musicDirector?.start(); // (the game's own music: MusicDirector)
         if (!this.enabled || !this.music.ambient.length) return;
         this.startTrack(this.music.ambient[this.music.currentIndex % this.music.ambient.length], 'ambient');
     }
@@ -356,6 +382,7 @@ export class SoundManager {
     }
 
     stopAll() {
+        this.musicDirector?.stop();
         if (this.music.current && this.music.current.isPlaying) this.music.current.stop();
         this.music.state = 'idle';
         for (const item of this.ambientPool) if (item.sound.isPlaying) item.sound.stop();
@@ -804,6 +831,8 @@ export class SoundManager {
     /** The silence of space: the music fades away there (and comes back off it). */
     spaceQuiet(on) {
         if (this.context && this.loaded) this._loop('space', on && this.enabled ? 'spaceAmb' : null, 0.5); // (space is not dead silent: a far quiet pad — SpellMusic.spaceAmb)
+        this._spaceQuiet = !!on;
+        if (this.context && this._musicBus) { const t = this.context.currentTime, g = this._musicBus.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(on ? 0 : this.music.volume, t + (on ? 2.5 : 4)); }
         const cur = this.music?.current;
         if (!this.context || !cur?.gain) return;
         const t = this.context.currentTime, g = cur.gain.gain;

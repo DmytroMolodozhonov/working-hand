@@ -133,6 +133,7 @@ import { sampleIceModels, iceQueenModel, snowmanModel, iceMonsterModel } from '.
 import { Dragons } from './Dragons.js';
 import { DragonRide } from './DragonRide.js';
 import { DragonForm } from './DragonForm.js';
+import { musicPlace } from '../audio/MusicDirector.js';
 import { HeroWings } from './HeroWings.js';
 import { WingFlight } from './WingFlight.js';
 import { ImperiusControl } from './ImperiusControl.js';
@@ -4259,9 +4260,11 @@ export class Game {
             const houses = me ? [...hm.list.values()].map((h) => ({ x: h.x, z: h.z, mine: h.owner === me })) : [];
             this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles, cave, houses);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
+            if (this.sound?.musicDirector) this._musicPlace = musicPlace(this); // (where the hero is for the music: battle, hell, cave, the towns… — MusicDirector)
         }
 
         this.quality.update(deltaTime);
+        if (this.sound?.loaded) this.sound.musicDirector?.update(dt, this._musicPlace ?? null); // (the game's own music: the place → the tune, crossfaded — MusicDirector)
         const logic = performance.now() - t0;
         this.stats.logicMs = (this.stats.logicMs || logic) * 0.95 + logic * 0.05;
         if (logic > (this.stats.worstLogicMs || 0)) this.stats.worstLogicMs = logic;
