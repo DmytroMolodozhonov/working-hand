@@ -22,7 +22,7 @@ import { BODIES } from './ImperiusBodies.js';
 /** What the guard does with a creature of this kind in its castle (pure; tests/unit/imperius.test.js). */
 export const GUARD_REACT = {
     villager: 'person', knight: 'person', wizard: 'person', sailor: 'person', canary: 'person', // (a canary is no castle's own: a guard's «уходи» is a person's)
-    pig: 'small', sheep: 'small', swan: 'small', magicSwan: 'small', runbook: 'small', owl: 'small', bookbird: 'small', phoenix: 'small',
+    pig: 'small', sheep: 'small', swan: 'small', magicSwan: 'small', shark: 'big', dolphin: 'big', glowfin: 'small', runbook: 'small', owl: 'small', bookbird: 'small', phoenix: 'small',
     cow: 'big', horse: 'big', pegasus: 'big',
     // (the castle's own fight with these — never a guard's «уходи»)
     zombie: null, dragon: null, spider: null, tree: null, gargoyle: null, // (a gargoyle: the knights fight it with the sword — Gargoyles.knightStep)

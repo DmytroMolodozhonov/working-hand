@@ -29,7 +29,7 @@ export const CROWD = {
 /** Body radius of a kind (m): the size others keep clear of. */
 export const BODY_R = {
     man: 0.5, knight: 0.7, player: 0.6, zombie: 0.5, skeleton: 0.5, servant: 0.5,
-    pig: 0.6, sheep: 0.7, swan: 0.7, cow: 1.0, horse: 1.1, carriage: 2.0, spider: 2.4, dragon: 3.5, tree: 1.0,
+    pig: 0.6, sheep: 0.7, swan: 0.7, shark: 1.1, dolphin: 0.9, glowfin: 0.6, cow: 1.0, horse: 1.1, carriage: 2.0, spider: 2.4, dragon: 3.5, tree: 1.0,
     snowman: 0.85, iceQueen: 1.0, iceMonster: 1.6, // (the Ice Castle: IceQueen.js)
     plant: 1.1, // (telewilpins and carnivorous heads: Plants.js — set by the source)
     owl: 0.3, // (a clever owl hopping on the ground: Owls.js)

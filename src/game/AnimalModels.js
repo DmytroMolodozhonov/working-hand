@@ -24,6 +24,7 @@
 import * as THREE from 'three';
 import { runningBookModel } from './RunningBook.js';
 import { swanModel } from './SwanModel.js';
+import { seaModel } from './SeaModels.js';
 import { bakeRenderer, bakeTarget, runPasses, bakeFailed } from '../core/GpuTexture.js';
 
 // ------------------------------------------------------------ materials
@@ -1074,6 +1075,7 @@ export const MODEL_KIT = { sweep, keys, v3, mesh, blob, group, leg, finish, cach
 /** A new model of an animal: 'cow' | 'pig' | 'sheep' | 'horse' | 'swan' (horse colour optional; a swan's: 1 plain, 2 magic). */
 export function animalModel(type, color) {
     if (type === 'swan') return swanModel(color);
+    if (type === 'shark' || type === 'dolphin' || type === 'glowfin') return seaModel(type); // (the sea's creatures: SeaModels.js)
     if (type === 'runbook') return runningBookModel(color ?? undefined); // (the rare running book)
     if (type === 'cow') return cow(color); // (color: the look, 1…4)
     if (type === 'pig') return pig(color); // (color: the look, 1…4)

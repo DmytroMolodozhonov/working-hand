@@ -72,9 +72,9 @@ export const GRAB_CRIES = {
 };
 
 /** Вес тела, кг (бросок, удар). */
-export const BODY_KG = { villager: 75, knight: 110, king: 95, wizard: 70, zombie: 70, sailor: 80, skeleton: 30, blackbeard: 95, player: 80, cow: 600, bull: 700, horse: 500, pig: 120, sheep: 70, ram: 85, runbook: 4, swan: 12 };
+export const BODY_KG = { villager: 75, knight: 110, king: 95, wizard: 70, zombie: 70, sailor: 80, skeleton: 30, blackbeard: 95, player: 80, cow: 600, bull: 700, horse: 500, pig: 120, sheep: 70, ram: 85, runbook: 4, swan: 12, shark: 400, dolphin: 250, glowfin: 40 };
 /** Самое длинное в теле, м (помещается ли в кулак — FIT_MAX). */
-export const BODY_LEN = { villager: 3.5, knight: 3.6, king: 3.6, wizard: 3.5, zombie: 3.5, sailor: 3.5, skeleton: 3.4, blackbeard: 3.6, player: 3.5, cow: 4.2, bull: 4.4, horse: 4.4, pig: 2.6, sheep: 2.2, ram: 2.3, runbook: 0.8, swan: 2.7 };
+export const BODY_LEN = { villager: 3.5, knight: 3.6, king: 3.6, wizard: 3.5, zombie: 3.5, sailor: 3.5, skeleton: 3.4, blackbeard: 3.6, player: 3.5, cow: 4.2, bull: 4.4, horse: 4.4, pig: 2.6, sheep: 2.2, ram: 2.3, runbook: 0.8, swan: 2.7, shark: 6, dolphin: 4.6, glowfin: 3.6 };
 
 /**
  * Кто и что — лапой монстра (CLAUDE.md: «кто/что × как действует»). does: 'grab' — можно схватить, держать, давить, бросить;

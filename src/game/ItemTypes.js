@@ -41,6 +41,7 @@ import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_T
 import { crystalItemModel } from './CrystalModel.js';
 import { pearGeometry } from './AppleTrees.js';
 import { swanWingsItemModel } from './SwanModel.js';
+import { glowfinTailItemModel } from './SeaModels.js';
 import { FLORA_ITEMS, FLORA_ITEM_TEXT, FLORA_OF_ITEM } from './MagicFlora.js';
 import { floraItemModel } from '../fx/FloraModels.js';
 import { pouchModel } from './PouchModel.js';
@@ -117,8 +118,8 @@ const SPELL_LABEL = SPELL_RU;
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
 
 /** Raw meat by the animal it came from (HP when eaten raw); roasted on a fire it gives twice as much. */
-export const MEAT_HP = { cow: 8, horse: 8, pig: 7, sheep: 6, ram: 6, bull: 9, minotaur: 10, pegasus: 9, swan: 5 };
-export const MEAT_RU = { cow: 'говядина', horse: 'конина', pig: 'свинина', sheep: 'баранина', ram: 'баранина', bull: 'говядина', minotaur: 'мясо минотавра', pegasus: 'мясо пегаса', swan: 'мясо лебедя' };
+export const MEAT_HP = { cow: 8, horse: 8, pig: 7, sheep: 6, ram: 6, bull: 9, minotaur: 10, pegasus: 9, swan: 5, shark: 8, dolphin: 7, glowfin: 4 };
+export const MEAT_RU = { cow: 'говядина', horse: 'конина', pig: 'свинина', sheep: 'баранина', ram: 'баранина', bull: 'говядина', minotaur: 'мясо минотавра', pegasus: 'мясо пегаса', swan: 'мясо лебедя' , shark: 'мясо акулы', dolphin: 'мясо дельфина', glowfin: 'мясо светлохвоста' };
 /** How much health this food gives (golden apple 10, apple 3, raw meat 5–10 by the animal, roasted ×2, the rest its own `heal`). */
 export function foodHeal(it) {
     if (!it) return 0;
@@ -173,7 +174,8 @@ export const ITEM_INFO = {
     // the phoenix (Phoenixes.js): what it leaves when it is killed — for potions later (no effect yet)
     phoenixFeather: { name: 'Перо феникса', icon: '🪶', weight: 0.05, stack: 10 },
     swanWings: { name: 'Крылья лебедя', icon: '🦢', weight: 0.6, stack: 4 }, // (off a plain swan of the lakes: SwanLife)
-    magicSwanWings: { name: 'Магические крылья лебедя', icon: '🦢', weight: 0.6, stack: 4 }, // (off a magic swan: the potion of wings wants them — Potions 'wings')
+    magicSwanWings: { name: 'Магические крылья лебедя', icon: '🦢', weight: 0.6, stack: 4 },
+    glowfinTail: { name: 'Хвост светлохвоста', icon: '🐟', weight: 0.5, stack: 4 }, // (off the magic fish of the deep: the potion of the mermaid wants it — SeaLife.died) // (off a magic swan: the potion of wings wants them — Potions 'wings')
     // the clever owl (Owls.js): what it leaves when a scroll's spell kills it — just a thing for now (the author: for potions later)
     owlFeather: { name: 'Перо совы', icon: '🪶', weight: 0.03, stack: 10 },
     // the plant creatures (Plants.js, PlantLife.js): what a broken telewilpin / a killed carnivorous head leaves — for potions later (no use yet)
@@ -251,6 +253,7 @@ function baseValue(it) {
         case 'phoenixFeather': return 250 * (it.count || 1);
         case 'swanWings': return 20 * (it.count || 1);
         case 'magicSwanWings': return 300 * (it.count || 1);
+        case 'glowfinTail': return 350 * (it.count || 1);
         case 'telewilpinLeaf': return 60 * (it.count || 1);
         case 'spencerFeather': return 220 * (it.count || 1);
         case 'beslanGrass': return 45 * (it.count || 1);
@@ -888,6 +891,7 @@ function describeItemBase(it) {
         case 'brightCore': return { title: '🔥 Сердцевина Ярколета', color: 0xffa21f, lines: [`Сердцевин: <b>${it.count || 1}</b>`, 'Тёплая светящаяся сердцевина огненного цветка Ярколето: внутри ещё живёт огонь', 'Её можно продать на рынке. Позже из неё будут варить зелья — храните про запас'] };
         case 'carnivoreHead': return { title: '🌿 Головка плотоядной', color: 0x6fb83a, lines: [`Головок: <b>${it.count || 1}</b>`, 'Оторванная ловушка-пасть плотоядного растения: зубчики, жилки, липкая слизь', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
         case 'swanWings': return { title: '🦢 Крылья лебедя', color: 0xf4f2ea, lines: [`Пар: <b>${it.count || 1}</b>`, 'Белые крылья обычного лебедя с озера', 'Для зелья крыльев не годятся — нужны магические'] };
+        case 'glowfinTail': return { title: '🐟 Хвост светлохвоста', color: 0x7fe6ff, lines: [`Штук: <b>${it.count || 1}</b>`, 'Прозрачные плавники ещё светятся — с магической рыбы глубин', 'Бросьте в кипящий котёл вместе с грушей Баксади: выйдет зелье русалки'] };
         case 'magicSwanWings': return { title: '🦢 Магические крылья лебедя', color: 0xbfdcff, lines: [`Пар: <b>${it.count || 1}</b>`, 'Перламутровые, светятся изнутри — с магического лебедя', 'Бросьте в кипящий котёл вместе с золотым яблоком: выйдет зелье крыльев'] };
         case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Ингредиент зелий: светлого ума и снятия проклятия тёмного мага'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
@@ -1222,7 +1226,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { swanWings: 2, magicSwanWings: 2, gargoyleHead: 2, iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, taronAxe: 1.6, taronIron: 2, redStone: 2.2, spencerFeather: 2, beslanGrass: 2 };
+export const ITEM_SCALE = { swanWings: 2, magicSwanWings: 2, glowfinTail: 1.6, gargoyleHead: 2, iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, taronAxe: 1.6, taronIron: 2, redStone: 2.2, spencerFeather: 2, beslanGrass: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1263,6 +1267,7 @@ function buildItemModel(it) {
         case 'web': return webModel();
         case 'glass': return glassModel();
         case 'phoenixFeather': return phoenixFeatherModel();
+        case 'glowfinTail': return glowfinTailItemModel();
         case 'swanWings': return swanWingsItemModel(false);
         case 'magicSwanWings': return swanWingsItemModel(true);
         case 'telewilpinLeaf': return telewilpinLeafModel();

@@ -216,7 +216,8 @@ export const CREATURE_BODY = {
     zombie: { mass: 1 },
     person: { mass: 1 }, knight: { mass: 1.4 }, king: { mass: 1.3 }, wizard: { mass: 1 },
     cow: { mass: 2.2, quad: true }, horse: { mass: 2.4, quad: true }, pig: { mass: 1.1, quad: true }, sheep: { mass: 1, quad: true },
-    swan: { mass: 0.6 }, // (a big bird ~12 kg: a gust and a blast throw it far — SwanLife)
+    swan: { mass: 0.6 },
+    shark: { mass: 3.5 }, dolphin: { mass: 2.6 }, glowfin: { mass: 0.9 }, // (the sea's creatures: heavy in the water — SeaLife) // (a big bird ~12 kg: a gust and a blast throw it far — SwanLife)
     tree: { mass: 3.5 },
     phoenix: { mass: 0.4 }, // (a bird half a hero tall, hollow bones: a gust throws it far)
     gargoyle: { mass: 1.6 }, // (stone, a little smaller than a hero but heavier than a man; held up by wings: it reels and is thrown aside, never falls over — Gargoyles.js)

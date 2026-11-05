@@ -125,6 +125,10 @@ export const IMPERIUS_NO = {
     brightflower: { ru: 'Ярколето', why: 'Ярколето — растение: у цветка нет разума, в который можно вселиться (даже «Империус Максима» его не берёт)' },
     telewilpin: { ru: 'телевильпин', why: 'Телевильпин — растение: у цветка нет разума, в который можно вселиться' },
     carnivore: { ru: 'плотоядная голова', why: 'Плотоядная голова — растение: в ней нет разума, только голод' },
+    // (the sea's creatures — SeaLife.js: the mind could go in, but nobody can steer a body under the water with arms and legs that are not there)
+    shark: { ru: 'акула', icon: '🦈', why: 'В акулу не вселиться: её тело создано для воды, им не управлять руками и ногами человека' },
+    dolphin: { ru: 'дельфин', icon: '🐬', why: 'В дельфина не вселиться: его тело создано для воды, им не управлять руками и ногами человека' },
+    glowfin: { ru: 'светлохвост', icon: '🐟', why: 'В светлохвоста не вселиться: магия рыбы глубин закрывает его разум' },
     ghost: { ru: 'призрак', icon: '👻', why: 'В призрака нельзя вселиться: у него нет тела и своей воли — он лишь морок замка призраков (не действует даже «Империус Максима»)' },
 };
 export function canTake(kind, maxima, ctx = {}) {
@@ -202,6 +206,7 @@ export function kindOf(sys, c = {}) {
             if (c.pegasus) return 'pegasus';
             if (c.type === 'swan') return c.color === 2 ? 'magicSwan' : 'swan';
             if (c.type === 'runbook') return 'runbook';
+            if (c.type === 'shark' || c.type === 'dolphin' || c.type === 'glowfin') return c.type; // (IMPERIUS_NO: not taken)
             if (c.form) return 'guardBeast';
             return IMPERIUS_TARGETS[c.type] ? c.type : 'cow';
         case 's': return c.role === 'blackbeard' ? 'blackbeard' : c.role === 'skeleton' ? 'pirateSkeleton' : 'sailor';
