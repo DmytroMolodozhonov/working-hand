@@ -27,13 +27,13 @@ function featherGeo() {
             const cam = -0.06 * v * v + 0.05 * Math.abs(u) * (1 - v * 0.5) * -1; // (the vane dips toward its rims, the tip droops)
             pos.push(x, cam * 0.5, v);
             // colour: base white-cream; the barbs — diagonal stripes; the shaft — a warm grey line at u≈0; the rim darker, the tip softer; the root cream (down)
-            const barb = 0.5 + 0.5 * Math.sin(v * 46 + Math.abs(u) * 9);
-            let k = 0.955 + 0.035 * barb;
+            const barb = 0.5 + 0.5 * Math.sin(v * 70 + Math.abs(u) * 14);
+            let k = 0.80 + 0.075 * barb;
             const shaft = Math.max(0, 1 - Math.abs(u) / 0.12);
             const rim = Math.pow(Math.abs(u), 3);
             let r = k, g = k * 0.995, b = k * 0.97;
-            r -= 0.07 * rim; g -= 0.07 * rim; b -= 0.06 * rim;
-            r = r * (1 - shaft * 0.12) + shaft * 0.04; g = g * (1 - shaft * 0.14) + shaft * 0.025; b = b * (1 - shaft * 0.2);
+            r -= 0.14 * rim; g -= 0.14 * rim; b -= 0.12 * rim;
+            r = r * (1 - shaft * 0.3) + shaft * 0.02; g = g * (1 - shaft * 0.34) + shaft * 0.01; b = b * (1 - shaft * 0.44);
             const root = Math.max(0, 1 - v / 0.25);
             r += 0.02 * root; g -= 0.015 * root; b -= 0.06 * root;
             col.push(r, g, b);
@@ -66,33 +66,35 @@ function tinted(geo, tint) {
     return g;
 }
 
-/** One wing (right, +x; mirror by s = −1): arm from the patch outwards and a little back, wrist at (0.5, ·, 0.12). */
+/** One wing (right, +x; mirror by s = −1): the leading arm runs outward from the patch, the wrist at x 0.5; the flight feathers fan BACK from it as in a spread wing — the long
+ * primaries from the wrist, the outermost turned out into the wing's pointed tip, the secondaries along the arm lying straight back; coverts in tiles over their quills. */
 function wing(parts, s, magic, rnd) {
-    const M = (t, dz = 0) => (magic ? [1 - 0.05 * t + dz, 1 - 0.015 * t, 1 + 0.05 * t] : null); // (a pearl tint drifting to blue-violet toward the tip)
+    // (a pearl tint drifting to blue-violet toward the tip; `lo`: the lower layers a little darker — the shade between feathers)
+    const M = (t, lo = 1) => (magic ? [(1 - 0.06 * t) * lo, (1 - 0.02 * t) * lo, (1 + 0.04 * t) * lo] : [lo, lo * 0.995, lo * 0.98]);
     const X = (x) => x * s;
     const Y = (yaw) => yaw * s;
-    // secondaries: along the arm, 9 long feathers lying back, each a little under the next (y rises toward the arm)
+    // secondaries: 9 along the arm, lying back, a little under the next
     for (let i = 0; i < 9; i++) {
-        const t = 0.1 + i * 0.045 * 1.0, x = t, z = 0.04 + t * 0.2;
-        feather(parts, X(x), -0.004 - i * 0.0006, z, Y(-0.05 + i * 0.012 + (rnd() - 0.5) * 0.03), 0.52 - i * 0.018, 0.13, M(t));
+        const t = 0.06 + i * 0.05, x = t, z = 0.05 + t * 0.15;
+        feather(parts, X(x), -0.006 - (8 - i) * 0.0008, z, Y(-0.1 + i * 0.022 + (rnd() - 0.5) * 0.025), 0.47 + i * 0.006, 0.125, M(t, 0.88));
     }
-    // primaries: 8 long feathers from the wrist, fanned tight — the outermost points outward-back
+    // primaries: 8 from the wrist, a fan — the outermost points outward, the middle ones are the longest
     for (let i = 0; i < 8; i++) {
-        const t = i / 7, x = 0.5 + t * 0.12, z = 0.12 + t * 0.03;
-        feather(parts, X(x), -0.012 - t * 0.003, z, Y(0.2 - t * 0.28 + (rnd() - 0.5) * 0.02), 0.66 - t * 0.2, 0.1, M(0.6 + t * 0.4), 0);
+        const t = i / 7, x = 0.5 + t * 0.07, z = 0.12 + t * 0.02;
+        feather(parts, X(x), -0.014 + t * 0.002, z, Y(0.06 + t * 0.62 + (rnd() - 0.5) * 0.02), 0.6 - Math.abs(t - 0.3) * 0.28, 0.1, M(0.6 + t * 0.4, 0.9));
     }
     // three rows of coverts (each shorter, higher, nearer the leading edge): roof tiles over the quills
-    const rows = [[11, 0.3, 0.13, 0.014, 0.075], [10, 0.22, 0.115, 0.027, 0.045], [9, 0.15, 0.1, 0.04, 0.02]];
-    rows.forEach(([n, l, w, y, zo], r) => {
+    const rows = [[11, 0.27, 0.13, 0.01, 0.07, 0.95], [10, 0.2, 0.115, 0.022, 0.04, 1.0], [9, 0.14, 0.1, 0.034, 0.012, 1.04]];
+    rows.forEach(([n, l, w, y, zo, lo], r) => {
         for (let i = 0; i < n; i++) {
-            const t = 0.06 + (i / (n - 1)) * 0.5, x = t, z = zo + t * 0.2;
-            feather(parts, X(x), y + (rnd() - 0.5) * 0.002, z, Y(-0.03 + (i / n) * 0.1 + (rnd() - 0.5) * 0.03), l * (1 - t * 0.1), w, M(t));
+            const t = 0.05 + (i / (n - 1)) * 0.5, x = t, z = zo + t * 0.15;
+            feather(parts, X(x), y + (rnd() - 0.5) * 0.002, z, Y(-0.06 + (i / n) * 0.2 + (rnd() - 0.5) * 0.03), l * (1 - t * 0.1), w, M(t, lo));
         }
     });
     // the wrist's alula: three small feathers turned outward-forward
-    for (let i = 0; i < 3; i++) feather(parts, X(0.5 + i * 0.015), 0.05 + i * 0.006, 0.1 - i * 0.01, Y(0.75 - i * 0.2), 0.14 - i * 0.02, 0.07, M(0.7));
-    // the leading edge: a few short «marginal» feathers along the arm, pointing forward-out
-    for (let i = 0; i < 6; i++) feather(parts, X(0.1 + i * 0.08), 0.048, 0.07 + i * 0.012, Y(0.35 - i * 0.04), 0.1, 0.06, M(0.3));
+    for (let i = 0; i < 3; i++) feather(parts, X(0.52 + i * 0.012), 0.046 + i * 0.006, 0.1 - i * 0.012, Y(1.0 - i * 0.2), 0.13 - i * 0.02, 0.065, M(0.7, 1.05));
+    // the leading edge: a few short «marginal» feathers along the arm, forward-out
+    for (let i = 0; i < 6; i++) feather(parts, X(0.1 + i * 0.08), 0.044, 0.06 + i * 0.012, Y(0.3 - i * 0.03), 0.1, 0.06, M(0.3, 1.04));
 }
 
 /** The pair, merged into one geometry (cached per look). → THREE.Group (one mesh + motes for the magic pair). */

@@ -25,13 +25,13 @@ try {
         const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
         const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
         const scene = new THREE.Scene(); scene.background = new THREE.Color(0x3a4048);
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, 1.0));
-        const sun = new THREE.DirectionalLight(0xfff0d8, 1.2); sun.position.set(-3, 6, 5); scene.add(sun);
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, top ? 0.55 : 1.0));
+        const sun = new THREE.DirectionalLight(0xfff0d8, top ? 0.85 : 1.2); sun.position.set(-3, 6, 5); scene.add(sun);
         kinds.forEach((k, i) => {
             const m = makeItemModel({ kind: k, uid: 'x' + i });
-            m.position.set((i - (kinds.length - 1) / 2) * 5, 0, 0); m.rotation.set(top ? 0 : 0.3, top ? 0.2 + i * 0.4 : -0.5 + i * 0.3, 0); scene.add(m);
+            m.position.set((i - (kinds.length - 1) / 2) * (top ? 1.25 : 5), 0, 0); m.rotation.set(top ? 0 : 0.3, top ? 0.2 + i * 0.4 : -0.5 + i * 0.3, 0); scene.add(m);
         });
-        const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 100); cam.position.set(0, top ? 12 : 4, top ? 9 : 16); cam.lookAt(0, 0, 0);
+        const cam = new THREE.PerspectiveCamera(top ? 34 : 30, W / H, 0.1, 100); cam.position.set(0, top ? 2.6 : 4, top ? 1.7 : 16); cam.lookAt(0, 0, 0);
         r.render(scene, cam);
         return cv.toDataURL('image/png');
     }, [kinds, top]);
