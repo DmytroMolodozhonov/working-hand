@@ -127,8 +127,12 @@ class PoseGuard:
         w = getattr(r, "pose_world_landmarks", None)
         if not w:
             return None
-        p = w[0]
-        if len(p) < 25:
+        return PoseGuard.tilt_of(w[0])
+
+    @staticmethod
+    def tilt_of(p):
+        """torso_tilt from a list of 3-D points (Tasks: pose_world_landmarks[0]; Holistic: pose_world_landmarks.landmark)."""
+        if not p or len(p) < 25:
             return None
         sx, sy, sz = (p[11].x + p[12].x) / 2, (p[11].y + p[12].y) / 2, (p[11].z + p[12].z) / 2
         hx, hy, hz = (p[23].x + p[24].x) / 2, (p[23].y + p[24].y) / 2, (p[23].z + p[24].z) / 2

@@ -290,36 +290,64 @@ const BRAINROT_UPKEEP = 1;
 
 /**
  * (Settings «Ходьба назад») Is the back leaning back now (the author 05.11: «когда я иду вперёд, держу прямо спину; когда назад — хоть
- * немного наклоняю спину назад»)? The back's lean in degrees from the network's 3-D body (torso.tilt; pose_guard.torso_tilt — the old
- * signs, the image's depth of the shoulders and their width, were too noisy: «хожу назад, хотя должен вперёд»), smoothed (~0.25 s), against
- * this player's own upright: measured the first CAL s, then followed (standing quickly, stepping slowly). ON° over it for HOLD s — back;
- * under OFF° — forward; «back» STUCK s with the lean barely changing — an offset, the upright anew. Only ever while stepping on the spot
- * (Game: ch.backward = back && ch.isRunning). `stepping`: pose.isRunning. → 0 / 1.
+ * немного наклоняю спину назад»)? The back's lean in degrees — from the network's 3-D body (torso.tilt; pose_guard.torso_tilt), else
+ * from the image's depth of the shoulders (noisy) — smoothed (~0.25 s) and compared with this player's OWN posture:
+ *   - standing — its upright (the first CAL s, then followed quickly);
+ *   - stepping — its own FORWARD stepping (learned while it steps and does not lean): the author's F8 record of 05.11 showed stepping on
+ *     the spot alone looks 13–15° «back» by the depth against standing (the old rule then walked back on every forward step); before
+ *     the steps are learned — the upright + STEP_ADD (depth only);
+ *   - the player stepped to / from the camera (the shoulders' width changed by > NEAR, the same record's start and end) — all anew.
+ * ON° over it for HOLD s — back; under OFF° — forward; «back» STUCK s with the lean barely changing — an offset, taken anew. Only ever
+ * while stepping on the spot (Game: ch.backward = back && ch.isRunning). `stepping`: pose.isRunning. → 0 / 1. tests/unit/walk-back.test.js
+ * replays the record itself (tests/fixtures/walk-f8-0511.txt).
  */
-export const LEAN_BACK = { ON: 9, OFF: 5, HOLD: 0.35, CAL: 2, SMOOTH: 4, LEARN: 0.35, STEP_LEARN: 0.1, STUCK: 15, STUCK_RANGE: 6, NEAR: 4, DEG_PER_SW: 46 }; // (degrees of the back's lean)
+export const LEAN_BACK = { ON: 9, OFF: 5, ON_DEPTH: 7, OFF_DEPTH: 4, HOLD: 0.35, CAL: 2, SMOOTH: 4, LEARN: 0.35, STEP_LEARN: 0.5, STEP_DOWN: 0.12, STEP_SETTLE: 0.6, STEP_CAL: 1.2, STEP_ADD: 13, STUCK: 15, STUCK_RANGE: 6, NEAR: 0.22, DEG_PER_SW: 46 }; // (degrees of the back's lean)
 function leanBack(st, torso, dt, stepping = true) {
-    // the back's lean in degrees: from the network's 3-D body (torso.tilt — the camera program sends it; the author: «когда иду назад, я
-    // наклоняю спину назад, хоть и немного») — else, an older program, from the image's depth of the shoulders (much noisier)
-    const b = torso && Number.isFinite(torso.tilt) ? torso.tilt : torso && Number.isFinite(torso.back) ? torso.back * LEAN_BACK.DEG_PER_SW : null;
+    const L = LEAN_BACK;
+    const b = torso && Number.isFinite(torso.tilt) ? torso.tilt : torso && Number.isFinite(torso.back) ? torso.back * L.DEG_PER_SW : null;
     if (b == null) { st.on = false; st.k = null; st.hold = 0; return 0; }
-    st.src = Number.isFinite(torso.tilt) ? '3D' : 'глубина';
-    st.k = st.k == null ? b : st.k + (b - st.k) * Math.min(1, dt * LEAN_BACK.SMOOTH);
+    const src = Number.isFinite(torso.tilt) ? '3D' : 'глубина', depth = src !== '3D';
+    const w = torso.sw;
+    // a new source (other units) or the player stepped to / from the camera: its own posture anew
+    const moved = depth && Number.isFinite(w) && st.bw > 0 && Math.abs(Math.log(w / st.bw)) > Math.log(1 + L.NEAR);
+    if (st.src !== src || moved) {
+        st.src = src; st.k = null; st.cal = 0; st.base = null; st.sbase = null; st.scal = 0; st.on = false; st.hold = 0;
+        if (moved) st.moved = (st.moved || 0) + 1;
+    }
+    st.k = st.k == null ? b : st.k + (b - st.k) * Math.min(1, dt * L.SMOOTH);
     st.cal = (st.cal || 0) + dt;
-    if (st.cal < LEAN_BACK.CAL) { st.base = st.base == null ? st.k : st.base + (st.k - st.base) * Math.min(1, dt * 2); st.x = 0; return 0; } // (measuring its own upright)
-    const x = st.k - st.base;
+    if (st.cal < L.CAL) { // (measuring its own upright; the width it was measured at)
+        st.base = st.base == null ? st.k : st.base + (st.k - st.base) * Math.min(1, dt * 2);
+        if (Number.isFinite(w)) st.bw = st.bw > 0 && st.cal > dt * 1.5 ? st.bw + (w - st.bw) * Math.min(1, dt * 2) : w;
+        st.x = 0; return 0;
+    }
+    st.stepT = stepping ? (st.stepT || 0) + dt : 0;
+    const ON = depth ? L.ON_DEPTH : L.ON, OFF = depth ? L.OFF_DEPTH : L.OFF;
+    const stepRef = st.scal >= L.STEP_CAL ? st.sbase : st.base + (depth ? L.STEP_ADD : 0);
+    const x = st.k - (stepping ? stepRef : st.base);
     st.x = x;
-    if (!st.on && x < LEAN_BACK.ON) st.base += x * Math.min(1, dt * (stepping ? LEAN_BACK.STEP_LEARN : LEAN_BACK.LEARN)); // (its own upright — standing quickly, stepping slowly)
+    if (!st.on && x < ON * 0.5) { // (not leaning: its own posture followed — standing quickly, stepping its forward steps)
+        if (stepping && st.stepT >= L.STEP_SETTLE) { // (the first moments of the steps — the body getting into them — are not its steps)
+            const d = st.k - (st.sbase ?? st.k);
+            // (down slowly: one deep dip of the depth must not make every forward step look «back» afterwards — the record's 26 s)
+            st.sbase = st.sbase == null ? st.k : st.sbase + d * Math.min(1, dt * (st.scal < L.STEP_CAL ? 3 : d < 0 ? L.STEP_DOWN : L.STEP_LEARN));
+            st.scal = (st.scal || 0) + dt;
+        } else if (!stepping) st.base += x * Math.min(1, dt * L.LEARN);
+    }
     if (st.on) {
-        if (x < LEAN_BACK.OFF) { st.on = false; st.hold = 0; }
+        if (x < OFF) { st.on = false; st.hold = 0; }
         else {
-            // stuck on «back» with the lean barely changing: an offset of the camera / the posture, not a lean — the upright anew
+            // stuck on «back» with the lean barely changing: an offset of the camera / the posture, not a lean — taken anew
             st.onT = (st.onT || 0) + dt;
             st.lo = Math.min(st.lo ?? x, x); st.hi = Math.max(st.hi ?? x, x);
-            if (st.onT > LEAN_BACK.STUCK && st.hi - st.lo < LEAN_BACK.STUCK_RANGE) { st.base = st.k; st.on = false; st.hold = 0; st.stuck = (st.stuck || 0) + 1; }
+            if (st.onT > L.STUCK && st.hi - st.lo < L.STUCK_RANGE) {
+                if (stepping) { st.sbase = st.k; st.scal = L.STEP_CAL; } else st.base = st.k;
+                st.on = false; st.hold = 0; st.stuck = (st.stuck || 0) + 1;
+            }
         }
     } else {
-        st.hold = x > LEAN_BACK.ON ? (st.hold || 0) + dt : 0;
-        if (st.hold >= LEAN_BACK.HOLD) { st.on = true; st.onT = 0; st.lo = st.hi = x; }
+        st.hold = x > ON ? (st.hold || 0) + dt : 0;
+        if (st.hold >= L.HOLD) { st.on = true; st.onT = 0; st.lo = st.hi = x; }
     }
     return st.on ? 1 : 0;
 }
@@ -4630,7 +4658,7 @@ export class Game {
     _walkBackLog(back, pose, dt) {
         const L = this._lean || {}, t = pose.torso || {};
         const f = (v) => (Number.isFinite(v) ? v.toFixed(2) : '—');
-        const line = () => `ходьба назад: ${back ? 'НАЗАД' : 'вперёд/стоит'}, шаги ${pose.isRunning ? 'да' : 'нет'}, наклон спины ${f(L.x)}° (порог ${LEAN_BACK.ON}°, по ${L.src || '—'}), сейчас ${f(L.k)}°, своё «прямо» ${f(L.base)}°${(L.cal || 0) < LEAN_BACK.CAL ? ' (замер)' : ''}${L.stuck ? `, сбросов «залипания» ${L.stuck}` : ''}; глубина плеч ${f(t.sz)}, бёдер ${f(t.hz)}, ширина плеч ${f(t.sw)}, бёдра ${t.hips ? 'видны' : 'не видны'}`;
+        const line = () => `ходьба назад: ${back ? 'НАЗАД' : 'вперёд/стоит'}, шаги ${pose.isRunning ? 'да' : 'нет'}, наклон спины ${f(L.x)}° (порог ${LEAN_BACK.ON}°, по ${L.src || '—'}), сейчас ${f(L.k)}°, своё «прямо» ${f(L.base)}°, свои шаги вперёд ${L.scal >= LEAN_BACK.STEP_CAL ? f(L.sbase) + '°' : 'ещё не знаю'}${(L.cal || 0) < LEAN_BACK.CAL ? ' (замер)' : ''}${L.moved ? `, отходил/подходил к камере ${L.moved}` : ''}${L.stuck ? `, сбросов «залипания» ${L.stuck}` : ''}; глубина плеч ${f(t.sz)}, бёдер ${f(t.hz)}, ширина плеч ${f(t.sw)}, бёдра ${t.hips ? 'видны' : 'не видны'}`;
         if (back !== (this._backWas ?? 0)) {
             this.perf?.note?.(line());
             if (back && performance.now() - (this._backToldAt || 0) > 5000) { this._backToldAt = performance.now(); this.hud.setVoice(`↩️ Назад (наклон спины ≈ ${Math.round(L.x || 0)}°)`, true); } // (every time it starts: the player sees when and why)

@@ -267,6 +267,9 @@ export class PoseService {
             faceLandmarks: results.faceLandmarks || null,
             leftHandLandmarks: results.leftHandLandmarks || null,
             rightHandLandmarks: results.rightHandLandmarks || null,
+            // (the back's lean from the 3-D body — «ходьба назад»: the program's own, or the browser Holistic's world points;
+            // the F8 record of 05.11 had «спина3D —» — this way carried none)
+            torsoTilt: results.torsoTilt || (results.poseWorldLandmarks || results.za ? torsoTiltOf(results.poseWorldLandmarks || results.za) : null),
         };
         // A hand Holistic lost: take it from the hand helper (fresh results only).
         // The helper only works while a hand is missing (it costs CPU).

@@ -45,6 +45,8 @@ export class WalkRecorder {
     heard(text) {
         if (!this.on) return;
         const L = walkLabel(text);
+        // (every phrase heard goes in too — the author: «надо было записывать ещё просто мои слова»: «подхожу к камере» and the like)
+        if (!L && String(text || '').trim()) this.buf.push(`${this.t.toFixed(1)}с сказано: «${String(text).slice(0, 80)}»`);
         if (L && L !== this.label) { this.label = L; this.labelAt = this.t; this.buf.push(`${this.t.toFixed(1)}с метка: ${L} («${String(text).slice(0, 60)}»)`); this.game.hud?.setVoice?.(`🔴 Метка: ${L}`, true); }
     }
 
@@ -61,7 +63,7 @@ export class WalkRecorder {
             this.buf.push([
                 `${this.t.toFixed(1)}с`, `метка ${this.label}${this.label === '—' ? ' (ещё не сказали)' : this.t - (this.labelAt ?? -99) < WALK_REC.SETTLE ? ' (переход)' : ''}`, `игра пошла бы ${back && pose.isRunning ? 'НАЗАД' : pose.isRunning ? 'вперёд' : 'стоит'}${back && !pose.isRunning ? ' (наклон назад есть, шагов нет)' : ''}`,
                 `шаги ${pose.isRunning ? 'да' : 'нет'} ${f(pose.runIntensity)}`,
-                `спина3D ${f(T.tilt, 1)}° бок ${f(T.tiltSide, 1)}°`, `наклон ${f(L.x, 1)}° сейчас ${f(L.k, 1)}° прямо ${f(L.base, 1)}° (${L.src || '—'})`,
+                `спина3D ${f(T.tilt, 1)}° бок ${f(T.tiltSide, 1)}°`, `наклон ${f(L.x, 1)}° сейчас ${f(L.k, 1)}° прямо ${f(L.base, 1)}° шаги ${L.scal >= 1.2 ? f(L.sbase, 1) + '°' : '—'} (${L.src || '—'})`,
                 `плечиZ ${f(T.sz, 3)} бёдраZ ${f(T.hz, 3)} глубина ${f(T.back, 3)} ширина ${f(T.sw, 3)} нос ${f(T.noseRel, 2)} поворот ${f(T.twist, 2)} бёдра ${T.hips ? 'видны' : 'нет'}`,
                 `ноги ${legs}`,
             ].join(' | '));

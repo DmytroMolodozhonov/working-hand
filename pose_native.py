@@ -434,6 +434,12 @@ class NativePose:
                 "leftHandLandmarks": self._um(_pts(r.left_hand_landmarks.landmark if r.left_hand_landmarks else None), rgb),
                 "rightHandLandmarks": self._um(_pts(r.right_hand_landmarks.landmark if r.right_hand_landmarks else None), rgb),
             }
+            # (the back's lean from Holistic's own 3-D body — «ходьба назад»; the F8 record of 05.11 showed «спина3D —»: this way had none)
+            from pose_guard import PoseGuard
+            w = getattr(r, "pose_world_landmarks", None)
+            tilt = PoseGuard.tilt_of(list(w.landmark)) if w is not None else None
+            if tilt:
+                out["torsoTilt"] = tilt
             v5 = self._v5()
             if v5:
                 # V5: the hands from the body's wrists (the stream then carries "hands", as the Tasks way)

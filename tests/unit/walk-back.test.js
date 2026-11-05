@@ -165,3 +165,20 @@ test('the F8 recording: the spoken labels; a line 10 times a second with what th
     assert.match(lines[0], /игра пошла бы НАЗАД/);
     assert.match(lines[0], /спина3D 13\.0°/);
 });
+
+test('the author\'s own F8 record of 05.11 (camera to the waist, no 3-D body): forward steps never walk back; stepping to the camera resets', async () => {
+    const fs = await import('node:fs');
+    const rows = fs.readFileSync(new URL('../fixtures/walk-f8-0511.txt', import.meta.url), 'utf8').split('\n').filter((l) => l && !l.startsWith('#'))
+        .map((l) => { const [t, L, s, now, w] = l.split(' '); return { t: +t, L, s: +s === 1, now: +now, w: +w }; });
+    const st = {};
+    let prev = 0, wrong = 0, steps = 0;
+    for (const r of rows) {
+        const dt = Math.max(0.03, r.t - prev); prev = r.t;
+        let v = 0;
+        for (let i = 0; i < 3; i++) v = _leanBack(st, { back: r.now / LEAN_BACK.DEG_PER_SW, sw: r.w }, dt / 3, r.s);
+        if (r.L === 'F' && r.s) { steps++; if (v) wrong++; } // (the old rule: «НАЗАД» on most of these)
+    }
+    assert.ok(steps > 60);
+    assert.equal(wrong, 0, 'stepping forward with a straight back: never back');
+    assert.ok(st.moved >= 1, 'walking away from / to the camera (its start and end): its own posture measured anew');
+});
