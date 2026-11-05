@@ -157,3 +157,12 @@ test('no take-off from a few steps and a stroke: a real run (≥ 6 m/s for over 
     assert.equal(h.wingFlight.airborne, false, 'a short run and one stroke: no');
     assert.ok(TAKEOFF.RUN_T >= 1 && HERO_FLY.takeoff >= 6);
 });
+
+test('take-off strokes start with the arms up (the author 05.11: running alone took off — the arms pumping are no wing stroke)', async () => {
+    const { armsHigh, TAKEOFF } = await import('../../src/game/WingFlight.js');
+    const ch = (l, r) => ({ armState: (side, out) => Object.assign(out, { up: side === 'left' ? l : r }) });
+    assert.equal(armsHigh(ch(-0.8, -0.7)), false, 'hands at the chest, running');
+    assert.equal(armsHigh(ch(0.1, -0.1)), true, 'both arms out at the shoulders');
+    assert.equal(armsHigh(ch(0.5, -0.9)), false, 'one arm up is no wing');
+    assert.ok(TAKEOFF.HIGH_WIN < TAKEOFF.STROKE_WIN);
+});

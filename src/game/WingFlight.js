@@ -103,7 +103,15 @@ export const HERO_FLY = { lift: 3.4, thrust: 3.0, maxUp: 8, maxFwd: 22, gravity:
  * The take-off (the author 05.11: «очень легко взлететь… ты должен прям разбежаться; нельзя просто взмахнуть руками и сразу полететь»):
  * a real run — at least HERO_FLY.takeoff m/s for RUN_T s — and at least STROKES strong strokes within STROKE_WIN s while running.
  */
-export const TAKEOFF = { RUN_T: 1.2, STROKES: 2, STROKE_WIN: 1.6, MIN_STROKE: 0.45 };
+export const TAKEOFF = { RUN_T: 1.2, STROKES: 2, STROKE_WIN: 1.6, MIN_STROKE: 0.45, HIGH_WIN: 0.7, HIGH_UP: -0.3 };
+
+/** Both arms up at the shoulders or higher (the elevation's sine over HIGH_UP) — where a wing's stroke begins. */
+export function armsHigh(ch) {
+    if (!ch?.armState) return false;
+    const a = ch.armState('left', _armL), b = ch.armState('right', _armR);
+    return a.up > TAKEOFF.HIGH_UP && b.up > TAKEOFF.HIGH_UP;
+}
+const _armL = {}, _armR = {};
 /** The air's currents over the land. */
 export const AIR = { THERMAL_FROM: 14, THERMAL_FULL: 40, CALM: 0.6, CEIL: 320 };
 /** The landing. */
@@ -172,10 +180,14 @@ export class WingFlight {
         // the run before the take-off: how long the hero has run fast; the strong strokes lately
         this._runT = this._gs >= HERO_FLY.takeoff && ch.onGround !== false ? (this._runT || 0) + dt : Math.max(0, (this._runT || 0) - dt * 3);
         const now = this.t;
-        if (stroke >= TAKEOFF.MIN_STROKE) (this._strokes || (this._strokes = [])).push(now);
+        // (a wing's stroke starts with the arms up — at the shoulders or higher — and goes down; the arms pumping while running (the hands at
+        // the chest, both down together at times) are no stroke: the author 05.11 «просто разбегаюсь и почему-то взлетаю, крыльями не махаю»)
+        if (armsHigh(ch)) this._highAt = now;
+        const wingStroke = stroke >= TAKEOFF.MIN_STROKE && now - (this._highAt ?? -99) <= TAKEOFF.HIGH_WIN;
+        if (wingStroke) (this._strokes || (this._strokes = [])).push(now);
         while (this._strokes?.length && now - this._strokes[0] > TAKEOFF.STROKE_WIN) this._strokes.shift();
         const wasGround = !st.air;
-        wingStep(st, HERO_FLY, { stroke, arms, ground: this._gs, alt, dive: steer.dive, runT: this._runT, strokes: this._strokes?.length || 0 }, dt);
+        wingStep(st, HERO_FLY, { stroke: st.air || wingStroke ? stroke : 0, arms, ground: this._gs, alt, dive: steer.dive, runT: this._runT, strokes: this._strokes?.length || 0 }, dt);
         if (wasGround && !st.air && stroke > 0 && this._gs > 2 && !this._toldRun && this._runT < TAKEOFF.RUN_T) { this._toldRun = true; g.hud?.setVoice?.('🪽 Чтобы взлететь, сначала хорошо разбегитесь, потом сильно машите', true); setTimeout(() => { this._toldRun = false; }, 15000); }
         if (st.air && steer.turn) { // (leaning sideways turns, as in «Флайн»)
             const yr = steer.turn * WING.TURN * dt; // (the sign of Flight's yawRate)

@@ -142,7 +142,8 @@ test('the 3-D body\'s tilt (the camera program sends it): a straight back walks 
     let last = 0;
     for (let i = 0; i < 30; i++) last = _leanBack(st, t(12 + Math.sin(i)), 1 / 30, true);
     assert.equal(last, 1, 'leaning back 12°: back');
-    for (let i = 0; i < 20; i++) last = _leanBack(st, t(1), 1 / 30, true);
+    // (1 s, was 0.67: the lean is smoothed longer since the author's 3-D record — the noise ±3° of a lean of only ~4°)
+    for (let i = 0; i < 30; i++) last = _leanBack(st, t(1), 1 / 30, true);
     assert.equal(last, 0, 'straight again: forward');
 });
 
@@ -192,4 +193,23 @@ test('steps leaning back bob weakly (the F8 record of 05.11, 14:09: 0.022–0.03
     for (let i = 0; i < 30; i++) on = Game.prototype._weakSteps.call(g, { bob: i % 4 ? 0.03 : 0.015 }, 1 / 30);
     assert.equal(on, true, 'stepping leaning back');
     assert.ok(WEAK_BOB.MIN > 0.02);
+});
+
+test('the author\'s F8 record of 05.11, 14:13 (the camera program: the 3-D body + the depth): forward never back, back mostly back', async () => {
+    const fs = await import('node:fs');
+    const { Game } = await import('../../src/game/Game.js');
+    const rows = fs.readFileSync(new URL('../fixtures/walk-f8-0511-3d.txt', import.meta.url), 'utf8').split('\n').filter((l) => l && !l.startsWith('#'))
+        .map((l) => { const [t, L, s, bob, tilt, dep, w] = l.split(' '); return { t: +t, L, s: +s === 1, bob: +bob, torso: { tilt: +tilt, back: +dep, sw: +w } }; });
+    const st = {}, g = {};
+    let prev = 0;
+    const c = { F: [0, 0], B: [0, 0] };
+    for (const r of rows) {
+        const dt = Math.max(0.03, r.t - prev); prev = r.t;
+        let v = 0, weak = false;
+        for (let i = 0; i < 3; i++) { weak = Game.prototype._weakSteps.call(g, { bob: r.bob }, dt / 3); v = _leanBack(st, r.torso, dt / 3, r.s); }
+        if ((r.L === 'F' || r.L === 'B') && (r.s || weak)) { c[r.L][0]++; if (v) c[r.L][1]++; }
+    }
+    assert.ok(c.F[0] > 50 && c.B[0] > 80, JSON.stringify(c));
+    assert.equal(c.F[1], 0, 'stepping forward: never back');
+    assert.ok(c.B[1] / c.B[0] > 0.75, `stepping back leaning back: back most of the time (${c.B[1]}/${c.B[0]})`);
 });

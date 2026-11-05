@@ -301,15 +301,18 @@ const BRAINROT_UPKEEP = 1;
  * while stepping on the spot (Game: ch.backward = back && ch.isRunning). `stepping`: pose.isRunning. → 0 / 1. tests/unit/walk-back.test.js
  * replays the record itself (tests/fixtures/walk-f8-0511.txt).
  */
-export const LEAN_BACK = { ON: 9, OFF: 5, ON_DEPTH: 7, OFF_DEPTH: 4, HOLD: 0.35, CAL: 2, SMOOTH: 4, LEARN: 0.35, STEP_LEARN: 0.5, STEP_DOWN: 0.12, STEP_SETTLE: 0.6, STEP_CAL: 1.2, STEP_ADD: 13, STUCK: 15, STUCK_RANGE: 6, NEAR: 0.22, DEG_PER_SW: 46 }; // (degrees of the back's lean)
+export const LEAN_BACK = { ON: 6, OFF: 3, ON_DEPTH: 7, OFF_DEPTH: 4, HOLD: 0.35, CAL: 2, SMOOTH: 2, LEARN: 0.35, STEP_LEARN: 0.2, STEP_DOWN: 0.12, STEP_SETTLE: 0.6, STEP_CAL: 1.2, STEP_ADD: 13, STUCK: 15, STUCK_RANGE: 6, NEAR: 0.22, DEG_PER_SW: 46, DEPTH_W: 0.4 }; // (degrees of the back's lean)
 function leanBack(st, torso, dt, stepping = true) {
     const L = LEAN_BACK;
-    const b = torso && Number.isFinite(torso.tilt) ? torso.tilt : torso && Number.isFinite(torso.back) ? torso.back * L.DEG_PER_SW : null;
+    // (both together when there are both: the author's F8 record of 05.11, 14:13 — stepping back the 3-D lean is only ~4° more than
+    // stepping forward (noise ±3°), the depth ~9° (±5°); added up (the depth weighed DEPTH_W) the noise partly cancels)
+    const t3 = torso && Number.isFinite(torso.tilt) ? torso.tilt : null, dd = torso && Number.isFinite(torso.back) ? torso.back * L.DEG_PER_SW : null;
+    const b = t3 != null ? t3 + (dd != null ? dd * L.DEPTH_W : 0) : dd;
     if (b == null) { st.on = false; st.k = null; st.hold = 0; return 0; }
-    const src = Number.isFinite(torso.tilt) ? '3D' : 'глубина', depth = src !== '3D';
+    const src = t3 != null ? (dd != null ? '3D+глубина' : '3D') : 'глубина', depth = src === 'глубина';
     const w = torso.sw;
     // a new source (other units) or the player stepped to / from the camera: its own posture anew
-    const moved = depth && Number.isFinite(w) && st.bw > 0 && Math.abs(Math.log(w / st.bw)) > Math.log(1 + L.NEAR);
+    const moved = dd != null && Number.isFinite(w) && st.bw > 0 && Math.abs(Math.log(w / st.bw)) > Math.log(1 + L.NEAR);
     if (st.src !== src || moved) {
         st.src = src; st.k = null; st.cal = 0; st.base = null; st.sbase = null; st.scal = 0; st.on = false; st.hold = 0;
         if (moved) st.moved = (st.moved || 0) + 1;
@@ -323,7 +326,7 @@ function leanBack(st, torso, dt, stepping = true) {
     }
     st.stepT = stepping ? (st.stepT || 0) + dt : 0;
     const ON = depth ? L.ON_DEPTH : L.ON, OFF = depth ? L.OFF_DEPTH : L.OFF;
-    const stepRef = st.scal >= L.STEP_CAL ? st.sbase : st.base + (depth ? L.STEP_ADD : 0);
+    const stepRef = st.scal >= L.STEP_CAL ? st.sbase : st.base + (depth ? L.STEP_ADD : dd != null ? L.STEP_ADD * L.DEPTH_W : 0);
     const x = st.k - (stepping ? stepRef : st.base);
     st.x = x;
     if (!st.on && x < ON * 0.5) { // (not leaning: its own posture followed — standing quickly, stepping its forward steps)
