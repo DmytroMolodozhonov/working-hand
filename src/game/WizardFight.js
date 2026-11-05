@@ -48,6 +48,10 @@ const URGENT = new Set(['punish', 'regroup', 'guardMaster', 'kite']);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _ch = new THREE.Vector3();
 
+/** (WizardFight._spellFor) a foe with a wand in his hand: how often each rank goes first for the wand («Экспеллиармус»), and how often a
+ *  teacher / the master breaks it instead when the foe is very dangerous */
+export const DISARM = { FIRST: { student: 0.75, teacher: 0.6, master: 0.45 }, BREAK: 0.12 };
+
 export class WizardFight {
     constructor(wl) {
         this.wl = wl;
@@ -517,7 +521,7 @@ export class WizardFight {
         if (T.mercy && st?.lying && !(wt?.role === 'binder') && !(Date.now() - (v.hurtAt || 0) < 5000)) return;
         if (v.prep) return;
         if (v.lesson && this.life._pupilDown(v.foe)) return; // (a lesson never finishes off the one on the ground)
-        const spell = this._spellFor(v, planSpell(plan, wt?.role, v.skillRole || v.role) || pickSpell(v.skillRole || v.role), T);
+        const spell = this._spellFor(v, planSpell(plan, wt?.role, v.skillRole || v.role) || pickSpell(v.skillRole || v.role), T, foe);
         const cost = NPC_COST[spell] ?? 10;
         if (v.mana < cost) return;
         // he says it first (a second: _prepTick casts it), then the pause before the next (low on mana: slower)
@@ -575,14 +579,28 @@ export class WizardFight {
     }
 
     /** The spell a wizard really casts at this foe (by his wanted level: Wanted.wantedTactics). */
-    _spellFor(v, spell, T) {
+    _spellFor(v, spell, T, foe = null) {
         if (v.lesson) return lessonSpell(); // (a lesson: only Expelliarmus / Stupefy — never freezing, never deadly)
         if (spell === 'LevitateDuel' || spell === 'AvadaKedavra') spell = 'Stupefy'; // (they don't lift a man to hold him)
         if (T.soft && spell === 'SapiraDuel') spell = v.role !== 'student' && Math.random() < 0.4 ? 'IceDuel' : 'Stupefy'; // (calm: only stun, freeze)
         if (T.heavy && (spell === 'Stupefy' || spell === 'Jolt') && Math.random() < T.heavy) spell = 'SapiraDuel';
         if (T.avada && Math.random() < T.avada) spell = 'AvadaKedavra'; // (a mass murderer: they mean to kill)
+        // (the author 05.11: «главная цель — обезоружить и забрать палочку»; a very dangerous one — now and then the wand is destroyed,
+        //  by one who knows how: a teacher or the master, «Liquidation» in a duel crumbles what the hand holds — HeldBreak.js)
+        else if (foe != null && this._foeArmed(foe)) {
+            const role = v.skillRole || v.role;
+            if ((T.heavy || T.avada) && role !== 'student' && Math.random() < DISARM.BREAK) spell = 'LiquidationDuel';
+            else if (Math.random() < (DISARM.FIRST[role] ?? DISARM.FIRST.teacher)) spell = 'Expelliarmus';
+        }
         if ((v.skillRole || v.role) === 'student' && (spell === 'IceDuel' || spell === 'AvadaKedavra')) spell = 'Stupefy';
         return spell;
+    }
+
+    /** Does this player hold a wand now (mine — my hands; a friend's — his avatar)? */
+    _foeArmed(id) {
+        const g = this.game;
+        if (id === g.localId || id === 'local') return !!g.wandSide?.();
+        return !!g.remotes?.get(id)?.wand;
     }
 
     /**
@@ -832,7 +850,7 @@ export class WizardFight {
         if (v.noWand || !L._isPlayer(b.by) || (v.castCd ?? 0) > 0.6) return false;
         const fp = L._playerPos(b.by);
         if (!fp || !this.clearShot(v, fp)) return false;
-        const spell = this._spellFor(v, pickSpell(v.skillRole || v.role), wantedTactics(L.wantedLevel(b.by), v.role));
+        const spell = this._spellFor(v, pickSpell(v.skillRole || v.role), wantedTactics(L.wantedLevel(b.by), v.role), b.by);
         const cost = NPC_COST[spell] ?? 10;
         if (v.mana < cost) return false;
         // (said first, a second — a charge too near is not met in time: then only the hand shield, _react)
