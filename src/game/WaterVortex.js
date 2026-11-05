@@ -415,7 +415,7 @@ export class WaterVortex {
         if (d.y < -0.05) {
             for (let k = 1; k < 12; k += 1) {
                 const x = o.x + d.x * k, y = o.y + d.y * k, z = o.z + d.z * k;
-                const s = t.findWaterSurface?.(x, z, 1.2);
+                const s = t.findWaterSurface?.(x, z, 1.2, y);
                 if (s && y - s.y < 3.5 && y - s.y > -1) return new THREE.Vector3(s.x, s.y, s.z);
             }
         }

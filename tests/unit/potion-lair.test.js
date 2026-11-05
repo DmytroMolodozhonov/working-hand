@@ -77,3 +77,15 @@ test('свет и герой: факелы на каменных стойках 
     for (let y = F + 1; y <= F + 6; y++) assert.equal(get(P.hero.x, y, P.hero.z), BLOCK.AIR);
     assert.ok(P.rect.x1 > LAIR.A && P.rect.z1 > LAIR.B);
 });
+
+test('ручей зала — настоящая вода для «Waterbollow»: поверхность находится по высоте руки (зал на слое ~96, не на уровне моря)', async () => {
+    const { TerrainData } = await import('../../src/world/Terrain.js');
+    const g = (x, L, z) => at.get(x + ',' + L + ',' + z) ?? BLOCK.AIR; // (the plan's blocks; everything else is air above, solid below)
+    const fake = { get: g };
+    const w = P.blocks.find((b) => b[3] === BLOCK.WATER);
+    const hand = { y: F + 2.5 }; // (a hand a little over the floor)
+    const s = TerrainData.prototype.findWaterSurface.call(fake, w[0] + 1, w[2], 4, hand.y);
+    assert.ok(s, 'вода не найдена');
+    assert.ok(Math.abs(s.y - (F - 1 - 0.5 - 0.12)) < 1e-9, `поверхность ${s.y}`);
+    assert.equal(TerrainData.prototype.findWaterSurface.call(fake, w[0], w[2], 4), null, 'без высоты ищет у моря — там тут ничего');
+});

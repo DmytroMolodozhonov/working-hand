@@ -2233,28 +2233,33 @@ export class TerrainData {
      * Nearest water surface to a point, searching `radius` m around it.
      * Returns {x, y, z, dist} (y = the water surface) or null.
      */
-    findWaterSurface(x, z, radius) {
+    findWaterSurface(x, z, radius, y = null) {
         const cx = Math.round(x), cz = Math.round(z);
         const r = Math.ceil(radius);
-        let best = null, bestD = radius * radius;
-        for (let dz = -r; dz <= r; dz++) {
-            for (let dx = -r; dx <= r; dx++) {
-                const ix = cx + dx, iz = cz + dz;
-                const d2 = (ix - x) * (ix - x) + (iz - z) * (iz - z);
-                if (d2 > bestD) continue;
-                // the water surface is at layer 0 (or lower inside flooded craters)
-                for (let L = 0; L >= MIN_LAYER + 1; L--) {
-                    const b = this.get(ix, L, iz);
-                    if (b === BLOCK.WATER) {
-                        if (this.get(ix, L + 1, iz) === BLOCK.AIR) { best = { x: ix, y: L - 0.5 - 0.12, z: iz }; bestD = d2; }
-                        break;
+        // (`y`: the caller's height — water high above the sea too: the Potion-maker's Lair's stream lies in a hall at layer ~95, not at layer 0; we look from a little over `y` down)
+        const top = y === null ? 0 : Math.min(MAX_LAYER - 1, Math.floor(y + 1.5) + 4), low = y === null ? MIN_LAYER + 1 : Math.max(MIN_LAYER + 1, Math.floor(y + 1.5) - 14);
+        const scan = (L0, L1) => {
+            let best = null, bestD = radius * radius;
+            for (let dz = -r; dz <= r; dz++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    const ix = cx + dx, iz = cz + dz;
+                    const d2 = (ix - x) * (ix - x) + (iz - z) * (iz - z);
+                    if (d2 > bestD) continue;
+                    // the water surface is at layer 0 (or lower inside flooded craters)
+                    for (let L = L0; L >= L1; L--) {
+                        const b = this.get(ix, L, iz);
+                        if (b === BLOCK.WATER) {
+                            if (this.get(ix, L + 1, iz) === BLOCK.AIR) { best = { x: ix, y: L - 0.5 - 0.12, z: iz }; bestD = d2; }
+                            break;
+                        }
+                        if (b !== BLOCK.AIR) break;
                     }
-                    if (b !== BLOCK.AIR) break;
                 }
             }
-        }
-        if (best) best.dist = Math.sqrt(bestD);
-        return best;
+            if (best) best.dist = Math.sqrt(bestD);
+            return best;
+        };
+        return scan(top, low) || (y === null || top <= 0 ? null : scan(0, MIN_LAYER + 1));
     }
 
     /**

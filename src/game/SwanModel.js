@@ -18,6 +18,7 @@
  */
 import * as THREE from 'three';
 import { MODEL_KIT as K } from './AnimalModels.js';
+import { swanWingsModel } from './SwanWingsItem.js';
 
 /** The waterline in the model's units (scaled by the swan's size): the body sits this deep. */
 export const WATERLINE = 0.14;
@@ -165,34 +166,7 @@ export function swanModel(color = 1) {
     return out;
 }
 
-/**
- * A swan's two wings as a thing (an item: 'swanWings' / 'magicSwanWings' — the potion of wings wants the magic ones): the pair of the
- * kit's feathered wings, half spread, crossed at the shoulder and tied with a twine; the magic pair pearly with a faint light and a few
- * motes of light along the feathers. ~0.5 long (ItemTypes.ITEM_SCALE makes it ~1 m in the hand).
- */
+/** A swan's wings as a thing: ONE flat pair joined at the back, lying spread (SwanWingsItem.js). */
 export function swanWingsItemModel(magic = false) {
-    const g = new THREE.Group();
-    g.name = magic ? 'magicSwanWings' : 'swanWings';
-    const feather = magic ? K.wingMat(0xeef3ff, 0x9fc8ff) : K.wingMat(0xf9f8f4);
-    // ONE pair, just folded (the author 06.11: «просто сложены, и всё красиво» — no hoop, no straps): the two wings lie back to back, roots and tips together
-    // (each is 0.08 thick along x, 0.36 long along y), leaning in a little, like closed hands.
-    for (const s of [1, -1]) {
-        const w = new THREE.Group();
-        w.scale.set(0.42 * s, 0.42, 0.42);
-        w.rotation.set(-Math.PI / 2, 0, 0); w.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), 0.2 * s); // (the span along the item length; each leans in a little: the two close into one pair)
-        const m = new THREE.Mesh(K.pigWingGeo(), feather);
-        m.morphTargetInfluences = [0.2, 0.05]; // (folded: the feathers close up)
-        m.castShadow = true;
-        w.add(m);
-        g.add(w);
-    }
-    if (magic) {
-        const mote = mat('mote', () => new THREE.MeshBasicMaterial({ color: 0xcfe9ff, transparent: true, opacity: 0.85, depthWrite: false }));
-        const r = K.rng(77);
-        for (let i = 0; i < 9; i++) {
-            const d = K.mesh(g, K.ball(5, 4), mote, (r() - 0.5) * 0.4, 0.02 + r() * 0.05, -0.05 - r() * 0.4, false);
-            d.scale.setScalar(0.006 + r() * 0.006);
-        }
-    }
-    return g;
+    return swanWingsModel(magic);
 }
