@@ -126,7 +126,7 @@ export class NetSync {
         const g = this.game;
         if (g.remotes.has(id) || !this.presence.canShow(id)) return;
         const e = this.presence.byId.get(id);
-        const av = new RemoteAvatar(g.scene, id, e.name, e.color); av.log = (t) => g.perf?.note?.(t);
+        const av = new RemoteAvatar(g.scene, id, e.name, e.color); av.log = (t) => g.perf?.note?.(t); av.collision = g.collision;
         av.character.group.visible = false; // (shown by its first update(), when it already stands where it is)
         av.setLook(this.looks.get(id));
         av.setHeroModel(this.models?.get(id));

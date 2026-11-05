@@ -21,6 +21,18 @@ const _d = new THREE.Vector3();
 /** m from the hand to a wand's tip (a remote player's hand shield stands there: Combat.shieldAt). */
 const WAND_LEN = 0.32;
 
+/**
+ * (RemoteAvatar) How much of a friend's crouch is drawn: only as much as the roof over his head needs (a cave, a low door);
+ * in the open he stands — the legs never go back on a guess of the camera. `pos` — the body's centre (feet + 2.0).
+ */
+export function crouchOk(cr, pos, collision) {
+    if (!(cr > 0) || !pos || !collision?.ceilingAt) return 0;
+    const head = pos.y + 2.75; // (the top of the head: feet + 4.75)
+    const c = collision.ceilingAt(pos.x, pos.z, pos.y);
+    if (!(c < head + 0.6)) return 0;
+    return Math.min(cr, Math.max(0.2, (head + 0.6 - c) / 1.0));
+}
+
 export class RemoteAvatar {
     constructor(scene, id, name, colorIndex = 0) {
         this.id = id;
@@ -235,8 +247,12 @@ export class RemoteAvatar {
         slerp(ch.rightArmAnchor, s.s.ra);
         slerp(ch.rightElbowAnchor, s.s.re);
         ch.setRunning(s.s.run >= 0, Math.max(0, s.s.run));
-        ch.setCrouching(s.s.cr >= 0.95); // (a squat; a little stoop under a low roof: how much lower)
-        ch.setStoop(+s.s.cr || 0);
+        // (a squat; a little stoop under a low roof: how much lower) — but the standard body has no knees: a «crouch» is both legs
+        // swung back, and the friend's camera guesses one whenever he leans to the monitor (the author: «ноги друга выворачиваются
+        // назад… никогда не назад, в таком случае — стоять»). So it bends only under a real roof over him (crouchOk)
+        const cr = crouchOk(+s.s.cr || 0, this.position, this.collision);
+        ch.setCrouching(cr >= 0.95);
+        ch.setStoop(cr);
         ch.jumpAir = !!s.s.jp; ch.verticalVelocity = s.s.jp === 2 ? 1 : 0; // (in a jump: the legs tucked, as on its own screen)
         ch.leftSimplifiedHand.applyState(s.s.lh);
         ch.rightSimplifiedHand.applyState(s.s.rh);
