@@ -21,6 +21,8 @@ import * as THREE from 'three';
 import { onFire, FIRE } from './WizardMind.js';
 
 export const BURN = {
+    INFERNO_CATCH: 1.4, // s of the «Инферно» stream on a body before it catches fire (≤ 3 s — the author)
+    ROLL_T: 2.6, // s a burning villager rolls on the ground to put himself out (stop, drop and roll)
     TIME: 8, // s a creature burns after the last fire that touched it (also the most it can ever have left)
     DMG: 2, // HP a second (a player has 20; one damage for every creature)
     TICK: 1, // s between two burns
@@ -191,6 +193,17 @@ export class Burning {
         // the people round are frightened by a burning one; a burning villager / a beast runs
         if (b.kind === 'v' || b.kind === 'c') g.castleLife?.alarm?.({ x: mid.x, y: mid.y, z: mid.z }, 'fire', b.by, 6);
         if (b.kind === 'v' || b.kind === 'a') b.run = this._runTo(mid);
+        // a villager (not a wizard: he has «Firefighting») with no water near — half of them drop and roll on the ground to put the fire out
+        // (the author 05.11: «обычные жители начнут кататься по земле, чтобы погасить себя»); the rest run (to water, if there is any)
+        if (b.kind === 'v' && !b.run?.water && Math.random() < 0.6) {
+            const v = g.duel?._creature?.('v', b.id);
+            if (v && !v.wizard && g.creatureImpact?.apply) {
+                const a = Math.random() * Math.PI * 2;
+                g.creatureImpact.apply(v, { v: new THREE.Vector3(Math.cos(a) * 3, 0, Math.sin(a) * 3), kind: 'shove', by: null, always: { down: BURN.ROLL_T }, down: BURN.ROLL_T, toss: 0, tumble: 2.5 });
+                b.roll = BURN.ROLL_T; b.run = null;
+                g.castleLife?._say?.(v, 'Горю! Катаюсь — тушу!', 2);
+            }
+        }
         g.sound?.playSpellFx?.('fxCrackle', mid, 0.9, 0.95 + Math.random() * 0.1);
     }
 
@@ -326,6 +339,7 @@ export class Burning {
         if (b.wetT <= 0) { b.wetT = 0.3; if (this._wet(e)) { this._out(k, b, 'water'); return; } }
         b.left -= dt;
         if (b.left <= 0) { this._out(k, b, 'time'); return; }
+        if (b.roll > 0) { b.roll -= dt; if (b.roll <= 0) { this._puff(mid, 1.2); this._out(k, b, 'roll'); return; } } // (rolled the flames out)
         if (b.kind === 'z') { const z = g.zombieById?.get(b.id); if (z) z.burning = 0.6; } // (the zombie's own smoke, seen on every computer)
         const v = b.kind === 'v' ? g.duel._creature('v', b.id) : null;
         // a wizard puts himself out with «Firefighting» (4 of 5 know it; it costs mana) — the rest, and one out of mana, run in panic
@@ -433,7 +447,15 @@ export class Burning {
             _a.subVectors(mid, o);
             const along = _a.dot(d);
             if (along < 0 || along > len + b.r) continue;
-            if (_a.addScaledVector(d, -along).length() <= width + b.r + 0.6) this.ignite(b.kind, b.id, by);
+            if (_a.addScaledVector(d, -along).length() > width + b.r + 0.6) continue;
+            // (the author 05.11: «Инферно должен поджигать существо — не сразу, в течение 3 секунд»): the stream on a body heats it — it
+            // catches fire after INFERNO_CATCH s of it (counted while the stream is on it; it cools off when the stream leaves it)
+            const k = key(b.kind, b.id), now = performance.now(), h = this._heat || (this._heat = new Map());
+            const was = h.get(k), dt = was && now - was.at < 400 ? (now - was.at) / 1000 : 0.03;
+            const acc = (was && now - was.at < 1500 ? was.acc : 0) + dt;
+            if (acc >= BURN.INFERNO_CATCH) { h.delete(k); this.ignite(b.kind, b.id, by); }
+            else h.set(k, { acc, at: now });
+            if (h.size > 64) for (const [kk, v] of h) if (now - v.at > 3000) h.delete(kk); // (bounded)
         }
     }
 
