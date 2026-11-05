@@ -134,7 +134,7 @@ export function helmetParts(p, code, list, dk = false) {
     const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), ml = mail(dk), lt = strap(), rm = rivetMat(code, dk);
     const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
     // a light open Norman cap: a close round skull (four rounded layers that hug the box head and cover the hair — no brim), a thin brow band, a comb along the top
-    rb(s, 1.4, 0.5, 1.4, 0, 0.36, 0); rb(s, 1.38, 0.2, 1.38, 0, 0.74, 0); rb(s, 1.2, 0.14, 1.2, 0, 0.9, 0); rb(s, 0.86, 0.1, 0.86, 0, 1.0, 0);
+    rb(s, 1.46, 0.5, 1.46, 0, 0.36, 0); rb(s, 1.44, 0.2, 1.44, 0, 0.74, 0); rb(s, 1.2, 0.14, 1.2, 0, 0.9, 0); rb(s, 0.86, 0.1, 0.86, 0, 1.0, 0);
     rb(t, 1.44, 0.07, 1.44, 0, 0.12, 0);
     for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.73, 0.12, Math.sin(a) * 0.73); }
     rb(d, 0.1, 0.1, 1.3, 0, 1.0, 0.04); // the comb
