@@ -33,7 +33,17 @@ export const SERPENT = {
     SPEED: 8, // m/s it crawls (the head; a lunge: LUNGE)
     LUNGE: 34,
     GROW_S: 8, // s it pours out of the fire (the whole body crawls out of the blaze)
-    BITE: 9, // a bite (one damage for all: Damage.js) + set on fire
+    BITE: 20, // a bite (the author 05.11: «укус должен быть 20» — black magic) + set on fire at once
+    // the author 05.11: «может поднимать игрока, как плотоядное растение… хватать и бросать… проходит сквозь существо — огонь вдвойне…
+    // поднять и проглотить — он пройдёт по кишечнику и упадёт, всё это время горит. Несколько видов атак»
+    ATTACKS: { bite: 0.34, through: 0.24, toss: 0.22, swallow: 0.2 }, // how often it strikes so (grabbing ones only at what it can lift)
+    GRAB_BITE: 10, // the jaws closing on what it lifts
+    LIFT_S: 1.3, // s it holds its prey up in its jaws (shaking it)
+    TOSS_V: 17, // m/s it throws it away (sideways) …
+    TOSS_UP: 9, // … and up
+    GUT_S: 3.2, // s a swallowed one slides down inside the fiery body (burning) before it falls out of it (the fire is not solid)
+    GUT_RINGS: 22, // rings from the head it slides through
+    THROUGH_ON: 18, // m the head goes on through and beyond its target
     BITE_EVERY: 1.6,
     BITE_R: 8, // m: the jaws reach
     BURN_TICK: 0.25, // s between burns of what it touches

@@ -150,7 +150,7 @@ export class WingFlight {
         if (!g.wings?.has) return 'none';
         if (g.isDeadLocal || g.combat?.dead || g.knock?.down) return 'down';
         if (g.flight?.active || g.space?.handles || ch.swimming || ch.swimY != null || g.animals?.riding || g.dragonRide?.busy || g.boards?.mounted || g.brooms?.riding
-            || g.imperius?.busy || g.imperius?.puppet || g.levitation?.lifted || g.beds?.lying || g.ships?.rigging?.climbing || g.ledge?.active || g.spiders?.held || g.diabolos?.holding) return 'busy';
+            || g.imperius?.busy || g.imperius?.puppet || g.levitation?.lifted || g.beds?.lying || g.ships?.rigging?.climbing || g.ledge?.active || g.spiders?.held || g.diabolos?.holding || g.fireSerpent?.holding) return 'busy';
         return null;
     }
 

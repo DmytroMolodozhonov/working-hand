@@ -4506,7 +4506,7 @@ export class Game {
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.wingFlight?.airborne && !(this.boards?.mounted || this.boats?.riding) && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.fireSerpent?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.wingFlight?.airborne && !(this.boards?.mounted || this.boats?.riding) && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
         // a fast run on a slow frame: the step is walked in short pieces against the walls, so a
         // thin wall or a door is never jumped over between two frames (the push-out below decides the rest)
@@ -4595,7 +4595,7 @@ export class Game {
         const mover = horse ? horse.group.position : me;
         const S = this._solid || (this._solid = { from: { x: 0, z: 0 }, has: false, mover: null, others: [], at: {}, to: {} });
         // (dead, lying in a bed, in a spider's legs: the body is not mine to move)
-        const free = !(this.combat.dead || this.isDeadLocal || this.beds?.lying || this.spiders?.held || this.diabolos?.holding);
+        const free = !(this.combat.dead || this.isDeadLocal || this.beds?.lying || this.spiders?.held || this.diabolos?.holding || this.fireSerpent?.holding || this.fireSerpent?.holding);
         const others = free ? this._otherBodies(S.others) : null;
         if (others && others.length) {
             const up = _v1.set(0, 1, 0).applyQuaternion(ch.group.quaternion);
@@ -5220,7 +5220,7 @@ export class Game {
             this._jumpSeen = J.jumps;
             const busy = this.flight.busy || ch.swimY != null || ch.swimming || this.knock.down || this.knock.flyT > 0
                 || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.() || this.dragonRide?.busy || this.dragonRide?.mountable?.()
-                || this.spiders?.held || this.diabolos?.holding || this.levitation.lifted || (this.boards?.mounted || this.boats?.riding) || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy || this.imperius?.puppet
+                || this.spiders?.held || this.diabolos?.holding || this.fireSerpent?.holding || this.levitation.lifted || (this.boards?.mounted || this.boats?.riding) || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy || this.imperius?.puppet
                 || (this.config.mode === 'test' && this.testState === 'setup');
             const went = !first && !busy && ch.onGround && ch.jump(J.strength);
             if (went) { this._jumpAt = J.at; this._jumpOnto(); }

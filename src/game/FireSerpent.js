@@ -773,6 +773,7 @@ export class FireSerpent {
             this._burnTick(s, dt);
             s.draw(dt);
         }
+        if (this.heldMe) this._heldMeStep(dt);
         this.pool?.update(dt);
         if (g.authority) this._wizards(dt);
     }
@@ -861,8 +862,17 @@ export class FireSerpent {
 
     /** «Атак» on someone: it crawls up to him, rears high, lunges, bites, draws back — again, while he is there. @returns the speeds */
     _strike(s, dt) {
-        const tp = this._targetPoint(s.target, _c);
         const L = s.lead;
+        // holding its prey up in the jaws / gulping it down — the head lifts, shakes, throws or swallows (the prey follows: _heldStep)
+        if (s.held) return this._holdStrike(s, dt);
+        // going on THROUGH what it struck: the head flies on beyond it, the fire burning what it passed
+        if (s.thru) {
+            s.thru.t += dt;
+            s.headT.copy(s.thru.to);
+            if (s.thru.t > 0.9 || s.head.distanceTo(s.thru.to) < 3) s.thru = null;
+            return { crawl: SERPENT.SPEED, head: SERPENT.LUNGE };
+        }
+        const tp = this._targetPoint(s.target, _c);
         if (!tp || s.modeT > 45) { s.mode = 'idle'; s.target = null; s.guard = false; s.jawT = 0; s.lunge = 0; s.reared = null; return { crawl: SERPENT.SPEED, head: 10 }; }
         const dx = tp.x - L.x, dz = tp.z - L.z, d = Math.hypot(dx, dz) || 1;
         s.faceT.set(tp.x - s.head.x, tp.y - s.head.y, tp.z - s.head.z).normalize();
@@ -874,7 +884,7 @@ export class FireSerpent {
             s.jawT = d < strikeAt * 1.6 ? 0.45 : 0;
             const gy = this.game.collision?.groundY ? this.game.collision.groundY(L.x, L.z) : L.y;
             (s.reared || (s.reared = new THREE.Vector3())).set(L.x + dx / d * 4, gy + SERPENT.HEAD_H * 1.5, L.z + dz / d * 4);
-            if (d < strikeAt * 1.1 && s.head.distanceTo(s.reared) < 4 && s.biteCd <= 0) { s.lunge = 0.0001; s.jawT = 1; this._roar(s, 0.6); }
+            if (d < strikeAt * 1.1 && s.head.distanceTo(s.reared) < 4 && s.biteCd <= 0) { s.lunge = 0.0001; s.jawT = 1; s.att = this._pickAttack(s.target); this._roar(s, 0.6); }
             return { crawl: d > strikeAt ? SERPENT.SPEED * 1.6 : 0, head: 16 };
         }
         // the lunge: the head flies at it
@@ -882,10 +892,92 @@ export class FireSerpent {
         s.headT.copy(tp);
         s.mouth(_d);
         if (_d.distanceTo(tp) < SERPENT.BITE_R || s.lunge > 0.9) {
-            if (_d.distanceTo(tp) < SERPENT.BITE_R + 2) this._bite(s, s.target, tp);
-            s.lunge = 0; s.biteCd = SERPENT.BITE_EVERY; s.jawT = 0;
+            const att = s.att || 'bite';
+            if (_d.distanceTo(tp) < SERPENT.BITE_R + 2) {
+                this._bite(s, s.target, tp, att);
+                if (att === 'through') { _a.copy(s.face).setY(Math.max(-0.2, s.face.y)).normalize(); s.thru = { t: 0, to: tp.clone().addScaledVector(_a, SERPENT.THROUGH_ON) }; }
+                else if (att === 'toss' || att === 'swallow') s.held = { ref: { ...s.target }, att, t: 0, dir: Math.random() < 0.5 ? 1 : -1 };
+            }
+            s.lunge = 0; s.biteCd = SERPENT.BITE_EVERY + (s.held ? SERPENT.LIFT_S + (s.att === 'swallow' ? SERPENT.GUT_S : 0) : 0); s.jawT = s.held ? 0.55 : 0;
         }
         return { crawl: 0, head: SERPENT.LUNGE };
+    }
+
+    /** Which attack this strike is (the author: «несколько видов атак»): bite / through / toss / swallow — grabbing only what it can lift. */
+    _pickAttack(ref) {
+        const A = SERPENT.ATTACKS, liftable = ref && (ref.k === 'p' || ref.k === 'v' || ref.k === 'c');
+        let r = Math.random() * (A.bite + A.through + (liftable ? A.toss + A.swallow : 0));
+        if ((r -= A.bite) < 0) return 'bite';
+        if ((r -= A.through) < 0) return 'through';
+        if ((r -= A.toss) < 0) return 'toss';
+        return 'swallow';
+    }
+
+    /** (owner) The prey in its jaws: lifted high and shaken, then thrown aside — or gulped and slid down inside the fiery body. → speeds */
+    _holdStrike(s, dt) {
+        const H = s.held, L = s.lead, g = this.game;
+        H.t += dt;
+        const gy = g.collision?.groundY ? g.collision.groundY(L.x, L.z) : L.y;
+        const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
+        if (H.t < SERPENT.LIFT_S) {
+            // up with it, high, shaking it (a dog with a rat)
+            const sh = Math.sin(H.t * 22) * 2.2 * (1 - H.t / SERPENT.LIFT_S);
+            s.headT.set(L.x + fx * 6 + fz * sh, gy + SERPENT.HEAD_H * 1.75, L.z + fz * 6 - fx * sh);
+            s.faceT.set(fx, -0.25, fz).normalize(); s.jawT = 0.4;
+        } else if (H.att === 'toss') {
+            // the whip of the neck to the side — and it lets go
+            s.headT.set(L.x + fx * 4 + fz * H.dir * 20, gy + SERPENT.HEAD_H * 1.2, L.z + fz * 4 - fx * H.dir * 20);
+            s.faceT.set(fz * H.dir, 0.2, -fx * H.dir).normalize();
+            if (!H.thrown && H.t > SERPENT.LIFT_S + 0.25) { H.thrown = true; s.jawT = 1; this._heldRelease(s, H, 'toss'); }
+            if (H.t > SERPENT.LIFT_S + 0.8) s.held = null;
+        } else {
+            // the gulp: the head up, the jaws snapping shut, the throat working — the prey slides down inside the fire
+            s.headT.set(L.x + fx * 3, gy + SERPENT.HEAD_H * 1.5, L.z + fz * 3);
+            s.faceT.set(fx, 0.75, fz).normalize();
+            s.jawT = H.t < SERPENT.LIFT_S + 0.5 ? 1 : 0.05;
+            if (H.t > SERPENT.LIFT_S + SERPENT.GUT_S) { this._heldRelease(s, H, 'gut'); s.held = null; }
+        }
+        if (s.held) this._heldStep(s, H);
+        return { crawl: 0, head: 20 };
+    }
+
+    /** Where a held prey is now (into `out`): in the jaws while lifted / thrown, then sliding down the rings inside the body. */
+    _victimPos(s, H, t, out) {
+        if (H.att === 'swallow' && t > SERPENT.LIFT_S * 0.85) {
+            const u = Math.min(1, (t - SERPENT.LIFT_S * 0.85) / SERPENT.GUT_S), f = (N - 3) - u * SERPENT.GUT_RINGS;
+            const i = Math.max(0, Math.floor(f)), k = f - i, a = s.p[i], b = s.p[Math.min(N - 1, i + 1)];
+            return out.copy(a).lerp(b, k);
+        }
+        return s.mouth(out).addScaledVector(s.face, -2.5);
+    }
+
+    /** (host) A held castle person / sailor goes with the jaws (players hold themselves: _heldMeStep on their own computer). */
+    _heldStep(s, H) {
+        const g = this.game;
+        if (H.ref.k === 'p' || !g.authority) return;
+        const c = g.duel?._creature?.(H.ref.k, H.ref.id);
+        if (!c || c.dead) { s.held = null; return; }
+        this._victimPos(s, H, H.t, _e);
+        c.carriedBy = 'fireSerpent';
+        if (c.x !== undefined) { c.x = _e.x; c.z = _e.z; c.y = _e.y - 1.6; c.vy = 0; }
+        c.model?.group?.position?.set(_e.x, _e.y + 0.35, _e.z);
+        g.creatureImpact?.kinds?.[H.ref.k]?.hold?.(g, c, 0.5);
+        c.stunT = Math.max(c.stunT || 0, 0.5);
+        H.burnT = (H.burnT || 0) - 1 / 60;
+        if (H.att === 'swallow' && H.t > SERPENT.LIFT_S) g.burning?.ignite(H.ref.k, H.ref.id, s.by, undefined, true, true); // (inside the fire: burning twice as hard)
+    }
+
+    /** (host) The held one let go: thrown (a flight: CreatureImpact) or fallen out of the body. */
+    _heldRelease(s, H, how) {
+        const g = this.game;
+        if (H.ref.k === 'p' || !g.authority) return;
+        const c = g.duel?._creature?.(H.ref.k, H.ref.id);
+        if (!c) return;
+        c.carriedBy = null;
+        const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
+        const v = how === 'toss' ? new THREE.Vector3(fz * H.dir * SERPENT.TOSS_V, SERPENT.TOSS_UP, -fx * H.dir * SERPENT.TOSS_V) : new THREE.Vector3((Math.random() - 0.5) * 4, 1, (Math.random() - 0.5) * 4);
+        g.creatureImpact?.apply?.(c, { v, by: s.by, kind: 'spell', spell: 'Jolt', always: { down: 3 }, down: 3, toss: v.y, tumble: 1.2 });
+        g.burning?.ignite(H.ref.k, H.ref.id, s.by, undefined, true);
     }
 
     _targetPoint(ref, out) {
@@ -901,7 +993,7 @@ export class FireSerpent {
     }
 
     /** The jaws close on `ref`: the bite (−BITE) and the fire on him; the host decides (players: their own computer). */
-    _bite(s, ref, at) {
+    _bite(s, ref, at, att = 'bite') {
         const g = this.game;
         this._note({ ev: 'bite', k: ref.k, id: ref.id });
         g.fx?.lightFlash?.(at, 0xff7a1a, 8, 0.4, 30);
@@ -909,30 +1001,35 @@ export class FireSerpent {
         g.sound?.playInferno?.();
         const P = this.pool;
         if (P) for (let i = 0; i < 70; i++) P.spawn(at.x, at.y, at.z, (Math.random() - 0.5) * 9, Math.random() * 7, (Math.random() - 0.5) * 9, pick(FLAME), 0.3 + Math.random() * 0.5, 0.6, { shrink: 0.7, spin: 7 });
-        if (g.authority || ref.k === 'p') this.applyBite(s.by, ref, at);
-        else this._send(true, [ref.k, ref.id]); // (the host does it)
+        if (g.authority || ref.k === 'p') this.applyBite(s.by, ref, at, att);
+        else this._send(true, [ref.k, ref.id, att]); // (the host does it)
     }
 
     /** (the host — or my own computer for my body) A bite of `by`'s serpent lands on `ref`. */
-    applyBite(by, ref, at) {
+    applyBite(by, ref, at, att = 'bite') {
         const g = this.game;
         const dir = new THREE.Vector3(0, 0, 1);
         const s = by === this.me ? this.mine : this.remote.get(by);
         if (s) dir.copy(s.face).setY(0).normalize();
         const K = g.fireBoost?.(by) ?? 1;
-        const dmg = SERPENT.BITE * K;
+        const grab = att === 'toss' || att === 'swallow';
+        const dmg = (grab ? SERPENT.GRAB_BITE : SERPENT.BITE) * K;
+        const twice = att === 'through' || att === 'swallow'; // (through the fire / inside it: the fire on him twice as hard)
         if (ref.k === 'p' && ref.id === this.me) {
-            // me (another's serpent): bitten and on fire
+            // me (another's serpent): bitten and on fire — or seized in the jaws
             if (g.combat?.enabled) g.combat.damage(dmg, by, SERPENT.NAME); else g.damageLocalPlayer?.(dmg);
-            g.burning?.ignite('p', this.me, by, undefined, true);
-            g.knockback?.add?.(_a.copy(dir).multiplyScalar(8).setY(3));
-            g.hud?.setVoice?.(`🐍 Огненный змей укусил вас: −${Math.round(dmg)}`, true);
+            g.burning?.ignite('p', this.me, by, undefined, true, twice);
+            if (grab) { this._seizeMe(by, att); return; }
+            g.knockback?.add?.(_a.copy(dir).multiplyScalar(att === 'through' ? 14 : 8).setY(att === 'through' ? 6 : 3));
+            g.hud?.setVoice?.(att === 'through' ? `🐍 Огненный змей прошёл сквозь вас: −${Math.round(dmg)}, вы горите вдвойне` : `🐍 Огненный змей укусил вас: −${Math.round(dmg)}`, true);
             return;
         }
-        if (ref.k === 'p') { g.sync?.fireSerpentBite?.(ref.id, by); return; } // (their computer hurts and burns them: 'fsb' → onBite)
+        if (ref.k === 'p') { g.sync?.fireSerpentBite?.(ref.id, by, att); return; } // (their computer hurts, burns, holds them: 'fsb' → onBite)
         if (!g.authority) return;
         g.servants?.damage?.(ref, dmg * (ref.k === 's' ? 2 : 1), dir, by, 'serpent', at ? { x: at.x, z: at.z, ref: { k: 'F', id: 'fs:' + by } } : null);
-        if (ref.k !== 'G' && ref.k !== 'Y' && ref.k !== 'T' && ref.k !== 'f' && ref.k !== 'D') g.burning?.ignite(ref.k, ref.id, by, undefined, true);
+        if (ref.k !== 'G' && ref.k !== 'Y' && ref.k !== 'T' && ref.k !== 'f' && ref.k !== 'D') g.burning?.ignite(ref.k, ref.id, by, undefined, true, twice);
+        // what it cannot lift (a zombie, a beast…): «toss» is a blow that flings it
+        if (grab && ref.k !== 'v' && ref.k !== 'c') { const c = g.duel?._creature?.(ref.k, ref.id); if (c) g.creatureImpact?.apply?.(c, { v: new THREE.Vector3(dir.x * SERPENT.TOSS_V, SERPENT.TOSS_UP, dir.z * SERPENT.TOSS_V), by, kind: 'spell', spell: 'Jolt', always: { down: 3 }, down: 3, toss: SERPENT.TOSS_UP, tumble: 1 }); }
     }
 
     /** What it touches burns: the head is a blaze, the body lying on the ground too (Hellfire._burn — every creature). */
@@ -1084,11 +1181,48 @@ export class FireSerpent {
         if (m[9] > 0 && s.fade === 0) s.fade = 0.001;
         s.at = this._t;
         // a bite asked of the host
-        if (msg.b && Array.isArray(msg.b) && this.game.authority) this.applyBite(msg.by, { k: msg.b[0], id: msg.b[1] }, s.mouth(_b));
+        if (msg.b && Array.isArray(msg.b) && this.game.authority) this.applyBite(msg.by, { k: msg.b[0], id: msg.b[1] }, s.mouth(_b), msg.b[2] || 'bite');
     }
 
     /** ('fsb') `by`'s serpent bit me on its computer. */
-    onBite(by) { this.applyBite(by, { k: 'p', id: this.me }, null); }
+    onBite(by, att = 'bite') { this.applyBite(by, { k: 'p', id: this.me }, null, ['bite', 'through', 'toss', 'swallow'].includes(att) ? att : 'bite'); }
+
+    /** Me seized in another's serpent's jaws (my computer holds my body: Game turns my own physics off while `holding`). */
+    _seizeMe(by, att) {
+        const g = this.game;
+        if (this.heldMe || g.isDeadLocal) return;
+        try { g.animals?.riding && g.animals.dismount?.(); } catch (_) { /* */ }
+        try { g.dragonRide?.busy && g.dragonRide.stop?.('grab'); } catch (_) { /* */ }
+        g.flight?.land?.('grab');
+        this.heldMe = { by, att, t: 0, dir: Math.random() < 0.5 ? 1 : -1 };
+        g.hud?.setVoice?.(att === 'swallow' ? '🐍 Огненный змей схватил вас и глотает! Вы горите внутри его огня' : '🐍 Огненный змей схватил вас в пасть!', true);
+    }
+
+    /** I am in its jaws / inside it: my body goes where the serpent has me; then thrown, or out through its fire. */
+    get holding() { return !!this.heldMe; }
+    _heldMeStep(dt) {
+        const g = this.game, H = this.heldMe, s = this.remote.get(H.by);
+        const me = g.character.group.position, ch = g.character;
+        H.t += dt;
+        if (!s || s.fade > 0 || g.isDeadLocal || g.combat?.dead) { this.heldMe = null; return; }
+        const end = H.att === 'toss' ? SERPENT.LIFT_S + 0.25 : SERPENT.LIFT_S + SERPENT.GUT_S;
+        if (H.t < end) { this._victimPos(s, H, H.t, _e); me.set(_e.x, _e.y, _e.z); ch.verticalVelocity = 0; return; }
+        this.heldMe = null;
+        if (H.att === 'toss') {
+            // thrown aside — high and far (the fall hurts as any fall)
+            const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
+            ch.verticalVelocity = SERPENT.TOSS_UP; ch.jumpAir = true; ch.onGround = false;
+            g.knockback?.add?.(_a.set(fz * H.dir * SERPENT.TOSS_V, 0, -fx * H.dir * SERPENT.TOSS_V));
+            g.hud?.setVoice?.('🐍 Змей швырнул вас!', true);
+        } else {
+            // out through its side (it is fire, not flesh): falling, still burning
+            const i = Math.max(0, N - 3 - SERPENT.GUT_RINGS), r = s.r[i] || SERPENT.R_BODY;
+            me.set(s.p[i].x + (Math.random() - 0.5) * 2, s.p[i].y + r * 0.3, s.p[i].z + (Math.random() - 0.5) * 2);
+            g.knockback?.add?.(_a.set((Math.random() - 0.5) * 10, 0, (Math.random() - 0.5) * 10));
+            g.burning?.ignite('p', this.me, H.by, undefined, true);
+            g.hud?.setVoice?.('🐍 Вы выпали из огненного змея — горите!', true);
+        }
+    }
 
     /** A sample for Game.prewarm: the shaders compile on the loading screen. */
     sample() {
