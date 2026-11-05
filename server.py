@@ -328,6 +328,44 @@ def frame_start(line):
     return "\n" + GAME_RULE + "\n" + line + "\n" + GAME_RULE + "\n\n"
 
 
+GAMES_DIR = os.path.join("logs", "games")  # one file per game (the author 05.11: «логи каждой игры… старше 2 дней — удалять»)
+GAMES_KEEP_S = 2 * 24 * 3600
+_game_file = None
+_ANON = [
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), "<почта>"),  # (an e-mail)
+    (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<ip>"),  # (an address on the network)
+    (re.compile(r"([A-Za-z]:\\Users\\|/home/|/Users/)[^\\/\s]+", re.I), r"\1<user>"),  # (the computer's user name in a path)
+]
+
+
+def anon(text):
+    """The journal without what tells who the player is: e-mails, network addresses, the user name in paths."""
+    for rx, to in _ANON:
+        text = rx.sub(to, text)
+    return text
+
+
+def append_game_log(text, new_game):
+    """(zns-all.log's batches) Each game also into its own file in logs/games — made anonymous; files older than 2 days go."""
+    global _game_file
+    try:
+        os.makedirs(GAMES_DIR, exist_ok=True)
+        if new_game or not _game_file:
+            now = time.time()
+            for f in os.listdir(GAMES_DIR):
+                fp = os.path.join(GAMES_DIR, f)
+                try:
+                    if f.endswith(".log") and now - os.path.getmtime(fp) > GAMES_KEEP_S:
+                        os.remove(fp)
+                except OSError:
+                    pass
+            _game_file = os.path.join(GAMES_DIR, "game-" + time.strftime("%Y%m%d-%H%M%S") + ".log")
+        with open(_game_file, "a", encoding="utf-8") as f:
+            f.write(anon(text))
+    except OSError as e:
+        print(f"  [Логи игр] не записать: {e}")
+
+
 def append_all_log(text):
     """Append to zns-all.log; past ALL_LOG_MAX only the newest half stays (cut at a line start)."""
     try:
@@ -838,6 +876,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 text = "".join((frame_start(x) if GAME_START_RE.search(x) else x + "\n") for x in (str(l)[:2000].replace("\r", " ").replace("\n", " ") for l in lines[:1000]))
                 if text:
                     append_all_log(text)
+                    append_game_log(text, bool(GAME_START_RE.search(text)))
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/armlog":
