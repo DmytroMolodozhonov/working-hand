@@ -46,6 +46,7 @@ import { FLORA_ITEMS, FLORA_ITEM_TEXT, FLORA_OF_ITEM } from './MagicFlora.js';
 import { floraItemModel } from '../fx/FloraModels.js';
 import { pouchModel } from './PouchModel.js';
 import { backpackModel } from './BackpackModel.js';
+import { wandModel } from './WandModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
 import { DRAGON_KINDS } from './DragonKinds.js';
@@ -951,44 +952,6 @@ function mat(color, opts = {}) {
 }
 const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); return b; };
 const cyl = (r1, r2, h, m, x = 0, y = 0, z = 0, seg = 8) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), m); c.position.set(x, y, z); return c; };
-
-/**
- * Ten wand designs (the colour is each wand's own): along +Y, the tip at y≈0.62.
- */
-function wandModel(it) {
-    const g = new THREE.Group();
-    if (it.plain) {
-        // a plain wooden wand: a turned handle and a tapering shaft, no metal, no light
-        const wood = mat(0x6b4423), dark = mat(0x4a2e17);
-        g.add(cyl(0.034, 0.038, 0.2, dark, 0, 0.1));
-        g.add(cyl(0.039, 0.039, 0.02, wood, 0, 0.2));
-        g.add(cyl(0.012, 0.03, 0.42, wood, 0, 0.41));
-        g.userData.tipY = 0.62;
-        return g;
-    }
-    const col = new THREE.Color(it.color ?? 0x8b5a2b);
-    const wood = mat(col.clone().multiplyScalar(0.55).getHex());
-    const light = mat(col.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex());
-    const gold = mat(0xd4af37, { standard: true, metal: 0.9, rough: 0.3 });
-    const glow = new THREE.MeshBasicMaterial({ color: col.clone().lerp(new THREE.Color(0xffffff), 0.5) });
-    const m = it.model ?? 0;
-    // handle
-    g.add(cyl(0.035, 0.04, 0.2, wood, 0, 0.1));
-    if (m % 3 === 0) g.add(cyl(0.045, 0.045, 0.03, gold, 0, 0.21));
-    if (m === 1 || m === 6) { g.add(cyl(0.046, 0.046, 0.025, light, 0, 0.05)); g.add(cyl(0.046, 0.046, 0.025, light, 0, 0.15)); }
-    // shaft
-    const shaft = cyl(0.016, 0.03, 0.42, m === 4 ? light : wood, 0, 0.41);
-    g.add(shaft);
-    if (m === 2 || m === 7) for (let i = 0; i < 6; i++) { const k = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.006, 4, 8), gold); k.rotation.x = Math.PI / 2; k.position.y = 0.26 + i * 0.06; g.add(k); }
-    if (m === 3 || m === 8) for (let i = 0; i < 3; i++) g.add(new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), wood)).position.set(0, 0.3 + i * 0.11, 0);
-    if (m === 5) { const spiral = new THREE.Mesh(new THREE.TorusKnotGeometry(0.03, 0.006, 40, 4, 1, 8), light); spiral.scale.set(1, 6, 1); spiral.position.y = 0.4; g.add(spiral); }
-    // tip
-    if (m === 4 || m === 9) { const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), glow); c.position.y = 0.64; g.add(c); }
-    else if (m === 6) { const f1 = cyl(0.008, 0.012, 0.08, wood, 0.02, 0.65); f1.rotation.z = -0.4; const f2 = f1.clone(); f2.position.x = -0.02; f2.rotation.z = 0.4; g.add(f1, f2); }
-    else g.add(new THREE.Mesh(new THREE.SphereGeometry(0.017, 6, 5), glow)).position.set(0, 0.625, 0);
-    g.userData.tipY = 0.65;
-    return g;
-}
 
 /**
  * The dragon's wand: deep crimson wood, dark-red scales spiralling up its shaft, a claw of black horn
