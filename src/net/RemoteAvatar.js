@@ -201,7 +201,7 @@ export class RemoteAvatar {
         if (this.wingsNet && !this._wings) this._wings = attachWings(ch, true);
         if (this._wings) { const w = this.wingsNet; if (w) this._wings.set((+w[0] || 0) / 100, (+w[1] || 0) / 100, (+w[2] || 0) / 100, (+w[3] || 0) / 100); else { this._wings.dispose(); this._wings = null; } }
         if (this.mermaid && !this._tail) this._tail = attachTail(ch);
-        if (this._tail) { if (this.mermaid) { this._tailPh = (this._tailPh || 0) + dt * (ch.swimming ? 3.5 : 0.8); this._tail.set(true, ch.swimming ? 0.4 * Math.sin(this._tailPh) : 0); } else { this._tail.dispose(); this._tail = null; } }
+        if (this._tail) { if (this.mermaid) { this._tailPh = (this._tailPh || 0) + dt * (ch.swimming ? 3.5 : 0.8); this._tail.set(true, ch.swimming ? 0.4 * Math.sin(this._tailPh) : 0, !ch.swimming); } else { this._tail.dispose(); this._tail = null; } }
         if (this.dragonForm !== this._dfShown) { this._dfShown = this.dragonForm; ch.group.visible = !this.dead && !this.dragonForm; } // (a dragon now: only the dragon is seen)
         // (the head turns only so far from the chest; sent further round, the body — and the legs — are put round to meet it)
         const nk = neckLimit(Number.isFinite(+s.s.hy) ? +s.s.hy : 0);

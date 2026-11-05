@@ -32,7 +32,7 @@ export const MERMAID = {
     WAVE: 0.55, // m/s: the raised hands going up and down together at least this fast — the fish's movement (the old way)
     SWAY: 0.55, // shoulder-widths a second: the torso swaying side to side at least this fast — the wriggle
     SWAY_TURN: 1.6, // s: a turn of the sway (left ↔ right) at least this recent — it is a wriggle, not one step aside
-    LEN: 2.25, // m from the hips to the fluke's root (the legs were 1.95)
+    LEN: 6.75, // m from the hips to the fluke's root (the author 05.11: «в 3 раза больше» than the first, 2.25; the legs were 1.95)
     // the change (the author 05.11: «как с крыльями… анимация какое-то время длилась… страдания… минус 1 хп… красное вокруг экрана,
     // замыливание, а через секунд 10 — хвост»)
     CHANGE_S: 10, // s from the potion to the tail
@@ -43,63 +43,146 @@ export const MERMAID = {
 let _tailMats = null;
 function mats() {
     if (_tailMats) return _tailMats;
-    const scales = new THREE.MeshPhongMaterial({ color: 0xffffff, vertexColors: true, shininess: 70, specular: 0x8fd8ff });
+    // the scales drawn per pixel (the author 05.11 saw only stripes: a vertex colour per ring is too coarse): rows of overlapping
+    // rounded scales hanging toward the fluke, each with a darker rim and a glint in its middle — over the colours of scalePaint
+    const scales = new THREE.MeshPhongMaterial({ color: 0xffffff, vertexColors: true, shininess: 80, specular: 0x9fe4ff });
+    scales.defines = { USE_UV: '' };
+    scales.onBeforeCompile = (sh) => {
+        sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        {
+            vec2 sc = vec2(vUv.y * 24.0, vUv.x * 40.0); // (round the tail, along it)
+            float rowi = floor(sc.y);
+            sc.x += mod(rowi, 2.0) * 0.5;
+            vec2 f = fract(sc) - vec2(0.5, 0.05);
+            float d = length(vec2(f.x, f.y * 0.95));
+            float rim = smoothstep(0.36, 0.52, d);
+            float glint = 1.0 - smoothstep(0.0, 0.42, d);
+            diffuseColor.rgb *= 0.74 + 0.26 * (1.0 - rim) + 0.16 * glint;
+        }`);
+    };
+    scales.customProgramCacheKey = () => 'mermaid-scales';
     const fin = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.82, side: THREE.DoubleSide, emissive: new THREE.Color(0x1b6f8a), emissiveIntensity: 0.25 });
     _tailMats = { scales, fin };
     return _tailMats;
 }
 
-/** The scales: rows of overlapping scales (a darker rim on each), teal to green along the tail, a play of violet, the belly paler. */
-function scalePaint(t, ang) {
-    const row = t * 46, col = ang * 7 + (Math.floor(row) % 2) * 0.5;
-    const fx = row - Math.floor(row), fy = col - Math.floor(col);
-    const rim = Math.max(Math.abs(fx - 0.5), Math.abs(fy - 0.5)) * 2; // (0 the middle of a scale … 1 its edge)
-    let c = K.mix([0.12, 0.62, 0.66], [0.16, 0.58, 0.34], t);
-    c = K.mix(c, [0.45, 0.33, 0.78], 0.25 * (0.5 + 0.5 * Math.sin(t * 9 + ang * 2)));
-    c = K.mix(c, [0.62, 0.86, 0.84], 0.4 * Math.max(0, -Math.sin(ang))); // (the belly paler)
-    const k = 1.08 - 0.32 * rim * rim;
-    return [c[0] * k, c[1] * k, c[2] * k];
+/** A tail's colours from its hue (random for every tail — the author 05.11: «цвет рандомный будет всегда»): along it from one shade to
+ *  a neighbouring one, a play of a third, the belly paler. */
+function tailPalette(hue) {
+    const c = new THREE.Color(), rgb = (h, s, l) => { c.setHSL(((h % 1) + 1) % 1, s, l); return [c.r, c.g, c.b]; };
+    return { top: rgb(hue, 0.62, 0.42), end: rgb(hue + 0.07, 0.58, 0.34), play: rgb(hue + 0.22, 0.5, 0.5), belly: rgb(hue, 0.35, 0.74), fin: rgb(hue + 0.03, 0.55, 0.72), glow: rgb(hue, 0.7, 0.3) };
 }
+function scalePaintOf(P) {
+    return (t, ang) => {
+        let c = K.mix(P.top, P.end, t);
+        c = K.mix(c, P.play, 0.22 * (0.5 + 0.5 * Math.sin(t * 9 + ang * 2)));
+        return K.mix(c, P.belly, 0.4 * Math.max(0, -Math.sin(ang))); // (the belly paler)
+    };
+}
+const finPaint = (x, y, e) => { const k = 0.62 + 0.38 * Math.min(1, e * 1.1); const v = k * (0.92 + 0.08 * Math.sin(Math.atan2(y, x) * 18)); return [v, v, v]; }; // (veins, the rim lighter; the hue — the material)
 
-/** The tail on a character (its legs hidden): {set(on, sweep), dispose()}. */
-export function attachTail(character) {
+/**
+ * The tails (the author 05.11: «хвост больше… в 3 раза… но выходить из туловища, не стыкаться некрасиво… до 3 типов хвостов»), all ~3×
+ * the first one (6.75 m from the hips), their top as wide as the torso and set INTO it (no seam), swelling below the hips:
+ *   classic — a wide crescent fluke;  veil — long flowing see-through lobes and long hip fins;  shark — a forked uneven fluke and a
+ *   fin along the back.
+ */
+export const TAIL_TYPES = {
+    classic: { prof: [[0, 0.47, 0.34, 0], [0.08, 0.7, 0.5, 0.02], [0.26, 0.86, 0.62, 0.04], [0.5, 0.64, 0.47, 0.03], [0.75, 0.35, 0.27, 0.01], [0.92, 0.16, 0.13, 0], [1, 0.11, 0.09, 0]],
+        fluke: [[0, 0.1], [0.25, -0.05], [0.62, -0.42], [0.72, -0.72], [0.4, -0.55], [0.08, -0.5], [0, -0.42], [-0.08, -0.5], [-0.4, -0.55], [-0.72, -0.72], [-0.62, -0.42], [-0.25, -0.05]], flukeK: 3.1, side: 1.9, opacity: 0.85 },
+    veil: { prof: [[0, 0.47, 0.34, 0], [0.08, 0.64, 0.47, 0.02], [0.3, 0.76, 0.55, 0.03], [0.6, 0.5, 0.38, 0.02], [0.85, 0.22, 0.18, 0], [1, 0.1, 0.09, 0]],
+        fluke: [[0, 0.1], [0.3, -0.1], [0.75, -0.6], [0.95, -1.35], [0.6, -1.15], [0.3, -1.5], [0.08, -0.9], [0, -1.05], [-0.08, -0.9], [-0.3, -1.5], [-0.6, -1.15], [-0.95, -1.35], [-0.75, -0.6], [-0.3, -0.1]], flukeK: 2.8, side: 2.1, opacity: 0.62 },
+    shark: { prof: [[0, 0.47, 0.34, 0], [0.1, 0.72, 0.54, 0.02], [0.32, 0.84, 0.62, 0.04], [0.6, 0.55, 0.42, 0.03], [0.85, 0.25, 0.2, 0], [1, 0.13, 0.11, 0]],
+        fluke: [[0, 0.12], [0.2, 0.0], [0.5, -0.35], [0.85, -0.95], [0.45, -0.5], [0.12, -0.38], [0, -0.3], [-0.1, -0.36], [-0.35, -0.48], [-0.6, -0.72], [-0.42, -0.28], [-0.18, -0.02]], flukeK: 2.7, side: 1.5, opacity: 0.9, dorsal: true },
+};
+const TYPE_IDS = Object.keys(TAIL_TYPES);
+
+const BEND_N = 48;
+/** The tail on a character (its legs hidden): {set(on, sweep, land), dispose(), type, hue}. It BENDS along its length as it sweeps (the
+ *  fluke stays on its end); on the land it lies curved back along the ground. `opts`: {type, hue} (random when not given). */
+export function attachTail(character, opts = {}) {
     const g = character?.group;
     if (!g) return null;
-    const { scales, fin } = mats();
+    const type = TAIL_TYPES[opts.type] ? opts.type : TYPE_IDS[(Math.random() * TYPE_IDS.length) | 0];
+    const hue = Number.isFinite(opts.hue) ? opts.hue : Math.random();
+    const T = TAIL_TYPES[type], PAL = tailPalette(hue);
+    const { scales } = mats();
+    const fin = new THREE.MeshLambertMaterial({ color: new THREE.Color(...PAL.fin), vertexColors: true, transparent: true, opacity: T.opacity, side: THREE.DoubleSide, emissive: new THREE.Color(...PAL.glow), emissiveIntensity: 0.3 });
     const root = new THREE.Group();
     root.name = 'mermaidTail';
-    const L = MERMAID.LEN;
-    // the tail: from the hips (wide as them) narrowing down to the fluke, a little forward then back like a fish's body
-    const tail = K.mesh(root, K.cached('mermaidTail', () => {
-        const k = K.keys([[0, 0.42, 0.3, 0], [0.18, 0.4, 0.3, 0.02], [0.45, 0.3, 0.24, 0.03], [0.75, 0.17, 0.14, 0.01], [1, 0.07, 0.06, 0]]);
-        return K.sweep([K.v3(0, 0.15, 0), K.v3(0, -L * 0.35, 0.06), K.v3(0, -L * 0.7, -0.02), K.v3(0, -L, 0.04)], (t) => k(t), { rings: 30, sides: 22, color: scalePaint, side: new THREE.Vector3(1, 0, 0) });
-    }), scales);
+    const L = MERMAID.LEN, TOP = 0.45; // (it starts inside the torso, 0.45 m above the hips: no seam where they meet)
+    const base = K.cached('mermaidTail3' + type, () => {
+        const k = K.keys(T.prof);
+        return K.sweep([K.v3(0, TOP, 0), K.v3(0, -L * 0.3, 0.12), K.v3(0, -L * 0.68, -0.05), K.v3(0, -L, 0.08)], (t) => k(t), { rings: 44, sides: 28, side: new THREE.Vector3(1, 0, 0), uv: [1, 1] });
+    });
+    const geo = base.clone();
+    // its own colours (its hue)
+    const paint = scalePaintOf(PAL), uv = geo.attributes.uv, col = new Float32Array(uv.count * 3);
+    for (let i = 0; i < uv.count; i++) { const c = paint(uv.getX(i), -Math.PI / 2 + uv.getY(i) * Math.PI * 2); col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2]; }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const P0 = Float32Array.from(base.attributes.position.array);
+    const tail = new THREE.Mesh(geo, scales);
     tail.name = 'tailBody';
-    // the fluke (a lower part that bends), wide and veined, translucent at its edge
+    root.add(tail);
+    // the fluke on the tail's end (turned with it)
     const low = new THREE.Group();
-    low.position.set(0, -L * 0.62, 0.0);
+    low.scale.setScalar(T.flukeK);
     root.add(low);
-    const fluke = K.mesh(low, finGeo('mermaidFluke', [[0, 0.1], [0.25, -0.05], [0.62, -0.42], [0.72, -0.72], [0.4, -0.55], [0.08, -0.5], [0, -0.42], [-0.08, -0.5], [-0.4, -0.55], [-0.72, -0.72], [-0.62, -0.42], [-0.25, -0.05]], 0.03,
-        (x, y, e) => K.mix([0.2, 0.7, 0.72], [0.75, 0.97, 0.95], Math.min(1, e * 1.1)).map((v, i) => v * (0.92 + 0.08 * Math.sin(Math.atan2(y, x) * 18 + i)))), fin, 0, -L * 0.38, 0);
+    const fluke = K.mesh(low, finGeo('mermaidFluke-' + type, T.fluke, 0.03, finPaint), fin, 0, 0.05, 0);
     fluke.rotation.x = -0.15;
-    // little fins at the hips
-    for (const s of [1, -1]) {
-        const f = K.mesh(root, finGeo('mermaidSide', [[0, 0], [0.18, -0.08], [0.3, -0.3], [0.12, -0.24], [0, -0.12]], 0.02, (x, y, e) => K.mix([0.22, 0.68, 0.7], [0.7, 0.95, 0.95], e)), fin, 0.33 * s, -0.25, 0.05);
-        f.scale.x = s;
-        f.rotation.y = 0.4 * s;
+    // the hip fins (long and flowing on the veil tail)
+    for (const sx of [1, -1]) {
+        const f = K.mesh(root, finGeo('mermaidSide-' + (type === 'veil' ? 'veil' : 'short'), type === 'veil' ? [[0, 0], [0.2, -0.1], [0.42, -0.55], [0.3, -0.75], [0.12, -0.5], [0, -0.15]] : [[0, 0], [0.18, -0.08], [0.3, -0.3], [0.12, -0.24], [0, -0.12]], 0.02, finPaint), fin, 0.62 * sx, -0.7, 0.08);
+        f.scale.set(sx * T.side, T.side, T.side);
+        f.rotation.y = 0.45 * sx;
     }
-    root.position.set(0, 0, 0);
+    // the shark tail: a fin along its back, bending with it (on the spine)
+    let dorsal = null;
+    if (T.dorsal) {
+        dorsal = K.mesh(root, finGeo('mermaidDorsal', [[0, 0], [0.25, 0.05], [0.7, 0.55], [0.55, 0.62], [0.2, 0.22], [-0.3, 0.05], [-0.4, 0]], 0.025, finPaint), fin, 0, 0, 0);
+        dorsal.scale.setScalar(1.5);
+    }
     g.add(root);
     const legs = [character.leftLegPivot, character.rightLegPivot].filter(Boolean);
+    // the bend: in the water the angle grows down the tail with the sweep (a(s) = sweep · 1.3 · (s/L)^1.6); on the land the tail curves
+    // back from the hips and lies on the ground behind (a long tail can't stand on its end — the hips are ~2 m up)
+    const py = new Float32Array(BEND_N + 1), pz = new Float32Array(BEND_N + 1), pa = new Float32Array(BEND_N + 1);
+    let last = NaN, lastLand = null;
+    const at = (s, out) => { const f = Math.max(0, Math.min(L, s)) / L * BEND_N, i = Math.min(BEND_N - 1, f | 0), u = f - i; out[0] = pa[i] + (pa[i + 1] - pa[i]) * u; out[1] = py[i] + (py[i + 1] - py[i]) * u; out[2] = pz[i] + (pz[i + 1] - pz[i]) * u; return out; };
+    const q = [0, 0, 0];
+    const bend = (sweep, land) => {
+        if (Math.abs(sweep - last) < 0.004 && land === lastLand) return;
+        last = sweep; lastLand = land;
+        const ds = L / BEND_N;
+        py[0] = 0; pz[0] = 0; pa[0] = 0;
+        for (let i = 1; i <= BEND_N; i++) {
+            const sn = i / BEND_N;
+            const a = land ? Math.min(Math.PI / 2, (sn * L) / 2.9 * (Math.PI / 2)) + sweep * sn : sweep * 1.3 * Math.pow(sn, 1.6);
+            pa[i] = a; py[i] = py[i - 1] - Math.cos(a) * ds; pz[i] = pz[i - 1] - Math.sin(a) * ds; // (back: the body faces +z)
+        }
+        const pos = geo.attributes.position.array;
+        for (let v = 0; v < pos.length; v += 3) {
+            const x = P0[v], y = P0[v + 1], z = P0[v + 2];
+            at(-y, q);
+            const over = y > 0 ? y : 0; // (the part inside the torso: unbent)
+            pos[v] = x; pos[v + 1] = q[1] + over - z * Math.sin(q[0]); pos[v + 2] = q[2] + z * Math.cos(q[0]);
+        }
+        geo.attributes.position.needsUpdate = true;
+        geo.computeVertexNormals();
+        low.position.set(0, py[BEND_N] - 0.08 * Math.sin(pa[BEND_N]), pz[BEND_N] + 0.08 * Math.cos(pa[BEND_N]));
+        low.rotation.x = pa[BEND_N];
+        if (dorsal) { at(L * 0.3, q); const R = 0.55; dorsal.position.set(0, q[1] + R * Math.sin(q[0]), q[2] - R * Math.cos(q[0])); dorsal.rotation.set(q[0], Math.PI / 2, -Math.PI / 2); } // (on its back, along it, leaning to the fluke)
+    };
+    bend(0, false);
     return {
-        root,
-        set(on, sweep = 0) {
+        root, type, hue,
+        set(on, sweep = 0, land = false) {
             root.visible = on;
             for (const l of legs) l.visible = !on;
-            root.rotation.x = 0.25 * sweep;
-            low.rotation.x = 0.55 * sweep;
+            root.rotation.x = land ? 0 : -0.2 * sweep;
+            if (on) bend(sweep, land);
         },
-        dispose() { root.parent?.remove(root); for (const l of legs) l.visible = true; },
+        dispose() { root.parent?.remove(root); geo.dispose(); fin.dispose(); for (const l of legs) l.visible = true; },
     };
 }
 
@@ -131,7 +214,7 @@ export class Mermaid {
         const swimming = !!ch.swimming;
         const sp = swimming ? (g.swim?.motion?.speed || 0) : 0;
         this.ph += dt * (swimming ? 2 + sp * 1.6 : 0.8);
-        this.tail.set(true, swimming ? Math.sin(this.ph) * (0.35 + 0.15 * Math.min(1, sp / 4)) : 0.06 * Math.sin(this.ph * 3));
+        this.tail.set(true, swimming ? Math.sin(this.ph) * (0.35 + 0.15 * Math.min(1, sp / 4)) : 0.06 * Math.sin(this.ph * 3), !swimming);
         // on the land: no walking — it drags itself
         if (!swimming && ch.swimY == null) { ch.speedScale = MERMAID.LAND_K; ch.jumpAir = false; }
     }
