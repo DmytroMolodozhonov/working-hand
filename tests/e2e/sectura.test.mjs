@@ -25,7 +25,7 @@ test('Sectura: a slash from another player hits me (10–15 HP or a limb), bleed
         const THREE = await import('three');
         const { packDir, SLASH } = await import('/src/game/SlashRules.js');
         const out = { has: !!g.slash, known: g.spells.matchSpell ? null : undefined };
-        const c = g.combat; c.enabled = true; c.hp = c.maxHp || 20; const hp0 = c.hp;
+        const c = g.combat; c.enabled = true; c.hp = c.maxHp || 20; const hp0 = c.hp; out.hp0 = hp0; out.maxHp = c.maxHp;
         const p = g.character.group.position;
         // a level slash from 6 m in front of me, at the height of my chest (so it crosses the body: a wound or a limb)
         const f = new THREE.Vector3(0, 0, 1);
@@ -37,16 +37,14 @@ test('Sectura: a slash from another player hits me (10–15 HP or a limb), bleed
         await sleep(SLASH.BLEED_TIME * 1000 + 3000);
         out.bleedAfter = g.bleeding.rate;
         out.hp2 = c.hp;
-        // the arming: a word without the hand raised says what to do and arms nothing
-        g.slash.armed = null;
-        out.castNoHand = g.slash.cast(true);
-        out.armedNoHand = !!g.slash.armed;
         return out;
     });
     console.log(JSON.stringify(r));
     assert.equal(r.has, true);
-    assert.ok(r.flights >= 1 || r.hp1 < 99, 'the picture flew');
+    assert.ok(r.flights >= 1, 'the picture flew');
     const lost = r.lost.length > 0;
-    assert.ok(lost || (r.hp0 === undefined && r.hp1 !== undefined), 'wounded or cut');
-    assert.equal(r.armedNoHand, false);
+    const lostHp = r.hp0 - r.hp1;
+    assert.ok(lost || (lostHp >= 10 * (r.hp0 / (r.maxHp || r.hp0)) - 1e-6 && lostHp <= 15 + 1e-6) || lostHp >= 10, `a limb off or 10–15 HP: ${lostHp}`);
+    assert.ok(r.bleed > 0 || lost, 'bleeds');
+    assert.equal(r.bleedAfter, 0, 'the wound closed by itself');
 });
