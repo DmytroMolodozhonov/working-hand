@@ -138,12 +138,12 @@ function folded(key, profile, folds, depth, seg, rows, seed) {
     });
 }
 
-const SKIRT = () => folded('skirt', (t) => [0.8 + 0.2 * (1 - t) ** 1.2, -2.2 + t * 1.55], 11, 0.05, 48, 20, 21);
-const HEM = () => folded('hem', (t) => [1.0 + 0.004, -2.2 + t * 0.34], 11, 0.05, 48, 2, 21); // (the same folds as the skirt: it lies right on it)
-const BODICE = () => folded('bodice', (t) => [0.78 + 0.06 * Math.sin(t * 3.1), -0.85 + t * 1.75], 9, 0.02, 32, 6, 24);
-const COLLAR = () => folded('collar', (t) => [0.52 + 0.24 * t, 0.78 + t * 0.3], 7, 0.03, 24, 2, 25);
-const SLEEVE = () => folded('sleeve', (t) => [0.2 + 0.2 * t ** 1.4, t], 6, 0.06, 20, 6, 26); // (along z later: radius grows toward the wrist)
-const CUFF = () => folded('cuff', (t) => [0.4 + 0.004, 0.82 + t * 0.18], 6, 0.06, 20, 1, 26);
+const SKIRT = () => folded('skirt', (t) => [0.86 + 0.36 * (1 - t) ** 1.15, -2.2 + t * 1.7], 11, 0.07, 56, 22, 21);
+const HEM = () => folded('hem', (t) => [1.22 + 0.004, -2.2 + t * 0.4], 11, 0.07, 56, 2, 21); // (the same folds as the skirt: it lies right on it)
+const BODICE = () => folded('bodice', (t) => [0.92 + 0.05 * Math.sin(t * 3.1), -0.9 + t * 1.95], 9, 0.02, 32, 6, 24);
+const COLLAR = () => folded('collar', (t) => [0.62 + 0.3 * t, 0.82 + t * 0.34], 7, 0.03, 24, 2, 25);
+const SLEEVE = () => folded('sleeve', (t) => [0.34 + 0.46 * t ** 1.5, t], 6, 0.07, 20, 8, 26); // (along z later: radius grows toward the wrist)
+const CUFF = () => folded('cuff', (t) => [0.8 + 0.004, 0.84 + t * 0.16], 6, 0.07, 20, 1, 26);
 
 function bent(key, make) { return geo(key, make); }
 const BRIM = () => bent('brim', () => {
@@ -188,23 +188,23 @@ export function mageRobeParts(ch, code, color, hood, list, tier = 0) {
     const T = ch.torso, LOW = ch.BONE_LENGTH_LOWER || 1;
 
     // the robe: skirt, close bodice, folds; the embroidered hem band (velvet under, gold thread over) and gold piping
-    put(T, SKIRT(), wool, list, 0, 0, 0, 1, 1, 0.76);
-    put(T, BODICE(), wool, list, 0, 0, 0, 1, 1, 0.74);
+    put(T, SKIRT(), wool, list, 0, 0, 0, 1, 1, 0.82);
+    put(T, BODICE(), wool, list, 0, 0, 0, 1, 1, 0.72);
     const hemH = 1;
-    put(T, HEM(), velvet, list, 0, 0, 0, 1.0, hemH, 0.76);
-    put(T, HEM(), cloth(0xffffff, threadTex(motif), 1, 1, { alphaTest: 0.4, side: true }), list, 0, 0, 0, 1.006, hemH, 0.766);
-    if (tier >= 1) for (const y of [-2.2, -1.86]) put(T, TORUS(), gold, list, 0, y, 0, 1.0, 1.0 * 0.76, 1.0, Math.PI / 2);
+    put(T, HEM(), velvet, list, 0, 0, 0, 1.0, hemH, 0.82);
+    put(T, HEM(), cloth(0xffffff, threadTex(motif), 1, 1, { alphaTest: 0.4, side: true }), list, 0, 0, 0, 1.006, hemH, 0.826);
+    if (tier >= 1) for (const y of [-2.2, -1.86]) put(T, TORUS(), gold, list, 0, y, 0, 1.22, 1.22 * 0.82, 1.22, Math.PI / 2);
     // the collar and lapels
-    put(T, COLLAR(), velvet, list, 0, 0, -0.02, 1, 1, 0.8);
+    put(T, COLLAR(), velvet, list, 0, 0, -0.02, 1, 1, 0.74);
     if (tier >= 1) for (const sx of [-1, 1]) {
-        bx(T, velvet, list, 0.34, 1.0, 0.05, sx * 0.24, 0.2, -0.6, 0, 0, -sx * 0.14);
-        bx(T, gold, list, 0.04, 1.0, 0.06, sx * 0.4, 0.2, -0.61, 0, 0, -sx * 0.14);
+        bx(T, velvet, list, 0.4, 1.1, 0.05, sx * 0.3, 0.2, -0.66, 0, 0, -sx * 0.14);
+        bx(T, gold, list, 0.04, 1.1, 0.06, sx * 0.49, 0.2, -0.67, 0, 0, -sx * 0.14);
     }
     // the belt: leather with a gold buckle, a pouch and a vial (middle and strong robes), a gem on a strong one
     const lea = cloth(0x4a2c18, leatherTex(), 4, 1);
-    put(T, TORUS(), lea, list, 0, -0.62, 0, 0.84, 0.64, 3.0, Math.PI / 2);
-    bx(T, gold, list, 0.26, 0.22, 0.07, 0, -0.62, -0.66);
-    bx(T, cloth(0x2a1a10, null, 1, 1), list, 0.15, 0.13, 0.08, 0, -0.62, -0.69);
+    put(T, TORUS(), lea, list, 0, -0.62, 0, 0.98, 0.7, 3.0, Math.PI / 2);
+    bx(T, gold, list, 0.28, 0.24, 0.07, 0, -0.62, -0.7);
+    bx(T, cloth(0x2a1a10, null, 1, 1), list, 0.15, 0.13, 0.08, 0, -0.62, -0.73);
     if (tier >= 1) {
         const pouch = cloth(0x5a3a20, leatherTex(), 1, 1);
         bx(T, pouch, list, 0.3, 0.3, 0.16, 0.62, -0.9, -0.5, 0, 0.6, 0);
@@ -221,35 +221,35 @@ export function mageRobeParts(ch, code, color, hood, list, tier = 0) {
     // the shoulders and the upper arms are covered too (the shirt must not poke out): a mantle over each shoulder, a loose sleeve on the arm
     const UP = ch.BONE_LENGTH_UPPER || 1;
     for (const [a, sx] of [[ch.leftArmAnchor, -1], [ch.rightArmAnchor, 1]]) {
-        bx(T, wool, list, 0.62, 0.34, 0.9, sx * 0.76, 0.62, 0, 0, 0, sx * 0.12);
+        bx(T, wool, list, 0.86, 0.36, 1.0, sx * 0.78, 0.62, 0, 0, 0, sx * 0.14);
         if (!a) continue;
-        const us = put(a, SLEEVE(), wool, list, 0, 0, 0, 1.25, UP * 1.0, 1.25);
+        const us = put(a, SLEEVE(), wool, list, 0, 0, 0, 0.72, UP * 1.0, 0.72);
         us.rotation.x = Math.PI / 2; us.position.z = 0;
     }
     // bell sleeves on the forearms, an embroidered cuff and a gold edge at the wrist
     for (const e of [ch.leftElbowAnchor, ch.rightElbowAnchor]) {
         if (!e) continue;
         const sl = put(e, SLEEVE(), wool, list, 0, 0, 0, 1, 1, 1); // radius grows toward z = LOW: made by rotating the unit shape onto z
-        sl.rotation.x = Math.PI / 2; sl.scale.set(1.3, LOW * 0.98, 1.3); sl.position.z = 0;
+        sl.rotation.x = Math.PI / 2; sl.scale.set(1.0, LOW * 0.98, 1.0); sl.position.z = 0;
         const cf = put(e, CUFF(), velvet, list, 0, 0, 0, 1, 1, 1);
-        cf.rotation.x = Math.PI / 2; cf.scale.set(1.3, LOW * 0.98, 1.3); cf.position.z = 0;
+        cf.rotation.x = Math.PI / 2; cf.scale.set(1.0, LOW * 0.98, 1.0); cf.position.z = 0;
         const th = put(e, CUFF(), cloth(0xffffff, threadTex(motif), 1, 1, { alphaTest: 0.4, side: true }), list, 0, 0, 0, 1.01, 1, 1.01);
-        th.rotation.x = Math.PI / 2; th.scale.set(1.315, LOW * 0.98, 1.315); th.position.z = 0;
+        th.rotation.x = Math.PI / 2; th.scale.set(1.012, LOW * 0.98, 1.012); th.position.z = 0;
         if (tier >= 1) put(e, TORUS(), gold, list, 0, 0, LOW * 0.98, 0.4, 0.4, 0.4);
     }
     // the hat
     const H = ch.head;
     if (hood && H) {
         const hatC = cloth(_tint(base, 0.85), woolTex(), 2, 2, { side: true, emissive: glow });
-        const high = 1.6 + 0.35 * tier;
-        put(H, BRIM(), hatC, list, 0, 0.64, 0, 1.45, 1, 1.45, 0.04, 0, 0.03);
-        put(H, CONE(), hatC, list, -0.02, 0.64 + high / 2, 0.04, 1.4, high, 1.4);
+        const high = 2.2 + 0.45 * tier;
+        put(H, BRIM(), hatC, list, 0, 0.64, 0, 1.75, 1, 1.75, 0.04, 0, 0.03);
+        put(H, CONE(), hatC, list, -0.02, 0.64 + high / 2, 0.04, 1.6, high, 1.6);
         const BAND = geo('hband', () => new THREE.CylinderGeometry(0.56, 0.6, 0.2, 28, 1, true));
-        put(H, BAND, velvet, list, 0, 0.78, 0, 1.25, 1, 1.25);
-        put(H, BAND, cloth(0xffffff, threadTex(motif), 2, 1, { alphaTest: 0.4, side: true }), list, 0, 0.78, 0, 1.265, 1, 1.265);
-        bx(H, gold, list, 0.2, 0.2, 0.05, 0, 0.78, -0.78);
-        bx(H, lam(tier >= 2 ? 'gemR' : 'gemB', tier >= 2 ? { color: 0xd02050, emissive: 0xc01040, emissiveIntensity: 0.9 } : { color: 0x4f8cff, emissive: 0x2a60e0, emissiveIntensity: 0.7 }), list, 0.11, 0.11, 0.06, 0, 0.78, -0.8);
-        if (tier >= 2) put(H, TORUS(), gold, list, 0, 0.66, 0, 1.4, 1.4, 1.4, Math.PI / 2);
-        put(H, geo('stud', () => new THREE.SphereGeometry(0.09, 8, 6)), gold, list, 0.56, 0.64 + 0.88 * high - 0.3, 0.04);
+        put(H, BAND, velvet, list, 0, 0.8, 0, 1.5, 1, 1.5);
+        put(H, BAND, cloth(0xffffff, threadTex(motif), 2, 1, { alphaTest: 0.4, side: true }), list, 0, 0.8, 0, 1.52, 1, 1.52);
+        bx(H, gold, list, 0.24, 0.24, 0.05, 0, 0.8, -0.93);
+        bx(H, lam(tier >= 2 ? 'gemR' : 'gemB', tier >= 2 ? { color: 0xd02050, emissive: 0xc01040, emissiveIntensity: 0.9 } : { color: 0x4f8cff, emissive: 0x2a60e0, emissiveIntensity: 0.7 }), list, 0.11, 0.11, 0.06, 0, 0.8, -0.95);
+        if (tier >= 2) put(H, TORUS(), gold, list, 0, 0.66, 0, 1.75, 1.75, 1.75, Math.PI / 2);
+        put(H, geo('stud', () => new THREE.SphereGeometry(0.09, 8, 6)), gold, list, 0.62, 0.64 + 0.88 * high - 0.3, 0.04);
     }
 }
