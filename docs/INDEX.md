@@ -715,6 +715,7 @@
 - `JournalTab.js` — @param {Document} [doc] @param {() => ({name, title, text}/null)} [live]  the spell journal of this game (shown when there is no file)
 - `LogGamesView.js` — Wire a button: click → copy `getText()` → «Скопировано» for 1.5 s.
 - `MapEditor.js` — 2D Grid-based Map Editor (original editor, ES module). Features: Drag-to-paint, multiple zombies per cell (up to 10)
+- `PortalLoader.js` — the loading of a world as a whirlpool passage (a full-screen shader: spiral nebula, star streaks, the eye, a ring of runes lit by the progress; a palette of eight, arms, turn and lore lines different every time; over everything — the game's interface never shows through it). Pictures: `node tools/portal-screenshots.mjs` → docs/media/loading-*.png.
 - `PlayerPreview.js` — the small 3D hero of the «Игрок» tab (own renderer; created on open, disposed on close). Same scene as the character editor's preview: the hero with their look, armour and robe on.
 - `PlayerSheet.js` — the «🧙 Игрок» tab of the pause menu: who the hero is and what they have (nothing here is invented: a row appears only when the game really has the value).
 - `PlayersTab.js` — Escape → «👥 Игроки». The only place where the list of players lives (in the live game nothing of it is drawn: the list used to cover the coins counter). One row per player: a dot in his colour, the name, host / guest, the link,…

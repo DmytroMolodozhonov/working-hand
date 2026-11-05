@@ -4,6 +4,7 @@
  */
 
 import { mountHeroPanel } from './ui/HeroSettingsUi.js';
+import { PortalLoader } from './ui/PortalLoader.js';
 import { DEFAULT_HERO } from './game/HeroSetup.js';
 import { collapseMaxima } from './audio/MaximaShout.js';
 import { CreateMemory } from './ui/CreateMemory.js';
@@ -191,9 +192,13 @@ let isMenuVoiceActive = false;
 
 const settings = { smoothness: 0.3, sensitivity: 1.0 };
 
+// the loading: a whirlpool passage into the world, over everything (PortalLoader.js; the old #loading screen is no longer shown —
+// it lay under the game's interface, which showed through it for a second or two)
+const portal = new PortalLoader();
 function updateProgress(percent, text) {
     progressBar.style.width = `${percent}%`;
     if (text && loadingStatus) loadingStatus.textContent = text;
+    portal.progress(percent, text);
 }
 
 // Loading screen starts visible in the HTML: hide it, show the menu.
@@ -1150,7 +1155,7 @@ const ui = {
         btn.onclick = () => { if (btn.disabled) return; screen.classList.add('hidden'); onRespawn?.(); };
         $('death-menu-btn').onclick = () => { net.sayGoodbye(); net.leave(); location.reload(); };
     },
-    isLoading: () => !loadingScreen.classList.contains('hidden'),
+    isLoading: () => portal.on && portal.phase !== 'arrive', // (the passage into the world is on — PortalLoader)
     isMenuVoiceActive: () => isMenuVoiceActive,
     fatal(e) {
         alert('Критическая ошибка: ' + (e?.message || e));
@@ -1220,9 +1225,7 @@ async function startGame(config, welcome = null) {
 }
 
 async function startGameInner(config, welcome) {
-    mainMenu.classList.add('hidden');
-    loadingScreen.classList.remove('hidden');
-    loadingScreen.style.display = 'flex';
+    portal.start(mainMenu); // (the menu is drawn into the whirl; hidden when the swirl has opened)
     updateProgress(2, 'Инициализация...');
     const B = bootTimer;
     B.reset();
@@ -1312,7 +1315,8 @@ async function startGameInner(config, welcome) {
             game.revealed = true; // (the frames before it are behind the loading screen: PerfLog says so of their hitches)
             loadingScreen.classList.add('hidden');
             loadingScreen.style.display = 'none';
-            hud.show(true);
+            hud.show(true); // (under the passage: the light of the arrival fades and the world is there — the interface with it)
+            portal.finish();
             game.sync?.markScreenOpen(); // (network game: «ready» to the others — only now my avatar may appear for them)
             if (creativeRestartNow) game.keeper?.save(); // replace the old saved attempt with the pristine world
             applyFps();
