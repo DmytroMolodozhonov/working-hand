@@ -224,3 +224,17 @@ test('the duel mode waits for the loading screen and the floor\'s land before th
     assert.equal(f.call(mk(true, false), A), false, 'the land is not brought yet');
     assert.equal(f.call(mk(true, true), A), true);
 });
+
+test('the way in from the tower: no cliff before the front gate — the forecourt steps down a block at a time (the author: «арена выше земли на 3 блока, волшебники не могут зайти»)', () => {
+    const t = world(true, 4242);
+    const top = (x, z) => { for (let L = 60; L > -17; L--) { const b = t.get(x, L, z); if (b !== BLOCK.AIR && b !== BLOCK.WATER) return L; } return -99; };
+    const a = towerArena(t);
+    const g = a.gates[0].out, dx = a.towerAt.x - g.x, dz = a.towerAt.z - g.z, L = Math.hypot(dx, dz);
+    let prev = top(Math.round(g.x), Math.round(g.z)), worst = 0;
+    for (let k = 1; k <= 40; k++) {
+        const h = top(Math.round(g.x + dx / L * k), Math.round(g.z + dz / L * k));
+        worst = Math.max(worst, prev - h);
+        prev = h;
+    }
+    assert.ok(worst <= 1, 'the steepest step down from the gate to the tower: ' + worst + ' blocks');
+});

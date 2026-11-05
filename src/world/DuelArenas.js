@@ -95,6 +95,14 @@ export function buildArena(p, d = ARENA) {
         //  the author: «кружок игрока — напротив входа»)
         out.gates.push({ out: p.pt(0, s * (END + 4)), in: p.pt(0, s * (A.S + A.W - 3)), mark: p.pt(0, -s * A.MARK) });
     }
+    // the forecourt by the front gate (the lectern, the stall, the road in) on a stepped terrace: where the tower's levelled land beside it lies
+    // lower (the author: «арена у башни выше земли на 3 блока — волшебники упираются и не могут зайти»), its rings come down a block every
+    // 2 m, each an ordinary step; where the land is as high, it all lies under the ground and nothing shows (only solid, never air)
+    // (flat to the edge of the levelled land, ZONE, then down: the land falls away only past it)
+    if (A.ENTRIES) for (const s of [-1, 1]) for (let i = FORE.STEPS - 1; i >= 0; i--) {
+        const w = A.ZONE + 2 * i;
+        p.box(-w, w, -FORE.DEEP, -1 - i, s * (END + 1), s * (A.ZONE + 1 + 2 * i), B.ENCHANTED);
+    }
     // the place to sign up: a lectern with the book of duels by the front gate (outside, on the right)
     p.box(6, 7, 0, 1, -(END + 3), -(END + 3), B.ENCHANTED);
     p.box(6, 7, 2, 2, -(END + 3), -(END + 3), B.BOOKS);
@@ -137,6 +145,9 @@ export function buildArena(p, d = ARENA) {
  *                  each, none on another): `desk.stall.slots` (the figures' feet are on the counter's top).
  * Every part is a block: nothing is walked through (the counter is a wall to a man, the posts are pillars).
  */
+/** (entries) the forecourt's terrace: steps down from the floor's level, how deep its foundation goes (blocks) */
+export const FORE = { STEPS: 7, DEEP: 10 }; // (7 rings of 2 m: the last ends at ZONE + 13 — inside the cell the arena was placed in, ZONE + BLEND + 4)
+
 function entries(p, A, out, OUT_W, END, T) {
     const B = BLOCK;
     // the stall: the counter, the posts, the canopy
