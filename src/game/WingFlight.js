@@ -194,7 +194,8 @@ export class WingFlight {
             if (g.settings?.drifting) g.cameraBaseRotation += yr; else if (g.smoothBody != null) g.smoothBody += yr;
             ch.setBodyRotation?.(g.settings?.drifting ? g.cameraBaseRotation : g.smoothBody);
         }
-        if (stroke > 0) g.sound?.playSwan?.(p, 'wings');
+        if (stroke > 0) { g.sound?.playSwan?.(p, 'wings'); this._strokeAt = this.t; }
+        if (st.air) this._top = Math.max(this._top ?? -1e9, p.y - PLAYER_GROUND_OFFSET);
         if (!st.air) { if (wasAir) this._touch(0, 0); this._pose(false, arms, dt); return; }
         if (!wasAir) g.hud?.setVoice?.('🪽 Взлёт! Машите руками, иначе упадёте. Наклон вперёд — вниз, назад — вверх, вбок — поворот', true);
         if (st.hold < 0.35 && !this._toldFall) { this._toldFall = true; g.hud?.setVoice?.('🪽 Крылья устали держать — машите!', true); }
@@ -227,24 +228,27 @@ export class WingFlight {
         this._pose(true, arms, dt, stroke);
     }
 
-    /** The torso's lean from its pose at the take-off → {turn, dive} (Flight.steering's rule); the head bowed helps the dive. */
+    /** The torso's lean from its pose at the take-off → {turn, dive} (Flight.steering's rule); the head is free to look anywhere. */
     _steer(torso, headPitch, dt) {
         const st = this.st;
         if (!st.air) { this.neutral = null; this._samples = 0; }
         const n = this.neutral;
         if (st.air && torso && (!n || this._samples < 20)) {
             // the first moments in the air: the body's calm pose (leaning from it steers)
-            const k = 1 / (++this._samples), m = n || { lateral: torso.lateral, noseRel: torso.noseRel, depth: torso.depth ?? null };
+            const k = 1 / (++this._samples), m = n || { lateral: torso.lateral, noseRel: torso.noseRel, depth: torso.depth ?? null, tilt: Number.isFinite(torso.tilt) ? torso.tilt : null };
             m.lateral += (torso.lateral - m.lateral) * k; m.noseRel += (torso.noseRel - m.noseRel) * k;
+            if (Number.isFinite(torso.tilt)) m.tilt = m.tilt == null ? torso.tilt : m.tilt + (torso.tilt - m.tilt) * k;
             if (torso.depth != null) m.depth = m.depth == null ? torso.depth : m.depth + (torso.depth - m.depth) * k;
             this.neutral = m;
-            return { turn: 0, dive: Math.max(-1, Math.min(1, -headPitch * 0.6)) };
+            return { turn: 0, dive: 0 };
         }
-        let turn = 0, dive = -headPitch * 0.6;
+        // (the head is free — the author 05.11: «должен мочь свободно смотреть то ли вниз, то ли прямо, то ли чуть-чуть вверх»: the head's
+        //  pitch and the nose no longer steer; only the torso: its 3-D lean forward / back (degrees) or the shoulders' depth, and sideways)
+        let turn = 0, dive = 0;
         if (torso && n) {
             turn = Math.max(-1, Math.min(1, (torso.lateral - n.lateral) * 2.2));
-            if (torso.depth != null && n.depth != null) dive += (n.depth - torso.depth) * 6;
-            dive += (n.noseRel - torso.noseRel) * 1.6;
+            if (Number.isFinite(torso.tilt) && Number.isFinite(n.tilt)) dive += (n.tilt - torso.tilt) / 14; // (leaning forward 14° — a full dive)
+            else if (torso.depth != null && n.depth != null) dive += (n.depth - torso.depth) * 6;
         }
         const dz = (v, d) => (Math.abs(v) < d ? 0 : v - Math.sign(v) * d);
         return { turn: dz(turn, 0.12), dive: Math.max(-1, Math.min(1, dz(dive, 0.08))) };
@@ -263,6 +267,10 @@ export class WingFlight {
     _touch(vy, vf) {
         const g = this.game;
         const h = landingHurt(vy, vf);
+        // (a landing teaches steadiness — not a long fall with no stroke at all: Steadiness.landed)
+        const feet = g.character.group.position.y - PLAYER_GROUND_OFFSET;
+        if (this._top != null) g.steady?.landed?.(this._top - feet, this.t - (this._strokeAt ?? -99));
+        this._top = null;
         this.game.character.setFlightTilt?.(0);
         this.game.character.flying = false;
         if (!h.dmg) { if (vy < -1) g.sound?.playLand?.(0.3); return; }

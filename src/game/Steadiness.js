@@ -44,6 +44,9 @@ export const STEADY = {
     NEVER: new Set(['WindMaxima', 'Inspirius']),
     WIND_GAIN_COOLDOWN: 2, // s: one fall from the wind gives one +1 (a gust's repeated ticks do not pile up)
     WIND_KINDS: new Set(['Wind', 'WindMaxima']),
+    LAND_K: 0.34, // a landing on the wings (or a fall the wings tried to soften) counts this share of a step (+1 in ~3 landings)
+    LAND_FREE_DROP: 30, // m: a fall from higher than this with no stroke for LAND_FREE_T s — not a landing, nothing learnt
+    LAND_FREE_T: 6,
 };
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -140,6 +143,24 @@ export class Steadiness {
             this.skill++;
             g.hud?.toast ? g.hud.toast('+1 к устойчивости') : g.hud?.setVoice?.('+1 к устойчивости', true);
         }
+    }
+
+    /**
+     * A landing after a flight on the wings (WingFlight._touch; the author 05.11: «после полёта устойчивость тоже прибавляется… ему будет
+     * легче приземляться каждый раз… не считается, когда он упал с невероятно большой высоты, даже не пытаясь»): `drop` m from the
+     * flight's top, `sinceStroke` s since the last stroke. Not in Creative. → true when it counted.
+     */
+    landed(drop = 0, sinceStroke = 0) {
+        const g = this.game;
+        if (g.config?.mode === 'creative' || this.skill >= STEADY.MAX) return false;
+        if (drop > STEADY.LAND_FREE_DROP && sinceStroke > STEADY.LAND_FREE_T) return false; // (a long fall, not even trying)
+        this.acc += needFor(this.skill) * STEADY.LAND_K;
+        while (this.acc >= needFor(this.skill) && this.skill < STEADY.MAX) {
+            this.acc -= needFor(this.skill);
+            this.skill++;
+            g.hud?.toast ? g.hud.toast('+1 к устойчивости (посадка)') : g.hud?.setVoice?.('+1 к устойчивости (посадка)', true);
+        }
+        return true;
     }
 
     /**

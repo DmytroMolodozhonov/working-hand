@@ -102,10 +102,13 @@ test('the torso steers as in «Флайн»: leaning forward — down (faster), 
     g.wings.grant();
     const wf = g.wingFlight;
     wf.st.air = true;
-    for (let i = 0; i < 25; i++) wf._steer({ lateral: 0, noseRel: 0.5, depth: null }, 0, dt);
-    assert.ok(wf._steer({ lateral: 0, noseRel: 0.2, depth: null }, 0, dt).dive > 0.3, 'the head and shoulders forward: a dive');
-    assert.ok(wf._steer({ lateral: 0, noseRel: 0.8, depth: null }, 0, dt).dive < -0.3, 'back: up');
-    assert.ok(Math.abs(wf._steer({ lateral: 0.3, noseRel: 0.5, depth: null }, 0, dt).turn) > 0.3, 'sideways: a turn');
+    // (the torso's 3-D lean steers; the head and the nose are free to look — the author 05.11: «должен мочь свободно смотреть»)
+    for (let i = 0; i < 25; i++) wf._steer({ lateral: 0, noseRel: 0.5, depth: null, tilt: 0 }, 0, dt);
+    assert.ok(wf._steer({ lateral: 0, noseRel: 0.5, depth: null, tilt: -10 }, 0, dt).dive > 0.3, 'the torso forward: a dive');
+    assert.ok(wf._steer({ lateral: 0, noseRel: 0.5, depth: null, tilt: 10 }, 0, dt).dive < -0.3, 'back: up');
+    assert.ok(Math.abs(wf._steer({ lateral: 0.3, noseRel: 0.5, depth: null, tilt: 0 }, 0, dt).turn) > 0.3, 'sideways: a turn');
+    assert.equal(wf._steer({ lateral: 0, noseRel: 0.1, depth: null, tilt: 0 }, -0.8, dt).dive, 0, 'looking down at the land (the head bowed, the nose low): no dive');
+    assert.equal(wf._steer({ lateral: 0, noseRel: 0.9, depth: null, tilt: 0 }, 0.4, dt).dive, 0, 'looking ahead / a little up: no climb');
 });
 
 test('a soft landing with the arms spread does not hurt; a dive with the wings folded into the ground hurts', () => {
@@ -165,4 +168,15 @@ test('take-off strokes start with the arms up (the author 05.11: running alone t
     assert.equal(armsHigh(ch(0.1, -0.1)), true, 'both arms out at the shoulders');
     assert.equal(armsHigh(ch(0.5, -0.9)), false, 'one arm up is no wing');
     assert.ok(TAKEOFF.HIGH_WIN < TAKEOFF.STROKE_WIN);
+});
+
+test('a landing after a flight teaches steadiness (+1 in a few landings); a long fall with no stroke does not', async () => {
+    const { Steadiness, STEADY } = await import('../../src/game/Steadiness.js');
+    const g = { config: { mode: 'survival' }, hud: { toast() {} } };
+    const s = new Steadiness(g);
+    const k0 = s.skill;
+    for (let i = 0; i < 3; i++) assert.equal(s.landed(12, 1), true);
+    assert.equal(s.skill, k0 + 1, '+1 after three landings');
+    assert.equal(s.landed(STEADY.LAND_FREE_DROP + 20, STEADY.LAND_FREE_T + 5), false, 'a fall from very high, not even trying');
+    assert.equal(new Steadiness({ config: { mode: 'creative' } }).landed(5, 0), false, 'no skill counted in Creative');
 });
