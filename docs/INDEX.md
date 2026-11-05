@@ -134,7 +134,7 @@
 - `temple.worker.js` — the Temple of the Gods' look and solids (GodsTemple.templePlan: ~0.5 s of work — never in a frame of the game). In: {id, seed}; out: {id, plan} (the mesh arrays moved, not copied).
 - `terrain.worker.js` — makes terrain chunks away from the drawing (TerrainView.js).
 
-### `src/game/` — игра: системы, заклинания, существа, правила и таблицы «кто/что» (402)
+### `src/game/` — игра: системы, заклинания, существа, правила и таблицы «кто/что» (404)
 
 - `Accio.js` — «Акцио»: summon a thing into your hand.
 - `Achievements.js` — the player's achievements («ачивки») and the status «Высший маг».
@@ -326,6 +326,7 @@
 - `HerdSites.js` — Where herds live: the world is cut into small cells, and each cell has (or has not) one herd place, decided only by the world's seed — the same on every computer and not depending on any animals around. The share of cells that…
 - `HeroApply.js` — «Настройки героя» Творческого мира, применённые к герою (правила и числа — HeroSetup.js).
 - `HeroSetup.js` — «Настройки героя» Творческого мира (чистые правила, без THREE; игровая часть — HeroApply.js).
+- `HeroWings.js` — «Зелье крыльев»: the hero grows wings, for good (till death). The author 05.11: «Крылья не сразу отрастут полностью, а в течение 10 минут. И ты будешь страдать: минус 1 ХП в полминуты в течение 20 минут — можно умереть, если не…
 - `HillWay.js` — people on hills (pure core, no THREE).
 - `Hints.js` — the player is always told WHAT happened and WHY, in one short line.
 - `HoloText.js` — the words of the «Раскрой свои секреты» hologram, as plain text.
@@ -527,6 +528,7 @@
 - `Weapons.js` — how the player's hands interact with physical weapons.
 - `WindImpulse.js` — «Wind Impulse» / «Wind Impulse Maxima» (only from a scroll — one scroll teaches both).
 - `WindRing.js` — «Wind Maxima» («Вайнд Максима») with the wand raised UP (or turned at oneself).
+- `WingFlight.js` — flying on the wings of the potion (HeroWings.js) by the arms' strokes. No mana (the author: «это не будет тратить маны»), and not the «Flight» of the spell: the wings must be worked all the time.
 - `WizVillages.js` — the life of the wizards' settlements (src/world/WizardVillages.js).
 - `WizardAI.js` — who the wizards are and how they decide (pure, node-testable).
 - `WizardFight.js` — the wizards of a tower (and the wanderers) fight: real duel spells from the wand (src/game/Duel.js — the same charges a player casts: «Остолбеней», «Сапира», «Айс»), a hand shield against a charge flying at them, the Master's…

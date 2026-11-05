@@ -134,6 +134,7 @@ import { Dragons } from './Dragons.js';
 import { DragonRide } from './DragonRide.js';
 import { DragonForm } from './DragonForm.js';
 import { HeroWings } from './HeroWings.js';
+import { WingFlight } from './WingFlight.js';
 import { ImperiusControl } from './ImperiusControl.js';
 import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
 import { Carriages, cartModel } from './Carriages.js';
@@ -726,6 +727,7 @@ export class Game {
         this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
         this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
+        this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
         this.wings = new HeroWings(this); // «Зелье крыльев»: the wings grow on the back, for good (HeroWings.js; the flight — WingFlight.js)
         this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
         this.potionFx._randomLook = () => _cleanLook(_rollLook());
@@ -4325,6 +4327,7 @@ export class Game {
 
         if (this.space?.handles) this.space.update(dt, pose); // (the climb to space, space, the fall back: Space.js)
         else if (flying) this._updateFlight(dt, pose);
+        if (!flying) this.wingFlight?.update(dt); // (the wings of the potion: strokes of the arms — WingFlight.js)
         if (iced) ch.setRunning(false);
         this._jumpStep(pose);
         this.steady.step(dt);
@@ -4333,7 +4336,7 @@ export class Game {
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.wingFlight?.airborne && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
         // a fast run on a slow frame: the step is walked in short pieces against the walls, so a
         // thin wall or a door is never jumped over between two frames (the push-out below decides the rest)
