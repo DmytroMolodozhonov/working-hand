@@ -42,8 +42,40 @@ export function fromModel(doll, model) {
 
 const at = (doll, i, v) => { doll.at(i, pt); return v.set(pt[0], pt[1], pt[2]); };
 
-/** Turn that brings `from` (unit) onto the direction `dir` (any length) — into q. */
-const aim = (q, from, dir) => { const n = dir.length(); if (n < 1e-6) return q.identity(); return q.setFromUnitVectors(from, dir.multiplyScalar(1 / n)); };
+/**
+ * Turn that brings `from` (unit: the part's own axis, DOWN for a limb, UP for the head) onto the direction `dir` (any length) — into q —
+ * keeping the part's own side axis (x: his right, the hinge of a knee, the nod of the head) as near as it can to the frame's x. The
+ * shortest turn (setFromUnitVectors) twisted a part round itself whenever it pointed near the opposite of `from` (an arm flung up over the
+ * head, a head hanging down): the turn's axis is undefined there and it jumped — the knee, the foot, the hand wrung sideways (the author
+ * 05.11: «он как-то так искривился странно»). Near the frame's x itself (an arm out sideways) the part's front (z) is kept instead, smoothly.
+ */
+const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _az = new THREE.Vector3(), _mb = new THREE.Matrix4(), _fq = new THREE.Quaternion();
+/** The turn taking +y onto the unit `v` with its x kept nearest the frame's x (near x itself: the front kept instead, blended). */
+function frameQ(out, v) {
+    _ay.copy(v);
+    _ax.set(1, 0, 0).addScaledVector(_ay, -_ay.x);
+    let lx = _ax.length();
+    if (lx < 0.45) { // (pointing nearly along x: blend in the front's keeping, so the side axis never flips)
+        _az.set(0, 0, 1).addScaledVector(_ay, -_ay.z).normalize();
+        const w = (0.45 - lx) / 0.45;
+        _ax.multiplyScalar(1 - w).add(_az.crossVectors(_ay, _az).multiplyScalar(w));
+        lx = _ax.length();
+    }
+    if (lx < 1e-6) return out.setFromUnitVectors(UP, _ay);
+    _ax.multiplyScalar(1 / lx);
+    _az.crossVectors(_ax, _ay).normalize();
+    _ax.crossVectors(_ay, _az);
+    return out.setFromRotationMatrix(_mb.makeBasis(_ax, _ay, _az));
+}
+/** The turn taking the unit `from` onto `dir` (any length) — the part's side axis kept, never wrung round itself. */
+function turnTo(q, from, dir) {
+    const n = dir.length();
+    if (n < 1e-6) return q.identity();
+    frameQ(_fq, from).invert();
+    _az.copy(dir).multiplyScalar(1 / n);
+    return frameQ(q, _az).multiply(_fq);
+}
+const aim = (q, from, dir) => turnTo(q, from, dir);
 
 /** The model's parts follow the doll (call after the model's own update: what it animated is overwritten). */
 export function toModel(doll, model) {
@@ -196,7 +228,7 @@ function aimPart(obj, rest, target, joint, half) {
     _dl.copy(target).sub(_jw).applyQuaternion(_wq.copy(_pq).invert());
     _rest.set(rest[0], rest[1], rest[2]).normalize();
     const n = _dl.length();
-    if (n > 1e-6) obj.quaternion.setFromUnitVectors(_rest, _dl.multiplyScalar(1 / n));
+    if (n > 1e-6) turnTo(obj.quaternion, _rest, _dl); // (its side axis kept: no wringing — turnTo)
     if (joint) obj.position.set(joint[0], joint[1], joint[2]).addScaledVector(_rest.applyQuaternion(obj.quaternion), half);
     obj.updateMatrixWorld(true);
 }
