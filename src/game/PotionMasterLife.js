@@ -128,6 +128,8 @@ export class PotionMasterLife {
                 this._show(r.found.map((e) => ({ x: LAIR.CX + e.slot.x, y: e.slot.y + 0.4, z: LAIR.CZ + e.slot.z })));
                 return pick(['Сейчас покажу.', 'Идёмте, покажу.', 'Минутку — вот сюда.']);
             }
+            case 'recipe': return recipeAnswer(it.rec);
+            case 'know': return `Конечно знаю — ${recipeAnswer(it.rec)}`;
             case 'hint': return c ? hintLine(c.st.ings) : LINES.noCauldron;
             case 'stop': if (!this.job) return LINES.idle; this._end(); return LINES.stopped;
             case 'fire': if (!c) return LINES.noCauldron; this._castFire(v, c); return 'Готово, огонь горит.';
