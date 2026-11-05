@@ -1210,7 +1210,8 @@ export class NetSync {
             case 'spx': g.spencers?.onNet(m, this.net.isHost); break; // (the invisible birds of Spencer: SpencerBirds.js)
             case 'garg': g.gargoyles?.onNet(m, this.net.isHost); break; // (the infernal gargoyles and their ritual: Gargoyles.js)
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
-            case 'cforge': case 'cforgemk': g.cauldronForge?.onNet(m); break; // («Create a Cauldron»: CauldronForge.js)
+            case 'cforge': case 'cforgemk': g.cauldronForge?.onNet(m); break;
+            case 'gblow': g.glassBlowing?.onNet(m); break; // («Create a Flask»: GlassBlowing.js) // («Create a Cauldron»: CauldronForge.js)
             case 'btnew': case 'bts': case 'btseat': case 'btdrive': case 'btlev': case 'btlevp': g.boats?.onNet(m); break; // (boats: Boats.js)
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="fb-drop" cx="45%" cy="40%" r="60%"><stop offset="0" stop-color="#fff6c8"/><stop offset="0.5" stop-color="#ffb347"/><stop offset="1" stop-color="#d0601e"/></radialGradient>
+    <linearGradient id="fb-glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eaf9ff" stop-opacity="0.95"/><stop offset="1" stop-color="#8fd0e6" stop-opacity="0.75"/></linearGradient>
+    <radialGradient id="fb-halo" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fff0c0" stop-opacity="0.7"/><stop offset="1" stop-color="#fff0c0" stop-opacity="0"/></radialGradient>
+  </defs>
+  <!-- sand and shards spiralling in -->
+  <g fill="#e6d29a"><circle cx="14" cy="104" r="3"/><circle cx="24" cy="92" r="2.5"/><circle cx="20" cy="80" r="2"/><circle cx="34" cy="74" r="2"/><circle cx="10" cy="88" r="2"/></g>
+  <g fill="#bfe8f5" stroke="#ffffff" stroke-width="1"><path d="M104 100 L112 94 L110 104 Z"/><path d="M114 80 L120 74 L120 84 Z"/><path d="M96 84 L102 80 L101 88 Z"/></g>
+  <path d="M26 98 Q40 60 62 48" fill="none" stroke="#e6d29a" stroke-width="2.5" stroke-dasharray="3 5"/>
+  <path d="M106 94 Q92 60 70 48" fill="none" stroke="#bfe8f5" stroke-width="2.5" stroke-dasharray="3 5"/>
+  <!-- the glowing drop being blown -->
+  <circle cx="64" cy="34" r="26" fill="url(#fb-halo)"/>
+  <circle cx="64" cy="34" r="12" fill="url(#fb-drop)" stroke="#fff3c0" stroke-width="2"/>
+  <!-- the flask it becomes -->
+  <path d="M56 62 L72 62 L72 76 Q92 86 90 104 Q88 122 64 122 Q40 122 38 104 Q36 86 56 76 Z" fill="url(#fb-glass)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="53" y="56" width="22" height="8" rx="3" fill="#a7d8ea" stroke="#ffffff" stroke-width="2"/>
+  <path d="M46 98 Q54 112 70 112" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+</svg>

@@ -80,6 +80,7 @@ import { Campfires } from './Campfires.js';
 import { LanternLights } from './LanternLights.js';
 import { FireLights } from './FireLights.js';
 import { CauldronForge } from './CauldronForge.js';
+import { GlassBlowing } from './GlassBlowing.js';
 import { Cauldrons } from './Cauldrons.js';
 import { PotionLair } from './PotionLair.js';
 import { PotionMasterLife, lairDef } from './PotionMasterLife.js';
@@ -742,6 +743,7 @@ export class Game {
         this.caveEyes = new CaveExplorer(this.caveMap);
         this.lanterns = new LanternLights(this); // the houses' lamps shine: lights at the nearest lanterns (made before prewarm too)
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
+        this.glassBlowing = new GlassBlowing(this); // «Create a Flask»: empty flasks of sand or glass (GlassBlowing.js)
         this.cauldronForge = new CauldronForge(this); // «Create a Cauldron»: a cauldron cast out of three armour pieces (CauldronForge.js)
         this.potionMaster = new PotionMasterLife(this); // the potion master of the lair: brews, talks, lifts things (PotionMasterLife.js)
         this.potionLair = new PotionLair(this); // «Логово зельевара» (Творческий, «Где появиться»): зал в небе с котлом, ручьём и полками (PotionLair.js)
@@ -3197,7 +3199,8 @@ export class Game {
         else if (name === 'CreateDoor') hint = this.doors ? this.doors.create() : '🚪 Двери скоро будут';
         else if (name === 'CreateBoard') hint = this.boards.create();
         else if (name === 'CreateBoat') hint = this.boats.create();
-        else if (name === 'CreateCauldron') hint = this.cauldronForge.cast(); // (3 armour pieces melted into a cauldron — CauldronForge.js)
+        else if (name === 'CreateCauldron') hint = this.cauldronForge.cast();
+        else if (name === 'CreateFlask') hint = this.glassBlowing.cast(); // (empty flasks blown of sand / glass — GlassBlowing.js) // (3 armour pieces melted into a cauldron — CauldronForge.js)
         else if (name === 'Navigare') hint = this.boats.enchant();
         else hint = this.builder.start(name);
         if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
@@ -4234,6 +4237,7 @@ export class Game {
         if (earth && !duelOnly) this.lanterns?.update(dt);
         if (earth && !duelOnly) this.cauldrons?.update(dt);
         this.cauldronForge?.update(dt);
+        this.glassBlowing?.update(dt);
         this.potionLair?.update(dt);
         this.potionMaster?.update(dt);
         if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)

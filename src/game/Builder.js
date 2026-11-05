@@ -34,7 +34,8 @@ export const BUILD_SPELLS = {
     CreateDoor: { name: 'Create a Door', ru: 'дверь', cost: 4 },
     CreateBoard: { name: 'Create a Board', ru: 'доска для волн', cost: 6 },
     CreateBoat: { name: 'Create a Boat', ru: 'лодка', cost: 15 },
-    CreateCauldron: { name: 'Create a Cauldron', ru: 'котёл', cost: 20 }, // (out of the metal of 3 armour pieces — CauldronForge.js; the author 05.11) // (the author 05.11: 15 mana — Boats.js)
+    CreateCauldron: { name: 'Create a Cauldron', ru: 'котёл', cost: 20 },
+    CreateFlask: { name: 'Create a Flask', ru: 'колба', cost: 5 }, // (empty flasks of sand / glass — GlassBlowing.js; the author 05.11) // (out of the metal of 3 armour pieces — CauldronForge.js; the author 05.11) // (the author 05.11: 15 mana — Boats.js)
     Navigare: { name: 'Navigare', ru: 'заколдовать лодку / доску', cost: 15 }, // (the boat / the surfboard goes where the head looks — Boats.js)
 };
 
