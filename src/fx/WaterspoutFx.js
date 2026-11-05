@@ -73,10 +73,15 @@ uniform vec2 uBend;
 varying vec2 vUv;
 varying float vRim;
 varying vec3 vW;
+${NOISE}
 void main() {
     vUv = uv;
     float u = uv.y;
     vec3 p = position;
+    // the wall is no smooth pipe: it bulges and pinches, the bulges climbing and turning (mist torn by the wind)
+    float ang = uv.x * 6.2832;
+    float bulge = spF(vec2(ang * 1.2 + uTime * 0.8 * uSpin, u * 7.0 - uTime * 0.9)) - 0.5;
+    p.xz *= 1.0 + 0.55 * bulge * (0.4 + 0.6 * (1.0 - u)) + 0.18 * sin(u * 23.0 - uTime * 3.0) * (1.0 - u);
     // the spin: faster low down, the mist wound round
     float spin = uTime * uSpin * (2.4 - 1.6 * u);
     float c = cos(spin), s = sin(spin);
@@ -106,15 +111,18 @@ ${NOISE}
 void main() {
     float u = vUv.y;
     // the streaks wound round the tube (spiralling up), torn by the noise
-    vec2 q = vec2(vUv.x * 6.0 + u * 9.0 * uSpin - uTime * 0.9 * uSpin, u * 22.0 - uTime * 1.6);
-    float streak = spF(q);
-    float bands = smoothstep(0.35, 0.85, streak);
+    // condensation: long streaks wound steeply round the tube (spiralling up fast), billows climbing, a darker core seen through
+    vec2 q = vec2(vUv.x * 9.0 + u * 4.0 * uSpin - uTime * 1.3 * uSpin, u * 5.0 - uTime * 1.1);
+    float streak = spF(q) * 0.6 + spF(vec2(vUv.x * 23.0 - uTime * 2.2 * uSpin, u * 3.0 - uTime * 0.7)) * 0.4;
+    float billow = spF(vec2(vUv.x * 4.0 + uTime * 0.2, u * 9.0 - uTime * 1.6));
+    float bands = smoothstep(0.3, 0.8, streak) * (0.6 + 0.6 * billow);
     // a tube of mist: thicker seen edge-on
     float a = mix(0.35, 0.92, pow(vRim, 1.2)) * (0.6 + 0.55 * bands);
     a *= smoothstep(0.0, 0.05, u) * (1.0 - smoothstep(0.86, 1.0, u)); // (the foot torn into spray; the top melts into the cloud)
     a *= uK;
     vec3 low = vec3(0.78, 0.82, 0.86), high = vec3(0.32, 0.35, 0.39);
-    vec3 col = mix(low, high, smoothstep(0.1, 0.9, u)) * (0.75 + 0.35 * bands) * uLight;
+    vec3 col = mix(low, high, smoothstep(0.1, 0.9, u)) * (0.68 + 0.42 * bands) * uLight;
+    col = mix(col * 0.72, col, pow(vRim, 0.6)); // (the core darker where we see through the tube)
     gl_FragColor = vec4(col, clamp(a, 0.0, 0.92));
 }`,
     });
@@ -146,6 +154,75 @@ void main() {
     });
 }
 
+let _sheathGeo = null;
+/** The spray sheath at the foot: a flared skirt of mist, wide at the sea (SHEATH.R0 m) and narrowing up to the funnel. */
+function sheathGeometry() {
+    if (_sheathGeo) return _sheathGeo;
+    const pts = [];
+    for (let i = 0; i <= 16; i++) { const u = i / 16; pts.push(new THREE.Vector2(16 * (1 - u) ** 1.6 + 5.5 * u, u * 26)); }
+    _sheathGeo = new THREE.LatheGeometry(pts, 48);
+    return _sheathGeo;
+}
+function sheathMaterial() {
+    return new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uSpin: { value: 1 }, uLight: { value: 1 } },
+        vertexShader: /* glsl */ `
+uniform float uTime, uSpin;
+varying vec2 vUv; varying float vRim;
+${NOISE}
+void main() {
+    vUv = uv;
+    vec3 p = position;
+    float ang = uv.x * 6.2832;
+    p.xz *= 1.0 + 0.35 * (spF(vec2(ang * 1.5 - uTime * 1.6 * uSpin, uv.y * 4.0 - uTime * 1.2)) - 0.5);
+    vec4 w = modelMatrix * vec4(p, 1.0);
+    vec3 n = normalize(mat3(modelMatrix) * vec3(position.x, 0.0, position.z));
+    vRim = 1.0 - abs(dot(n, normalize(cameraPosition - w.xyz)));
+    gl_Position = projectionMatrix * viewMatrix * w;
+}`,
+        fragmentShader: /* glsl */ `
+uniform float uTime, uK, uSpin, uLight;
+varying vec2 vUv; varying float vRim;
+${NOISE}
+void main() {
+    float u = vUv.y;
+    // spray boiling up and whirled round fast: puffs, streaks, ragged at the top
+    float puff = spF(vec2(vUv.x * 12.0 - uTime * 2.6 * uSpin, u * 6.0 - uTime * 2.2));
+    float fine = spF(vec2(vUv.x * 40.0 - uTime * 4.0 * uSpin, u * 14.0 - uTime * 3.0));
+    float a = (0.25 + 0.75 * smoothstep(0.35, 0.8, puff * 0.7 + fine * 0.3)) * mix(0.35, 0.95, vRim);
+    a *= smoothstep(0.0, 0.08, u) * (1.0 - smoothstep(0.45 + 0.4 * puff, 1.0, u)) * uK;
+    vec3 col = vec3(0.86, 0.92, 0.96) * (0.82 + 0.25 * fine) * uLight;
+    gl_FragColor = vec4(col, clamp(a, 0.0, 0.85));
+}`,
+    });
+}
+function foamMaterial() {
+    return new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false,
+        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uSpin: { value: 1 }, uLight: { value: 1 } },
+        vertexShader: /* glsl */ `varying vec2 vP; void main() { vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: /* glsl */ `
+uniform float uTime, uK, uSpin, uLight;
+varying vec2 vP;
+${NOISE}
+void main() {
+    float r = length(vP), a = atan(vP.y, vP.x);
+    if (r > 1.0) discard;
+    // the sea under it: foam spiralling in, a dark sinking eye, a churned ring at the edge
+    float sp = sin(a * 5.0 + log(r + 0.02) * 9.0 * uSpin - uTime * 5.0 * uSpin);
+    float n = spF(vec2(a * 3.0 - uTime * 2.0 * uSpin, r * 14.0));
+    float foam = smoothstep(0.35, 0.95, sp * 0.6 + n * 0.8 - 0.1) * (1.0 - smoothstep(0.7, 1.0, r));
+    float ring = smoothstep(0.1, 0.0, abs(r - 0.8 - 0.06 * sin(a * 3.0 + uTime))) * n;
+    vec3 col = mix(vec3(0.05, 0.15, 0.2), vec3(0.93, 0.97, 1.0), max(foam, ring)) * uLight;
+    float alpha = (0.4 * (1.0 - r) * smoothstep(0.0, 0.15, r) + 0.85 * foam + 0.7 * ring) * uK;
+    gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.92));
+}`,
+    });
+}
+let _foamDisc = null;
+const foamDisc = () => _foamDisc || (_foamDisc = (() => { const g = new THREE.CircleGeometry(1, 64); g.rotateX(-Math.PI / 2); return g; })());
+
 export class WaterspoutFx {
     constructor(scene, spray = null) {
         this.scene = scene;
@@ -158,8 +235,11 @@ export class WaterspoutFx {
             funnel.frustumCulled = false;
             cloud.renderOrder = 2; funnel.renderOrder = 3;
             funnel.userData.keep = cloud.userData.keep = true;
-            scene.add(funnel); scene.add(cloud);
-            this.slots.push({ funnel, cloud, id: null, sprayT: 0 });
+            const sheath = new THREE.Mesh(sheathGeometry(), sheathMaterial()), foam = new THREE.Mesh(foamDisc(), foamMaterial());
+            sheath.visible = foam.visible = false; sheath.frustumCulled = foam.frustumCulled = false;
+            sheath.renderOrder = 4; foam.renderOrder = 1;
+            scene.add(funnel); scene.add(cloud); scene.add(sheath); scene.add(foam);
+            this.slots.push({ funnel, cloud, sheath, foam, id: null, sprayT: 0 });
         }
     }
 
@@ -172,9 +252,16 @@ export class WaterspoutFx {
         const wl = Math.hypot(wind?.x || 0, wind?.z || 0) || 1;
         for (let i = 0; i < SPOUT_FX.MAX; i++) {
             const S = this.slots[i], sp = i < n ? spouts[i] : null;
-            if (!sp || sp.k <= 0.01) { S.funnel.visible = S.cloud.visible = false; S.id = null; continue; }
+            if (!sp || sp.k <= 0.01) { S.funnel.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = false; S.id = null; continue; }
             S.id = sp.id;
-            S.funnel.visible = S.cloud.visible = true;
+            S.funnel.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = true;
+            // the spray sheath boiling at the foot, the foam spiralling on the sea under it (they follow the funnel's bent foot)
+            const bx = sp.x - (wind?.x || 0) / wl * 0.6 * 30 * 0.92, bz = sp.z - (wind?.z || 0) / wl * 0.6 * 30 * 0.92;
+            S.sheath.position.set(bx, seaY - 0.5, bz);
+            S.sheath.scale.set(0.5 + 0.5 * sp.k, 0.3 + 0.7 * sp.k, 0.5 + 0.5 * sp.k);
+            S.foam.position.set(bx, seaY + 0.3, bz);
+            S.foam.scale.setScalar(14 + 22 * sp.k);
+            for (const m of [S.sheath, S.foam]) { const u = m.material.uniforms; u.uTime.value = t; u.uK.value = Math.max(0, (sp.k - 0.15) / 0.85); u.uSpin.value = sp.spin; u.uLight.value = light; }
             S.funnel.position.set(sp.x, seaY, sp.z);
             const fu = S.funnel.material.uniforms;
             fu.uTime.value = t; fu.uK.value = sp.k; fu.uSpin.value = sp.spin; fu.uLight.value = light;
@@ -187,20 +274,22 @@ export class WaterspoutFx {
             cu.uTime.value = t; cu.uK.value = Math.min(1, sp.k * 1.4); cu.uLight.value = light;
             // the spray racing round the foot and thrown up
             if (this.spray && sp.k > 0.3) {
-                S.sprayT += dt * 90 * sp.k;
+                S.sprayT += dt * 260 * sp.k;
                 while (S.sprayT >= 1) {
                     S.sprayT -= 1;
-                    const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 7;
-                    const x = sp.x + Math.cos(a) * r, z = sp.z + Math.sin(a) * r;
-                    const sw = (10 + Math.random() * 8) * sp.spin, out = 2 + Math.random() * 3;
+                    const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 12;
+                    const x = bx + Math.cos(a) * r, z = bz + Math.sin(a) * r;
+                    const sw = (12 + Math.random() * 12) * sp.spin, out = 3 + Math.random() * 5;
                     const vx = -Math.sin(a) * sw + Math.cos(a) * out, vz = Math.cos(a) * sw + Math.sin(a) * out;
-                    if (Math.random() < 0.35) this.spray.add(x, seaY + 0.5 + Math.random() * 3, z, vx * 0.5, 2 + Math.random() * 3, vz * 0.5, 1.2 + Math.random() * 1.6, 1.6, 1);
-                    else this.spray.add(x, seaY + 0.2, z, vx, 4 + Math.random() * 9, vz, 0.07 + Math.random() * 0.06, 1.2);
+                    const k = Math.random();
+                    if (k < 0.3) this.spray.add(x, seaY + 0.5 + Math.random() * 6, z, vx * 0.45, 3 + Math.random() * 6, vz * 0.45, 2 + Math.random() * 3, 2.4, 1); // (big puffs of mist)
+                    else if (k < 0.45) this.spray.add(x, seaY + 0.3, z, vx * 1.2, 10 + Math.random() * 12, vz * 1.2, 0.12 + Math.random() * 0.1, 2); // (thrown high)
+                    else this.spray.add(x, seaY + 0.2, z, vx, 4 + Math.random() * 9, vz, 0.07 + Math.random() * 0.08, 1.3);
                 }
             }
         }
     }
 
     /** For Game.prewarm: the meshes to draw once at the loading screen. */
-    samples() { const s = this.slots[0]; return [new THREE.Mesh(s.funnel.geometry, s.funnel.material), new THREE.Mesh(s.cloud.geometry, s.cloud.material)]; }
+    samples() { const s = this.slots[0]; return [s.funnel, s.cloud, s.sheath, s.foam].map((m) => new THREE.Mesh(m.geometry, m.material)); }
 }

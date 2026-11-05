@@ -294,14 +294,17 @@ const BRAINROT_UPKEEP = 1;
  * seated at the monitor never; the shoulders' width in the frame (tried next) changes as much by stepping away from the camera.
  * Returns 0 (no), 1 (leaning back: walks back while stepping on the spot), 2 (strongly: walks back by itself).
  */
-export const LEAN_BACK = { ON: 0.25, OFF: 0.14, HOLD: 0.3, CAL: 2, SMOOTH: 4, LEARN: 0.35, NEAR: 0.08 }; // (in shoulder widths: ~0.021 a degree — ON ≈ 12°)
+export const LEAN_BACK = { ON: 0.45, OFF: 0.25, HOLD: 0.4, CAL: 2, SMOOTH: 4, LEARN: 0.35, STEP_LEARN: 0.1, STUCK: 15, STUCK_RANGE: 0.15, NEAR: 0.08 }; // (in shoulder widths: ~0.021 a degree — ON ≈ 21°)
 /**
- * The author 05.11 (third time): «теперь я почти всегда хожу назад, вперёд не могу нормально ходить». Why it could: the «upright» was
- * the first pose's depth clamped to 0.1 — a body whose own upright depth is more (the camera low, a chair, a posture) stood «leaning
- * back» for good; a strong lean also walked by itself. Now:
- *   - the first CAL s the body's own upright is measured (the mean), nothing walks;
- *   - standing (not stepping) the upright follows the body all the time — walking back is only ever while stepping on the spot;
- *   - leaning back must last HOLD s over ON to count; never walks by itself.
+ * The author 05.11 (third and fourth time): «теперь я почти всегда хожу назад… в большей степени хожу назад, хотя должен идти вперёд».
+ * Why: stepping on the spot the camera sees the shoulders a little «deeper» than standing (the body bobs, leans into the steps) — the
+ * «upright» learned standing was not the stepping one. Now:
+ *   - the first CAL s: its own upright measured (the mean), nothing walks;
+ *   - standing (not stepping) the upright follows the body quickly; stepping — slowly too (STEP_LEARN): a steady offset of the
+ *     steps is the body's own, it never walks back for good;
+ *   - only a clear lean back counts: over ON (≈ 21°) for HOLD s; off under OFF;
+ *   - stuck: «back» for STUCK s while the lean barely changes (within STUCK_RANGE) — an offset, not a lean: the upright is taken anew;
+ *   - never walks by itself (only while stepping on the spot: Game — ch.backward = back && ch.isRunning).
  * `stepping`: the player steps on the spot now (pose.isRunning). → 0 / 1.
  */
 function leanBack(st, torso, dt, stepping = true) {
@@ -312,10 +315,19 @@ function leanBack(st, torso, dt, stepping = true) {
     if (st.cal < LEAN_BACK.CAL) { st.base = st.base == null ? st.k : st.base + (st.k - st.base) * Math.min(1, dt * 2); st.x = 0; return 0; } // (measuring its own upright)
     const x = st.k - st.base;
     st.x = x;
-    if (!stepping && !st.on) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN); // (standing: its upright is whatever it does now)
-    else if (!st.on && Math.abs(x) < LEAN_BACK.NEAR) st.base += x * Math.min(1, dt * LEAN_BACK.LEARN * 0.3);
-    if (st.on) { if (x < LEAN_BACK.OFF) { st.on = false; st.hold = 0; } }
-    else { st.hold = x > LEAN_BACK.ON ? (st.hold || 0) + dt : 0; if (st.hold >= LEAN_BACK.HOLD) st.on = true; }
+    if (!st.on && x < LEAN_BACK.ON) st.base += x * Math.min(1, dt * (stepping ? LEAN_BACK.STEP_LEARN : LEAN_BACK.LEARN)); // (its own upright — standing quickly, stepping slowly)
+    if (st.on) {
+        if (x < LEAN_BACK.OFF) { st.on = false; st.hold = 0; }
+        else {
+            // stuck on «back» with the lean barely changing: an offset of the camera / the posture, not a lean — the upright anew
+            st.onT = (st.onT || 0) + dt;
+            st.lo = Math.min(st.lo ?? x, x); st.hi = Math.max(st.hi ?? x, x);
+            if (st.onT > LEAN_BACK.STUCK && st.hi - st.lo < LEAN_BACK.STUCK_RANGE) { st.base = st.k; st.on = false; st.hold = 0; st.stuck = (st.stuck || 0) + 1; }
+        }
+    } else {
+        st.hold = x > LEAN_BACK.ON ? (st.hold || 0) + dt : 0;
+        if (st.hold >= LEAN_BACK.HOLD) { st.on = true; st.onT = 0; st.lo = st.hi = x; }
+    }
     return st.on ? 1 : 0;
 }
 export { leanBack as _leanBack };
@@ -4614,10 +4626,10 @@ export class Game {
     _walkBackLog(back, pose, dt) {
         const L = this._lean || {}, t = pose.torso || {};
         const f = (v) => (Number.isFinite(v) ? v.toFixed(2) : '—');
-        const line = () => `ходьба назад: ${back ? 'НАЗАД' : 'вперёд/стоит'}, шаги ${pose.isRunning ? 'да' : 'нет'}, наклон ${f(L.x)} (порог ${LEAN_BACK.ON}), плечи за бёдрами ${f(L.k)}, своё «прямо» ${f(L.base)}${(L.cal || 0) < LEAN_BACK.CAL ? ' (замер)' : ''}; глубина плеч ${f(t.sz)}, бёдер ${f(t.hz)}, ширина плеч ${f(t.sw)}, бёдра ${t.hips ? 'видны' : 'не видны'}`;
+        const line = () => `ходьба назад: ${back ? 'НАЗАД' : 'вперёд/стоит'}, шаги ${pose.isRunning ? 'да' : 'нет'}, наклон ${f(L.x)} (порог ${LEAN_BACK.ON}), плечи за бёдрами ${f(L.k)}, своё «прямо» ${f(L.base)}${(L.cal || 0) < LEAN_BACK.CAL ? ' (замер)' : ''}${L.stuck ? `, сбросов «залипания» ${L.stuck}` : ''}; глубина плеч ${f(t.sz)}, бёдер ${f(t.hz)}, ширина плеч ${f(t.sw)}, бёдра ${t.hips ? 'видны' : 'не видны'}`;
         if (back !== (this._backWas ?? 0)) {
             this.perf?.note?.(line());
-            if (back && !this._backTold) { this._backTold = true; this.hud.setVoice('↩️ Наклон назад: герой идёт спиной вперёд', true); }
+            if (back && performance.now() - (this._backToldAt || 0) > 5000) { this._backToldAt = performance.now(); this.hud.setVoice(`↩️ Назад (наклон ≈ ${Math.round((L.x || 0) / 0.021)}°)`, true); } // (every time it starts: the player sees when and why)
             this._backWas = back;
         }
         if (pose.isRunning && (this._backLogT = (this._backLogT || 0) - dt) <= 0) { this._backLogT = 1; this.perf?.note?.(line()); }

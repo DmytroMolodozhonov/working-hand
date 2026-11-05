@@ -35,6 +35,7 @@ export const OCEAN_STORM = {
     FLING_EVERY: 6, // s
     SHIP_HARM: 6, // a second in the core
     DEEP: 3, // m under the water: the spout does not reach
+    FLEE_R: 170, // m: a ship's crew that sees a spout this near runs from it (the author: «все моряки боятся смерча»)
     // «Tornado» (the spell, 05.11): a spout called down out of the sky over the sea
     SUMMON_LIFE: 12 * 60, // s: 12 game hours at most (a game hour is a real minute) — no spout stands for ever (the author)
     SUMMON_AHEAD: 45, // m ahead of the caster it comes down
@@ -248,6 +249,11 @@ export class OceanStorm {
             if (s.state === 'wreck' || s.state === 'sinking' || !s.st) continue;
             const st = s.st, sx = s.pose?.x ?? st.x, sz = s.pose?.z ?? st.z;
             if (sx == null) continue;
+            // the crew sees a spout near: they run before it, away (the black ship's own helmsman does the same — Blackbeard._sail)
+            if (harm || !s._fleeAt) {
+                const near = this.nearSpout(sx, sz, OCEAN_STORM.FLEE_R - OCEAN.PULL);
+                if (near && g.fleet?.flee) g.fleet.flee(s, Math.atan2(-(sx - near.x), -(sz - near.z)), 4);
+            }
             for (const sp of this.spouts) {
                 const f = spoutPush(sp, sx, 0, sz, _push);
                 if (!f) continue;

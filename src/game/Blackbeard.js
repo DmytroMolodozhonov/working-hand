@@ -298,6 +298,9 @@ export class Blackbeard {
         const st = s.st;
         const seas = this.game.terrain?.data?.seas;
         let yaw = wantYaw ?? Math.atan2(-(tx - st.x), -(tz - st.z));
+        // even Black Moustache fears a waterspout (the author 05.11): away from it on all the sails
+        const spout = this.game.oceanStorm?.nearSpout?.(st.x, st.z, 120);
+        if (spout) { yaw = Math.atan2(-(st.x - spout.x), -(st.z - spout.z)); gain = Math.max(gain, 13); }
         if (seas) {
             const ahead = 40 + Math.abs(st.u) * 8;
             const fx = -Math.sin(st.yaw), fz = -Math.cos(st.yaw);

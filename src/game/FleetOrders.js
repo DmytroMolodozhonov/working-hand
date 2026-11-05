@@ -60,6 +60,21 @@ export class FleetOrders {
         return f;
     }
 
+    /**
+     * (host) The crew saw a waterspout (the author 05.11: «все моряки, даже Чёрные Усы, боятся смерча и уплывают»): she runs before it
+     * on all her sails, away from it, for `secs` s (renewed while it is near). Never when a player holds her wheel or she is moored.
+     */
+    flee(s, yaw, secs = 4) {
+        if (this._steerBlock(s) || !this._alive(s)) return false;
+        const f = this.state(s);
+        if (f.mode !== 'idle' && !f.flee) return false; // (her king's order goes first — he decides)
+        const first = !f.flee;
+        f.flee = performance.now() + secs * 1000;
+        f.auto = { yaw, gain: 13, until: f.flee };
+        if (first) { const me = this.game.character?.group?.position; if (me && Math.hypot(me.x - s.st.x, me.z - s.st.z) < 120) this.game.hud?.setVoice?.('🌪️ Моряки кричат: «Смерч! Все паруса — уходим!»', true); }
+        return true;
+    }
+
     /** Is the ship under orders now (the sailors' mind asks). */
     active(s) { const f = this.st.get(s.id); return !!f && (f.mode !== 'idle' || !!f.board); }
 
@@ -290,6 +305,11 @@ export class FleetOrders {
             if (f.lash && !f.board && (!this._holdsBoarders(s) || f.lash.t > 90)) this._unlash(f); // (everybody is back aboard: the lines off)
             if (f.mode === 'idle' && !f.auto) continue;
             f.t += dt;
+            if (f.flee) { // (the crew's own fear of a waterspout — OceanStorm: no owner's order needed)
+                if (performance.now() > f.flee || !f.auto) { f.flee = 0; f.auto = null; this._stopWind(s); continue; }
+                this._drive(s, f, dt);
+                continue;
+            }
             if (!this.S.loyalTo(s, f.by)) { this._cease(s, f); continue; }
             this._guns(s, f, dt);
             if (f.board) this._boarding(s, f, dt);

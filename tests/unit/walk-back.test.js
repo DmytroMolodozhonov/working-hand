@@ -47,11 +47,11 @@ function run(st, o, secs, stepping = true) {
     return { last, max };
 }
 
-test('standing: upright never walks back (noise over a minute, stepping); leaning back 16° while stepping — back; upright — stops; never by itself', () => {
+test('standing: upright never walks back (noise over a minute, stepping); leaning back 30° while stepping — back; upright — stops; never by itself', () => {
     seed = 1;
     const st = {};
     assert.equal(run(st, {}, 60).max, 0, 'upright with a jitter: never');
-    assert.equal(run(st, { lean: 16 }, 1).last, 1, 'leaning back while stepping');
+    assert.equal(run(st, { lean: 30 }, 1).last, 1, 'leaning back (≈ 30°) while stepping');
     assert.equal(run(st, {}, 1).last, 0, 'upright: stops');
     assert.equal(run(st, { lean: 40 }, 1).last, 1, 'a strong lean: the same — only while stepping (ch.backward needs the steps)');
 });
@@ -62,7 +62,7 @@ test('the author\'s «почти всегда хожу назад»: a body whos
         const st = {};
         run(st, { lean }, 3, false); // (the first seconds: its own upright measured, standing)
         assert.equal(run(st, { lean }, 20).max, 0, `its own posture ${lean}° is its upright`);
-        assert.equal(run(st, { lean: lean + 18 }, 1.5).last, 1, `and a real lean back from it counts (${lean}° → ${lean + 18}°)`);
+        assert.equal(run(st, { lean: lean + 30 }, 1.5).last, 1, `and a real lean back from it counts (${lean}° → ${lean + 30}°)`);
     }
 });
 
@@ -76,14 +76,14 @@ test('seated at the monitor, the hips out of the frame: the lean back is still s
     seed = 2;
     const st = {};
     assert.equal(run(st, { seated: true }, 20).max, 0);
-    assert.ok(run(st, { seated: true, lean: 25 }, 1.5).last >= 1);
+    assert.ok(run(st, { seated: true, lean: 32 }, 1.5).last >= 1);
     // (the old sign: no depth without the hips)
     assert.equal(torsoMetrics(body({ seated: true, lean: 25 })).depth, null);
 });
 
 test('not a lean back: turning round, leaning forward, stepping away from the camera, a small sway', () => {
     seed = 3;
-    for (const o of [{ turn: 40 }, { turn: -40 }, { lean: -25 }, { dist: 3.6 }, { dist: 1.6 }, { lean: 6 }]) {
+    for (const o of [{ turn: 40 }, { turn: -40 }, { lean: -25 }, { dist: 3.6 }, { dist: 1.6 }, { lean: 6 }, { lean: 14 }]) {
         const st = {};
         run(st, {}, 5);
         assert.equal(run(st, o, 3).max, 0, JSON.stringify(o));
@@ -95,7 +95,7 @@ test('its own upright is learned: a player who stands a little back all the time
     const st = {};
     run(st, { lean: 9 }, 30);
     assert.equal(run(st, { lean: 9 }, 5).max, 0);
-    assert.equal(run(st, { lean: 32 }, 1.5).last >= 1, true, 'and a real lean from it still counts');
+    assert.equal(run(st, { lean: 40 }, 1.5).last >= 1, true, 'and a real lean from it still counts');
     assert.ok(LEAN_BACK.ON > LEAN_BACK.OFF);
 });
 
@@ -111,4 +111,21 @@ test('standing still (not stepping) never walks back, whatever the lean', () => 
     run(st, {}, 3);
     // (the hero walks back only while stepping on the spot — Game: ch.backward = back && ch.isRunning)
     assert.ok(run(st, { lean: 25 }, 2, false).max <= 1);
+});
+
+test('the author\'s «хожу назад, хотя должен идти вперёд»: stepping makes the shoulders look 10° «deeper» than standing — still forward', () => {
+    seed = 11;
+    const st = {};
+    run(st, {}, 4, false); // (standing: its upright)
+    assert.equal(run(st, { lean: 10 }, 30, true).max, 0, 'stepping with the body\'s own small lean: forward');
+    assert.equal(run(st, { lean: 42 }, 1.5, true).last, 1, 'a real lean back while stepping: back');
+});
+
+test('stuck on «back» with the lean not changing (an offset of the camera) — the upright is taken anew, forward again', () => {
+    seed = 12;
+    const st = {};
+    run(st, {}, 3);
+    assert.equal(run(st, { lean: 30 }, 2).last, 1);
+    assert.equal(run(st, { lean: 30 }, LEAN_BACK.STUCK + 2).last, 0, 'not back for ever');
+    assert.ok(st.stuck >= 1);
 });
