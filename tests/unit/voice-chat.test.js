@@ -4,11 +4,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MODES, DEFAULTS, normalizeSettings, loadSettings, saveSettings, myMode, carries, hearing, radiusGain, RADIUS, muffleHz, topology, pairKey, caller, opusSdp, voiceKbps, MESH_MAX, VOICE_TARGETS, MODE_HINT } from '../../src/net/VoiceChatRules.js';
 
-test('the voice chat is off by default; a broken record never breaks the game', () => {
-    assert.equal(DEFAULTS.mode, 'off');
+test('the voice chat is «own devices» (Discord) by default; a broken record never breaks the game', () => {
+    // (почему не 'off': автор 05.11 — «по умолчанию голос через Discord, а не выключен»)
+    assert.equal(DEFAULTS.mode, 'own');
     assert.deepEqual(normalizeSettings(null), { ...DEFAULTS });
     const s = normalizeSettings({ mode: 'radio', me: 7, volume: 999, sens: -4, mic: 5, ptt: 'yes', pttKey: '<script>', aec: false });
-    assert.equal(s.mode, 'off');
+    assert.equal(s.mode, DEFAULTS.mode);
     assert.equal(s.me, 'auto');
     assert.equal(s.volume, 200);
     assert.equal(s.sens, 0);
@@ -28,10 +29,10 @@ test('settings are remembered (and a storage that throws is no error)', () => {
     assert.equal(s.volume, 140);
     assert.equal(s.ptt, true);
     const bad = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
-    assert.equal(loadSettings(bad).mode, 'off');
+    assert.equal(loadSettings(bad).mode, DEFAULTS.mode);
     assert.equal(saveSettings({ mode: 'world' }, bad).mode, 'world');
     mem.set('zns-voicechat', '{not json');
-    assert.equal(loadSettings(storage).mode, 'off');
+    assert.equal(loadSettings(storage).mode, DEFAULTS.mode);
 });
 
 test('my mode: the server sets it, a player may only take less', () => {

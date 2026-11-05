@@ -41,9 +41,9 @@ export const RADIUS = {
     WATER: 0.5, // gain when one of us is under water (and a muffled voice)
 };
 
-/** The settings the player can change (and their defaults: the voice chat is off — the author). */
+/** The settings the player can change (and their defaults: the voice over one's own devices — Discord — the author 05.11; it was off). */
 export const DEFAULTS = Object.freeze({
-    mode: 'off',       // the mode a server is created with (the host's choice; remembered for the next server)
+    mode: 'own',       // the mode a server is created with (the author 05.11: «по умолчанию — голос через Discord, а не выключен») (the host's choice; remembered for the next server)
     me: 'auto',        // this player: 'auto' (as on the server) | 'own' (I use Discord etc.) | 'off' (no voice chat for me)
     volume: 100,       // %, the friends' voices (0…200)
     mic: '',           // the microphone (deviceId; '' — the system's)
