@@ -51,7 +51,7 @@ const r2 = (v) => Math.round(v * 100) / 100;
 const CORE = [0xfffbe6, 0xfff2b0, 0xffe680, 0xffd25a];
 const FLAME = [0xffb030, 0xff9a1a, 0xff8000, 0xff6400, 0xf04a00, 0xd42a00, 0xb81c00];
 const DEEP = [0xd42a00, 0xa81800, 0x8a1000, 0xff4a00];
-const EMBER = [0xffe680, 0xffb030, 0xff6400];
+const EMBER = [0xffb030, 0xff8a1a, 0xff6400];
 const SMOKE = [0x4a4440, 0x57504b, 0x625a54, 0x6a625c];
 const STEAM = [0xe8eef2, 0xd5dde2, 0xffffff];
 const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -72,7 +72,7 @@ uniform float uTime; uniform float uShell;
 uniform vec4 uC[${N}]; uniform vec3 uN[${N}]; uniform vec3 uB[${N}];
 attribute float aRing; attribute float aAng;
 #endif
-varying vec3 vN; varying vec3 vV; varying vec3 vQ; varying float vTip;
+varying vec3 vN; varying vec3 vV; varying vec3 vQ; varying float vTip; varying float vUpN;
 void main(){
 #ifdef SPINE
   int i = int(aRing + 0.5);
@@ -88,11 +88,12 @@ void main(){
   vQ = position * vec3(2.2, 2.6, 1.6) + vec3(0.0, 0.0, 30.0);
 #endif
   vTip = 0.0;
+  vUpN = normalize((modelMatrix * vec4(dir, 0.0)).xyz).y; // (how much this point of it faces the sky: its roundness)
   if (uShell > 0.0) {
     // tongues of flame: off the back and the flanks they rise (the world's up), along the body they flow to the tail
     float f = fbm(vQ * vec3(0.45, 0.9, 0.9) + vec3(uTime * 1.6, 0.0, -uTime * 2.3));
     float side = smoothstep(-0.45, 0.4, normalize((modelMatrix * vec4(dir, 0.0)).xyz).y);
-    float tongue = (0.12 + 1.9 * f * f * f) * (0.35 + 0.65 * side);
+    float tongue = (0.1 + 1.1 * f * f * f) * (0.35 + 0.65 * side);
     vTip = tongue;
     vec3 rise = normalize(vec3(modelMatrix[0][1], modelMatrix[1][1], modelMatrix[2][1])); // (the world's up in its own space)
     p += (dir * 0.35 + rise * 0.9 * side) * r * tongue;
@@ -105,7 +106,7 @@ void main(){
 const FRAG = `
 ${NOISE}
 uniform float uTime; uniform float uHeat; uniform float uFade;
-varying vec3 vN; varying vec3 vV; varying vec3 vQ; varying float vTip;
+varying vec3 vN; varying vec3 vV; varying vec3 vQ; varying float vTip; varying float vUpN;
 vec3 ramp(float h){
   vec3 c = mix(vec3(0.35, 0.03, 0.0), vec3(1.0, 0.24, 0.0), smoothstep(0.08, 0.45, h));
   c = mix(c, vec3(1.0, 0.6, 0.1), smoothstep(0.42, 0.8, h));
@@ -120,15 +121,33 @@ void main(){
 #ifdef SHELL
   // the tongues: hot at their roots, thin and red at their tips, torn by the noise
   float al = smoothstep(0.32, 0.75, n2 + n * 0.4) * (1.0 - smoothstep(0.4, 1.6, vTip)) * (0.35 + 0.65 * facing) * 0.75;
+  al *= smoothstep(-0.2, 0.25, vUpN); // (none off its underside: no skirt of flame lying round it on the ground)
   vec3 col = ramp((0.55 + 0.6 * n - vTip * 0.35) * uHeat);
 #else
-  // the body: thick fire in its middle, thinning to its edges (it has no skin: one sees into the flames)
-  float dens = pow(facing, 0.7);
-  float al = (0.22 + 0.78 * dens) * (0.55 + 0.45 * smoothstep(0.25, 0.75, n * 0.7 + n2 * 0.6));
-  vec3 col = ramp((0.38 + 0.55 * n + 0.45 * n2 * dens + 0.25 * dens) * uHeat);
+  // the body: SOLID fire (the author 05.11: «змей не похож на змея» — a see-through glow had no shape): a body of living flame —
+  // white-hot rivers of fire flowing along it to the tail between darker, cooler crusts of embers, the rim blazing (the flames on its
+  // outline), the belly darker; it is its own light (no shading)
+  float vein = smoothstep(0.45, 0.75, fbm(q * vec3(0.7, 1.6, 1.6) + vec3(n * 1.5, 0.0, 0.0)));
+  float crust = smoothstep(0.5, 0.28, fbm(q * vec3(0.5, 2.2, 2.2) - vec3(uTime * 0.4, 0.0, 0.0)) + vein * 0.35);
+  float rim = pow(1.0 - facing, 2.2);
+#ifdef HEAD
+  // the head: darker, deep red embers in its scales, the flames on its outline — its shape reads (the eyes and the throat blaze)
+  float heat = 0.32 + 0.4 * vein + 0.15 * n2 - 0.3 * crust + 0.75 * rim;
+#else
+  float heat = 0.45 + 0.5 * vein + 0.2 * n2 - 0.35 * crust + 0.6 * rim;
+#endif
+  vec3 col = ramp(heat * uHeat) * (0.85 + 0.3 * n);
+  col = mix(col, vec3(0.22, 0.03, 0.0), crust * 0.55 * (1.0 - rim));
+  // round, not a ribbon: the back blazes, the flanks go deeper red, the belly into dark embers (its own light from within + the sky)
+  col *= 0.5 + 0.62 * smoothstep(-0.7, 0.85, vUpN) + 0.25 * rim;
+  float al = 1.0;
 #endif
   al *= uFade;
+#ifdef SHELL
   gl_FragColor = vec4(col * al * 1.15, al);
+#else
+  gl_FragColor = vec4(col * (0.4 + 0.6 * uFade), 1.0);
+#endif
 }`;
 
 let _mats = null;
@@ -137,12 +156,13 @@ export function serpentMaterials() {
     if (_mats) return _mats;
     const shared = { uTime: { value: 0 } };
     const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
-    const mk = (defs, extra) => new THREE.ShaderMaterial({ defines: defs, uniforms: { ...extra, uTime: shared.uTime, uShell: { value: defs.SHELL ? 1 : 0 }, uHeat: { value: 1 }, uFade: { value: 1 } }, vertexShader: VERT, fragmentShader: FRAG, ...add });
+    const solid = { transparent: false, depthWrite: true, blending: THREE.NormalBlending };
+    const mk = (defs, extra, o = add) => new THREE.ShaderMaterial({ defines: defs, uniforms: { ...extra, uTime: shared.uTime, uShell: { value: defs.SHELL ? 1 : 0 }, uHeat: { value: 1 }, uFade: { value: 1 } }, vertexShader: VERT, fragmentShader: FRAG, ...o });
     _mats = {
         shared,
-        core: (sp) => mk({ SPINE: 1 }, sp),
+        core: (sp) => mk({ SPINE: 1 }, sp, solid),
         shell: (sp) => mk({ SPINE: 1, SHELL: 1 }, sp),
-        head: () => mk({}, {}),
+        head: () => mk({ HEAD: 1 }, {}, solid),
         headShell: () => mk({ SHELL: 1 }, {}),
     };
     return _mats;
@@ -291,8 +311,8 @@ class Serpent {
         hd.add(skull, skullF, fu, throat);
         for (const sx of [-1, 1]) {
             // the eyes under the brow ridges, looking forward-sideways; a vertical slit of a pupil
-            const e = new THREE.Mesh(H.eye, B.eye); e.position.set(sx * 0.6, 0.2, 0.42); e.scale.set(0.8, 0.85, 1.25);
-            const s = new THREE.Mesh(H.slit, B.slit); s.position.set(sx * 0.7, 0.2, 0.47); s.scale.set(0.12, 0.75, 0.3); s.rotation.y = sx * 0.6;
+            const e = new THREE.Mesh(H.eye, B.eye); e.position.set(sx * 0.58, 0.22, 0.45); e.scale.set(1.3, 1.1, 1.7);
+            const s = new THREE.Mesh(H.slit, B.slit); s.position.set(sx * 0.74, 0.22, 0.5); s.scale.set(0.16, 1.0, 0.45); s.rotation.y = sx * 0.6;
             const n = new THREE.Mesh(H.nostril, B.dark); n.position.set(sx * 0.17, 0.16, 1.5); n.scale.set(1, 0.6, 1.4);
             hd.add(e, s, n);
         }
@@ -344,7 +364,7 @@ class Serpent {
         const want = Math.atan2(dx, dz);
         let dh = want - this.heading;
         dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-        const turn = (0.8 + speed * 0.08) * dt;
+        const turn = Math.max(0.35, speed / SERPENT.TURN_R) * dt; // (wide curves: never tighter than TURN_R)
         this.heading += clamp(dh, -turn, turn);
         this.phase += dt * speed / 6.5; // (a wave ~40 m long)
         const sway = 0.62 * Math.min(1, d / 14) * (Math.abs(dh) > 1.2 ? 0.4 : 1);
@@ -386,7 +406,7 @@ class Serpent {
         // on the ground: the rings lie on it (half sunk — a river of fire), their heights smoothed over the blocks' steps
         const k6 = Math.min(1, dt * 7);
         for (let j = 0; j < NB; j++) {
-            const yT = j < i0 ? this.anchor.y - 2 : gyAt(p[j].x, p[j].z) + this.r[j] * 0.55;
+            const yT = j < i0 ? this.anchor.y - 2 : gyAt(p[j].x, p[j].z) + this.r[j] * 0.85; // (lying ON the ground, a little sunk)
             this.ys[j] = Number.isFinite(this.ys[j]) && j >= i0 ? this.ys[j] + (yT - this.ys[j]) * k6 : yT;
             p[j].y = this.ys[j];
         }
@@ -466,7 +486,7 @@ class Serpent {
         if (!P) return;
         const p = this.p, i0 = this.i0, out = N - i0, live = 1 - this.fade;
         // flames: off the back and the flanks, rising and streaming back along the body
-        const n = S._n('flame', (780 * live + 300 * this.fade) * out / N, dt, 40);
+        const n = S._n('flame', (420 * live + 300 * this.fade) * out / N, dt, 24);
         for (let k = 0; k < n; k++) {
             const i = i0 + ((Math.random() * out) | 0), r = this.r[i];
             if (r < 0.3) continue;
@@ -477,8 +497,8 @@ class Serpent {
             const big = r / SERPENT.R_BODY;
             P.spawn(p[i].x + ux * r * 0.8, p[i].y + uy * r * 0.8, p[i].z + uz * r * 0.8,
                 ux * 1.5 + (back.x - p[i].x) * 0.6, 3.5 + Math.random() * 5 * big, uz * 1.5 + (back.z - p[i].z) * 0.6,
-                this.fade > 0 ? pick(EMBER) : Math.random() < 0.18 ? pick(CORE) : Math.random() < 0.75 ? pick(FLAME) : pick(DEEP),
-                (0.9 + Math.random() * 1.6) * (0.4 + 0.6 * big), 0.45 + Math.random() * 0.45, { shrink: 1.1, spin: 6 });
+                this.fade > 0 ? pick(EMBER) : Math.random() < 0.08 ? pick(CORE) : Math.random() < 0.7 ? pick(FLAME) : pick(DEEP),
+                (0.6 + Math.random() * 1.1) * (0.4 + 0.6 * big), 0.4 + Math.random() * 0.35, { shrink: 1.1, spin: 6 });
         }
         // the head: a crown of flame streaming back off it
         const h = this.head, hn = S._n('head', 140 * live, dt, 10);
@@ -486,13 +506,13 @@ class Serpent {
             const s = SERPENT.HEAD_LEN * 0.4;
             P.spawn(h.x + (Math.random() - 0.5) * s, h.y + Math.random() * s * 0.35, h.z + (Math.random() - 0.5) * s,
                 -this.face.x * 4 + (Math.random() - 0.5) * 2, 4 + Math.random() * 4, -this.face.z * 4 + (Math.random() - 0.5) * 2,
-                Math.random() < 0.3 ? pick(CORE) : pick(FLAME), 0.8 + Math.random() * 1.4, 0.4 + Math.random() * 0.3, { shrink: 1.2, spin: 7 });
+                Math.random() < 0.1 ? pick(CORE) : pick(FLAME), 0.7 + Math.random() * 1.1, 0.35 + Math.random() * 0.25, { shrink: 1.2, spin: 7 });
         }
         // embers flying up off it, smoke over it
-        const em = S._n('ember', 60 * live, dt, 6);
+        const em = S._n('ember', 30 * live, dt, 4);
         for (let k = 0; k < em; k++) {
             const i = i0 + ((Math.random() * out) | 0);
-            P.spawn(p[i].x, p[i].y + this.r[i], p[i].z, (Math.random() - 0.5) * 4, 7 + Math.random() * 8, (Math.random() - 0.5) * 4, pick(EMBER), 0.25 + Math.random() * 0.25, 1.2 + Math.random(), { shrink: 0.4, spin: 9 });
+            P.spawn(p[i].x, p[i].y + this.r[i], p[i].z, (Math.random() - 0.5) * 4, 5 + Math.random() * 5, (Math.random() - 0.5) * 4, pick(EMBER), 0.3 + Math.random() * 0.25, 0.8 + Math.random() * 0.6, { shrink: 0.4, spin: 9 });
         }
         if (fx?.smoke) {
             const sm = S._n('smoke', 22 * live, dt, 3);
@@ -663,9 +683,9 @@ export class FireSerpent {
         if (s.mode === 'rise') {
             // it pours out of the blaze: fast, in a wide arc round it (the whole body comes out in GROW_S)
             crawl = BODY_LEN / SERPENT.GROW_S;
-            const a = s.heading + s.curl * 0.9;
-            s.leadT.set(L.x + Math.sin(a) * 20, 0, L.z + Math.cos(a) * 20);
-            if (dMe < SERPENT.NEAR + 4) { _a.set(L.x - me.x, 0, L.z - me.z).setLength(25); s.leadT.set(me.x + _a.x, 0, me.z + _a.z); } // (never over me)
+            const a = s.heading + s.curl * 0.3; // (out and away in a long gentle curve)
+            s.leadT.set(L.x + Math.sin(a) * 40, 0, L.z + Math.cos(a) * 40);
+            if (dMe < SERPENT.NEAR + 4) { _a.set(L.x - me.x, 0, L.z - me.z).setLength(SERPENT.NEAR + 30); s.leadT.set(me.x + _a.x, 0, me.z + _a.z); } // (never over me: away from me)
             s.liftT = SERPENT.CRAWL_LIFT;
             if (s.grow >= 1) { s.mode = 'idle'; s.modeT = 0; s.restT = 2.5; this._roar(s, 1); }
         } else if (s.mode === 'strike') {
@@ -687,8 +707,8 @@ export class FireSerpent {
             else if (s.restT > 0) { s.restT -= dt; crawl = 0; }
             else if (Math.hypot(s.leadT.x - L.x, s.leadT.z - L.z) < 4 || s.modeT > 14 || Math.hypot(s.leadT.x - me.x, s.leadT.z - me.z) > SERPENT.WANDER * 1.3) {
                 // a new place to crawl to: round me, between NEAR and WANDER, ahead of it (it does not turn back on itself)
-                const base = Math.atan2(L.x - me.x, L.z - me.z) + (s.curl || 1) * (0.6 + Math.random() * 0.9);
-                const R = SERPENT.NEAR + 6 + Math.random() * (SERPENT.WANDER - SERPENT.NEAR - 6);
+                const base = Math.atan2(L.x - me.x, L.z - me.z) + (s.curl || 1) * (0.7 + Math.random() * 0.8);
+                const R = SERPENT.NEAR + 15 + Math.random() * (SERPENT.WANDER - SERPENT.NEAR - 15);
                 s.leadT.set(me.x + Math.sin(base) * R, 0, me.z + Math.cos(base) * R);
                 s.modeT = 0;
                 if (Math.random() < 0.35) s.restT = 2 + Math.random() * 4;

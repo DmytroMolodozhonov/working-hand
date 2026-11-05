@@ -25,9 +25,10 @@ export const SERPENT = {
     CRAWL_LIFT: 0.6, // how much of HEAD_H the head is up while it crawls (resting / watching: 1, rearing to strike: 1.5)
     NECK: 10, // rings of the neck that rise from the lying body to the head
     HEAD_LEN: 16, // m: the head, nose to the back of the skull
-    WANDER: 36, // m: it crawls round its master within this…
-    NEAR: 16, // …but never closer than this (it never crawls over its master)
-    FOLLOW: 60, // m: the master further than this — it crawls after him faster (FOLLOW_K × SPEED)
+    WANDER: 75, // m: it crawls round its master within this (wide: ~190 m of body lies in long loops, never in a knot)…
+    NEAR: 22, // …but never closer than this (it never crawls over its master)
+    TURN_R: 26, // m: the tightest turn it makes (a body ~10 m thick bends in wide curves)
+    FOLLOW: 110, // m: the master further than this — it crawls after him faster (FOLLOW_K × SPEED)
     FOLLOW_K: 2.2,
     SPEED: 8, // m/s it crawls (the head; a lunge: LUNGE)
     LUNGE: 34,
@@ -166,8 +167,8 @@ export function serpentResponse({ rank, mana, dist, hpK = 1 }) {
 /** The body's radius at ring `i` of `n` (0 the tail … n−1 the head): thin tail, thick middle, the neck, the wide head. */
 export function serpentRadius(i, n = SERPENT.SEGS) {
     const k = i / (n - 1);
-    if (k > 0.95) return SERPENT.R_BODY * (0.6 - (k - 0.95) * 6); // (inside the skull: the head is drawn by its own shape)
-    if (k > 0.88) return SERPENT.R_BODY * (0.72 - (k - 0.88) * 1.7 + 0.12 * Math.sin((k - 0.88) / 0.07 * Math.PI)); // (the throat under the head)
-    if (k > 0.75) return SERPENT.R_BODY * (1 - (k - 0.75) * 2.1); // (the neck, slimmer)
+    if (k > 0.95) return SERPENT.R_BODY * (0.78 - (k - 0.95) * 6); // (inside the skull: the head is drawn by its own shape)
+    if (k > 0.88) return SERPENT.R_BODY * 0.8; // (the throat under the head: a thick neck, no strand — the author 05.11)
+    if (k > 0.75) return SERPENT.R_BODY * (1 - (k - 0.75) * 1.5); // (the neck, a little slimmer than the body)
     return SERPENT.R_BODY * Math.max(0.12, Math.sin(Math.min(1, k / 0.5) * Math.PI * 0.5) ** 0.9); // (from the tail thickening)
 }

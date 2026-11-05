@@ -25,7 +25,7 @@ try {
     const shoot = async (name) => { await page.screenshot({ path: path.join(OUT, name + '.png'), timeout: 180000 }); console.log('📸', name); };
     const frames = (n) => page.evaluate(async (n) => { const g = window.__zns.game, f = g.frameCount; while (g.frameCount < f + n) await new Promise((r) => setTimeout(r, 20)); }, n);
     // the Hellfire, then the serpent
-    const r1 = await page.evaluate(() => { const g = window.__zns.game; g.character.isArmRaised = () => true; const a = g.hellfire.cast(true); return { a, st: !!g.hellfire.state }; });
+    const r1 = await page.evaluate(() => { const g = window.__zns.game; g.dayStart = Date.now() - 24 * 60 * 1000 * 0.4; const cv = g.renderer.domElement; for (let el = cv; el && el !== document.body; el = el.parentElement) for (const sib of el.parentElement.children) if (sib !== el) sib.style.visibility = 'hidden'; g.character.isArmRaised = () => true; const a = g.hellfire.cast(true); return { a, st: !!g.hellfire.state }; });
     console.log('hellfire', JSON.stringify(r1));
     await frames(6);
     const r2 = await page.evaluate(() => { const g = window.__zns.game; const a = g.fireSerpent.cast(true); const s = g.fireSerpent.mine; return { a, mine: !!s, anchor: s && [s.anchor.x, s.anchor.y, s.anchor.z].map((v) => +v.toFixed(1)) }; });
