@@ -48,7 +48,12 @@ test('getting up after «Джолт»: no somersault — the body turns only the
                 turned += prev.angleTo(q); prev.copy(q);
                 lowest = Math.min(lowest, up.y - y0);
                 rising = true;
-            } else if (rising && st === 'up') break;
+            } else if (rising && st === 'up') {
+                // (and AFTER: standing, it stays standing — the drawn somersault of the throw used to be kept and played right now:
+                //  the villager stood up, then went head over heels — the author 05.11, «всё ещё делает сальто»)
+                for (let k = 0; k < 90; k++) { ci.update(1 / 30); sync(); v.model.root.getWorldQuaternion(q); up.set(0, 1, 0).applyQuaternion(q); assert.ok(up.y > 0.8, `throw ${n}: standing, then over again (${up.y.toFixed(2)}) — the left-over somersault`); }
+                break;
+            }
         }
         if (!rising) continue;
         risen++;

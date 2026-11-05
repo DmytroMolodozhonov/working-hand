@@ -502,6 +502,9 @@ export class CreatureImpact {
                 h = (K.centre(c, _v).y - base.y) / sc;
             }
         } catch (e) { /* (no model yet) */ }
+        // (a body that flies as a rag doll tumbles by itself — its drawn somersault must never wait for it: it used to be kept and played
+        //  the moment the body stood up again — the villager stood, then went head over heels once more; the author 05.11, again and again)
+        if (s.rag) { s.tum = null; return; }
         s.tum = { turns: Math.max(1, Math.min(3, turns | 0)), dur: Math.max(0.3, Math.min(3, dur)), t: 0, h: Math.max(0.3, Math.min(4, h || 1)) };
     }
 
@@ -726,7 +729,7 @@ export class CreatureImpact {
                 if (rig) {
                     // (a zombie, a Taron: standing as the doll stood him — his own animation takes over from here)
                     RagPose.cleanRig(rig, c);
-                    s.rag = null; s.rig = null; c.rag = false; s.getUp = null; s.state = 'up'; s.t = 0;
+                    s.rag = null; s.rig = null; c.rag = false; s.getUp = null; s.state = 'up'; s.t = 0; s.tum = null;
                     return;
                 }
                 // standing: the last few centimetres go over to the model's own standing pose
@@ -734,7 +737,7 @@ export class CreatureImpact {
                 c.model.group.updateMatrixWorld(true);
                 s.pose = RagPose.capture(c.model, []);
                 s.poseFrom = (s.poseFrom || new THREE.Matrix4()).copy(c.model.group.matrixWorld);
-                s.rag = null; c.rag = false; s.riseT = 0; s.getUp = null;
+                s.rag = null; c.rag = false; s.riseT = 0; s.getUp = null; s.tum = null; // (the doll did the tumbling: no drawn somersault left over)
             }
         }
         if (s.rag) { this._ragDraw(c, s.rag, rig); return; }

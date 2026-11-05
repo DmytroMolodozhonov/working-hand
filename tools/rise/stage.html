@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8"><title>rise stage</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js" } }</script></head>
+<body><script type="module">
+// A villager thrown by «Джолт» and getting up, drawn frame by frame as in the game (CreatureImpact + Ragdoll + the model,
+// near people as one shape — FarShape): tools/rise-stage.mjs takes the frames.
+import * as THREE from 'three';
+import { VillagerModel, villagerLook } from '../../src/entities/VillagerModel.js';
+import { CreatureImpact } from '../../src/game/CreatureImpact.js';
+import { house, FLOOR } from '../../tests/unit/solid-guard-world.mjs';
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9cc4e4);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556644, 1));
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshLambertMaterial({ color: 0x7a9a5a })); floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR; scene.add(floor);
+const cam = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+const H = house({ w: 40, d: 40, door: false, bed: false, chest: false, cupboard: false });
+let v, ci, model;
+window.__R = {
+    THREE, cam, scene,
+    setup(seed, yaw, far) {
+        if (model) scene.remove(model.group);
+        model = new VillagerModel(villagerLook(seed, 'farmer'), {});
+        scene.add(model.group);
+        v = { id: 'cs1_1:' + seed, isVillager: true, role: 'farmer', model, group: model.group, x: 20, y: FLOOR, z: 20, yaw, dead: false, stunT: 0, vy: 0, mode: 'idle', speed: 0 };
+        const g = { scene, authority: true, localId: 'me', remotes: new Map(), fx: { spark() {} },
+            collision: { queryBoxes: H.world.boxes, resolveCylinder() {}, groundAt: () => FLOOR },
+            terrain: { data: { solidIn: (ix, iz, lo, hi) => H.world.solid(ix, iz, lo, hi) } },
+            zombies: [], zombieById: new Map(), sync: null,
+            castleLife: { byId: new Map([[v.id, v]]), _walkable: () => true, _ground() {} } };
+        ci = g.creatureImpact = new CreatureImpact(g);
+        this.far = far;
+        this.sync();
+    },
+    sync() { model.group.position.set(v.x, v.y + 1.95, v.z); model.group.rotation.y = v.yaw; if (ci.stateOf(v) === 'up') model.update(1 / 30, { mode: 'idle', speed: 0 }); if (this.far) model.setFar(true); model.group.updateMatrixWorld(true); },
+    jolt(ang, sp) { ci.apply(v, { v: new THREE.Vector3(Math.cos(ang) * sp, 0, Math.sin(ang) * sp), kind: 'spell', spell: 'Jolt', always: { down: 3 }, down: 3, toss: 6, tumble: 1 }); },
+    step(t) { for (let i = 0; i < Math.round(t * 30); i++) { ci.update(1 / 30); this.sync(); } return ci.stateOf(v); },
+    shot(side) { const c = new THREE.Vector3(v.x, v.y + 1.5, v.z); cam.position.set(c.x + Math.cos(side) * 9, c.y + 3, c.z + Math.sin(side) * 9); cam.lookAt(c); renderer.render(scene, cam); return { state: ci.stateOf(v), x: +v.x.toFixed(2), z: +v.z.toFixed(2), yaw: +(v.yaw || 0).toFixed(2) }; },
+};
+window.__ready = true;
+</script></body></html>
