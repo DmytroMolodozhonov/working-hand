@@ -21,6 +21,8 @@
  *      nearest PASSING PLACE (a spot with room to stand aside), steps aside and holds until the other has passed. Those behind it, seeing it back
  *      out, do the same (a queue backs out like a train); the winner never waits. So a passage with traffic both ways is used by one stream at a time.
  *   3. QUEUES form by themselves: behind a slower one the speed matches (the time-to-collision with the leader is long only when slow).
+ *   4a. ALONE AND NOT MOVING (a block, a ledge, a corner the straight way runs into — the author's knight in a cave): after DETOUR s a way
+ *      round to a side (`detourHeading`, the sides in turn), after UNSTICK_ALONE s — set on the nearest open place.
  *   4. WHAT IS LEFT: a standing body in the way is asked to step aside (Crowd.askWay); stuck ~6 s — a squeeze past (smaller body); ~10 s —
  *      it is set on the nearest free place (`unstick`, the journal says so). A permanent stand is not possible.
  *   5. `separate(p, r, others)` — the hard guarantee under all of it: bodies never stay inside each other.
@@ -40,6 +42,9 @@ export const PILOT = {
     UNSTICK_ALONE: 2.5, // s: the same with nobody near (pressed to a wall / a counter — no queue to wait for)
     SQUEEZE: 2, // s: stuck so long — squeezes past (smaller body)
     UNSTICK: 6, // s: stuck so long — set on a free place (was 10: «жители застревают»)
+    DETOUR: 0.8, // s: a lone walker that tries and does not move — it goes round (detourHeading)
+    DETOUR_T: 1.3, // s it keeps to the way round before trying the straight way again
+    DETOUR_FAIL: 0.5, // s of not moving on the way round: it failed too
     SPEEDS: [1, 0.6, 0.3],
     ANGLES: [0, 14, -14, 28, -28, 45, -45, 65, -65, 90, -90, 120, -120, 160, -160],
 };
@@ -215,9 +220,32 @@ export function pilot(st, p, u, others, opts) {
     const trying = maxF > 0.6 || st.plan;
     if (moved < speed * dt * 0.25 && trying) st.still += dt; else st.still = Math.max(0, st.still - dt * 2);
     st.unstuck = Math.max(0, st.unstuck - dt);
-    // --- no one near: go (the common case — costs nothing)
+    // --- no one near: go (the common case — costs nothing) — unless it walks and stays where it is (a block, a ledge, a corner the
+    // straight way runs into: the author's knight in a cave «идёт вперёд, но остаётся на месте»): then a way round (`detour`: an open
+    // heading to one side, the sides in turn), and if even that does not move it — set on the nearest open place (as with others near)
     if (!near.length && !st.plan) {
-        st.vx = u.x * speed; st.vz = u.z * speed; st.k = 1; st.blocker = null; st.squeeze = 0; st.yielding = false;
+        st.blocker = null; st.squeeze = 0; st.yielding = false;
+        if (st.detour) {
+            st.detour.t -= dt;
+            const failed = st.still - st.detour.s0 > PILOT.DETOUR_FAIL; // (the way round does not move it either)
+            if (!failed && st.detour.t > 0 && st.still < PILOT.UNSTICK_ALONE) { st.vx = st.detour.x * speed * 0.8; st.vz = st.detour.z * speed * 0.8; st.k = 0.8; return { x: st.detour.x, z: st.detour.z, k: 0.8, detour: true }; }
+            if (failed) { // (a steeper way round next; three failures on one side — the other side)
+                st.detourTry = (st.detourTry || 0) + 1;
+                if (st.detourTry >= 3) { st.detourTry = 0; st.detourFlip = true; }
+                st.still = Math.max(st.still, PILOT.DETOUR + 0.01);
+            } else { st.detourTry = Math.max(0, (st.detourTry || 0) - 1); st.detourDir = { x: st.detour.x, z: st.detour.z }; } // (it worked: on the same way along the wall next time, a little less steep)
+            st.detour = null;
+        } else if (st.still <= 0) st.detourTry = 0;
+        if (st.still > PILOT.UNSTICK_ALONE && st.unstuck <= 0) {
+            const to = freeSpot(p, u, near, opts, room, r);
+            st.unstuck = 4; st.still = 0;
+            if (to) return { x: u.x, z: u.z, k: 0, unstick: to };
+        }
+        if (st.still > PILOT.DETOUR) {
+            const d = detourHeading(p, u, room, st);
+            if (d) { st.detour = { x: d.x, z: d.z, t: PILOT.DETOUR_T, s0: st.still }; st.vx = d.x * speed * 0.8; st.vz = d.z * speed * 0.8; st.k = 0.8; return { x: d.x, z: d.z, k: 0.8, detour: true }; }
+        }
+        st.vx = u.x * speed; st.vz = u.z * speed; st.k = 1;
         return { x: u.x, z: u.z, k: 1 };
     }
     // --- the right of way at a narrow place (wait outside while a stream comes the other way through it)
@@ -457,6 +485,39 @@ function stalled(st, p, u, near, b, me, opts, room, r) {
     }
     return undefined;
 }
+
+/**
+ * A way round what stops a lone walker: the straight way is shut (it walked and did not move), so an open heading to a side — 35…150° off
+ * the wanted way, open for 2.4 m (the shoulders too). It keeps to the side that worked (round a long wall it does not swing back and forth);
+ * a way round that did not move it either — steeper next (`detourTry`), three failures on a side — the other side (`detourFlip`).
+ * → {x, z} | null.
+ */
+export function detourHeading(p, u, room, st = {}) {
+    if (st.detourSide == null) st.detourSide = (hashId(st.id) & 1) ? 1 : -1;
+    else if (st.detourFlip) { st.detourSide = -st.detourSide; st.detourDir = null; }
+    st.detourFlip = false;
+    const side = st.detourSide, from = Math.min(DETOUR_ANGLES.length - 1, st.detourTry || 0);
+    const open = (x, z) => {
+        for (const d of [0.6, 1.2, 1.8, 2.4]) if (!room(p.x + x * d, p.z + z * d) || !room(p.x + x * d - z * 0.4, p.z + z * d + x * 0.4) || !room(p.x + x * d + z * 0.4, p.z + z * d - x * 0.4)) return false;
+        return true;
+    };
+    // (the way along the wall that worked last: kept in the WORLD — the wanted way turns as it goes along, a side «to the left of it» would swing)
+    const D = st.detourDir;
+    let best = null, bs = -Infinity;
+    for (const pass of [from, 0]) {
+        for (let i = pass; i < DETOUR_ANGLES.length; i++) for (const s of [side, -side]) {
+            const ang = DETOUR_ANGLES[i] * s * DEG, c = Math.cos(ang), sn = Math.sin(ang);
+            const x = u.x * c - u.z * sn, z = u.x * sn + u.z * c;
+            if (!open(x, z)) continue;
+            if (!D) { st.detourSide = s; return { x, z }; }
+            const sc = x * D.x + z * D.z - i * 0.05;
+            if (sc > bs) { bs = sc; best = { x, z, s }; }
+        }
+        if (best) { if (bs > 0.2) { st.detourSide = best.s; return { x: best.x, z: best.z }; } st.detourDir = null; return detourHeading(p, u, room, st); } // (that way along the wall is shut now: a fresh choice)
+    }
+    return null;
+}
+const DETOUR_ANGLES = [35, 60, 90, 120, 150];
 
 /** The way back along its own trail: the nearest crumb ≥ 1 m away that is free. */
 function backTarget(st, p, r, room, near) {
