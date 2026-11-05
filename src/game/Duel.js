@@ -37,6 +37,7 @@
  */
 
 import { isSpectator } from './ArenaDome.js';
+import { ragRootOf } from './RagdollPose.js';
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
 import { PVP } from './Combat.js';
@@ -76,7 +77,7 @@ const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: '
 export { JERK, sharpJerk } from './Jerk.js';
 
 const _tipP = new THREE.Vector3(), _tipQ = new THREE.Quaternion(), _tipD = new THREE.Quaternion();
-const _tipM = new THREE.Matrix4(), _tipRest = new THREE.Vector3(0, -1.95, 0); // (a villager's root at rest: his feet, 1.95 below the group — VillagerModel)
+const _tipM = new THREE.Matrix4(), _tipRest = new THREE.Vector3(0, -1.95, 0), _tipR = [null, null, 0, 0, 0]; // (a villager's root at rest: his feet, 1.95 below the group — VillagerModel)
 export const DUEL_SPELLS = {
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
     // a poison-green charge: an acid core (never white), a murky swamp-green glow, smoke and sparks (AvadaLook.js);
@@ -590,7 +591,7 @@ export class Duel {
         // the swamp Canaries: a stocky body (Canaries.boltHit says what a charge does: «Авада» kills, «Остолбеней» stuns, the rest hurts)
         for (const c of g.canaries?.targets() || []) this._canaryBody(c, put('N', c.id));
         // the Tarons of the underworld: a giant (Taron.boltHit says what a charge does)
-        for (const c of g.tarons?.targets() || []) this._taronBody(c, put('T', c.id));
+        for (const c of g.tarons?.targets() || []) this._tipped(c, this._taronBody(c, put('T', c.id))); // (lying as a rag doll: the capsule lies with him)
         // creatures of one's own («Да пусть создастся»): their own body (CustomCreatures.boltHit says what a charge does)
         for (const c of g.customCreatures?.targets() || []) c.bodyCapsule(put('C', c.id));
         // clever owls: a small body (only «Авада Кедавра», a scroll's, hurts one — Owls.boltHit)
@@ -628,7 +629,7 @@ export class Duel {
         if (kind === 'f') { const f = g.phoenixes?.byId(id); return f ? phoenixBody(f, e) : null; }
         if (kind === 'o') { const o = g.owls?.byId(id); return o ? owlBody(o, e) : null; }
         if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? this._canaryBody(c, e) : null; }
-        if (kind === 'T') { const c = g.tarons?.byId(id); return c && !c.dead ? this._taronBody(c, e) : null; }
+        if (kind === 'T') { const c = g.tarons?.byId(id); return c && !c.dead ? this._tipped(c, this._taronBody(c, e)) : null; }
         if (kind === 'S') { const o = g.spencers?.byId(id); return o ? spencerBody(o, e) : null; }
         if (kind === 'G') { const o = g.ghosts?.byId(id); return o ? o.bodyCapsule(e) : null; }
         if (kind === 'C') { const c = g.customCreatures?.byId(id); return c ? c.bodyCapsule(e) : null; }
@@ -680,10 +681,12 @@ export class Duel {
      */
     _tipped(c, e) {
         // (a rag doll lays him — CreatureImpact/RagdollPose: the model's root is placed AND turned; the standing capsule goes with the root's whole frame)
-        if (c.rag && c.model?.root && c.group) {
-            const root = c.model.root;
-            c.group.updateWorldMatrix(true, false); root.updateWorldMatrix(false, false);
-            _tipM.copy(c.group.matrixWorld).invert();
+        const rr = c.rag ? ragRootOf(c, _tipR) : null;
+        if (rr) {
+            const root = rr[0], par = rr[1];
+            par.updateWorldMatrix(true, false); root.updateWorldMatrix(false, false);
+            _tipM.copy(par.matrixWorld).invert();
+            _tipRest.set(rr[2], rr[3], rr[4]);
             for (const q of [e.a, e.b]) q.applyMatrix4(_tipM).sub(_tipRest).applyMatrix4(root.matrixWorld);
             return e;
         }

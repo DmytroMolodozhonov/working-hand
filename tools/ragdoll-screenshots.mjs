@@ -24,7 +24,8 @@ for (let i = 0; i < 200 && !(await up()); i++) await new Promise((r) => setTimeo
 
 const browser = await launch({});
 try {
-    const { page } = await openPage(browser, `http://localhost:${PORT}/`, { noCamera: true, viewport: { width: 1280, height: 720 } });
+    const { page, errors } = await openPage(browser, `http://localhost:${PORT}/`, { noCamera: true, viewport: { width: 1280, height: 720 } });
+    page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
     await startFromMenu(page, 'creative').catch(async (e) => { if (!/Timeout/.test(e.message)) throw e; await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 600000 }); });
     await waitHudVisible(page, 240000);
     const setup = await page.evaluate(async () => {
@@ -100,4 +101,32 @@ try {
     await shot('ragdoll-dead');
     const r2 = await page.evaluate(() => { const g = window.__zns.game, v = window.__v; clearInterval(window.__probeT); return { dead: !!v.dead, rag: v.rag, body: [...g.death.bodies.values()].some((b) => b.who === v.id && b.rp), worstInBlock: +window.__probe.worst.toFixed(3) }; });
     console.log('dead:', JSON.stringify(r2));
+    // a zombie and a wizard (any humanoid: the same doll) thrown by «Джолт» in front of the hero
+    const r3 = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const me = g.character.group.position, yaw = window.__aim.yaw;
+        const ahead = (d, side = 0) => new T.Vector3(me.x - Math.sin(yaw) * d + Math.cos(yaw) * side, 0, me.z - Math.cos(yaw) * d - Math.sin(yaw) * side);
+        const p = ahead(6, -2); p.y = g.collision.groundY(p.x, p.z) + 1.0;
+        const z = g._createZombie(p); z.setSleeping?.(true);
+        await sleep(300);
+        z.group.position.copy(p);
+        g.creatureImpact.spellHit(z, 'Jolt', new T.Vector3(me.x, p.y + 1, me.z), g.localId);
+        const out = { zombieRag: !!g.creatureImpact.active.get('z|' + z.id)?.s.rag };
+        const wiz = [...g.castleLife.byId.values()].find((v) => v.wizard && !v.dead);
+        out.wizard = !!wiz;
+        if (wiz) {
+            const q = ahead(6, 2); wiz.x = q.x; wiz.z = q.z; wiz.y = g.collision.groundY(q.x, q.z); wiz.path = null; wiz.stunT = 1;
+            await sleep(100);
+            g.creatureImpact.spellHit(wiz, 'Jolt', new T.Vector3(me.x, wiz.y + 2.6, me.z), g.localId);
+            out.wizardRag = !!g.creatureImpact.active.get('v|' + wiz.id)?.s.rag;
+        }
+        for (let i = 0; i < 6; i++) { window.__look(); await sleep(50); }
+        return out;
+    });
+    console.log('zombie / wizard:', JSON.stringify(r3));
+    await page.waitForTimeout(400); await shot('ragdoll-zombie-1');
+    await page.waitForTimeout(2200); await shot('ragdoll-zombie-2');
+    await page.evaluate(() => { const g = window.__zns.game; for (const z of g.zombies) if (!z.isDead) g.damageZombie?.(z, 999, false, null, g.localId); });
+    await page.waitForTimeout(3000); await shot('ragdoll-zombie-dead');
+    console.log('page errors:', JSON.stringify((errors || []).slice(0, 5)));
 } finally { await browser.close(); srv.kill(); }

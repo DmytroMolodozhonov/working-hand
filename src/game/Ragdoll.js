@@ -34,45 +34,68 @@ export const DOLL = {
 // the points; CHEST and PELVIS are not points of their own (the middle of the shoulders / the hips) — `at` gives them too
 export const P = { HEAD: 0, SHL: 1, SHR: 2, HIPL: 3, HIPR: 4, HNL: 5, HNR: 6, KNL: 7, FTL: 8, KNR: 9, FTR: 10, CHEST: 11, PELVIS: 12 };
 const N = 11;
-/** Where each point is on a person standing (feet frame, x to his right, y up, z behind him) — VillagerModel's measures. */
+/**
+ * Where each point is on a person standing, in his model's own frame (feet at 0, y up, the model's x and z as they are) — VillagerModel's
+ * measures (it looks along −Z: x is his right, z behind him). Other bodies (a zombie, a Taron) give their own `makeSpec`.
+ */
 export const REST = [
     [0, 4.05, 0],                       // head (the middle of the 1.2 m cube)
-    [-0.8, 3.25, 0], [0.8, 3.25, 0],    // shoulders
+    [-0.8, 3.25, 0], [0.8, 3.25, 0],    // shoulders (the model's −x side first)
     [-0.3, 1.95, 0], [0.3, 1.95, 0],    // hips
     [-0.8, 2.30, 0], [0.8, 2.30, 0],    // hands (0.95 down the arm)
-    [-0.3, 0.95, 0], [-0.3, 0.30, 0],   // left knee, foot
-    [0.3, 0.95, 0], [0.3, 0.30, 0],     // right knee, foot
+    [-0.3, 0.95, 0], [-0.3, 0.30, 0],   // −x knee, foot
+    [0.3, 0.95, 0], [0.3, 0.30, 0],     // +x knee, foot
 ];
-const R = [0.68, 0.42, 0.42, 0.42, 0.42, 0.28, 0.28, 0.34, 0.32, 0.34, 0.32];
-const dist = (a, b) => Math.hypot(REST[a][0] - REST[b][0], REST[a][1] - REST[b][1], REST[a][2] - REST[b][2]);
-// bones that hold their length: [a, b, length, stiffness]
-const BONES = [
-    // the torso: four corners and both diagonals — stiff
-    [P.SHL, P.SHR, dist(P.SHL, P.SHR), 1], [P.HIPL, P.HIPR, dist(P.HIPL, P.HIPR), 1],
-    [P.SHL, P.HIPL, dist(P.SHL, P.HIPL), 1], [P.SHR, P.HIPR, dist(P.SHR, P.HIPR), 1],
-    [P.SHL, P.HIPR, dist(P.SHL, P.HIPR), 1], [P.SHR, P.HIPL, dist(P.SHR, P.HIPL), 1],
-    // the head on its neck (it nods round the shoulders' line)
-    [P.HEAD, P.SHL, dist(P.HEAD, P.SHL), 1], [P.HEAD, P.SHR, dist(P.HEAD, P.SHR), 1],
-    // the arms, the legs
-    [P.SHL, P.HNL, 0.95, 1], [P.SHR, P.HNR, 0.95, 1],
-    [P.HIPL, P.KNL, 1.0, 1], [P.KNL, P.FTL, 0.65, 1], [P.HIPR, P.KNR, 1.0, 1], [P.KNR, P.FTR, 0.65, 1],
-];
-// the joints' limits: [a, b, min, max] — the two points may not come closer than min (nor further than max, if given)
-const HEAD_HIP = Math.hypot(0, REST[0][1] - 1.95);
-const LIMITS = [
-    [P.HEAD, P.HIPL, HEAD_HIP - 0.55, Infinity], [P.HEAD, P.HIPR, HEAD_HIP - 0.55, Infinity], // (the head does not fold onto the chest / far behind)
-    [P.HIPL, P.FTL, 0.62, Infinity], [P.HIPR, P.FTR, 0.62, Infinity],     // (a knee bends up to ~140°)
-    [P.SHL, P.KNL, 1.05, Infinity], [P.SHR, P.KNR, 1.05, Infinity],       // (a thigh does not go up through the chest)
-    [P.KNL, P.KNR, 0.42, Infinity], [P.FTL, P.FTR, 0.42, Infinity],       // (the legs do not pass through each other)
-    [P.HNL, P.HNR, 0.45, Infinity], [P.HEAD, P.HNL, 0.75, Infinity], [P.HEAD, P.HNR, 0.75, Infinity],
-];
-// the balls along the torso (weights of the four corners SHL, SHR, HIPL, HIPR) and their radius — the body's thickness (0.8 deep)
-const TORSO_BALLS = [[0.4, 0.4, 0.1, 0.1, 0.5], [0.25, 0.25, 0.25, 0.25, 0.5], [0.1, 0.1, 0.4, 0.4, 0.5]];
+const R0 = [0.68, 0.42, 0.42, 0.42, 0.42, 0.28, 0.28, 0.34, 0.32, 0.34, 0.32];
+
+/**
+ * A body's measures for the doll: `rest` — the 11 points standing (model frame, see REST), `r` — the balls' radii, `torsoR` — the three
+ * balls along the torso (its thickness), `faces` — −1: the model looks along −Z (villagers, sailors, Tarons), +1: along +Z (zombies);
+ * `scale` — the model's size in the world (a Taron ×1.06…). The bones' lengths and the joints' limits are measured from `rest`.
+ */
+export function makeSpec({ rest = REST, r = R0, torsoR = [0.5, 0.5, 0.5], faces = -1, scale = 1, rigidHead = false } = {}) {
+    const sc = Array.isArray(scale) ? scale : [scale, scale, scale]; // (a zombie is stretched up only: 1 × 1.12 × 1)
+    const q = rest.map((p) => [p[0] * sc[0], p[1] * sc[1], p[2] * sc[2]]);
+    const sr = (sc[0] + sc[1] + sc[2]) / 3;
+    const rr = r.map((x) => x * sr);
+    const d = (a, b) => Math.hypot(q[a][0] - q[b][0], q[a][1] - q[b][1], q[a][2] - q[b][2]);
+    const h = d(P.HIPL, P.SHL) / Math.hypot(0.5, 1.3); // (the size of this body against a villager's torso: the joints' limits scale with it — 1 for a villager)
+    const hipMid = [(q[P.HIPL][0] + q[P.HIPR][0]) / 2, (q[P.HIPL][1] + q[P.HIPR][1]) / 2, (q[P.HIPL][2] + q[P.HIPR][2]) / 2];
+    const headHip = Math.hypot(q[P.HEAD][0] - hipMid[0], q[P.HEAD][1] - hipMid[1], q[P.HEAD][2] - hipMid[2]);
+    const legLen = d(P.HIPL, P.KNL) + d(P.KNL, P.FTL);
+    return {
+        rest: q, r: rr, faces, scale: sr, h,
+        // bones that hold their length: [a, b, length, stiffness]
+        bones: [
+            [P.SHL, P.SHR, d(P.SHL, P.SHR), 1], [P.HIPL, P.HIPR, d(P.HIPL, P.HIPR), 1],
+            [P.SHL, P.HIPL, d(P.SHL, P.HIPL), 1], [P.SHR, P.HIPR, d(P.SHR, P.HIPR), 1],
+            [P.SHL, P.HIPR, d(P.SHL, P.HIPR), 1], [P.SHR, P.HIPL, d(P.SHR, P.HIPL), 1],
+            [P.HEAD, P.SHL, d(P.HEAD, P.SHL), 1], [P.HEAD, P.SHR, d(P.HEAD, P.SHR), 1], // (the head nods round the shoulders' line)
+            [P.SHL, P.HNL, d(P.SHL, P.HNL), 1], [P.SHR, P.HNR, d(P.SHR, P.HNR), 1],
+            [P.HIPL, P.KNL, d(P.HIPL, P.KNL), 1], [P.KNL, P.FTL, d(P.KNL, P.FTL), 1], [P.HIPR, P.KNR, d(P.HIPR, P.KNR), 1], [P.KNR, P.FTR, d(P.KNR, P.FTR), 1],
+            // (a head with no neck — a zombie's block, a Taron's sunk in his shoulders: held to the hips too, it does not nod)
+            ...(rigidHead ? [[P.HEAD, P.HIPL, d(P.HEAD, P.HIPL), 1], [P.HEAD, P.HIPR, d(P.HEAD, P.HIPR), 1]] : []),
+        ],
+        // the joints' limits: [a, b, min, max]
+        limits: [
+            [P.HEAD, P.HIPL, headHip - 0.55 * h, Infinity], [P.HEAD, P.HIPR, headHip - 0.55 * h, Infinity], // (the head does not fold onto the chest / far behind)
+            [P.HIPL, P.FTL, 0.62 * legLen / 1.65, Infinity], [P.HIPR, P.FTR, 0.62 * legLen / 1.65, Infinity], // (a knee bends up to ~140°)
+            [P.SHL, P.KNL, 1.05 * h, Infinity], [P.SHR, P.KNR, 1.05 * h, Infinity],             // (a thigh does not go up through the chest)
+            [P.KNL, P.KNR, 0.42 * rr[P.KNL] / 0.34, Infinity], [P.FTL, P.FTR, 0.42 * rr[P.FTL] / 0.32, Infinity], // (the legs do not pass through each other)
+            [P.HNL, P.HNR, 0.45 * h, Infinity], [P.HEAD, P.HNL, 0.75 * h, Infinity], [P.HEAD, P.HNR, 0.75 * h, Infinity],
+        ],
+        // the balls along the torso (weights of the corners SHL, SHR, HIPL, HIPR; radius — the body's thickness)
+        torso: [[0.4, 0.4, 0.1, 0.1, torsoR[0] * sr], [0.25, 0.25, 0.25, 0.25, torsoR[1] * sr], [0.1, 0.1, 0.4, 0.4, torsoR[2] * sr]],
+    };
+}
+/** A villager's (and a sailor's) doll — the model the game's people are drawn with. */
+export const HUMAN = makeSpec();
 
 const _c = new Float64Array(3);
 
 export class Ragdoll {
-    constructor() {
+    constructor(spec = HUMAN) {
+        this.sp = spec;
         this.x = new Float64Array(N * 3);
         this.o = new Float64Array(N * 3); // the previous positions (Verlet: the speed is x − o)
         this.asleep = true;
@@ -88,10 +111,16 @@ export class Ragdoll {
 
     /** A standing body at (x, floorY, z) looking along the unit (fx, fz), moving with (vx, vy, vz) m/s, turning at `spin` rad/s round its middle. */
     stand(x, floorY, z, fx, fz, vx = 0, vy = 0, vz = 0, spin = 0) {
-        const s = Math.hypot(fx, fz) || 1; fx /= s; fz /= s;
-        const rx = -fz, rz = fx; // (his right)
-        for (let i = 0; i < N; i++) { const p = REST[i]; this.set(i, x + rx * p[0] - fx * p[2], floorY + p[1], z + rz * p[0] - fz * p[2]); }
+        this._place(this.x, x, floorY, z, fx, fz);
         this.launch(vx, vy, vz, spin);
+    }
+
+    /** The rest pose put at (x, floorY, z), the body looking along (fx, fz) — into `out` (33 numbers). */
+    _place(out, x, floorY, z, fx, fz) {
+        const sp = this.sp;
+        const th = sp.faces < 0 ? Math.atan2(-fx, -fz) : Math.atan2(fx, fz); // (the model's own turn: its forward is −Z or +Z)
+        const c = Math.cos(th), sn = Math.sin(th);
+        for (let i = 0; i < N; i++) { const p = sp.rest[i]; out[i * 3] = x + c * p[0] + sn * p[2]; out[i * 3 + 1] = floorY + p[1]; out[i * 3 + 2] = z - sn * p[0] + c * p[2]; }
     }
 
     /**
@@ -99,10 +128,8 @@ export class Ragdoll {
      * the world still pushes the balls out (last), so a body by a wall gets up along it, never through it. `goalDist` says how far it still is.
      */
     standUp(x, floorY, z, fx, fz) {
-        const s = Math.hypot(fx, fz) || 1; fx /= s; fz /= s;
-        const rx = -fz, rz = fx;
         const g = this.goal || (this.goal = new Float64Array(N * 3));
-        for (let i = 0; i < N; i++) { const p = REST[i]; g[i * 3] = x + rx * p[0] - fx * p[2]; g[i * 3 + 1] = floorY + p[1]; g[i * 3 + 2] = z + rz * p[0] - fz * p[2]; }
+        this._place(g, x, floorY, z, fx, fz);
         this.asleep = false; this.still = 0; this.age = 0;
     }
 
@@ -121,7 +148,9 @@ export class Ragdoll {
     lie(x, floorY, z, ax, az) {
         const s = Math.hypot(ax, az) || 1; ax /= s; az /= s;
         const rx = az, rz = -ax; // (his right, lying on his back with the head along a)
-        for (let i = 0; i < N; i++) { const p = REST[i]; this.set(i, x + ax * p[1] + rx * p[0], floorY + (i >= P.SHL && i <= P.HIPR ? 0.52 : R[i] + 0.02), z + az * p[1] + rz * p[0]); } // (each ball resting on the floor, the torso on its thickness)
+        const sp = this.sp, hy = (sp.rest[P.HIPL][1] + sp.rest[P.HIPR][1]) / 2 - sp.rest[P.HIPL][1];
+        for (let i = 0; i < N; i++) { const p = sp.rest[i]; this.set(i, x + ax * p[1] + rx * p[0], floorY + (i >= P.SHL && i <= P.HIPR ? sp.torso[1][4] + 0.02 : sp.r[i] + 0.02), z + az * p[1] + rz * p[0]); }
+        void hy; // (each ball resting on the floor, the torso on its thickness)
         this.launch(0, 0, 0, 0);
     }
 
@@ -175,14 +204,14 @@ export class Ragdoll {
             for (let i = 0; i < N * 3; i++) { o[i] = x[i]; x[i] += (gl[i] - x[i]) * K; }
             this.contacts = 0;
             for (let it = 0; it < DOLL.ITER; it++) {
-                for (let b = 0; b < BONES.length; b++) this._len(BONES[b][0], BONES[b][1], BONES[b][2], BONES[b][2], BONES[b][3]);
+                for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
                 if (it & 1 || it === DOLL.ITER - 1) { for (let i = 0; i < N; i++) this._collide(world, i); this._torso(world); }
             }
             for (let i = 0; i < N * 3; i++) o[i] = x[i];
             return;
         }
         for (let i = 0; i < N; i++) {
-            const k = i * 3, lim = R[i] * DOLL.MAX_MOVE_K;
+            const k = i * 3, lim = this.sp.r[i] * DOLL.MAX_MOVE_K;
             let vx = (x[k] - o[k]) * DOLL.DAMP, vy = (x[k + 1] - o[k + 1]) * DOLL.DAMP - DOLL.G * dt * dt, vz = (x[k + 2] - o[k + 2]) * DOLL.DAMP;
             const m = Math.hypot(vx, vy, vz);
             if (m > lim) { const q = lim / m; vx *= q; vy *= q; vz *= q; }
@@ -191,8 +220,8 @@ export class Ragdoll {
         }
         this.contacts = 0;
         for (let it = 0; it < DOLL.ITER; it++) {
-            for (let b = 0; b < BONES.length; b++) this._len(BONES[b][0], BONES[b][1], BONES[b][2], BONES[b][2], BONES[b][3]);
-            for (let b = 0; b < LIMITS.length; b++) this._len(LIMITS[b][0], LIMITS[b][1], LIMITS[b][2], LIMITS[b][3], 1);
+            for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
+            for (let b = 0; b < this.sp.limits.length; b++) { const L = this.sp.limits[b]; this._len(L[0], L[1], L[2], L[3], 1); };
             this._knee(P.HIPL, P.KNL, P.FTL); this._knee(P.HIPR, P.KNR, P.FTR);
             this._handsOut();
             // the world last (it wins): every other pass and the final one — the blocks are the dearest question
@@ -236,20 +265,21 @@ export class Ragdoll {
         const x = this.x, F = this._f || (this._f = new Float64Array(9));
         this.frame(F);
         const mx = (x[h * 3] + x[f * 3]) / 2, my = (x[h * 3 + 1] + x[f * 3 + 1]) / 2, mz = (x[h * 3 + 2] + x[f * 3 + 2]) / 2;
-        // forward = −back
-        const fw = -((x[k * 3] - mx) * F[6] + (x[k * 3 + 1] - my) * F[7] + (x[k * 3 + 2] - mz) * F[8]);
+        // forward = −back; back = (right × up) for a model looking along −Z, its opposite for one looking along +Z
+        const sg = -this.sp.faces, bx = F[6] * sg, by = F[7] * sg, bz = F[8] * sg;
+        const fw = -((x[k * 3] - mx) * bx + (x[k * 3 + 1] - my) * by + (x[k * 3 + 2] - mz) * bz);
         if (fw >= 0) return;
         const c = -fw * 0.6;
-        x[k * 3] -= F[6] * c; x[k * 3 + 1] -= F[7] * c; x[k * 3 + 2] -= F[8] * c;
-        x[h * 3] += F[6] * c * 0.2; x[h * 3 + 1] += F[7] * c * 0.2; x[h * 3 + 2] += F[8] * c * 0.2;
-        x[f * 3] += F[6] * c * 0.2; x[f * 3 + 1] += F[7] * c * 0.2; x[f * 3 + 2] += F[8] * c * 0.2;
+        x[k * 3] -= bx * c; x[k * 3 + 1] -= by * c; x[k * 3 + 2] -= bz * c;
+        x[h * 3] += bx * c * 0.2; x[h * 3 + 1] += by * c * 0.2; x[h * 3 + 2] += bz * c * 0.2;
+        x[f * 3] += bx * c * 0.2; x[f * 3 + 1] += by * c * 0.2; x[f * 3 + 2] += bz * c * 0.2;
     }
 
     /** The hands do not go into the torso (its three balls). */
     _handsOut() {
-        for (let t = 0; t < TORSO_BALLS.length; t++) {
+        for (let t = 0; t < this.sp.torso.length; t++) {
             this._torsoPoint(t, _c);
-            const rr = TORSO_BALLS[t][4] + R[P.HNL];
+            const rr = this.sp.torso[t][4] + this.sp.r[P.HNL];
             for (let hh = 0; hh < 2; hh++) {
                 const k = (hh ? P.HNR : P.HNL) * 3, dx = this.x[k] - _c[0], dy = this.x[k + 1] - _c[1], dz = this.x[k + 2] - _c[2];
                 const d = Math.hypot(dx, dy, dz);
@@ -261,7 +291,7 @@ export class Ragdoll {
     }
 
     _torsoPoint(t, out) {
-        const w = TORSO_BALLS[t], x = this.x;
+        const w = this.sp.torso[t], x = this.x;
         for (let a = 0; a < 3; a++) out[a] = w[0] * x[P.SHL * 3 + a] + w[1] * x[P.SHR * 3 + a] + w[2] * x[P.HIPL * 3 + a] + w[3] * x[P.HIPR * 3 + a];
         return out;
     }
@@ -269,13 +299,13 @@ export class Ragdoll {
     /** The torso's middle balls against the world: the correction is shared by its four corners. */
     _torso(world) {
         const x = this.x;
-        for (let t = 0; t < TORSO_BALLS.length; t++) {
+        for (let t = 0; t < this.sp.torso.length; t++) {
             this._torsoPoint(t, _c);
             const px = _c[0], py = _c[1], pz = _c[2];
-            this._ballOut(world, _c, TORSO_BALLS[t][4]);
+            this._ballOut(world, _c, this.sp.torso[t][4]);
             const dx = _c[0] - px, dy = _c[1] - py, dz = _c[2] - pz;
             if (!dx && !dy && !dz) continue;
-            const w = TORSO_BALLS[t], s = w[0] * w[0] + w[1] * w[1] + w[2] * w[2] + w[3] * w[3];
+            const w = this.sp.torso[t], s = w[0] * w[0] + w[1] * w[1] + w[2] * w[2] + w[3] * w[3];
             const cs = [P.SHL, P.SHR, P.HIPL, P.HIPR];
             for (let q = 0; q < 4; q++) {
                 const k = cs[q] * 3, f = w[q] / s;
@@ -289,7 +319,7 @@ export class Ragdoll {
     _collide(world, i) {
         const k = i * 3;
         _c[0] = this.x[k]; _c[1] = this.x[k + 1]; _c[2] = this.x[k + 2];
-        const ax = this._ballOut(world, _c, R[i]);
+        const ax = this._ballOut(world, _c, this.sp.r[i]);
         if (ax < 0) return;
         this.x[k] = _c[0]; this.x[k + 1] = _c[1]; this.x[k + 2] = _c[2];
         this._rub(k, ax);
@@ -378,7 +408,10 @@ export class Ragdoll {
     }
 
     /** Ball i's radius. */
-    static radius(i) { return R[i]; }
+    static radius(i) { return HUMAN.r[i]; }
+
+    /** Ball i's radius in this doll. */
+    radius(i) { return this.sp.r[i]; }
 
     /** How deep the body is in the world right now (m; 0 — clear): every ball and the torso's three. */
     penetration(world) {
@@ -390,12 +423,12 @@ export class Ragdoll {
             if (d > worst) worst = d;
         };
         const slack = 0.06; // (a ball just touching is not «in»)
-        for (let i = 0; i < N; i++) probe(this.x[i * 3], this.x[i * 3 + 1], this.x[i * 3 + 2], R[i] - slack);
+        for (let i = 0; i < N; i++) probe(this.x[i * 3], this.x[i * 3 + 1], this.x[i * 3 + 2], this.sp.r[i] - slack);
         const T = new Float64Array(3);
-        for (let t = 0; t < TORSO_BALLS.length; t++) { this._torsoPoint(t, T); probe(T[0], T[1], T[2], TORSO_BALLS[t][4] - slack); }
+        for (let t = 0; t < this.sp.torso.length; t++) { this._torsoPoint(t, T); probe(T[0], T[1], T[2], this.sp.torso[t][4] - slack); }
         return worst;
     }
 
     /** The lowest point of the body (a body lying on a bed has it at the bed's top). */
-    lowest() { let m = Infinity; for (let i = 0; i < N; i++) m = Math.min(m, this.x[i * 3 + 1] - R[i]); return m; }
+    lowest() { let m = Infinity; for (let i = 0; i < N; i++) m = Math.min(m, this.x[i * 3 + 1] - this.sp.r[i]); return m; }
 }

@@ -95,7 +95,7 @@ test('a villager killed by a blow falls as a rag doll and his body keeps the pos
     run(null, ci, sync, 0.3);
     v.dead = true; v.model.update(0.016, { mode: 'dead' });
     ci.ragDeath(v);
-    assert.ok(ci.deadRags.has(v.id), 'the same doll lies on, dead');
+    assert.ok(ci.deadRags.has('v|' + v.id), 'the same doll lies on, dead'); // (keyed by kind and id: a zombie and a villager may share an id)
     for (let t = 0; t < 8 && !got.length; t += 1 / 30) { v.model.update(1 / 30, { mode: 'dead' }); ci.update(1 / 30); sync(); }
     assert.equal(got.length, 1, 'the pose went to the body');
     assert.equal(got[0].pose.length, 7 + 40);

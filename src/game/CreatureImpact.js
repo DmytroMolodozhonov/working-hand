@@ -204,28 +204,51 @@ export class CreatureImpact {
         this._out = [];
         this.log = []; // (tests) what happened to whom
         this.rnd = Math.random; // (tests: a fixed roll)
-        this.deadRags = new Map(); // villager id → {c, doll} (a dead body still settling as a rag doll)
+        this.deadRags = new Map(); // ck|id → {c, doll, ck} (a dead body still settling / lying as a rag doll)
         this._pose = [];
     }
 
-    /** How many rag dolls are being drawn now (alive and dead). */
-    ragCount() { let n = this.deadRags.size; for (const e of this.active.values()) if (e.s.rag) n++; return n; }
+    /** How many rag dolls are moving now (alive and dead; a doll asleep costs nothing and is not counted). */
+    ragCount() { let n = 0; for (const r of this.deadRags.values()) if (!r.doll.asleep) n++; for (const e of this.active.values()) if (e.s.rag) n++; return n; }
 
     /** Is this body drawn by a rag doll now (its own place / fall / guard must not move it)? */
-    ragOf(c) { const ck = kindOf(c); const e = ck && this.active.get(ck + '|' + c.id); return !!(e?.s.rag || e?.s.pose || this.deadRags.has(c.id)); }
+    ragOf(c) { const ck = kindOf(c); const e = ck && this.active.get(ck + '|' + c.id); return !!(e?.s.rag || e?.s.pose || this.deadRags.has(ck + '|' + c.id)); }
 
-    /** May a doll start for this body (a villager's model, near the hero, room for one more)? */
+    /**
+     * The rig of a humanoid body (RagdollPose.js): null — a VillagerModel (villagers, wizards, knights, the king, merchants, wanderers; a sailor
+     * ashore), a rig object — a zombie, a Taron; false — no rag doll for it (an animal, a tree, a sailor on a moving deck, a body with no model).
+     * (the ice giants, the Queen and the snowmen do not fall at all — noKnock, the author's rule; the gargoyles fly; Diabolos is chained)
+     */
+    _rig(ck, c) {
+        if (ck === 'v') return c.model?.leftKnee && c.model.root ? null : false;
+        if (ck === 'c') return !c.ship && c.model?.leftKnee && c.model.root ? null : false; // (on a deck: the ship moves under him — his own deck physics)
+        if (ck === 'z') return c.group && c.leftArm && c.leftLeg && !c.isTree ? RagPose.ZOMBIE_RIG : false;
+        if (ck === 'T') return c.model?.userData?.root && c.model.userData.kneeL ? RagPose.TARON_RIG : false;
+        return false;
+    }
+
+    /** May a doll start for this body (a humanoid with a model of parts, near the hero, room for one more)? */
     _ragOk(ck, c) {
-        if (ck !== 'v' || !c.model?.leftKnee || !c.model.root || c.seated || c.lev || c.carriedBy) return false;
+        if (this._rig(ck, c) === false || c.seated || c.lev || c.carriedBy) return false;
         const me = this.game.character?.group?.position;
-        if (me && Math.hypot(c.x - me.x, c.z - me.z) > RAG.NEAR) return false;
+        const K = KINDS[ck];
+        if (me && K) { K.centre(c, _v); if (Math.hypot(_v.x - me.x, _v.z - me.z) > RAG.NEAR) return false; }
         return this.ragCount() < RAG.MAX;
     }
 
     /** The doll takes the model's pose of this moment and flies with (vx, vy, vz); `tip` (rad/s) topples it over the way it is pushed. */
-    _ragStart(c, s, vx, vy, vz, tip = 0) {
-        const doll = new Ragdoll();
-        RagPose.fromModel(doll, c.model);
+    _ragStart(ck, c, s, vx, vy, vz, tip = 0) {
+        const rig = this._rig(ck, c);
+        let doll;
+        if (rig) {
+            if (ck === 'z') KINDS.z.pivot(c); // (the zombie's parts under one pivot — made the first time it falls)
+            rig.begin?.(c);
+            doll = new Ragdoll(rig.spec(c));
+            RagPose.fromRig(doll, rig, c);
+        } else {
+            doll = new Ragdoll();
+            RagPose.fromModel(doll, c.model);
+        }
         doll.launch(vx, vy, vz, 0);
         if (tip) {
             // (the upper body goes on with the push, the feet stay a moment: it topples — and Jolt's turns go over the head)
@@ -235,11 +258,14 @@ export class CreatureImpact {
             yc /= 11;
             for (let i = 0; i < 11; i++) { const h = doll.x[i * 3 + 1] - yc; doll.o[i * 3] -= dx * h * tip * 1 / 60; doll.o[i * 3 + 2] -= dz * h * tip * 1 / 60; }
         }
-        s.rag = doll; s.pose = null;
+        s.rag = doll; s.pose = null; s.rig = rig;
         c.rag = true;
-        c.vy = 0; // (the doll flies — not the villager's own fall: CastleLife._fallStep)
+        c.vy = 0; // (the doll flies — not the body's own fall: CastleLife._fallStep, the zombie's gravity)
         return doll;
     }
+
+    /** Draw the body from its doll (`dy`: a corpse sinking at the end). */
+    _ragDraw(c, doll, rig, dy = 0) { if (rig) RagPose.toRig(doll, rig, c, dy); else RagPose.toModel(doll, c.model); }
 
     get auth() { return this.game.authority !== false; }
 
@@ -351,7 +377,7 @@ export class CreatureImpact {
         if (res === 'knockdown' && !o.noSlide) {
             const tip = tumble ? (tumble.turns * Math.PI * 2) / tumble.dur : Math.min(6, 0.9 + Math.hypot(o.v.x, o.v.z) / B.mass * 0.12);
             if (s.rag) { s.rag.push(o.v.x / B.mass, toss, o.v.z / B.mass); s.pose = null; c.vy = 0; this._emit(ck, c, 'g', [r2(o.v.x / B.mass), r2(toss), r2(o.v.z / B.mass), 0, 1]); }
-            else if (this._ragOk(ck, c)) { this._ragStart(c, s, s.vx, toss, s.vz, tip); this._emit(ck, c, 'g', [r2(s.vx), r2(toss), r2(s.vz), r2(tip), 0]); }
+            else if (this._ragOk(ck, c)) { this._ragStart(ck, c, s, s.vx, toss, s.vz, tip); this._emit(ck, c, 'g', [r2(s.vx), r2(toss), r2(s.vz), r2(tip), 0]); }
         }
         else if (res === 'stagger') this._stagger(ck, c, e, dir, (held ? vHeld : v) / B.mass, true, held);
         // dizzy once it is up again (a heavy body less)
@@ -459,7 +485,7 @@ export class CreatureImpact {
             else if (ev === 'g') { // (the host's doll started / was pushed again: ours does the same — each computer lies it on its own world)
                 const cl = (x, m) => Math.max(-m, Math.min(m, +x || 0));
                 if (e.s.rag && it[7]) e.s.rag.push(cl(a, 80), cl(b, 40), cl(c3, 80));
-                else if (!e.s.rag && this._ragOk(ck, c)) this._ragStart(c, e.s, cl(a, 80), cl(b, 40), cl(c3, 80), cl(c4, 12));
+                else if (!e.s.rag && this._ragOk(ck, c)) this._ragStart(ck, c, e.s, cl(a, 80), cl(b, 40), cl(c3, 80), cl(c4, 12));
             }
         }
     }
@@ -546,7 +572,7 @@ export class CreatureImpact {
             const K = KINDS[ck];
             const gone = !c.group || !c.group.parent || !K.alive(c) || (ck === 'z' && g.zombieById && !g.zombieById.has(c.id)) || c.removable;
             if (gone) {
-                if (s.rag && c.dead && !this.deadRags.has(c.id)) this.deadRags.set(c.id, { c, doll: s.rag }); // (killed while flying / lying: the same doll lies on, dead)
+                if (s.rag && (c.dead || c.isDead) && !this.deadRags.has(key)) this.deadRags.set(key, { c, doll: s.rag, ck, rig: s.rig }); // (killed while flying / lying: the same doll lies on, dead)
                 s.rag = null; s.pose = null;
                 this._release(K, c, s, true); this.active.delete(key); continue;
             }
@@ -581,17 +607,19 @@ export class CreatureImpact {
      * with the hips (host); getting up — from the pose it lies in to standing, smoothly (RAG.RISE_T), facing where its head lay.
      */
     _ragFrame(ck, K, c, s, dt) {
-        const g = this.game, doll = s.rag;
+        const g = this.game, doll = s.rag, rig = s.rig;
         s.vx = s.vz = 0; s.airT = 0; s.rest = 0;
         if (doll) {
             if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
             if (this.auth) {
-                doll.at(12, _pt); // (the middle of the hips)
-                c.x = _pt[0]; c.z = _pt[2];
-                const fl = guardWorld(g).floor(c.x, c.z, _pt[1]);
-                if (Number.isFinite(fl)) c.y = Math.min(fl, _pt[1]);
+                // the body's place goes with its hips (the AI, the others' computers, the targets see it there)
+                doll.at(12, _pt);
+                const fl = guardWorld(g).floor(_pt[0], _pt[2], _pt[1]);
+                const fy = Number.isFinite(fl) ? Math.min(fl, _pt[1]) : _pt[1] - 1.9;
+                if (rig) rig.place(c, _pt[0], fy, _pt[2]);
+                else { c.x = _pt[0]; c.z = _pt[2]; c.y = fy; if (c.group) c.group.position.set(c.x, c.y + 1.95, c.z); }
                 c.vy = 0;
-                if (c.group) c.group.position.set(c.x, c.y + 1.95, c.z);
+                if (c.velocity?.set) c.velocity.set(0, 0, 0); // (a zombie's own slide: the doll moves it)
             }
         }
         const was = s.state;
@@ -602,21 +630,32 @@ export class CreatureImpact {
             const W = guardWorld(g);
             doll.at(12, _pt);
             const fy = W.floor(_pt[0], _pt[2], _pt[1]);
+            const rr = 0.45 * (doll.sp.h || 1);
             let sx = _pt[0], sz = _pt[2];
-            if (!standFree(W, sx, sz, 0.45, fy)) { const f = freeSpot(W, sx, sz, 0.45, fy); if (f) { sx = f.x; sz = f.z; } }
+            if (!standFree(W, sx, sz, rr, fy)) { const f = freeSpot(W, sx, sz, rr, fy); if (f) { sx = f.x; sz = f.z; } }
             doll.frame(_fr);
             let fx = _fr[3], fz = _fr[5];
-            if (_fr[7] < 0) { fx = -fx; fz = -fz; } // (on his back: the back looks down — he sits up facing his feet)
-            if (Math.hypot(fx, fz) < 0.2) { fx = Math.sin(c.yaw || 0) * -1; fz = -Math.cos(c.yaw || 0); }
+            const backY = _fr[7] * -doll.sp.faces; // (the back: right × up for a body looking along −Z, its opposite for one looking along +Z)
+            if (backY < 0) { fx = -fx; fz = -fz; } // (on his back: the back looks down — he sits up facing his feet)
+            if (Math.hypot(fx, fz) < 0.2) { fx = -Math.sin(c.yaw || 0); fz = -Math.cos(c.yaw || 0); }
             doll.standUp(sx, fy, sz, fx, fz);
-            s.getUp = { yaw: Math.atan2(-fx, -fz), t: 0 };
+            s.getUp = { fx, fz, t: 0 };
         }
         if (s.getUp && doll) {
             s.getUp.t += dt;
             s.t = 0; // (still rising: not «up» until he stands)
             K.hold(g, c, 0.3);
-            if (this.auth) { c.yaw = s.getUp.yaw; if (c.group) c.group.rotation.y = c.yaw; }
+            if (this.auth) {
+                if (rig) rig.face(c, s.getUp.fx, s.getUp.fz);
+                else { c.yaw = Math.atan2(-s.getUp.fx, -s.getUp.fz); if (c.group) c.group.rotation.y = c.yaw; }
+            }
             if (s.getUp.t >= RAG.UP_MAX || doll.goalDist() < RAG.UP_NEAR) {
+                if (rig) {
+                    // (a zombie, a Taron: standing as the doll stood him — his own animation takes over from here)
+                    RagPose.cleanRig(rig, c);
+                    s.rag = null; s.rig = null; c.rag = false; s.getUp = null; s.state = 'up'; s.t = 0;
+                    return;
+                }
                 // standing: the last few centimetres go over to the model's own standing pose
                 RagPose.toModel(doll, c.model);
                 c.model.group.updateMatrixWorld(true);
@@ -625,7 +664,7 @@ export class CreatureImpact {
                 s.rag = null; c.rag = false; s.riseT = 0; s.getUp = null;
             }
         }
-        if (s.rag) { RagPose.toModel(s.rag, c.model); return; }
+        if (s.rag) { this._ragDraw(c, s.rag, rig); return; }
         if (s.pose) {
             s.riseT = (s.riseT || 0) + dt;
             const k = Math.min(1, s.riseT / RAG.BLEND_T);
@@ -641,36 +680,59 @@ export class CreatureImpact {
     }
 
     /**
-     * (every computer) A villager died: his body falls as a rag doll — the one he flew as, or a new one from the pose he died in, toppling
-     * the way the last blow went (or backwards). Asleep, the pose goes to his body (Death.reposeBody) — it lies so for good, and is sent and saved so.
+     * (every computer) A humanoid died — a villager, a wizard, a knight, a sailor ashore, a zombie, a Taron: his body falls as a rag doll — the one
+     * he flew as, or a new one from the pose he died in, toppling the way the last blow went (or backwards). A villager's settled pose goes to his
+     * body (Death.reposeBody) — it lies so for good, and is sent and saved so; a zombie's / a Taron's lies so until the body is gone (sinking with it).
      */
     ragDeath(c) {
-        if (!c || this.deadRags.has(c.id)) return;
-        const e = this.active.get('v|' + c.id);
-        if (e?.s.rag) { this.deadRags.set(c.id, { c, doll: e.s.rag }); e.s.rag = null; e.s.pose = null; return; }
-        if (!this._ragOk('v', c)) return;
+        const ck = kindOf(c) || (c?.isVillager ? 'v' : null);
+        if (!c || !ck || this.deadRags.has(ck + '|' + c.id)) return;
+        const e = this.active.get(ck + '|' + c.id);
+        if (e?.s.rag) { this.deadRags.set(ck + '|' + c.id, { c, doll: e.s.rag, ck, rig: e.s.rig }); e.s.rag = null; e.s.pose = null; e.s.rig = null; return; }
+        if (!this._ragOk(ck, c)) return;
         const tmp = { };
-        const yaw = c.yaw ?? c.group?.rotation.y ?? 0;
+        const K = KINDS[ck];
+        const yaw = ck === 'T' ? c.model.rotation.y : (c.yaw ?? c.group?.rotation.y ?? 0);
         let vx = e?.s.vx || 0, vz = e?.s.vz || 0;
-        if (Math.hypot(vx, vz) < 0.5) { vx = Math.sin(yaw) * 0.8; vz = Math.cos(yaw) * 0.8; } // (no blow: he sinks back, away from where he looked — the model looks along −Z)
-        this._ragStart(c, tmp, vx, 0, vz, RAG.DEAD_TIP);
-        this.deadRags.set(c.id, { c, doll: tmp.rag });
+        // (no blow: he sinks back, away from where he looked — the model looks along −Z, a zombie along +Z)
+        if (Math.hypot(vx, vz) < 0.5) { const f = K?.faces || -1; vx = Math.sin(yaw) * 0.8 * -f; vz = Math.cos(yaw) * 0.8 * -f; }
+        this._ragStart(ck, c, tmp, vx, 0, vz, RAG.DEAD_TIP);
+        this.deadRags.set(ck + '|' + c.id, { c, doll: tmp.rag, ck, rig: tmp.rig });
+    }
+
+    /** The zombies and Tarons that died this frame (they have no hook of their own into here): their bodies fall as dolls too. */
+    _watchDeaths() {
+        const g = this.game;
+        const zs = g.zombies;
+        if (zs) for (let i = 0; i < zs.length; i++) { const z = zs[i]; if (z.isDying && !z._ragSeen) { z._ragSeen = true; this.ragDeath(z); } }
+        const ts = g.tarons?.list;
+        if (ts) for (let i = 0; i < ts.length; i++) { const t = ts[i]; if (t.dead && !t._ragSeen) { t._ragSeen = true; this.ragDeath(t); } }
     }
 
     _deadFrame(dt) {
+        this._watchDeaths();
         if (!this.deadRags.size) return;
         const g = this.game;
-        for (const [id, r] of this.deadRags) {
-            const { c, doll } = r;
-            if (!c.group || !c.group.parent || !c.model?.root || !c.dead || c.lev || c.bodyMoved) { this.deadRags.delete(id); if (!c.dead) c.rag = false; continue; } // (carried off by «Левиоса», gone from the world, raised: the doll is done)
+        for (const [key, r] of this.deadRags) {
+            const { c, doll, rig } = r;
+            if (rig) {
+                // a zombie / a Taron: until its body is gone (sunk, unloaded)
+                const gone = (r.ck === 'z' ? !c.group?.parent || c.removable || !c.group.visible : !c.model?.parent) || c.lev;
+                if (gone) { this.deadRags.delete(key); continue; }
+                if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
+                let dy = 0;
+                if (doll.asleep) { if (r.feet0 == null) r.feet0 = rig.feet(c); dy = Math.min(0, rig.feet(c) - r.feet0); } // (the corpse sinking at the end: the drawn body goes down with it)
+                this._ragDraw(c, doll, rig, dy);
+                continue;
+            }
+            if (!c.group || !c.group.parent || !c.model?.root || !c.dead || c.lev || c.bodyMoved) { this.deadRags.delete(key); if (!c.dead) c.rag = false; continue; } // (carried off by «Левиоса», gone from the world, raised: the doll is done)
             if (!doll.asleep && performance.now() < this._budget) doll.step(guardWorld(g), dt);
             RagPose.toModel(doll, c.model);
             if (doll.asleep && c.model.isDeadDone) {
                 c.model.group.updateMatrixWorld(true);
-                const pose = RagPose.capture(c.model, []);
-                g.death?.reposeBody?.('v', c.id, pose, c.group);
+                if (r.ck === 'v') g.death?.reposeBody?.('v', c.id, RagPose.capture(c.model, []), c.group);
                 c.rag = 'done';
-                this.deadRags.delete(id);
+                this.deadRags.delete(key);
             }
         }
     }
@@ -841,9 +903,10 @@ export class CreatureImpact {
     /** Back to the creature's own animation (alive: upright; dead: its death takes over). */
     _release(K, c, s, dead) {
         if (!c.group) return;
-        if (!dead && (s.rag || s.pose) && c.model?.root) RagPose.cleanOwn(c.model); // (the doll let go of him: his own animation again)
-        if (!dead || !this.deadRags.has(c.id)) { if (c.rag !== 'done') c.rag = false; }
-        s.rag = null; s.pose = null; s.getUp = null;
+        if (!dead && (s.rag || s.pose)) { if (s.rig) RagPose.cleanRig(s.rig, c); else if (c.model?.root) RagPose.cleanOwn(c.model); } // (the doll let go of him: his own animation again)
+        if (!dead || !this.deadRags.has(kindOf(c) + '|' + c.id)) { if (c.rag !== 'done') c.rag = false; }
+        s.rag = null; s.pose = null; s.getUp = null; s.rig = null;
+        if (s.rag === null && dead && this.deadRags.has(kindOf(c) + '|' + c.id)) return; // (dead and lying as a doll: the doll draws it — the old tilt is not reset under it)
         try {
             const P = K.pivot(c);
             // (a villager's own death fall turns the same root: only the sideways tilt is taken back)
