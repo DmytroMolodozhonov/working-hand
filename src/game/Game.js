@@ -3685,6 +3685,8 @@ export class Game {
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
+        for (const k of [1, 2]) { zoo.add(animalModel('swan', k)); const m = animalModel('swan', k); new FarShape(m).set(true); zoo.add(m); } // (the swans of the lakes, plain and magic: as near and as the video card draws them far — SwanModel.js)
+        zoo.add(makeItemModel({ kind: 'swanWings' }), makeItemModel({ kind: 'magicSwanWings' })); // (their wings as a thing)
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), ...(this.diabolos?.sampleModels() || []), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)

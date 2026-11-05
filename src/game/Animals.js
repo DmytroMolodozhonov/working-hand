@@ -51,6 +51,7 @@ import { earthly } from '../world/Planets.js';
 import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 import { appleTreeModel, baksadiTreeModel, pulseGolden } from './AppleTrees.js';
+import { SwanLife, SWAN, swanSiteAt, swanSitesNear, swanMagic, floatY as swanFloatY } from './SwanLife.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
 export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1 };
 const _farF = new THREE.Frustum(), _farM = new THREE.Matrix4(), _farS = new THREE.Sphere();
@@ -63,6 +64,7 @@ export const SPECIES = {
     pig: { name: 'Свинья', hp: 6, speed: 1.5, run: 5.5, dmg: 1, meat: 3, size: 1.45 },
     sheep: { name: 'Баран', hp: 6, speed: 1.5, run: 5.8, dmg: 1, meat: 2, size: 1.55 },
     horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 2.3 },
+    swan: { name: 'Лебедь', hp: 5, speed: 0.8, run: 2.6, dmg: 1, meat: 2, size: SWAN.SIZE }, // (the lakes' swans: SwanLife.js — they float, feed, hiss, fly off)
     runbook: { name: 'Бегущая книга', hp: 4, speed: 2.2, run: 9.5, dmg: 0, meat: 0, size: RUNNER.SIZE }, // (rare; its mind is RunningBook.js)
 };
 /**
@@ -193,6 +195,7 @@ export class Animals {
         this._feedT = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test';
         this.guards = new HerdGuards(this); // (a herd's hidden bull / leader ram)
+        this.swans = new SwanLife(this); // (the swans of the lakes: SwanLife.js)
     }
 
     get auth() { return this.game.authority; }
@@ -204,7 +207,7 @@ export class Animals {
         if (this.byId.has(id)) return this.byId.get(id);
         const S = SPECIES[type];
         const color = type === 'horse' ? (opts.color ?? HORSE_COLORS[Math.floor(Math.random() * HORSE_COLORS.length)]) : type === 'runbook' ? (opts.color || runBookColor(id))
-            : type === 'pig' || type === 'cow' ? (opts.color || 1 + Math.floor(Math.random() * 4)) : null; // (a pig's / a cow's look 1…4)
+            : type === 'pig' || type === 'cow' ? (opts.color || 1 + Math.floor(Math.random() * 4)) : type === 'swan' ? (opts.color === 2 ? 2 : 1) : null; // (a pig's / a cow's look 1…4; a swan: 1 plain, 2 magic)
         const model = animalModel(type, color);
         model.scale.setScalar(S.size * (type === 'pig' ? pigSize(id) : 1));
         if (type === 'pig' || isPegasusColor(color)) model.rotation.order = 'YXZ'; // (in flight: rolls into a turn, pitches, then faces its way)
@@ -230,6 +233,12 @@ export class Animals {
         this.list.push(a);
         this.byId.set(id, a);
         return a;
+    }
+
+    /** (host) A swan at (x, y, z) — magic or not by its id (the same on every computer). */
+    _spawnSwan(x, y, z, opts = {}) {
+        const id = ++_nextId;
+        return this._spawn('swan', new THREE.Vector3(x, y, z), { ...opts, id, color: swanMagic(id, this.game.seed || 1) ? 2 : 1 });
     }
 
     /** Where the player looks (flat). */
@@ -280,6 +289,7 @@ export class Animals {
     _siteLand(r) {
         const t = this.game.terrain?.data;
         if (!t) return false;
+        if (r.swans) return this.swans.siteWater(r); // (a swans' place: a lake in its cell — SwanLife.siteWater)
         if (t.landMade && !t.landMade(Math.round(r.x), Math.round(r.z))) return null; // (not yet: ask later)
         const x = Math.round(r.x), z = Math.round(r.z);
         const top = t.topLayer(x, z);
@@ -304,14 +314,15 @@ export class Animals {
         }
         // emptied places: while a player is near they stay empty; after a quiet while they are full again
         for (const [k, t] of this.emptied) {
-            const [gx, gz] = k.split(',').map(Number), r = this.sites.get(k) || siteAt(gx, gz, seed);
+            const sw = k[0] === 's', [gx, gz] = (sw ? k.slice(1) : k).split(',').map(Number), r = this.sites.get(k) || (sw ? swanSiteAt(gx, gz, seed) : siteAt(gx, gz, seed));
             if (r && people.some((p) => Math.hypot(p.x - r.x, p.z - r.z) < H.REFILL_D)) this.emptied.set(k, this.clock);
             else if (this.clock - t >= H.REFILL_T) this.emptied.delete(k);
         }
         // places to wake: any player near, nobody seeing them; the nearest first
         const look = this._look(this._lookV || (this._lookV = new THREE.Vector3()));
         const todo = this._todo; todo.length = 0;
-        for (const p of people) sitesNear(p.x, p.z, H.WAKE, seed, (s) => {
+        const eachSite = (x, z, fn) => { sitesNear(x, z, H.WAKE, seed, fn); swanSitesNear(x, z, H.WAKE, seed, fn); }; // (the swans' places too: their own roll — SwanLife.swanSiteAt)
+        for (const p of people) eachSite(p.x, p.z, (s) => {
             if (this.emptied.has(s.key)) return;
             const r = this._site(s);
             if (r.awake || r.ok === false) return;
@@ -328,7 +339,7 @@ export class Animals {
         for (const r of todo) { // (one herd per look: the nearest first)
             if (r.ok == null) { const ok = this._siteLand(r); if (ok === null) continue; r.ok = ok; if (!ok) continue; }
             r.awake = true; r.lost = 0; r.members.clear();
-            for (const a of this.spawnHerdAt(r.type, r.n, r.x, r.z)) { a.site = r; r.members.add(a.id); }
+            for (const a of (r.swans ? this.swans.spawnFlock(r) : this.spawnHerdAt(r.type, r.n, r.x, r.z))) { a.site = r; r.members.add(a.id); }
             break;
         }
     }
@@ -386,10 +397,11 @@ export class Animals {
         // defend (65%) or run away; sheep stand up for each other
         const attacker = by;
         const guarded = a.herd?.guard != null && this.byId.get(a.herd.guard)?.form; // (their bull / minotaur fights for them: they run)
-        const fight = a.type !== 'runbook' && !guarded && Math.random() < (a.type === 'pig' ? 0.15 : 0.65); // (a running book only runs; a pig mostly flies off)
+        const fight = a.type !== 'runbook' && !guarded && Math.random() < (a.type === 'pig' ? 0.15 : a.type === 'swan' ? SWAN.AGGRO_HIT : 0.65); // (a running book only runs; a pig mostly flies off; a swan: SwanLife)
         a.state = fight ? 'attack' : 'flee';
         a.attacker = attacker;
         a.stateT = fight ? 15 : 8;
+        if (a.type === 'swan' && !fight) { const ap = this._playerPos(attacker); this.swans.scare(a, ap ? { x: ap.x, z: ap.z } : null); } // (the flock flies off with it)
         if (a.type === 'sheep' && !guarded) {
             for (const o of this.list) {
                 if (o === a || o.dead || o.type !== 'sheep' || o.group.position.distanceTo(a.group.position) > 14) continue;
@@ -419,6 +431,7 @@ export class Animals {
         this._layDown(a);
         if (a.type === 'sheep') this.game.beds?.dropWool(a.group.position); // wool for beds
         if (a.type === 'runbook' && this.auth) this.game.runner?.died(a, !!cooked); // (burnt to ash, or a plain book on the ground)
+        if (a.type === 'swan' && this.auth) this.swans.died(a); // (its white wings fall off it — a magic swan's for the potion of wings)
     }
 
     _layDown(a) {
@@ -945,6 +958,7 @@ export class Animals {
             this._animate(a, 0, a.type === 'pig' ? dt : 0);
             return;
         }
+        if (a.type === 'swan') { this.swans.think(a, dt); return; } // (on the lake, hissing, flying off: SwanLife.js)
         if (a.type === 'pig' && this._pigAir(a, dt)) return; // (in flight: PigFlight.js)
         if (a.pegasus && this._pegasusThink(a, dt)) return; // (the Pegasus defends his herd in the air)
         if (a.form && this.guards.think(a, dt)) return; // (the bronze bull / the minotaur: HerdGuards.js)
@@ -1252,6 +1266,7 @@ export class Animals {
 
     /** Oinks: a squeal when it takes off, faint oinks from a migrating flock high up. */
     _pigSounds(a, dt) {
+        if (a.type !== 'pig') return; // (a swan's own voice: SwanLife)
         const snd = this.game.sound;
         const code = a.flyCode || 0;
         if (snd?.playOink) {
@@ -1585,9 +1600,10 @@ export class Animals {
         a.stunT = Math.max(a.stunT || 0, stun);
         a.airborne = a.vel.y > 0.5 || a.airborne;
         // a pig thrown about is frightened: when it comes to itself it flies off (away from where the push came)
-        if (a.type === 'pig' && !a.dead && this.auth) {
+        if ((a.type === 'pig' || a.type === 'swan') && !a.dead && this.auth) {
             const p = a.group.position, h = Math.hypot(vel.x, vel.z);
-            this._scare(a, h > 0.1 ? { x: p.x - vel.x / h * 5, z: p.z - vel.z / h * 5 } : null);
+            const from = h > 0.1 ? { x: p.x - vel.x / h * 5, z: p.z - vel.z / h * 5 } : null;
+            if (a.type === 'swan') { if (a.state !== 'attack') this.swans.scare(a, from); } else this._scare(a, from);
         }
     }
 
@@ -1608,6 +1624,7 @@ export class Animals {
         }
         let gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
         if (a.dead) { const w = waterAt(g.terrain?.data, p.x, p.z, gy); if (w && w.depth >= 2) gy = w.surface - base; } // (a carcass in deep water floats)
+        else if (a.type === 'swan') { const w = waterAt(g.terrain?.data, p.x, p.z, gy); if (w && w.depth >= 1) gy = swanFloatY(w.surface, S.size) - base; } // (a swan floats: thrown, stunned — on the water, never sunk to the bottom)
         if (a.airborne || p.y > gy + base + 0.8) {
             // in the air: falls
             v.y -= 22 * dt;

@@ -125,6 +125,7 @@ export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDu
  */
 export const MAGIC_KILL = {
     wingedPig: { n: 3, name: 'Крылатая свинья' },
+    magicSwan: { n: 4, name: 'Магический лебедь' },
     runningBook: { n: 4, name: 'Бегущая книга' },
     livingTree: { n: 6, name: 'Живое дерево' },
     pegasus: { n: 8, name: 'Пегас' },
@@ -148,6 +149,7 @@ export function animalMagicKind(a) {
     if (a.form && a.guard === 'ram') return 'minotaur'; // (the ram turned minotaur)
     if (a.type === 'pig') return 'wingedPig'; // (every pig here has wings: PigFlight.js)
     if (a.type === 'runbook') return 'runningBook';
+    if (a.type === 'swan' && a.color === 2) return 'magicSwan'; // (the pearly swan of the lakes: SwanLife — a plain swan is no magic)
     return null;
 }
 

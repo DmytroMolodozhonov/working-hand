@@ -82,10 +82,12 @@ export const IMPERIUS_TARGETS = {
     horse: { ru: 'конь', plain: true },
     canary: { ru: 'канарик', plain: true }, // (a swamp canary: not magical — the plain spell takes it; it walks on its own short legs, can lift a boulder and throw it — Canaries.js)
     custom: { ru: 'существо, созданное богами', magic: true }, // («Да пусть создастся»: the gods' own making — only «Империус Максима» takes it; CustomCreatures.js, adapter BODIES.C)
+    swan: { ru: 'лебедь', plain: true }, // (a swan of the lakes: it swims and waddles with the plain one — flying only with «Максима» (flies))
     pig: { ru: 'свинья', plain: true }, // (the farm pig; its wings are another thing: walking with the plain one, flying only with «Максима»)
     sailor: { ru: 'моряк', plain: true },
     // the magic ones: «Максима» only
     pegasus: { ru: 'Пегас', magic: true, fly: true },
+    magicSwan: { ru: 'магический лебедь', magic: true, fly: true }, // (the pearly swan: a magic creature)
     runbook: { ru: 'бегущая книга', magic: true },
     guardBeast: { ru: 'медный бык / минотавр', magic: true }, // (a herd's magic guard — HerdGuards.js)
     dragon: { ru: 'дракон', magic: true, fly: true }, // (its anger, a grudge, a robbed hoard — no matter: the Maxima is the gods'; the mind in it is yours. «Brain Rot Maxima» calms; this one takes)
@@ -198,6 +200,7 @@ export function kindOf(sys, c = {}) {
             return c.role === 'knight' ? 'knight' : 'villager';
         case 'a':
             if (c.pegasus) return 'pegasus';
+            if (c.type === 'swan') return c.color === 2 ? 'magicSwan' : 'swan';
             if (c.type === 'runbook') return 'runbook';
             if (c.form) return 'guardBeast';
             return IMPERIUS_TARGETS[c.type] ? c.type : 'cow';
@@ -223,7 +226,7 @@ export function kindOf(sys, c = {}) {
 /** Does this kind fly with the arms in «Максима» (and does it run first to take off: the dragon)? */
 export function flies(kind, maxima) {
     if (!maxima) return false;
-    return !!IMPERIUS_TARGETS[kind]?.fly || kind === 'pig';
+    return !!IMPERIUS_TARGETS[kind]?.fly || kind === 'pig' || kind === 'swan';
 }
 
 /** The network's short names of the spell. */

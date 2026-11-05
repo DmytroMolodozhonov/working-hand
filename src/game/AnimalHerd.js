@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 
 /** Calm personal space between centres, × the body length (sheep closest, horses widest). */
-export const ROOM = { sheep: 0.95, pig: 1.1, cow: 1.3, horse: 1.4 };
+export const ROOM = { sheep: 0.95, pig: 1.1, cow: 1.3, horse: 1.4 }; // (no swan: its neck and head are its own — SwanModel; SwanLife keeps the flock apart)
 /** How far apart they like to graze, × the personal space. */
 export const LOOSE = 1.55;
 /** What each species likes to do when calm (relative weights). */

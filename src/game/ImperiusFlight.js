@@ -58,6 +58,8 @@ export function headPath(pitch) {
 export const FLYERS = {
     dragon: { lift: 4.2, thrust: 4.5, maxUp: 10, maxFwd: 26, gravity: 9, sink: 2.4, drag: 0.08, takeoff: 4.2, turn: 0.75 },
     pegasus: { lift: 4.5, thrust: 3.5, maxUp: 9, maxFwd: 18, gravity: 9, sink: 2.2, drag: 0.12, takeoff: 3.6, turn: 1.1 },
+    swan: { lift: 4.0, thrust: 3.4, maxUp: 7, maxFwd: 17, gravity: 8, sink: 1.6, drag: 0.14, takeoff: 3.0, turn: 1.2 }, // (a heavy bird: a run along the water first)
+    magicSwan: { lift: 4.4, thrust: 3.8, maxUp: 8, maxFwd: 19, gravity: 8, sink: 1.5, drag: 0.12, takeoff: 2.6, turn: 1.3 },
     bookbird: { lift: 3.4, thrust: 2.2, maxUp: 7, maxFwd: 11, gravity: 6, sink: 1.5, drag: 0.35, takeoff: 0, turn: 1.6 },
     owl: { lift: 3.8, thrust: 3.0, maxUp: 8, maxFwd: 16, gravity: 7, sink: 1.3, drag: 0.2, takeoff: 0, turn: 1.5 },
     gargoyle: { lift: 5.0, thrust: 4.0, maxUp: 11, maxFwd: 24, gravity: 8, sink: 1.0, drag: 0.14, takeoff: 0, turn: 1.8 }, // (an infernal gargoyle: strong, quick — Gargoyles.js)

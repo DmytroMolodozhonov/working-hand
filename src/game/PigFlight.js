@@ -224,7 +224,7 @@ export function flockSlot(i, rnd = Math.random) {
 
 /**
  * What the wings do, every frame, on every computer (from a.flyCode: 0 on the ground,
- * 1 beating, 2 gliding, 3 landing — spread wide, 4 falling — folded). Sets
+ * 1 beating, 2 gliding, 3 landing — spread wide, 4 falling — folded, 5 a swan's threat — raised half open). Sets
  * a.wingOpen (0 folded … 1 spread), a.flapA (the up/down angle), a.flapFlex (the wing tips bend),
  * a.tuck (the legs in flight). On the ground a folded wing twitches now and then.
  */
@@ -237,11 +237,12 @@ export function wingTick(a, dt, rnd = Math.random) {
     }
     if (a.twitch > 0) a.twitch -= dt;
     const twitch = !flying && code !== 4 && a.twitch > 0;
-    const openWant = flying ? 1 : twitch ? 0.14 : 0;
+    const threat = code === 5; // (5: a swan's threat — the wings raised half open over the back, trembling: SwanLife)
+    const openWant = flying ? 1 : threat ? 0.5 : twitch ? 0.14 : 0;
     a.wingOpen = (a.wingOpen || 0) + (openWant - (a.wingOpen || 0)) * Math.min(1, dt * (openWant > (a.wingOpen || 0) ? 7 : 3.5));
-    const amp = code === 1 ? 0.85 : code === 3 ? 0.45 : code === 2 ? 0.04 : twitch ? 0.35 : 0;
-    const freq = code === 1 ? 3.2 : code === 3 ? 4.2 : twitch ? 6 : 1;
-    const base = code === 2 ? 0.14 : code === 3 ? 0.3 : 0.05;
+    const amp = code === 1 ? 0.85 : code === 3 ? 0.45 : code === 2 ? 0.04 : threat ? 0.1 : twitch ? 0.35 : 0;
+    const freq = code === 1 ? 3.2 : code === 3 ? 4.2 : threat ? 2.5 : twitch ? 6 : 1;
+    const base = code === 2 ? 0.14 : code === 3 ? 0.3 : threat ? 0.6 : 0.05;
     a.flapAmp = (a.flapAmp || 0) + (amp - (a.flapAmp || 0)) * Math.min(1, dt * 5);
     a.flapPh = ((a.flapPh || 0) + dt * freq * Math.PI * 2) % (Math.PI * 200);
     a.flapA = base + a.flapAmp * Math.sin(a.flapPh);

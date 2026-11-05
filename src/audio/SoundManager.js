@@ -13,6 +13,7 @@
 
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
+import { synthSwan, SWAN_SOUNDS } from './SwanSounds.js';
 import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
 import { synthGhost, GHOST_SOUND_IDS } from './GhostSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
@@ -750,6 +751,7 @@ export class SoundManager {
             ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
             // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
+            ...SWAN_SOUNDS.map((k) => ['swan_' + k, () => synthSwan(this.context, k)]),
             // (the invisible bird of Spencer — SpencerBirds.js: a chirp, a trill, small wings)
             ...SPENCER_SOUNDS.map((k) => ['spencer_' + k, () => synthSpencer(this.context, k)]),
             // (the Castle of Ghosts — Ghosts.js: steps, whispers, a cry, knocks, a chair's scrape, the wail, a child's laugh, the chill, a far bell, a door, the hum)
@@ -2087,6 +2089,14 @@ export class SoundManager {
         if (!this.enabled || !this.loaded) return;
         if (!this.sounds.oink) this.sounds.oink = [this._synthOink(0), this._synthOink(1)];
         this._playAt(this.sounds.oink[Math.floor(Math.random() * 2)], position, volume, refDistance, rate);
+    }
+
+    /** The swans of the lakes (SwanLife.js): 'hiss' | 'call' | 'wings' | 'run' | 'splash' — made ahead (prewarmStep). */
+    playSwan(position, kind = 'call') {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'swan_' + kind;
+        if (!this.sounds[key]) { if (!SWAN_SOUNDS.includes(kind)) return; this.sounds[key] = synthSwan(this.context, kind); }
+        this._playAt(this.sounds[key], position, kind === 'hiss' ? 0.9 : kind === 'wings' ? 0.65 : 0.8, kind === 'hiss' ? 7 : 12, 0.94 + Math.random() * 0.12);
     }
 
     /** The clever owl (Owls.js): 'hoot' | 'sad' | 'wings' | 'coo' | 'chime' — made ahead (prewarmStep). */

@@ -134,7 +134,7 @@
 - `temple.worker.js` — the Temple of the Gods' look and solids (GodsTemple.templePlan: ~0.5 s of work — never in a frame of the game). In: {id, seed}; out: {id, plan} (the mesh arrays moved, not copied).
 - `terrain.worker.js` — makes terrain chunks away from the drawing (TerrainView.js).
 
-### `src/game/` — игра: системы, заклинания, существа, правила и таблицы «кто/что» (400)
+### `src/game/` — игра: системы, заклинания, существа, правила и таблицы «кто/что» (402)
 
 - `Accio.js` — «Акцио»: summon a thing into your hand.
 - `Achievements.js` — the player's achievements («ачивки») and the status «Высший маг».
@@ -482,6 +482,8 @@
 - `SunContest.js` — «To the Sun» against the black storm clouds of the gargoyle ritual (the caster's computer; the rules and numbers are GargoyleRules.js: `SUN`, `sunStep`; the burning of the gargoyles and the clearing of the sky — Gargoyles.js; the…
 - `SurfBoards.js` — surfboards: made by «Create a Board», carried by hand, ridden on waves.
 - `SurfWater.js` — the water a surfboard feels, in one place.
+- `SwanLife.js` — the swans of the lakes (the author 05.11: «лебеди, которые обитают возле озёр болотных. Красивые лебеди. Они плавают красиво по озеру… если убить, то можно получить их крылья беленькие… магические — в два раза реже, чем обычные;…
+- `SwanModel.js` — the swans of the marshy lakes (Animals.js, type 'swan'; SwanLife.js — how they live): a mute swan's shape.
 - `SwimStroke.js` — real arm strokes in front of the camera, and what they do to a swimmer.
 - `Swimming.js` — deep water, air and «Air Bubble».
 - `Taron.js` — the Tarons («Тароны») of the underworld: fat, reddish, horned giants (twice a man's size) with a huge axe-hammer, in camps. Rules, numbers and the «who / what» table: TaronRules.js; the look: fx/TaronModel.js; the voices:…
@@ -622,7 +624,7 @@
 - `WaterMaterial.js` — living water for the water-bending spells.
 - `WizardFx.js` — what the wizards' small magic looks like (on every computer).
 
-### `src/audio/` — звук: синтез, музыка заклинаний, звуки существ (32)
+### `src/audio/` — звук: синтез, музыка заклинаний, звуки существ (33)
 
 - `ArenaSounds.js` — the duel arena's sounds (src/game/ArenaDuels.js), synthesized ahead (SoundManager.prewarmStep): cheer    the stands roar: many voices, a swell of noise with shouts in it   (a hit, a good save, the win) groan    the crowd's…
 - `CanarySounds.js` — the voices and noises of the Canaries (Canaries.js), synthesized ahead (SoundManager.prewarmStep): grr     «Грр!» — a low rough snarl as they see a trespasser          ha      «Ха!» — the shout of a throw lift    a grunt of…
@@ -647,6 +649,7 @@
 - `SpellPhrase.js` — is the phrase the spell itself, or talk with a spell's word in it?
 - `SpellSpotter.js` — which spell was said, found by its sound.
 - `SpencerSounds.js` — the voice of the bird of Spencer (SpencerBirds.js), synthesized ahead (SoundManager.prewarmStep): chirp  two or three bright, clear notes, the last one sliding up — a little pearly ring after it trill  a quick warble, rising and…
+- `SwanSounds.js` — the swans of the lakes (SwanLife.js), synthesized ahead (SoundManager.prewarmStep): hiss    a mute swan's angry hiss — a breathy noise, rising and falling, with a rough throaty edge   (the threat, a bite) call    a soft nasal…
 - `TaronSounds.js` — the voices and noises of the Tarons (Taron.js), synthesized ahead (SoundManager.prewarmStep): roar   a deep bellow as a Taron sees a trespasser        grunt  a pig-like grunt (idle, a swing)       hurt  a thick cry when hit die  …
 - `ThrowSounds.js` — the sounds of a thing leaving the hand and landing (Items: ThrowModel). Made ahead on the loading screen (SoundManager.prewarmStep), never in the moment. Each is layered, not one beep: whoosh — the air the thing cuts: noise…
 - `VoiceCast.js` — who speaks with which voice (pure, testable in node).
