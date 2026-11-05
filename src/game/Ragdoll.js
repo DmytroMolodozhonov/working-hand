@@ -128,6 +128,23 @@ export function makeSpec({ rest = REST, r = R0, torsoR = [0.5, 0.5, 0.5], faces 
             [P.KNL, P.KNR, 0.42 * rr[P.KNL] / 0.34, Infinity], [P.FTL, P.FTR, 0.42 * rr[P.FTL] / 0.32, Infinity], // (the legs do not pass through each other)
             [P.HNL, P.HNR, 0.45 * h, Infinity], [P.HEAD, P.HNL, 0.75 * h, Infinity], [P.HEAD, P.HNR, 0.75 * h, Infinity],
         ],
+        // the body's own parts never through each other (the author 05.11: «у NPC по отношению к самому себе косточкам нет коллизии…
+        // борода проходит сквозь него, голова…»): every two balls not joined by a bone, and every limb ball against the torso's balls,
+        // kept at least as far apart as their radii allow — a little less (the flesh gives), never closer than they stand at rest
+        self: (() => {
+            const joined = new Set(), key = (a, b) => (a < b ? a * 16 + b : b * 16 + a);
+            for (const [a, b] of [[P.SHL, P.SHR], [P.HIPL, P.HIPR], [P.SHL, P.HIPL], [P.SHR, P.HIPR], [P.SHL, P.HIPR], [P.SHR, P.HIPL], [P.HEAD, P.SHL], [P.HEAD, P.SHR], [P.SHL, P.HNL], [P.SHR, P.HNR], [P.HIPL, P.KNL], [P.KNL, P.FTL], [P.HIPR, P.KNR], [P.KNR, P.FTR], [P.HIPL, P.FTL], [P.HIPR, P.FTR]]) joined.add(key(a, b));
+            const out = [];
+            const pts = [P.HEAD, P.HNL, P.HNR, P.KNL, P.FTL, P.KNR, P.FTR];
+            for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+                const a = pts[i], b = pts[j];
+                if (joined.has(key(a, b))) continue;
+                out.push([a, b, Math.min((rr[a] + rr[b]) * 0.8, d(a, b) * 0.95)]);
+            }
+            return out;
+        })(),
+        // the head, the knees and the feet against the torso's balls (the hands: _handsOut); the head's chin may come to the chest — not into it
+        selfTorso: [[P.HEAD, 0.55], [P.KNL, 0.85], [P.KNR, 0.85], [P.FTL, 0.85], [P.FTR, 0.85]],
         // the balls along the torso (weights of the corners SHL, SHR, HIPL, HIPR; radius — the body's thickness)
         torso: [[0.4, 0.4, 0.1, 0.1, torsoR[0] * sr], [0.25, 0.25, 0.25, 0.25, torsoR[1] * sr], [0.1, 0.1, 0.4, 0.4, torsoR[2] * sr]],
     };
@@ -297,10 +314,26 @@ export class Ragdoll {
             }
             for (let i = 0; i < N * 3; i++) { o[i] = x[i]; x[i] += (gl[i] - x[i]) * K; }
             this.contacts = 0;
-            for (let it = 0; it < DOLL.ITER; it++) {
-                for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
-                if (it & 1 || it === DOLL.ITER - 1) { for (let i = 0; i < N; i++) this._collide(world, i); this._torso(world); }
+            for (let it = 0; it < DOLL.ITER; it++) for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); }
+            // the world: the body is moved out of a wall, a bed, the floor as ONE piece — never a shoulder shoved alone (the author 05.11,
+            // the third time: «когда NPC встаёт, он всё равно переворачивается, делает сальто» — getting up by a wall, the collisions pushed
+            // single points and the torso's frame jumped over itself in a step). Twice: what one push leaves the next one takes.
+            const y = this._ry || (this._ry = new Float64Array(N * 3));
+            for (let pass = 0; pass < 2; pass++) {
+                y.set(x);
+                for (let i = 0; i < N; i++) this._collide(world, i);
+                this._torso(world);
+                let dx = 0, dy = 0, dz = 0;
+                for (let i = 0; i < N; i++) {
+                    const k = i * 3, ex = x[k] - y[k], ey = x[k + 1] - y[k + 1], ez = x[k + 2] - y[k + 2];
+                    if (Math.abs(ex) > Math.abs(dx)) dx = ex; if (ey > dy) dy = ey; if (Math.abs(ez) > Math.abs(dz)) dz = ez;
+                }
+                for (let i = 0; i < N; i++) { const k = i * 3; x[k] = y[k] + dx; x[k + 1] = y[k + 1] + dy; x[k + 2] = y[k + 2] + dz; }
+                if (!dx && !dy && !dz) break;
             }
+            // (wedged — a wall on one side, a bed on the other: no one shift frees it; what is still in a solid is pushed out by itself)
+            for (let i = 0; i < N; i++) this._collide(world, i);
+            this._torso(world);
             for (let i = 0; i < N * 3; i++) o[i] = x[i];
             return;
         }
@@ -317,14 +350,17 @@ export class Ragdoll {
         //  переворачивается»)
         if (this.tone > 0 && this.contacts > 0 && this.age < DOLL.TONE_T) this._tone(); // (and only while it lands and rolls: then it lies still, as a body does — never twitching on)
         this.contacts = 0;
+        this._hitMask = (this._hitMask || 0) | (this._hitNow || 0); this._hitNow = 0; // (what touched the world last step and this one)
         for (let it = 0; it < DOLL.ITER; it++) {
             for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
             for (let b = 0; b < this.sp.limits.length; b++) { const L = this.sp.limits[b]; this._len(L[0], L[1], L[2], L[3], 1); };
             this._knee(P.HIPL, P.KNL, P.FTL); this._knee(P.HIPR, P.KNR, P.FTR);
             this._handsOut();
+            if (it & 1 && this._selfOn !== false) this._selfOut();
             // the world last (it wins): every other pass and the final one — the blocks are the dearest question
             if (it & 1 || it === DOLL.ITER - 1) { for (let i = 0; i < N; i++) this._collide(world, i); this._torso(world); }
         }
+        this._hitMask = this._hitNow || 0;
         let mv = 0;
         for (let i = 0; i < N * 3; i++) { const d = Math.abs(x[i] - o[i]); if (d > mv) mv = d; }
         if (mv < DOLL.SLEEP_V && this.contacts > 0) { this.still += dt; if (this.still >= DOLL.SLEEP_T) this._sleep(); } else this.still = 0;
@@ -444,6 +480,34 @@ export class Ragdoll {
         }
     }
 
+    /** The body's own parts out of each other (makeSpec.self, selfTorso): both moved apart by half — no part pushes the body around. */
+    _selfOut() {
+        const x = this.x, o = this.o, sp = this.sp, hit = this._hitMask || 0;
+        if (sp.self) for (const [a, b, m] of sp.self) {
+            if (hit & ((1 << a) | (1 << b))) continue; // (against a wall, the floor, a bed: the world decides where it is)
+            const ka = a * 3, kb = b * 3, dx = x[kb] - x[ka], dy = x[kb + 1] - x[ka + 1], dz = x[kb + 2] - x[ka + 2];
+            const dd = Math.hypot(dx, dy, dz);
+            if (dd >= m - 0.02 || dd < 1e-6) continue; // (a touch of flesh: let be — only a part really in another is moved)
+            const f = (m - 0.02 - dd) / dd * 0.5;
+            x[ka] -= dx * f; x[ka + 1] -= dy * f; x[ka + 2] -= dz * f; x[kb] += dx * f; x[kb + 1] += dy * f; x[kb + 2] += dz * f;
+            o[ka] -= dx * f; o[ka + 1] -= dy * f; o[ka + 2] -= dz * f; o[kb] += dx * f; o[kb + 1] += dy * f; o[kb + 2] += dz * f; // (moved, not flung: no speed is added)
+        }
+        if (sp.selfTorso) for (let t = 0; t < sp.torso.length; t++) {
+            this._torsoPoint(t, _c);
+            for (const [i, k] of sp.selfTorso) {
+                if (hit & (1 << i)) continue;
+                // (the head's own neck: the chest ball is where it hangs from — only the belly and the hips push it, and the chest a little)
+                const kk = i === P.HEAD && t === 0 ? k * 0.75 : k;
+                const m = (sp.torso[t][4] + sp.r[i]) * kk, j = i * 3;
+                const dx = x[j] - _c[0], dy = x[j + 1] - _c[1], dz = x[j + 2] - _c[2], dd = Math.hypot(dx, dy, dz);
+                if (dd >= m - 0.02 || dd < 1e-6) continue;
+                const f = (m - 0.02 - dd) / dd;
+                x[j] += dx * f; x[j + 1] += dy * f; x[j + 2] += dz * f;
+                o[j] += dx * f; o[j + 1] += dy * f; o[j + 2] += dz * f;
+            }
+        }
+    }
+
     _torsoPoint(t, out) {
         const w = this.sp.torso[t], x = this.x;
         for (let a = 0; a < 3; a++) out[a] = w[0] * x[P.SHL * 3 + a] + w[1] * x[P.SHR * 3 + a] + w[2] * x[P.HIPL * 3 + a] + w[3] * x[P.HIPR * 3 + a];
@@ -475,6 +539,7 @@ export class Ragdoll {
         _c[0] = this.x[k]; _c[1] = this.x[k + 1]; _c[2] = this.x[k + 2];
         const ax = this._ballOut(world, _c, this.sp.r[i]);
         if (ax < 0) return;
+        this._hitNow = (this._hitNow || 0) | (1 << i); // (this part touches the world: the world wins over the body's own parts — _selfOut)
         this.x[k] = _c[0]; this.x[k + 1] = _c[1]; this.x[k + 2] = _c[2];
         this._rub(k, ax);
     }
