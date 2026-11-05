@@ -72,7 +72,7 @@ export function waterAt(t, x, z, y) {
     const f = t.floorBelow(ix, iz, Math.floor(y + 1.5) + 1);
     if (t.get(ix, f + 1, iz) !== BLOCK.WATER) return null;
     let n = 1;
-    while (n < 32 && t.get(ix, f + 1 + n, iz) === BLOCK.WATER) n++;
+    while (n < 64 && t.get(ix, f + 1 + n, iz) === BLOCK.WATER) n++; // (the open sea ~50 deep)
     return { surface: f + n - 0.5, bottom: f - 0.5, depth: n, floor: f };
 }
 

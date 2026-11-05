@@ -275,7 +275,7 @@ export class ReefFish {
                 const n = sp.school[0] + Math.floor(Math.random() * (sp.school[1] - sp.school[0] + 1));
                 const lo = Math.max(w.bottom + 0.6, w.surface - sp.depth[1]), hi = Math.min(w.surface - 0.8, w.surface - sp.depth[0]);
                 const y = hi > lo ? lo + Math.random() * (hi - lo) : w.bottom + 0.8 + Math.random() * Math.max(0.2, w.depth - 2);
-                S = this.schools[k] = { sp, n, x, z, y, yaw: Math.random() * 6.28, tx: x, tz: z, fast: 0, seed: Math.random() * 100, bend: 0, near: sp.len > 0.7 || sp.school[1] <= 2 ? 0 : 1 };
+                S = this.schools[k] = { sp, n, x, z, y, lo: w.bottom + 0.35, hi: w.surface - 0.35, yaw: Math.random() * 6.28, tx: x, tz: z, fast: 0, seed: Math.random() * 100, bend: 0, near: sp.len > 0.7 || sp.school[1] <= 2 ? 0 : 1 };
             }
             if (budget + S.n > REEF.MAX) S.n = Math.max(0, REEF.MAX - budget);
             budget += S.n;
@@ -292,7 +292,7 @@ export class ReefFish {
             const speed = (0.6 + 1.6 * Math.min(1, S.sp.len)) * (1 + S.fast * 3);
             const nx = S.x - Math.sin(S.yaw) * speed * dt, nz = S.z - Math.cos(S.yaw) * speed * dt;
             const w = waterAt(nx, nz, S.y);
-            if (w && w.depth >= 2) { S.x = nx; S.z = nz; S.y = Math.max(w.bottom + 0.5 + S.sp.len * 0.3, Math.min(w.surface - 0.6, S.y + Math.sin(this.t * 0.3 + S.seed) * 0.15 * dt)); }
+            if (w && w.depth >= 2) { S.lo = w.bottom + 0.35; S.hi = w.surface - 0.35; S.x = nx; S.z = nz; S.y = Math.max(w.bottom + 0.5 + S.sp.len * 0.3, Math.min(w.surface - 0.6, S.y + Math.sin(this.t * 0.3 + S.seed) * 0.15 * dt)); }
             else { S.yaw += 1.4; S.tx = S.x - (nx - S.x) * 10; S.tz = S.z - (nz - S.z) * 10; }
         }
         // the fish of each school round its centre (a tight shoal, a loose pair, a lone big one), each a little its own way
@@ -308,7 +308,7 @@ export class ReefFish {
                 const a = i * 2.399 + S.seed, r = spread * Math.sqrt((i + 0.5) / S.n);
                 const ox = Math.cos(a + this.t * 0.2) * r, oz = Math.sin(a + this.t * 0.2) * r * 1.6, oy = Math.sin(a * 1.7 + this.t * 0.7) * spread * 0.3;
                 const k2 = 0.85 + ((i * 7) % 5) * 0.07;
-                A.world.setXYZW(n, S.x + ox * c + oz * s, S.y + oy, S.z - ox * s + oz * c, S.yaw + Math.sin(this.t * 1.1 + i) * 0.12);
+                A.world.setXYZW(n, S.x + ox * c + oz * s, Math.max(S.lo, Math.min(S.hi, S.y + oy)), S.z - ox * s + oz * c, S.yaw + Math.sin(this.t * 1.1 + i) * 0.12);
                 A.pitch.setX(n, Math.sin(this.t * 0.9 + i * 1.3) * 0.08);
                 A.shape.setXYZW(n, sp.h, sp.w, sp.tail, sp.dorsal);
                 A.swim.setXYZW(n, a * 3.1, (8 + 10 / Math.max(0.3, L)) * (1 + S.fast), L * k2, Math.max(-1.5, Math.min(1.5, S.bend)));

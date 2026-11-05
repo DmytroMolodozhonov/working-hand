@@ -15,6 +15,7 @@
  */
 
 import { BLOCK, CHUNK, MIN_LAYER, MAX_LAYER } from './Terrain.js';
+const PLANET_FLOOR = -14; // (the planets' lowest land, as it was when the world's floor was −17: the planets stay as they were)
 import { createNoise2D, smoothstep } from '../core/math.js';
 import { slotRect } from './Planets.js';
 import { venusTempleSite, templeGround, TEMPLE_FLAT } from './GodsTemple.js';
@@ -104,11 +105,11 @@ export function planetHeight(def, x, z) {
             ice = 0;
         }
         planetHeight.top = top; planetHeight.dark = 0; planetHeight.ice = ice; planetHeight.water = water;
-        return Math.max(MIN_LAYER + 3, Math.min(MAX_LAYER - 12, Math.round(h)));
+        return Math.max(PLANET_FLOOR, Math.min(MAX_LAYER - 12, Math.round(h)));
     }
     if (_c.dark && top === BLOCK.REGOLITH) top = BLOCK.PLANET_DARK;
     planetHeight.top = top; planetHeight.dark = _c.dark; planetHeight.ice = ice; planetHeight.water = water;
-    return Math.max(MIN_LAYER + 3, Math.min(MAX_LAYER - 12, Math.round(h)));
+    return Math.max(PLANET_FLOOR, Math.min(MAX_LAYER - 12, Math.round(h)));
 }
 const _c = { top: 0, dark: 0, ice: 0 };
 

@@ -174,6 +174,13 @@ export class UnderwaterLight {
         const dome = g.world?.sky?.mesh;
         if (dome && under && this.depth > 0.4) { if (dome.visible) { dome.visible = false; this._hidSky = true; } }
         else if (dome && this._hidSky) { dome.visible = true; this._hidSky = false; } // (only what it hid: space and the rest decide the sky themselves)
+        // (…and past the surface's edge, far off, the background is the water itself, not the white of an empty sky)
+        const sc = g.scene;
+        if (sc && this._hidSky) {
+            if (this._bg === undefined) this._bg = sc.background ?? null;
+            if (!sc.background?.isColor || sc.background === this._bg) sc.background = new THREE.Color();
+            if (sc.fog) sc.background.copy(sc.fog.color);
+        } else if (sc && this._bg !== undefined) { sc.background = this._bg; this._bg = undefined; }
         const on = this.k > 0.01 && !!this.shafts;
         if (this.shafts) { this.shafts.visible = on && sun > 0.02; this.snow.visible = on; }
         if (!on) return;

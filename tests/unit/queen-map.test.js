@@ -1,7 +1,7 @@
 // The Ice Queen's OWN MAP (src/world/QueenMap.js, QUEEN_MAP_FROM_GEN): a far region of the same world with her palace, snow and mountains — nothing else.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TerrainData, BLOCK, CHUNK, WORLD_GEN, QUEEN_MAP_FROM_GEN, SPAWN_MAPS_FROM_GEN, MAX_LAYER } from '../../src/world/Terrain.js';
+import { TerrainData, BLOCK, CHUNK, WORLD_GEN, QUEEN_MAP_FROM_GEN, SPAWN_MAPS_FROM_GEN, MAX_LAYER, MIN_LAYER } from '../../src/world/Terrain.js';
 import { QUEEN_MAP, inQueenMap, queenChunk } from '../../src/world/QueenMap.js';
 import { SPACE, offEarth, earthly, realmAt, slotAt } from '../../src/world/Planets.js';
 import { iceApproach } from '../../src/world/IceCastle.js';
@@ -62,7 +62,7 @@ test('on the map: only snow, rock, ice and bedrock — no tree, grass, water, sa
     for (const [dx, dz] of [[M.HALF - 8, 0], [-M.HALF + 8, 0], [0, M.HALF - 8], [0, -M.HALF + 8]]) assert.ok(d.surfaceY(M.CX + dx, M.CZ + dz) >= 90, 'a wall at the rim');
     assert.ok(d.surfaceY(M.CX + M.HALF - 8, M.CZ) <= MAX_LAYER);
     // nothing at all past the rim (no ground is made there)
-    assert.equal(d.chunk(Math.floor((M.CX + M.HALF + 64) / CHUNK), 0).maxTop, -17);
+    assert.equal(d.chunk(Math.floor((M.CX + M.HALF + 64) / CHUNK), 0).maxTop, MIN_LAYER); // (the world's floor: −53 since the ocean went three times deeper)
     // the Earth's sites are asked and are not there
     for (const [x, z] of [[M.CX, M.CZ], [M.CX + 300, M.CZ + 300], [M.CX - 700, M.CZ + 100]]) {
         assert.equal(d.sites.castles.near(x, z, 400).length + d.sites.towers.near(x, z, 400).length + (d.sites.hamlets?.near(x, z, 400).length || 0) + (d.sites.dungeons?.near(x, z, 400).length || 0), 0, 'no site of the Earth');

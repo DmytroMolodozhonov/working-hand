@@ -25,7 +25,9 @@ import { waterAt } from '../game/CreatureSwim.js';
 import { ReefFish } from './ReefFish.js';
 import { SeaCritters } from './SeaCritters.js';
 
-export const FLOOR = { R: 56, CELL: 8, PER_CELL: 12, REEF_CELL: 26, BUDGET: 1.2, CAP: { kelp: 600, grass: 2600, staghorn: 520, fan: 340, brain: 340, anemone: 360, lily: 160, table: 200, tube: 280, soft: 320, urchin: 320, star: 220 } };
+export const FLOOR = { R: 56, CELL: 8, PER_CELL: 12, REEF_CELL: 26, BUDGET: 1.2, CAP: { kelp: 600, grass: 2600, staghorn: 700, fan: 420, brain: 420, anemone: 420, lily: 200, table: 300, tube: 340, soft: 420, urchin: 320, star: 220, glowcoral: 520, glowfan: 260, glowbrain: 220, crystal: 300 } };
+/** The kinds that shine (their own light: brighter at night and in the dark depths). */
+export const GLOW_KINDS = new Set(['anemone', 'lily', 'glowcoral', 'glowfan', 'glowbrain', 'crystal']);
 
 function h01(a, b, c) {
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0;
@@ -44,9 +46,11 @@ export function cellPlants(cx, cz, seed, depthOf) {
     // the reefs: patches of the bottom (a few cells across) thick with corals of every kind, between them sand with seagrass meadows,
     // stones with urchins and starfish (the author 05.11: «коралловые рифы… интересная трава… максимально подробное интересное дно»)
     const R = FLOOR.REEF_CELL / C;
-    const reef = h01(Math.floor(cx / R), Math.floor(cz / R), seed + 509) < 0.45;
+    const reef = h01(Math.floor(cx / R), Math.floor(cz / R), seed + 509) < 0.5;
+    // (some reefs are magic: their corals glow — cyan, violet, gold — lighting the deep water; the author 05.11: «магические, светящиеся»)
+    const magic = reef && h01(Math.floor(cx / R), Math.floor(cz / R), seed + 517) < 0.3;
     const meadow = !reef && h01(Math.floor(cx / 3), Math.floor(cz / 3), seed + 511) < 0.5;
-    const n = Math.floor(h01(cx, cz, seed + 501) * (FLOOR.PER_CELL + 1) * (reef ? 1.6 : meadow ? 1.4 : 0.7));
+    const n = Math.floor(h01(cx, cz, seed + 501) * (FLOOR.PER_CELL + 1) * (reef ? 2.4 : meadow ? 1.4 : 0.7));
     for (let i = 0; i < n; i++) {
         const r = (q) => h01(cx * 13 + i * 7 + q, cz * 17 + q, seed + 502);
         const x = cx * C + r(1) * C, z = cz * C + r(2) * C;
@@ -54,11 +58,15 @@ export function cellPlants(cx, cz, seed, depthOf) {
         if (d < 2) continue;
         const k = r(3);
         let kind;
-        if (reef && d <= 12) kind = k < 0.2 ? 'staghorn' : k < 0.32 ? 'brain' : k < 0.42 ? 'table' : k < 0.53 ? 'soft' : k < 0.63 ? 'tube' : k < 0.72 ? 'fan' : k < 0.82 ? 'anemone' : k < 0.9 ? 'urchin' : k < 0.95 ? 'star' : 'grass';
+        if (magic && d >= 4) kind = k < 0.3 ? 'glowcoral' : k < 0.45 ? 'glowfan' : k < 0.57 ? 'glowbrain' : k < 0.72 ? 'crystal' : k < 0.82 ? 'anemone' : k < 0.88 ? 'lily' : k < 0.94 ? 'staghorn' : 'soft';
+        else if (reef && d <= 20) kind = k < 0.2 ? 'staghorn' : k < 0.32 ? 'brain' : k < 0.42 ? 'table' : k < 0.53 ? 'soft' : k < 0.63 ? 'tube' : k < 0.72 ? 'fan' : k < 0.82 ? 'anemone' : k < 0.9 ? 'urchin' : k < 0.95 ? 'star' : 'grass';
         else if (d <= 5) kind = k < (meadow ? 0.8 : 0.5) ? 'grass' : k < 0.86 ? 'star' : k < 0.92 ? 'urchin' : k < 0.96 ? 'staghorn' : 'anemone';
         else if (meadow) kind = k < 0.65 ? 'grass' : k < 0.8 ? 'kelp' : k < 0.9 ? 'star' : 'lily';
         else kind = k < 0.38 ? 'kelp' : k < 0.5 ? 'grass' : k < 0.58 ? 'urchin' : k < 0.64 ? 'star' : k < 0.7 ? 'tube' : k < 0.76 ? 'fan' : k < 0.82 ? 'soft' : k < 0.92 ? 'anemone' : 'lily';
-        const s = kind === 'kelp' ? Math.max(2, d - 1 - r(4) * 2.5) : kind === 'grass' ? 0.6 + r(4) * 0.9 : kind === 'lily' ? 1 + r(4) * 1.2 : kind === 'table' ? 0.8 + r(4) * 1.4 : kind === 'urchin' || kind === 'star' ? 0.8 + r(4) * 0.6 : 0.7 + r(4) * 1.1;
+        // (a reef's corals are big — thickets and plates of several metres, the author: «огромными»)
+        const giant = reef && kind !== 'grass' && kind !== 'urchin' && kind !== 'star' && kind !== 'anemone' ? 1.6 + r(7) * 2.2 : 1;
+        const s0 = kind === 'kelp' ? Math.max(2, Math.min(d - 1, 22) - r(4) * 2.5) : kind === 'grass' ? 0.6 + r(4) * 0.9 : kind === 'lily' ? 1 + r(4) * 1.2 : kind === 'table' ? 0.8 + r(4) * 1.4 : kind === 'urchin' || kind === 'star' ? 0.8 + r(4) * 0.6 : 0.7 + r(4) * 1.1;
+        const s = s0 * giant;
         out.push({ kind, x, z, s, rot: r(5) * Math.PI * 2, tint: r(6) });
     }
     return out;
@@ -181,6 +189,18 @@ function lilyGeo() {
     for (let i = 0; i < 6; i++) { const f = new THREE.CylinderGeometry(0.002, 0.006, 0.3, 3, 3); f.translate(0, -0.15, 0); const a = i / 6 * Math.PI * 2; parts.push({ geo: paint(f, () => [0.9, 0.95, 1]), pos: [Math.cos(a) * 0.07, 0.96, Math.sin(a) * 0.07], rot: [Math.sin(a) * 0.2, 0, -Math.cos(a) * 0.2] }); }
     return mergeParts(parts);
 }
+function crystalGeo() {
+    // a magic crystal coral: a cluster of glassy spires, faceted, brighter at their tips
+    const parts = [], rng = K.rng(57);
+    for (let i = 0; i < 9; i++) {
+        const h = 0.4 + rng() * 0.9, r = 0.05 + rng() * 0.06;
+        const g = new THREE.ConeGeometry(r, h, 6, 3);
+        g.translate(0, h / 2, 0);
+        const a = rng() * Math.PI * 2, lean = rng() * 0.5;
+        parts.push({ geo: colorBy(g, (x, y) => { const t = y / h; return [0.6 + 0.6 * t, 0.6 + 0.6 * t, 0.6 + 0.6 * t]; }), pos: [Math.cos(a) * 0.12 * (i ? 1 : 0), 0, Math.sin(a) * 0.12 * (i ? 1 : 0)], rot: [Math.cos(a) * lean, 0, Math.sin(a) * lean] });
+    }
+    return mergeParts(parts);
+}
 function colorBy(g, f) { const P = g.getAttribute('position'), a = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++) { const k = f(P.getX(i), P.getY(i), P.getZ(i)); a[i * 3] = k[0]; a[i * 3 + 1] = k[1]; a[i * 3 + 2] = k[2]; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; }
 function tableGeo() {
     // a table coral: a short stout stalk and a broad flat plate, its rim ragged, ridged rays from the middle, the edge paler
@@ -252,7 +272,7 @@ function starGeo() {
     g.computeVertexNormals();
     return g;
 }
-const SHAPES = { kelp: kelpGeo, grass: grassGeo, staghorn: staghornGeo, fan: fanGeo, brain: brainGeo, anemone: anemoneGeo, lily: lilyGeo, table: tableGeo, tube: tubeGeo, soft: softGeo, urchin: urchinGeo, star: starGeo };
+const SHAPES = { kelp: kelpGeo, grass: grassGeo, staghorn: staghornGeo, fan: fanGeo, brain: brainGeo, anemone: anemoneGeo, lily: lilyGeo, table: tableGeo, tube: tubeGeo, soft: softGeo, urchin: urchinGeo, star: starGeo, glowcoral: staghornGeo, glowfan: fanGeo, glowbrain: brainGeo, crystal: crystalGeo };
 const shape = (k) => _geo[k] || (_geo[k] = SHAPES[k]());
 /** The tint of a kind (rgb, the instance's colour; × the shape's own colours). */
 function tintOf(kind, t) {
@@ -267,6 +287,10 @@ function tintOf(kind, t) {
         case 'tube': return pick([[0.62, 0.3, 0.75], [0.95, 0.55, 0.2], [0.9, 0.8, 0.3], [0.35, 0.55, 0.85], [0.85, 0.3, 0.35]]);
         case 'soft': return pick([[1, 0.45, 0.65], [0.95, 0.75, 0.3], [0.65, 0.5, 1], [1, 0.6, 0.35], [0.5, 0.95, 0.75]]);
         case 'urchin': return pick([[0.35, 0.2, 0.45], [0.18, 0.15, 0.2], [0.55, 0.25, 0.3]]);
+        case 'glowcoral': return pick([[0.3, 1, 1], [0.8, 0.45, 1], [1, 0.85, 0.35], [0.4, 1, 0.6], [1, 0.45, 0.85]]);
+        case 'glowfan': return pick([[0.55, 0.4, 1], [0.3, 0.85, 1], [1, 0.5, 0.9]]);
+        case 'glowbrain': return pick([[0.4, 1, 0.8], [1, 0.75, 0.4], [0.7, 0.6, 1]]);
+        case 'crystal': return pick([[0.6, 0.95, 1], [0.85, 0.65, 1], [1, 0.9, 0.6], [0.6, 1, 0.75]]);
         case 'star': return pick([[1, 0.45, 0.2], [0.9, 0.2, 0.25], [0.3, 0.45, 0.95], [0.95, 0.75, 0.3], [0.75, 0.35, 0.8]]);
         default: return [0.85 + 0.3 * t, 0.9 + 0.2 * t, 0.85 + 0.25 * t];
     }
@@ -306,8 +330,8 @@ export class SeaFloor {
         this.center = null; // where the plants were last laid round
         this.job = null;
         for (const [k, cap] of Object.entries(FLOOR.CAP)) {
-            const glow = k === 'anemone' || k === 'lily';
-            const mat = swayMaterial(glow ? new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: k === 'lily', opacity: 0.9 })
+            const glow = GLOW_KINDS.has(k);
+            const mat = swayMaterial(glow ? new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: k === 'lily' || k === 'crystal', opacity: k === 'crystal' ? 0.82 : 0.9, depthWrite: k !== 'crystal' })
                 : new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side: k === 'kelp' || k === 'grass' ? THREE.DoubleSide : THREE.FrontSide }), k === 'kelp' ? 0.05 : k === 'grass' ? 0.12 : k === 'lily' ? 0.06 : k === 'soft' ? 0.05 : k === 'urchin' || k === 'star' || k === 'table' ? 0 : 0.015);
             const m = new THREE.InstancedMesh(shape(k), mat, cap);
             m.count = 0;
@@ -350,7 +374,7 @@ export class SeaFloor {
         this.critters.visible(near);
         if (!near) { this.center = null; this.job = null; return; }
         const night = g.world?._night || 0;
-        for (const [k, m] of Object.entries(this.meshes)) { const U = m.material.userData.U; U.uTime.value = this.t; U.uGlow.value = (k === 'anemone' || k === 'lily') ? (0.75 + 0.25 * Math.sin(this.t * 1.3)) * (1 + 0.6 * night) : 1; }
+        for (const [k, m] of Object.entries(this.meshes)) { const U = m.material.userData.U; U.uTime.value = this.t; U.uGlow.value = GLOW_KINDS.has(k) ? (0.75 + 0.25 * Math.sin(this.t * (k === 'crystal' ? 2.1 : 1.3) + k.length)) * (1 + 0.6 * night) : 1; }
         // the plants: laid anew round the player when he has moved far enough (a few cells a frame)
         if (!this.job && (!this.center || Math.hypot(me.x - this.center.x, me.z - this.center.z) > FLOOR.CELL * 1.5)) this._startJob(me);
         if (this.job) this._runJob();

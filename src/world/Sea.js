@@ -33,6 +33,7 @@ export const SEA = {
     CELL: 2048, CHANCE: 0.42, MARGIN: 940, MIN_SPAWN: 1100,
     R_MIN: 380, R_MAX: 640, N: 512, // radius profile samples
     BEACH: 16, TAPER: 120, SHELF: 30, DEEP: 170, MAX_DEPTH: 16, ISLANDS: 2,
+    ABYSS: 48, // layers of water at the deepest (the canyons) — the open sea three times as deep as the old MAX_DEPTH (Sea.seabedDepth)
 };
 
 /** Cheap deterministic hash → [0, 1). */
@@ -196,26 +197,28 @@ export function seabedDepth(ix, iz, s, d0, noise) {
     const k = smooth01((s - SEA.SHELF) / 50); // (how far into the open sea: the relief grows in)
     if (k <= 0) return d0;
     const n = (x, z) => noise(x, z);
+    // the open sea falls away three times as deep as the old plain bottom (the author 05.11: «океан… глубже раза в 3»)
+    const far = smooth01((s - SEA.SHELF) / (SEA.DEEP * 1.6 - SEA.SHELF));
+    let d = d0 + (SEA.ABYSS - 8 - d0) * far;
     // the plateaus and rolling hills: the open bottom lifted in broad swells
     const swell = n(ix / 90 + 31.7, iz / 90 - 12.1) * 0.6 + n(ix / 37 - 5.2, iz / 37 + 8.9) * 0.4;
-    let d = d0 - 3.2 * k * (0.55 + 0.45 * swell);
+    d -= (3 + 7 * far) * k * (0.55 + 0.45 * swell);
     // dunes: long low waves of sand
-    d += 0.7 * k * Math.sin((ix * 0.8 + iz * 0.55) / 9 + n(ix / 30, iz / 30) * 3);
-    // canyons: winding channels where the ridged noise is near zero, cut down to the deep floor
+    d += 0.8 * k * Math.sin((ix * 0.8 + iz * 0.55) / 9 + n(ix / 30, iz / 30) * 3);
+    // canyons: winding gorges where the ridged noise is near zero, cut down to the abyss, steep-walled
     const c = 1 - Math.abs(n(ix / 120 + 77.3, iz / 120 - 41.6) + 0.35 * n(ix / 41 - 3.3, iz / 41 + 19.4));
-    const canyon = smooth01((c - 0.86) / 0.08) * smooth01((s - SEA.SHELF - 40) / 60);
-    d += (SEA.MAX_DEPTH + 0.5 - d) * canyon;
-    // crevices: narrow cracks in the plateaus
+    const canyon = smooth01((c - 0.84) / 0.07) * smooth01((s - SEA.SHELF - 30) / 50);
+    d += (SEA.ABYSS + 0.5 - d) * canyon;
+    // crevices: narrow deep cracks in the plateaus
     const cr = 1 - Math.abs(n(ix / 26 + 140.1, iz / 26 - 60.7));
-    d += 3 * k * smooth01((cr - 0.94) / 0.04) * (1 - canyon);
-    // rock ridges and lone pinnacles
+    d += (6 + 8 * far) * k * smooth01((cr - 0.94) / 0.04) * (1 - canyon);
+    // rock ridges and lone pinnacles rising from the deep (the reefs grow on their tops)
     const rg = n(ix / 47 - 90.5, iz / 47 + 33.3);
-    d -= 9 * k * smooth01((rg - 0.48) / 0.3) * (0.6 + 0.4 * (1 - Math.abs(n(ix / 11 + 2.2, iz / 11 - 7.7)))) * (1 - canyon);
-    // the reef mounds on the shelf (round, a few metres high)
+    d -= (9 + 18 * far) * k * smooth01((rg - 0.45) / 0.3) * (0.6 + 0.4 * (1 - Math.abs(n(ix / 11 + 2.2, iz / 11 - 7.7)))) * (1 - canyon);
+    // the reef mounds (round, a few metres high)
     const rf = n(ix / 19 + 210.4, iz / 19 - 88.8);
-    const shelf = 1 - smooth01((s - SEA.SHELF - 70) / 60);
-    d -= 2.6 * k * shelf * smooth01((rf - 0.35) / 0.3);
-    return Math.max(2, Math.min(SEA.MAX_DEPTH, Math.round(d)));
+    d -= 3.5 * k * smooth01((rf - 0.35) / 0.3) * (1 - canyon);
+    return Math.max(2, Math.min(SEA.ABYSS, Math.round(d)));
 }
 
 // ------------------------------------------------------------------ waves

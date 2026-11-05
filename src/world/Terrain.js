@@ -270,7 +270,7 @@ const SHADES = {
 const GRASS_SIDE = 0x6b4a2a;
 const SNOW_CAP = 0xe4ecf0, FROST = 0xd8e0e4; // (snow on a crown's top; a thin frost of snow on rock and grass) // dirt-coloured sides under a grass top
 
-export const MIN_LAYER = -17; // the lowest layer: bedrock (indestructible); the deep sea's floor is at -16
+export const MIN_LAYER = -53; // the lowest layer: bedrock (indestructible); the deep sea's floor down to ~-50 (the author 05.11: «океан… глубже раза в 3»; was −17, the floor at −16)
 /** Bedrock top of old worlds (generation 1, and every world without seas): lakes reach down to -7. */
 export const OLD_BEDROCK = -9;
 /**
@@ -700,7 +700,8 @@ export class TerrainData {
         this.buildings = !!(mountains && buildings); // (generation 17: different buildings in the settlements — Buildings.js)
         this.apart = !!(mountains && test && apart); // (generation 11: the bosses' places apart — SPAWN_MAPS_FROM_GEN)
         this.queenMap = !!(this.apart && queenMap); // (generation 22: the Ice Queen on a map of her own — QueenMap.js, QUEEN_MAP_FROM_GEN)
-        this.seabed = !!(mountains && seas && lush && seabed); // (generation 24: the sea's bottom a landscape — Sea.seabedDepth, SEABED_FROM_GEN)
+        this.seabed = !!(mountains && seas); // (the sea's bottom a landscape, three times as deep — Sea.seabedDepth; every world with seas, the old ones too: the author 05.11 «в старых мирах тоже»)
+        void seabed;
         this.caveLake = !!(mountains && deepCaves && caveLake); // (generation 23: a cave never opens into a lake's side — CAVE_LAKE_FROM_GEN)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
         this.bigHouses = !!(mountains && furnish && bigHouses); // (generation 14: the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig; the castles' villages are laid wider)

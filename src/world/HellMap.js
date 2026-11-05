@@ -28,7 +28,7 @@
  *     roads: [[{x, z, h}…]…]           — дороги (ломаные): от метки к котловине, от дорог к лагерям — по ним всё достижимо пешком
  *   }
  *
- * Слои: MIN_LAYER −17 … MAX_LAYER 120 (Terrain.js); блок 1 м, герой ~3,5 м.
+ * Слои: MIN_LAYER −53 … MAX_LAYER 120 (Terrain.js); блок 1 м, герой ~3,5 м.
  */
 
 import { createRng, createNoise2D } from '../core/math.js';

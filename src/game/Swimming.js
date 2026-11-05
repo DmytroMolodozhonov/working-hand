@@ -63,17 +63,17 @@ export class Swimming {
         const ix = Math.round(x), iz = Math.round(z);
         let top = data.topLayer(ix, iz); // highest solid block
         let L = top + 1, n = 0;
-        while (n < 24 && data.get(ix, L, iz) === BLOCK.WATER) { L++; n++; }
+        while (n < 64 && data.get(ix, L, iz) === BLOCK.WATER) { L++; n++; } // (the open sea ~50 deep)
         // under a roof over the water (a pier's deck, a bridge): the water the body is in
         if (!n && y != null) {
             let l = Math.floor(y + 1.5);
             if (data.get(ix, l, iz) !== BLOCK.WATER) l--;
             if (data.get(ix, l, iz) === BLOCK.WATER) {
                 let b = l;
-                while (b > l - 24 && data.get(ix, b - 1, iz) === BLOCK.WATER) b--;
+                while (b > l - 64 && data.get(ix, b - 1, iz) === BLOCK.WATER) b--;
                 top = b - 1;
                 L = l;
-                while (L < l + 24 && data.get(ix, L, iz) === BLOCK.WATER) L++;
+                while (L < l + 64 && data.get(ix, L, iz) === BLOCK.WATER) L++;
                 n = L - b;
             }
         }

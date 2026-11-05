@@ -38,7 +38,7 @@ test('it builds and lays the plants round the player within the caps; the fish s
     assert.ok(n > 50, `plants laid: ${n}`);
     for (let i = 0; i < 60; i++) F.update(1 / 30);
     assert.ok(F.fish.count > 0, 'fish');
-    for (const p of F.fish.positions()) assert.ok(p.y > 0 && p.y < 11, `a fish in the water: ${p.y}`);
+    for (const p of F.fish.positions()) assert.ok(p.y > -0.5 && p.y < 9.5, `a fish in the water: ${p.y}`);
     assert.ok(F.critters.count('crab') > 0, 'crabs on the bottom');
 });
 
