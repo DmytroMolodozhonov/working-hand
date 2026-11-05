@@ -666,6 +666,7 @@ export class Levitation {
             if (S.free) c.lev.freeT = S.free[0] + Math.random() * (S.free[1] - S.free[0]);
         }
         this.carried.set(ck + ':' + c.id, { ck, c });
+        if (ck === 'v' || ck === 'z') c.lev.doll = !!g.creatureImpact?.levDoll?.(ck, c); // (a humanoid hangs as a rag doll — CreatureImpact.levDoll)
         this._sparkle(p, 20);
         return true;
     }
@@ -693,6 +694,18 @@ export class Levitation {
         _h3.subVectors(L.target, centre);
         L.vel.lerp(_h3.multiplyScalar(4), Math.min(1, dt * 6));
         if (!L.body && !L.lower && this._struggle(ck, c, L, dt)) return;
+        if (L.doll) {
+            // a rag doll in the hold: its chest goes where the magic holds it (the target is its middle; the chest ~0.7 above it)
+            _h4.copy(centre).addScaledVector(L.vel, dt);
+            _h4.y += 0.7;
+            if (!g.creatureImpact.levDollStep(ck, c, _h4, dt)) L.doll = false;
+            else {
+                this._centre(ck, c, _h3);
+                L.top = Math.max(L.top, _h3.y - up);
+                if (Math.random() < 0.5) this.game.fx?.spark(_h3.set(centre.x + (Math.random() - 0.5) * 1.4, centre.y + (Math.random() - 0.5) * 1.4, centre.z + (Math.random() - 0.5) * 1.4), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _h4.set(0, 0.6, 0), 0.6);
+                return;
+            }
+        }
         this._moveBody(ck, c, _h3.copy(L.vel).multiplyScalar(dt));
         // walls and trees stop it as they would stop the thing
         // (from its feet: the centre less `up` — an animal's group stands lower than its centre, and from
@@ -751,7 +764,8 @@ export class Levitation {
         cl._say(c, list[Math.floor(Math.random() * list.length)], 2.5, true, first);
     }
 
-    _endCarry(ck, c) {
+    _endCarry(ck, c, vel = null) {
+        if (c.lev?.doll) this.game.creatureImpact?.levDollRelease?.(ck, c, vel); // (the rag doll falls / lies on, then gets up — CreatureImpact)
         if (ck === 'z' && !c.isDead) { for (const a of [c.leftArm, c.rightArm]) if (a) { a.rotation.x = -Math.PI / 2; a.rotation.z = 0; } }
         c.lev = null;
         this.carried.delete(ck + ':' + c.id);
@@ -762,8 +776,10 @@ export class Levitation {
         const L = c.lev;
         if (!L) return;
         if (gentle && !c.dead && !c.isDead) { L.lower = true; return; }
-        this._endCarry(ck, c);
         const v = L.vel.clone().multiplyScalar(1.5);
+        const doll = !!L.doll;
+        this._endCarry(ck, c, v);
+        if (doll) { this.falls.push({ ck, c, top: L.top, by: L.by, t: 0, v: v.clone(), doll: true }); return; } // (the doll flies by its own weight: CreatureImpact)
         this.falls.push({ ck, c, top: L.top, by: L.by, t: 0, v: v.clone() });
         if (ck === 'a') { c.attacker = L.by; c.levFall = true; c.vel = new THREE.Vector3(); this.game.animals?.push(c, v, 1.5); c.airborne = true; }
         else if (ck === 'z' && c.isDead) this.bodyDrops.push({ c, vel: v });
@@ -810,7 +826,7 @@ export class Levitation {
             const vel = _h2.subVectors(_h1, prev).divideScalar(Math.max(dt, 1e-3));
             const was = f.vel || (f.vel = vel.clone());
             const hWas = Math.hypot(was.x, was.z), hNow = Math.hypot(vel.x, vel.z);
-            if (!f.track) this._kicking(ck, c, dt);
+            if (!f.track && !f.doll) this._kicking(ck, c, dt); // (a rag doll flies limp: no kicking)
             // into another creature on its way
             const into = f.t > 0.1 && was.length() >= THROW.MIN_HIT_V ? this._flewInto(f, prev, _h1) : null;
             if (into) {

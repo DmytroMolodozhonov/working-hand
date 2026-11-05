@@ -29,11 +29,14 @@ export const DOLL = {
     MAX_MOVE_K: 0.5,    // a ball moves at most this share of its radius per step: no skipping a block
     GOAL_K: 0.09,       // getting up: the share of the way to the standing pose each step (~1 s to stand)
     SIM_MAX: 7,         // seconds one doll is computed at the most (then it is put to sleep where it is)
+    TONE_K: 0.11,       // a living body (tone 1): the share of the way each limb is pulled a step back to its own shape against the torso
+    TONE_LIVE: 0.5,     // a living one thrown («Джолт», a blast, «Левиоса»): half the slackness of a dead one (the author 05.11: «он же не умер… на 50 % менее выражена»)
 };
 
 // the points; CHEST and PELVIS are not points of their own (the middle of the shoulders / the hips) — `at` gives them too
 export const P = { HEAD: 0, SHL: 1, SHR: 2, HIPL: 3, HIPR: 4, HNL: 5, HNR: 6, KNL: 7, FTL: 8, KNR: 9, FTR: 10, CHEST: 11, PELVIS: 12 };
 const N = 11;
+const LIMBS = [P.HEAD, P.HNL, P.HNR, P.KNL, P.FTL, P.KNR, P.FTR]; // (the parts a living body's muscles hold — _tone)
 /**
  * Where each point is on a person standing, in his model's own frame (feet at 0, y up, the model's x and z as they are) — VillagerModel's
  * measures (it looks along −Z: x is his right, z behind him). Other bodies (a zombie, a Taron) give their own `makeSpec`.
@@ -104,6 +107,7 @@ export class Ragdoll {
         this.acc = 0;
         this.contacts = 0;
         this.goal = null; // (getting up: where each point is pulled — standUp)
+        this.tone = 0; // (0 — dead, all slack; 1 — a living body's muscles in full: the limbs held to the torso's own shape — see _tone)
     }
 
     /** Put point i at (x, y, z) (from a model's current pose — RagdollPose.fromModel). Then `launch`. */
@@ -218,6 +222,7 @@ export class Ragdoll {
             o[k] = x[k]; o[k + 1] = x[k + 1]; o[k + 2] = x[k + 2];
             x[k] += vx; x[k + 1] += vy; x[k + 2] += vz;
         }
+        if (this.tone > 0) this._tone();
         this.contacts = 0;
         for (let it = 0; it < DOLL.ITER; it++) {
             for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
@@ -231,6 +236,41 @@ export class Ragdoll {
         for (let i = 0; i < N * 3; i++) { const d = Math.abs(x[i] - o[i]); if (d > mv) mv = d; }
         if (mv < DOLL.SLEEP_V && this.contacts > 0) { this.still += dt; if (this.still >= DOLL.SLEEP_T) this._sleep(); } else this.still = 0;
         if (this.age > DOLL.SIM_MAX) this._sleep();
+    }
+
+    /**
+     * A living body's muscles: the head, the hands, the knees and the feet are pulled back toward where they are on a standing body
+     * against the torso as it lies now (its own frame: the hips' middle, up to the shoulders, across them) — by TONE_K × tone a step,
+     * and their swinging is calmed by the same share. The torso itself goes where the push sends it; the limbs follow it, not flop.
+     */
+    _tone() {
+        const x = this.x, o = this.o, R = this.sp.rest;
+        const hx = (x[P.HIPL * 3] + x[P.HIPR * 3]) / 2, hy = (x[P.HIPL * 3 + 1] + x[P.HIPR * 3 + 1]) / 2, hz = (x[P.HIPL * 3 + 2] + x[P.HIPR * 3 + 2]) / 2;
+        let ux = (x[P.SHL * 3] + x[P.SHR * 3]) / 2 - hx, uy = (x[P.SHL * 3 + 1] + x[P.SHR * 3 + 1]) / 2 - hy, uz = (x[P.SHL * 3 + 2] + x[P.SHR * 3 + 2]) / 2 - hz;
+        let ul = Math.hypot(ux, uy, uz) || 1; ux /= ul; uy /= ul; uz /= ul;
+        let rx = x[P.SHR * 3] - x[P.SHL * 3], ry = x[P.SHR * 3 + 1] - x[P.SHL * 3 + 1], rz = x[P.SHR * 3 + 2] - x[P.SHL * 3 + 2];
+        const d = rx * ux + ry * uy + rz * uz; rx -= ux * d; ry -= uy * d; rz -= uz * d;
+        const rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+        const fx = ry * uz - rz * uy, fy = rz * ux - rx * uz, fz = rx * uy - ry * ux; // (right × up)
+        // the same frame on the rest pose
+        const RH = [(R[P.HIPL][0] + R[P.HIPR][0]) / 2, (R[P.HIPL][1] + R[P.HIPR][1]) / 2, (R[P.HIPL][2] + R[P.HIPR][2]) / 2];
+        const RS = [(R[P.SHL][0] + R[P.SHR][0]) / 2 - RH[0], (R[P.SHL][1] + R[P.SHR][1]) / 2 - RH[1], (R[P.SHL][2] + R[P.SHR][2]) / 2 - RH[2]];
+        const rsl = Math.hypot(RS[0], RS[1], RS[2]) || 1, Ru = [RS[0] / rsl, RS[1] / rsl, RS[2] / rsl];
+        let Rr = [R[P.SHR][0] - R[P.SHL][0], R[P.SHR][1] - R[P.SHL][1], R[P.SHR][2] - R[P.SHL][2]];
+        const rd = Rr[0] * Ru[0] + Rr[1] * Ru[1] + Rr[2] * Ru[2]; Rr = [Rr[0] - Ru[0] * rd, Rr[1] - Ru[1] * rd, Rr[2] - Ru[2] * rd];
+        const rrl = Math.hypot(Rr[0], Rr[1], Rr[2]) || 1; Rr = [Rr[0] / rrl, Rr[1] / rrl, Rr[2] / rrl];
+        const Rf = [Rr[1] * Ru[2] - Rr[2] * Ru[1], Rr[2] * Ru[0] - Rr[0] * Ru[2], Rr[0] * Ru[1] - Rr[1] * Ru[0]];
+        const K = DOLL.TONE_K * this.tone;
+        for (const i of LIMBS) {
+            const a = R[i][0] - RH[0], b = R[i][1] - RH[1], c = R[i][2] - RH[2];
+            const lr = a * Rr[0] + b * Rr[1] + c * Rr[2], lu = a * Ru[0] + b * Ru[1] + c * Ru[2], lf = a * Rf[0] + b * Rf[1] + c * Rf[2];
+            const tx = hx + rx * lr + ux * lu + fx * lf, ty = hy + ry * lr + uy * lu + fy * lf, tz = hz + rz * lr + uz * lu + fz * lf;
+            const k = i * 3;
+            const dx = (tx - x[k]) * K, dy = (ty - x[k + 1]) * K, dz = (tz - x[k + 2]) * K;
+            x[k] += dx; x[k + 1] += dy; x[k + 2] += dz;
+            // (the swinging calmed too: part of the step's motion is the limb's own effort, not the fall)
+            o[k] += dx * 0.5; o[k + 1] += dy * 0.5; o[k + 2] += dz * 0.5;
+        }
     }
 
     _sleep() { this.asleep = true; for (let i = 0; i < N * 3; i++) this.o[i] = this.x[i]; }

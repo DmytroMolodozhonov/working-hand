@@ -60,7 +60,8 @@ test('a zombie pushed hard falls on its back, lies, and gets up by itself; every
     step(ci, 0.6);
     assert.equal(ci.stateOf(z), 'down');
     const piv = z.group.userData.impPivot;
-    assert.ok(piv && Math.abs(piv.rotation.x) > 1.4, `lying: ${piv?.rotation.x}`);
+    // (> 1.2, was 1.4: a living body keeps some tone and does not lie perfectly flat — the author 05.11, Ragdoll.tone)
+    assert.ok(piv && Math.abs(piv.rotation.x) > 1.2, `lying: ${piv?.rotation.x}`);
     assert.ok(piv.rotation.x < 0, 'on its back (its back is −Z)');
     assert.ok(z.group.position.z < -1, 'slid back along the push');
     assert.ok(sent.some((e) => e[0] === 'z' && e[1] === 7 && e[2] === 'k'), 'the guests are told it fell');
@@ -144,7 +145,7 @@ test('guests draw what the host says: the fall, the lying, the rise', () => {
     assert.equal(guest.ci.apply(guest.z, { v: new THREE.Vector3(0, 0, -14) }), 'none', 'a guest never decides');
     guest.ci.onNet(host.sent.slice());
     step(guest.ci, 0.6);
-    assert.ok(Math.abs(guest.z.group.userData.impPivot.rotation.x) > 1.4, 'the guest sees it lying');
+    assert.ok(Math.abs(guest.z.group.userData.impPivot.rotation.x) > 1.2, 'the guest sees it lying'); // (a living body keeps some tone — Ragdoll.tone)
     step(guest.ci, 3);
     assert.equal(guest.ci.stateOf(guest.z), 'down', 'until the host says it rose');
     guest.ci.onNet([['z', 7, 'r']]);

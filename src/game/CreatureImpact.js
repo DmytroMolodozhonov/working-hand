@@ -30,7 +30,7 @@ import * as THREE from 'three';
 import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
 import { stepBody, bounce, lieProbe, GUARD, guardWorld, standFree, freeSpot } from './SolidGuard.js';
-import { Ragdoll } from './Ragdoll.js';
+import { Ragdoll, DOLL } from './Ragdoll.js';
 import * as RagPose from './RagdollPose.js';
 
 /**
@@ -249,6 +249,7 @@ export class CreatureImpact {
             doll = new Ragdoll();
             RagPose.fromModel(doll, c.model);
         }
+        doll.tone = c.dead || c.isDead || c.hp <= 0 ? 0 : DOLL.TONE_LIVE; // (alive: half as slack as a dead body — it still holds itself)
         doll.launch(vx, vy, vz, 0);
         if (tip) {
             // (the upper body goes on with the push, the feet stay a moment: it topples — and Jolt's turns go over the head)
@@ -262,6 +263,67 @@ export class CreatureImpact {
         c.rag = true;
         c.vy = 0; // (the doll flies — not the body's own fall: CastleLife._fallStep, the zombie's gravity)
         return doll;
+    }
+
+    // ---------------------------------------------------------------- «Вингардиум Левиоса» on a body: a rag doll in the air
+    /**
+     * (host) A body lifted by «Левиоса» hangs as a rag doll (the author 05.11: «при помощи Вингардиум Левиоса у него всё ещё продолжает он
+     * быть тряпичной куклой… не должна вот эта анимация проигрываться»): held by the chest at the hand's point, the arms and legs hang and
+     * swing by their weight — a living one holding itself at half (Ragdoll.tone), a dead one slack. → the doll, or null (no humanoid rig:
+     * an animal keeps its own kicking).
+     */
+    levDoll(ck, c) {
+        const key = ck + '|' + c.id;
+        const had = this.levDolls?.get(key);
+        if (had) return had.doll;
+        const rig = this._rig(ck, c);
+        if (rig === false) return null;
+        const e = this.active.get(key);
+        let doll = e?.s.rag || this.deadRags.get(key)?.doll || null;
+        if (doll) { if (e) { e.s.rag = null; e.s.pose = null; this._release(KINDS[ck], c, e.s, false); this.active.delete(key); } this.deadRags.delete(key); }
+        else if (rig) { if (ck === 'z') KINDS.z.pivot(c); rig.begin?.(c); doll = new Ragdoll(rig.spec(c)); RagPose.fromRig(doll, rig, c); doll.launch(0, 0, 0, 0); }
+        else { doll = new Ragdoll(); RagPose.fromModel(doll, c.model); doll.launch(0, 0, 0, 0); }
+        doll.tone = c.dead || c.isDead ? 0 : DOLL.TONE_LIVE;
+        doll.wake();
+        (this.levDolls || (this.levDolls = new Map())).set(key, { c, ck, doll, rig });
+        c.rag = true;
+        return doll;
+    }
+
+    /** (host) A frame of a held doll: its chest pulled to `at` (the hand's point), the rest by its weight; the model and the body's place follow. */
+    levDollStep(ck, c, at, dt) {
+        const r = this.levDolls?.get(ck + '|' + c.id);
+        if (!r) return false;
+        const d = r.doll, x = d.x, o = d.o;
+        d.at(11, _pt); // (the chest: the shoulders' middle)
+        const k = Math.min(1, dt * 9);
+        const dx = (at.x - _pt[0]) * k, dy = (at.y - _pt[1]) * k, dz = (at.z - _pt[2]) * k;
+        for (const i of [1, 2]) { x[i * 3] += dx; x[i * 3 + 1] += dy; x[i * 3 + 2] += dz; o[i * 3] += dx * 0.6; o[i * 3 + 1] += dy * 0.6; o[i * 3 + 2] += dz * 0.6; }
+        d.asleep = false; d.age = Math.min(d.age, 1);
+        d.step(guardWorld(this.game), dt);
+        this._ragDraw(c, d, r.rig);
+        d.at(12, _pt);
+        if (r.rig) r.rig.place(c, _pt[0], _pt[1] - 1.9, _pt[2]);
+        else { c.x = _pt[0]; c.z = _pt[2]; c.y = _pt[1] - 1.9; if (c.group) c.group.position.set(c.x, c.y + 1.95, c.z); }
+        return true;
+    }
+
+    /** (host) Let go: the doll falls on with `vel` (a throw) — knocked down as by a blow (it lies, then gets up), or lies dead. */
+    levDollRelease(ck, c, vel = null) {
+        const key = ck + '|' + c.id;
+        const r = this.levDolls?.get(key);
+        if (!r) return false;
+        this.levDolls.delete(key);
+        const d = r.doll;
+        if (vel) d.push(vel.x, vel.y, vel.z);
+        d.wake();
+        if (c.dead || c.isDead) { d.tone = 0; this.deadRags.set(key, { c, doll: d, ck, rig: r.rig }); return true; }
+        const e = this._state(ck, c), s = e.s;
+        const yaw = this._yaw(KINDS[ck], c);
+        this._knock(ck, c, e, fallDir(vel?.x || 0, vel?.z || 0, yaw, -1), CREATURE.MIN_DOWN, true, null);
+        s.rag = d; s.pose = null; s.rig = r.rig; s.vx = s.vz = 0;
+        c.rag = true; c.vy = 0;
+        return true;
     }
 
     /** Draw the body from its doll (`dy`: a corpse sinking at the end). */
@@ -572,7 +634,7 @@ export class CreatureImpact {
             const K = KINDS[ck];
             const gone = !c.group || !c.group.parent || !K.alive(c) || (ck === 'z' && g.zombieById && !g.zombieById.has(c.id)) || c.removable;
             if (gone) {
-                if (s.rag && (c.dead || c.isDead) && !this.deadRags.has(key)) this.deadRags.set(key, { c, doll: s.rag, ck, rig: s.rig }); // (killed while flying / lying: the same doll lies on, dead)
+                if (s.rag && (c.dead || c.isDead) && !this.deadRags.has(key)) { s.rag.tone = 0; s.rag.wake?.(); this.deadRags.set(key, { c, doll: s.rag, ck, rig: s.rig }); } // (killed while flying / lying: the same doll lies on, dead)
                 s.rag = null; s.pose = null;
                 this._release(K, c, s, true); this.active.delete(key); continue;
             }
@@ -599,6 +661,11 @@ export class CreatureImpact {
             if (!this._busy(s)) { this._release(K, c, s, false); this.active.delete(key); }
         }
         this._deadFrame(dt);
+        // the bodies «Левиоса» holds as rag dolls: drawn again last (their own animation never wins); let go elsewhere — handed back
+        if (this.levDolls?.size) for (const [key, r] of this.levDolls) {
+            if (!r.c.lev || !r.c.group?.parent) { this.levDollRelease(r.ck, r.c, null); continue; }
+            this._ragDraw(r.c, r.doll, r.rig);
+        }
         if (this._out.length && g.sync) { g.sync.creatureImpacts?.(this._out.splice(0, 200)); this._out.length = 0; }
     }
 
@@ -688,7 +755,7 @@ export class CreatureImpact {
         const ck = kindOf(c) || (c?.isVillager ? 'v' : null);
         if (!c || !ck || this.deadRags.has(ck + '|' + c.id)) return;
         const e = this.active.get(ck + '|' + c.id);
-        if (e?.s.rag) { this.deadRags.set(ck + '|' + c.id, { c, doll: e.s.rag, ck, rig: e.s.rig }); e.s.rag = null; e.s.pose = null; e.s.rig = null; return; }
+        if (e?.s.rag) { e.s.rag.tone = 0; e.s.rag.wake?.(); this.deadRags.set(ck + '|' + c.id, { c, doll: e.s.rag, ck, rig: e.s.rig }); e.s.rag = null; e.s.pose = null; e.s.rig = null; return; }
         if (!this._ragOk(ck, c)) return;
         const tmp = { };
         const K = KINDS[ck];
