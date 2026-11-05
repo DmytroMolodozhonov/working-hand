@@ -49,7 +49,7 @@ try {
     // real sea: points out from the shore (the sea's signed distance) — shallow, the shelf, the deep
     const spots = await page.evaluate(() => {
         const g = window.__zns.game, S = g.world.terrain.data.seas, me = g.character.group.position, out = [];
-        for (const want of [40, 110, 260]) {
+        for (const want of [180, 420, 700]) {
             let best = null;
             for (let r = 50; r < 3000 && !best; r += 25) for (let a = 0; a < 6.28 && !best; a += 0.2) { const x = me.x + Math.cos(a) * r, z = me.z + Math.sin(a) * r; const d = S.signedDist(x, z); if (Math.abs(d - want) < 12) best = [x, z]; }
             if (best) out.push(best);
