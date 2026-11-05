@@ -36,7 +36,7 @@ import { accioCatcher } from './Accio.js';
 import { logStackModel, logIconUrl } from './LogModel.js';
 import { ENCHANT_TIERS } from './Enchant.js';
 import { handLog } from './HandRelease.js';
-import { packAccepts, packPut, PACK_TEXT } from './MagicPack.js';
+import { PACK_TEXT } from './MagicPack.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -393,7 +393,7 @@ export class Inventory {
 
     /** Is there room in the slots for this thing (a free slot, or room on a stack of it)? */
     canStore(item) {
-        return this._canSlots(item) || packAccepts(this._pack(), item); // (the cells are full: the golden magic backpack on my back takes it)
+        return this._canSlots(item); // (the golden magic backpack takes nothing by itself: a thing goes into it only from a hand put behind the back — Items._stash)
     }
 
     /** The magic backpack I wear (its overflow store), or null. */
@@ -438,8 +438,7 @@ export class Inventory {
         if (item && BACK_KINDS.has(item.kind) && this.back) { const b = this.back.indexOf(null); if (b >= 0) { this.back[b] = item; this._render(); return true; } }
         let i = this.selected >= 0 && !this.slots[this.selected] ? this.selected : this.slots.findIndex((s) => !s);
         if (i < 0) {
-            if (packPut(this._pack(), item)) { this.game.hud.toast?.(PACK_TEXT.put, 3200); this._render(); return true; } // (not seen anywhere in the interface)
-            this.game.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка');
+            this.game.hud.toast?.(this._pack() ? PACK_TEXT.fullWithPack : '🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка');
             return false;
         }
         this.slots[i] = item;

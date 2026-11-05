@@ -43,6 +43,7 @@ function oneShape(model) {
 }
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { seesInvisible, isGhostItem } from './Invisibles.js';
+import { packAccepts, packPut, PACK_TEXT } from './MagicPack.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollWreckLoot, rollSeaTempleLoot, rollGhostLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
@@ -172,7 +173,7 @@ const _hq = new THREE.Quaternion();
  * or both hands behind the back. Body space: x right, y up from the hips, the body looks along −Z, its back is at z +0.4;
  * the hero ~3.5 m tall, shoulders at ±0.7 (y ≈ 0.5 above the hips… the arm anchor), arm 1.9 m. The camera's depth is rough, so loose.
  */
-export const BACKPACK_WEAR = { T: 0.35, T_SHOULDER: 0.6, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7, T_OFF: 1.2 }; // (T_OFF: an EMPTY hand behind the back this long takes the worn backpack off)
+export const BACKPACK_WEAR = { T: 0.35, T_SHOULDER: 0.6, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7, T_OFF: 1.2, STASH_T: 0.5 }; // (T_OFF: an EMPTY hand behind the back this long takes the worn backpack off)
 export function backpackSpot(hand, other, shoulder) {
     const bx = Math.abs(hand.x), sy = shoulder ? shoulder.y : 0.5;
     // behind the back (either hand with the pack; the arm's depth is a guess, so the band is wide)
@@ -1569,8 +1570,39 @@ export class ItemSystem {
         g.hud.setVoice?.('🎒 Рюкзак снят — он в руке', true);
     }
 
+    /** Is this hand behind the back (the same place the backpack is put on and taken off)? */
+    _handAtBack(ch, sd) {
+        ch.group.updateMatrixWorld(true);
+        _inv.copy(ch.group.matrixWorld).invert();
+        return backpackSpot(ch.getHandWorldPosition(sd, _v).applyMatrix4(_inv),
+            ch.getHandWorldPosition(sd === 'left' ? 'right' : 'left', _v2).applyMatrix4(_inv),
+            (sd === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_f).applyMatrix4(_inv)) === 'back';
+    }
+
+    /**
+     * The golden magic backpack on my back: a thing in a hand, that hand put behind the back for STASH_T — the thing goes into the pack (and nothing else does:
+     * never by itself, never through the interface). What can go wrong: a backpack in the hand is the other gesture (putting it on); an unpaid shop thing never goes;
+     * a full pack or a backpack-in-a-backpack refuses with a hint and the thing stays in the hand; the hand leaving the place resets the time.
+     */
+    _stash(dt, ch) {
+        const g = this.game, w = this.worn.backpack, pack = w?.item?.magic ? w.item : null;
+        const t = this._stashT || (this._stashT = { right: 0, left: 0 });
+        for (const sd of ['right', 'left']) {
+            const h = this.held[sd];
+            if (!pack || !h || h.item.kind === 'backpack' || (h.item.shop && !h.item.shop.paid) || g.monster?.active || !this._handAtBack(ch, sd)) { t[sd] = Math.max(0, t[sd] - 0.5 * dt); continue; }
+            t[sd] += dt;
+            if (t[sd] < BACKPACK_WEAR.STASH_T) continue;
+            t[sd] = 0;
+            if (!packAccepts(pack, h.item)) { if (!this._stashHint || performance.now() - this._stashHint > 4000) { this._stashHint = performance.now(); g.hud.toast?.(PACK_TEXT.packFull, 2600); } continue; }
+            const item = this.releaseHand(sd);
+            if (item && packPut(pack, item)) { g.hud.toast?.(PACK_TEXT.put, 2600); for (let i = 0; i < 8; i++) g.fx?.spark?.(ch.getHandWorldPosition(sd, _v), 0xffd860, 0.08, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.4); }
+            else if (item) this.takeIntoHand(item, sd, { closed: true }); // (refused after all: back into the hand, nothing lost)
+        }
+    }
+
     _wear(dt, ch) {
         this._takeOff(dt, ch);
+        this._stash(dt, ch);
         const bp = this.heldOf('backpack');
         if (!bp || (bp.item.shop && !bp.item.shop.paid)) { this._wearT = 0; this._wearWhy = null; return; }
         ch.group.updateMatrixWorld(true);

@@ -6,7 +6,8 @@
  *  рюкзак в руку; нет такого предмета — ничего, подсказка «такого предмета нет».»)
  *
  * It is an ordinary backpack item with `magic: true` and `store: [items]` (so it is worn, thrown, dropped at death, saved and sold like one).
- *   - Wearing it adds no cells. When the cells are full, `Inventory.store` puts the thing into `store` (with a hint).
+ *   - Wearing it adds no cells. Putting a thing in: take it in a hand and put that hand BEHIND THE BACK for a moment (`Items._stash`) — never by itself, never through
+ *     the ordinary interface (the author 06.11: «чтобы положить вещь, нужно именно потянуться назад, а не в обычный интерфейс»).
  *   - Taking out: the pack lies on the ground near me, I say «Акцио <вещь>» → that thing flies out of it into my free hand. The words come
  *     here from main.js (`hear`) before the usual speech handling, because «Акцио меч» is not a one-word spell.
  *   - What can go wrong, decided here: a second backpack never goes inside (no bag in a bag); the bag holds at most CAP things;
@@ -58,7 +59,9 @@ export function packTake(pack, text) {
 }
 
 export const PACK_TEXT = {
-    put: '🎒 В ячейках нет места — вещь ушла в магический рюкзак',
+    put: '🎒 Вещь убрана в магический рюкзак',
+    fullWithPack: '🎒 Все ячейки заняты. Вещь можно убрать в магический рюкзак: заведите руку с ней за спину',
+    packFull: '🎒 Магический рюкзак полон',
     none: '🎒 Такого предмета нет',
     empty: '🎒 В магическом рюкзаке пусто',
     handBusy: '🎒 Освободите руку — вещь прилетит в неё',
