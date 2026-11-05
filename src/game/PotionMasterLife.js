@@ -165,6 +165,10 @@ export class PotionMasterLife {
     step(v, dt) {
         const j = this.job;
         if (!v.potionMaster || v.dead) return false;
+        // knocked down / getting up (the author 05.11: «после Джолта поднимается — всё равно делает сальто»): his own turning to the guest
+        // used to go on every frame while the body got up — the doll rose one way, the model turned the other. Down — nothing of his own.
+        const ci = this.game.creatureImpact;
+        if (ci?.stateOf && ci.stateOf(v) !== 'up') { if (j) this._end(); this.show = null; return false; }
         if (!j) return this.show ? this._showStep(v, dt) : this._idle(v, dt);
         const g = this.game, life = this.life, c = this.cauldron;
         if (!c) { life._say(v, LINES.noCauldron, 5); this._end(); return false; }

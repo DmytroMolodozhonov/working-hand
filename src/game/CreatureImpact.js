@@ -39,7 +39,7 @@ import * as RagPose from './RagdollPose.js';
  * Only near the hero (NEAR m) and at most MAX bodies at once (the rest fall the old way: tilted over); the dolls' work a frame is held
  * to BUDGET_MS (a doll over it waits a frame). A doll asleep costs nothing.
  */
-export const RAG = { NEAR: 45, MAX: 8, BUDGET_MS: 2.5, DEAD_TIP: 1.6, UP_MAX: 1.6, UP_NEAR: 0.07, BLEND_T: 0.25 };
+export const RAG = { NEAR: 45, MAX: 8, BUDGET_MS: 2.5, DEAD_TIP: 1.6, UP_MAX: 3.4, UP_NEAR: 0.07, BLEND_T: 0.25 };
 import { FIRM, absoluteStops } from './FirmRules.js';
 import { creatureHolds, creatureAbsolute, ordinaryOutcome, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';

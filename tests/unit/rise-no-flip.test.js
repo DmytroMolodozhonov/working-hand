@@ -37,15 +37,16 @@ test('getting up after «Джолт»: no somersault — the body turns only the
         ci.apply(v, { v: new THREE.Vector3(Math.cos(a) * sp, 0, Math.sin(a) * sp), kind: 'spell', spell: 'Jolt', always: { down: 3 }, down: 3, toss: 6, tumble: 1 });
         const s = ci.active.get('v|' + v.id)?.s;
         if (!s) continue;
-        let rising = false, turned = 0, need = 0, started = false;
+        let rising = false, turned = 0, need = 0, started = false, y0 = 0, lowest = 1;
         for (let t = 0; t < 30; t += 1 / 30) {
             ci.update(1 / 30); sync();
             const st = ci.stateOf(v);
             v.model.root.getWorldQuaternion(q);
             up.set(0, 1, 0).applyQuaternion(q);
             if (st === 'rising' || s.getUp) {
-                if (!started) { started = true; need = Math.acos(Math.max(-1, Math.min(1, up.y))); prev.copy(q); }
+                if (!started) { started = true; need = Math.acos(Math.max(-1, Math.min(1, up.y))); prev.copy(q); y0 = up.y; }
                 turned += prev.angleTo(q); prev.copy(q);
+                lowest = Math.min(lowest, up.y - y0);
                 rising = true;
             } else if (rising && st === 'up') break;
         }
@@ -53,7 +54,10 @@ test('getting up after «Джолт»: no somersault — the body turns only the
         risen++;
         const extra = turned - need;
         if (extra > worst) { worst = extra; worstN = n; }
+        assert.ok(lowest > -0.35, `throw ${n}: it tipped further over than it lay (${lowest.toFixed(2)}) — a somersault`);
     }
     assert.ok(risen > 30, `got up: ${risen}`);
-    assert.ok(worst < 1.2, `the worst getting-up turned ${worst.toFixed(2)} rad more than standing needs (throw ${worstN}) — a somersault`);
+    // (since 05.11 a real getting up through key poses — sits up / pushes up, leans over its knees, kneels, stands: its turning is more than
+    //  the shortest arc — ~1.5–2.5 rad more — but never a somersault, which is ≥ 2π: and it never tips further over than it lay, above)
+    assert.ok(worst < 3, `the worst getting-up turned ${worst.toFixed(2)} rad more than standing needs (throw ${worstN}) — a somersault`);
 });

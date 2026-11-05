@@ -28,7 +28,7 @@ export const DOLL = {
     SLEEP_V: 0.006, SLEEP_T: 0.4, // (≤ ~0.35 m/s for 0.4 s while it touches something: it lies — the last slow settling of the joints is not seen)
     MAX_MOVE_K: 0.5,    // a ball moves at most this share of its radius per step: no skipping a block
     GOAL_K: 0.09,       // getting up: the share of the way to the standing pose each step (~1 s to stand)
-    RISE_T: 0.85,       // s: getting up — the whole body's turn from lying to standing (Ragdoll.standUp)
+    RISE_T: 2.1,        // s: getting up — a real getting up through its key poses (sit up / push up → knees → one knee → standing: Ragdoll.standUp)
     SIM_MAX: 7,         // seconds one doll is computed at the most (then it is put to sleep where it is)
     TONE_K: 0.11,       // a living body (tone 1): the share of the way each limb is pulled a step back to its own shape against the torso
     TONE_T: 1.6,        // s: the muscles hold while the body lands and rolls; after that it lies as it lies (and can fall asleep)
@@ -222,12 +222,102 @@ export class Ragdoll {
         let ox = bw[0] * sp.faces, oz = bw[2] * sp.faces;
         const ol = Math.hypot(ox, oz);
         if (ol < 0.2) { ox = fx; oz = fz; } else { ox /= ol; oz /= ol; }
+        // a REAL getting up (the author 05.11: «сделать отдельную анимацию того, как человек встаёт»): not the body turned up as a
+        // block, but its key poses — on its back: sits up, legs out, hands behind → draws its knees up, leans forward, a hand on the
+        // ground → up onto one knee, the other foot planted → standing; on its face: pushes up on its hands → on hands and knees → one
+        // knee → standing. The poses are built from this body's own measures, round the place it stands up at, facing (ox, oz).
+        // which way it gets up: on its back it sits up facing its feet, on its face it pushes up facing where its head lay (on its side —
+        // whichever it is more); the standing pose turned to face so (the same body, the same right — no turn about itself)
+        const back = F[7] * -sp.faces < 0; // (its back looks down)
+        const hl = Math.hypot(F[3], F[5]);
+        if (hl > 0.3) {
+            const nx = (back ? -F[3] : F[3]) / hl, nz = (back ? -F[5] : F[5]) / hl;
+            const turn = Math.atan2(ox * nz - oz * nx, ox * nx + oz * nz); // (from where the shortest arc had it face, round the vertical)
+            const c = Math.cos(turn), sn = Math.sin(turn), cx = x, cz = z;
+            for (let i = 0; i < N; i++) { const k = i * 3, dx = g[k] - cx, dz = g[k + 2] - cz; g[k] = cx + dx * c - dz * sn; g[k + 2] = cz + dx * sn + dz * c; }
+            ox = nx; oz = nz;
+        }
+        this.rise.keys = this._riseKeys(x, floorY, z, ox, oz, back, g, F[4]);
         return { fx: ox, fz: oz };
     }
 
-    /** Where every point is at share `s` (0…1) of getting up (into `out`): the rest shape turned by the slerp of q0 → q1, its middle risen. */
+    /**
+     * The key poses of getting up (each N×3, world), the first — the body as it lies now, the last — standing (`stand`).
+     * `back`: lying on its back (it faces its feet). Measures: this body's rest pose (hips, shoulders, legs, arms) and its balls' radii.
+     */
+    _riseKeys(x, floorY, z, fx, fz, back, stand, upY = 0) {
+        const sp = this.sp, R = sp.rest, rr = sp.r;
+        const mid = (a, b, k) => (R[a][k] + R[b][k]) / 2, d = (a, b) => Math.hypot(R[a][0] - R[b][0], R[a][1] - R[b][1], R[a][2] - R[b][2]);
+        const H = mid(P.HIPL, P.HIPR, 1), T = mid(P.SHL, P.SHR, 1) - H, NK = R[P.HEAD][1] - mid(P.SHL, P.SHR, 1);
+        const hw = d(P.HIPL, P.HIPR) / 2, sw = d(P.SHL, P.SHR) / 2, th = (d(P.HIPL, P.KNL) + d(P.HIPR, P.KNR)) / 2, sh = (d(P.KNL, P.FTL) + d(P.KNR, P.FTR)) / 2;
+        const A = (d(P.SHL, P.HNL) + d(P.SHR, P.HNR)) / 2;
+        // the frame it stands up in: forward (fx, fz), right, up; which side is «right» — as in its rest pose
+        const rfx = R[P.HIPR][0] - R[P.HIPL][0], rfz = R[P.HIPR][2] - R[P.HIPL][2];
+        const sgn = rfx * (sp.faces < 0 ? 1 : -1) >= 0 ? 1 : -1; // (rest: a model looking along −Z has its right at +X; mirrored rests flip it)
+        const rx = -fz * sgn, rz = fx * sgn;
+        void rfz;
+        const pr = rr[P.HIPL], kr = rr[P.KNL], fr = rr[P.FTL], hr = rr[P.HNL], cr = sp.torso?.[1]?.[4] || pr;
+        const pose = (o) => {
+            const out = new Float64Array(N * 3);
+            const put = (i, r, u, f) => { out[i * 3] = x + rx * r + fx * f; out[i * 3 + 1] = floorY + u; out[i * 3 + 2] = z + rz * r + fz * f; };
+            const [pr0, pu, pf] = o.pel, [tr, tu, tf] = o.tor, tl = Math.hypot(tr, tu, tf) || 1;
+            const sr = pr0 + tr / tl * T, su = pu + tu / tl * T, sf = pf + tf / tl * T;
+            put(P.HIPL, pr0 - hw, pu, pf); put(P.HIPR, pr0 + hw, pu, pf);
+            put(P.SHL, sr - sw, su, sf); put(P.SHR, sr + sw, su, sf);
+            put(P.HEAD, sr + tr / tl * NK, su + tu / tl * NK, sf + tf / tl * NK);
+            put(P.KNL, ...o.knL); put(P.KNR, ...o.knR); put(P.FTL, ...o.ftL); put(P.FTR, ...o.ftR); put(P.HNL, ...o.hnL); put(P.HNR, ...o.hnR);
+            return out;
+        };
+        const now = Float64Array.from(this.x);
+        // up on one knee: the left knee on the ground under the hip, the right foot planted ahead, the right hand on the right knee
+        const kneelPel = [0, kr + th * 0.92, -0.05];
+        const kneel = pose({ pel: kneelPel, tor: [0, 0.95, 0.28],
+            knL: [-hw, kr, -0.1], ftL: [-hw, fr, -0.1 - sh], knR: [hw, fr + sh * 0.98, th * 0.8], ftR: [hw, fr, th * 0.85],
+            hnL: [-sw - 0.08, kneelPel[1] + T - A * 0.95, 0.15], hnR: [hw + 0.05, fr + sh + 0.12, th * 0.75] });
+        let a, b;
+        if (back) {
+            // sat up, the legs straight out ahead, the hands on the ground behind the hips
+            const p1 = [0, Math.max(pr, cr * 0.7), -th * 0.55];
+            a = pose({ pel: p1, tor: [0, 0.82, -0.57],
+                knL: [-hw, kr, p1[2] + th], ftL: [-hw, fr, p1[2] + th + sh], knR: [hw, kr, p1[2] + th], ftR: [hw, fr, p1[2] + th + sh],
+                hnL: [-sw - 0.12, hr, p1[2] - A * 0.45], hnR: [sw + 0.12, hr, p1[2] - A * 0.45] });
+            // the knees drawn up, leaning forward, the right hand pushing on the ground beside
+            const p2 = [0, Math.max(pr, cr * 0.7), -th * 0.35];
+            b = pose({ pel: p2, tor: [0, 0.78, 0.62],
+                knL: [-hw * 1.3, p2[1] + th * 0.62, p2[2] + th * 0.72], ftL: [-hw, fr, p2[2] + th * 0.95], knR: [hw * 1.3, p2[1] + th * 0.62, p2[2] + th * 0.72], ftR: [hw, fr, p2[2] + th * 0.95],
+                hnL: [-hw * 1.3, p2[1] + th * 0.62 + 0.1, p2[2] + th * 0.72], hnR: [sw + 0.35, hr, p2[2] + 0.25] });
+        } else {
+            // pushed up on the hands: the knees and the feet still on the ground, the hands under the shoulders
+            const p1 = [0, pr + th * 0.25, -T * 0.35];
+            a = pose({ pel: p1, tor: [0, 0.5, 0.86],
+                knL: [-hw, kr, p1[2] - th * 0.95], ftL: [-hw, fr, p1[2] - th - sh], knR: [hw, kr, p1[2] - th * 0.95], ftR: [hw, fr, p1[2] - th - sh],
+                hnL: [-sw, hr, p1[2] + T * 0.88], hnR: [sw, hr, p1[2] + T * 0.88] });
+            // on hands and knees: the hips over the knees, the shoulders over the hands
+            const p2 = [0, kr + th * 0.95, -T * 0.4];
+            b = pose({ pel: p2, tor: [0, 0.18, 1],
+                knL: [-hw, kr, p2[2]], ftL: [-hw, fr, p2[2] - sh], knR: [hw, kr, p2[2]], ftR: [hw, fr, p2[2] - sh],
+                hnL: [-sw, hr, p2[2] + T], hnR: [sw, hr, p2[2] + T] });
+        }
+        const st = Float64Array.from(stand);
+        // (already half up — slumped against a wall, sitting: it does not lie down again to get up — the knees, a knee, standing)
+        if (upY > 0.45) return back ? { poses: [now, b, kneel, st], at: [0, 0.4, 0.72, 1] } : { poses: [now, kneel, st], at: [0, 0.55, 1] };
+        return { poses: [now, a, b, kneel, st], at: [0, 0.3, 0.56, 0.8, 1] };
+    }
+
+    /** Where every point is at share `s` (0…1) of getting up (into `out`): through its key poses (or the rest shape turned, a body with none). */
     _riseAt(s, out) {
-        const r = this.rise, q = quatSlerp(r.q0, r.q1, s), loc = this._loc;
+        const r = this.rise;
+        if (r.keys) {
+            const K = r.keys, at = K.at;
+            let j = 0;
+            while (j < at.length - 2 && s > at[j + 1]) j++;
+            let u = Math.min(1, Math.max(0, (s - at[j]) / (at[j + 1] - at[j])));
+            u = u * u * (3 - 2 * u);
+            const A = K.poses[j], B = K.poses[j + 1];
+            for (let i = 0; i < N * 3; i++) out[i] = A[i] + (B[i] - A[i]) * u;
+            return out;
+        }
+        const q = quatSlerp(r.q0, r.q1, s), loc = this._loc;
         const lift = Math.sin(Math.min(1, s * 1.15) * Math.PI / 2); // (the hips come up a little ahead of the turn: no feet driven into the floor)
         const px = r.p0[0] + (r.p1[0] - r.p0[0]) * s, py = r.p0[1] + (r.p1[1] - r.p0[1]) * lift, pz = r.p0[2] + (r.p1[2] - r.p0[2]) * s;
         for (let i = 0; i < N; i++) {
@@ -309,8 +399,8 @@ export class Ragdoll {
             if (this.rise && this.rise.t < DOLL.RISE_T) {
                 this.rise.t += dt;
                 const u = Math.min(1, this.rise.t / DOLL.RISE_T);
-                gl = this._riseAt(u * u * (3 - 2 * u), this._rg || (this._rg = new Float64Array(N * 3)));
-                K = 0.35;
+                gl = this._riseAt(this.rise.keys ? u : u * u * (3 - 2 * u), this._rg || (this._rg = new Float64Array(N * 3)));
+                K = this.rise.keys ? 0.45 : 0.35;
             }
             for (let i = 0; i < N * 3; i++) { o[i] = x[i]; x[i] += (gl[i] - x[i]) * K; }
             this.contacts = 0;

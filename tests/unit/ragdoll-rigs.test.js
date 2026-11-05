@@ -92,7 +92,7 @@ for (const kind of ['z', 'T']) {
             if (!s?.rag) continue;
             dolls++;
             const doll = s.rag, rig = s.rig;
-            for (let t = 0; t < 14 && ci.active.has(kind + '|' + c.id); t += 1 / 30) {
+            for (let t = 0; t < 18 && ci.active.has(kind + '|' + c.id); t += 1 / 30) { // (18 s: lying 5…10 s, then a real getting up ~2 s)
                 ci.update(1 / 30); frames++;
                 if (!s.rag) continue;
                 const p = doll.penetration(H.world);
@@ -132,14 +132,19 @@ test('getting up: the body turns up the shortest way — no somersault (the auth
         const up = d.standUp(0, 0, 0, 1, 0);
         // on its back it sits up: it faces its feet (the head lay along a)
         assert.ok(up.fx * ax + up.fz * az < -0.9, `faces its feet: ${up.fx.toFixed(2)},${up.fz.toFixed(2)}`);
-        let pu = [fr[3], fr[4], fr[5]], pr = [fr[0], fr[1], fr[2]], turnU = 0, turnR = 0;
-        for (let f = 0; f < 120; f++) {
+        // (since 05.11 it gets up through key poses — the author: «отдельную анимацию того, как человек встаёт»: it sits up, leans
+        //  forward over its knees, kneels, stands — its up swings forward past upright and back: more than a quarter, never over itself)
+        let pu = [fr[3], fr[4], fr[5]], pr = [fr[0], fr[1], fr[2]], turnU = 0, turnR = 0, lowest = fr[4];
+        const y0 = fr[4];
+        for (let f = 0; f < 200; f++) {
             d.step(world, 1 / 60); d.frame(fr);
             turnU += Math.acos(Math.min(1, fr[3] * pu[0] + fr[4] * pu[1] + fr[5] * pu[2])); pu = [fr[3], fr[4], fr[5]];
             turnR += Math.acos(Math.min(1, fr[0] * pr[0] + fr[1] * pr[1] + fr[2] * pr[2])); pr = [fr[0], fr[1], fr[2]];
+            lowest = Math.min(lowest, fr[4]);
         }
-        assert.ok(turnU < Math.PI / 2 + 0.2, `its up turned ${(turnU * 57.3).toFixed(0)}° — a quarter, not over itself`);
-        assert.ok(turnR < 0.2, `no roll about itself: ${(turnR * 57.3).toFixed(0)}°`);
+        assert.ok(lowest > y0 - 0.1, `never tips further over than it lay: ${lowest.toFixed(2)} < ${y0.toFixed(2)}`);
+        assert.ok(turnU < Math.PI * 1.15, `its up turned ${(turnU * 57.3).toFixed(0)}° — up and over its knees, not over itself`);
+        assert.ok(turnR < 0.6, `no roll about itself: ${(turnR * 57.3).toFixed(0)}°`); // (kneeling on one knee twists it a little)
         assert.ok(fr[4] > 0.97 && d.goalDist() < 0.1, 'standing at the end');
     }
 });

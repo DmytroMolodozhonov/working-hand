@@ -71,8 +71,11 @@ test('a zombie pushed hard falls on its back, lies, and gets up by itself; every
     assert.equal(ci.stateOf(z), 'rising');
     assert.ok(lay >= CREATURE.MIN_DOWN + CREATURE.EXTRA_DOWN[0] && lay <= CREATURE.MIN_DOWN + CREATURE.EXTRA_DOWN[1] + 1.2, `lay ${lay}`);
     assert.ok(sent.some((e) => e[2] === 'r'));
-    step(ci, CREATURE.RISE_T + 0.1);
+    // (a real getting up since 05.11 — sits up, knees, a knee, standing: ~2 s; the author: «отдельную анимацию того, как человек встаёт»)
+    let up = 0;
+    while (ci.stateOf(z) !== 'up' && up < 5) { ci.update(1 / 30); up += 1 / 30; }
     assert.equal(ci.stateOf(z), 'up');
+    assert.ok(up >= 1.2, `a real getting up takes its time: ${up.toFixed(1)} s`);
     assert.equal(piv.rotation.x, 0, 'upright again');
     assert.ok(z.head.visible && z.leftArm.parent.parent === piv, 'its parts stay in the model');
 });
