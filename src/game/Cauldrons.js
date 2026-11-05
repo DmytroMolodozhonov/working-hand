@@ -779,7 +779,7 @@ export class Cauldrons {
             const base = this.fy(c);
             for (const L of this.game.items.loose.values()) {
                 const p = L.model?.position;
-                if (!p || L.hover || L.lev || L.accio || L.inCaul || L.away) continue;
+                if (!p || L.hover || L.lev || L.accio || L.inCaul || L.away || !L.rest) continue; // (only a thing that LIES on the rim: one still falling must not be lifted back — it hung over the water, the author 06.11)
                 const dx = c.x - p.x, dz = c.z - p.z, d = Math.hypot(dx, dz), y = p.y - base;
                 if (d > CAULDRON.R_IN + 0.7 || y < H - 0.4 || y > H + 0.8) continue;
                 L.rest = false; L.sentRest = false;
