@@ -53,9 +53,22 @@ test('полки: места под вещи — на досках, не в во
 });
 
 test('свет и герой: факелы на каменных стойках (чаша внизу пламени); весь зал из тёмного камня; герой стоит внутри на полу', () => {
-    assert.ok(P.torches.length >= 24, `факелов ${P.torches.length}`);
-    for (const t of P.torches) { assert.equal(get(t.x, Math.floor(t.y - 0.35 - 0.5 + 0.0), t.z), BLOCK.HELL_OBSIDIAN, 'чаша под пламенем'); assert.equal(get(t.x, F + 3, t.z), BLOCK.HELL_BASALT, 'стойка'); }
-    const light = new Set([BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.COBBLE, BLOCK.CS_WHITE, BLOCK.CS_GREY, BLOCK.CS_SAND, BLOCK.GRAVEL]);
+    assert.ok(P.torches.length >= 36, `факелов ${P.torches.length}`);
+    for (const t of P.torches) {
+        assert.equal(get(t.x, Math.round(t.y + 0.5 - 0.4), t.z), BLOCK.HELL_OBSIDIAN, 'чаша под пламенем');
+        // (чаша — не столб посреди зала: рядом стена или стойка полки — к чему она прикреплена)
+        let held = false;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const n = get(t.x + dx, Math.round(t.y + 0.5 - 0.4), t.z + dz); if (n !== undefined && n !== BLOCK.AIR) held = true; }
+        if (!held) held = get(t.x, Math.round(t.y + 0.5 - 0.4) - 1, t.z) === BLOCK.PLANKS_DARK; // (на стойке полки)
+        assert.ok(held, `факел висит в воздухе: ${t.x},${t.y},${t.z}`);
+    }
+    // свободных столбов (стойка в зале не у стены и не у полки) нет
+    for (const b of P.blocks) if (b[3] === BLOCK.HELL_BASALT && b[1] > F && b[1] <= F + 5 && !inHall(b[0], b[2], 0.5) === false) {
+        let n = 0;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const q = get(b[0] + dx, b[1], b[2] + dz); if (q !== undefined && q !== BLOCK.AIR) n++; }
+        assert.ok(n > 0, `столб посреди зала в ${b[0]},${b[1]},${b[2]}`);
+    }
+    const light = new Set([BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.COBBLE, BLOCK.CS_WHITE, BLOCK.CS_GREY, BLOCK.CS_SAND, BLOCK.CS_DARK, BLOCK.GRAVEL, BLOCK.DEEPSTONE]);
     for (const b of P.blocks) if (!(b[0] === LAIR.MARKER.x && b[2] === LAIR.MARKER.z && b[1] === F)) assert.ok(!light.has(b[3]), `светлый камень ${b[3]} в ${b[0]},${b[1]},${b[2]}`);
     for (let y = F + 1; y <= F + 12; y++) assert.ok(get(0, y, 0) !== undefined);
     assert.ok(inHall(P.hero.x, P.hero.z, -3));

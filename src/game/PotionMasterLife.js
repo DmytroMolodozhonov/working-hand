@@ -19,9 +19,9 @@
 
 import * as THREE from 'three';
 import { LAIR, racks as lairRacks } from '../world/PotionLairPlan.js';
-import { CAULDRON, addWater, takePortion, boiling, newBrew, potionItem } from './Potions.js';
+import { CAULDRON, addWater, addIngredient, surfaceY, takePortion, boiling, newBrew, potionItem } from './Potions.js';
 import { newUid } from './ItemTypes.js';
-import { MASTER, LINES, parseIntent, planOf, recipeLine, knownLine, hintLine, ingName, whereLine, ingredientsLine } from './PotionMaster.js';
+import { MASTER, LINES, parseIntent, planOf, recipeLine, recipeAnswer, knownLine, hintLine, ingName, whereLine, ingredientsLine } from './PotionMaster.js';
 import { lairIngredients, stockFor } from './PotionLair.js';
 
 export const LAIR_SITE_ID = 'potionlair';
@@ -124,7 +124,7 @@ export class PotionMasterLife {
                 this._point(r.found.map((e) => ({ x: LAIR.CX + e.slot.x, y: e.slot.y + 0.4, z: LAIR.CZ + e.slot.z })));
                 return r.text + ' Смотрите — я подсвечу.';
             }
-            case 'recipe': return recipeLine(it.rec);
+            case 'recipe': return recipeAnswer(it.rec);
             case 'hint': return c ? hintLine(c.st.ings) : LINES.noCauldron;
             case 'stop': if (!this.job) return LINES.idle; this._end(); return LINES.stopped;
             case 'fire': if (!c) return LINES.noCauldron; this._castFire(v, c); return 'Готово, огонь горит.';
@@ -269,13 +269,35 @@ export class PotionMasterLife {
                 v.mode = 'cast';
                 this._aim(v, L.hover);
                 if (Math.random() < dt * 22) g.fx?.spark(_b.copy(L.hover), 0xb9a0ff, 0.09, _c.set((Math.random() - 0.5) * 0.4, 0.3, (Math.random() - 0.5) * 0.4), 0.6);
-                if (k >= 1) { L.hover = null; L.vel?.set(0, 0, 0); j.sub = 'drop'; j.t = 0; }
+                if (k >= 1) { j.sub = 'sink'; j.t = 0; cur.t2 = 0; }
                 break;
             }
-            case 'drop': {
-                const L = j.cur.L;
+            case 'sink': {
+                // (вещь опускается над самой водой и растворяется ровно в котле — по одной, по порядку; никакой физики падения: она не зацепится за край)
+                const cur = j.cur, L = cur.L;
+                if (!items.loose.has(L.item.uid)) { j.sub = 'pick'; j.tries++; if (j.tries > 4) this._end(); return; }
                 v.mode = 'cast';
-                if (!items.loose.has(L.item.uid) || j.t > MASTER.DROP_WAIT) { j.i++; j.sub = 'gap'; j.t = 0; j.tries = 0; j.cur = null; }
+                cur.t2 += dt;
+                const k = Math.min(1, cur.t2 / 0.8), water = g.cauldrons.fy(c) + surfaceY(c.st) + 0.12;
+                L.hover.set(cx, top + (water - top) * ease(k), cz);
+                this._aim(v, L.hover);
+                if (k < 1) break;
+                const res = addIngredient(c.st, L.item.kind, L.item.count || 1);
+                if (res === 'in' || res === 'spoil') {
+                    items.removeLoose(L.item.uid);
+                    g.sync?.itemGone?.(L.item.uid, null, null);
+                    g.water?._splash?.(_a.set(cx, water, cz), 0.8, 14);
+                    g.sound?.playSplash?.();
+                    g.cauldrons._event?.(c, res === 'spoil' ? 'spoil' : 'ing', kind);
+                    g.cauldrons._send?.(c, res === 'spoil' ? 'spoil' : 'ing', kind);
+                    j.i++; j.sub = 'gap'; j.t = 0; j.tries = 0; j.cur = null;
+                } else if (res === 'cold') { // (вода остыла — ждёт кипения, вещь висит над ней)
+                    cur.t2 = 0.8;
+                    if (!j.saidCold) { j.saidCold = true; this.life._say(v, LINES.boiling, 4); }
+                    if (!g.potionLair?._fire(c.x, c.z)) this._castFire(v, c);
+                    if ((j.coldT = (j.coldT || 0) + dt) > MASTER.BOIL_WAIT) this._end();
+                } else if (res === 'dry') { this._castWater(v, c); }
+                else { items.removeLoose(L.item.uid); j.i++; j.sub = 'gap'; j.t = 0; j.cur = null; } // (то, что в воде не растворяется)
                 break;
             }
             case 'gap':

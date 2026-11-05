@@ -393,12 +393,21 @@ export class Speech {
                 lp.type = 'lowpass'; lp.frequency.value = 650;
                 tail.connect(lp); tail = lp;
             }
+            if (live && live.echo > 0 && ctx.createDelay) { // (a great stone hall: a faint, soft echo — not a wash: one slow repeat that fades, no dullness of the voice itself)
+                const dl = ctx.createDelay(0.6), fb = ctx.createGain(), wet = ctx.createGain(), lpE = ctx.createBiquadFilter();
+                dl.delayTime.value = 0.14; fb.gain.value = 0.3; wet.gain.value = Math.min(0.35, live.echo);
+                lpE.type = 'lowpass'; lpE.frequency.value = 2400;
+                tail.connect(dl); dl.connect(lpE); lpE.connect(fb); fb.connect(dl); lpE.connect(wet);
+                this._echoWet = wet; // (joined to the output below, after the pan)
+                tail._echoWet = wet;
+            }
             if (live && ctx.createStereoPanner) { // (from the side where he stands)
                 const pn = ctx.createStereoPanner();
                 pn.pan.value = Math.max(-1, Math.min(1, live.pan || 0));
                 tail.connect(pn); tail = pn;
             }
             tail.connect(out);
+            if (tail._echoWet || this._echoWet) { const w = tail._echoWet || this._echoWet; w.connect(out); this._echoWet = null; }
             src.onended = ended;
             if (ctx.state === 'suspended') ctx.resume?.()?.catch?.(() => {});
             const now = ctx.currentTime || 0;

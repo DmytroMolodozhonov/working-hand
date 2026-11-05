@@ -98,8 +98,8 @@ export function layout() {
             else {
                 // (тёмный гранит: базальт, редко обсидиан и тёмный тёсаный камень; пол — плиты базальта и тёмного камня шахматкой)
                 const k = hash01(x, y, z, 11);
-                if (y <= F) t = ((x + z) & 1) ? BLOCK.CS_DARK : BLOCK.HELL_BASALT;
-                else t = k < 0.05 ? BLOCK.HELL_OBSIDIAN : k < 0.17 ? BLOCK.CS_DARK : BLOCK.HELL_BASALT;
+                if (y <= F) t = ((x + z) & 1) ? BLOCK.HELL_OBSIDIAN : BLOCK.HELL_BASALT; // (тёмная шахматка; светлого тёсаного камня нет — он светло-бежевый)
+                else t = k < 0.06 ? BLOCK.HELL_OBSIDIAN : BLOCK.HELL_BASALT;
             }
             put(x, y, z, t);
         }
@@ -108,7 +108,7 @@ export function layout() {
     const hx = LAIR.CAULDRON.x, hz = LAIR.CAULDRON.z;
     for (let z = -5; z <= 3; z++) for (let x = -4; x <= 4; x++) {
         const d = Math.hypot(x - hx, z - hz);
-        if (d <= 3.6) put(x, F, z, d >= 2.7 ? BLOCK.HELL_OBSIDIAN : BLOCK.CS_DARK);
+        if (d <= 3.6) put(x, F, z, d >= 2.7 ? BLOCK.HELL_BASALT : BLOCK.HELL_OBSIDIAN);
     }
     put(LAIR.MARKER.x, F, LAIR.MARKER.z, BLOCK.COBBLE); // (метка «зал построен»: одна булыжная плитка под котлом)
     // ---- ручей: русло на блок ниже пола, вода наполовину глубины; берега — булыжник
@@ -117,7 +117,7 @@ export function layout() {
         for (let x = Math.floor(xr - 3); x <= Math.ceil(xr + 3); x++) {
             if (!inHall(x, z, -1)) continue;
             if (inRiver(x, z)) { put(x, F, z, AIR); put(x, F - 1, z, BLOCK.WATER); put(x, F - 2, z, BLOCK.HELL_BASALT); }
-            else if (Math.abs(x - xr) <= LAIR.RIVER_W + 1.1 && hash01(x, z, 2, 7) < 0.6) put(x, F, z, BLOCK.CS_DARK);
+            else if (Math.abs(x - xr) <= LAIR.RIVER_W + 1.1 && hash01(x, z, 2, 7) < 0.6) put(x, F, z, BLOCK.HELL_BASALT);
         }
     }
     // ---- полки
@@ -136,29 +136,20 @@ export function layout() {
             else slots[r.role].push({ x, y: F + t - 0.5 + 0.02, z: r.zFront, rack: r.x0 + r.side, tier: t });
         }
     }
-    // ---- факелы: каменные стойки (тёмный камень, 3 блока) с чашей наверху, огонь рисует игра; кольцо у стены, между полками, у очага и у ручья
+    // ---- факелы: кронштейн из тёмного камня на стене (блок, прижатый к стене) с огнём над ним — кольцо по стене; и чаши на стойках полок.
+    // (Свободных столбов и сталагмитов нет: автор — «какие-то тупые столбы, убрать».) Пламя рисует игра над верхней гранью блока-чаши.
     const torches = [];
-    const pillar = (x, z) => {
-        if (!inHall(x, z, -2) || inRiver(x, z) || get(x, F + 1, z) !== AIR) return;
-        for (let y = F + 1; y <= F + 3; y++) put(x, y, z, BLOCK.HELL_BASALT);
-        put(x, F + 4, z, BLOCK.HELL_OBSIDIAN); // чаша факела
-        torches.push({ x, y: F + 4.5 + 0.35, z });
-    };
-    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU + 0.26; pillar(Math.round(Math.cos(a) * 21.5), Math.round(Math.sin(a) * 21.5)); }
-    for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + 0.78; pillar(Math.round(Math.cos(a) * 6), Math.round(Math.sin(a) * 6 - 1)); }
-    for (const x of [-20, -13.5, -6.5, 1, 8]) for (const z of [-9.5, 9.5]) pillar(Math.round(x), Math.round(z)); // (между рядами полок и средней частью: свет на полки)
-    pillar(12, 0); pillar(20, -9); pillar(20, 9);
-    // ---- сосульки-сталактиты и сталагмиты (не над полками, очагом и ручьём)
-    const free = (x, z) => !inRiver(x, z) && Math.hypot(x, z + 1) > 7 && Math.abs(z) < 10.5 && Math.hypot(x, z) < A - 5 && get(x, F + 1, z) === AIR;
-    for (let z = -11; z <= 11; z++) for (let x = -(A - 4); x <= A - 4; x++) {
-        if (!inHall(x, z, -2) || !free(x, z) || hash01(x, z, 4, 21) > 0.045) continue;
-        const hh = ceilingAt(x, z), len = 1 + Math.floor(hash01(x, z, 5, 22) * 3);
-        for (let k = 0; k < len; k++) if (get(x, F + hh - k, z) === AIR) put(x, F + hh - k, z, BLOCK.HELL_BASALT);
-        if (hash01(x, z, 6, 23) < 0.4 && get(x, F + 1, z) === AIR && get(x, F, z) !== BLOCK.WATER) {
-            const l2 = 1 + Math.floor(hash01(x, z, 7, 24) * 2);
-            for (let k = 1; k <= l2; k++) put(x, F + k, z, BLOCK.HELL_BASALT);
+    const bowl = (x, y, z) => { put(x, y, z, BLOCK.HELL_OBSIDIAN); torches.push({ x, y: y - 0.5 + 0.4, z }); };
+    for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * TAU + 0.13;
+        for (let r = LAIR.R - 0.5; r >= LAIR.R - 2.5; r -= 0.5) { // (ближайшая к стене пустая клетка на этом луче)
+            const x = Math.round(Math.cos(a) * r), z = Math.round(Math.sin(a) * r);
+            if (inRiver(x, z) || !inHall(x, z) || get(x, F + 3, z) !== AIR) continue;
+            bowl(x, F + 3, z);
+            break;
         }
     }
+    for (const r of racks()) for (const x of [r.x0, r.x1]) bowl(x, F + LAIR.TIERS[LAIR.TIERS.length - 1] + 1, r.zFront);
     // ---- в блоки
     const blocks = [];
     for (let y = y0; y <= y1; y++) for (let z = -Z; z <= Z; z++) for (let x = -X; x <= X; x++) {

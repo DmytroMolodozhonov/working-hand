@@ -450,6 +450,10 @@ export class CastleTalk {
         const g = this.game, me = g.character.group.position;
         const dx = v.x - me.x, dz = v.z - me.z;
         const d = Math.hypot(dx, dz, ((v.y ?? me.y) - me.y) * 0.5);
+        if (v.potionMaster && g.potionLair?.inLair) { // (the Potion-maker's lair is one great stone hall: his voice is heard clearly all over it — a little quieter with distance, never dull — and with a faint echo off the dome (Speech: `echo`); the author: «тихо и приглушённо — разные вещи… в помещении должно быть ещё лучше слышно»)
+            const yaw0 = g.character.group.rotation.y;
+            return { volume: Math.max(0.55, 1 - d / 80), muffled: false, pan: d > 1 ? (dx * Math.cos(yaw0) - dz * Math.sin(yaw0)) / d * 0.8 : 0, echo: 0.2 };
+        }
         const range = shout ? SHOUT_RANGE : VOICE;
         if (d > range) return { volume: 0 };
         // (falls off to nothing at the limit; a shout stays louder; the sound goes from head to head: a 2 m counter between a seller and a buyer does not muffle it)
@@ -460,6 +464,8 @@ export class CastleTalk {
         if (muffled) volume *= 0.45;
         const yaw = g.character.group.rotation.y;
         const pan = d > 1 ? (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d * 0.8 : 0;
+        // the Potion-maker's lair is one great stone hall: his voice is heard clearly all over it (a little quieter with distance, never dull)
+        // and with a faint echo off the dome (Speech: `echo`) — the author: «тихо и приглушённо — разные вещи… в помещении должно быть ещё лучше слышно»
         return { volume, muffled, pan };
     }
 
