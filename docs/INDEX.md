@@ -1,0 +1,835 @@
+# Карта проекта «Волшебство только начинается»
+
+> Где что лежит. Сверху — короткий путеводитель по темам (куда смотреть), ниже — каждая папка и каждый файл одной строкой
+> (из шапки самого файла). Правила — в `CLAUDE.md` (общие) и `docs/rules/*.md` (подробные, обязательны). Список задач — `docs/plans/`.
+> Обновить нижнюю часть: `python3 tools/mkindex.py` (перечитывает шапки файлов).
+
+## 1. Путеводитель по темам
+
+| Тема | Где код | Правила | Проверка |
+|---|---|---|---|
+| Запуск, меню, настройки | `src/main.js`, `src/ui/` (`Codex.js` — справочник), `index.html`, `style.css`/`theme.css` | `CLAUDE.md` «Прочие правила» | `tests/e2e/` |
+| Главный цикл игры | `src/game/Game.js` (`frame`, `_castLocalSpell`, `explode`, `prewarm`) | — | `tools/creativebench.mjs` |
+| Камера, позы, руки | `pose_native.py`, `hand_v5*.py`, `src/input/` (`PoseService`, `PoseSmoother`, `PoseInterpreter`), `src/entities/ArmSolver.js`, `SimplifiedHand.js` | `docs/rules/hands-body.md` | `tools/armbench.mjs`, `tools/handbench/` |
+| Вещи в руках, бросок, карманы, спина | `src/game/Items.js`, `ThrowModel.js`, `Inventory.js` (ячейки, `back` — спина), `Weapons.js` | `docs/rules/hands-body.md` | `tools/throwbench.mjs` |
+| Голос, распознавание заклинаний | `voice_native.py`, `voice_gpu.py`, `src/input/NativeVoice.js`, `SpellSpotter`, `src/game/SpellPhrase.js` | `CLAUDE.md` «Работа с репозиторием» (голос) | `npm run test:voice`, `tools/voicebench/` |
+| Заклинания: таблица «кто/что» | `Game._castLocalSpell`, `Combat.js` (цены `SPELL_COST`), `Duel.js` (заряды), `Concentration.js`, `SpellBook.js` (кто что знает) | `docs/rules/spells-creatures.md` | `tests/unit/spell-targets.test.js`, `tools/spellbench.mjs` |
+| Пентаграммы | `Pentagranium.js`, `PentagramRules.js`, `PentagramFigures.js`, `Offerings.js`, `src/fx/PentagramFx.js` | `docs/rules/spells-creatures.md` | `tests/unit/pentagram-*.test.js` |
+| Мана, смерть, наследие | `Mana.js`, `Combat.js`, `Death.js`, `Legacy.js` | `CLAUDE.md` (мана), `docs/rules/misc-rules.md` | `tests/unit/death*.test.js` |
+| Мир (генерация) | `src/world/Terrain.js` (версии мира `*_FROM_GEN`), `terrain.worker.js`, `TerrainView.js` | `CLAUDE.md` «Производительность» | `tests/unit/terrain-worker.test.js`, `tools/flightbench.mjs` |
+| Замки, деревни, жители | `src/world/Castles.js`, `Buildings.js`, `CastleFurniture.js`; `src/game/CastleLife.js`, `VillagerFear.js`, `HomeDefence*.js`, `Audacity*.js` | `docs/rules/castle-furniture.md`, `settlement-buildings.md`, `big-houses-iron-gates.md`, `audacity-mob.md`, `home-defence.md` | `tools/crowdbench.mjs`, `tools/housebench.mjs` |
+| Ходьба существ | `src/game/Crowd.js`, `Pilot.js`, `CrowdSources.js`, `HillWay.js`, `FleePlan.js` | `docs/rules/hands-body.md` (коллизии) | `tools/pilotsim.mjs`, `tools/hillbench.mjs` |
+| Разговор с жителями | `src/ai/` (`TalkCommands.js`, `TalkFlow.js`), `src/game/CastleTalk.js`, `CommandTalk.js`, `llm_native.py`, `tts_native.py` | `docs/rules/misc-rules.md` | `tools/talkbench.mjs` |
+| Волшебники, башня, арена | `WizardFight.js`, `WizardAI.js`, `WizardMind.js`, `ArenaDuels.js`, `ArenaSteward.js`, `src/world/DuelArenas.js` | `docs/rules/misc-rules.md` | `tests/unit/arena*.test.js` |
+| Драконы | `Dragons.js`, `DragonMind.js`, `DragonAggro.js`, `DragonTame.js`, `DragonRide.js` | `docs/rules/spells-creatures.md` | `tests/unit/dragon-*.test.js` |
+| Ледяная Королева | `IceQueen.js`, `IceGiants.js`, `QueenBolts.js`, `src/world/QueenMap.js` | `docs/rules/spells-creatures.md` | `tools/icearenabench.mjs` |
+| Ад, Тароны, Дьяволос | `src/world/HellMap.js`, `HellRules.js`, `HellGate.js`, `Taron.js`, `Diabolos*.js` | `docs/rules/hell.md`, `tarons-hell-gargoyles.md`, `diabolos.md` | `tools/hellbench.mjs` |
+| Данжи, призраки | `src/world/Dungeons.js`, `DungeonRules.js`, `GhostCastle.js`; `src/game/Ghosts.js` | `docs/rules/dungeons.md`, `ghost-castle.md` | `tools/dungeonbench.mjs`, `tools/ghostbench.mjs` |
+| Растения | `Plants.js`, `PlantHunt.js`, `MagicFloraLife.js`, `CustomPlants.js`, `BeslanGrass.js` | `docs/rules/carnivore-hunt.md`, скилл `new-plant` | `tools/huntbench.mjs` |
+| Космос и планеты | `src/game/Space.js`, `PlanetMagic.js`, `src/world/Planets.js` | `docs/rules/spells-creatures.md` | `tests/unit/space*.test.js` |
+| Прочность построек | `src/world/Structure.js`, `Collapse.js` | `CLAUDE.md` «Прочность зданий» | `tools/structbench.mjs --check` |
+| Сеть и мультиплеер | `src/net/Network.js`, `NetSync.js`, `RemoteAvatar.js`, `VoiceChat.js` | `docs/rules/voice-chat.md`, `docs/ideas-future.md` | `tests/e2e/voicechat.test.mjs` |
+| Сохранение | `src/game/WorldSave.js` (`playerSnapshot`/`applyPlayerSnapshot`) | — | `tests/unit/save*.test.js` |
+| Загрузка и кеш | `src/core/BootCache.js`, `BootTimer.js`, `server.py` | `docs/rules/boot-cache.md` | `tools/entrybench.mjs` |
+| Модель героя | `src/entities/Character.js`, `RealisticBody.js`, `src/entities/real/` | `docs/rules/realistic-hero.md` | `tools/realbench.mjs` |
+| Звук | `src/audio/SoundManager.js`, `SpellMusic.js` | `CLAUDE.md` «Производительность» | `tests/unit/spell-sounds.test.js` |
+| Лаунчер | `launcher/`, `server.py`, `install-windows.ps1` | — | `tests/unit/launcher-python.test.js` |
+
+Скиллы для повторяющихся задач — `.claude/skills/` (`new-spell`, `new-pentagram`, `new-creature`, `new-plant`, `new-building`, `optimization`).
+Замыслы «на потом» (не противоречить) — `docs/ideas-future.md`. Отчёты и снимки — `docs/reports/`, `docs/media/`.
+
+## 2. Все файлы по папкам
+
+### `src/core/` — ядро: математика, кеш, общие формы, журналы (19)
+
+- `AllLog.js` — «Общие логи»: ONE journal with every tag together, by time (performance, spells, voice, villagers, hands, items, network, errors…). Settings → Журнал → «Общие логи» shows it with tag filters, a search and «copy everything / the…
+- `ArmLog.js` — the arms' diary (shoulder → elbow → wrist; NOT the palms and fingers).
+- `BootCache.js` — what is dear to make and always comes out the same is kept on the disk between starts (the author: «игра запускается постоянно, у меня SSD — почему бы не хранить готовое между запусками»).
+- `BootTimer.js` — where the seconds of a start go (the author: «очень детально проработай систему БЫСТРОЙ ЗАГРУЗКИ»).
+- `CappedLog.js` — a «what happened» list (the systems keep one for the tests and the hand recording) that keeps only its last `max` entries: played for hours, such a list must not grow without end. An ordinary array otherwise (filter/map/slice…
+- `FarBatch.js` — FarBatch — many one-shapes (FarShape) of one look drawn as ONE draw.
+- `FarShape.js` — FarShape — a model of many moving parts (an animal: legs in joints, head, ears, tail… ~22 parts, 22 draws) drawn as ONE shape per material, its parts moved by the VIDEO CARD (the author's rule «всё сложное — на видеокарту»): the…
+- `FastMath.js` — `Math.hypot` without the garbage. The built-in one is ~4× slower than this and, called from code that is not yet optimized, makes heap numbers on every call: the people's walking, the sea, the ships and the crowd call it…
+- `GpuTexture.js` — pictures made on the video card at loading (the author: «всё сложное — на видеокарту»).
+- `LocalSkin.js` — кости скин-моделей считаются относительно самой модели, а не мира.
+- `LogGames.js` — a journal text → games. Every new game writes a line «=== игра началась …» (spells, hands…) or «=== старт …» (performance diary); the file puts it into a frame of «═══» with empty lines around (server.py), the old files have just…
+- `MergeGeometry.js` — several pieces of one material made into ONE geometry (one draw call instead of one per piece): a door's frame, its panels, a chest's gold corners. The pieces are placed as the meshes were (`at`: an Object3D-like {position,…
+- `PerfLog.js` — a performance diary of the running game, for finding why a computer loses frames. Every 5 s one line: FPS, how long frames take (the middle one, the slow ones, the worst), which part of the frame is heaviest, the camera network…
+- `ProfileTransfer.js` — the saves come with the player into the game's own window.
+- `SceneMatrices.js` — SceneMatrices — the scene's matrices each frame, only where they are needed.
+- `Shadows.js` — Shadows only near the player: every caster is drawn a second time into the shadow map, so the far ones (people, animals, chests…) don't cast.
+- `SpellLog.js` — the spell journal: every phrase the voice heard and what came of it.
+- `events.js` — Minimal synchronous event emitter.
+- `math.js` — Small math helpers shared by every system. Pure functions only — safe to import from Node unit tests (no THREE, no DOM).
+
+### `src/world/` — мир: генерация в воркерах (без THREE), места (замки, башни, деревни, данжи, ад, планеты), прочность, вода, коллизии (69)
+
+- `BlockShapes.js` — the shapes a block can have besides the whole cube: slabs (half a block, the lower or the upper half), ramps (a wedge rising 1 m over 1 m — 45° — in four directions, on the floor or upside down under a ceiling) and the corners…
+- `BoomCarve.js` — the crater of «Бум» (src/game/Boom.js) dug out of the voxel world: pure data, no three.js.
+- `Buildings.js` — the different buildings of the settlements (world generation 17; BUILDINGS_FROM_GEN, Terrain.js).
+- `CastleFurniture.js` — the rooms of a king's castle, furnished (world generation 8; FURNISH_FROM_GEN, Terrain.js).
+- `Castles.js` — castles, their villages, markets and fields.
+- `CaveSystems.js` — caves as in Minecraft (generation 4 worlds): a mouth in a hillside (or a sloping hole in flat ground), then tunnels that wind and go deep down, branch off, end in dead ends, and open into chambers now and then — big enough to get…
+- `Collapse.js` — what is left hanging in the air after a blast falls down.
+- `Collision.js` — one place for every static obstacle in the world.
+- `CreationBuild.js` — the blocks of a building made by «Да пусть создастся …» (DivineCreation.js): a recipe (CreationRules — parts, sizes, materials) → real blocks of the world. Pure data, no THREE: made in a worker (creation.worker.js), the same on…
+- `DoomView.js` — «Planet Liquidation» seen from space (SpaceView's scene): the great beam of magic from the caster to the planet, the planet cracking (its red-hot core through the cracks — PLANET_FS uDoom), shaking and swelling, then the blast —…
+- `DragonLairs.js` — the dragons' lairs: special, rare, huge caves high up in the big mountains.
+- `DuelArenas.js` — the duel arenas of the wizards (the author: «как ипподром раньше был»): an oval floor and six rows of stands round it, all of the enchanted stone (EnchantedStone.js — a blast is, the stone stays), two gates at the ends for the…
+- `DungeonBuild.js` — the dungeons UNDER the ground (old mine, crypt, passage, tomb, catacombs, cave temple) and the entry that builds any dungeon (Dungeons.js places them; DungeonRules.js lists the kinds; DungeonKit.js the tools; DungeonRuins.js the…
+- `DungeonCheck.js` — checks a built dungeon against the REAL blocks of a world (the benches and the tests): every chest has room (nothing solid in its box, a floor under it), can be walked to from the way in (a flood fill over standing places: a…
+- `DungeonKit.js` — the tools to build the dungeons of the wild with (DungeonBuild.js: under the ground, DungeonRuins.js: on it; Dungeons.js places them).
+- `DungeonRuins.js` — the ruins on the ground (Dungeons.js places them): six buildings that fell, three of plain stone and three of arcane, each a small one, a middling one, a great one. The plan's F is the levelled ground (l = −1 the ground itself),…
+- `DungeonRules.js` — the dungeons of the wild: the kinds, their sizes and numbers (pure data, no three.js, no Terrain.js).
+- `Dungeons.js` — where the dungeons of the wild are (the author: «Игрок гуляет по миру и может найти ДАНЖ»): ruins on the ground and halls under it. Kinds and numbers: DungeonRules.js; the blocks: DungeonBuild.js.
+- `EnchantedStone.js` — the enchanted stone of the duel arenas (DuelArenas.js) and of the walls of the wizards' towers (WizardTowers.js: the drum). The author: «пол арены и трибуны из особого заколдованного камня. Любые взрывные заклинания можно…
+- `Fire.js` — trees catch fire and the fire spreads.
+- `Flora.js` — tall grass and flowers on the meadows of generation-5 worlds (the author: «трава такая однотипная, зелёная, нету переливов… цветы, разная высота травы»).
+- `FloraBuild.js` — the tufts and flowers of one chunk as plain arrays (Flora.js draws them). No THREE here: the terrain workers (terrain.worker.js) make them too, away from the drawing.
+- `GhostBuild.js` — the blocks of the Castle of Ghosts (GhostCastle.js places it; the rules and numbers: game/GhostRules.js).
+- `GhostCastle.js` — where the Castle of Ghosts is (the author: «замок настоящих призраков… его нельзя найти, пока у игрока нет зрения невидимого — он даже не генерируется в мире»). Numbers and the rules of the whole thing: game/GhostRules.js; the…
+- `GhostKit.js` — the builder's tools of the Castle of Ghosts (GhostBuild.js lays the plan, GhostRooms.js furnishes the rooms).
+- `GhostRooms.js` — the gloomy furniture of the Castle of Ghosts' rooms (GhostBuild.js lays the rooms out; GhostKit.js has the pieces).
+- `GodsTemple.js` — the abandoned Temple of the Gods (the author: «На Венере можно будет найти храм — заброшенный храм богов. Внутри будет библиотека…»).
+- `Hamlets.js` — the small places of the world between the castles (the author: «хочу сделать мир живым: ты идёшь и видишь — тут одни живут, там другие, мир разнообразен»):
+- `HellLand.js` — блоки ада по плану HellMap.js: чанк за чанком, в воркерах (как поверхности планет — PlanetSurface.js).
+- `HellMap.js` — АД: план мира ада (КОНТРАКТ для всех сессий про ад — не менять сигнатуры без нужды).
+- `IceCastle.js` — the Ice Queen's palace: ONE in the whole world (the author: «На всю карту будет спавниться один замок — Ледяной замок… Не в виде крепости, а именно замок как у Эльзы»).
+- `IceMagicPlan.js` — the blocks of «Create an Ice Castle» and «Ice Bridge» (src/game/IceMagic.js).
+- `InvisibleFlora.js` — «Трава Беслана»: a plant of the invisible world (pure, no THREE — a terrain worker can make it too).
+- `KnightPosts.js` — The castle's guard: how many knights and where each stands (pure data, no THREE — read by Castles.js and by CastleLife). The author: «Всего в замке должно быть не больше 10–15 рыцарей, рандомно (по размеру замка). Два у входа,…
+- `Landscape.js` — the land of generation-5 worlds: big beautiful mountains and many kinds of land.
+- `LoreStand.js` — the reading stand (аналой) of the world's history: a book lies open on a sloping board on a post of two blocks. Pure numbers (no THREE): the builders (WizardTowers.js, WizardVillages.js) lay the post and the spot, LoreLibrary.js…
+- `MagicCastle.js` — the plan of a castle made by magic («Create a Castle», CastleMagic.js).
+- `MagicHouse.js` — the plan of a house made by magic («Create a House», «Improve a House»).
+- `PawnStall.js` — the buyer's stall (a pawnbroker, `stall.pawn`): the same one by the wizards' tower and in the small wizard villages (in old worlds too, by the author's wish). CastleTalk buys anything from a hand put on its counter (40 % under:…
+- `PlanSlopes.js` — the ramps of the buildings' roofs (generation 6, BlockShapes.js).
+- `PlanetDoom.js` — «Planet Liquidation» (уничтожение планеты), its pure part (no THREE): the times of its picture, what it costs, which bodies the gods protect, the meteor cluster left of a planet. Used by the spell (src/game/PlanetDestroy.js), the…
+- `PlanetSurface.js` — the ground of the other planets (Planets.js: each rocky body has a slot of the voxel world far out, x ≥ SPACE.ZONE_X). TerrainData makes a chunk there by this recipe instead of the Earth's: in the terrain worker like every chunk,…
+- `PlanetTextures.js` — the pictures of the planets seen from space (equirectangular RGBA maps). Pure (no THREE): made in space.worker.js, away from the drawing.
+- `Planets.js` — the Solar System of the game: the one shared list of planets (the registry). Pure (no THREE): the game, the terrain worker and the tests use it alike.
+- `QueenMap.js` — the Ice Queen's OWN MAP (worlds of generation QUEEN_MAP_FROM_GEN, the Creative test ground).
+- `Ruin.js` — «Total Destruction»: everything built in an area falls apart by itself.
+- `Sea.js` — the seas of a world (generation 2+) and their waves.
+- `Sites.js` — every built place of the world in one index: castles (src/world/Castles.js), the wizards' towers (src/world/WizardTowers.js), the wizards' settlements (src/world/WizardVillages.js) and the hamlets between them — lone houses,…
+- `Sky.js` — a painted sky instead of a flat grey-blue ball.
+- `SpaceView.js` — what space looks like: the stars and the Milky Way, the Sun, the planets with their atmospheres, the Earth's clouds, Saturn's and Uranus' rings, the orbits, the asteroid belt and the Kuiper belt with their meteor clusters. Its…
+- `SpiderDens.js` — the giant spider's cave (worlds of generation SPAWN_MAPS_FROM_GEN, the Creative test ground: «Логово паучихи»).
+- `SpiderLairs.js` — where the giant spider lives (Spider.js).
+- `Structure.js` — does a building still stand? (the author: «на одной недостаточно усиленной колонне оно не удержится»)
+- `Terrain.js` — endless, destructible voxel terrain (ground + mountains).
+- `TerrainView.js` — the THREE meshes of the endless terrain (TerrainData in Terrain.js).
+- `TreeBuild.js` — the new trees (the author: «деревья не будут просто блоками, квадратными. Они будут извивающимися, с большими ветками всевозможными»; and after the first try: «зелёные шары… не похоже на дерево. Я думал, ветки красивые……
+- `TreeLeaves.js` — the pictures on the trees' leaf cards (TreeBuild.js): one sprig per kind, side by side in one picture (an atlas: one material for every tree). Each sprig is a stalk from the card's bottom middle up to its top with its leaves…
+- `TreeMaterials.js` — the THREE side of the new trees (TreeBuild.js shapes, TreeLeaves.js pictures): the leaf atlas texture, the bark and leaf materials, the geometries of every shape (cached: one per kind × variant × near/far, never a new one per…
+- `Trees.js` — the real trees of the worlds made with them (`realTrees`, every world made from now on): drawn, hit, burnt, felled and carried like the start area's trees always were (World.trees), but all over the world.
+- `UltraGrass.js` — the soft lawn of «Ультра качество»: thousands of thin curved blades on every grass block round the player (as in Minecraft's best shader packs), thick near, thinning out smoothly further away; gusts of wind roll over them in…
+- `VoxelShading.js` — simple but pleasant block textures, without texture files.
+- `WizardTowers.js` — the wizards' towers (academies) and the wizards' houses around them.
+- `WizardVillages.js` — the big settlements of the wizards (no castle, no tower: a town of wizards).
+- `World.js` — everything static in a level: lights, sky, ground/terrain, decorations (grass cubes, trees), tables and custom-map walls.
+- `castle.worker.js` — the blocks of a castle made by magic (MagicCastle.castleCells: ~0.15 s of work — never in a frame of the game). In: {id, o}; out: {id, cells, shapes, fill, n, nAir, nRise} (the arrays moved, not copied).
+- `creation.worker.js` — the blocks of a building made by «Да пусть создастся …» (CreationBuild.creationPlan: a city is ~0.2–0.6 s of work — never in a frame of the game). In: {id, o}; out: {id, plan} (its arrays moved, not copied).
+- `space.worker.js` — the planets' pictures for the view from space (PlanetTextures.js), made away from the drawing: the game asks for one map at a time and gets its RGBA bytes back. It has its own copy of the world's recipe (the Earth's map is the…
+- `temple.worker.js` — the Temple of the Gods' look and solids (GodsTemple.templePlan: ~0.5 s of work — never in a frame of the game). In: {id, seed}; out: {id, plan} (the mesh arrays moved, not copied).
+- `terrain.worker.js` — makes terrain chunks away from the drawing (TerrainView.js).
+
+### `src/game/` — игра: системы, заклинания, существа, правила и таблицы «кто/что» (397)
+
+- `Accio.js` — «Акцио»: summon a thing into your hand.
+- `Achievements.js` — the player's achievements («ачивки») and the status «Высший маг».
+- `ActionLog.js` — a full journal of what the people the hero deals with do and why (the author: «в журнал записать все действия, позы, куда смотрит, что делает рыцарь, как думает… максимально весь лог взаимодействия, чтобы я потом мог кидать…
+- `AimHold.js` — holding something at the hand's line the way «Вингардиум Левиоса» does (pure maths): taken where it is (its angle to the hand's line is kept — no jump onto the line) and the camera's glitches filtered out. Shared by Levitation.js…
+- `Alohomora.js` — «Алохомора» (5 маны) and «Алохомора Максима» (25): locks.
+- `AnimalBones.js` — the skeleton an animal leaves when its meat is gone: a real one of its own kind (a cow with horn cores, a long horse skull, a pig with a snout disc, a ram with curled horns), not five sticks. Nothing is sized by eye: every length…
+- `AnimalHerd.js` — how a herd of ordinary animals keeps its distance and lives.
+- `AnimalModels.js` — the shapes of cows, pigs, sheep and horses.
+- `Animals.js` — cows, pigs, sheep and horses; golden apple trees.
+- `AppleTrees.js` — the look of the apple trees (Animals.js places them, keeps their apples, lets them be picked).
+- `ArenaBoard.js` — the magic board of the duel arena (pure: ArenaDuels.js fills it, src/fx/ArenaBoardFx.js draws it, the tests read it).
+- `ArenaDome.js` — the magic dome over a duel arena's floor (pure geometry; the look — fx/ArenaDomeFx.js; the hook — Duel._step).
+- `ArenaDuels.js` — the life of the duel arenas (src/world/DuelArenas.js; the rules — ArenaRules.js).
+- `ArenaRules.js` — the rules of the duel arena (the author's words), pure: the game (ArenaDuels.js), the codex and the tests read them.
+- `ArenaSteward.js` — the steward of a duel arena and the queue he keeps (pure: ArenaDuels.js plays it, CastleTalk.js asks him, the tests drive it).
+- `ArenaTag.js` — the sign over an arena duellist (the author, Creative only): his kind («Младший», «Средний», «Сильный», «Глава башни»), his mana now / his cells, his duel strength — alive: the mana goes down as he casts. Pure: the values come…
+- `ArmPump.js` — running with the arms, as a sprinter does: the two hands swinging back and forth IN TURN (one forward and up while the other goes back and down), over and over. The author: «you can run up to 40% faster if you work your arms … it…
+- `Armor.js` — wearing armour and robes (the rules of the things: ArmorTypes.js; the look: entities/ArmorLook.js).
+- `ArmorTypes.js` — armour and robes as things (pure: data, rolls, the rules of protection; node-testable, no THREE, no game).
+- `Attention.js` — to whom am I talking? (the author: «он меня замечает, только когда я вплотную подхожу… должно быть быстрое взаимодействие: на кого смотрю, сколько смотрю — быстро посмотрел, это вряд ли; иду я к персонажу или нет; чтобы он понял,…
+- `Attitude.js` — who a villager is (his character, 0–100) and how he takes the one talking to him (the author: «у жителей — небольшие характеры: доброта, помощь… от 0 до 100; отношение к тебе по умолчанию какое-то случайное, растёт или падает…
+- `Audacity.js` — «наглость» игрока в поселении: чем больше он грабит, убивает и поджигает на глазах у жителей, тем решительнее они действуют ВМЕСТЕ (pure logic: no three.js, no game — AudacityLife.js runs it; tests/unit/audacity.test.js).
+- `AudacityLife.js` — the game side of Audacity.js: «наглость» of a player in a settlement, the crowd that falls on him together, and the people who run out of the village.
+- `Avoid.js` — walking past the others instead of into them (pure, Node-testable).
+- `BareHand.js` — «колдовать без палочки» (pure rules, node-testable; the game part is Game._wandGate and Pentagranium.js). The author: «сейчас можно колдовать БЕЗ палочки, рукой. Эту возможность убрать — волшебник ещё слишком слаб».
+- `BedModels.js` — the 3D models of beds, wool and bundles of logs (THREE only, no game logic). Geometries and materials are shared; the blanket material is cached per colour (recolouring a bed only swaps it).
+- `BedRules.js` — the pure rules of beds (no THREE, no DOM; unit-tested): bed colours and the colour words of «Change a color», the recipe of «Create a Bed» (logs + wool lying together) and the sleep check.
+- `Beds.js` — beds, «Create a Bed», «Change a color», sleeping through the night, and throwing wood out of the hand (bundles of logs).
+- `BeslanGrass.js` — «Трава Беслана»: the plant that only a hero who sees the invisible sees (the places and the shape: world/InvisibleFlora.js).
+- `Blackbeard.js` — Captain Black Moustache («капитан Чёрные Усы») and his black ship.
+- `BladeClash.js` — blade against blade (players fighting with swords / axes).
+- `Blame.js` — who do the people (villagers, knights, the king, wizards, sailors…) think did it? (pure logic: CastleLife and WizardLife ask it.)
+- `Bleeding.js` — a blade stuck in a body, blood, and «Rescue».
+- `BoardHold.js` — where a surfboard is when hands hold it (THREE math only).
+- `BoardPhysics.js` — a surfboard on the water (pure, no THREE).
+- `BoardRegistry.js` — every surfboard of the world (plain data: network and save). The host (or single player) decides who holds or rides a board: first come wins, a held or ridden board is never taken from its owner. Record: {id, wood, st:…
+- `BodyContact.js` — players are solid: one hero's body never goes into another's.
+- `BodyFound.js` — somebody of a castle, a village or a wizards' tower was killed where nobody saw it: no-one knows who did it. But the body lies there. Whoever of its people comes by and sees it cries out; the place is on the alert for a while: -…
+- `BodyImpact.js` — something hits MY body (the local player; every computer moves only its own).
+- `BodyStrikes.js` — my real hands striking bodies: other players AND every creature (zombies, villagers, knights, animals…). Nothing by accident: - the tracked knuckles (not the drawn hand) must really reach a body part: the fist's path this frame…
+- `Bodyguard.js` — the king's knights guard the player who took the castle.
+- `BookBirds.js` — book-birds and their books of spells.
+- `BookModel.js` — the book of spells as a real thing: two covers on a spine, a block of pages under each, and two page faces that show the spread.
+- `BookPhysics.js` — the book in the hands as a real thing (pure maths, no scene).
+- `BookReading.js` — the spell book in the hands, like a real book.
+- `Boom.js` — «Бум» («Boom»): a mountain (a castle, a tower, a rock) torn apart from inside.
+- `BossRetry.js` — «повторить бой с боссом» (Творческий, старт у босса): по аналогии с дуэльным режимом.
+- `BowDraw.js` — the drawing hand on a bow's string (pure logic: the game feeds what the camera sees each frame; tests feed it noisy poses).
+- `Breakward.js` — «Пентаграмма слома магической защиты» (`PENTAGRAMS.breakward`): чистые правила, без THREE.
+- `BreakwardMark.js` — метка «слом защиты» на герое (игровая часть; правила и числа — Breakward.js).
+- `Bridge.js` — «Create a Bridge» (10 mana, no scroll — the author: «доступно без свитка»): a strip of blocks that grows from where the hero stands to the place the wand points at.
+- `BrightFlower.js` — the mind of the Brightflower («Ярколето», a kind of Plants.js; rules and numbers: PlantLife.BRIGHT / BRIGHT_TARGETS, the look: fx/BrightFlowerFx.js).
+- `Builder.js` — gathering resources and building with magic.
+- `BuildingFx.js` — the moving and sounding parts of the settlement buildings (Buildings.js; `def.fx` records): - 'vanes'  the four sails of a mill: one shape (4 beams, their lattices and cloth, the hub — one draw call), turned round the axle by the…
+- `BumpRules.js` — an accident is no blow (pure rules; BodyStrikes, CastleLife and CastleTalk use them). - a blow is MY hand's own movement (its speed in the world, not against the body's): a villager who walks into a still hand, or my…
+- `BurnWreck.js` — a house that burns down: nothing is left hanging in the air.
+- `Burning.js` — a creature ON FIRE («горит»): the fire sticks to the body and keeps burning it for a while.
+- `BuyerDeal.js` — the pawnshop's and the shady buyer's short deal (pure logic, no THREE).
+- `BuyerSigns.js` — the «Скупка» plaque on the front of the counter of the pawnshop (wizards' settlement) and the shady buyer's plaque in a town (signSpec in BuyerDeal.js has the sizes). One shared geometry per part, one texture + material per kind…
+- `Campfires.js` — the spell «Fire» and campfires.
+- `Canaries.js` — the Canaries («Канарики»): small, broad, very strong swamp people who live in camps of 3–8 on the marshy shores of lakes and hurl boulders at whoever walks into their territory. Rules, numbers and the «who / what» table:…
+- `CanaryRules.js` — the Canaries («Канарики»): rules, numbers and the «who / what» table (no THREE: the tests read it).
+- `Cannons.js` — the guns of the ships and of the sea castles' ports.
+- `Carriages.js` — carts on the roads of the world (the author: «a horse pulls a cart; two wizards sit in it, one drives the horse, they carry a chest of valuables. The same, only a less magical cart — with ordinary people going to town. People's…
+- `CastHints.js` — advice about a spell («поднимите руку…», «скажите «…»») only to a player who is really casting, never to one who is just talking (the author: «я просто сам с собой разговаривал, а мне постоянно кидались подсказки»).
+- `CastleLife.js` — the people of the castles.
+- `CastleMagic.js` — «Create a Castle»: a whole castle made by magic (as «Create a House», HouseMagic.js, on the same ground: its chests, its net, its save — this class is a HouseMagic of its own kind).
+- `CastleTalk.js` — talking to the castle people, and the market.
+- `CastleTreasure.js` — a king's fortune (the author: «У короля должно быть от 500 до 1500 монеток, рандомно, и разбросаны по нескольким сундукам: это единая сумма, а по сундукам поменьше — он же не в одном всё хранит»).
+- `CastleWatch.js` — слежка внутри замка (чистые правила + мелкий класс-помощник; без three.js).
+- `CauldronModel.js` — the big black iron cauldron (and the glass flask) as THREE models.
+- `Cauldrons.js` — the big black cauldrons in the world: moved by hands, filled with water, brewing potions (what goes on inside: Potions.js).
+- `CaveMap.js` — the map of a cave, as far as the hero has explored it (the author: «Когда заходишь в пещеру, карта должна рисовать пещеру — но только ту часть, которую ты уже исследовал»).
+- `Chores.js` — what the people of the towns and villages do all day (a part of CastleLife).
+- `CircleAttack.js` — «Circle Attack» («Сёркл Аттак») and «Circle Attack Maxima».
+- `CoinBelt.js` — the hero's one coin pouch: tied to the belt on the right side, beside the hip (the wand's place is in front, on the left: WandBelt.js). Seen on the hero. A left-hander (Настройки: Левша): all mirrored — on the left hip, the right…
+- `CoinDeal.js` — coins come out of the pouch only when you buy or sell (the author: «монеты можно было достать из инвентаря только в момент покупки или продажи»).
+- `CoinScale.js` — how much gold the world spawns (the author: «сократить количество золота во всех сундуках и вообще во всей игре на 40 %»): every rule that says how many coins a chest, a knight, a king, a wizard, a ship or a dragon's hoard holds…
+- `Combat.js` — the «Свободный мир» rules: players fight each other with spells.
+- `CommandTalk.js` — the player's plain-word commands to the castle's people (the author: «рыцари не понимают команд… постоянное живое взаимодействие и огромное количество команд… если не может — отвечает, что не может»).
+- `Concentration.js` — «правило концентрации» (the author's rule).
+- `CopruStatue.js` — the statue of Coprus the Clever in the wizards' settlements: a real model (not blocks) of an old wizard in a long robe — a long beard, a tall bent hat, one hand down, the other raised with the wand up and its tip glowing. Marble…
+- `Court.js` — the king's court: the treasury, the people's troubles, and the vizier who reports them (the author: «главный визирь сам инициирует разговор… знает, сколько денег в казне, какие проблемы у жителей… 20 самых распространённых…
+- `CourtLife.js` — the game side of Court.js: the king's treasury and the people's troubles, and the vizier.
+- `CreationPrompt.js` — what the gods (the local Gemma, llm_native.py on the video card) are asked for «Да пусть создастся …», and how their answer is read. Pure: no THREE, no fetch.
+- `CreationRules.js` — the rules of «Да пусть создастся …» (DivineCreation.js): pure data and checks, no THREE.
+- `CreationWords.js` — the words of «Да пусть создастся …» (DivineCreation.js), the gods' spell said in Russian.
+- `CreativeGuest.js` — a plain villager by the Creative start, to talk to (the author: «поставишь в творческом режиме какого-то особого обычного жителя возле входа в игру — чтобы я мог повзаимодействовать, протестировать новую систему» — the quick…
+- `CreativeMarket.js` — a city merchant's stall by the Creative start, to try buying and selling without walking to a castle (author: «где-то рядом поставь продавца из города — его прилавок»).
+- `CreativeMirror.js` — a tall mirror by Творческий's start: to see oneself — the whole body, every pose of the arms and fingers, every face the camera reads (the «Реалистичный» hero most of all; the standard one too).
+- `CreativeRestart.js` — A selected solo Creative environment is a fresh attempt, not an ordinary world respawn.
+- `CreatureForge.js` — the body of a creature of one's own («Да пусть создастся существо …»): a recipe (CreationRules — its skeleton template, proportions, eyes, horns, tail, wings…) → the measures of every part, in metres. Pure numbers, no THREE: the…
+- `CreatureImpact.js` — pushes, staggers, knockdowns and head jolts for EVERY creature that is not a player: zombies, villagers (farmers, knights, the king… and anybody else CastleLife runs), animals (cows, pigs, sheep, horses) — and any new kind…
+- `CreatureSpecies.js` — the kinds of beasts a creature of one's own may be LIKE («Да пусть создастся существо, похожее на коня»).
+- `CreatureSwim.js` — land creatures in deep water (knights, the castle people, the king, merchants, wizards, the people of the roads, the beasts).
+- `CrewTactics.js` — how a group fights (pure, Node-testable): a ship's crew on its deck, the knights of a castle, anybody who fights together.
+- `CrossedArms.js` — «Protection» жестом: руки скрещены перед грудью (просьба автора).
+- `Crowd.js` — every creature on the ground in one place, so each walker sees the others (pure core).
+- `CrowdSources.js` — who is on the ground, for the crowd (Crowd.js): every kind of creature the game has, with its size. A new walking creature is added here (and walks with `crowdStep`).
+- `CrystalModel.js` — a mana crystal as real gems grow: a hexagonal prism with a pointed six-sided tip, translucent glowing blue, with a brighter core inside. Shared materials (never disposed with one model).
+- `CustomCreatures.js` — creatures of one's own, made by «Да пусть создастся существо …» (DivineCreation.js).
+- `CustomPlants.js` — plants of one's own, made by «Да пусть создастся дерево / цветок / гриб …» (DivineCreation.js).
+- `CutBodies.js` — what can be cut off each kind of creature, and where its body stops a blade. One description per kind (pure three.js, runs in node):
+- `Damage.js` — A blast's damage by distance from its centre: the same for every body (Bombardo 8 at the centre, Maxima ×power; Total Destruction is the same blast many times over).
+- `Danger.js` — what the people of a castle or a village count as danger, and how each of them judges it (pure logic: no three.js, no game — VillagerFear.js runs it).
+- `DarkExile.js` — изгнание чёрного мага из башни волшебников (DarkMagic.js: уровень тьмы 81…100). Герой-изгой в стенах башни: маги гонят его («Уходи»), через `GRACE` секунд маги башни объявляют его врагом (на `HOSTILE_MS`) и защищают башню как от…
+- `DarkLord.js` — «НАСТОЯЩИЙ ТЁМНЫЙ МАГ» (pure, no THREE, node-testable). Игровая часть — DarkLordLife.js.
+- `DarkLordLife.js` — the game side of DarkLord.js: the turning into a true dark mage, the outfit, the curse, the cure, the world's answer.
+- `DarkMagic.js` — чёрная магия (pure, no THREE, node-testable).
+- `Death.js` — what is left when somebody dies.
+- `Diabolos.js` — Дьяволос, огромный прикованный дьявол ада: игровая часть (правила и числа — DiabolosRules.js, модель — entities/DiabolosModel.js, звуки — audio/DiabolosSounds.js).
+- `DiabolosActs.js` — характер Дьяволоса: его поступки (анимации тела + мимика лица) и то, когда какой (чистые данные, без THREE).
+- `DiabolosBody.js` — настоящее тело Дьяволоса для коллизий (жалоба автора: «я лечу — и пролетаю СКВОЗЬ Дьяволоса»).
+- `DiabolosRules.js` — Дьяволос, огромный прикованный дьявол ада: чистые правила и числа (без THREE, проверяются в node).
+- `DiabolosTalk.js` — что говорит Дьяволос (чистые данные, без THREE). Слова автора: «пусть дьявол может разговаривать таким басом. Крутым. В основном троллить будет. Особенно, когда ты пытаешься его уничтожить».
+- `Dismember.js` — a sword or an axe cuts off an arm, a leg or the head of any creature exactly where the blade went through it.
+- `DivineCreation.js` — «Да пусть создастся …»: the gods' spell said in Russian, the gods make what is described.
+- `DivineSword.js` — «Божественный меч» (the gods' sword): the shared API (rules + `makeDivineSword`; THREE only for a vector).
+- `Doors.js` — «Create a Door», «Stand», opening by the handle.
+- `DragonAggro.js` — когда дракон имеет право напасть (чистые правила, без THREE; тест `tests/unit/dragon-aggro.test.js`).
+- `DragonHowl.js` — the dragon's fire in «Империус Максима»: the caster's long «У-у-у» (pure; tests/unit/imperius-flight.test.js).
+- `DragonImperius.js` — the dragon that holds a mind of «Империус Максима»: the rules (pure, no THREE; tests/unit/dragon-imperius.test.js). The game's side: ImperiusFlyers.js (drive), Dragons.js (_breathe), DragonSmash.js (the wings and the body break…
+- `DragonKinds.js` — the dragons' kinds, their strength, the hoard, and the table «на кого и на что» (what touches a dragon and how; what a dragon's flame touches). Pure data and rules: no THREE, Node-testable. The dragons themselves: Dragons.js;…
+- `DragonMind.js` — the fighting mind of a dragon: when it flies and when it SITS and fights (pure: no THREE, no game).
+- `DragonModel.js` — the look of the five dragons (DragonKinds.js): a big, cheap model.
+- `DragonRide.js` — «Brain Rot Maxima» on MY computer: the held spell (0,5 mana a second), getting onto the dragon, flying it, letting it go. The dragon's mind, anger and the host's word: Dragons.js; the rules (when the spell takes, whom «Атак» may…
+- `DragonSmash.js` — the weight of a dragon that holds a mind of «Империус Максима» (rules and tables: DragonImperius.js).
+- `DragonTame.js` — «Brain Rot Maxima» (Брейнрот Максима): the rules of calming a dragon and riding it. Pure data and rules: no THREE, Node-testable. The runtime: DragonRide.js (the rider's computer), Dragons.js (the host: the dragon's mind, its…
+- `Dragons.js` — dragons: rare, in their lairs high in the big mountains, now and then flying over the world. (Kinds, strength, the table «на кого и на что»: DragonKinds.js; looks: DragonModel.js; the lairs themselves are carved into the…
+- `DrawRange.js` — How far people (and other creatures) are drawn: as far as the world itself — «Прорисовка мира» (TerrainView.viewDistance). A mountain you can see has the people on it seen too (the author: «NPC и игроки — высший приоритет…
+- `Drawdown.js` — «Drawdown» / «Drawdown Maxima»: the ground the wand points at sinks.
+- `Duel.js` — duel magic: spells cast straight at a creature (a wizard or a zombie).
+- `DuelRange.js` — how far a duel charge flies (pure rules, no THREE). Author: «длина луча = количество маны у колдующего, 1 мана = 1 метр, максимум 200 м; мана за метры не берётся». The reach is read ONCE, at the moment of casting, from the mana…
+- `DuelReport.js` — the duel journal's lines (pure: tests): who fights the hero at the arena, with what numbers, what each cast, how every beam clash went and why one of them won. The author: «Нужны дуэльные логи: кто со мной сражается, какие…
+- `Enchant.js` — «Пентаграмма зачарования»: правила (чистый модуль, без THREE).
+- `EnchantCircles.js` — the game part of «Пентаграмма зачарования» (rules and numbers: Enchant.js).
+- `Expelliarmus.js` — «Экспеллиармус»: a duel spell that knocks the wand out of the hand.
+- `FaceTarget.js` — the author's rule «лицом к цели» (pure, node-testable).
+- `FireLights.js` — fire really lights what is round it: the ground, the walls, the trees, the people.
+- `Firefighting.js` — «Firefighting» and «Firefighting Maxima»: the air is taken from the fire, and it goes out.
+- `Fireworks.js` — «Fireworks» (known from the start, no scroll — the author: «изначально известно человеку»): the wand raised, the word said, and for 10 seconds salvos of fireworks leave the wand tip by themselves — a bunch of one to three rockets…
+- `FirmRules.js` — «Pentagranium Firmitas»: the white pentagram of absolute steadiness (pure, node-testable; the game part is Firmitas.js, the circle itself is Pentagranium.js, the flag lives in Steadiness.js).
+- `Firmitas.js` — the game part of «Pentagranium Firmitas», the white pentagram of absolute steadiness (rules and numbers: FirmRules.js; the flag: Steadiness.absolute; the circle: Pentagranium.js — it calls `useCircle` each frame the hero stands…
+- `FleePlan.js` — where a frightened one runs (pure, Node-testable).
+- `FleetMath.js` — the pure part of the orders a king gives to the crew of his own ship (Node-testable, no THREE).
+- `FleetOrders.js` — the king of a sea castle (or whoever took a ship) commands the crew of his own ship.
+- `Flight.js` — the «Флайн» spell: fly like Superman.
+- `Game.js` — one play session (creative, survival, custom map or camera test).
+- `GargoyleModel.js` — the look of the infernal gargoyle (THREE; the rules are GargoyleRules.js).
+- `GargoyleRitual.js` — what the ritual of the pentagram of the infernal gargoyles LOOKS like (THREE; the numbers are GargoyleRules.js, the rules and the creatures are Gargoyles.js). Cheap by design (CLAUDE.md «Производительность»):
+- `GargoyleRules.js` — the infernal gargoyles of the pentagram «Пентаграмма адских горгулий» (pure, no THREE, node-testable).
+- `Gargoyles.js` — the infernal gargoyles of the pentagram «Пентаграмма адских горгулий» (the black mage's). Rules and numbers: GargoyleRules.js (+ the table «на кого и на что», `TARGETS`); the look: GargoyleModel.js; the ritual's fire, clouds and…
+- `GateModel.js` — the forged-iron gates of a castle's keep (world generation 14, GATE_METAL_FROM_GEN in Terrain.js). The author: «ворота замка — не деревянные, а металлические». Two leaves of black forged iron: a frame of stiles and rails, a…
+- `Gear.js` — shields, the bow, Thor's hammer and the weather.
+- `GestureLife.js` — what a villager feels now and what his hands do about it (src/entities/Emotions.js, Gestures.js). `stateOf(life, v, now)` → { emo, gctx, talk } for VillagerModel.update (cheap: the feeling is worked out 4 times a second at most);…
+- `GhostCastleLife.js` — the Castle of Ghosts in the game: who has it in the land, its chests, who vanishes inside it, the achievement (the blocks: world/GhostBuild.js; the places: world/GhostCastle.js; the rules and numbers: GhostRules.js; the ghosts:…
+- `GhostRules.js` — the Castle of Ghosts and its ghosts: rules, numbers and the «who / what» tables (pure, no THREE, node-testable).
+- `Ghosts.js` — the ghosts of the Castle of Ghosts (rules and numbers: GhostRules.js; the look: fx/GhostFx.js; the castle's loose things: fx/GhostProps.js).
+- `GrabRules.js` — монстр пентаграммы (`Pentagranium Monstrum`) берёт существ в лапу: схватить, держать, раздавить, бросить (чистые правила и числа, без THREE — проверяет tests/unit/monster-grab.test.js; игровая часть — MonsterGrab.js).
+- `Grapple.js` — the grapnels and the boarding plank between two ships (the king's boarding order, FleetOrders.js).
+- `GroundVortex.js` — «Ground Vortex» (a scroll; held): the earth rises and circles round the hero. Rules, numbers and the «who / what» table — GroundVortexRules.js (read its header first); the blocks are drawn by src/fx/GroundVortexFx.js.
+- `GroundVortexRules.js` — «Ground Vortex» («Граунд Вортекс», a scroll): the rules, pure (no THREE) and node-testable. The spell itself is GroundVortex.js, the picture is src/fx/GroundVortexFx.js.
+- `GroundVortexWords.js` — how «Ground Vortex» and its «Shield» are said. «Ground Vortex» («граунд вортекс», «граунт вортекс»): both words together, "ground" before "vortex" — «вортекс» alone is the water's («Water Vortex»), «граунд» alone / «ground» in…
+- `Groundprud.js` — «Groundprud» (10 mana, +2 cells of mana at the first cast, a scroll): the ground rises into a wall. It belongs to the Protection group (the author: «сэкономить на Protection»): another wizard's spell hits the wall.
+- `GroundprudWords.js` — how «Groundprud» is said: the one word (the author: «граунтпруд»), or its two halves one right after the other («граунд пруд»), the way a Russian ear writes them. «Ground» alone is nothing, and the everyday «пруд» (a pond) alone…
+- `HamletLife.js` — the life of the hamlets (src/world/Hamlets.js): the lone wizard's house, the hermit's hut, the small villages of wizards and of ordinary folk. A part of CastleLife: the people are castle people of the hamlet's site (blows,…
+- `HandBlocks.js` — hands never go into the world's blocks: a counter, a wall, a table, the ground.
+- `HandHold.js` — taking another creature by the hand, as in life (the maths: Handshake.js).
+- `HandRecorder.js` — a 10-second recording of the player's hands (F9 in the game), to be sent to the developer: what the camera network really gives for a real hand (a hand holding a wand, a brush, a pen…), a few camera pictures, and what the game…
+- `HandRelease.js` — when a held thing leaves the hand. Never by accident:
+- `Handover.js` — passing a thing from one player to another (pure logic, unit-tested). Items.js (_give) does the game side, NetSync carries the `hov` messages.
+- `HandsLog.js` — the journal «Руки»: where the hands and the fingers may go wrong (the author: «логи на кисти рук и сами руки, чтобы отслеживать, где могут быть проблемы»). Into «Общие логи» (tag «Руки»), never per frame:
+- `Handshake.js` — hands meeting hands (pure maths, unit-tested): when a hand closes round another creature's hand, where two hands shaking each other are drawn, how a held body is led by the hand that holds it, and when it breaks free. HandHold.js…
+- `HeadTurn.js` — turning the view by turning the head («drifting» camera).
+- `HeldBreak.js` — «Liquidation» on what a humanoid HOLDS (the author: «Liquidation Maxima работает против ЛЮБОГО оружия, даже если оно в руке — даже против Чёрных Усов. Обычный Liquidation уничтожает НЕМАГИЧЕСКИЙ предмет, даже в руках… Если…
+- `HellGargoyleRules.js` — the gargoyles of the underworld (pure, no THREE; node-testable).
+- `HellGate.js` — врата ада: «Пентаграмма ада» (`Pentagranium Infernum`) на Земле и метка возврата в аду (правила и тексты — HellRules.js, план — HellMap.js).
+- `HellKills.js` — «Let the Hellfire Come» — заклинание ЧЁРНОЙ магии (pure, no THREE, node-testable).
+- `HellPatrol.js` — the patrols of the underworld's gargoyles (the author: «горгульи вокруг ПЕРИОДИЧЕСКИ летают, не супер-часто; иногда могут напасть, но ПООДИНОЧКЕ, не массово: от 1 до 3 максимум»). Rules and numbers: HellGargoyleRules.js; the…
+- `HellRealm.js` — как ад ВЫГЛЯДИТ, ЗВУЧИТ и ЖЖЁТ там, где сейчас герой (план — HellMap.js, правила — HellRules.js).
+- `HellRules.js` — правила АДА и «Пентаграммы ада» (`Pentagranium Infernum`), чистые (node-тесты). Игровая часть — HellGate.js (врата, переход, возврат), HellRealm.js (небо, туман, свет, лава, искры, звук); план мира — src/world/HellMap.js…
+- `Hellfire.js` — «Let the Hellfire Come» («Да придёт адский огонь»), the strongest fire there is.
+- `Helm.js` — the ship's wheel in real hands.
+- `HelmMath.js` — the ship's wheel turned by hands (pure, Node-testable).
+- `HerdGuards.js` — the hidden guardians of herds.
+- `HerdSites.js` — Where herds live: the world is cut into small cells, and each cell has (or has not) one herd place, decided only by the world's seed — the same on every computer and not depending on any animals around. The share of cells that…
+- `HeroApply.js` — «Настройки героя» Творческого мира, применённые к герою (правила и числа — HeroSetup.js).
+- `HeroSetup.js` — «Настройки героя» Творческого мира (чистые правила, без THREE; игровая часть — HeroApply.js).
+- `HillWay.js` — people on hills (pure core, no THREE).
+- `Hints.js` — the player is always told WHAT happened and WHY, in one short line.
+- `HoloText.js` — the words of the «Раскрой свои секреты» hologram, as plain text.
+- `HomeDefence.js` — «страх → свой дом → заперся → обороняется» (чистые правила и числа, без THREE; игровая часть — HomeDefenceLife.js).
+- `HomeDefenceLife.js` — игровая часть «страх → свой дом → заперся → обороняется» (правила и числа — HomeDefence.js). Хост ведёт, гости видят позы, оружие в руках (биты `fx`, как у толпы — Audacity.withTool) и закрытую дверь (`dlk`).
+- `HouseAim.js` — which house the hand (the wand, the gaze) points at. Pure numbers, no THREE.
+- `HouseMagic.js` — «Create a House» and «Improve a House»: a house made by magic.
+- `HouseWards.js` — the shield magic of a HOUSE (learned only from the book of protection, the dark-blue book-bird — BookBirds.js; in Creative everybody knows it).
+- `Houses.js` — the life of the village houses near the players.
+- `HurtFlash.js` — a creature that really loses HP glows a light red for a moment, on every computer: so it is clear the blow / the spell / the fire really hit and really hurt.
+- `IceFixtures.js` — the Ice Castle's gates and its chandelier: strong, but not invulnerable (CLAUDE.md: «Ничто не висит в воздухе… неуязвимы только дары богов» — they are not gifts of the gods).
+- `IceGiants.js` — the pure rules of the Ice Castle's fight (no THREE: tests and the worker can read it):
+- `IceMagic.js` — «Create an Ice Castle» and «Ice Bridge»: ice made by hands and feet, as Elsa does it.
+- `IceModels.js` — the Ice Castle's people and things (IceQueen.js): the Ice Queen, the evil snowmen, the ice monsters, the Ice Rod, the ice chandelier, the snowflake shot and the ice spike.
+- `IceQueen.js` — the Ice Castle's life (the castle itself: src/world/IceCastle.js): the Ice Queen in her throne hall, the evil snowmen round her palace, the two ice monsters at its gates, the ice gates, the chandelier, the fire that melts it all…
+- `Impact.js` — what a blow does to a body (pure maths; both ends of the wire and every creature use it). Hero units (≈2.8 per metre), speeds in hero m/s.
+- `Imperius.js` — «Империус» and «Империус Максима»: the rules (pure, no THREE; tests/unit/imperius.test.js). The spell itself on this computer — the cast, the passage of the mind, the body left standing, driving the creature, the camera, the link…
+- `ImperiusBodies.js` — «Империус»: how each kind of creature is driven by the mind in it (ImperiusControl.js).
+- `ImperiusControl.js` — «Империус» / «Империус Максима» on MY computer: the cast, the mind's passage into the creature and back, the body left standing with white eyes, driving the creature, the camera in its eyes, the link fading with the distance, the…
+- `ImperiusFlight.js` — «Империус Максима»: flying a winged creature with one's own arms (pure; tests/unit/imperius-flight.test.js).
+- `ImperiusFlyers.js` — «Империус Максима»: the magic creatures the mind may go into (ImperiusControl.js), added to the adapters of ImperiusBodies.js — the dragon, the clever owl, the phoenix, the book-bird; and the wings of the pig and the Pegasus…
+- `ImperiusGuards.js` — how a castle's guard treats a creature with a «Империус» mind in it, inside the castle's walls (the throne hall too). Nobody reads minds: it is treated as the creature it is (the hero is suspected only by who saw the cast —…
+- `ImperiusWalkers.js` — «Империус Максима» (and «Империус» for the sailors): the rest of the game's walking creatures the mind may go into, added to the adapters of ImperiusBodies.js (how an adapter works: there). sp  the giant spider (a boss — the…
+- `Inspirius.js` — «Inspirius» («Инспириус»): the mightiest spell of all.
+- `Inventory.js` — five slots under the fatigue bar (like Minecraft's hotbar).
+- `Invisibility.js` — «Invisibility» (only from a scroll): the caster can't be seen.
+- `Invisibles.js` — the world of the invisible: ONE registry for everything that only a hero who sees the invisible can see (the author: «общий признак `invisible` / "мир невидимого" в одном реестре; будущие невидимые существа учитывай заранее»).
+- `ItemSupport.js` — what a loose thing lies on besides the ground: the top of a solid box of the world (a bed, a chest, a stool, a bench). Without it a thing let go over a bed hung in the mattress or sank through.
+- `ItemSwarm.js` — «дирижёр предметов»: «Вингардиум Левиоса Максима» pointed at a thing lying about.
+- `ItemSwarmRules.js` — the shared, pure (no THREE) heart of a SWARM OF THINGS held up by magic. Used by «Вингардиум Левиоса Максима» as the «дирижёр предметов» (ItemSwarm.js); any other spell that wants a crowd of things round the hero (a ground…
+- `ItemTypes.js` — what can be found in chests (and what animals drop), their properties and their 3D models. Pure data + THREE models, no game logic.
+- `Items.js` — things in the world and in the hands (wands, scrolls, shields, backpacks, bows, Thor's hammer, food…).
+- `Jerk.js` — a sharp jerk of the hand (pure maths): it ends a duel or puts out a held «Protection». Shared by Duel.js and Combat.js.
+- `Jump.js` — the hero's jump and the hero's gravity (pure numbers, Node-testable).
+- `Justice.js` — the king's law: «убейте всех моряков», «арестуйте его», «обыщите дом» (the author: «рыцари понимают класс персонажей: убейте всех моряков — пойдут и убьют; убейте всех жителей — откажутся… арестовать можно только конкретного,…
+- `JusticeLife.js` — the guard carries out the king's law (Justice.js): an arrest (up to the man, the cuffs, led to the jail, handed over), the jail itself (who sits there, who is let out), the search of a house (the things found are brought to the…
+- `KingNerve.js` — когда король дерётся, а когда прячется (чистые правила, без игры и three.js).
+- `KnightStaff.js` — Where the knights of a castle of generation 21+ stand (the table of posts: world/KnightPosts.js). The king, his advisor and the merchants are not counted here. A post is a place with its facing; the knight's `post` is also his…
+- `KnightTactics.js` — the squad brain of a castle's knights (pure, Node-testable).
+- `Knockdown.js` — my hero off its feet (and reeling) — the local player only.
+- `LanternLights.js` — the lamps of the houses really shine.
+- `LedgeClimb.js` — out of a pit, up a ledge, with the hands (as in life).
+- `Legacy.js` — what a hero had, left in the body when they die (the author: «Смерть всё убирает полностью. Умер — всё. Игра начинается сначала, но в том же мире… Максимум — игрок найдёт своё умершее тело, заберёт все достижения, всё, что было.…
+- `Levitation.js` — «Вингардиум Левиоса».
+- `LevitationMaxima.js` — «Вингардиум Левиоса Максима».
+- `LieClear.js` — a body knocked down lies stretched out along the ground, head and arms 3 m from the feet. Thrown into a crater, a ditch or against a house it may lie with its head (or its legs) IN the wall: the author saw «NPC проваливаются под…
+- `Liquidation.js` — «Liquidation» (10 mana) and «Liquidation Maxima» (25). Not a duel spell.
+- `Lives.js` — a person's own life: a goal of his own (≈200 of them), what he lets a friend have, and whether he will go with the hero on his road (the author: «у каждого персонажа своя цель в жизни, до 200 целей… рыцарь — скорее что-то с…
+- `LivingTrees.js` — «Alive»: a tree comes alive and obeys its caster.
+- `LogModel.js` — a real log (a trunk piece with bark and rings on its ends) for the wood in the hand and in the slots. The author: «Когда я держу эти брёвна, они показываются как кубик из дерева, а должна быть текстура как бревна». Sizes (a world…
+- `LoreBooks.js` — the books of the world's history (the author: «книги истории мира»). Not spell books: they teach nothing and give nothing — they are only read. Opened with both hands and turned with a finger as every book (BookReading.js: an…
+- `LoreLibrary.js` — the books of the world's history (LoreBooks.js) on their reading stands: in the library of the wizards' tower and in any site whose record gives `lore` spots (a wizards' town's library). The author: «просто стенды, похожие на…
+- `LorePages.js` — the pages of the books of the world's history (LoreBooks.js), drawn on canvases: the title page, the text flowing on from page to page, and the pictures — portraits and scenes painted procedurally (no image files). BookReading…
+- `MagicFlora.js` — the wild magic plants of the meadows, forests and the cold north: rules, numbers and the tables (no THREE: the tests read it).
+- `MagicFloraLife.js` — the wild magic plants in the game (rules and tables: MagicFlora.js, the look: fx/FloraModels.js).
+- `MagicWave.js` — what the two great waves share: «Circle Attack» (CircleAttack.js) and the blast of «Inspirius» (Inspirius.js). A wave rolls outwards from a point and reaches each body when its front gets to it — not all at once:
+- `Mana.js` — the blue bar at the bottom («Мана», internally still Combat.fatigue).
+- `ManaCrystals.js` — glowing blue mana crystals deep in caves.
+- `ManaRegen.js` — a stronger mage gets his mana back faster (the author: «на каждые 100 ячеек маны — 10% быстрее восстановление: 200 ячеек — 20%, и так далее»). Pure.
+- `MarketChoice.js` — Words a good is called by (its name's words, and what people say for it).
+- `MarketGoods.js` — what each market stall of a castle sells.
+- `MonsterChunks.js` — «Пентаграмма страшного монстра»: куски построек в лапе (pure, no THREE, node-testable).
+- `MonsterClimb.js` — как монстр (×7) прыгает через уступы и не застревает в щелях между скал (чистые правила, без THREE).
+- `MonsterFear.js` — как мир встречает героя в форме монстра («Pentagranium Monstrum»): кто бежит, кто нападает, кто рассеивает тьму (чистые правила и числа, без THREE; игровая часть — MonsterFearLife.js; тест tests/unit/monster-fear.test.js).
+- `MonsterFearLife.js` — игровая часть MonsterFear.js (правила и числа — там): как жители встречают героя в форме монстра. `game.monsterFear`; хост ведёт жителей (CastleLife.update → step(v, dt) для каждого, до огня и боя).
+- `MonsterForm.js` — «Пентаграмма страшного монстра»: правила превращения (pure, no THREE, node-testable).
+- `MonsterGrab.js` — монстр пентаграммы берёт существ в лапу (`game.monsterGrab`; правила и числа — GrabRules.js).
+- `MonsterTransform.js` — игровая часть «Пентаграммы страшного монстра» (правила и числа — MonsterForm.js, тело — entities/MonsterBody.js). `game.monster`.
+- `NightLife.js` — the night of the castles, villages, wizards' towers and ships.
+- `Nihilis.js` — «Nihilis Atra»: the scattering of black magic (rules, numbers and the «who/what» table: NihilisRules.js). WHITE magic, from a scroll.
+- `NihilisRules.js` — «Nihilis Atra» (the scattering of black magic; pure, no THREE, node-testable). WHITE magic, only from a scroll, instant.
+- `NihilisWords.js` — how «Nihilis Atra» is said: «нихилис атра» / «нигилис атра» — and as a Russian ear writes it. BOTH words, one right after the other: «нигилист» (an everyday word), «нихилис» alone and «атра» alone never cast it. Not close to any…
+- `ObjectSwarm.js` — the shared, pure (no THREE) logic of a SWARM of things circling a hero: «Ground Vortex» (blocks) and any other spell that conducts many things (e.g. «Левиоса Максима» for objects). Pure maths, node-testable.
+- `Offerings.js` — the game part of what must lie on a pentagram before its ritual begins (rules and numbers: PentagramOfferings.js).
+- `Overgrown.js` — «Overgrown» («Овергроун»): the raised hand points at one creature or a crowd and they are thrown apart — away from the line of the spell, to both sides and up. «Overgrown Максима» is twice as strong (further and higher).
+- `OwlBosses.js` — what the clever owl (Owls.js) can find: the bosses, by name, and where the nearest living one of a kind is.
+- `Owls.js` — clever magic owls: curious, fearless of people; fed with meat, one loves you and shows you the way to a boss you name — once.
+- `PentagramFigures.js` — рисунки пентаграмм «по точкам кольца»: 16 точек кольца (шаг 22,5°): вершины фигур лежат на них, чтобы рисунки были ровными и разными. Точка `i` — на круге единичного радиуса, 0 — сверху, дальше против часовой стрелки (шаг 22,5°).…
+- `PentagramMonster.js` — «Пентаграмма страшного монстра»: строка общей таблицы пентаграмм (Pentagrams.js `PENTAGRAMS.monster`) — её рисунок и что делает стоящему на ней (pure, no imports). Создают её, как все пентаграммы, словами «Pentagranium Monstrum»…
+- `PentagramOfferings.js` — what must LIE on a pentagram before its ritual begins (pure, node-testable; the game part is Offerings.js).
+- `PentagramRules.js` — pentagrams on the ground: the rules, pure (node-testable). The author: «рисовать пентаграммы вообще не надо» — the hero points the wand at the ground and says «Pentagranium <Name>» (PentagramWords.js); the figure draws itself…
+- `PentagramStand.js` — the picture of a public pentagram on a reading stand (the author: the drawing of the teleportation pentagram stands in the wizards' towns and the tower: «рисунок виден на нём сразу, но срисовать «в зачёт» нельзя, пока не сожжён…
+- `PentagramUse.js` — what standing on the good pentagrams does (pure rules, node-testable; the game part is Pentagranium.js). The author's words: «нарисовал один раз — потом остаётся на земле навсегда и пользоваться можно сколько угодно раз. Встаёшь…
+- `PentagramWords.js` — слова пентаграмм (чистый модуль, без THREE). Автор: «Теперь рисовать пентаграммы вообще не надо. Ты направляешь палочку на землю и произносишь пентаграмму… Все пентаграммы начинаются со слова Пентаграниум — первое слово, дальше…
+- `PentagramWorld.js` — the ready-made pairs of teleportation pentagrams between the wizards' settlements (pure; the game part is Pentagranium.worldWake / worldSleep). The author: «между городами магов стоят готовые парные пентаграммы телепортации: от…
+- `Pentagrams.js` — таблица пентаграмм (`PENTAGRAMS`): id, dark, glow, рисунок. Другие пентаграммы (дьявольской силы, телепортации, жизни, ремонта брони, горгулий, монстра, зачарования) добавляются СЮДА ЖЕ строкой `PENTAGRAMS.<id> = {...}` (см.…
+- `Pentagranium.js` — «Pentagranium <Name>»: pentagrams on the ground. The author: «Такие сложные пентаграммы никто рисовать не сможет. Теперь рисовать пентаграммы вообще не надо. Ты направляешь палочку на землю и произносишь пентаграмму. В этот…
+- `PersonalSpace.js` — personal distances of people (pure, Node-testable). One place for all the numbers.
+- `Phoenixes.js` — phoenixes: rare, beautiful fire birds that heal the wounded.
+- `PigFlight.js` — pigs have wings: how a pig takes off, flies and lands.
+- `Pilot.js` — how a creature on foot chooses its way among the others (pure, Node-testable; the walking brain of every walker).
+- `PlanetDestroy.js` — «Planet Liquidation» («Планет Ликвидейшн», «Уничтожь планету»): a planet blown up. The sixth scroll of the gods' library (the Temple of the Gods on Venus — GodsTemple.js); in Creative known at once and free.
+- `PlanetMagic.js` — the four spells of the gods' scrolls (the library of the Gods' temple on Venus): «Create a Planet», «Enlarge Planet», «Terraform Planet», «Wingardium Leviosa Super Maxima». Outside Creative each is known only from its burnt…
+- `PlantHunt.js` — the hunt of the carnivorous head as a pure little simulation (no THREE: Plants.js runs it, the tests and tools/huntbench.mjs run the very same code).
+- `PlantLife.js` — the creatures of the plant world: rules, numbers and the table of kinds (no THREE: the tests read it).
+- `Plants.js` — the plant creatures of the world (rules and numbers: PlantLife.js; the look: fx/PlantModels.js).
+- `PoseHint.js` — «я вас услышал, но сделайте сначала вот это»: ОДНО место, где написано, какая поза нужна заклинанию и что сказать игроку, если её не хватает.
+- `Potions.js` — what a cauldron does with what goes into it (pure, node-testable).
+- `PouchModel.js` — the coin pouches' 3D models (ItemTypes.makeItemModel, kind 'coins').
+- `ProtectionGods.js` — «Protection Gods» (божественная защита) and «Protection Gods Maxima»: the gods' shield.
+- `Quake.js` — what «Earthquake» does to the ground and the eye, beyond the crack SpellManager draws (how bodies fall when the ground runs away under them is Impact.js / CreatureImpact.js, for every creature and the players): - the ground…
+- `Quality.js` — keeps the game fluid on any computer.
+- `QueenBolts.js` — the rules of the Ice Queen's far blows (pure numbers, no THREE: tests/unit/queen-bolts.test.js).
+- `Ragdoll.js` — a rag doll for a person knocked off his feet, thrown («Джолт», a blast, a blow) or dead (the author: «даже не анимация, а скорее тряпичная кукла… чтобы они фактически обтекающе взаимодействовали со стеной, сундуком, с другими…
+- `RagdollPose.js` — the villager's model drawn BY the rag doll (Ragdoll.js): what is seen is where the doll's balls are, no animation.
+- `Ranks.js` — what the king may entrust to a friend (the author: «скажу визирю: это мой друг… поручаю ему должность… слушайтесь его… — визирь передал всем… градация слушания»). The king says it to his vizier (the advisor); the vizier tells the…
+- `Rebellion.js` — «недовольство королевством» (the author: «Как только король убит — тебя подчиняются все (формально), но в большей степени тебя ненавидят. Если ты вторгаешься в дома — с процентной вероятностью на тебя нападут, даже если ты…
+- `RebellionLife.js` — the game side of Rebellion.js: the hidden unrest of a castle / village toward its owner.
+- `Rebuild.js` — after the danger, the builders put the castle back.
+- `Relations.js` — how every person feels about the hero, as in The Sims (the author: «дружба и любовь… полосочки… не две полосы, а три: формальная — подчинение; дружба; любовь… как только ты становишься королем — 80 подчинений из 100… дружба…
+- `RelationsLife.js` — the game side of Relations.js: who feels what about the hero, what he does about it.
+- `RevealTarget.js` — «Раскрой свои секреты»: which thing the spell is about. Pure maths (no THREE), so it is unit-tested. The order (author): 1) what the wand points at (a narrow cone, nearest to the axis, then the nearer); 2) else any thing close to…
+- `Riders.js` — the riders of the roads (a part of Travelers.js): a knight errant, an ordinary man or a wizard going alone (or two together) right on a horse — not in a cart (the author: «одиночные рыцари на конях. Или обычные жители на конях,…
+- `Rigging.js` — ropes in real hands: the mooring lines and the rope ladders.
+- `RunningBook.js` — the running book: a rare, cheerful book on little legs.
+- `SailorDisarm.js` — «Экспеллиармус» on the crews: Captain Black Moustache's rapier, a skeleton's cutlass or axe, a sailor's cutlass.
+- `Sailors.js` — the crews of the ships.
+- `ScrollNet.js` — a scroll opened in someone's hands, as the others see it (pure numbers, no THREE).
+- `ScrollReading.js` — opening a scroll with the hands and reading it.
+- `SecondSight.js` — the two gifts of the white pentagrams of sight (rules and numbers: SightRules.js; the circles: Pentagranium.js):
+- `SegmentContact.js` — Where the segment p–q (a charge's move this frame) comes closest to the segment a–b: {s: 0…1 on p–q, k: 0…1 on a–b, dist}.
+- `Servants.js` — creatures that obey a wizard.
+- `SeveredPart.js` — a cut-off arm, leg, head or branch lying in the world: it flies off with the blow, tumbles, falls, rolls to rest flat on the ground, bleeds for a while and stays a couple of minutes before it sinks into the ground.
+- `ShieldAlert.js` — «чутьё опасности» для «Protection» скрещёнными руками (слова автора: «если какой-то игрок рядом, который, может, даже палочку уже поднял, или сказал заклинание, или заклинание летит, то если человек пытается поднимать руки — с…
+- `ShieldBounce.js` — arrows (and other things flying fast) bounce off a «Protection» / «Protection Maxima» instead of passing through it: the hand shield is a disc of light before the hand, the dome a sphere round the body. The thing hits its surface…
+- `ShieldWalls.js` — a player's «Protection» is SOLID (the author: «через него не может пройти другой волшебник, вообще другое существо»). The hand shield and the dome («Protection Maxima», the gods' shield and dome — ProtectionGods.js: the same…
+- `ShipCollision.js` — a ship as a moving piece of the world (pure, Node-testable).
+- `ShipDamage.js` — holes, leaks, fire and sinking (pure, Node-testable).
+- `ShipLayout.js` — the inside of a ship, in ship-local metres (pure, Node-testable).
+- `ShipPhysics.js` — how a heavy ship moves (pure, Node-testable).
+- `ShipTypes.js` — the three kinds of 17th-century ships (pure data, Node-testable).
+- `Ships.js` — the 17th-century ships of the sea castles.
+- `SightRules.js` — the two white pentagrams of sight (pure, node-testable; the game part is SecondSight.js, the circles are Pentagranium.js):
+- `SkeletonRecorder.js` — the skeleton's diary: no video, only what the camera network saw of the body and what every stage of the game made of it, so the arms' jerks can be found on the player's real camera (tools/armreplay.mjs plays it). The author…
+- `Skeletons.js` — «Alive» said at a grave (the village graveyards, Castles.js buildGraveyard): the dead rises. It is not a living thing — the same in principle as a living tree, and it is one (LivingTrees.js runs it: `t.skel`): the caster's…
+- `SkyRules.js` — «небесные» заклинания: те, что берут силу у неба (молния, солнечный луч, дождь, гром, салют, чёрные тучи ритуала). Слова автора: «запретить использовать их в помещении. Не запрет, а просто сообщение… Неважно что: главное, что…
+- `Slow.js` — «Даст» (Dust): sand in the eyes and the joints slows any creature down for a while. Every creature (zombies, animals, villagers, knights…) keeps `slowT` (seconds left); the player's own is in Combat.slowLeft.
+- `SmokeSwipe.js` — a wizard turns a wave of smoke aside with one stroke of the wand: from above downwards, aslant. No words, no scroll — known from the very start (the author), 3 mana a stroke. The smoke is thrown along the stroke's side and a…
+- `SocialLife.js` — people as people (Lives.js is the pure side): each has a goal of his own; the hero may call a friend on the road; a friend or a lover stands up for the hero when he is attacked, of his own will; a man watches a spell and praises…
+- `SolidGuard.js` — a body of ANY creature never goes into a solid thing, however it is pushed (the author: «житель врезается в угол дома, проваливается под кровать и в текстуры дома. Такого не должно быть… лежит как упал, но без прохода в…
+- `Space.js` — «Космос»: Flying Maxima, the flight out of the Earth's air into the Solar System, the planets, the way back. The game system (THREE); the planets' data: src/world/Planets.js (read its header: the API for the other «Космос»…
+- `SpawnSpots.js` — «Где появиться» в настройках героя Творческого мира (HeroSetup.spawn; применяет HeroApply). Автор: проверять каждого босса отдельно — герой появляется (при входе и после возрождения) рядом с ним. Чистые правила: таблица точек и…
+- `SpellBook.js` — which spells the hero knows (pure, node-testable). The ONE place for it: the cast (Game.knowsSpell → Builder.knows too), the voice's wait for a longer spell (NativeVoice.knows, Game.castLocalSpell), the pause menu's spell book…
+- `SpencerBirds.js` — the bird of Spencer (rules and the table «who / what»: SpencerRules.js; the look: fx/InvisibleModels.js).
+- `SpencerRules.js` — the bird of Spencer: numbers and the table «who / what» (pure, node-testable; the creature is SpencerBirds.js, the look — fx/InvisibleModels.js).
+- `Spider.js` — the boss: a giant spider that comes out at night.
+- `Startle.js` — a threat that passed close by (the author: «использовал заклинание, оно не попало — пролетело рядом. Но они никак не отреагировали вообще»). A charge flying past, a ray, a blast near somebody, a spell that hit him without hurting…
+- `Steadiness.js` — the skill «Устойчивость» (1 … 100). Not magic: just how well the hero keeps their feet.
+- `Stitching.js` — «Stitching» (7 mana, no scroll): a passage the hand points at is sewn shut.
+- `Stock.js` — what the hero carries for the spells that need resources (a house, a bed…).
+- `StrongMagic.js` — what the strong duel charges and the new ice DO when they touch (StrongSpells.js: the numbers and the table «на кого и на что»). Duel.js flies the charges and asks this module when one arrives:
+- `StrongSpells.js` — the strong duel spells and the new ice: their numbers, their words and the table «на кого и на что» (pure: no THREE — Node-testable). What they do in the world: StrongMagic.js; the charges: Duel.js.
+- `SunContest.js` — «To the Sun» against the black storm clouds of the gargoyle ritual (the caster's computer; the rules and numbers are GargoyleRules.js: `SUN`, `sunStep`; the burning of the gargoyles and the clearing of the sky — Gargoyles.js; the…
+- `SurfBoards.js` — surfboards: made by «Create a Board», carried by hand, ridden on waves.
+- `SurfWater.js` — the water a surfboard feels, in one place.
+- `SwimStroke.js` — real arm strokes in front of the camera, and what they do to a swimmer.
+- `Swimming.js` — deep water, air and «Air Bubble».
+- `Taron.js` — the Tarons («Тароны») of the underworld: fat, reddish, horned giants (twice a man's size) with a huge axe-hammer, in camps. Rules, numbers and the «who / what» table: TaronRules.js; the look: fx/TaronModel.js; the voices:…
+- `TaronRules.js` — the Tarons («Тароны»): rules, numbers and the «who / what» table (pure, no THREE; node-testable).
+- `Temple.js` — the abandoned Temple of the Gods in the game: its look, its solid stone, the library's pedestals with the nine scrolls, its sounds. The plan itself (pure, deterministic, made in a worker) and the API to put it on a planet are in…
+- `ThroneHall.js` — where people stand in a castle's throne room (pure: works on the castle's plan).
+- `ThrowModel.js` — how a hand lets a thing go, as a person's hand does: a real throw (any — overhand, from the chest, underhand, sidearm, a lob, down at the feet) or a calm opening of the hand. Pure logic (no THREE): tests and tools/throwbench.mjs…
+- `ThunderWave.js` — The height of the roof/ceiling over (x, y, z) that stops a bolt, or null (open sky, a hole in the roof).
+- `TotalDestruction.js` — «Total Destruction» («Тотал Дестракшн»).
+- `TownNews.js` — what a town knows has happened in it lately (the author: «жители должны знать контекст своего города, недавние события: если кто-то что-то взорвал — они знают и говорят об этом»).
+- `Trades.js` — who works in the settlement buildings (Buildings.js; generation 11): the priest in the church, the smith at the forge, the innkeeper in the tavern, the baker, the herbalist, the miller, the stableman, the granary's keeper.
+- `Travelers.js` — the people of the roads: so that the world seems alive (the author: «there are wanderers who walk about: knights errant, wandering wizards — I never met them, they must be met at least twice as often»; «a horse pulls a cart,…
+- `Ultra.js` — «Ультра качество» (Общие настройки → Графика): an addition to the usual picture, switched on and off at any moment, like the best shader packs of Minecraft. The usual mode is not touched at all: with ultra off nothing of it is…
+- `UnitedPower.js` — the game part of «Пентаграмма объединённой силы» (`Pentagranium Unitas`; rules and numbers: UnitedRules.js).
+- `UnitedRules.js` — «Пентаграмма объединённой силы» (United Power, `Pentagranium Unitas`): правила (чистый модуль, без THREE).
+- `UnitedWandModel.js` — the united wand (UnitedRules.js): thinner and finer than every found wand. Along +Y, the tip at y≈0.66, the same size as the others (a 0.2 handle, a 0.44 shaft). Made of three merged shapes (dark pearly wood, light veins and…
+- `Unstick.js` — «стоит без причины»: a walker that should be going and isn't (pure core, no THREE).
+- `UpSpell.js` — «Up» («Ап»): a raised hand and the word.
+- `V5WandAim.js` — where the V5 wand points (Items._v5Wand) as one small function, so the game and the pointing bench (tools/handbench/pointbench.mjs, tests/unit/pointing.test.js) measure the very same thing.
+- `Vanish.js` — Когда существо нельзя убирать из мира (чистые правила, без THREE). Жалоба автора: «поговорил со странником, через пару фраз он пропал». Убрать «по политике» (ушёл далеко, дошёл до дома, дорожная компания вышла из поля зрения)…
+- `VillagerBrain.js` — what castle villagers say when you talk to them by voice.
+- `VillagerCommands.js` — the castle's people carry out the player's plain-word commands (src/ai/TalkCommands.js).
+- `VillagerFear.js` — how the people of a castle and its village meet real danger (the host runs it; guests see where the people go and hear what they shout).
+- `VillagerOrders.js` — the castle's people carry out what they agreed to do.
+- `VisibleGodi.js` — «Visible Godi» (only from a scroll): steam from the wand paints a cloud; you see through the steam.
+- `VisibleGodiWords.js` — how «Visible Godi» is said (the author, by voice): «визибл годи» — and as a Russian ear writes it: «визибл гоуди», «визибл гади», «визибл боди»; in Latin «visible godi» / «visible body». Both words, one right after the other (or…
+- `Vitality.js` — the game part of «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`; rules and numbers: VitalityRules.js).
+- `VitalityRules.js` — «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): правила (чистый модуль, без THREE).
+- `VoiceGate.js` — is it really ME who said the spell?
+- `VortexCost.js` — the price of the vortexes (the author: 20 mana at the cast + 1 mana a second while the vortex lives — circling, following the wand, in a shield; out of mana it falls apart). Pure; shared by «Ground Vortex» and «Water Vortex».
+- `WandAim.js` — where the wand (or the bare hand) points, for spells cast «вверх» or «на себя» («Wind Impulse», «Invisibility»). The pure checks are exported for the tests.
+- `WandBelt.js` — the wand's own place on the body: tucked into the waistband in front, a little to the left (its handle up, for the right hand to take across), seen on the hero (look down and it is there).
+- `WandMagic.js` — what a wand in the hand does.
+- `WandSwap.js` — swapping wands between the hands (the author: «в одной руке одна палочка, в другой — другая; свёл руки так, чтобы палочки касались, и подождал около 3 секунд — палочки поменялись местами»).
+- `WandererMind.js` — how the people of the roads (wandering wizards, knights errant, ordinary travellers: Travelers.js) answer a player who attacks them or shoots near them (pure, node-testable; CastleLife / Travelers run it).
+- `Wanted.js` — the hidden «wanted level» of each player (like the stars of GTA, but never shown anywhere): how much harm this player has done to the people of the castles, the villages and the wizards' towers. It grows with what they do (a…
+- `WaterMagic.js` — water bending.
+- `WaterStorm.js` — «Water Vortex Super Maxima»: the water's answer to «Let the Hellfire Come».
+- `WaterVortex.js` — «Water Vortex» (with «Bubble» and «Frozen») and «Fire Maxima».
+- `WaveAttack.js` — «Wave Attack» (and «Wave Attack Максима»): a real wave made of the water.
+- `Weapons.js` — how the player's hands interact with physical weapons.
+- `WindImpulse.js` — «Wind Impulse» / «Wind Impulse Maxima» (only from a scroll — one scroll teaches both).
+- `WindRing.js` — «Wind Maxima» («Вайнд Максима») with the wand raised UP (or turned at oneself).
+- `WizVillages.js` — the life of the wizards' settlements (src/world/WizardVillages.js).
+- `WizardAI.js` — who the wizards are and how they decide (pure, node-testable).
+- `WizardFight.js` — the wizards of a tower (and the wanderers) fight: real duel spells from the wand (src/game/Duel.js — the same charges a player casts: «Остолбеней», «Сапира», «Айс»), a hand shield against a charge flying at them, the Master's…
+- `WizardLife.js` — the life of the wizards (a part of CastleLife for the wizards' towers and the wandering wizards).
+- `WizardMarket.js` — what the shops of a wizards' settlement sell and buy (pure, node-testable).
+- `WizardMind.js` — how a wizard (of a tower, a settlement, a hamlet, a lone wanderer) thinks in trouble (pure, node-testable). The numbers and the tables the author asked for; WizardLife / WizardFight / Burning / CastleLife only run them.
+- `WizardShop.js` — what wizards keep and sell (pure, node-testable).
+- `WizardTactics.js` — how the wizards of a tower fight one foe together (pure, Node-testable).
+- `WorldSave.js` — worlds are saved by themselves, all the time.
+- `Wreck.js` — things in a building that is blown apart (doors, beds, chests, window glass).
+- `ZombieSpawn.js` — zombies come out of the dark.
+
+### `src/entities/` — модели: герой, жители, зомби, оружие, кисти, позы (31)
+
+- `Appearance.js` — how a hero looks: face, hair, clothes, shoes, hat.
+- `ArenaPoses.js` — how the wizards try at the arena (src/game/ArenaDuels.js; the author: «волшебники должны стараться — до 12 разных анимаций, как они стараются победить»), and the crowd on the stands.
+- `ArmSolver.js` — the hero's arm from the camera's picture, as a human arm moves (pure, no THREE).
+- `ArmorLook.js` — armour and robes on a hero (a VoxelCharacter: me and the other players) and as things (in the hand, on the ground). Boxes from code, like the clothes (Appearance.js).
+- `BoardModel.js` — a wooden surfboard: a pointed nose, the widest part a little behind the middle, a squash tail, rocker (the nose and tail curve up), a darker stringer down the middle and three fins under the tail. Local frame: +X right, +Y the…
+- `Character.js` — the voxel player avatar (local player and remote players).
+- `Charisma.js` — what makes the talk of a villager alive (the author: «нет энтузиазма и харизмы»). Pure (no THREE / DOM): tests/unit/charisma.test.js. - the character (`archetypeOf`): an energetic trader, a curt guard, a solemn king, a grumbling…
+- `Chest.js` — map chest that opens when the player comes close.
+- `ChoreAnim.js` — how a villager's body does its chore (src/game/Chores.js), and the things of it.
+- `CommandPoses.js` — the body's answers to «присядь», «отдай честь», «станцуй», «помаши», «кивни», «смейся», «обними» (src/ai/TalkCommands.js; carried out by src/game/VillagerCommands.js).
+- `CustomCreatureModel.js` — how a creature of one's own looks and moves («Да пусть создастся существо …»).
+- `DarkLordLook.js` — the true dark mage's outfit (DarkLord.js, robe code 5 in the worn code): it REPLACES the clothes and the robe. Black-violet cloth with folds and frayed edges, a ragged cloak down the back with runes stitched along it, a high…
+- `DarkSkin.js` — метки чёрной магии на теле (DarkMagic.js `darkLook`): тёмные пятна («зародыши проклятия»), растущие по уровню прожилки, чернеющее тело, потемневшая одежда, трещины на доспехах и чёрный дымок от тела.
+- `DetailedHand.js` — "V2 (Точная)" voxel hand drawn straight from the raw MediaPipe landmarks with an InstancedMesh. Original algorithm and constants, rewritten without per-frame allocations.
+- `DiabolosModel.js` — модель Дьяволоса, огромного прикованного дьявола ада (DiabolosRules.js — правила, Diabolos.js — игра).
+- `DivineSwordModel.js` — the look of «Божественный меч» (DivineSword.js): a long, slender sword born of the Ice Queen's rod and a classic sword (Pentagranium Unitas). Model space as every weapon (WeaponModels.js): the pommel at the origin, the point…
+- `Emotions.js` — what a person feels, and how it shows on his face and in his bearing (the author: «как у Sims… анимации общения под разные ситуации… зависит от эмоций: разгневан, счастлив… все эмоции подключи… и на лице искривления, мимика…
+- `FaceExpr.js` — the player's face as the camera sees it (MediaPipe's 478 face points), read as a few muscles' worth of numbers for the «Реалистичный» hero: the eyes closing (each), the brows (each, and the inner ends: worried / frowning), where…
+- `Gestures.js` — what a person does with his hands, head and body while he talks (the author: «анимации общения как в Sims… до 100 под разные ситуации… зависит от эмоций»). Pure (no THREE / DOM): tests/unit/gestures.test.js.
+- `HandPose.js` — the whole hand as the camera network sees it (pure maths).
+- `ImperiusEyes.js` — the white burning eyes of a hero whose mind is in another body («Империус» — ImperiusControl.js).
+- `LimbSurgery.js` — cutting a limb off a voxel model exactly where a blade went through it (pure three.js: runs in node for the tests).
+- `MonsterBody.js` — тело героя в форме страшного монстра («Пентаграмма страшного монстра», MonsterForm.js).
+- `MoveStyle.js` — How a person moves — each in their own way (VillagerModel): a walk of their own for everybody (the king's stately step, a knight's march, an old man's shuffle…), and for a wizard his own fighting manner — his stance with the…
+- `RealisticBody.js` — the «Детальный» hero (in the settings «Модель героя → Детальная»; the standard one stays the default): the standard hero cut finer and bending like a body — the same sizes, colours and pixel face, more pieces, real joints (the…
+- `ShipModel.js` — how a 17th-century ship looks (three.js).
+- `SimplifiedHand.js` — "V3 (Стабильная)" voxel hand.
+- `VillagerModel.js` — light voxel people for the castles: builders, farmers, merchants, knights and kings.
+- `Weapon.js` — a physical sword/axe.
+- `WeaponModels.js` — realistic procedural sword and axe.
+- `Zombie.js` — enemy AI and visuals.
+
+### `src/fx/` — эффекты: частицы, свет, заклинания, пентаграммы (48)
+
+- `ArenaBoardFx.js` — the magic board of a duel arena: a hologram floating over the road by the steward's stall (ArenaBoard.js tells what it says: the duel now and how long it may last, the queue, the result and the pay-out).
+- `ArenaDollsFx.js` — the three small figures on the arena steward's counter (the author: «как крытый рынок/прилавок продавца, а вместо товаров — МАЛЕНЬКИЕ ФИГУРКИ волшебников (не во весь рост), подписанные: младший / средний / сильный… сейчас они…
+- `ArenaDomeFx.js` — the look of the arena's magic dome (rules — game/ArenaDome.js).
+- `ArenaMarkFx.js` — the lit places of a duel (the steward's sign-up, ArenaSteward.js; the rules — ArenaDuels.js).
+- `ArenaTagFx.js` — the sign over a duellist at the arena (ArenaTag.js; Creative only): big, readable from the stands, above his head. One sprite and one small canvas per sign (two at most per computer, kept and reused); the picture is redrawn only…
+- `AvadaLook.js` — how «Авада Кедавра» looks (the author: «ядовито-зелёным, и звук — явно страшным»).
+- `BrightFlowerFx.js` — draws every Brightflower («Ярколето») near the player with four instanced draws, whatever their number: stems (+ leaves, calyx)   the petals (they open and close in the vertex shader)   the flame in the cup   the glowing heart.…
+- `BrightFlowerModel.js` — the look of the Brightflower («Ярколето», BrightFlower.js / PlantLife.BRIGHT) and of its heart.
+- `CanaryModel.js` — the look of the Canaries («Канарики», Canaries.js / CanaryRules.js): small, broad swamp people with huge arms, big flat feet, a heavy brow, pointed ears and a crest of canary-yellow hair; dressed in patched hides edged with…
+- `CustomPlantModel.js` — how a plant of one's own looks («Да пусть создастся дерево / цветок / гриб …» — CustomPlants.js).
+- `DarkLordFx.js` — how the turning into a true dark mage looks (DarkLord.js, DarkLordLife.js). Cheap by the project's rules: - THREE meshes made ONCE (hidden when the rite is not on), their shaders compiled while loading (`darkLordSamples`,…
+- `DevilDeathFx.js` — смерть Дьяволоса от божественного меча, «ещё эффектнее» (слова автора): он РАЗЛЕТАЕТСЯ во все стороны.
+- `DevilFires.js` — огонь вокруг Дьяволоса (просьба автора: «вокруг Дьяволоса везде горел ОГОНЬ… СВЕТИТ на него и окружение — чтобы он красиво читался в красном свете, были видны рога, лицо, брюхо, цепь; особенно красиво внутри ямы — подсветка…
+- `DivineCreationFx.js` — how «Да пусть создастся …» looks (DivineCreation.js), the same on every computer.
+- `DivineSwordFx.js` — the divine sword alive in the world (DivineSword.js, DivineSwordModel.js), once a frame for all of them: the shared clock of its glow shaders, the soft sparks that drift up from the blade, the trail of light along a fast swing,…
+- `Effects.js` — every visual effect of the game behind one object. All buffers, meshes and lights are created once at load time.
+- `EnchantGlow.js` — the look of an enchanted thing («Пентаграмма зачарования», Enchant.js): a thin shell of light with a pattern of runes round it, in the colour of its level (lilac, violet, gold, pearly white; a higher level — a brighter shell and…
+- `FallingBlocks.js` — a piece of a building falling after a blast (src/world/Collapse.js, Structure.js).
+- `FireworkShapes.js` — what a salvo of «Fireworks» is made of (pure: numbers only, no THREE; the same on every computer: all the chance comes from the salvo's seed).
+- `FireworksFx.js` — the look and the sound of «Fireworks» salvos (the rules are Fireworks.js; the shapes — FireworkShapes.js).
+- `FloraModels.js` — the look of the wild magic plants (MagicFlora.js rules, MagicFloraLife.js system).
+- `GargoyleHeadModel.js` — «Голова горгульи» (вещь: ключ возврата из ада — HellRules.HEAD). Отбитая каменная голова той же красной породы, что и горгульи (их текстура: камень с тлеющими прожилками — GargoyleModel.gargoyleTextures): вытянутая морда с…
+- `GhostFx.js` — how the ghosts of the Castle of Ghosts look (Ghosts.js; rules: GhostRules.js). ONE InstancedMesh for all of them (one draw call).
+- `GhostProps.js` — the loose things of the Castle of Ghosts (GhostSite.props: chairs, stools, candles, candelabras, urns), drawn and moved (rules and numbers: game/GhostRules.js; the poltergeist that moves them: game/Ghosts.js).
+- `GroundVortexFx.js` — the blocks of «Ground Vortex» (flying round, in a train, in the shield, thrown) drawn as the world's own blocks.
+- `HouseMagicFx.js` — how the magic of «Create a House» / «Improve a House» looks (every computer the same).
+- `IceLook.js` — how «Айс» looks.
+- `InfernoStream.js` — the «Инферно» flame stream: its rules (pure, Node-testable) and its look.
+- `InvisibleModels.js` — the looks of the invisible world (Invisibles.js): the bird of Spencer, its feather, and the sheaf of Beslan's grass.
+- `Iridescent.js` — a shimmering material (the clever owl's plumage, its feather — Owls.js): the colour runs through the rainbow with the angle of view and slowly with the time, like a soap bubble or a peacock's neck. No light of its own; one clock…
+- `JoltLook.js` — how «Джолт» looks: a short, sharp bolt of invisible air.
+- `Particles.js` — pooled, instanced particle systems.
+- `PentagramFx.js` — how the pentagrams of «Pentagranium <Name>» look (Pentagranium.js, Pentagrams.js). Cheap by the project's rules: - the TRAIL of the wand on the ground: ONE preallocated ribbon mesh (a wide soft scorched band and a narrow bright…
+- `PlantModels.js` — the look of the plant creatures (PlantLife.js rules, Plants.js system) and of what they leave.
+- `ScrollArt.js` — how a scroll looks inside (the author: «текст внутри свитка — контрастный, красивый, магический: название красивым цветом по школе, буквицы, золотистые руны на краях, бумага с текстурой, потёртостями, печатью, а может «картинка»…
+- `SeaSurface.js` — the moving surface of the sea.
+- `SeeThroughFx.js` — the window of «Visible Godi» (the rules: game/VisibleGodi.js; the steam itself: SteamFx.js).
+- `SpellManager.js` — voice spells.
+- `SteamFx.js` — the steam of «Visible Godi» as everybody sees it (the rules: game/VisibleGodi.js).
+- `Storm.js` — the weather of «Lightning Strike» and «Let it rain».
+- `SunBeam.js` — «To the Sun»: a golden beam from the raised hand into the sky, the clouds part round it in a widening bright ring, sun rays pour down and the rain dies away. Everybody near sees it (the spell is sent to all).
+- `TaronModel.js` — the look of the Tarons («Тароны», Taron.js / TaronRules.js): paunchy, fat, reddish men with horns, TWICE a man's size.
+- `UltraPost.js` — the picture of «Ультра качество», made after the scene is drawn (the way the Minecraft shader packs — BSL, Complementary, SEUS — finish theirs): - the scene into a bright (HDR) picture with its depth, - bloom: what is brighter…
+- `UltraUniforms.js` — the numbers «Ультра качество» shares with the world's shaders.
+- `UltraWater.js` — water in «Ультра качество» (the sea's waves, lakes and rivers): the sky mirrored in it (strong at a glancing look, clear water looking down — the Fresnel law), small ripples running over it, the sun's (or moon's) glittering path,…
+- `WaterFlow.js` — water that FLOWS: streams, jets, swirling bands, a funnel.
+- `WaterMaterial.js` — living water for the water-bending spells.
+- `WizardFx.js` — what the wizards' small magic looks like (on every computer).
+
+### `src/audio/` — звук: синтез, музыка заклинаний, звуки существ (32)
+
+- `ArenaSounds.js` — the duel arena's sounds (src/game/ArenaDuels.js), synthesized ahead (SoundManager.prewarmStep): cheer    the stands roar: many voices, a swell of noise with shouts in it   (a hit, a good save, the win) groan    the crowd's…
+- `CanarySounds.js` — the voices and noises of the Canaries (Canaries.js), synthesized ahead (SoundManager.prewarmStep): grr     «Грр!» — a low rough snarl as they see a trespasser          ha      «Ха!» — the shout of a throw lift    a grunt of…
+- `DiabolosSounds.js` — голос и вес Дьяволоса (Diabolos.js), синтез заранее (SoundManager.prewarmStep), не в момент игры: snore   храп: долгий низкий хрип на вдохе, клокочущий выдох с шипением (дым из ноздрей) step    копыто встало: глубокий удар, земля…
+- `DragonSounds.js` — the voices and the weight of a dragon in a fight (Dragons.js), synthesized ahead (SoundManager.prewarmStep), never at the moment of the first play: step   a great foot set down: a deep thud, the earth giving                   …
+- `EchoGuard.js` — was it ME who said it, or a friend's voice from my speakers? (pure: tests, voicebench)
+- `GameVoices.js` — what the game itself said aloud, and when: the villagers', sailors', wizards' voices (src/audio/Speech.js). The microphone hears the speakers too. A spell's word in their line — a merchant's «…поджаренный на костре» («костёр» is…
+- `GargoyleSounds.js` — the voices of the infernal gargoyles and of their ritual (Gargoyles.js), synthesized ahead (SoundManager.prewarmStep), never at the moment of the first play: roar     a low, rough growl with a vowel's formants sliding            …
+- `GhostSounds.js` — the sounds of the Castle of Ghosts (Ghosts.js; ids and what they are: GhostRules.GHOST_SOUNDS), synthesized ahead (SoundManager.prewarmStep), never on the first play. Every one has its own small echo of stone halls. steps   four…
+- `GrabSounds.js` — лапа монстра и тело в ней (MonsterGrab.js). Делается заранее на экране загрузки (SoundManager.prewarmStep), никогда в момент. Каждый звук — из нескольких слоёв: grab    — огромные пальцы смыкаются на теле: глухой мясистый шлепок…
+- `HouseTheme.js` — the tune of «Create a House» / «Improve a House» (HouseMagic.js), made by synthesis.
+- `MaximaShout.js` — «Максима!», выкрикнутая в столкновении лучей, считается выкриком, даже если распознавание слышит её как сплошной поток («максимум максимум максиму сим максима…»). Автор: «пусть мои выкрики срабатывали, даже если они кажутся…
+- `NativeTTS.js` — the villagers' neural voices as a program of its own on this computer (tts_native.py: sherpa-onnx with the same Supertonic 3 model, below normal priority — the game's frames come first). This object stands in for the old web…
+- `NeuralVoice.js` — the neural villager voices (Supertonic 3, ten Russian voices: F1–F5 women, M1–M5 men) running in a Web Worker in the browser.
+- `OwlSounds.js` — the clever owl's voice (Owls.js), synthesized ahead (SoundManager.prewarmStep): hoot   a soft low «у-ху… ху-ху»            (curious, «follow me») sad    a long falling hoot                  (no such boss, a feather burst) wings …
+- `PlantSounds.js` — the sounds of the plant creatures (Plants.js), synthesized ahead (SoundManager.prewarmStep): rustle  leaves stirring (a telewilpin or a head being touched)      prick  a thorn's tick and a tiny glassy ring lash    a tendril…
+- `SoundGroups.js` — Every sound of the game belongs to one volume group of the settings (Общие настройки → Звук). The author: «звуки не регулируются в настройках — например, разрушение домов». The table is the guard: tests/unit/sound-groups.test.js…
+- `SoundManager.js` — music + sound effects.
+- `SpaceSounds.js` — the sounds of «Космос» (Space.js), synthesized ahead, a few milliseconds a frame (SoundManager._prepare runs these generators): never made at the moment they are first heard.
+- `Speech.js` — villagers' voices.
+- `SpellMusic.js` — the sounds of the spells that had none (or only a borrowed one), made by synthesis.
+- `SpellPhrase.js` — is the phrase the spell itself, or talk with a spell's word in it?
+- `SpellSpotter.js` — which spell was said, found by its sound.
+- `SpencerSounds.js` — the voice of the bird of Spencer (SpencerBirds.js), synthesized ahead (SoundManager.prewarmStep): chirp  two or three bright, clear notes, the last one sliding up — a little pearly ring after it trill  a quick warble, rising and…
+- `TaronSounds.js` — the voices and noises of the Tarons (Taron.js), synthesized ahead (SoundManager.prewarmStep): roar   a deep bellow as a Taron sees a trespasser        grunt  a pig-like grunt (idle, a swing)       hurt  a thick cry when hit die  …
+- `ThrowSounds.js` — the sounds of a thing leaving the hand and landing (Items: ThrowModel). Made ahead on the loading screen (SoundManager.prewarmStep), never in the moment. Each is layered, not one beep: whoosh — the air the thing cuts: noise…
+- `VoiceCast.js` — who speaks with which voice (pure, testable in node).
+- `ruText.js` — a line made ready to be read aloud in Russian: no stage directions, emoji or markup, and numbers written as words («5 монет» → «пять монет»), because a neural voice reads letters, not digits.
+- `spellMusic.worker.js` — the spells' tunes, effects and loops (SpellMusic.js): ~1.5 s of synthesis, never in a frame of the game. In: {sr}; out: one message per sound {key, data} (moved), then {done: true}.
+- `supertonic.js` — the Supertonic 3 text-to-speech pipeline (pure: no DOM, no fetch), so the same code runs in the voice worker (onnxruntime-web) and in node tests (a fake or onnxruntime-node `ort`).
+- `theme.worker.js` — the long tune of «Create a Castle» (HouseTheme.houseTheme for 30 s, its grandest form): ~0.2 s of synthesis, never in a frame of the game. In: {sr, seconds, level}; out: {data} (moved).
+- `tts.worker.js` — the neural villager voices (Supertonic 3) off the main thread, so the game never stutters while a line is being synthesized.
+- `voicechat.worklet.js` — the voice chat's sound work, on the audio thread (never in the game's frame):
+
+### `src/input/` — камера и позы: фильтры, жесты, руки (20)
+
+- `ArmGuard.js` — the arms (shoulder → elbow → wrist) between the camera network and the hero. Only the arms: the palms and fingers have their own guard (TrackingGuard.HandStabilizer).
+- `HandSmooth.js` — «Плавность камеры» for the hands and the wand too (the author: «нет плавности»; the setting used to steady only the head's view). 0 % — as quick as the camera can (every tremble shown), 100 % — as smooth as it gets (slower); the…
+- `HeadFromBody.js` — the head's turn read from the body net's own face points (the nose and both ears) when the face net finds no face. Standing a step farther from the camera (seen down to the knees) the face is too small for the face net and the…
+- `JumpReader.js` — a real jump, from the camera's body points.
+- `LegReader.js` — what the legs do, from the camera's knees and ankles.
+- `LegSafe.js` — what the camera may say about the legs, made safe before it is drawn or sent. The camera gives a leg only as «lifted this much» (0…1) and «heel kicked up»; a stranger's number (a bad packet, a camera guessing the legs it cannot…
+- `NativeVoice.js` — the voice heard by voice_native.py (the speech network on this computer).
+- `PocketHints.js` — the quiet hint in the camera's window (bottom right): where the body's «pockets» are, as the camera sees the player — the things' pocket (the coins are taken there too) and the wand at the belt — so one can check WHERE to put the…
+- `PocketHintsDraw.js` — draws the hints of PocketHints.js on the camera window's 2D canvas: for every place a bright outlined mark (a dark edge under a coloured line, a see-through fill) for the things' pocket (yellow: the next thing's picture in it and…
+- `PoseInterpreter.js` — turns landmarks into game input (original rules): arm landmarks, run intensity (shoulder bobbing), punch (fast wrist), crouch (nose height with hysteresis), head yaw/pitch (Kalidokit face solver).
+- `PoseService.js` — webcam → neural networks → game input.
+- `PoseSmoother.js` — smooth motion between camera results.
+- `RealStick.js` — a real stick (a pen, a paintbrush, a wand) in the player's hand.
+- `StepReader.js` — walking and running from the legs: steps on the spot.
+- `StickDetector.js` — a real stick in the hand, found in the browser (when the camera program pose_native.py with stick_detect.py isn't there).
+- `StoopReader.js` — how far the person bends down (0 standing … 1 bent low), from the camera.
+- `TrackingGuard.js` — safety layer between the neural network and the game.
+- `VisionRunner.js` — runs the MediaPipe Tasks models (pose, hands, face).
+- `VoiceService.js` — the voice: what the player says (spells, talk to villagers).
+- `vision.worker.js` — MediaPipe inference off the main thread. Protocol: main -> worker  {type:'init', baseUrl, quality} worker -> main  {type:'ready', delegate, poseModel} / {type:'error', message} main -> worker  {type:'frame', bitmap, ts}   (bitmap…
+
+### `src/net/` — сеть: PeerJS, синхронизация, голосовой чат, аватары друзей (7)
+
+- `NetSync.js` — game-level multiplayer protocol.
+- `Network.js` — peer-to-peer multiplayer transport (PeerJS / WebRTC).
+- `PlayerPresence.js` — who is in the world right now, and when the others may SEE them (чистые правила, без THREE и сети).
+- `RemoteAvatar.js` — another player in the world. A full VoxelCharacter (head and body visible) driven by network snapshots, smoothly interpolated, with a floating name tag.
+- `RemoteTwist.js` — angles of another player's body, always the short way round. The body (and so the legs) and the head come as separate angles; a human neck turns about ±120° from the chest, no more. An angle that is stepped without wrapping at ±π…
+- `VoiceChat.js` — the players' voice chat (the author: «голосовая игра через весь мир… или только в радиусе… или отключить»).
+- `VoiceChatRules.js` — the voice chat between players: its modes, settings and how loud a friend is heard (pure: tests).
+
+### `src/ui/` — интерфейс: меню, HUD, справочник, настройки (26)
+
+- `AllLogsTab.js` — ignore
+- `CameraPanel.js` — when the camera doesn't start.
+- `CharacterEditor.js` — the «Персонаж» tab: make your own heroes.
+- `Codex.js` — the menu's «Заклинания», «Предметы» and «Механика игры» tabs.
+- `CreateMemory.js` — окно «Создать мир» помнит, что игрок выбрал в прошлый раз, ОТДЕЛЬНО для каждого режима (Творческий, Выживание, Свободный мир, Карты): настройки героя Творческого, «Гладкий мир», последняя карта. Хранится в кэше браузера…
+- `DuckTripleClick.js` — Пасхалка: три быстрых нажатия на «🎮 Одиночная игра» → кряканье.
+- `DuelEndUi.js` — конец дуэли в режиме «Перед дуэлью» (ArenaDuels.startDuelMode): крупная надпись «Вы победили!» и через несколько секунд окно «Хотите повторить дуэль?» — выбрать соперника, начать заново или выйти в меню. Тексты — для игрока, на…
+- `GameNames.js` — the game's name and the names of the modes, in one place.
+- `HeroSettingsUi.js` — раздел «Настройки героя» в окне создания Творческого мира (правила — game/HeroSetup.js). `mountHeroPanel(root, prefix)` рисует раздел внутри `root` и возвращает `{ read, set }`: `read()` — настройки в виде, который понимает мир…
+- `HintPolicy.js` — the setting «Подсказки» (the author: «если подсказка вылезла хотя бы один раз, смысл её показывать дальше нету»): 'once'   (default) every hint is shown once, then never again — remembered in this browser, for all worlds;…
+- `Hud.js` — in-game HUD, damage flash, FPS counter and minimap. DOM elements are looked up once (the original queried them every frame).
+- `ItemIcons.js` — the pictures of the things in the slots under the fatigue bar (and in the «hand» cell).
+- `JournalTab.js` — @param {Document} [doc] @param {() => ({name, title, text}/null)} [live]  the spell journal of this game (shown when there is no file)
+- `LogGamesView.js` — Wire a button: click → copy `getText()` → «Скопировано» for 1.5 s.
+- `MapEditor.js` — 2D Grid-based Map Editor (original editor, ES module). Features: Drag-to-paint, multiple zombies per cell (up to 10)
+- `PlayerPreview.js` — the small 3D hero of the «Игрок» tab (own renderer; created on open, disposed on close). Same scene as the character editor's preview: the hero with their look, armour and robe on.
+- `PlayerSheet.js` — the «🧙 Игрок» tab of the pause menu: who the hero is and what they have (nothing here is invented: a row appears only when the game really has the value).
+- `PlayersTab.js` — Escape → «👥 Игроки». The only place where the list of players lives (in the live game nothing of it is drawn: the list used to cover the coins counter). One row per player: a dot in his colour, the name, host / guest, the link,…
+- `QuickSettings.js` — the numbers of the settings that sit in «Общие настройки» (Escape → «Общие настройки», or the main menu → «Общие настройки»): the camera smoothness, the sensitivity, the minimap's size, the slots' size and the hand version.
+- `RelationBars.js` — the Sims-like bars over the person I talk to: Подчинение, Дружба, Любовь (src/game/Relations.js). One sprite for the whole game, moved to the person (the author: «взаимоотношения будет видно… плюс три к дружбе… если там ноль, то…
+- `ServerLost.js` — the game's program on this computer (the launcher / server.py) is gone while the window is open (it was closed, it crashed, the port was freed for another program): the window says so plainly instead of breaking quietly, and…
+- `SpeechBubble.js` — a comic text bubble above a 3D character.
+- `TestMode.js` — "🛠️ Настроить Камеру (Тест)": orbit view of the character, red marker = FPV camera position, hand / weapon sliders, live tracking. Same UI and behaviour as the original test mode (with its crashes fixed).
+- `UpdateScreen.js` — the game gets another version while it runs (the launcher does the work, launcher/zns_launcher.py → /__launcher/update), behind a loading window: - the menu opens and a newer version is out: it is downloaded at once (no «please…
+- `VoiceChatUi.js` — the voice chat's settings: «Создать сервер» (the mode, chosen by the host) and Escape → «Общие настройки» → «🎙 Голосовой чат» (the mode on the go, the friends' loudness, the microphone and the output, «нажми и говори», the…
+- `WindowControls.js` — the menu is a window of its own: its own «свернуть», «во весь экран» and «закрыть» buttons (drawn by the game, not by Windows), its own title bar to drag the window by, and the game itself plays full screen.
+
+### `src/ai/` — разговор с жителями: команды, нейросеть, отклики (9)
+
+- `LocalLLM.js` — optional small chat neural network running in the browser.
+- `NativeLLM.js` — the villagers' conversation network as a program of its own on this computer (llm_native.py: llama.cpp's llama-server, below normal priority, on the processor — the video card stays the game's). This object stands in for the old…
+- `TalkAcks.js` — the villagers' quick words: «Слушаюсь!», «Есть поднять паруса!», «К оружию!», «Ага…». A person answers an order at once — with a word, a nod, a step — and only then (if at all) at length. These words are short, said by role and…
+- `TalkActions.js` — what a villager can DO when you talk to them.
+- `TalkCommands.js` — what you can ORDER or ASK a villager in plain words (the author: «рыцари не понимают команд… нужно ПОСТОЯННОЕ живое взаимодействие и ОГРОМНОЕ количество разных команд… если он что-то не может — отвечает, что не может, а не…
+- `TalkFlow.js` — WHEN a villager answers (the author: «отвечать МОМЕНТАЛЬНО… как человек»).
+- `TalkMind.js` — a villager really talks: a small neural net understands what you said (any words, not a list of phrases) and answers in character; when it means to DO something it calls one of the game actions (TalkActions TOOLS). The game…
+- `TalkTrace.js` — a stopwatch on every talk turn (the author: «жители медленно отвечают… нужен конкретный бенчмарк»): when the player's speech really ended (by the sound, not the text), when the phrase was heard (a look while still said / the…
+- `llm.worker.js` — runs a small chat LLM (Transformers.js + ONNX Runtime Web) off the main thread, so the game never freezes while the model thinks.
+
+### `tools/` — стенды и замеры (`node tools/<имя>.mjs --check`) (103)
+
+- `apple-screenshots.mjs` — Pictures of the apple trees (AppleTrees.js): the ordinary one with red apples and the golden magic one, by day
+- `armbench.mjs` — how true to the player's arm the hero's arm is (ArmSolver vs the old getRelativeDirection), on human arm movements seen by a noisy camera: a throw (wind-up behind the shoulder, release, follow-through), a T-pose, a reach, arms…
+- `armreplay.mjs` — a real recording of the player's camera (F9 in the game: recordings/zns-hands-….json) played through the game's own arm chain - TrackingGuard.PoseStabilizer (ArmGuard) → PoseInterpreter → PoseSmoother → VoxelCharacter (ArmSolver,…
+- `armstab.mjs` — does the hero's arm tremble? The author: «когда я поднимаю руку вверх, она может шататься, дрожать… когда я близко подхожу к стене или горе, рука… начинает дрожать, у неё истерика… когда размахиваю рукой — тоже дрожание».
+- `avada-screenshots.mjs` — Screenshots of «Авада Кедавра» (the cast and the hit) for docs/spells/avada/.
+- `bodybench.mjs` — bodybench — «тело не проходит сквозь твёрдое»: тесные дома × все толчки (10–60 м/с, 16 углов) × все виды тел. node tools/bodybench.mjs [--check] [--n 300] Три замера на одном домике (стены из блоков, кровать, сундук, шкаф,…
+- `book-screenshots.mjs` — Screenshots of the book and the scroll in the hands (docs/items/books), driven by synthetic camera
+- `bootcheck.mjs` — the boot cache never changes the game (the author: «быструю загрузку — но НЕ СЛОМАТЬ ИГРУ»). node tools/bootcheck.mjs [--check] [--keep DIR]
+- `boss-screenshots.mjs` — The scenes. Each runs in the page: stages its boss and returns where the camera stands and what it looks at ({cam: [x, y, z], at: [x, y, z]}, or {skip: 'why'}). `h` — helpers (below).
+- `brightflower-screenshots.mjs` — Pictures of the Brightflower («Ярколето», BrightFlowerFx.js): a group of five shut / half open / open, angry (the cup turned on a hero post),
+- `buildbench.mjs` — the settlement buildings (src/world/Buildings.js) as plans seen from above, layer by layer, and their checks. node tools/buildbench.mjs [kind ...] [--layers 0,2,5] [--face 0] [--top] [--fits] node tools/buildbench.mjs --world…
+- `buildings-screenshots.mjs` — Pictures of the settlement buildings (src/world/Buildings.js) as the game's voxel shader draws them, with a hero-sized post (3.5 m).
+- `canary-screenshots.mjs` — Pictures and numbers of the Canaries (CanaryModel.js): a line-up of looks, the poses (walk, lift, carry, windup, throw, shove, roar, dead) next to
+- `chest-screenshots.mjs` — Screenshots of the chests (docs/items/chests): each look (Chest.js styles) shut and open, side by side,
+- `collapsebench.mjs` — buildings coming down in the real game (Structure.js, Collapse.Settling, FallingBlocks): what falls, in how many rounds, and what it costs a frame. Run: node tools/collapsebench.mjs [--only колонны,угол,бомбардо,разрушение]…
+- `creativebench.mjs` — the Creative start scene, measured (the author: «в Творческом раньше было ~75 FPS, теперь 50»). node tools/creativebench.mjs [--frames 120] [--seed 20261015] [--level high/max/ultra] [--check] [--profile] [--alloc]
+- `creature-screenshots.mjs` — (--plants: plants of one's own — CustomPlantModel.js)
+- `crowdbench.mjs` — how the people of the game really walk when something dreadful happens (the author: «Нужно провести глобальный тест того, как вообще персонажи ходят в игре»). Run:  node tools/crowdbench.mjs [--site tower/castle] [--seconds 40]…
+- `devil-arrival-screenshot.mjs` — «Вид с точки появления в аду в сторону Дьяволоса» — в НАСТОЯЩЕЙ игре (воркеры, туман ада, загрузка Дьяволоса).
+- `devil-fightbench.mjs` — Бой с Дьяволосом в НАСТОЯЩЕЙ игре (ад, воркеры): игрок в ~100 м от его места (за цепью), потом в ~45 м (в досягаемости);
+- `devil-imperius-check.mjs` — «Империус Максима» в Дьяволоса в НАСТОЯЩЕЙ игре: вселиться (как после удачного броска), «бежать на месте», повернуться, ударить —
+- `devil-screenshots.mjs` — Снимки Дьяволоса: node tools/devil-screenshots.mjs [--out docs/media] — стенд tools/devil-view.html (сервер — на этом же процессе).
+- `divine-probe.mjs` — Live check of «Да пусть создастся …» in a real browser (Creative): the voice path, the seed, the gods' answer
+- `divine-sword-screenshots.mjs` — Pictures of the divine sword beside the plain one (tools/divine-view.html): node tools/divine-sword-screenshots.mjs [--out docs/media] → docs/media/divine-sword-<name>.png and the sizes of both (Box3, metres).
+- `duelbench.mjs` — the Creative duel-only start («Перед дуэлью на арене»), run in the real game and measured. node tools/duelbench.mjs [--seed 7] [--seconds 40] [--foe mid/weak/strong/master] Shows: that the hero stands on his mark facing the…
+- `dungeon-screenshots.mjs` — Pictures of the dungeons as the game's voxel shader draws them (Dungeons.js): a ruin from outside, a hall under the ground with its roof cut away.
+- `dungeonbench.mjs` — Замер данжей без игры (Dungeons.js, DungeonBuild.js, DungeonRuins.js): сколько их на карту, размеры, число сундуков, связность проходов.
+- `entrybench.mjs` — вход в мир, замер (жалоба автора: «при заходе в Творческий игра зависла на ~3 минуты»). node tools/entrybench.mjs [--spot start/dragon/queen/...] [--gen 17] [--cpu 4] [--check] [--mode creative]
+- `flashlight-screenshots.mjs` — «Flashlight» before/after pictures: node tools/flashlight-screenshots.mjs → docs/media/flashlight-<scene>-<old/new>.png
+- `flightbench.mjs` — a repeatable measurement of the game's smoothness in flight over the new world (generation 5). Run:  node tools/flightbench.mjs [options]
+- `furnish-screenshots.mjs` — Pictures of the castle's furnished rooms as the game's voxel shader draws them — the roof of the room cut away (a clipping
+- `furnishbench.mjs` — what stands in the rooms of the castles (the keep's rooms: size, furniture, chests). node tools/furnishbench.mjs [--seeds 20261015,7,99] [--gen 7/8] [--cells 2] [--rooms] Per castle: every room's floor (blocks), its height, the…
+- `gargoyle-bench.mjs` — the pentagram of the infernal gargoyles, run in the real game (Creative), measured and photographed. node tools/gargoyle-bench.mjs [--out docs/gargoyles] [--dt 0.05] [--size 960x540] [--no-shots] [--check] [--hold 40]
+- `gargoyle-screenshots.mjs` — Pictures of the infernal gargoyle (GargoyleModel.js): poses in a row beside a hero-sized post (3.5 m) and the owl's size (1.2 m).
+- `gate-screenshots.mjs` — Pictures of the keep's forged-iron gates (src/game/GateModel.js): the four variants side by side (two leaves each, shut), a leaf opened, and a
+- `gestures-screenshots.mjs` — A contact sheet of the talk gestures (docs/media/gestures-<prefix>.png): four characters (a trader, a knight, a king, a mage) × four
+- `ghost-screenshots.mjs` — Pictures of the ghosts of the Castle of Ghosts (GhostFx.js) and the castle's loose things (GhostProps.js): a dark stone hall, a 3.5 m red post (the hero)
+- `ghostbench.mjs` — the Castle of Ghosts (src/world/GhostBuild.js) on real voxels: plans seen from above, layer by layer, and the checks. node tools/ghostbench.mjs [--seeds 1,7,99] [--layers 0,8,16,30,60] [--check] [--rot 0] [--lo 6 --hi 14] [--top]…
+- `ghostcastle-screenshots.mjs` — Pictures of the Castle of Ghosts as the game's voxel shader draws it (GhostCastle.js, GhostBuild.js): the black stone, its 15 % see-through dither, the glow.
+- `guardbench.mjs` — do the king's knights guard him? (the author: «рыцари тоже помогали и защищали игрока-короля») Run:  node tools/guardbench.mjs [--no-guard] [--zombies 6] [--seconds 40] [--walk] [--hp 100] [--seed 20261015] [--check]
+- `hell-screenshots.mjs` — Pictures of HELL as the game's voxel shader draws it (HellMap.js — the plan, HellLand.js — the blocks, HellRealm.js — the sky, VoxelShading — lava and stone).
+- `hellbench.mjs` — Замер АДА без игры (HellMap.js — план, HellLand.js — блоки): сколько чего на карте, цена чанка (в воркере), проходимость дорог (ступень ≤ 1 блок,
+- `hillbench.mjs` — how the walkers of the game really go UP AND DOWN HILLS (the author: «Рыцари-путешественники, поднимаясь по холмам — даже не очень высоким — застревают… это не только рыцари, а все человекоподобные существа»). No browser: the…
+- `hillrig.mjs` — the real ground of the world's seed and the game's own walking code, without a browser (for tools/hillbench.mjs and tests/unit/hill-walk.test.js). `makeRig({ seed, slopes })` → the trips of a man (`tripKnight`), of a party of the…
+- `house-screenshots.mjs` — Pictures of a villager's house (generation 11: roomy, the rich in two floors) as the game's voxel shader draws it — cut by a clipping plane at the
+- `housebench.mjs` — The villagers' houses (Castles.buildHouseBig, HOUSE_SIZE_FROM_GEN): how roomy they are for the hero, measured on the REAL blocks of generated castles.
+- `huntbench.mjs` — Стенд охоты плотоядной головы (PlantHunt.js — тот же код, что в игре): «макс. скачок положения жертвы» должен быть 0 телепортов.
+- `hutbench.mjs` — Measure one lone wizard's house (`def` of a 'magehut').
+- `icearenabench.mjs` — the Ice Queen's great ice arena (src/world/IceCastle.js ICE_CASTLE.ARENA), on the REAL generated world, without the game. node tools/icearenabench.mjs [--seeds 12345,777,42] [--check] [--walk] For each seed: the floor of the…
+- `levmax-repro.mjs` — Leviosa Maxima on a house in a real browser (the game's own code): lift it, carry it, let it fall; every frame error with its stack. The author 02.11: «когда воспользовался вингардиум левиоса максима… под низом дома будто…
+- `levmax-shot.mjs` — In the real game (Creative): a lump of ground lifted by «Вингардиум Левиоса Максима» seen next to the same ground.
+- `library-screenshots.mjs` — Pictures of the wizards' town library (WizardVillages.js buildLibrary + the sign board of LoreLibrary.js). Based on buildings-screenshots.
+- `loadbench.mjs` — where the processor's time goes when the land around the hero is made (as the terrain worker does it). node tools/loadbench.mjs [--seed 20261015] [--radius 5] [--at x,z] [--gen 20] Makes every chunk in a square round a point, the…
+- `make-ico.py` — Builds assets/logo/logo.ico (and logo.icns when supported) from the PNG renders.
+- `mkindex.py` — rebuilds part 2 of docs/INDEX.md (every file with the first line of its own header); part 1 (the guide) is kept.
+- `monster-screenshots.mjs` — Pictures of the monster form («Пентаграмма страшного монстра», MonsterBody.js): the hero's own body (VoxelCharacter)
+- `monsterbench.mjs` — «Пентаграмма страшного монстра» in the real game: a frame of the monster form in a village. node tools/monsterbench.mjs [--frames 150] [--site village/castle] [--shots docs/monster] [--seed 20261015]
+- `monsterrig.mjs` — the monster form (×7) walking the world's REAL ground without a browser: the game's own body (VoxelCharacter.update), the game's own wall code (Collision.resolveCylinder with the monster's radius, as Game._resolveMe),…
+- `monsterscenes.mjs` — the monster form (×7) in made scenes of REAL blocks on real ground: ledges of every height across the way, canyons between rock walls of every width. (No browser: tools/monsterrig.mjs.) The author: «монстр застревает в проходах…
+- `monsterwalkbench.mjs` — does the monster form (×7) get STUCK in the scarlet canyons / between the rocks? (the author: «монстр застревает в проходах между блоками/скалами, особенно в пустыне, узкие каньоны»). No browser: the world's real ground of the…
+- `neighborbench.mjs` — how much the game loses when it shares the browser's process with another tab that draws (a video, another 3D page): the reason for the game's own engine process (launcher/zns_browser.py, docs/plans/desktop.md). Run: node…
+- `netfuzz.mjs` — every message type of the network protocol (NetSync._onMessage), malformed (missing fields, wrong types, absurd numbers, unknown ids), handed straight to a running game — as the host or as a guest — one type at a time, timed.…
+- `pegasus-screenshots.mjs` — Pictures of the Pegasus coats (AnimalModels.PEGASUS_COATS): every coat standing with folded wings, and one with the wings spread, next to a hero post
+- `pentagram-screenshots.mjs` — Pictures of «Пентаграниум»: the wand's trail on the ground, the lit pentagram (a hero-sized post of 3.5 m for scale) and the rite's hellfire.
+- `pilotsim.mjs` — walking scenarios for Pilot.js without the game (pure Node): corridors, doorways, a crowd round a player, crossings. node tools/pilotsim.mjs [--only corridor] [--v] Each scenario reports: arrived, the deepest overlap of two…
+- `plant-hunt-screenshots.mjs` — Pictures and numbers of the carnivorous head's hunt (PlantHunt.js + PlantModels.js HeadNeck/jaws/tendrils): the real hunt simulation is run
+- `plant-screenshots.mjs` — Pictures and numbers of the plant creatures (PlantModels.js): a group of five telewilpins by day and at night, a carnivorous head
+- `pocket-hints-screenshots.mjs` — Снимок подсказок карманов в окне камеры: node tools/pocket-hints-screenshots.mjs → docs/media/pocket-hints.png
+- `pocketsweep.mjs` — Замер зоны перекрёстного кармана: левая рука к правому бедру со смещением кисти.
+- `pouch-screenshots.mjs` — Screenshots of the coin pouches (docs/items): a pouch close up, a pouch held in the hand (by its
+- `protectbench.mjs` — how fast and how surely «Protection» by crossed arms goes up (CrossedArms.CrossTrack), measured on synthetic people through the game's camera path (tools/protectsim.mjs): real crosses (7 start poses × 5 ways to cross × camera…
+- `protectsim.mjs` — synthetic people crossing their arms (and doing everything else) in front of a camera, through the game's own path: the camera's pictures (15–60 a second, its latency, noise, a wrist lost for 1–3 pictures, occluded wrists seen…
+- `ragdoll-screenshots.mjs` — ragdoll-screenshots — the rag doll in the REAL game (Creative, the nearest castle): a villager is put by a wall and thrown at it by «Джолт» (the spell's own push through CreatureImpact), then one is killed beside it; pictures of…
+- `realbench.mjs` — The detailed («Реалистичная») hero against the standard one — sizes and weight of the skin: node tools/realbench.mjs Prints: where the drawn shoulder is vs the game's, the drawn upper arm and forearm (never longer than the game's…
+- `render-logo.mjs` — Renders assets/logo/logo.svg to PNGs (several sizes) with Chromium; ICO/ICNS come from tools/make-ico.py.
+- `sea-battle-video.mjs` — Everything that runs in the page: the virtual clock, the battle's wiring and the director.
+- `sinkbench.mjs` — do the creatures stand on the real ground after «Бомбардо» (the author: «NPC проваливаются под землю»)? Run:  node tools/sinkbench.mjs [--seconds 14] [--check] [--seed N] Every kind of walking creature (villagers, knights,…
+- `skin-screenshots.mjs` — Pictures of the hero, the standard model and the «Реалистичный» one side by side (tools/skin-view.html): node tools/skin-screenshots.mjs [--out docs/media] [--size 420] [--only front,side] [--set name:query …] Each picture:…
+- `slope-screenshots.mjs` — Pictures of the land as the game's voxel shader draws it — generation 5 (steps) beside generation 6 (ramps and slabs,
+- `soakbench.mjs` — a long game played by itself, to find what piles up the longer one plays (the author: «чем дольше играешь, тем больше FPS просаживается»). Run: node tools/soakbench.mjs [--minutes 15] [--every 30] [--out file.json] [--check]
+- `spawnbench.mjs` — вход в Творческий с выбранным «Где появиться» (жалоба автора: «У Ледяной Королевы» — в игру не зайти). node tools/spawnbench.mjs [--spot queen] [--seeds 20261015,7] [--gen 20] [--ice-arena 1/0] [--wait 300] [--after 40] Печатает:…
+- `spellbench.mjs` — how much of a frame the heavy spells that change the world take (the author: «создание дома: может резко пропасть FPS, потом вернуться»). Run: node tools/spellbench.mjs [--only house,castle,…] [--out file.json] [--seed 20261015]
+- `startfirst.mjs` — what is drawn within R m of the hero in the FIRST frames after the loading screen opens (the author: «все текстуры персонажей накладываются у спавна, потом пропадают»). node tools/startfirst.mjs [--mode creative] [--r 15]…
+- `startscan.mjs` — what stands near the start (the author: «у спавна получеловек в земле»). node tools/startscan.mjs [--mode creative/survival] [--r 15] [--shot out.png] [--check]
+- `structbench.mjs` — does every building the game makes stand by the physics of buildings (src/world/Structure.js)? A world just made must have no block the model would let fall: else the world would come down by itself the first time a blast or a…
+- `sun-screenshots.mjs` — Pictures of «To the Sun» against the black clouds of the gargoyle ritual (SunBeam.js, GargoyleRitual.js): the start of the struggle,
+- `talkbench.mjs` — how fast the villagers answer (the author: «жители МЕДЛЕННО отвечают… нужен конкретный тест-бенчмарк. Скорость должна быть моментальной, как у человека»).
+- `talkbench_native.py` — the real networks for tools/talkbench.mjs --real (not part of the game).
+- `tarobench.mjs` — the Tarons and the underworld's gargoyle patrols without the game. node tools/tarobench.mjs [--seeds 1,4242,12345] [--check] Prints: (1) the Taron's measures against the hero (~3.5 m) — height with the horns, belly, head, parts,…
+- `taron-screenshots.mjs` — Pictures of the Tarons (TaronModel.js): the look from the front and the side, the swing (wind-up / blow, blade and hammer side), next to a hero post (3.5 m),
+- `testall.mjs` — Полный прогон unit-тестов с короткой сводкой: сколько прошло, какие файлы упали и почему (одной строкой).
+- `throwbench.mjs` — how well the hands let things go (ThrowModel.HandTrack), measured on synthetic human throws run through the game's camera path (tools/throwsim.mjs): every kind of throw × both hands × camera 15/24/30/60 Hz × latency 50/100/150 ms…
+- `throwsim.mjs` — synthetic human throws and opening hands, run through the game's own camera path, for tools/throwbench.mjs and tests/unit/release-model.test.js. Pure (no THREE, no browser).
+- `tree-screenshots.mjs` — Pictures of the new trees (TreeBuild.js): every variant of a kind in a row, with a hero-sized post (3.5 m)
+- `tree-world-screenshots.mjs` — The real trees in the game (Trees.js), against the old block trees: the same world (a fixed seed), the same
+- `treepopbench.mjs` — How far away the real trees (Trees.js) first show — flying straight over a world at flight speed (26 m/s), the view
+- `ui-screenshots.mjs` — Screenshots of every screen (menu tabs, HUD, pause, death) at a desktop size and a small window.
+- `ultra-screenshots.mjs` — pictures of «Ультра качество» next to the usual mode (the same place, the same moments: day, sunset, night, rain). Run:  node tools/ultra-screenshots.mjs [out dir] --seed 20261015   --size 1280x720   --only day,night
+- `ultrabench.mjs` — what each part of «Ультра качество» costs (the picture here is drawn by the processor, SwiftShader: not a video card's numbers, but the same WORK — pixels shaded, vertices moved, passes made — so the shares are telling). node…
+- `visible-godi-screenshots.mjs` — «Visible Godi»: pictures of the cloud as the game draws it (the real SeeThroughFx shader and its second pass over real voxel
+- `voicegpu_check.py` — проверка и включение нейросети голоса на видеокарте (вне браузера и игры).
+- `wakebench.mjs` — what it costs when a castle / a wizards' settlement wakes (its people made at once). node tools/wakebench.mjs [--site castle/village/tower] [--times 4] [--profile] Flies (teleports) the hero to the nearest such place, waits for…
+- `wandbench.mjs` — Одна палочка: выбита в точке `at` (м), летит по pickFlight; → {y, floor, fell}
