@@ -399,7 +399,7 @@ function readConfig() {
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
         walkBackThreat: !!$('walk-back-threat')?.checked, // (the author 05.11: stepping with a foe coming at me in front — the hero steps back facing it: ThreatBack.js)
-        walkBack: !!$('walk-back')?.checked && !$('walk-back-threat')?.checked, // (the author 05.11: stepping on the spot leaning back — the hero walks backwards; off by default)
+        walkBack: false, // (the lean of the back is gone from the settings — the author 05.11: «ходьба назад только при чужаке»; ThreatBack.js) // (the author 05.11: stepping on the spot leaning back — the hero walks backwards; off by default)
         leftHanded: $('handedness')?.value === 'left',
         look: activeLook(), // the hero from the «Персонаж» tab
         villagerVoice: ($('villager-voice')?.value ?? '1') !== '0',

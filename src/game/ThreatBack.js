@@ -15,7 +15,8 @@
 
 export const THREAT_BACK = {
     R: 16, // m: a foe this near counts
-    CLOSE: 2.2, // m/s: its distance shrinking at least this fast — it comes at me
+    CLOSE: 2.2, // m/s: (kept for the tools) a fast approach
+    COME: 0.6, // m/s: a hostile one coming at me at least this fast
     NEAR: 5, // m: this close, a foe that came stays one while it stands and strikes
     HOLD: 3, // s it stays a foe after it stopped coming
     FACE: 70, // ° between where the hero looks and the foe: in front
@@ -47,8 +48,10 @@ export function threatStep(st, me, bodies, dt, now) {
             s.x = b.x; s.z = b.z;
         }
         s.at = now;
-        if (b.hostile || s.v >= T.CLOSE) s.until = now + T.HOLD; // (hostile: it is after me — a villager angry at me, a knight, a zombie…)
-        if (s.until > 0 && d <= T.NEAR && s.v > -T.CLOSE) s.until = Math.max(s.until, now + 0.2); // (standing at me, striking: still a foe)
+        // only one that is AFTER me (angry at me, hunting me) and coming at me — or already at me, striking (the author 05.11: «включается
+        // только если на меня какое-то существо заагрилось и идёт на меня»; walking up to a calm Тихон must never start it)
+        if (b.hostile && (s.v >= T.COME || d <= T.NEAR)) s.until = now + T.HOLD;
+        if (!b.hostile) s.until = -1;
         if (now > s.until) continue;
         const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx + dz * fz) / (d || 1e-6)))) / D2R;
         if (!best || d < best.d) best = { id: b.id, d, ang };

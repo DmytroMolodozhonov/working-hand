@@ -6,7 +6,7 @@ import { threatStep, THREAT_BACK } from '../../src/game/ThreatBack.js';
 /** Run `secs` at 30 a second: the foe moves by fn(t) → {x, z}; me at the origin looking along −z (yaw 0) or as given. */
 function run(st, secs, foe, yaw = 0, t0 = 0) {
     let r = null;
-    for (let i = 1; i <= secs * 30; i++) { const t = t0 + i / 30, p = foe(t); r = threatStep(st, { x: 0, z: 0, yaw }, p ? [{ id: 'v1', ...p }] : [], 1 / 30, t); }
+    for (let i = 1; i <= secs * 30; i++) { const t = t0 + i / 30, p = foe(t); r = threatStep(st, { x: 0, z: 0, yaw }, p ? [{ id: 'v1', hostile: true, ...p }] : [], 1 / 30, t); }
     return r;
 }
 
@@ -19,9 +19,11 @@ test('a villager running at me from the front: back; turned away from him: forwa
     assert.equal(away.back, false, 'turned away: the steps go forward');
 });
 
-test('not a foe: strolling up to talk, standing far, passing by far, nobody', () => {
-    assert.equal(run({}, 3, (t) => ({ x: 0, z: -14 + t * 1.2 })).back, false, 'walking up slowly');
-    assert.equal(run({}, 3, () => ({ x: 0, z: -8 })).back, false, 'standing');
+test('not a foe: one not after me (even running at me), a hostile one standing far, passing by far, nobody', () => {
+    let r = null; const st = {};
+    for (let i = 1; i <= 60; i++) r = threatStep(st, { x: 0, z: 0, yaw: 0 }, [{ id: 'calm', x: 0, z: -14 + i * 0.15 }], 1 / 30, i / 30);
+    assert.equal(r.back, false, 'a calm villager running up to talk');
+    assert.equal(run({}, 3, () => ({ x: 0, z: -8 })).back, false, 'angry but standing far');
     assert.equal(run({}, 3, (t) => ({ x: -30 + t * 6, z: -20 })).back, false, 'far away running past');
     assert.equal(run({}, 1, () => null).back, false);
 });
@@ -44,6 +46,7 @@ test('the author 05.11: walking up to somebody who stands — no attack (only HI
     let r = null;
     for (let i = 1; i <= 60; i++) r = threatStep(st, { x: 0, z: -i * 0.15, yaw: 0 }, [{ id: 'v', x: 0, z: -12 }], 1 / 30, i / 30); // (I walk at 4.5 m/s towards him)
     assert.equal(r.back, false);
-    r = threatStep({}, { x: 0, z: 0, yaw: 0 }, [{ id: 'v', x: 0, z: -8, hostile: true }], 1 / 30, 1);
-    assert.equal(r.back, true, 'he is after me');
+    const st2 = {};
+    for (let i = 1; i <= 30; i++) r = threatStep(st2, { x: 0, z: 0, yaw: 0 }, [{ id: 'v', x: 0, z: -10 + i * 0.1, hostile: true }], 1 / 30, i / 30);
+    assert.equal(r.back, true, 'he is after me and coming');
 });
