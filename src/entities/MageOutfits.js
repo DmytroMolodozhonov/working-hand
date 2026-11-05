@@ -88,7 +88,7 @@ function robe(d, o) {
     d.rb(T, wool, 1.44, 1.72, 1.0, 0, 0.04, 0); d.rb(T, vel, 1.0, 0.24, 0.8, 0, 0.84, 0);
     // the skirt: layers of a trapezoid, each wider and deeper, to the hem; pleats down the front
     const N = o.layers, top = -0.62, bottom = o.hem, h = (top - bottom) / N;
-    for (let i = 0; i < N; i++) { const t = (i + 0.5) / N; d.rb(i % 2 ? dark : wool, 1.46 + t * o.flare, h + 0.02, 1.0 + t * o.flare * 0.6, 0, top - (i + 0.5) * h, 0); }
+    for (let i = 0; i < N; i++) { const t = (i + 0.5) / N; d.rb(T, i % 2 ? dark : wool, 1.46 + t * o.flare, h + 0.02, 1.0 + t * o.flare * 0.6, 0, top - (i + 0.5) * h, 0); }
     for (let k = -2; k <= 2; k++) d.bx(T, dark, 0.07, (top - bottom) * 0.92, 0.05, k * 0.28, (top + bottom) / 2, -(0.52 + o.flare * 0.3 * 0.5), 0, 0, k * 0.01);
     // the hem band: velvet with gold thread on its front and sides
     const hb = 0.4, wb = 1.46 + o.flare, db = 1.0 + o.flare * 0.6;
