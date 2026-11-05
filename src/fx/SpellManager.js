@@ -223,6 +223,7 @@ export function matchSpell(text) {
     if (has('импульс', 'импулс', 'импалс', 'импэлс', 'импульз', 'импелс', 'импольс', 'impuls', 'impals', 'impulse')) return mx() ? 'WindImpulseMaxima' : 'WindImpulse';
     if (has('drawdown', 'draw down', 'drowdown', 'drow down', 'дравдаун', 'драв даун', 'дродаун', 'дро даун', 'драудаун', 'драу даун', 'дровдаун', 'дров даун', 'драфдаун', 'дравдан', 'дродан', 'дравдаон', 'просядь')) return mx() ? 'DrawdownMaxima' : 'Drawdown';
     if (has('ликвидейш', 'ликвидэйш', 'ликвидеш', 'ликвидайш', 'ликвидац', 'ликвидир', 'ликвидей', 'liquidat', 'liquidation', 'ликвидейтион')) return mx() ? 'LiquidationMaxima' : 'Liquidation';
+    if (has('sectura', 'sektura', 'сектура', 'сэктура', 'сектюра', 'сектура', 'sectur')) return 'Sectura'; // (the cutting curse: Slash.js — «сектора» is the everyday word, not taken)
     if (has('стичинг', 'стичин', 'ститчинг', 'ститчин', 'стиччинг', 'стичен', 'стечинг', 'стичэнг', 'stitching', 'stitchin', 'stiching', 'stitch', 'сшив', 'сшей')) return 'Stitching';
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
@@ -583,6 +584,7 @@ export class SpellManager {
             case 'Drawdown': case 'DrawdownMaxima': this.hooks.drawdown?.(name, o, casterId); break; // (Drawdown.js)
             case 'Liquidation': case 'LiquidationMaxima': this.hooks.liquidation?.(name, o, d, casterId); break; // (Liquidation.js)
             case 'Stitching': this.hooks.stitching?.(o, d, casterId); break; // (Stitching.js)
+            case 'Sectura': this.hooks.slash?.(o, direction.clone(), casterId, handSide); break; // (the cutting curse: the direction's LENGTH carries the swing's roll — Slash.js)
             case 'Groundprud': this.hooks.groundprud?.(o, direction.clone(), casterId); break; // (Groundprud.js: o = the spot, direction = away from the caster)
             case 'CreateBridge': this.hooks.bridge?.(o, direction.clone(), casterId); break; // (Bridge.js: o = the feet, its length = to the far end)
             case 'WallRise': case 'WallRiseMaxima': this.castWallRise(o, d, casterId, name === 'WallRiseMaxima'); break; // (Breakthrough's wall)

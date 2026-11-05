@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffd2da"/><stop offset="0.5" stop-color="#d4183a"/><stop offset="1" stop-color="#d4183a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="b" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#8a0f26" stop-opacity="0"/><stop offset="0.5" stop-color="#ff3a58"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="56" fill="url(#g)" opacity="0.55"/>
+  <!-- the crescent of the blade: a thick back, a needle edge -->
+  <path d="M14 104 C 34 44, 84 16, 116 20 C 92 30, 52 60, 14 104 Z" fill="url(#b)"/>
+  <path d="M14 104 C 52 60, 92 30, 116 20" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- drops of blood -->
+  <path d="M84 78 q6 10 0 16 q-6 -6 0 -16 Z" fill="#b3122e"/>
+  <path d="M100 62 q4 7 0 11 q-4 -4 0 -11 Z" fill="#b3122e"/>
+  <path d="M70 96 q3 6 0 9 q-3 -3 0 -9 Z" fill="#8a0f26"/>
+</svg>

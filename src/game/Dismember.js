@@ -339,7 +339,12 @@ export class Dismemberment {
      */
     tryCut(t, ctx) {
         if (!ctx) return null;
-        const who = this.which(t);
+        return this.tryCutWho(this.which(t), t, ctx);
+    }
+
+    /** The same for an already known body `who` ({k, id, t, body, r?}) — «Sectura» (Slash.js) cuts with a virtual blade, me included. */
+    tryCutWho(who, t, ctx) {
+        if (!ctx) return null;
         if (!who || !who.body) return null;
         const root = who.body.root;
         const st = root.limbs || {};
@@ -460,12 +465,12 @@ export class Dismemberment {
         else if (typeof t.onCut === 'function') t.onCut(sv, by);
     }
 
-    _bleed(who, rate, by) {
+    _bleed(who, rate, by, time = 0) {
         if (!(rate > 0)) return;
         const key = who.k + ':' + who.id;
         const b = this.bleeders.get(key);
-        if (b) { b.rate = Math.max(b.rate, rate); b.by = by; return; }
-        this.bleeders.set(key, { k: who.k, id: who.id, t: who.t, rate, by, acc: 0 });
+        if (b) { b.rate = Math.max(b.rate, rate); b.by = by; if (!time) b.left = null; else if (b.left != null) b.left = Math.max(b.left, time); return; } // (a wound for `time` s: a severed limb's bleeding, which has no end, stays)
+        this.bleeders.set(key, { k: who.k, id: who.id, t: who.t, rate, by, acc: 0, left: time > 0 ? time : null });
         who.t.bleed = rate;
     }
 
@@ -676,6 +681,7 @@ export class Dismemberment {
             for (const [key, b] of this.bleeders) {
                 const t = b.t;
                 if (t.dead || t.isDead || t.removable) { this.bleeders.delete(key); continue; }
+                if (b.left != null && (b.left -= dt) <= 0) { this.bleeders.delete(key); t.bleed = 0; continue; } // (a wound that closes by itself — «Sectura»)
                 b.acc += b.rate * dt;
                 if (b.acc >= 1) {
                     b.acc -= 1;

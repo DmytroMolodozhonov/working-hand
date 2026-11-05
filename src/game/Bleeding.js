@@ -76,7 +76,18 @@ export class Bleeding {
     start(rate = 1, text = null) {
         if (this.game.config.mode === 'creative' && !this.game.combat?.enabled) return;
         this.rate = Math.max(this.rate, rate);
+        this._until = 0; // (a blade in the body or a lost limb: no end but «Rescue»)
         this.game.hud.setVoice(text || '🩸 В вас вонзилось оружие! Вытащите его и скажите «Rescue», указав на рану', true);
+        this.game.sync?.bleed?.(this.rate);
+    }
+
+    /** A cut wound that bleeds for `seconds` and closes by itself («Sectura»); a bleeding that has no end already is left as it is. «Rescue» stops it at once. */
+    startFor(rate, seconds, text) {
+        if (this.game.config.mode === 'creative' && !this.game.combat?.enabled) return;
+        const sticky = this.rate > 0 && !this._until;
+        this.rate = Math.max(this.rate, rate);
+        if (!sticky) this._until = Math.max(this._until || 0, performance.now() + seconds * 1000);
+        if (text) this.game.hud.setVoice(text, true);
         this.game.sync?.bleed?.(this.rate);
     }
 
@@ -87,7 +98,7 @@ export class Bleeding {
 
     stop() {
         if (this.rate <= 0) return;
-        this.rate = 0;
+        this.rate = 0; this._until = 0;
         this._acc = 0;
         this.game.sync?.bleed?.(0);
         const lost = this.game.character.limbs && Object.keys(this.game.character.limbs).length;
@@ -223,6 +234,7 @@ export class Bleeding {
         const g = this.game;
         const now = performance.now();
         // my blood
+        if (this._until && now >= this._until) { this._until = 0; if (this.rate > 0) { this.rate = 0; this._acc = 0; g.sync?.bleed?.(0); g.hud.setVoice('✚ Рана затянулась — кровь остановилась', true); } } // (a cut that closes by itself)
         if (this.rate > 0 && !g.combat.dead && !g.isDeadLocal) {
             this._acc += this.rate * dt;
             while (this._acc >= 1) {
