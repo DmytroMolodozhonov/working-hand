@@ -4406,7 +4406,13 @@ export class Game {
             const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning) : 0;
             ch.backward = !!(back && ch.isRunning);
             if (this.config.walkBack) this._walkBackLog(back, pose, dt);
-            if (this.walkRec?.on) { if (!this.config.walkBack) leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning); this.walkRec.frame(dt, pose, back); } // (F8: «Ходьба» — what the camera saw, with the player's spoken label)
+            if (this.walkRec?.on) {
+                // (F8: «Ходьба» — what the camera saw, with the player's spoken label; the hero stands still meanwhile: it is a recording of
+                // the body, not walking — the author: «я не должен в игре никак ходить»; what the game WOULD do is written)
+                const would = this.config.walkBack ? back : leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning);
+                this.walkRec.frame(dt, pose, would);
+                ch.setRunning(false); ch.backward = false;
+            }
         }
         // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
         const J = this._jolt = this.impact.step(dt);

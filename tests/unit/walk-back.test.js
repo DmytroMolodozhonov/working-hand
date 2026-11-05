@@ -162,6 +162,6 @@ test('the F8 recording: the spoken labels; a line 10 times a second with what th
     assert.ok(R.buf.some((l) => l.includes('метка НАЗАД (переход) |')), 'the first 1.5 s after the words: «переход»');
     const lines = R.buf.filter((l) => l.includes('метка НАЗАД |'));
     assert.ok(lines.length >= 3, `${lines.length}`);
-    assert.match(lines[0], /игра НАЗАД/);
+    assert.match(lines[0], /игра пошла бы НАЗАД/);
     assert.match(lines[0], /спина3D 13\.0°/);
 });

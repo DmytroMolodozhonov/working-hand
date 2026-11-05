@@ -32,7 +32,7 @@ export class WalkRecorder {
         if (this.on) {
             this.t = 0; this.label = '—';
             this.buf.push(`=== ходьба: запись ${new Date().toLocaleString('ru-RU')} | «ходьба назад» ${g.config?.walkBack ? 'вкл' : 'ВЫКЛ'} | скажите «иду вперёд», «иду назад», «стою»`);
-            g.hud?.setVoice?.('🔴 Запись ходьбы (F8 — стоп). Скажите «иду вперёд» и походите, потом «иду назад» и походите', true);
+            g.hud?.setVoice?.('🔴 Запись ходьбы (F8 — стоп). Герой стоит на месте. Скажите «иду вперёд» и пошагайте на месте, потом «иду назад» и пошагайте', true);
         } else {
             this.buf.push(`=== ходьба: конец записи (${this.t.toFixed(0)} с)`);
             this._flush();
@@ -59,7 +59,7 @@ export class WalkRecorder {
             const f = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '—');
             const legs = pose.legs ? Object.entries(pose.legs).map(([k, v]) => `${k}:${typeof v === 'object' ? JSON.stringify(v).slice(0, 40) : v}`).join(' ') : '—';
             this.buf.push([
-                `${this.t.toFixed(1)}с`, `метка ${this.label}${this.label === '—' ? ' (ещё не сказали)' : this.t - (this.labelAt ?? -99) < WALK_REC.SETTLE ? ' (переход)' : ''}`, `игра ${back ? 'НАЗАД' : ch?.isRunning ? 'вперёд' : 'стоит'}`,
+                `${this.t.toFixed(1)}с`, `метка ${this.label}${this.label === '—' ? ' (ещё не сказали)' : this.t - (this.labelAt ?? -99) < WALK_REC.SETTLE ? ' (переход)' : ''}`, `игра пошла бы ${back && pose.isRunning ? 'НАЗАД' : pose.isRunning ? 'вперёд' : 'стоит'}${back && !pose.isRunning ? ' (наклон назад есть, шагов нет)' : ''}`,
                 `шаги ${pose.isRunning ? 'да' : 'нет'} ${f(pose.runIntensity)}`,
                 `спина3D ${f(T.tilt, 1)}° бок ${f(T.tiltSide, 1)}°`, `наклон ${f(L.x, 1)}° сейчас ${f(L.k, 1)}° прямо ${f(L.base, 1)}° (${L.src || '—'})`,
                 `плечиZ ${f(T.sz, 3)} бёдраZ ${f(T.hz, 3)} глубина ${f(T.back, 3)} ширина ${f(T.sw, 3)} нос ${f(T.noseRel, 2)} поворот ${f(T.twist, 2)} бёдра ${T.hips ? 'видны' : 'нет'}`,
