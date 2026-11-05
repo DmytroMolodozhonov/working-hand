@@ -172,7 +172,9 @@
     box-shadow: 0 0 12px rgba(255, 70, 110, 0.85), inset -2px 0 4px rgba(255, 200, 210, 0.55);
 }
 #fatigue-fill {
-    background: linear-gradient(180deg, #c6f6ff 0%, #6fd8ff 22%, #7b5cff 62%, #3a1a9e 100%);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.08) 30%, rgba(0, 0, 0, 0) 55%, rgba(10, 0, 40, 0.45) 100%),
+        linear-gradient(90deg, #39d8ff 0%, #5b8cff 30%, #8a5cff 58%, #c56bff 80%, #ff8fd0 100%);
     box-shadow: 0 0 12px rgba(126, 160, 255, 0.95), inset -2px 0 4px rgba(220, 240, 255, 0.6);
 }
 /* the liquid moves: a band of the whirl's colours flows through it (a wide layer slid by transform — no repaint) */
@@ -226,7 +228,7 @@
     animation: mu-halo 2.8s ease-in-out infinite;
 }
 .hotbar-slot.hand { border: 1px dashed rgba(255, 215, 106, 0.55); }
-.hotbar-slot .hb-key { color: rgba(255, 233, 168, 0.75); font-family: var(--ui-font-title); }
+.hotbar-slot .hb-key { color: rgba(255, 233, 168, 0.8); font-family: var(--ui-font-title); left: 11px; top: 7px; font-size: 14px; }
 
 /* --- the minimap: a magic mirror in a gold frame with rune corners --- */
 #minimap-container {
