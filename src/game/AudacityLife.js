@@ -83,6 +83,8 @@ export class AudacityLife {
     deed(cs, by, kind, witnesses, { n = 1, victim = null } = {}) {
         if (!this.auth || !this.life.enabled || !cs || by == null || !this._eligible(cs)) return 0;
         if (this.game.arenaDuels?.peace?.() || !this.life._isPlayer(by)) return 0;
+        // («Зелье скрытия личности»: nobody knows the face — the deed is a stranger's, not this player's)
+        if (by === this.game.localId ? this.game.potionFx?.has?.('disguise') : this.game.remotes?.get(by)?.disguised) { this.life.alog?.note?.(`наглость: ${kind} — лицо незнакомое (скрытие личности), никто не узнал`); return 0; }
         const st = this.life.state(cs.def.id);
         if (st.owner === by || isForgiven(st.ranks, by)) return 0;
         const w = (witnesses || []).filter((x) => x && !x.dead && x.sleep?.phase !== 'lie' && !x.arena);

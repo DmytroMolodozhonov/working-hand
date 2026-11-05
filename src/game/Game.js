@@ -240,6 +240,8 @@ import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 import { restartsCreative } from './CreativeRestart.js';
 import { RealisticBody, realSamples } from '../entities/RealisticBody.js';
 import { CreativeMirror, mirrorSamples } from './CreativeMirror.js';
+import { PotionEffects } from './PotionEffects.js';
+import { randomLook as _rollLook, cleanLook as _cleanLook } from '../entities/Appearance.js';
 
 const SPELL_COOLDOWN = 1000;
 /** The duel's one-word spells: cast the moment they are heard — no wait for a «… Максима» (NativeVoice.DUEL_FAST). */
@@ -704,6 +706,8 @@ export class Game {
         this.crossedShield = new CrossedShield(this); // «Protection» by crossing the arms before the chest (CrossedArms.js)
         this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
+        this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
+        this.potionFx._randomLook = () => _cleanLook(_rollLook());
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.handHold = new HandHold(this); // handshakes, holding and leading by the hand
@@ -4070,6 +4074,7 @@ export class Game {
         if (earth && !duelOnly) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._brainrotUpkeep(dt);
+        this.potionFx?.update(dt);
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
         // (and the arena duel itself: the author's duel with the tower's head — «Бомбардо», «Фрозен» waited 0.4–0.6 s for a «Максима»)

@@ -385,7 +385,7 @@ export class NetSync {
             if (floating) held.push(floating.serialize());
             this.net.send({
                 t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP,
-                c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, mm: Math.floor(g.combat.maxFatigue || 30), dc: g.duel.myContact(), w: held,
+                c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, mm: Math.floor(g.combat.maxFatigue || 30), px: (g.potionFx?.has('disguise') ? 1 : 0) | (g.potionFx?.has('dazzle') ? 2 : 0) || undefined, // (the potions the host must know of: PotionEffects) dc: g.duel.myContact(), w: held,
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
                 sc: g.scrolls?.netState() || undefined, // (my scroll open in the hands: ScrollNet.js)
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)

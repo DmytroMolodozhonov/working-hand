@@ -141,6 +141,7 @@ export class RemoteAvatar {
         this.lastUpdate = t;
         if (s.hp !== undefined) this.hp = s.hp;
         if (s.ft !== undefined) this.fatigue = s.ft;
+        this.disguised = !!(s.px & 1); this.dazzle = !!(s.px & 2); // (a friend's potions: nobody knows his face / he charms — PotionEffects)
         if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)
         this.firm = !!s.ab; // (absolute steadiness: FirmRules.js)
         this.sees = !!s.sg; // (they see the invisible: Invisibles.seesInvisible)

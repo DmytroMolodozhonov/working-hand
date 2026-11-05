@@ -1462,6 +1462,8 @@ export class ItemSystem {
             } else g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
             said.push(`+${fx.hp} HP`);
         }
+        if (fx.timed) { const line = g.potionFx?.start(fx.timed); if (line) said.push(line); } // (PotionEffects.js)
+        if (fx.reset) said.push(g.potionFx?.resetAll() ? 'действие всех зелий снято' : 'на вас не было зелий — ничего не изменилось');
         if (fx.mana && g.combat) { g.combat.fatigue = Math.min(g.combat.maxFatigue ?? 100, (g.combat.fatigue ?? 0) + fx.mana); said.push(`+${fx.mana} маны`); }
         if (!silent) g.hud.setVoice?.(`🧪 ${r ? r.name : 'Зелье'} выпито${said.length ? ': ' + said.join(', ') : ''}`, true);
         const col = h.item.color ?? 0x9fd8ff;

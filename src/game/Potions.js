@@ -62,6 +62,12 @@ export const RECIPES = [
         window: 30, brew: [150, 210], portions: 1, crumble: 6,
         effect: { lordCure: true }, desc: 'Выпейте: снимает проклятие тёмного мага полностью (цена — ячейки маны)',
     },
+    // (the author 05.11: three ingredients, one may be rare — the timed ones: PotionEffects.js)
+    { id: 'disguise', name: 'Зелье скрытия личности', ingredients: { spencerFeather: 1, carnivoreHead: 1, sun_herb: 1 }, window: 30, brew: [90, 140], effect: { timed: 'disguise' }, desc: 'Выпейте: на 24 минуты другое лицо и одежда — вас никто не узнаёт' },
+    { id: 'dazzle', name: 'Зелье ослепительности', ingredients: { brightCore: 1, azure_berry: 1, sun_herb: 1 }, window: 30, effect: { timed: 'dazzle' }, desc: 'Выпейте: 24 минуты дружба и любовь к вам растут втрое быстрее' },
+    { id: 'luck', name: 'Зелье удачи', ingredients: { magicPebble: 1, glowcap_mushroom: 1, redApple: 1 }, window: 30, brew: [90, 140], effect: { timed: 'luck' }, desc: 'Выпейте: 12 игровых часов каждое заклинание сильнее — на сколько, решает удача' },
+    { id: 'waterbreath', name: 'Зелье дыхания под водой', ingredients: { fern_frond: 1, frost_shard: 1, azure_berry: 1 }, window: 30, effect: { timed: 'waterbreath' }, desc: 'Выпейте: целый игровой день под водой не кончается воздух' },
+    { id: 'potionreset', name: 'Зелье обнуления', ingredients: { crystal: 1, telewilpinLeaf: 1, glowcap_mushroom: 1 }, window: 30, effect: { reset: true }, desc: 'Выпейте: снимает действие всех выпитых зелий' },
 ];
 
 /** Things that never dissolve: they sink to the bottom and lie there (a hand can fish them out). */
@@ -72,7 +78,9 @@ export const INGREDIENT_RU = {
     apple: 'золотое яблоко', crystal: 'кристалл маны', wool: 'шерсть', meat: 'сырое мясо', steak: 'стейк',
     bread: 'хлеб', cheese: 'сыр', pie: 'пирог', scroll: 'свиток', fish: 'рыба',
     web: 'связка паутины', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
-    baksadi_pear: 'груша Баксади',
+    baksadi_pear: 'груша Баксади', spencerFeather: 'перо птички Спенсера', carnivoreHead: 'головка плотоядной', sun_herb: 'солнечница',
+    brightCore: 'сердцевина Ярколета', azure_berry: 'лазурная ягода', magicPebble: 'волшебный камушек', glowcap_mushroom: 'светящийся гриб',
+    redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина',
 };
 
 export const recipeById = (id) => RECIPES.find((r) => r.id === id) || null;

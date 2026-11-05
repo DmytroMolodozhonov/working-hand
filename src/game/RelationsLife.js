@@ -11,6 +11,7 @@
  *    coup (Relations.plotOf).
  */
 
+import { dazzleBump } from './PotionEffects.js';
 import { RelationBars } from '../ui/RelationBars.js';
 import { friendDrag } from './Rebellion.js';
 import {
@@ -98,6 +99,9 @@ export class RelationsLife {
             if (pid === this.game.localId) this.game.sync?.villagerOrder?.(v.id, 'rel', { d });
             return;
         }
+        // («Зелье ослепительности»: my friendship and love rise three times as easily — PotionEffects.dazzleBump; the host counts it for a guest too)
+        if (pid === this.game.localId && this.game.potionFx?.has?.('dazzle')) d = dazzleBump(d);
+        else if (pid !== this.game.localId && this.game.remotes?.get(pid)?.dazzle) d = dazzleBump(d);
         this._apply(v, pid, d, show);
     }
 

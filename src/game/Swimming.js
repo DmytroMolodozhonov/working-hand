@@ -105,7 +105,7 @@ export class Swimming {
         const now = performance.now();
         if (this.bubble && now > this.bubble.until) this._popBubble();
         if (this.underwater && !this.bubble) {
-            this.air = Math.max(0, this.air - dt);
+            if (!g.potionFx?.has?.('waterbreath')) this.air = Math.max(0, this.air - dt); // («Зелье дыхания под водой»: the air never runs out)
             if (this.air <= 0) {
                 this._drownT += dt;
                 if (this._drownT >= 1) {

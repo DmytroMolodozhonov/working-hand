@@ -260,7 +260,7 @@ export class WandMagic {
         return out;
     }
 
-    power(spell) { return wandPower(this.wand, spell); }
+    power(spell) { return wandPower(this.wand, spell) * (this.game.potionFx?.luckK?.() ?? 1); } // («Удача»: every spell stronger by luck — PotionEffects.js)
 
     /** Voice: «Люмос», «Люмос Максима», «Нокс», «Lightning Writing», «Раскрой свои секреты». Returns a hint or the name. */
     cast(name, isFinal) {
