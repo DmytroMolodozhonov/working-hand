@@ -379,6 +379,9 @@ export function clashLead(p, v) {
 const _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1), _mA = new THREE.Vector3(), _mB = new THREE.Vector3();
 let _ringGeo = null;
 
+/** (Duel._updateClash) a guest's clash with no word from the host this long is gone (s) */
+const CLASH_SILENT = 3;
+
 export class Duel {
     constructor(game) {
         this.game = game;
@@ -1698,7 +1701,7 @@ export class Duel {
         let c = this.clashes.find((x) => x.a === a && x.b === b);
         if (!c) { this._startClash(a, b, m.p); c = this.clashes.find((x) => x.a === a && x.b === b); }
         // (glides to the host's value — it comes 10 times a second — instead of jumping)
-        if (c) { c.pNet = m.p; c.v = m.v ?? 0; c.k = m.k ?? 3; }
+        if (c) { c.pNet = m.p; c.v = m.v ?? 0; c.k = m.k ?? 3; c.netT = 0; }
     }
 
     _marks(aBy, bBy) {
@@ -1875,7 +1878,13 @@ export class Duel {
                 g.hud.setVoice?.('🌀 Вы слишком слабы, чтобы отвести заклинание: усильте натиск — держите палочку на сопернике и крикните «Максима», пока ваша доля луча не вырастет', true);
             }
         }
-        if (!this._referee()) return;
+        if (!this._referee()) {
+            // (a guest's clash lives on the host's word, 10 times a second: no word for CLASH_SILENT s — the host left, its end was lost —
+            // and it is over. A clash left behind blocked every spell for good: «Идёт дуэль» — the author: «перестали работать заклинания»)
+            c.netT = (c.netT || 0) + dt;
+            if (c.netT > CLASH_SILENT) { this._note({ ev: 'clashLost', why: `от хоста ни слова о дуэли ${CLASH_SILENT} с — дуэль снята` }); this._finishClash(c, null); }
+            return;
+        }
 
         c.luckT -= dt;
         if (c.luckT <= 0) {
