@@ -92,7 +92,7 @@ function rune(B, parent, m, x, y, z, k, s = 1) {
  * (the helmet is on the head — the hood is not drawn; the cloak and the clothes still are).
  */
 export function lordParts(ch, list, hood = true) {
-    const T = ch.torso, B = new Batch();
+    const T = ch.torso, B = new Batch(), L = new Batch(); // L: what hangs below the waist and down the back (tabard, skirt, hem, cloak) — hidden from the hero's own eyes in first person (looking down it was a black slab over the legs: the author 06.11)
     const cloth = mat(CLOTH, { map: true }), deep = mat(CLOTH_DEEP, { map: true }), lining = mat(LINING, { glow: 0x180830 }), leather = mat(LEATHER), metal = mat(METAL, { glow: 0x100818 });
     const rune_ = mat(RUNE, { glow: RUNE_GLOW });
     const LU = ch.BONE_LENGTH_UPPER || 1, LL = ch.BONE_LENGTH_LOWER || 1;
@@ -105,11 +105,11 @@ export function lordParts(ch, list, hood = true) {
     B.box(T, metal, 0.26, 0.26, 0.06, 0, -0.62, -0.53); // …a clasp
     B.box(T, rune_, 0.08, 0.08, 0.03, 0, -0.62, -0.57);
     for (const sx of [-1, 1]) B.box(T, leather, 0.12, 1.7, 0.05, sx * 0.3, 0.1, -0.5, 0, 0, -sx * 0.52); // straps crossing the chest
-    B.box(T, deep, 0.92, 1.9, 0.08, 0, -1.55, -0.5, 0.03); // the tabard in front…
-    B.box(T, cloth, 1.4, 1.4, 1.02, 0, -1.5, 0); // …over the skirt of the tunic (to the knees)
-    for (const [i, x] of [-0.6, -0.3, 0, 0.3, 0.6].entries()) B.box(T, deep, 0.26, 0.5 + (i % 2) * 0.28, 0.06, x, -2.22 - (i % 2) * 0.1, -0.5); // a ragged hem
-    for (let i = 0; i < 4; i++) rune(B, T, rune_, -0.36 + i * 0.24, -1.7 + (i % 2) * 0.22, -0.55, i);
-    B.box(T, rune_, 0.72, 0.03, 0.03, 0, -2.12, -0.55); // a thread along the hem
+    L.box(T, deep, 0.92, 1.9, 0.08, 0, -1.55, -0.5, 0.03); // the tabard in front…
+    L.box(T, cloth, 1.4, 1.4, 1.02, 0, -1.5, 0); // …over the skirt of the tunic (to the knees)
+    for (const [i, x] of [-0.6, -0.3, 0, 0.3, 0.6].entries()) L.box(T, deep, 0.26, 0.5 + (i % 2) * 0.28, 0.06, x, -2.22 - (i % 2) * 0.1, -0.5); // a ragged hem
+    for (let i = 0; i < 4; i++) rune(L, T, rune_, -0.36 + i * 0.24, -1.7 + (i % 2) * 0.22, -0.55, i);
+    L.box(T, rune_, 0.72, 0.03, 0.03, 0, -2.12, -0.55); // a thread along the hem
 
     // --- the shoulders: a mantle, torn at the edge, with a clasp chain
     for (const sx of [-1, 1]) {
@@ -124,13 +124,13 @@ export function lordParts(ch, list, hood = true) {
     for (let i = 0; i < N; i++) {
         const u = i / (N - 1) - 0.5, len = 3.0 + ((i * 5) % 7) * 0.12 + (i % 2 ? 0.18 : 0), x = u * 1.62;
         const rz = u * 0.16, rx = 0.05 + Math.abs(u) * 0.05;
-        B.box(T, deep, 0.27, len, 0.07, x, 0.68 - len / 2, 0.58 + Math.abs(u) * 0.08, rx, 0, rz);
-        B.box(T, lining, 0.2, len - 0.1, 0.03, x, 0.64 - len / 2, 0.55 + Math.abs(u) * 0.08, rx, 0, rz); // the lining seen through the gaps
+        L.box(T, deep, 0.27, len, 0.07, x, 0.68 - len / 2, 0.58 + Math.abs(u) * 0.08, rx, 0, rz);
+        L.box(T, lining, 0.2, len - 0.1, 0.03, x, 0.64 - len / 2, 0.55 + Math.abs(u) * 0.08, rx, 0, rz); // the lining seen through the gaps
     }
-    for (let r = 0; r < 4; r++) for (let i = 0; i < 4; i++) rune(B, T, rune_, -0.54 + i * 0.36 + (r % 2) * 0.1, -0.2 - r * 0.62, 0.64 + Math.abs(-0.54 + i * 0.36) * 0.07, r + i, 1.1);
-    B.box(T, rune_, 1.2, 0.03, 0.03, 0, -2.85, 0.68); // a stitched line near the hem
-    B.box(T, rune_, 0.5, 0.5, 0.02, 0, 0.08, 0.66, 0, 0, Math.PI / 4); // a big diamond sigil between the shoulders
-    B.box(T, deep, 0.34, 0.34, 0.03, 0, 0.08, 0.665, 0, 0, Math.PI / 4);
+    for (let r = 0; r < 4; r++) for (let i = 0; i < 4; i++) rune(L, T, rune_, -0.54 + i * 0.36 + (r % 2) * 0.1, -0.2 - r * 0.62, 0.64 + Math.abs(-0.54 + i * 0.36) * 0.07, r + i, 1.1);
+    L.box(T, rune_, 1.2, 0.03, 0.03, 0, -2.85, 0.68); // a stitched line near the hem
+    L.box(T, rune_, 0.5, 0.5, 0.02, 0, 0.08, 0.66, 0, 0, Math.PI / 4); // a big diamond sigil between the shoulders
+    L.box(T, deep, 0.34, 0.34, 0.03, 0, 0.08, 0.665, 0, 0, Math.PI / 4);
 
     // --- the arms: wide sleeves, leather bracers, the hands bare
     for (const a of [ch.leftArmAnchor, ch.rightArmAnchor]) if (a) B.box(a, cloth, 0.52, 0.52, LU * 0.82, 0, 0, LU * 0.5);
@@ -173,6 +173,9 @@ export function lordParts(ch, list, hood = true) {
         B.add(H, mat(0xb06bff, { basic: true, alpha: 0.85 }), eyes, 0, 0.08, -0.65, 0, Math.PI, 0); // two faint violet glints deep in the hood
     }
     B.flush(list);
+    const low = [];
+    L.flush(low);
+    for (const m of low) { m.userData.lowerBody = true; if (ch._fpv) m.layers.set(1); list.push(m); }
 }
 
 /** Samples for compiling the shaders while loading: a hero dressed in it (Game.prewarm). */

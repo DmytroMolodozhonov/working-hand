@@ -34,6 +34,10 @@ test('every top, bottom, shoe, hat and hairstyle dresses the hero without errors
         for (let h = 0; h < A.HAIR_STYLES.length; h++) dress({ hair: h });
         for (let i = 0; i < 40; i++) dress(A.randomLook());
         dress({});
+        // the knight's armour (all codes, the curse bits) and the dark mage's outfit, worn and taken off
+        const AL = await import('/src/entities/ArmorLook.js');
+        for (const c of [{ h: 1, c: 1, l: 1 }, { h: 2, c: 2, l: 2 }, { h: 3, c: 3, l: 3 }, { h: 1, c: 1, l: 1, dk: 7 }, { r: 1, rc: 0x2c3e7a }, { r: 5 }, {}]) { AL.dressArmor(ch, c); out.n++; }
+        ch.setFirstPerson?.(true); AL.dressArmor(ch, { h: 3, c: 3, l: 3 }); AL.dressArmor(ch, { r: 5 }); ch.setFirstPerson?.(false); AL.dressArmor(ch, {});
         out.geoGrowth = g.renderer.info.memory.geometries - geo0;
         out.texGrowth = g.renderer.info.memory.textures - tex0;
         out.hasLook = !!ch.look;

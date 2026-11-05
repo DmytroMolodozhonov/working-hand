@@ -1114,7 +1114,7 @@ export class VoxelCharacter {
         // (the clothes and the armour, ArmorLook: on the head hidden with it, on the torso seen)
         for (const p of [...(this._lookParts || []), ...(this._armorParts || [])]) {
             if (p.parent === this.head) p.traverse((c) => c.layers.set(layer));
-            else if (p.parent === this.torso) p.traverse((c) => c.layers.set(0));
+            else if (p.parent === this.torso) p.traverse((c) => c.layers.set(p.userData?.lowerBody ? layer : 0)); // (the dark mage's skirt and cloak: not seen from inside)
         }
         // the hidden head still casts its shadow (the renderer casts shadows only of what the
         // camera's layers show): an unseen double of it

@@ -162,8 +162,8 @@ export function chestParts(ch, p, code, list, dk = false) {
     rb(t, 1.2, 0.07, 0.8, 0, 0.7, 0);
     // the surcoat: front and back panels in the house colours with a cross, hanging from the shoulders to the knees under the belt; mail skirt below
     const tb = tabard(code, dk);
-    bx(p, tb, list, 0.86, 1.95, 0.04, 0, -0.35, -0.5); bx(p, tb, list, 0.86, 1.95, 0.04, 0, -0.35, 0.5);
-    rb(ml, 1.1, 0.34, 0.82, 0, -1.55, 0);
+    for (const z of [-0.5, 0.5]) bx(p, tb, list, 0.86, 1.95, 0.04, 0, -0.35, z).userData.lowerBody = true; // (not seen from inside: looking down it would be a slab over the legs)
+    rb(ml, 1.1, 0.34, 0.82, 0, -1.55, 0).userData.lowerBody = true;
     // the belt with a buckle and leather side straps
     bx(p, lt, list, 1.46, 0.14, 0.96, 0, -0.3, 0); bx(p, t, list, 0.26, 0.18, 0.06, 0, -0.3, -0.5); bx(p, d, list, 0.12, 0.1, 0.07, 0, -0.3, -0.52);
     for (const sx of [-1, 1]) { bx(p, lt, list, 0.07, 0.95, 0.9, sx * 0.72, 0.2, 0); bx(p, t, list, 0.12, 0.08, 0.1, sx * 0.72, 0.5, -0.46); bx(p, t, list, 0.12, 0.08, 0.1, sx * 0.72, 0.0, -0.46); }
@@ -210,4 +210,16 @@ export function legParts(p, code, list, dk = false) {
     bx(p, s, list, 0.52, 0.18, 0.26, 0, -1.84, 0.08); rb(s, 0.34, 0.16, 0.3, 0, -1.86, -0.74);
     bx(p, d, list, 0.54, 0.06, 0.78, 0, -1.94, -0.12);
     if (code >= 2) bx(p, t, list, 0.04, 0.5, 0.03, 0, -1.5, -0.34);
+}
+
+/** Samples for compiling the shaders while loading: the three sets on a dummy hero (Game.prewarm). */
+export function knightSamples() {
+    const g = new THREE.Group();
+    const ch = { torso: new THREE.Group(), head: new THREE.Group(), leftArmAnchor: new THREE.Group(), rightArmAnchor: new THREE.Group(), leftElbowAnchor: new THREE.Group(), rightElbowAnchor: new THREE.Group(), BONE_LENGTH_UPPER: 1, BONE_LENGTH_LOWER: 0.9 };
+    const leg = new THREE.Group();
+    g.add(ch.torso, ch.head, leg);
+    for (const k of ['leftArmAnchor', 'rightArmAnchor', 'leftElbowAnchor', 'rightElbowAnchor']) ch.torso.add(ch[k]);
+    const list = [];
+    for (const code of [1, 2, 3]) { helmetParts(ch.head, code, list, code === 1); chestParts(ch, ch.torso, code, list, code === 1); legParts(leg, code, list, code === 1); }
+    return [g];
 }

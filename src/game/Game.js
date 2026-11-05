@@ -127,6 +127,7 @@ import { darkSamples } from '../entities/DarkSkin.js';
 import { DarkLordLife } from './DarkLordLife.js';
 import { darkLordSamples } from '../fx/DarkLordFx.js';
 import { lordSamples } from '../entities/DarkLordLook.js';
+import { knightSamples } from '../entities/KnightArmorLook.js';
 import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
@@ -3850,7 +3851,7 @@ export class Game {
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
         for (const m of mirrorSamples()) zoo.add(m); // (the Creative mirror's glass and frame)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
-        for (const m of [...darkLordSamples(), ...lordSamples()]) zoo.add(m); // («настоящий тёмный маг»: шар тьмы, воронка, круг рун, наряд — DarkLordFx.js, DarkLordLook.js)
+        for (const m of [...darkLordSamples(), ...lordSamples(), ...knightSamples()]) zoo.add(m); // («настоящий тёмный маг»: шар тьмы, воронка, круг рун, наряд — DarkLordFx.js, DarkLordLook.js)
         zoo.add(monsterSamples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.enchantCircles?.sampleModels?.() || []) zoo.add(m); // (the enchanting circle, its column and rune rings)

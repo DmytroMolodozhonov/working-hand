@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { addBodyGlow } from '../fx/EnchantGlow.js';
 import { ROBE_TIERS } from '../game/ArmorTypes.js';
 import { lordParts } from './DarkLordLook.js';
+import { helmetParts as knightHelm, chestParts as knightChest, legParts as knightLegs } from './KnightArmorLook.js';
 
 const STEEL = 0xb8c2cc, STEEL_DARK = 0x8a94a0, STEEL_MAGIC = 0xcfdcff, GOLD = 0xd4af37, LEATHER = 0x5a3a1e;
 
@@ -187,9 +188,9 @@ export function dressArmor(ch, code) {
     ch.armorCode = { ...c };
     const list = ch._armorParts;
     const dk = c.dk | 0; // (the pieces a dark mage's curse blackened: 1 helmet, 2 breastplate, 4 greaves)
-    if (c.h && ch.head) helmetParts(ch.head, c.h, list, !!(dk & 1));
-    if (c.c && ch.torso) chestParts(ch, ch.torso, c.c, list, !!(dk & 2));
-    if (c.l) for (const p of [ch.leftLegPivot, ch.rightLegPivot]) if (p) legParts(p, c.l, list, !!(dk & 4));
+    if (c.h && ch.head) knightHelm(ch.head, c.h, list, !!(dk & 1)); // (the knight's armour drawn «like the gates»: KnightArmorLook.js; the old boxes below stay for the item models)
+    if (c.c && ch.torso) knightChest(ch, ch.torso, c.c, list, !!(dk & 2));
+    if (c.l) for (const p of [ch.leftLegPivot, ch.rightLegPivot]) if (p) knightLegs(p, c.l, list, !!(dk & 4));
     ch.darkLord = c.r === 5; // (the true dark mage's outfit: DarkLordLook.js — it replaces the clothes and the robe)
     if (c.r === 5 && ch.torso) lordParts(ch, list, !c.h);
     else if (c.r === 4 && ch.torso) archmageParts(ch, list);
@@ -198,7 +199,7 @@ export function dressArmor(ch, code) {
     // (first person: what is on the head is not seen from inside — as the head itself; on the
     // torso it is seen looking down, as the torso is: Character.setFirstPerson)
     const layer = ch._fpv ? 1 : 0;
-    for (const m of list) if (m.parent === ch.head) m.layers.set(layer);
+    for (const m of list) if (m.parent === ch.head || m.userData.lowerBody) m.layers.set(layer);
     if (c.e > 0) addBodyGlow(ch, c.e - 1, list); // (enchanted on the pentagram: a faint rune shell — EnchantGlow.js)
     ch.refreshDarkArmor?.(); // (чёрная магия: трещины на новых доспехах)
 }
