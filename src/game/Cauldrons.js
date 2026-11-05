@@ -705,7 +705,20 @@ export class Cauldrons {
             const g = this.game;
             if (!this.auth) { L.model.position.set(p.x, this.fy(c) + top, p.z); L.vel.set(0, 0, 0); return 'stop'; }
             const kind = L.item.kind;
-            const res = addIngredient(c.st, kind, L.item.count || 1);
+            // (one thing is one ingredient: a stack — «пара крыльев», 3 яблока — gives ONE, the rest is tossed back out of the cauldron; the whole stack once
+            // counted as «2 крыла» and the recipe wanted exactly 1 → «не успели»: the author 06.11)
+            const res = addIngredient(c.st, kind, 1);
+            if ((res === 'in' || res === 'spoil') && (L.item.count || 1) > 1) {
+                L.item.count--;
+                const o = Math.hypot(dx, dz) || 1;
+                L.model.position.set(c.x + (dx / o) * (CAULDRON.R_IN + 0.6), this.fy(c) + H + 0.9, c.z + (dz / o) * (CAULDRON.R_IN + 0.6));
+                L.vel.set((dx / o) * 3, 3, (dz / o) * 3); L.rest = false;
+                g.water?._splash?.(_v.set(p.x, this.fy(c) + top, p.z), 0.8, 14);
+                if (this._near(c, 25)) g.sound?.playSplash?.();
+                this._event(c, res === 'spoil' ? 'spoil' : 'ing', kind);
+                this._send(c, res === 'spoil' ? 'spoil' : 'ing', kind);
+                return 'stop';
+            }
             if (res === 'in' || res === 'spoil') {
                 g.items.removeLoose(L.item.uid);
                 g.sync?.itemGone?.(L.item.uid, null, null);
