@@ -101,7 +101,7 @@ const CYL = () => geo('cyl', () => new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1
 const FRONT = () => geo('front', () => new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1, true, Math.PI / 2, Math.PI)); // the front half (−z)
 const BACK = () => geo('back', () => new THREE.CylinderGeometry(0.5, 0.5, 1, 20, 1, true, -Math.PI / 2, Math.PI));
 const TAPER = () => geo('taper', () => new THREE.CylinderGeometry(0.5, 0.36, 1, 20, 1, true)); // wider on top (a thigh, a forearm)
-const DOME = () => geo('dome', () => new THREE.SphereGeometry(0.5, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2));
+const DOME = () => geo('dome', () => new THREE.SphereGeometry(0.5, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2));
 const BALL = () => geo('ball', () => new THREE.SphereGeometry(0.5, 8, 6));
 const SPIKE = () => geo('spike', () => new THREE.ConeGeometry(0.5, 1, 6));
 const RING = () => geo('ring', () => new THREE.TorusGeometry(0.5, 0.04, 6, 24));
@@ -133,18 +133,18 @@ const rivets = (p, mat, list, r, n, x0, x1, y, z) => { for (let i = 0; i < n; i+
 export function helmetParts(p, code, list, dk = false) {
     const s = steel(code, dk), d = darkSteel(code, dk), t = trim(code, dk), ml = mail(dk), lt = strap(), rm = rivetMat(code, dk);
     const rb = (m, w, h, dd, x, y, z, rx, ry, rz) => put(p, RBOX(), m, list, x, y, z, w, h, dd, rx, ry, rz);
-    // the skull: a smooth bascinet — many thin rounded layers make one round dome over the box head; a brow band with rivets all round
-    const W = [1.48, 1.48, 1.48, 1.46, 1.44, 1.4, 1.32, 1.2, 1.0, 0.7]; // (wide to the top: it covers the hair slab, 1.3 wide at the crown)
-    W.forEach((w, i) => rb(s, w, 0.13, w, 0, 0.1 + i * 0.105, 0));
-    rb(t, 1.5, 0.07, 1.5, 0, 0.08, 0);
-    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.74, 0.08, Math.sin(a) * 0.74); }
-    bx(p, d, list, 0.06, 0.08, 1.0, 0, 0.98, 0); // a seam along the top
-    if (code >= 2) bx(p, t, list, 0.05, 0.22, 0.8, 0, 1.06, 0.04, -0.05); // a thin fin
+    // the skull: ONE smooth round dome (a hemisphere big enough to wrap the box head's corners), a flared rim, a raised comb, a small front peak
+    put(p, DOME(), s, list, 0, 0.14, 0, 1.98, 1.56, 1.98);
+    put(p, geo('torusR', () => new THREE.TorusGeometry(0.5, 0.06, 8, 32)), t, list, 0, 0.14, 0, 1.96, 1.96, 1, Math.PI / 2); // the rim band (a rolled edge)
+    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; rivet(p, rm, list, 0.045, Math.cos(a) * 0.98, 0.15, Math.sin(a) * 0.98); }
+    rb(d, 0.12, 0.1, 1.5, 0, 0.9, 0.05); rb(t, 0.07, 0.07, 1.6, 0, 0.96, 0.05); // the comb along the top
+    bx(p, d, list, 0.9, 0.06, 0.28, 0, 0.2, -0.98, -0.25); // a small peak over the face
+    if (code >= 2) bx(p, t, list, 0.05, 0.2, 0.9, 0, 1.0, 0.1, -0.05); // a thin fin
     // a Norman nasal and brow peaks (the face stays open)
     bx(p, s, list, 0.12, 0.6, 0.07, 0, -0.1, -0.78);
-    for (const sx of [-1, 1]) { bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.1, -0.78, 0, 0, sx * 0.25); bx(p, s, list, 0.07, 0.5, 0.5, sx * 0.76, -0.05, 0.3); rivet(p, rm, list, 0.06, sx * 0.8, 0.1, 0.2); }
+    for (const sx of [-1, 1]) { bx(p, d, list, 0.34, 0.07, 0.08, sx * 0.3, 0.1, -0.78, 0, 0, sx * 0.25); rb(s, 0.1, 0.5, 0.56, sx * 0.78, -0.08, 0.14); rivet(p, rm, list, 0.06, sx * 0.84, 0.1, 0.2); }
     // the camail: a mail hood hanging from the helm over the neck and the shoulders
-    rb(ml, 1.42, 0.3, 1.4, 0, -0.62, 0.02); rb(ml, 1.66, 0.22, 1.2, 0, -0.84, 0.02); rb(ml, 1.9, 0.16, 1.1, 0, -1.0, 0.02);
+    rb(ml, 1.4, 0.32, 1.38, 0, -0.64, 0.02); rb(ml, 1.56, 0.18, 1.1, 0, -0.84, 0.02);
     for (const sx of [-1, 1]) bx(p, lt, list, 0.07, 0.5, 0.05, sx * 0.66, -0.42, -0.62, 0.15, 0, sx * 0.1);
     if (code === 3) { // named: a plume of red horsehair on a gold socket
         put(p, DISK(), t, list, 0, 1.12, 0.05, 0.24, 0.12, 0.24);
