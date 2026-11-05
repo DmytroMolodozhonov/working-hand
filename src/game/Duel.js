@@ -1781,12 +1781,12 @@ export class Duel {
         return this.game.remotes?.get(id)?.mastery || 0;
     }
 
-    /** A player's whole store of mana (its cells): Creative's duel against another player. */
+    /** A player's mana NOW (the author 05.11: «в дуэли сталкивается текущая мана, а не ячейки»): Creative's duel against another player. */
     _playerMana(id) {
         const g = this.game;
-        if (id === this.me) return Math.max(g.combat?.fatigue ?? 0, g.combat?.maxFatigue || 30);
+        if (id === this.me) return g.combat?.fatigue ?? 30;
         const r = g.remotes.get(id);
-        return r ? Math.max(r.fatigue ?? 30, r.maxMana ?? 30) : 30;
+        return r ? (r.fatigue ?? 30) : 30;
     }
 
     /** Is this wizard still holding the duel (hand on the opponent)? jerk = gave up sharply. */
