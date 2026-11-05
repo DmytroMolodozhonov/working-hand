@@ -5,8 +5,8 @@
  * The author (31.10 / 01.11 / 05.11): while one's own «Let the Hellfire Come» burns, a shout «Serpent» (English only) — out of the
  * fire rises a huge serpent made of the fire itself (as tall as the pentagram's monster), where the wand points; it is a spell
  * of its own on top of the Hellfire (never both at once): to call it one must HAVE 350 mana; while it lives the Hellfire's
- * drain per second is doubled (two spells held at once). Black magic: +10 to the dark level. It writhes, crawls a short way
- * from its fire; «Атак» at someone — it bites and sets on fire; at a place — it goes there and burns everything; it fights
+ * drain per second is doubled (two spells held at once). Black magic: +10 to the dark level. It pours out of the fire once,
+ * then lives on its own beside its master: lies, crawls about him like a snake, rests and watches (05.11); «Атак» at someone — it bites and sets on fire; at a place — it goes there and burns everything; it fights
  * one-on-one; «Firefighting Maxima» on it puts it out. A helper: it defends its master when he is really attacked.
  * Wizards: a weak one runs from it, a strong one fights it.
  */
@@ -16,22 +16,30 @@ export const SERPENT = {
     COST: 60, // mana at once (the rest: the doubled Hellfire drain)
     DRAIN_K: 2, // the Hellfire's drain ×2 while the serpent lives
     DARK: 10, // +10 to the dark level at the call (black magic)
-    SEGS: 48, // rings of the body (head last)
-    SEG_LEN: 1.15, // m between rings (~54 m of body)
-    R_BODY: 1.75, // m: the body's radius at its thickest
-    HEAD_H: 22, // m: the head held up (the monster of the pentagram is 24.5 m tall: the arch of the neck reaches it)
-    LEASH: 34, // m: how far the head goes from its fire (it crawls only a short way)
-    SPEED: 9, // m/s the head moves (a lunge: LUNGE)
-    LUNGE: 26,
-    GROW_S: 3.2, // s it rises out of the fire
+    // (the author 05.11, the second time: «он больше раза в 3, наверное… а может, в 5… он больше как бы лежит, а не стоит… один раз вылез из
+    //  огня… и потом сам живёт своей жизнью рядом с тобой… и ползает» — the serpent of Dumbledore and Voldemort's duel: a river of fire)
+    SEGS: 64, // rings of the body (head last; the video card places them — ≤ 64: the uniforms' room)
+    SEG_LEN: 3.0, // m between rings (~190 m of body)
+    R_BODY: 5.2, // m: the body's radius at its thickest (~10 m through)
+    HEAD_H: 12, // m: the head raised over the ground (a cobra's neck: the body lies, only the front rears)
+    CRAWL_LIFT: 0.6, // how much of HEAD_H the head is up while it crawls (resting / watching: 1, rearing to strike: 1.5)
+    NECK: 10, // rings of the neck that rise from the lying body to the head
+    HEAD_LEN: 16, // m: the head, nose to the back of the skull
+    WANDER: 36, // m: it crawls round its master within this…
+    NEAR: 16, // …but never closer than this (it never crawls over its master)
+    FOLLOW: 60, // m: the master further than this — it crawls after him faster (FOLLOW_K × SPEED)
+    FOLLOW_K: 2.2,
+    SPEED: 8, // m/s it crawls (the head; a lunge: LUNGE)
+    LUNGE: 34,
+    GROW_S: 8, // s it pours out of the fire (the whole body crawls out of the blaze)
     BITE: 9, // a bite (one damage for all: Damage.js) + set on fire
     BITE_EVERY: 1.6,
-    BITE_R: 2.6, // m: the jaws reach
+    BITE_R: 8, // m: the jaws reach
     BURN_TICK: 0.25, // s between burns of what it touches
-    HEAD_FIRE_R: 2.6, // m: the head is a blaze of this radius…
-    BODY_FIRE_R: 1.9, // …the body on the ground
+    HEAD_FIRE_R: 7, // m: the head is a blaze of this radius…
+    BODY_FIRE_R: 5, // …the body on the ground
     SWEEP_S: 7, // s it ravages a place pointed at
-    SWEEP_R: 7, // m round the place
+    SWEEP_R: 16, // m round the place
     HP: 100, // its fire's strength
     REGEN: 5, // a second, while its Hellfire burns
     DOUSE_KNOCK: 30, // «Firefighting» (a burst) takes this…
@@ -158,8 +166,8 @@ export function serpentResponse({ rank, mana, dist, hpK = 1 }) {
 /** The body's radius at ring `i` of `n` (0 the tail … n−1 the head): thin tail, thick middle, the neck, the wide head. */
 export function serpentRadius(i, n = SERPENT.SEGS) {
     const k = i / (n - 1);
-    if (k > 0.94) return SERPENT.R_BODY * (1.15 - (k - 0.94) * 7); // (the snout tapers)
-    if (k > 0.86) return SERPENT.R_BODY * (0.95 + (k - 0.86) * 2.5); // (the head swells from the neck)
-    if (k > 0.78) return SERPENT.R_BODY * (1 - (k - 0.78) * 0.6); // (the neck)
-    return SERPENT.R_BODY * Math.max(0.18, Math.sin(Math.min(1, k / 0.55) * Math.PI * 0.5) ** 0.8); // (from the tail thickening)
+    if (k > 0.95) return SERPENT.R_BODY * (0.6 - (k - 0.95) * 6); // (inside the skull: the head is drawn by its own shape)
+    if (k > 0.88) return SERPENT.R_BODY * (0.72 - (k - 0.88) * 1.7 + 0.12 * Math.sin((k - 0.88) / 0.07 * Math.PI)); // (the throat under the head)
+    if (k > 0.75) return SERPENT.R_BODY * (1 - (k - 0.75) * 2.1); // (the neck, slimmer)
+    return SERPENT.R_BODY * Math.max(0.12, Math.sin(Math.min(1, k / 0.5) * Math.PI * 0.5) ** 0.9); // (from the tail thickening)
 }

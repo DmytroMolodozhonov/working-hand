@@ -1,39 +1,58 @@
 /**
  * FireSerpent.js — the fire serpent of «Let the Hellfire Come» (rules: FireSerpentRules.js).
  *
- * While my Hellfire burns, «Serpent» — out of the blaze a huge serpent of the fire itself rises (≈ 55 m of body, the head
- * held ~22 m up), its tail always in its fire: the blaze is where it lives (the wand steers the blaze, so the serpent crawls
- * after it). It writhes; «Атак» at someone — the head goes over, rears and strikes: a bite (−9) and the bitten burns; «Атак»
- * at a place — it goes there and ravages it low (trees, grass, everyone there burns); left alone it guards its master:
- * whoever really hurts him is bitten. Its head and the body lying on the ground are the Hellfire's own blaze (Hellfire._burn):
- * every creature burns as in that fire. «Firefighting» knocks it back, «Firefighting Maxima» held on it puts it out; cold and
- * water charges hurt it; the gods' spells end it. The Hellfire put out («стоп», no mana, water) — the serpent falls apart
- * into embers and steam. While it lives the Hellfire's drain is doubled (Hellfire._updateMine).
+ * The author (05.11, about the first one: «полная фигня… почему-то прямо вверх идёт… должен быть прямо моим огнём… огромная змея,
+ * как в сцене, где Волдеморт сражается с Дамблдором… больше раза в 3–5… лицо нормальное… он больше лежит, а не стоит… один раз вылез
+ * из огня и продолжает быть огнём… потом сам живёт своей жизнью рядом с тобой… и ползает»).
  *
- * The body: one tube whose rings sit on a spine computed here (FABRIK from the head, the tail held in the fire), drawn by
- * the video card (the rings' centres and frames are uniforms; the vertex shader places them) — a solid glowing core with
- * flowing flame-scales and an additive shell of licking flames; the head: an opening jaw with white-hot fangs, glowing
- * slit eyes, horns of flame, a glowing throat. Embers, sparks and smoke from the Hellfire's own particle pool.
- * The network: 'fs' ~10×/s (the anchor, the head, how grown, the jaw, the strength, the bite); every computer simulates
- * the body itself from these.
+ * While my Hellfire burns, «Serpent» — out of the blaze a serpent of that same fire POURS: ~190 m of body, ~10 m through. It crawls
+ * out once (the whole body slides out of the blaze in ~8 s, the tail last), then it is free: it lies on the ground and CRAWLS
+ * round its master like a real snake — the head leads, waves run down the body, every ring follows the path the head took
+ * (the path's history), only the neck rears and holds the head up, cobra-like, ~12 m. It wanders within ~36 m of me (never
+ * over me), follows me when I go, rests and watches, hisses. «Атак» at someone — it crawls there, rears high and strikes: a
+ * bite (−9) and the bitten burns; «Атак» at a place — it goes there and coils round it burning everything; it guards its
+ * master: whoever really hurts him is bitten. What it touches burns as the Hellfire does (Hellfire._burn: every creature).
+ * «Firefighting» knocks it back, «Firefighting Maxima» held on it puts it out; cold and water hurt it; the gods' spells end
+ * it. The Hellfire put out («стоп», no mana, water) — it falls apart into embers and steam. While it lives the Hellfire's drain
+ * is doubled (Hellfire._updateMine).
+ *
+ * The look — the Hellfire's own fire, no «skin»: the body is a tube placed by the video card (the rings' centres and frames
+ * are uniforms) drawn ADDITIVELY like the Hellfire's flames — a dense glowing middle thinning to the edges, flowing fire, and a
+ * shell of flame tongues licking UP off its back; over it the Hellfire's flame cubes (its own pool, the same colours: CORE /
+ * FLAME / DEEP), embers and smoke stream off the whole body. The head — a viper's: a wide skull over the jaw muscles, a flat
+ * crown, brow ridges over slit eyes, a narrowing snout with nostrils, a lower jaw on a hinge opening wide on curved fangs and
+ * a white-hot throat — modelled as one shape (no boxes), of the same fire.
+ * The network: 'fs' ~10×/s (the blaze it came from, where the neck rises, the head, the lift, the jaw, the strength); every
+ * computer crawls the body itself from these (its own path history).
  */
 import * as THREE from 'three';
 import { SERPENT, serpentBlock, serpentHit, serpentRadius, serpentResponse } from './FireSerpentRules.js';
 import { addDark } from './DarkMagic.js';
 import { mergeParts } from '../core/MergeGeometry.js';
+import { ParticlePool } from '../fx/Particles.js';
 
 const N = SERPENT.SEGS;
-const RAD = 18; // vertices round a ring
+const NB = N - SERPENT.NECK; // rings lying on the ground; the last of them (NB − 1) is where the neck rises: the «lead»
+const SEG = SERPENT.SEG_LEN;
+const BODY_LEN = (NB - 1) * SEG; // m of body on the ground
+const NECK_LEN = SERPENT.NECK * SEG;
+const HSTEP = 0.75, HCAP = 360; // the path's history: a point every 0.75 m (270 m kept: more than the body)
+const RAD = 20; // vertices round a ring
 const TAU = Math.PI * 2;
+const HEAD_K = SERPENT.HEAD_LEN / 3.2; // the head's shape is ~3.2 long: its scale
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _m = new THREE.Matrix4();
 const r2 = (v) => Math.round(v * 100) / 100;
 
-const FLAME = [0xffd25a, 0xffb030, 0xff9a1a, 0xff8000, 0xff6400, 0xf04a00, 0xd42a00];
+// the Hellfire's own colours (Hellfire.js): it is that fire
+const CORE = [0xfffbe6, 0xfff2b0, 0xffe680, 0xffd25a];
+const FLAME = [0xffb030, 0xff9a1a, 0xff8000, 0xff6400, 0xf04a00, 0xd42a00, 0xb81c00];
+const DEEP = [0xd42a00, 0xa81800, 0x8a1000, 0xff4a00];
 const EMBER = [0xffe680, 0xffb030, 0xff6400];
-const SMOKE = [0x4a4440, 0x57504b, 0x625a54];
+const SMOKE = [0x4a4440, 0x57504b, 0x625a54, 0x6a625c];
 const STEAM = [0xe8eef2, 0xd5dde2, 0xffffff];
 const pick = (a) => a[(Math.random() * a.length) | 0];
 
@@ -45,6 +64,7 @@ float vn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
              mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
 float fbm(vec3 p){ return 0.55 * vn(p) + 0.3 * vn(p * 2.1 + 1.7) + 0.15 * vn(p * 4.3 + 3.1); }
 `;
+// (the group carries no rotation: «up» in its space is the world's up — the tongues of flame rise)
 const VERT = `
 ${NOISE}
 uniform float uTime; uniform float uShell;
@@ -52,32 +72,31 @@ uniform float uTime; uniform float uShell;
 uniform vec4 uC[${N}]; uniform vec3 uN[${N}]; uniform vec3 uB[${N}];
 attribute float aRing; attribute float aAng;
 #endif
-varying vec3 vN; varying vec3 vV; varying vec2 vUv;
+varying vec3 vN; varying vec3 vV; varying vec3 vQ; varying float vTip;
 void main(){
 #ifdef SPINE
   int i = int(aRing + 0.5);
   vec4 c = uC[i];
   vec3 dir = uN[i] * cos(aAng) + uB[i] * sin(aAng);
   float r = c.w;
-  vUv = vec2(aRing, aAng);
-#else
-  vec3 dir = normal;
-  float r = 0.0;
-  vUv = vec2(position.z * 0.9 + 40.0, atan(position.x, position.y));
-#endif
-  if (uShell > 0.0) {
-    float f = fbm(vec3(vUv.x * 0.35 - uTime * 2.4, cos(vUv.y) * 1.3, sin(vUv.y) * 1.3 + uTime * 0.7));
-#ifdef SPINE
-    r *= 1.0 + uShell * (0.22 + 1.1 * f * f);
-#else
-    r = uShell * (0.12 + 0.5 * f * f);
-#endif
-  }
-#ifdef SPINE
   vec3 p = c.xyz + dir * r;
+  vQ = vec3(aRing * 1.1, cos(aAng) * 1.6, sin(aAng) * 1.6);
 #else
-  vec3 p = position + dir * r;
+  vec3 dir = normalize(normal);
+  float r = 0.32;
+  vec3 p = position;
+  vQ = position * vec3(2.2, 2.6, 1.6) + vec3(0.0, 0.0, 30.0);
 #endif
+  vTip = 0.0;
+  if (uShell > 0.0) {
+    // tongues of flame: off the back and the flanks they rise (the world's up), along the body they flow to the tail
+    float f = fbm(vQ * vec3(0.45, 0.9, 0.9) + vec3(uTime * 1.6, 0.0, -uTime * 2.3));
+    float side = smoothstep(-0.45, 0.4, normalize((modelMatrix * vec4(dir, 0.0)).xyz).y);
+    float tongue = (0.12 + 1.9 * f * f * f) * (0.35 + 0.65 * side);
+    vTip = tongue;
+    vec3 rise = normalize(vec3(modelMatrix[0][1], modelMatrix[1][1], modelMatrix[2][1])); // (the world's up in its own space)
+    p += (dir * 0.35 + rise * 0.9 * side) * r * tongue;
+  }
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   vV = -mv.xyz;
   vN = normalize(mat3(modelViewMatrix) * dir);
@@ -86,44 +105,45 @@ void main(){
 const FRAG = `
 ${NOISE}
 uniform float uTime; uniform float uHeat; uniform float uFade;
-varying vec3 vN; varying vec3 vV; varying vec2 vUv;
+varying vec3 vN; varying vec3 vV; varying vec3 vQ; varying float vTip;
 vec3 ramp(float h){
-  vec3 c = mix(vec3(0.28, 0.02, 0.0), vec3(0.95, 0.2, 0.0), smoothstep(0.05, 0.5, h));
-  c = mix(c, vec3(1.0, 0.62, 0.12), smoothstep(0.45, 0.85, h));
-  return mix(c, vec3(1.0, 0.96, 0.78), smoothstep(0.85, 1.3, h));
+  vec3 c = mix(vec3(0.35, 0.03, 0.0), vec3(1.0, 0.24, 0.0), smoothstep(0.08, 0.45, h));
+  c = mix(c, vec3(1.0, 0.6, 0.1), smoothstep(0.42, 0.8, h));
+  return mix(c, vec3(1.0, 0.95, 0.75), smoothstep(0.82, 1.25, h));
 }
 void main(){
-  float u = vUv.x, a = vUv.y;
-  vec3 q = vec3(u * 0.55 - uTime * 1.7, cos(a) * 1.4, sin(a) * 1.4);
-  float n = fbm(q + vec3(0.0, 0.0, uTime * 0.4));
-  float n2 = fbm(q * 2.6 + vec3(uTime * 0.9, 0.0, 0.0));
-  // scales of flame: rows along the body, every other row shifted; their edges darker, their middles hotter
-  float row = u * 1.7;
-  vec2 sc = fract(vec2(a / 6.2831853 * 14.0 + 0.5 * floor(row), row));
-  float seam = smoothstep(0.0, 0.2, min(min(sc.x, 1.0 - sc.x), sc.y));
-  float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
-  float heat = (0.3 + 0.7 * n + 0.35 * n2 - (1.0 - seam) * 0.38 + rim * 0.3) * uHeat;
-  vec3 col = ramp(heat);
+  // the fire flows: to the tail and up, in two scales of flicker
+  vec3 q = vQ * vec3(0.5, 0.75, 0.75) + vec3(uTime * 1.3, -uTime * 1.9, uTime * 0.5);
+  float n = fbm(q);
+  float n2 = fbm(q * 2.4 + vec3(0.0, -uTime * 3.1, 0.0));
+  float facing = abs(dot(normalize(vN), normalize(vV)));
 #ifdef SHELL
-  float al = smoothstep(0.38, 0.9, n2 + rim * 0.55) * 0.6 * uFade;
-  gl_FragColor = vec4(col * al, al);
+  // the tongues: hot at their roots, thin and red at their tips, torn by the noise
+  float al = smoothstep(0.32, 0.75, n2 + n * 0.4) * (1.0 - smoothstep(0.4, 1.6, vTip)) * (0.35 + 0.65 * facing) * 0.75;
+  vec3 col = ramp((0.55 + 0.6 * n - vTip * 0.35) * uHeat);
 #else
-  gl_FragColor = vec4(col * (0.85 + 0.3 * n2), 1.0);
+  // the body: thick fire in its middle, thinning to its edges (it has no skin: one sees into the flames)
+  float dens = pow(facing, 0.7);
+  float al = (0.22 + 0.78 * dens) * (0.55 + 0.45 * smoothstep(0.25, 0.75, n * 0.7 + n2 * 0.6));
+  vec3 col = ramp((0.38 + 0.55 * n + 0.45 * n2 * dens + 0.25 * dens) * uHeat);
 #endif
+  al *= uFade;
+  gl_FragColor = vec4(col * al * 1.15, al);
 }`;
 
 let _mats = null;
-/** The three materials (body core, body shell of flames, the head's pieces) and their shared uniforms — made once. */
+/** The materials (body core, body tongues, the head's fire and its tongues) and their shared time — made once per serpent. */
 export function serpentMaterials() {
     if (_mats) return _mats;
     const shared = { uTime: { value: 0 } };
-    const mk = (defs, extra, opts) => new THREE.ShaderMaterial({ defines: defs, uniforms: { ...extra, uTime: shared.uTime, uShell: { value: defs.SHELL ? 1 : 0 }, uHeat: { value: 1 }, uFade: { value: 1 } }, vertexShader: VERT, fragmentShader: FRAG, ...opts });
+    const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
+    const mk = (defs, extra) => new THREE.ShaderMaterial({ defines: defs, uniforms: { ...extra, uTime: shared.uTime, uShell: { value: defs.SHELL ? 1 : 0 }, uHeat: { value: 1 }, uFade: { value: 1 } }, vertexShader: VERT, fragmentShader: FRAG, ...add });
     _mats = {
         shared,
-        core: (sp) => mk({ SPINE: 1 }, sp, {}),
-        shell: (sp) => mk({ SPINE: 1, SHELL: 1 }, sp, { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
-        head: () => mk({}, {}, {}),
-        headShell: () => mk({ SHELL: 1 }, {}, { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+        core: (sp) => mk({ SPINE: 1 }, sp),
+        shell: (sp) => mk({ SPINE: 1, SHELL: 1 }, sp),
+        head: () => mk({}, {}),
+        headShell: () => mk({ SHELL: 1 }, {}),
     };
     return _mats;
 }
@@ -149,32 +169,60 @@ function tubeGeometry() {
     return (_tube = g);
 }
 
+/**
+ * A viper's head out of a sphere (z — forward to the snout, y — up; length ~3.2, width ~2): `upper` — the skull: wide over the
+ * jaw muscles at the back, narrowing to a rounded snout, a flat crown with brow ridges over the eyes, the cheeks bulging; else
+ * the lower jaw: a narrow flat bowl, hinged at the back (its origin there).
+ */
+function viperShape(upper) {
+    const g = upper ? new THREE.SphereGeometry(1, 36, 22) : new THREE.SphereGeometry(1, 28, 10, 0, TAU, Math.PI / 2, Math.PI / 2);
+    const P = g.attributes.position;
+    for (let i = 0; i < P.count; i++) {
+        const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+        const t = (z + 1) / 2; // 0 the back of the skull … 1 the snout
+        let w = (1 - 0.6 * smooth(0.28, 1, t)) * (0.8 + 0.2 * smooth(0, 0.3, t));
+        let X, Y, Z = z * 1.6;
+        if (upper) {
+            w *= 1 + 0.08 * Math.exp(-((t - 0.25) ** 2) / 0.01) * (y < 0.2 ? 1 : 0.4); // (the cheeks: the venom glands)
+            X = x * w;
+            Y = y > 0 ? y * 0.44 * (1 - 0.4 * smooth(0.55, 1, t)) : y * 0.2;
+            // the brow ridges over the eyes, a groove between them; the snout's tip turned up a little
+            const ax = Math.abs(x);
+            if (y > 0) Y += 0.11 * Math.exp(-((ax - 0.62) ** 2) / 0.025 - ((t - 0.6) ** 2) / 0.018) - 0.03 * Math.exp(-(x * x) / 0.02 - ((t - 0.55) ** 2) / 0.05);
+            Y += 0.05 * smooth(0.85, 1, t);
+        } else {
+            X = x * w * 0.9;
+            Y = y * 0.26 * (1 - 0.35 * smooth(0.6, 1, t));
+            Z = z * 1.55 + 1.55 * 0.8; // (the hinge at its back: the origin)
+        }
+        P.setXYZ(i, X, Y, Z);
+    }
+    g.computeVertexNormals();
+    return g;
+}
+
 let _headGeo = null;
-/** The head's pieces (shared): the lower jaw, the fangs, the horns of flame, the eyes and their slits, the throat. */
+/** The head's pieces (shared): the skull, the lower jaw, the fangs, the eyes and their slits, the nostrils, the throat. */
 function headGeometry() {
     if (_headGeo) return _headGeo;
-    const jaw = new THREE.SphereGeometry(1, 16, 8, 0, TAU, Math.PI / 2, Math.PI / 2); // (the lower half: the jaw's bowl)
-    const cone = new THREE.ConeGeometry(1, 1, 7);
-    const fangsUp = [], fangsLow = [];
+    const cone = new THREE.ConeGeometry(1, 1, 8);
+    const fangsUp = [], teeth = [];
     for (const sx of [-1, 1]) {
-        fangsUp.push({ geo: cone, pos: [sx * 0.62, -0.55, 1.85], rot: [Math.PI, 0, 0], scale: [0.17, 1.05, 0.17] }); // (the two great fangs, down)
-        fangsUp.push({ geo: cone, pos: [sx * 0.85, -0.35, 1.1], rot: [Math.PI, 0, 0], scale: [0.1, 0.5, 0.1] });
-        fangsLow.push({ geo: cone, pos: [sx * 0.55, 0.25, 1.75], scale: [0.11, 0.6, 0.11] });
-        fangsLow.push({ geo: cone, pos: [sx * 0.8, 0.18, 1.0], scale: [0.08, 0.4, 0.08] });
+        // two great curved fangs hanging from the front of the upper jaw (two cones: a curve), small ones behind
+        fangsUp.push({ geo: cone, pos: [sx * 0.34, -0.2, 1.28], rot: [Math.PI - 0.25, 0, 0], scale: [0.075, 0.32, 0.075] });
+        fangsUp.push({ geo: cone, pos: [sx * 0.34, -0.47, 1.36], rot: [Math.PI + 0.35, 0, 0], scale: [0.05, 0.26, 0.05] });
+        for (let k = 0; k < 4; k++) fangsUp.push({ geo: cone, pos: [sx * (0.52 + k * 0.07), -0.14, 0.85 - k * 0.32], rot: [Math.PI, 0, 0], scale: [0.03, 0.12, 0.03] });
+        for (let k = 0; k < 5; k++) teeth.push({ geo: cone, pos: [sx * (0.36 + k * 0.08), 0.08, 2.35 - k * 0.3], scale: [0.03, 0.12, 0.03] });
     }
-    const horns = [];
-    for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) horns.push({ geo: cone, pos: [sx * (0.75 - k * 0.1), 0.9 - k * 0.05, -0.2 - k * 1.0], rot: [-1.9 + k * 0.12, 0, sx * (0.35 + k * 0.1)], scale: [0.32 - k * 0.06, 1.9 - k * 0.4, 0.32 - k * 0.06] });
-    horns.push({ geo: cone, pos: [0, 1.0, 0.6], rot: [-1.6, 0, 0], scale: [0.22, 1.2, 0.5] }); // (the crest over the brow)
-    const ridges = [];
-    for (const sx of [-1, 1]) ridges.push({ geo: new THREE.SphereGeometry(1, 10, 6), pos: [sx * 0.72, 0.52, 1.05], scale: [0.36, 0.2, 0.85] }); // (the brows over the eyes)
     _headGeo = {
-        jaw,
+        skull: viperShape(true),
+        jaw: viperShape(false),
         fangsUp: mergeParts(fangsUp),
-        fangsLow: mergeParts(fangsLow),
-        horns: mergeParts([...horns, ...ridges]),
-        eye: new THREE.SphereGeometry(0.3, 12, 8),
-        slit: new THREE.BoxGeometry(0.07, 0.42, 0.06),
-        throat: new THREE.SphereGeometry(1, 12, 8),
+        teeth: mergeParts(teeth),
+        eye: new THREE.SphereGeometry(0.15, 14, 10),
+        slit: new THREE.SphereGeometry(0.15, 10, 8),
+        nostril: new THREE.SphereGeometry(0.06, 8, 6),
+        throat: new THREE.SphereGeometry(1, 14, 10),
     };
     for (const k in _headGeo) _headGeo[k].userData.shared = true; // (every serpent's; never disposed)
     return _headGeo;
@@ -185,7 +233,8 @@ const basics = () => _basic || (_basic = {
     fang: new THREE.MeshBasicMaterial({ color: 0xfff1cc }),
     eye: new THREE.MeshBasicMaterial({ color: 0xfff6b0 }),
     slit: new THREE.MeshBasicMaterial({ color: 0x1a0300 }),
-    throat: new THREE.MeshBasicMaterial({ color: 0xffd060, side: THREE.BackSide }),
+    dark: new THREE.MeshBasicMaterial({ color: 0x3a0800 }),
+    throat: new THREE.MeshBasicMaterial({ color: 0xffd060, side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
 });
 
 // ------------------------------------------------------------------ one serpent (mine or another computer's)
@@ -194,11 +243,20 @@ class Serpent {
         this.sys = sys; this.by = by;
         this.id = 'fs:' + by;
         this.isFireSerpent = true;
-        this.anchor = anchor.clone();
-        this.head = anchor.clone();
-        this.headT = anchor.clone(); // (where the head is going)
+        this.anchor = anchor.clone(); // the blaze it poured out of (its tail is there until all of it is out)
+        this.lead = anchor.clone(); // where the neck rises off the ground (the body follows its path)
+        this.leadT = anchor.clone(); // where it crawls
+        this.head = anchor.clone(); // the head's middle
+        this.headT = anchor.clone();
         this.p = Array.from({ length: N }, () => anchor.clone());
         this.r = new Float32Array(N);
+        this.ys = new Float32Array(N).fill(NaN); // (the rings' heights, smoothed over the blocks' steps)
+        this.hx = new Float32Array(HCAP); this.hz = new Float32Array(HCAP); this.h0 = 0; this.hn = 0;
+        this._push(anchor.x, anchor.z);
+        this.walked = 0; // m crawled: how much of it is out of the fire
+        this.i0 = N; // (the first ring out of the fire)
+        this.heading = 0; this.phase = Math.random() * TAU;
+        this.lift = 0; this.liftT = SERPENT.CRAWL_LIFT;
         this.grow = 0; this.fade = 0; this.dead = false;
         this.hp = SERPENT.HP;
         this.jaw = 0; this.jawT = 0;
@@ -206,10 +264,9 @@ class Serpent {
         this.target = null; // {k, id}
         this.point = null; // {x, y, z} a place to ravage
         this.biteCd = 0; this.burnT = 0; this.bodyI = 0;
-        this.face = new THREE.Vector3(0, 0, 1);
+        this.face = new THREE.Vector3(0, 0, 1); this.faceT = new THREE.Vector3(0, 0, 1);
         this.vel = new THREE.Vector3();
-        this.surgeT = 0; this.pushT = 0;
-        this.hissT = 0; this.wobble = Math.random() * 10;
+        this.hissT = 0; this.wobble = Math.random() * 10; this.restT = 0;
         this._build();
     }
 
@@ -223,28 +280,29 @@ class Serpent {
         this.group = new THREE.Group();
         this.group.name = 'fireSerpent';
         const core = new THREE.Mesh(geo, this.coreMat), shell = new THREE.Mesh(geo, this.shellMat);
-        core.frustumCulled = shell.frustumCulled = false;
-        shell.renderOrder = 3;
+        core.renderOrder = 3; shell.renderOrder = 4;
         this.group.add(core, shell);
-        // the head: its frame sits on the skull ring; z — forward, y — up
+        // the head: its middle at the head point; z — forward, y — up
         const hd = this.headGroup = new THREE.Group();
-        const horns = new THREE.Mesh(H.horns, this.headMat), hornsF = new THREE.Mesh(H.horns, this.headShellMat);
-        hornsF.renderOrder = 3;
+        const skull = new THREE.Mesh(H.skull, this.headMat), skullF = new THREE.Mesh(H.skull, this.headShellMat);
+        skull.renderOrder = 3; skullF.renderOrder = 4;
         const fu = new THREE.Mesh(H.fangsUp, B.fang);
-        const throat = new THREE.Mesh(H.throat, B.throat); throat.scale.set(0.95, 0.6, 1.3); throat.position.set(0, -0.35, 0.6);
-        hd.add(horns, hornsF, fu, throat);
+        const throat = new THREE.Mesh(H.throat, B.throat); throat.scale.set(0.55, 0.25, 1.1); throat.position.set(0, -0.12, 0.1); throat.renderOrder = 4;
+        hd.add(skull, skullF, fu, throat);
         for (const sx of [-1, 1]) {
-            const e = new THREE.Mesh(H.eye, B.eye); e.position.set(sx * 0.78, 0.32, 1.25); e.scale.set(1, 0.8, 1.1);
-            const s = new THREE.Mesh(H.slit, B.slit); s.position.set(sx * 0.98, 0.32, 1.32); s.rotation.y = sx * 0.5;
-            hd.add(e, s);
+            // the eyes under the brow ridges, looking forward-sideways; a vertical slit of a pupil
+            const e = new THREE.Mesh(H.eye, B.eye); e.position.set(sx * 0.6, 0.2, 0.42); e.scale.set(0.8, 0.85, 1.25);
+            const s = new THREE.Mesh(H.slit, B.slit); s.position.set(sx * 0.7, 0.2, 0.47); s.scale.set(0.12, 0.75, 0.3); s.rotation.y = sx * 0.6;
+            const n = new THREE.Mesh(H.nostril, B.dark); n.position.set(sx * 0.17, 0.16, 1.5); n.scale.set(1, 0.6, 1.4);
+            hd.add(e, s, n);
         }
         // the lower jaw: hinged at the back of the head
         const hinge = this.jawHinge = new THREE.Group();
-        hinge.position.set(0, -0.35, -0.9);
-        const jaw = new THREE.Mesh(H.jaw, this.headMat); jaw.scale.set(1.05, 0.55, 1.75); jaw.position.set(0, 0, 1.6);
-        const jawF = new THREE.Mesh(H.jaw, this.headShellMat); jawF.scale.copy(jaw.scale); jawF.position.copy(jaw.position); jawF.renderOrder = 3;
-        const fl = new THREE.Mesh(H.fangsLow, B.fang); fl.position.set(0, 0, 0.9);
-        hinge.add(jaw, jawF, fl);
+        hinge.position.set(0, -0.08, -1.28);
+        const jaw = new THREE.Mesh(H.jaw, this.headMat), jawF = new THREE.Mesh(H.jaw, this.headShellMat);
+        jaw.renderOrder = 3; jawF.renderOrder = 4;
+        const tl = new THREE.Mesh(H.teeth, B.fang);
+        hinge.add(jaw, jawF, tl);
         hd.add(hinge);
         this.group.add(hd);
         for (const m of [...this.group.children, ...hd.children, ...hinge.children]) m.frustumCulled = false;
@@ -256,78 +314,120 @@ class Serpent {
         for (const m of [this.coreMat, this.shellMat, this.headMat, this.headShellMat]) m.dispose(); // (the geometries are shared)
     }
 
-    /** How many rings are out of the fire now (the head first). */
-    get out() { return Math.max(2, Math.round(N * clamp(this.grow, 0.04, 1))); }
+    /** The first ring out of the fire (rings before it are still in the blaze). */
+    get out() { return N - this.i0; }
 
-    /** The point the head bites with (in front of the skull). */
-    mouth(out) { return out.copy(this.p[N - 1]); }
+    /** The point the head bites with (its jaws' front). */
+    mouth(out) { return out.copy(this.head).addScaledVector(this.face, SERPENT.HEAD_LEN * 0.42); }
 
-    /** The body as one capsule for a charge (Duel._bodies): the neck to the snout. */
+    /** The body as one capsule for a charge (Duel._bodies): the neck to the snout — what one aims at. */
     bodyCapsule(e) {
-        e.a.copy(this.p[Math.floor(N * 0.7)]); e.b.copy(this.p[N - 2]);
-        e.r = SERPENT.R_BODY * 1.2;
+        e.a.copy(this.lead); this.mouth(e.b);
+        e.r = SERPENT.R_BODY * 1.1;
         return e;
     }
 
-    centre(out) { return out.copy(this.p[N - 4]); }
+    centre(out) { return out.copy(this.head); }
 
-    // ---------------------------------------------------------------- the body (every computer)
-    /** The spine: the head runs to `headT`, the body follows (FABRIK), the tail stays in the fire; writhing; on the ground. */
-    step(dt, speed) {
-        const g = this.sys.game, t = this.sys._t;
-        // the head
-        _a.subVectors(this.headT, this.head);
-        const L = _a.length(), st = speed * dt;
-        if (L > st) _a.multiplyScalar(st / L);
-        this.head.add(_a);
-        this.vel.copy(_a).divideScalar(Math.max(dt, 1e-4));
-        const out = this.out, i0 = N - out;
-        // (what is not out yet waits in the fire)
-        for (let i = 0; i < i0; i++) this.p[i].copy(this.anchor);
-        const p = this.p, seg = SERPENT.SEG_LEN;
-        // writhing: a wave running down the body, sideways; the loose middle sags to the ground
-        for (let i = i0 + 1; i < N - 1; i++) {
-            const k = (i - i0) / Math.max(1, out - 1);
-            _b.subVectors(p[i + 1], p[i - 1]);
-            _c.crossVectors(_b, _up);
-            if (_c.lengthSq() > 1e-6) _c.normalize();
-            const w = Math.sin(i * 0.42 - t * 3.1 + this.wobble) * (0.9 + 1.4 * (1 - k)) * dt * (this.fade > 0 ? 0.3 : 1);
-            p[i].addScaledVector(_c, w);
-            if (k < 0.6) p[i].y -= 7 * dt * (1 - k / 0.6);
-        }
-        // FABRIK: from the head down, then from the fire up
-        p[N - 1].copy(this.head);
-        for (let i = N - 2; i >= i0; i--) {
-            _b.subVectors(p[i], p[i + 1]);
-            const l = _b.length() || 1;
-            p[i].copy(p[i + 1]).addScaledVector(_b, seg / l);
-        }
-        p[i0].copy(this.anchor);
-        for (let i = i0 + 1; i < N; i++) {
-            _b.subVectors(p[i], p[i - 1]);
-            const l = _b.length() || 1;
-            if (l > seg) p[i].copy(p[i - 1]).addScaledVector(_b, seg / l);
-        }
-        // never under the ground
-        const col = g.collision;
-        for (let i = i0; i < N; i++) {
-            const r = serpentRadius(i, N);
-            const gy = col?.groundY ? col.groundY(p[i].x, p[i].z) : -Infinity;
-            if (p[i].y < gy + r * 0.85) p[i].y = gy + r * 0.85;
-        }
-        this.head.copy(p[N - 1]);
-        // the radii: it rises out of the fire, it collapses at the end
-        const sc = (this.grow < 1 ? 0.35 + 0.65 * this.grow : 1) * (1 - 0.85 * this.fade) * (0.75 + 0.25 * this.hp / SERPENT.HP);
-        for (let i = 0; i < N; i++) this.r[i] = i < i0 ? 0 : serpentRadius(i, N) * sc * (i === N - 1 ? 0.3 : 1) * (i - i0 < 3 ? (i - i0 + 1) / 4 : 1);
+    // ---------------------------------------------------------------- the path
+    _push(x, z) {
+        const k = (this.h0 + this.hn) % HCAP;
+        this.hx[k] = x; this.hz[k] = z;
+        if (this.hn < HCAP) this.hn++; else this.h0 = (this.h0 + 1) % HCAP;
+    }
+    _newest() { return (this.h0 + this.hn - 1) % HCAP; }
+
+    /** The lead crawls to (gx, gz) at `speed`: it turns gradually and snakes from side to side — the waves run down the body. */
+    crawl(dt, gx, gz, speed) {
+        const L = this.lead, dx = gx - L.x, dz = gz - L.z, d = Math.hypot(dx, dz);
+        if (d < 0.6 || speed <= 0) return 0;
+        const want = Math.atan2(dx, dz);
+        let dh = want - this.heading;
+        dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+        const turn = (0.8 + speed * 0.08) * dt;
+        this.heading += clamp(dh, -turn, turn);
+        this.phase += dt * speed / 6.5; // (a wave ~40 m long)
+        const sway = 0.62 * Math.min(1, d / 14) * (Math.abs(dh) > 1.2 ? 0.4 : 1);
+        const th = this.heading + sway * Math.sin(this.phase);
+        const st = Math.min(speed * dt, d);
+        L.x += Math.sin(th) * st; L.z += Math.cos(th) * st;
+        const k = this._newest();
+        if (Math.hypot(L.x - this.hx[k], L.z - this.hz[k]) >= HSTEP) this._push(L.x, L.z);
+        this.walked += st;
+        return st;
     }
 
-    /** The uniforms (relative to the anchor: precise in far places too), the head's frame, the jaw. */
+    // ---------------------------------------------------------------- the body (every computer)
+    /** The rings: the body along the path behind the lead, on the ground; the neck an arch up to the head; the head to `headT`. */
+    step(dt, headSpeed) {
+        const g = this.sys.game, col = g.collision, p = this.p, t = this.sys._t;
+        const gyAt = (x, z) => (col?.groundY ? col.groundY(x, z) : this.anchor.y);
+        this.grow = Math.min(1, this.walked / BODY_LEN);
+        // the body: ring NB−1 at the lead, every next one SEG further back along the path; what the path does not reach is still in the blaze
+        const L = this.lead;
+        let i = NB - 1, need = 0, acc = 0, px = L.x, pz = L.z;
+        p[i].x = px; p[i].z = pz; i--; need = SEG;
+        for (let n = this.hn - 1; n >= 0 && i >= 0; n--) {
+            const k = (this.h0 + n) % HCAP, qx = this.hx[k], qz = this.hz[k];
+            const l = Math.hypot(qx - px, qz - pz);
+            while (i >= 0 && acc + l >= need) {
+                const f = l > 1e-6 ? (need - acc) / l : 0;
+                p[i].x = px + (qx - px) * f; p[i].z = pz + (qz - pz) * f;
+                i--; need += SEG;
+            }
+            acc += l; px = qx; pz = qz;
+        }
+        this.i0 = i + 1; // (the rings 0…i are still in the fire)
+        for (; i >= 0; i--) { p[i].x = this.anchor.x; p[i].z = this.anchor.z; }
+        // the radii: it shrinks when weakened, collapses at the end; the end coming out of the fire tapers in
+        const sc = (1 - 0.8 * this.fade) * (0.8 + 0.2 * this.hp / SERPENT.HP);
+        const i0 = this.i0;
+        for (let j = 0; j < N; j++) this.r[j] = j < i0 ? 0 : serpentRadius(j, N) * sc * (j - i0 < 4 ? (j - i0 + 1) / 5 : 1);
+        // on the ground: the rings lie on it (half sunk — a river of fire), their heights smoothed over the blocks' steps
+        const k6 = Math.min(1, dt * 7);
+        for (let j = 0; j < NB; j++) {
+            const yT = j < i0 ? this.anchor.y - 2 : gyAt(p[j].x, p[j].z) + this.r[j] * 0.55;
+            this.ys[j] = Number.isFinite(this.ys[j]) && j >= i0 ? this.ys[j] + (yT - this.ys[j]) * k6 : yT;
+            p[j].y = this.ys[j];
+        }
+        // the head goes to its target; the neck can reach so far from the lead
+        _a.subVectors(this.headT, this.head);
+        const Lh = _a.length(), st = headSpeed * dt;
+        if (Lh > st) _a.multiplyScalar(st / Lh);
+        this.head.add(_a);
+        this.vel.copy(_a).divideScalar(Math.max(dt, 1e-4));
+        const Ly = p[NB - 1].y;
+        _b.set(this.head.x - L.x, this.head.y - Ly, this.head.z - L.z);
+        const reach = NECK_LEN * 0.92;
+        if (_b.length() > reach) { _b.setLength(reach); this.head.set(L.x + _b.x, Ly + _b.y, L.z + _b.z); }
+        const hg = gyAt(this.head.x, this.head.z) + 2.5;
+        if (this.head.y < hg) this.head.y = hg;
+        // where it looks
+        this.face.lerp(this.faceT, Math.min(1, dt * 5));
+        if (this.face.lengthSq() < 1e-4) this.face.set(Math.sin(this.heading), 0, Math.cos(this.heading));
+        this.face.normalize();
+        // the neck: a cubic arch from the lead (along the ground, the way it crawls) up to the back of the skull (along the look)
+        _c.copy(this.head).addScaledVector(this.face, -SERPENT.HEAD_LEN * 0.36); // (the back of the skull)
+        _d.set(Math.sin(this.heading), 0, Math.cos(this.heading));
+        const P0x = L.x, P0y = Ly, P0z = L.z;
+        const P1x = L.x + _d.x * NECK_LEN * 0.3, P1y = Ly + 1, P1z = L.z + _d.z * NECK_LEN * 0.3;
+        const P2x = _c.x - this.face.x * NECK_LEN * 0.3, P2y = _c.y - this.face.y * NECK_LEN * 0.3 - 3, P2z = _c.z - this.face.z * NECK_LEN * 0.3;
+        for (let j = NB; j < N; j++) {
+            const u = (j - NB + 1) / SERPENT.NECK, v = 1 - u;
+            const b0 = v * v * v, b1 = 3 * v * v * u, b2 = 3 * v * u * u, b3 = u * u * u;
+            p[j].set(b0 * P0x + b1 * P1x + b2 * P2x + b3 * _c.x, b0 * P0y + b1 * P1y + b2 * P2y + b3 * _c.y, b0 * P0z + b1 * P1z + b2 * P2z + b3 * _c.z);
+            // (breathing: the neck sways a little)
+            p[j].x += Math.sin(t * 1.3 + j * 0.5 + this.wobble) * 0.25 * u * (1 - this.fade);
+        }
+    }
+
+    /** The uniforms (relative to the lead: precise in far places too), the head's frame, the jaw. */
     draw(dt) {
-        const g = this.sys.game, p = this.p, o = this.anchor;
+        const p = this.p, o = this.lead;
         this.group.position.copy(o);
         this.group.updateMatrix();
         const C = this.spine.uC.value, Nn = this.spine.uN.value, Bb = this.spine.uB.value;
-        // a frame carried along the spine without twisting (it starts upright at the tail)
+        // a frame carried along the spine without twisting
         _c.set(0, 1, 0);
         for (let i = 0; i < N; i++) {
             const a = p[Math.max(0, i - 1)], b = p[Math.min(N - 1, i + 1)];
@@ -341,10 +441,7 @@ class Serpent {
             Bb[i].crossVectors(_b, _c);
             C[i].set(p[i].x - o.x, p[i].y - o.y, p[i].z - o.z, this.r[i]);
         }
-        // the head: on the skull ring, looking along the neck's end; upright
-        _b.subVectors(p[N - 1], p[N - 4]);
-        if (_b.lengthSq() > 1e-6) this.face.copy(_b.normalize());
-        const sk = p[N - 3];
+        // the head: upright, along the look
         _c.copy(_up).addScaledVector(this.face, -this.face.dot(_up));
         if (_c.lengthSq() < 1e-4) _c.set(1, 0, 0);
         _c.normalize();
@@ -352,36 +449,62 @@ class Serpent {
         _m.makeBasis(_d, _c, this.face);
         const hd = this.headGroup;
         hd.quaternion.setFromRotationMatrix(_m);
-        hd.position.set(sk.x - o.x, sk.y - o.y, sk.z - o.z);
-        const hs = Math.max(0.01, this.r[N - 3] / (SERPENT.R_BODY * 1.1));
-        hd.scale.setScalar(hs);
-        hd.visible = this.grow > 0.6;
-        // the jaw: snaps open before a bite, shut after; it breathes a little when idle
+        hd.position.set(this.head.x - o.x, this.head.y - o.y, this.head.z - o.z);
+        hd.scale.setScalar(HEAD_K * (1 - 0.7 * this.fade) * (0.85 + 0.15 * this.hp / SERPENT.HP) * Math.min(1, 0.3 + this.walked / 30));
+        // the jaw: snaps open before a bite, shut after; it breathes a little
         this.jaw += (this.jawT - this.jaw) * Math.min(1, dt * 9);
-        this.jawHinge.rotation.x = 0.08 + this.jaw * 0.85 + Math.sin(this.sys._t * 2.3 + this.wobble) * 0.04;
-        // heat: weakened — darker embers
-        const heat = (0.65 + 0.35 * this.hp / SERPENT.HP) * (1 - 0.6 * this.fade);
+        this.jawHinge.rotation.x = 0.04 + this.jaw * 0.9 + Math.sin(this.sys._t * 2.3 + this.wobble) * 0.03;
+        // heat: weakened — darker
+        const heat = (0.7 + 0.3 * this.hp / SERPENT.HP) * (1 - 0.6 * this.fade);
         for (const m of [this.coreMat, this.shellMat, this.headMat, this.headShellMat]) { m.uniforms.uHeat.value = heat; m.uniforms.uFade.value = 1 - this.fade; }
         this._particles(dt);
     }
 
+    /** The Hellfire's own flame cubes off the whole body (its pool, its colours), embers, smoke; sparks from the jaws. */
     _particles(dt) {
-        const P = this.sys.game.hellfire?.pool, S = this.sys;
+        const S = this.sys, P = S.pool, fx = S.game.fx;
         if (!P) return;
-        const out = this.out, i0 = N - out, p = this.p;
-        // embers rising off the body, flames licking off the back, sparks from the jaws, smoke from the head
-        const n = S._n('ember', 90 * (1 - this.fade) + 160 * this.fade, dt, 14);
+        const p = this.p, i0 = this.i0, out = N - i0, live = 1 - this.fade;
+        // flames: off the back and the flanks, rising and streaming back along the body
+        const n = S._n('flame', (780 * live + 300 * this.fade) * out / N, dt, 40);
         for (let k = 0; k < n; k++) {
             const i = i0 + ((Math.random() * out) | 0), r = this.r[i];
-            P.spawn(p[i].x + (Math.random() - 0.5) * r * 2, p[i].y + r * (0.3 + Math.random() * 0.7), p[i].z + (Math.random() - 0.5) * r * 2,
-                (Math.random() - 0.5) * 1.5, 2 + Math.random() * 3, (Math.random() - 0.5) * 1.5, this.fade > 0 ? pick(EMBER) : pick(FLAME), 0.25 + Math.random() * 0.35 * r, 0.6 + Math.random() * 0.6, { shrink: 0.5, spin: 4 });
+            if (r < 0.3) continue;
+            const a = Math.random() * TAU, ca = Math.cos(a), sa = Math.sin(a);
+            const nx = this.spine.uN.value[i], bx = this.spine.uB.value[i];
+            const ux = nx.x * ca + bx.x * sa, uy = Math.abs(nx.y * ca + bx.y * sa), uz = nx.z * ca + bx.z * sa; // (the upper side)
+            const back = p[Math.max(0, i - 1)];
+            const big = r / SERPENT.R_BODY;
+            P.spawn(p[i].x + ux * r * 0.8, p[i].y + uy * r * 0.8, p[i].z + uz * r * 0.8,
+                ux * 1.5 + (back.x - p[i].x) * 0.6, 3.5 + Math.random() * 5 * big, uz * 1.5 + (back.z - p[i].z) * 0.6,
+                this.fade > 0 ? pick(EMBER) : Math.random() < 0.18 ? pick(CORE) : Math.random() < 0.75 ? pick(FLAME) : pick(DEEP),
+                (0.9 + Math.random() * 1.6) * (0.4 + 0.6 * big), 0.45 + Math.random() * 0.45, { shrink: 1.1, spin: 6 });
         }
-        const h = p[N - 1];
-        const sm = S._n('smoke', 10, dt, 3);
-        for (let k = 0; k < sm; k++) P.spawn(h.x + (Math.random() - 0.5) * 2, h.y + 1.5, h.z + (Math.random() - 0.5) * 2, (Math.random() - 0.5), 2.5 + Math.random() * 2, (Math.random() - 0.5), pick(SMOKE), 1.2 + Math.random(), 1.6, { shrink: -0.6, spin: 1 });
-        if (this.jaw > 0.4) {
-            const sp = S._n('spit', 60 * this.jaw, dt, 6);
-            for (let k = 0; k < sp; k++) P.spawn(h.x, h.y, h.z, this.face.x * 8 + (Math.random() - 0.5) * 3, this.face.y * 8 + Math.random() * 2, this.face.z * 8 + (Math.random() - 0.5) * 3, pick(FLAME), 0.4 + Math.random() * 0.5, 0.5, { shrink: 0.8, spin: 6 });
+        // the head: a crown of flame streaming back off it
+        const h = this.head, hn = S._n('head', 140 * live, dt, 10);
+        for (let k = 0; k < hn; k++) {
+            const s = SERPENT.HEAD_LEN * 0.4;
+            P.spawn(h.x + (Math.random() - 0.5) * s, h.y + Math.random() * s * 0.35, h.z + (Math.random() - 0.5) * s,
+                -this.face.x * 4 + (Math.random() - 0.5) * 2, 4 + Math.random() * 4, -this.face.z * 4 + (Math.random() - 0.5) * 2,
+                Math.random() < 0.3 ? pick(CORE) : pick(FLAME), 0.8 + Math.random() * 1.4, 0.4 + Math.random() * 0.3, { shrink: 1.2, spin: 7 });
+        }
+        // embers flying up off it, smoke over it
+        const em = S._n('ember', 60 * live, dt, 6);
+        for (let k = 0; k < em; k++) {
+            const i = i0 + ((Math.random() * out) | 0);
+            P.spawn(p[i].x, p[i].y + this.r[i], p[i].z, (Math.random() - 0.5) * 4, 7 + Math.random() * 8, (Math.random() - 0.5) * 4, pick(EMBER), 0.25 + Math.random() * 0.25, 1.2 + Math.random(), { shrink: 0.4, spin: 9 });
+        }
+        if (fx?.smoke) {
+            const sm = S._n('smoke', 22 * live, dt, 3);
+            for (let k = 0; k < sm; k++) {
+                const i = i0 + ((Math.random() * out) | 0), r = this.r[i];
+                fx.smoke.spawn(p[i].x + (Math.random() - 0.5) * r, p[i].y + r * 1.6 + Math.random() * 2, p[i].z + (Math.random() - 0.5) * r, (Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5), pick(SMOKE), 1.6 + Math.random() * 1.6, 2.4, { shrink: -0.5, spin: 0.8 });
+            }
+        }
+        if (this.jaw > 0.35) {
+            const sp = S._n('spit', 80 * this.jaw, dt, 8);
+            this.mouth(_e);
+            for (let k = 0; k < sp; k++) P.spawn(_e.x, _e.y, _e.z, this.face.x * 14 + (Math.random() - 0.5) * 4, this.face.y * 14 + Math.random() * 3, this.face.z * 14 + (Math.random() - 0.5) * 4, Math.random() < 0.4 ? pick(CORE) : pick(FLAME), 0.6 + Math.random() * 0.8, 0.5, { shrink: 1, spin: 6 });
         }
     }
 }
@@ -394,8 +517,10 @@ export class FireSerpent {
         this.remote = new Map(); // by -> Serpent
         this.log = [];
         this._t = 0; this._sendT = 0; this._sent = false;
-        this._acc = { ember: 0, smoke: 0, spit: 0 };
+        this._acc = { flame: 0, head: 0, ember: 0, smoke: 0, spit: 0 };
         this._tmpE = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
+        // its own pool of the Hellfire's flame cubes (the same material: no new shader; the Hellfire's own pool stays for its fire)
+        this.pool = game.scene ? new ParticlePool(game.scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 3000, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }) : null;
     }
 
     get me() { return this.game.localId; }
@@ -408,7 +533,7 @@ export class FireSerpent {
 
     /** Every serpent (for charges, wizards, water): mine and the others'. */
     *all() { if (this.mine && !this.mine.dead) yield this.mine; for (const s of this.remote.values()) if (!s.dead) yield s; }
-    targets() { return [...this.all()].filter((s) => s.fade === 0 && s.grow > 0.3); }
+    targets() { return [...this.all()].filter((s) => s.fade === 0 && s.walked > 20); }
     byId(id) { for (const s of this.all()) if (s.id === id) return s; return null; }
 
     // ---------------------------------------------------------------- the words
@@ -426,23 +551,27 @@ export class FireSerpent {
         // the dark: +10 (black magic — the author)
         if (g.dark) addDark(g.dark, SERPENT.DARK, 'cast');
         const sv = this.mine = new Serpent(this, this.me, this._anchorOf(s.c, _a));
-        sv.face.copy(s.d).setY(0);
-        if (sv.face.lengthSq() < 1e-4) sv.face.set(0, 0, 1);
-        sv.face.normalize();
+        // it pours out of the blaze away from me (the way the wand pointed), then curls round
+        _b.copy(s.c).sub(g.character.group.position).setY(0);
+        if (_b.lengthSq() < 1e-4) _b.copy(s.d).setY(0);
+        if (_b.lengthSq() < 1e-4) _b.set(0, 0, 1);
+        sv.heading = Math.atan2(_b.x, _b.z);
+        sv.face.set(Math.sin(sv.heading), 0.3, Math.cos(sv.heading)).normalize(); sv.faceT.copy(sv.face);
+        sv.curl = Math.random() < 0.5 ? 1 : -1;
         this._note({ ev: 'cast' });
-        const P = g.hellfire.pool;
+        const P = this.pool;
         // the fire heaves up: a burst, the ground shakes, the roar
-        g.fx?.lightFlash?.(s.c, 0xff5a1a, 14, 0.9, 80);
-        if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 1.1);
+        g.fx?.lightFlash?.(s.c, 0xff5a1a, 18, 1, 90);
+        if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 1.3);
         g.sound?.playInferno?.(); g.sound?.playRumble?.(s.c, g.character.group.position);
-        if (P) for (let i = 0; i < 160; i++) { const a = Math.random() * TAU, v = 3 + Math.random() * 9; P.spawn(s.c.x, s.c.y, s.c.z, Math.cos(a) * v, 4 + Math.random() * 14, Math.sin(a) * v, pick(FLAME), 0.5 + Math.random() * 0.9, 0.8 + Math.random() * 0.6, { shrink: 0.6, spin: 5 }); }
-        g.castleLife?.alarm?.(s.c, 'fire', this.me, 40); // (a horror: everyone near runs, the knights come)
-        g.hud?.setVoice?.('🐍 <b>Огненный змей!</b> Он поднимается из адского огня. «Атак» на кого-то — укусит и подожжёт; на место — пойдёт туда и выжжет всё. Пока он жив, огонь тратит вдвое больше маны', true);
+        if (P) for (let i = 0; i < 260; i++) { const a = Math.random() * TAU, v = 4 + Math.random() * 12; P.spawn(s.c.x, s.c.y, s.c.z, Math.cos(a) * v, 5 + Math.random() * 18, Math.sin(a) * v, Math.random() < 0.3 ? pick(CORE) : pick(FLAME), 0.8 + Math.random() * 1.6, 0.8 + Math.random() * 0.7, { shrink: 0.7, spin: 5 }); }
+        g.castleLife?.alarm?.(s.c, 'fire', this.me, 60); // (a horror: everyone near runs, the knights come)
+        g.hud?.setVoice?.('🐍 <b>Огненный змей!</b> Он выползает из адского огня и ползает рядом с вами. «Атак» на кого-то — укусит и подожжёт; на место — поползёт туда и выжжет всё. Пока он жив, огонь тратит вдвое больше маны', true);
         this._send(true);
         return SERPENT.NAME;
     }
 
-    /** Where the serpent's tail is: the blaze, on the ground. */
+    /** Where it pours out: the blaze, on the ground. */
     _anchorOf(c, out) {
         const g = this.game;
         out.copy(c);
@@ -458,14 +587,14 @@ export class FireSerpent {
         const aim = g.duel?.pickSide?.(false);
         const t = aim?.t;
         if (t && t.kind !== 'b' && t.kind !== 'F' && !(t.kind === 'p' && t.id === this.me)) {
-            s.target = { k: t.kind, id: t.id }; s.point = null; s.mode = 'strike'; s.modeT = 0;
+            s.target = { k: t.kind, id: t.id }; s.point = null; s.mode = 'strike'; s.modeT = 0; s.lunge = 0;
             this._note({ ev: 'attack', k: t.kind, id: t.id });
             g.hud?.setVoice?.('🐍 Змей бросается на цель!', true);
             return true;
         }
         const o = new THREE.Vector3(), d = new THREE.Vector3();
         g.duel?._myRay?.(aim?.side || g.magicHand || g.lastMagicHand || 'right', o, d);
-        const cell = g.builder?._hitCell?.(o, d, 80);
+        const cell = g.builder?._hitCell?.(o, d, 120);
         if (cell?.point) {
             s.point = { x: cell.point.x, y: cell.point.y, z: cell.point.z }; s.target = null; s.mode = 'sweep'; s.modeT = 0;
             this._note({ ev: 'sweep' });
@@ -483,7 +612,7 @@ export class FireSerpent {
         if (s.mode === 'strike' && s.target) return; // (already at someone: it finishes)
         const ref = refOf(this.game, byId);
         if (!ref) return;
-        s.target = ref; s.mode = 'strike'; s.modeT = 0; s.guard = true;
+        s.target = ref; s.mode = 'strike'; s.modeT = 0; s.guard = true; s.lunge = 0;
         this._note({ ev: 'guard', k: ref.k, id: ref.id });
     }
 
@@ -497,12 +626,17 @@ export class FireSerpent {
         for (const [by, s] of this.remote) {
             if (!s.dead && this._t - s.at > SERPENT.STALE && s.fade === 0) s.fade = 0.001;
             if (s.fade > 0) { s.fade += dt / SERPENT.FADE_S; if (s.fade >= 1) { s.dispose(); this.remote.delete(by); continue; } }
-            s.grow = Math.min(1, s.grow + dt / SERPENT.GROW_S * 1.2);
-            if (s.netAnchor) s.anchor.lerp(s.netAnchor, 1 - Math.exp(-dt * 8));
+            // (its lead crawls after the owner's — the same snaking, its own path)
+            const sp = s.netLead ? Math.max(SERPENT.SPEED, s.lead.distanceTo(s.netLead) * 3) : 0;
+            if (s.netLead) s.crawl(dt, s.netLead.x, s.netLead.z, sp);
+            s.faceT.copy(s.headT).sub(s.head);
+            if (s.faceT.lengthSq() < 4) s.faceT.copy(s.face);
+            s.faceT.normalize();
             s.step(dt, SERPENT.LUNGE);
             this._burnTick(s, dt);
             s.draw(dt);
         }
+        this.pool?.update(dt);
         if (g.authority) this._wizards(dt);
     }
 
@@ -512,89 +646,109 @@ export class FireSerpent {
         if (s.fade === 0 && (!hf || s.hp <= 0)) this._die(s.hp <= 0 ? s.killedBy || 'water' : 'fire');
         if (s.fade > 0) {
             s.fade += dt / SERPENT.FADE_S;
-            s.headT.y -= 6 * dt;
+            s.headT.y -= 6 * dt; s.jawT = 0.5;
             s.step(dt, 4); s.draw(dt);
             if (s.fade >= 1) { s.dispose(); this.mine = null; this._send(false); }
             return;
         }
-        this._anchorOf(hf.c, s.anchor);
-        if (hf.k > 0.5) s.anchor.copy(g.character.group.position).addScaledVector(s.face, -3).setY(s.anchor.y); // (the fire gone into a ring: the serpent's tail stays near me)
-        s.grow = Math.min(1, s.grow + dt / SERPENT.GROW_S);
         s.hp = Math.min(SERPENT.HP, s.hp + SERPENT.REGEN * dt);
         // water round its head (a river, water magic): it hisses and weakens
-        const wet = g.hellfire._wet?.(s.p[N - 1], SERPENT.HEAD_FIRE_R) || 0;
+        const wet = g.hellfire._wet?.(s.head, SERPENT.HEAD_FIRE_R) || 0;
         if (wet > 0) { s.hp -= 25 * wet * dt; s.killedBy = 'water'; }
-        s.modeT += dt; s.biteCd -= dt;
-        let speed = SERPENT.SPEED;
-        const A = s.anchor, me = g.character.group.position;
+        s.modeT += dt; s.biteCd -= dt; s.hissT -= dt;
+        const me = g.character.group.position, L = s.lead, t = this._t;
+        const fwdX = Math.sin(s.heading), fwdZ = Math.cos(s.heading);
+        let crawl = SERPENT.SPEED, headSpeed = 14;
+        const dMe = Math.hypot(me.x - L.x, me.z - L.z);
         if (s.mode === 'rise') {
-            s.headT.copy(A).addScaledVector(s.face, 5 * s.grow).setY(A.y + SERPENT.HEAD_H * s.grow);
-            speed = 14;
-            if (s.grow >= 1) { s.mode = 'idle'; s.modeT = 0; this._roar(s, 1); }
+            // it pours out of the blaze: fast, in a wide arc round it (the whole body comes out in GROW_S)
+            crawl = BODY_LEN / SERPENT.GROW_S;
+            const a = s.heading + s.curl * 0.9;
+            s.leadT.set(L.x + Math.sin(a) * 20, 0, L.z + Math.cos(a) * 20);
+            if (dMe < SERPENT.NEAR + 4) { _a.set(L.x - me.x, 0, L.z - me.z).setLength(25); s.leadT.set(me.x + _a.x, 0, me.z + _a.z); } // (never over me)
+            s.liftT = SERPENT.CRAWL_LIFT;
+            if (s.grow >= 1) { s.mode = 'idle'; s.modeT = 0; s.restT = 2.5; this._roar(s, 1); }
         } else if (s.mode === 'strike') {
-            speed = this._strike(s, dt);
+            const r = this._strike(s, dt);
+            crawl = r.crawl; headSpeed = r.head;
         } else if (s.mode === 'sweep') {
-            const P = s.point;
-            const a = s.modeT * 1.3;
-            s.headT.set(P.x + Math.cos(a) * SERPENT.SWEEP_R, P.y + 3 + Math.sin(a * 2.3) * 1.2, P.z + Math.sin(a * 0.8) * SERPENT.SWEEP_R);
-            s.jawT = 0.6;
-            speed = 12;
-            if (s.modeT > SERPENT.SWEEP_S) { s.mode = 'idle'; s.modeT = 0; s.jawT = 0; }
+            // round the place, coiling, its jaws breathing fire low over it
+            const P = s.point, a = s.modeT * 0.55 * (s.curl || 1);
+            s.leadT.set(P.x + Math.cos(a) * SERPENT.SWEEP_R, 0, P.z + Math.sin(a) * SERPENT.SWEEP_R);
+            crawl = SERPENT.SPEED * 1.8;
+            s.liftT = 0.45; s.jawT = 0.6;
+            s.faceT.set(P.x - s.head.x, P.y - s.head.y, P.z - s.head.z).normalize();
+            if (Math.hypot(P.x - L.x, P.z - L.z) > SERPENT.SWEEP_R * 2.2) s.modeT = 0; // (still on its way: the time runs from its arrival)
+            if (s.modeT > SERPENT.SWEEP_S) { s.mode = 'idle'; s.modeT = 0; s.jawT = 0; s.restT = 1.5; }
         }
         if (s.mode === 'idle') {
-            // it rears over its fire, looking where the wand points, swaying — a living thing
-            _a.copy(hf.d).setY(0);
-            if (_a.lengthSq() < 1e-4) _a.copy(s.face).setY(0);
-            _a.normalize();
-            const t = this._t;
-            s.headT.copy(A).addScaledVector(_a, 9).add(_b.set(Math.sin(t * 0.7 + s.wobble) * 3, SERPENT.HEAD_H + Math.sin(t * 1.1) * 1.5, Math.cos(t * 0.53 + s.wobble) * 3));
-            s.jawT = Math.sin(t * 0.4) > 0.93 ? 0.7 : 0; // (now and then it opens its jaws and hisses)
-            speed = 5;
-            if (s.jawT > 0 && s.hissT <= 0) { s.hissT = 4; g.sound?.playInferno?.(); }
+            // its own life round its master: crawls about (never over him, follows him when he goes), rests, raises its head and watches, hisses
+            if (dMe > SERPENT.FOLLOW) { s.leadT.set(me.x - (me.x - L.x) / dMe * SERPENT.WANDER * 0.7, 0, me.z - (me.z - L.z) / dMe * SERPENT.WANDER * 0.7); crawl = SERPENT.SPEED * SERPENT.FOLLOW_K; s.restT = 0; }
+            else if (s.restT > 0) { s.restT -= dt; crawl = 0; }
+            else if (Math.hypot(s.leadT.x - L.x, s.leadT.z - L.z) < 4 || s.modeT > 14 || Math.hypot(s.leadT.x - me.x, s.leadT.z - me.z) > SERPENT.WANDER * 1.3) {
+                // a new place to crawl to: round me, between NEAR and WANDER, ahead of it (it does not turn back on itself)
+                const base = Math.atan2(L.x - me.x, L.z - me.z) + (s.curl || 1) * (0.6 + Math.random() * 0.9);
+                const R = SERPENT.NEAR + 6 + Math.random() * (SERPENT.WANDER - SERPENT.NEAR - 6);
+                s.leadT.set(me.x + Math.sin(base) * R, 0, me.z + Math.cos(base) * R);
+                s.modeT = 0;
+                if (Math.random() < 0.35) s.restT = 2 + Math.random() * 4;
+                if (Math.random() < 0.2) s.curl = -(s.curl || 1);
+            }
+            // never through me: the lead goes round
+            if (dMe < SERPENT.NEAR) { _a.set(L.x - me.x, 0, L.z - me.z).setLength(SERPENT.NEAR + 8); s.leadT.set(me.x + _a.x, 0, me.z + _a.z); crawl = Math.max(crawl, SERPENT.SPEED); }
+            const resting = crawl === 0;
+            s.liftT = resting ? 1 : SERPENT.CRAWL_LIFT;
+            s.jawT = resting && Math.sin(t * 0.5 + s.wobble) > 0.9 ? 0.75 : 0; // (now and then it opens its jaws and hisses)
+            if (s.jawT > 0 && s.hissT <= 0) { s.hissT = 5; g.sound?.playInferno?.(); }
+            // it looks where it crawls; resting — round about, now at me, now away
+            if (resting) { const la = s.heading + Math.sin(t * 0.4 + s.wobble) * 1.1; s.faceT.set(Math.sin(la), -0.05 + Math.sin(t * 0.7) * 0.1, Math.cos(la)).normalize(); }
+            else s.faceT.set(fwdX, -0.12, fwdZ).normalize();
         }
-        s.hissT -= dt;
-        // the leash: it crawls only a short way from its fire; never through me
-        _a.subVectors(s.headT, A).setY(0);
-        if (_a.length() > SERPENT.LEASH) { _a.setLength(SERPENT.LEASH); s.headT.x = A.x + _a.x; s.headT.z = A.z + _a.z; }
-        s.step(dt, speed);
+        s.lift += (s.liftT - s.lift) * Math.min(1, dt * 2.2);
+        s.crawl(dt, s.leadT.x, s.leadT.z, crawl);
+        // the head: ahead of where the neck rises, raised by the lift, swaying (unless the strike leads it)
+        if (s.mode !== 'strike' || !s.lunge) {
+            const gy = g.collision?.groundY ? g.collision.groundY(L.x, L.z) : L.y;
+            const sw = Math.sin(t * 0.9 + s.wobble) * 1.6;
+            const ahead = NECK_LEN * (0.55 - 0.2 * Math.min(1, s.lift));
+            s.headT.set(L.x + fwdX * ahead + fwdZ * sw, gy + SERPENT.HEAD_H * s.lift + Math.sin(t * 1.3) * 0.6, L.z + fwdZ * ahead - fwdX * sw);
+            if (s.mode === 'strike' && s.reared) s.headT.copy(s.reared);
+        }
+        s.step(dt, headSpeed);
         this._burnTick(s, dt);
         s.draw(dt);
         // the network
         this._sendT += dt;
         if (this._sendT >= SERPENT.SEND) { this._sendT = 0; this._send(true); }
-        void me;
     }
 
-    /** «Атак» on someone: over him, rear, lunge, bite, back up — again, while he is there and in reach. @returns the head's speed */
+    /** «Атак» on someone: it crawls up to him, rears high, lunges, bites, draws back — again, while he is there. @returns the speeds */
     _strike(s, dt) {
-        const g = this.game;
         const tp = this._targetPoint(s.target, _c);
-        if (!tp || s.modeT > 40) { s.mode = 'idle'; s.target = null; s.guard = false; s.jawT = 0; return 6; }
-        _a.subVectors(tp, s.anchor).setY(0);
-        if (_a.length() > SERPENT.LEASH + 10) { // (ran away beyond its reach: it gives up)
-            if (s.modeT > 4) { s.mode = 'idle'; s.target = null; return 6; }
-        }
-        _b.subVectors(s.anchor, tp).setY(0);
-        if (_b.lengthSq() < 1e-4) _b.set(1, 0, 0);
-        _b.normalize();
-        const head = s.p[N - 1];
+        const L = s.lead;
+        if (!tp || s.modeT > 45) { s.mode = 'idle'; s.target = null; s.guard = false; s.jawT = 0; s.lunge = 0; s.reared = null; return { crawl: SERPENT.SPEED, head: 10 }; }
+        const dx = tp.x - L.x, dz = tp.z - L.z, d = Math.hypot(dx, dz) || 1;
+        s.faceT.set(tp.x - s.head.x, tp.y - s.head.y, tp.z - s.head.z).normalize();
+        const strikeAt = NECK_LEN * 0.62; // (the neck strikes from about here)
         if (!s.lunge) {
-            // rearing over it, the jaws opening
-            s.headT.copy(tp).addScaledVector(_b, 6).setY(tp.y + 7);
-            s.jawT = 0.45;
-            if (head.distanceTo(s.headT) < 3 && s.biteCd <= 0) { s.lunge = 0.0001; s.jawT = 1; this._roar(s, 0.5); }
-            return SERPENT.SPEED * 1.4;
+            // crawling up to it, then rearing: the head drawn back and high, the jaws opening
+            s.leadT.set(tp.x - dx / d * strikeAt * 0.8, 0, tp.z - dz / d * strikeAt * 0.8);
+            s.liftT = d < strikeAt * 1.6 ? 1.5 : SERPENT.CRAWL_LIFT;
+            s.jawT = d < strikeAt * 1.6 ? 0.45 : 0;
+            const gy = this.game.collision?.groundY ? this.game.collision.groundY(L.x, L.z) : L.y;
+            (s.reared || (s.reared = new THREE.Vector3())).set(L.x + dx / d * 4, gy + SERPENT.HEAD_H * 1.5, L.z + dz / d * 4);
+            if (d < strikeAt * 1.1 && s.head.distanceTo(s.reared) < 4 && s.biteCd <= 0) { s.lunge = 0.0001; s.jawT = 1; this._roar(s, 0.6); }
+            return { crawl: d > strikeAt ? SERPENT.SPEED * 1.6 : 0, head: 16 };
         }
-        // the lunge
+        // the lunge: the head flies at it
         s.lunge += dt;
         s.headT.copy(tp);
-        if (head.distanceTo(tp) < SERPENT.BITE_R || s.lunge > 0.9) {
-            if (head.distanceTo(tp) < SERPENT.BITE_R + 0.8) this._bite(s, s.target, tp);
+        s.mouth(_d);
+        if (_d.distanceTo(tp) < SERPENT.BITE_R || s.lunge > 0.9) {
+            if (_d.distanceTo(tp) < SERPENT.BITE_R + 2) this._bite(s, s.target, tp);
             s.lunge = 0; s.biteCd = SERPENT.BITE_EVERY; s.jawT = 0;
-            s.headT.copy(tp).addScaledVector(_b, 8).setY(tp.y + 9); // (back up)
         }
-        void g;
-        return SERPENT.LUNGE;
+        return { crawl: 0, head: SERPENT.LUNGE };
     }
 
     _targetPoint(ref, out) {
@@ -616,8 +770,8 @@ export class FireSerpent {
         g.fx?.lightFlash?.(at, 0xff7a1a, 8, 0.4, 30);
         if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 0.35);
         g.sound?.playInferno?.();
-        const P = g.hellfire?.pool;
-        if (P) for (let i = 0; i < 50; i++) P.spawn(at.x, at.y, at.z, (Math.random() - 0.5) * 9, Math.random() * 7, (Math.random() - 0.5) * 9, pick(FLAME), 0.3 + Math.random() * 0.5, 0.6, { shrink: 0.7, spin: 7 });
+        const P = this.pool;
+        if (P) for (let i = 0; i < 70; i++) P.spawn(at.x, at.y, at.z, (Math.random() - 0.5) * 9, Math.random() * 7, (Math.random() - 0.5) * 9, pick(FLAME), 0.3 + Math.random() * 0.5, 0.6, { shrink: 0.7, spin: 7 });
         if (g.authority || ref.k === 'p') this.applyBite(s.by, ref, at);
         else this._send(true, [ref.k, ref.id]); // (the host does it)
     }
@@ -646,7 +800,7 @@ export class FireSerpent {
 
     /** What it touches burns: the head is a blaze, the body lying on the ground too (Hellfire._burn — every creature). */
     _burnTick(s, dt) {
-        if (s.grow < 0.3) return;
+        if (s.walked < 10) return;
         const hf = this.game.hellfire;
         if (!hf?._burn) return;
         s.burnT -= dt;
@@ -655,11 +809,11 @@ export class FireSerpent {
         const k = 1 - s.fade;
         if (k < 0.3) return;
         const f = s._f || (s._f = { c: new THREE.Vector3(), R: 1, k: 0, vel: new THREE.Vector3(), pushT: 0, surgeT: 0, meT: 0, by: s.by });
-        f.c.copy(s.p[N - 1]); f.R = SERPENT.HEAD_FIRE_R * k; f.vel.copy(s.vel);
+        f.c.copy(s.head); f.R = SERPENT.HEAD_FIRE_R * k; f.vel.copy(s.vel);
         let hit = hf._burn(s.by, f, f.c);
         // a piece of the body on the ground (a different one every tick: all of it within a second or two)
-        const out = s.out, i0 = N - out;
-        s.bodyI = (s.bodyI + 7) % Math.max(1, out - 6);
+        const i0 = s.i0, out = N - i0;
+        s.bodyI = (s.bodyI + 7) % Math.max(1, out - 2);
         const i = i0 + s.bodyI;
         const gy = this.game.collision?.groundY ? this.game.collision.groundY(s.p[i].x, s.p[i].z) : -Infinity;
         if (s.p[i].y - gy < s.r[i] + 1.5) {
@@ -675,7 +829,7 @@ export class FireSerpent {
     _roar(s, k) {
         const g = this.game;
         g.sound?.playInferno?.();
-        if (k >= 1) g.sound?.playRumble?.(s.p[N - 1], g.character.group.position);
+        if (k >= 1) g.sound?.playRumble?.(s.head, g.character.group.position);
         if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 0.3 * k);
     }
 
@@ -685,13 +839,13 @@ export class FireSerpent {
         if (!s || s.fade > 0) return;
         s.fade = 0.001; s.mode = 'die'; s.jawT = 0.9;
         this._note({ ev: 'die', why });
-        const g = this.game, P = g.hellfire?.pool;
+        const g = this.game, P = this.pool;
         if (why === 'water' || why === 'cold') {
-            if (P) for (let i = 0; i < N; i += 2) for (let k = 0; k < 4; k++) P.spawn(s.p[i].x, s.p[i].y, s.p[i].z, (Math.random() - 0.5) * 2, 2 + Math.random() * 3, (Math.random() - 0.5) * 2, pick(STEAM), 1 + Math.random() * 1.2, 1.6, { shrink: -0.8, spin: 1 });
+            if (P) for (let i = s.i0; i < N; i += 2) for (let k = 0; k < 6; k++) P.spawn(s.p[i].x, s.p[i].y, s.p[i].z, (Math.random() - 0.5) * 2, 2 + Math.random() * 3, (Math.random() - 0.5) * 2, pick(STEAM), 2 + Math.random() * 2.5, 2, { shrink: -0.8, spin: 1 });
             g.hud?.setVoice?.('💨 Огненного змея погасили', true);
         } else if (why === 'gods') g.hud?.setVoice?.('✨ Божественная сила развеяла огненного змея', true);
         else if (why !== 'fire') g.hud?.setVoice?.('🐍 Огненный змей рассыпался', true);
-        g.sound?.playRumble?.(s.p[N - 1], g.character.group.position);
+        g.sound?.playRumble?.(s.head, g.character.group.position);
         this._send(true);
     }
 
@@ -705,12 +859,12 @@ export class FireSerpent {
         let any = false;
         for (const s of this.all()) {
             if (s.fade > 0) continue;
-            let on = false;
-            for (let i = N - 1; i >= N - s.out && !on; i -= 3) on = hit(s.p[i], Math.max(0.5, s.r[i]));
+            let on = hit(s.head, SERPENT.HEAD_LEN * 0.4);
+            for (let i = N - 1; i >= s.i0 && !on; i -= 2) on = hit(s.p[i], Math.max(0.5, s.r[i]));
             if (!on) continue;
             any = true;
-            const P = this.game.hellfire?.pool, h = s.p[N - 1];
-            if (P) for (let k = 0; k < 6; k++) P.spawn(h.x + (Math.random() - 0.5) * 3, h.y, h.z + (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2, pick(STEAM), 1 + Math.random(), 1.2, { shrink: -0.7, spin: 1 });
+            const P = this.pool, h = s.head;
+            if (P) for (let k = 0; k < 10; k++) P.spawn(h.x + (Math.random() - 0.5) * 8, h.y, h.z + (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2, pick(STEAM), 1 + Math.random(), 1.2, { shrink: -0.7, spin: 1 });
             if (s !== this.mine) continue;
             s.hp -= dt > 0 ? SERPENT.DOUSE_RATE * dt : SERPENT.DOUSE_KNOCK;
             s.killedBy = 'water';
@@ -725,14 +879,14 @@ export class FireSerpent {
         const h = serpentHit(spell, divine);
         this._note({ ev: 'bolt', spell, dmg: h.dmg, why: h.why });
         if (h.why === 'cold' || h.why === 'water') {
-            const P = this.game.hellfire?.pool, c = s.p[N - 3];
+            const P = this.pool, c = s.head;
             if (P) for (let k = 0; k < 14; k++) P.spawn(c.x, c.y, c.z, (Math.random() - 0.5) * 4, 2 + Math.random() * 3, (Math.random() - 0.5) * 4, pick(STEAM), 1 + Math.random(), 1.3, { shrink: -0.7, spin: 1 });
         }
         if (s !== this.mine) return;
         s.hp = Math.min(SERPENT.HP, s.hp - h.dmg);
         if (h.dmg > 0) s.killedBy = h.why === 'gods' ? 'gods' : h.why === 'cold' ? 'cold' : 'water';
         // struck by someone: it answers him (one-on-one)
-        if (h.dmg > 0 && by && by !== this.me && !(s.mode === 'strike' && s.target)) { const ref = refOf(this.game, by); if (ref) { s.target = ref; s.mode = 'strike'; s.modeT = 0; } }
+        if (h.dmg > 0 && by && by !== this.me && !(s.mode === 'strike' && s.target)) { const ref = refOf(this.game, by); if (ref) { s.target = ref; s.mode = 'strike'; s.modeT = 0; s.lunge = 0; } }
     }
 
     // ---------------------------------------------------------------- the wizards (host)
@@ -744,7 +898,7 @@ export class FireSerpent {
         const L = this.game.castleLife, F = L?.wizards?.fight;
         if (!L?.targets) return;
         for (const s of this.targets()) {
-            const h = s.p[N - 3];
+            const h = s.head;
             for (const v of L.targets(60) || []) {
                 if (!v.wizard || v.dead || v.servantOf != null) continue;
                 const dist = Math.hypot(v.x - h.x, v.z - h.z);
@@ -762,8 +916,9 @@ export class FireSerpent {
         const s = this.mine;
         if (!on || !s) { if (this._sent) this.game.sync?.fireSerpent?.(null); this._sent = false; return; }
         this._sent = true;
-        const a = s.anchor, h = s.headT;
-        const m = [r2(a.x), r2(a.y), r2(a.z), r2(h.x), r2(h.y), r2(h.z), r2(s.grow), r2(s.jawT), Math.round(s.hp), r2(s.fade)];
+        const a = s.anchor, h = s.headT, L = s.lead;
+        // [the blaze it came from, the head's target, how far it has crawled, the jaw, the strength, collapsing, where the neck rises]
+        const m = [r2(a.x), r2(a.y), r2(a.z), r2(h.x), r2(h.y), r2(h.z), Math.round(s.walked), r2(s.jawT), Math.round(s.hp), r2(s.fade), r2(L.x), r2(L.z)];
         this.game.sync?.fireSerpent?.(m, bite);
     }
 
@@ -772,20 +927,27 @@ export class FireSerpent {
         if (!msg || !msg.by || msg.by === this.me) return;
         const m = msg.s;
         let s = this.remote.get(msg.by);
-        if (!Array.isArray(m) || m.length < 10 || !m.every(Number.isFinite)) { if (s && s.fade === 0) s.fade = 0.001; return; }
+        if (!Array.isArray(m) || m.length < 12 || !m.every(Number.isFinite)) { if (s && s.fade === 0) s.fade = 0.001; return; }
         if (!s) {
             s = new Serpent(this, msg.by, _a.set(m[0], m[1], m[2]));
-            s.grow = m[6];
             this.remote.set(msg.by, s);
             this.game.sound?.playInferno?.();
+            // (it was already out when I came: its body lies along a line behind its lead — then it crawls on its own path)
+            if (m[6] > 20) {
+                const dx = m[10] - m[0], dz = m[11] - m[2], l = Math.hypot(dx, dz) || 1;
+                s.hn = 0; s.h0 = 0;
+                for (let k = Math.ceil(BODY_LEN / HSTEP) + 4; k >= 0; k--) s._push(m[10] - dx / l * k * HSTEP, m[11] - dz / l * k * HSTEP);
+                s.lead.set(m[10], m[1], m[11]); s.head.set(m[3], m[4], m[5]);
+                s.walked = Math.max(m[6], BODY_LEN); s.heading = Math.atan2(dx, dz);
+            }
         }
-        (s.netAnchor || (s.netAnchor = new THREE.Vector3())).set(m[0], m[1], m[2]);
+        (s.netLead || (s.netLead = new THREE.Vector3())).set(m[10], 0, m[11]);
         s.headT.set(m[3], m[4], m[5]);
         s.jawT = m[7]; s.hp = m[8];
         if (m[9] > 0 && s.fade === 0) s.fade = 0.001;
         s.at = this._t;
         // a bite asked of the host
-        if (msg.b && Array.isArray(msg.b) && this.game.authority) this.applyBite(msg.by, { k: msg.b[0], id: msg.b[1] }, s.p[N - 1]);
+        if (msg.b && Array.isArray(msg.b) && this.game.authority) this.applyBite(msg.by, { k: msg.b[0], id: msg.b[1] }, s.mouth(_b));
     }
 
     /** ('fsb') `by`'s serpent bit me on its computer. */
@@ -794,11 +956,11 @@ export class FireSerpent {
     /** A sample for Game.prewarm: the shaders compile on the loading screen. */
     sample() {
         const s = new Serpent(this, '__prewarm', new THREE.Vector3(0, -500, 0));
-        s.grow = 1;
         s.group.parent?.remove(s.group); // (three r128 has no removeFromParent)
-        for (let i = 0; i < N; i++) s.p[i].set(0, -500 + i * 0.5, 0);
-        s.r.fill(1);
+        for (let i = 0; i < N; i++) s.p[i].set(0, -500, i * 0.5);
+        s.i0 = 0; s.r.fill(1);
         s.draw(0.016);
+        this.pool?.clear?.();
         return { group: s.group, dispose: () => s.dispose() };
     }
 
@@ -806,8 +968,9 @@ export class FireSerpent {
         if (this.mine) { this.mine.dispose(); this.mine = null; }
         for (const s of this.remote.values()) s.dispose();
         this.remote.clear();
+        this.pool?.clear?.();
     }
-    dispose() { this.clear(); }
+    dispose() { this.clear(); if (this.pool) { this.pool.mesh.parent?.remove(this.pool.mesh); this.pool.mesh.geometry.dispose(); this.pool.mesh.material.dispose(); this.pool = null; } }
 }
 
 /** An attacker's id → a target {k, id} (a player, a castle person, a zombie, a sailor…), or null. */

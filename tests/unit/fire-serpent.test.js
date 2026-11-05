@@ -50,7 +50,9 @@ test('a wizard among several foes: the nearest / the one hitting him first; a li
 test('the body: thin tail, thick middle, a neck, a wide head, a tapering snout', () => {
     const N = SERPENT.SEGS;
     assert.ok(serpentRadius(0, N) < serpentRadius(N * 0.5, N));
-    assert.ok(serpentRadius(N - 4, N) > serpentRadius(Math.floor(N * 0.8), N), 'the head wider than the neck');
+    assert.ok(serpentRadius(Math.round(N * 0.85), N) < serpentRadius(Math.round(N * 0.5), N), 'the neck slimmer than the body');
     assert.ok(serpentRadius(N - 1, N) < serpentRadius(N - 4, N), 'the snout tapers');
-    assert.ok((N - 1) * SERPENT.SEG_LEN > 50, 'over 50 m of body');
+    // (the author 05.11: «больше раза в 3… может, в 5» than the first one, ~54 m: now ~190 m, ~10 m through, lying with a reared head)
+    assert.ok((N - 1) * SERPENT.SEG_LEN > 150, 'a huge serpent: over 150 m of body');
+    assert.ok(SERPENT.R_BODY * 2 > 8 && SERPENT.HEAD_H < SERPENT.HEAD_LEN, 'thick as a house, lying — the head raised less than its own length');
 });
