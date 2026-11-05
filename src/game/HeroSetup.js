@@ -41,6 +41,7 @@ export const DEFAULT_HERO = Object.freeze({
     wandBonus: 0, // дополнительный процент к силе палочки героя в дуэли (не сама палочка и не её красота): 0…WAND_MAX
     foe: 'mid', // who stands opposite on the arena of «Перед дуэлью» (SpawnSpots.DUEL_FOES)
     friendSame: true, // multiplayer «Перед дуэлью»: the friend who joins gets the same strength as the host (off — he chooses his own when he enters)
+    wings: false, // the hero starts with grown wings (HeroWings.js: flying by the arms' strokes) — the author: «галочка с крыльями или без, по умолчанию без»
     noCrew: false, // ships without sailors (and the black ship without Black Moustache and his skeletons) — Sailors.setCrewless
 });
 
@@ -70,6 +71,7 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         foe: normalizeFoe(r.foe ?? b.foe),
         wandBonus: clamp(Math.round(num(r.wandBonus, b.wandBonus ?? 0)), 0, HERO.WAND_MAX),
         noCrew: r.noCrew == null ? !!b.noCrew : !!r.noCrew,
+        wings: r.wings == null ? !!b.wings : !!r.wings,
         friendSame: r.friendSame == null ? b.friendSame !== false : !!r.friendSame,
     };
 }

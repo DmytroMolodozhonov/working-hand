@@ -133,6 +133,7 @@ import { sampleIceModels, iceQueenModel, snowmanModel, iceMonsterModel } from '.
 import { Dragons } from './Dragons.js';
 import { DragonRide } from './DragonRide.js';
 import { DragonForm } from './DragonForm.js';
+import { HeroWings } from './HeroWings.js';
 import { ImperiusControl } from './ImperiusControl.js';
 import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
 import { Carriages, cartModel } from './Carriages.js';
@@ -725,6 +726,7 @@ export class Game {
         this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
         this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
+        this.wings = new HeroWings(this); // «Зелье крыльев»: the wings grow on the back, for good (HeroWings.js; the flight — WingFlight.js)
         this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
         this.potionFx._randomLook = () => _cleanLook(_rollLook());
         this.lightning = null; // my «Lightning Strike» in progress
@@ -4099,6 +4101,7 @@ export class Game {
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._brainrotUpkeep(dt);
         this.potionFx?.update(dt);
+        this.wings?.update(dt); // (they grow, they hurt, they fold or spread)
         this.flourish?.update(dt);
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)

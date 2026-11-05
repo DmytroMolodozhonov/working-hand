@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <clipPath id="potion_wings-c"><path d="M55 22 L55 54 A38 38 0 1 0 73 54 L73 22 Z"/></clipPath>
+    <radialGradient id="potion_wings-g" cx="45%" cy="55%" r="65%"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#cfdcff"/><stop offset="1" stop-color="#7f8fd6"/></radialGradient>
+    <radialGradient id="potion_wings-o" r="50%"><stop offset="0" stop-color="#d6e4ff" stop-opacity="0.6"/><stop offset="1" stop-color="#d6e4ff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="86" r="58" fill="url(#potion_wings-o)"/>
+  <!-- two white wings opening behind the flask -->
+  <g fill="#ffffff" stroke="#a8b4d6" stroke-width="1.5" stroke-linejoin="round" opacity="0.95">
+    <path d="M50 70 C36 52 22 40 4 34 C12 46 12 56 10 64 C16 66 20 72 20 78 C26 78 30 84 30 90 C36 86 44 82 52 82 Z"/>
+    <path d="M78 70 C92 52 106 40 124 34 C116 46 116 56 118 64 C112 66 108 72 108 78 C102 78 98 84 98 90 C92 86 84 82 76 82 Z"/>
+  </g>
+  <path d="M55 22 L55 54 A38 38 0 1 0 73 54 L73 22 Z" fill="#eef4ff" fill-opacity="0.25"/>
+  <g clip-path="url(#potion_wings-c)"><rect x="20" y="64" width="90" height="70" fill="url(#potion_wings-g)"/><ellipse cx="64" cy="64" rx="34" ry="4" fill="#f4f7ff"/>
+    <path d="M50 104 C56 96 60 100 64 92 C68 100 72 96 78 104" fill="none" stroke="#ffffff" stroke-width="2.5" opacity="0.8"/></g>
+  <path d="M55 22 L55 54 A38 38 0 1 0 73 54 L73 22 Z" fill="none" stroke="#c9d6ff" stroke-width="3.5" stroke-linejoin="round"/>
+  <rect x="50" y="20" width="28" height="7" rx="3" fill="#e6eeff" stroke="#9fb2e6" stroke-width="2"/>
+  <path d="M54 4 L74 4 L72 22 L56 22 Z" fill="#c9a46a" stroke="#7a5a2a" stroke-width="2.5" stroke-linejoin="round"/>
+  <g fill="#ffffff"><circle cx="52" cy="80" r="2.5"/><circle cx="76" cy="88" r="2"/><circle cx="62" cy="46" r="2.2"/></g>
+  <path d="M42 72 C34 80 32 94 38 104" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity="0.6"/>
+</svg>

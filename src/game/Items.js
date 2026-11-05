@@ -1446,6 +1446,7 @@ export class ItemSystem {
         const r = recipeById(h.item.rec);
         if (r && !r.effect) { g.hud.setVoice?.(`🧪 ${r.name}: что оно делает, автор скоро расскажет — пока его не выпить`, true); return; }
         const fx = r?.effect || {};
+        if (fx.wings) { const why = g.wings?.cantDrink?.(); if (why) { g.hud.setVoice?.(why, true); return; } } // (wings already / growing: not drunk — HeroWings)
         if (fx.timed === 'dragon') { const why = g.dragonForm?.cantNow?.(); if (why) { g.hud.setVoice?.(why, true); return; } } // (no room for a dragon here: not drunk — DragonForm.cantNow)
         const said = [];
         let silent = false;
@@ -1469,6 +1470,7 @@ export class ItemSystem {
             said.push(`+${fx.hp} HP`);
         }
         if (fx.timed) { const line = g.potionFx?.start(fx.timed); if (line) said.push(line); } // (PotionEffects.js)
+        if (fx.wings && g.wings?.start()) said.push('крылья начали расти');
         if (fx.reset) said.push(g.potionFx?.resetAll() ? 'действие всех зелий снято' : 'на вас не было зелий — ничего не изменилось');
         if (fx.mana && g.combat) { g.combat.fatigue = Math.min(g.combat.maxFatigue ?? 100, (g.combat.fatigue ?? 0) + fx.mana); said.push(`+${fx.mana} маны`); }
         if (!silent) g.hud.setVoice?.(`🧪 ${r ? r.name : 'Зелье'} выпито${said.length ? ': ' + said.join(', ') : ''}`, true);

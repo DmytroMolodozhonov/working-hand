@@ -98,6 +98,7 @@ export function wipeHero(g) {
     g.dark?.onDeath(); // (тьма уходит в тело; а с ней и наряд тёмного мага — DarkLordLife.onDeath)
     g.darkLord?.onDeath();
     g.potionFx?.onDeath(); // (the potions' effects end: PotionEffects.js)
+    g.wings?.onDeath(); // (the wings of the potion go with the body: HeroWings.js)
     g.pentagranium?.onDeath(); // (the bare-hand power goes too)
     g.pentagranium?.restore(null); // (the learnt drawings are lost like the learnt spells)
     g.breakward?.onDeath(); // (метка «слом защиты» снимается смертью; в тело не идёт)

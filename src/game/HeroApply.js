@@ -266,6 +266,10 @@ export class HeroApply {
     initial() {
         const g = this.game, h = g.hero;
         this.dress();
+        if (h.wings) { // («С крыльями»: grown at once — and the potion in the bag to try the growing too)
+            g.wings?.grant();
+            if (g.inventory?.storeItem && !g.inventory.hasAnywhere?.((it) => it?.kind === 'potion' && it.rec === 'wings')) g.inventory.storeItem({ kind: 'potion', uid: 'wingsKit' + Date.now().toString(36), rec: 'wings', color: 0xd8e6ff });
+        }
         if (h.dark > 0 && g.dark) {
             const n = clampDark(h.dark);
             if (n > g.dark.level) g.dark.restore({ level: n, skin: n }); // (quietly: no «something dark stirs» at the world's start)

@@ -197,6 +197,7 @@ export function playerSnapshot(game) {
         bed: game.beds?.home || null, // the bed they come back to life at
         space: game.space?.snapshot() || null, // in space: where (the planets' surfaces need nothing: the place says it — Space.js)
         caves: game.caveMap?.snapshot() || null, // the cave map: what the hero has seen of the caves (CaveMap.js)
+        wng: game.wings?.snapshot() || null, // the wings grown (or growing: the time since the potion) — HeroWings.js
         pfx: game.potionFx?.snapshot() || null, // the potions' effects still on, and the time left (PotionEffects.js)
     };
 }
@@ -234,6 +235,7 @@ export function applyPlayerSnapshot(game, s) {
     }
     if (s.gear) game.items?.restore(s.gear);
     if (s.pfx) game.potionFx?.restore(s.pfx);
+    if (s.wng) game.wings?.restore(s.wng);
     if (inv?.purse) { // (every hero has the pouch: a save without it gets a new one; the coins owed go into it)
         inv.purse.ensure();
         if (owed > 0) {

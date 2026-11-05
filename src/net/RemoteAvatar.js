@@ -4,6 +4,7 @@
  * smoothly interpolated, with a floating name tag.
  */
 
+import { attachWings } from '../game/HeroWings.js';
 import { applyRemoteMonster } from '../game/MonsterTransform.js';
 import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
@@ -141,7 +142,8 @@ export class RemoteAvatar {
         this.lastUpdate = t;
         if (s.hp !== undefined) this.hp = s.hp;
         if (s.ft !== undefined) this.fatigue = s.ft;
-        this.disguised = !!(s.px & 1); this.dazzle = !!(s.px & 2); this.dragonForm = !!(s.px & 4); // (their body is a dragon now: DragonForm.js — the hero is not drawn) // (a friend's potions: nobody knows his face / he charms — PotionEffects)
+        this.disguised = !!(s.px & 1); this.dazzle = !!(s.px & 2); this.dragonForm = !!(s.px & 4);
+        this.wingsNet = Array.isArray(s.wg) ? s.wg : null; // (their wings: drawn in update — HeroWings.attachWings) // (their body is a dragon now: DragonForm.js — the hero is not drawn) // (a friend's potions: nobody knows his face / he charms — PotionEffects)
         if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)
         this.firm = !!s.ab; // (absolute steadiness: FirmRules.js)
         this.sees = !!s.sg; // (they see the invisible: Invisibles.seesInvisible)
@@ -216,6 +218,8 @@ export class RemoteAvatar {
         if (this._ppOk && dt > 0) { _d.subVectors(g, this._pp).divideScalar(dt); if (_d.lengthSq() < 900) this.vel.lerp(_d, 0.3); else this.vel.set(0, 0, 0); }
         this._pp.copy(g); this._ppOk = true;
         if (!this._placed) { this._placed = true; ch.group.visible = !this.dead; } // (the first frame at its real place: only now drawn)
+        if (this.wingsNet && !this._wings) this._wings = attachWings(ch, true);
+        if (this._wings) { const w = this.wingsNet; if (w) this._wings.set((+w[0] || 0) / 100, (+w[1] || 0) / 100, (+w[2] || 0) / 100, (+w[3] || 0) / 100); else { this._wings.dispose(); this._wings = null; } }
         if (this.dragonForm !== this._dfShown) { this._dfShown = this.dragonForm; ch.group.visible = !this.dead && !this.dragonForm; } // (a dragon now: only the dragon is seen)
         // (the head turns only so far from the chest; sent further round, the body — and the legs — are put round to meet it)
         const nk = neckLimit(Number.isFinite(+s.s.hy) ? +s.s.hy : 0);

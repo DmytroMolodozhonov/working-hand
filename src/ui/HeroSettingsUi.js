@@ -23,6 +23,7 @@ const T = {
     spawn: 'Где герой появится при входе в мир и после возрождения. Выберите босса, которого хотите проверить, — вы окажетесь рядом с ним, а не на начальной площадке. Если рядом с кроватью — кровать не учитывается: возрождение всегда здесь.',
     foe: 'Кто выйдет против вас на арене. Слабый — начинающий волшебник, средний — продвинутый, сильный — преподаватель, мастер — глава башни (самый сильный). «Случайный» — каждый раз новый уровень. Проиграли — сразу новая дуэль с волшебником того же уровня.',
     wand: `Дополнительная сила палочки в дуэли, в процентах. Красота палочки не важна — важна только сила: на столько процентов сильнее будут ваши дуэльные заклинания (столкновение лучей) сверх обычного. 0 — без добавки, 50 — на половину сильнее, 100 — вдвое. От 0 до ${HERO.WAND_MAX}. Работает и когда палочки у вас нет в руках, и когда её выбили.`,
+    wings: 'Герой появляется с выросшими крыльями (как после зелья крыльев). Взлететь: разбегитесь и машите обеими руками сверху вниз; руки в стороны — планируете. Мягко садитесь — от удара о землю можно разбиться. Зелье крыльев тоже лежит у вас в сумке.',
     noCrew: 'Корабли в порту и в море стоят пустыми: на них нет ни капитана, ни моряков. Чёрный корабль тоже без капитана Чёрные Усы и скелетов — на нём можно спокойно осмотреться. Удобно, чтобы проверить корабли отдельно от команды.',
     health: 'Здоровье. «Бессмертен» — герой не получает урона и не умирает (так в Творческом было всегда). «Обычное здоровье» — как в Свободном мире: удары, огонь, падение ранят, а при нуле герой погибает, роняет вещи и возрождается.',
     maxHp: 'Сколько здоровья у героя при обычном здоровье. По умолчанию 20 — как в Свободном мире.',
@@ -58,6 +59,7 @@ const html = (p) => `
   <div class="hero-row" id="${p}-wand-row" hidden title="${T.wand}"><label for="${p}-wand">🪄 Сила палочки: +</label> <input type="number" id="${p}-wand" min="0" max="${HERO.WAND_MAX}" step="5" value="0"> % <span class="mp-hint">к силе ваших дуэльных заклинаний (0 — без добавки)</span></div>
   <div class="hero-row" id="${p}-foe-row" hidden title="${T.foe}"><label for="${p}-foe">⚔️ Соперник на арене:</label> <select id="${p}-foe">${DUEL_FOES.map(foeOption).join('')}</select></div>
   <label class="world-opt" id="${p}-same-row" hidden title="${T.same}"><input type="checkbox" id="${p}-same" checked> 🤝 Дать другу такую же силу <span class="mp-hint">— соперником станет друг, который зайдёт на сервер; остальные — зрители</span></label>
+  <label class="world-opt" title="${T.wings}"><input type="checkbox" id="${p}-wings"> 🪽 С крыльями <span class="mp-hint">— летать взмахами рук, без маны</span></label>
   <label class="world-opt" title="${T.noCrew}"><input type="checkbox" id="${p}-nocrew"> ⚓ Корабли без моряков <span class="mp-hint">— и чёрный корабль без капитана и скелетов</span></label>
   <label class="world-opt" title="${T.mana}"><input type="checkbox" id="${p}-inf" checked> ♾️ Бесконечная мана <span class="mp-hint">— заклинания ничего не стоят</span></label>
   <div class="hero-row" id="${p}-cells-row" hidden title="${T.cells}">
@@ -117,7 +119,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
         duelMastery: $('mastery').value === '' ? 0 : $('mastery').value,
-        spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, foe: $('foe').value, friendSame: $('same').checked, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
+        spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, wings: $('wings').checked, foe: $('foe').value, friendSame: $('same').checked, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
     const set = (h) => {
@@ -125,7 +127,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('inf').checked = v.infiniteMana; $('cells').value = v.cells;
         $('armor').checked = v.armor; $('robe').checked = v.robe;
         root.querySelector(`input[name="${prefix}-spells"][value="${v.spells}"]`).checked = true;
-        $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('foe').value = v.foe; $('same').checked = v.friendSame; $('wand').value = v.wandBonus;
+        $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('wings').checked = v.wings; $('foe').value = v.foe; $('same').checked = v.friendSame; $('wand').value = v.wandBonus;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
         $('mastery').value = v.duelMastery; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();
