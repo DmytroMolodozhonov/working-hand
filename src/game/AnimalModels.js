@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { runningBookModel } from './RunningBook.js';
 import { swanModel } from './SwanModel.js';
 import { seaModel } from './SeaModels.js';
+import { horseModel } from './HorseModel.js';
 import { bakeRenderer, bakeTarget, runPasses, bakeFailed } from '../core/GpuTexture.js';
 
 // ------------------------------------------------------------ materials
@@ -182,13 +183,13 @@ function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat
     const [uz, uLen, uKeys] = upper;
     const [lz, lLen, lKeys] = lower;
     // (paint: {up, lo} vertex colours by the point — a pig's muddy legs — and texture coordinates)
-    const uGeo = cached(geoKey + 'u', () => sweep([v3(0, 0.12, 0), v3(0, -uLen * 0.5, uz * 0.45), v3(0, -uLen, uz)], keys(uKeys), { rings: 10, sides: 8, color: paint?.up, uv: paint?.uv }));
+    const uGeo = cached(geoKey + 'u', () => sweep([v3(0, 0.12, 0), v3(0, -uLen * 0.5, uz * 0.45), v3(0, -uLen, uz)], keys(uKeys), { rings: paint?.rings ?? 10, sides: paint?.sides ?? 8, color: paint?.up, uv: paint?.uv }));
     const up = mesh(pivot, uGeo, mat);
     up.name = name + 'Upper';
     const knee = group(pivot, name + 'Knee', 0, -uLen, uz);
     const jr = lKeys[0][1] * 1.05;
-    blob(knee, lowMat, jr, jr * 1.3, jr * 1.15, 0, 0, 0); // the joint
-    const lGeo = cached(geoKey + 'l', () => sweep([v3(0, 0.04, 0), v3(0, -lLen + hoof[1] * 0.6, lz)], keys(lKeys), { rings: 10, sides: 8, color: paint?.lo, uv: paint?.uv }));
+    if (paint?.joint !== false) blob(knee, lowMat, jr, jr * 1.3, jr * 1.15, 0, 0, 0); // the joint
+    const lGeo = cached(geoKey + 'l', () => sweep([v3(0, 0.04, 0), v3(0, -lLen + (hoof ? hoof[1] : 0.11) * 0.6, lz)], keys(lKeys), { rings: paint?.rings ?? 10, sides: paint?.sides ?? 8, color: paint?.lo, uv: paint?.uv }));
     mesh(knee, lGeo, lowMat);
     if (hoof) {
         const [r, h, c] = hoof;
@@ -253,7 +254,7 @@ function compact(g, keep) {
         for (const [mat, list] of buckets) {
             i++;
             if (list.length < 2) continue;
-            const geo = cached(`${g.name}/${node.name}/${i}`, () => mergeShapes(list, mat.vertexColors));
+            const geo = cached(`${g.userData.mergeKey || g.name}/${node.name}/${i}`, () => mergeShapes(list, mat.vertexColors));
             const one = new THREE.Mesh(geo, mat);
             one.name = list[0].name;
             one.castShadow = list.some((m) => m.castShadow);
@@ -272,170 +273,8 @@ function finish(g, parts) {
 }
 
 // ================================================================ horse
-// (no black: the only black horse in the world is the Pegasus)
-export const HORSE_COLORS = [0x4a3022, 0x33241a, 0x5e3a26, 0x7d7a75, 0xb3aea4, 0x8c7756];
-/**
- * The Pegasus (one in some herds — Animals.js): a horse with great feathered wings, every one in his own coat — white,
- * dapple grey, bay, chestnut, golden, and rarely a matte black with a soft sheen. The coat is a hair picture (short hairs,
- * mottling, dapples) times the tint; mane, tail, feathers and a faint glow of the feathers go with the coat.
- * `color` of the animal: 0xFE0000 + the coat's number (0xFE0005, matte black, is also the name `PEGASUS_COLOR`).
- */
-export const PEGASUS_COATS = [
-    { name: 'white', w: 5, tint: 0xf1eee7, mane: 0xd9d7d1, feather: 0xf7f4ee, glow: 0xfff3d6, legs: null, mottle: 0.07, warm: 0.03, spots: 0, hairs: 2600, pale: 0.7 },
-    { name: 'dapple grey', w: 5, tint: 0xa6aab0, mane: 0x61656c, feather: 0xc6cad0, glow: 0xdfe8ff, legs: 0x54575d, mottle: 0.12, warm: 0.02, spots: 90, spotR: [0.012, 0.026], spotC: [0.74, 0.75, 0.78], hairs: 2600, pale: 0.55 },
-    { name: 'bay', w: 4, tint: 0x7d4a2a, mane: 0x16100d, feather: 0x4a3023, glow: 0, legs: 0x1b1310, mottle: 0.12, warm: 0.07, spots: 0, hairs: 2600, pale: 0.5 },
-    { name: 'chestnut', w: 4, tint: 0x93502a, mane: 0x5c2c14, feather: 0x9a5632, glow: 0xffc27a, legs: null, mottle: 0.13, warm: 0.08, spots: 0, hairs: 2600, pale: 0.5 },
-    { name: 'golden', w: 3, tint: 0xd8b068, mane: 0xf3ead2, feather: 0xf2e2b4, glow: 0xffe39a, legs: null, mottle: 0.1, warm: 0.06, spots: 0, hairs: 2600, pale: 0.65 },
-    { name: 'black', w: 1, tint: 0x4a4744, mane: 0x15141a, feather: 0x34323a, glow: 0, legs: null, mottle: 0.1, warm: 0.02, spots: 0, hairs: 3000, pale: 0.8 }, // (matte: pale hairs catch the light)
-];
-const PEG_BASE = 0xFE0000;
-export const PEGASUS_COLOR = PEG_BASE + 5;
-const _OLD_PEGASUS = 0x0b0a0c; // (older saves: the one black Pegasus)
-/** Is this horse colour a Pegasus' coat? */
-export const isPegasusColor = (c) => c === _OLD_PEGASUS || (c >= PEG_BASE && c < PEG_BASE + PEGASUS_COATS.length);
-/** The number of the coat (older saves' black one: matte black). */
-export const pegasusCoat = (c) => (c === _OLD_PEGASUS ? 5 : c - PEG_BASE);
-/** A coat by chance (rnd 0…1): common ones often, the black one rarely. */
-export function randomPegasusColor(rnd = Math.random()) {
-    const total = PEGASUS_COATS.reduce((a, k) => a + k.w, 0);
-    let x = rnd * total;
-    for (let i = 0; i < PEGASUS_COATS.length; i++) { x -= PEGASUS_COATS[i].w; if (x < 0) return PEG_BASE + i; }
-    return PEG_BASE;
-}
-function pegasusMat(i) {
-    const k = 'pegasus' + i;
-    if (!_mats.has(k)) {
-        const C = PEGASUS_COATS[i];
-        _mats.set(k, new THREE.MeshLambertMaterial({ color: C.tint, vertexColors: true, map: hideTexture(k, { ...C, spotC: C.spotC || [1, 1, 1], hairLen: [3, 7] }, 7001 + i * 104729) }));
-    }
-    return _mats.get(k);
-}
-
-function horse(color) {
-    const c = color ?? HORSE_COLORS[0];
-    const base = new THREE.Color(c);
-    const pegasus = isPegasusColor(c);
-    const coat = pegasus ? PEGASUS_COATS[pegasusCoat(c)] : null;
-    const U = pegasus ? { uv: [1, 1] } : {}; // (the Pegasus has a hair picture: texture coordinates on every shape)
-    const K = pegasus ? 'P' : '';
-    const hair = pegasus ? coat.mane : base.clone().multiplyScalar(base.getHSL({}).l > 0.6 ? 0.72 : 0.42).getHex(); // mane, tail, forelock
-    // (the Pegasus: a matte hair picture of his own coat, no gloss)
-    const skin = pegasus ? pegasusMat(pegasusCoat(c)) : lamV(c);
-    const g = new THREE.Group();
-    g.name = pegasus ? 'pegasus' : 'horse';
-    const legs = [];
-
-    // trunk: rump (+Z) → chest (−Z); top / bottom line and half-width keyed along it
-    const body = mesh(g, cached('horseBody' + K, () => {
-        const k = keys([
-            [0.00, 1.74, 1.50, 0.10],
-            [0.06, 1.88, 1.30, 0.27],
-            [0.16, 1.95, 1.22, 0.35],
-            [0.30, 1.93, 1.17, 0.36],
-            [0.48, 1.88, 1.12, 0.36],
-            [0.64, 1.89, 1.10, 0.35],
-            [0.76, 1.97, 1.12, 0.31],
-            [0.87, 1.93, 1.18, 0.28],
-            [0.95, 1.80, 1.28, 0.23],
-            [1.00, 1.62, 1.42, 0.10],
-        ]);
-        return sweep([v3(0, 0, 0.98), v3(0, 0, -0.95)], (t) => { const [top, bot, w] = k(t); return [w, (top - bot) / 2, (top + bot) / 2]; },
-            { rings: 28, sides: pegasus ? 18 : 14, color: bellyShade([0.9, 0.9, 0.9], [1.04, 1.04, 1.04]), ...U });
-    }), skin);
-
-    // neck: from the withers up and forward to the poll, a crest on top
-    // (the neck turns at its root on the withers: lowering it to graze keeps it on the body)
-    const neck = group(g, 'neck', 0, 1.56, -0.56);
-    const neckPath = [v3(0, 0, 0), v3(0, 0.42, -0.34), v3(0, 0.78, -0.51), v3(0, 0.94, -0.54)];
-    const neckK = keys([[0, 0.24, 0.34, 0], [0.35, 0.16, 0.24, 0.02], [0.75, 0.105, 0.16, 0.015], [1, 0.095, 0.12, 0]]);
-    mesh(neck, cached('horseNeck' + K, () => sweep(neckPath, neckK, { rings: 14, sides: 10, color: bellyShade([0.92, 0.92, 0.92], [1.03, 1.03, 1.03]), ...(pegasus ? { uv: [0.4, 0.6] } : {}) })), skin);
-    // mane along the crest
-    mesh(neck, cached('horseMane', () => sweep(neckPath, (t) => { const [, ry, dy] = neckK(t); const h = 0.05 + 0.035 * Math.sin(Math.PI * Math.min(1, t * 1.1)); return [0.05 * (1 - 0.3 * t), h, dy + ry - h * 0.15]; }, { rings: 14, sides: 6 })), lamV(hair));
-
-    // head: hangs from the poll nose-down; a deep jowl, a long narrow face, a soft muzzle
-    const head = group(neck, 'head', 0, 0.92, -0.56);
-    head.rotation.x = -1.0;
-    mesh(head, cached('horseHead' + K, () => sweep([v3(0, 0, 0.1), v3(0, -0.02, -0.25), v3(0, 0, -0.66)], keys([
-        [0.00, 0.06, 0.07, -0.01],
-        [0.07, 0.11, 0.13, -0.02],
-        [0.16, 0.13, 0.16, -0.04],
-        [0.32, 0.12, 0.14, -0.03],
-        [0.60, 0.085, 0.105, 0],
-        [0.84, 0.08, 0.1, 0],
-        [0.94, 0.09, 0.105, -0.01],
-        [1.00, 0.05, 0.06, -0.01],
-    ]), { rings: 16, sides: 10, color: (t) => { const m = 1 - 0.45 * smooth(0.78, 0.92, t); return [m, m * 0.97, m * 0.95]; }, ...(pegasus ? { uv: [0.3, 0.4] } : {}) })), skin);
-    // ears, pricked up and a little forward
-    for (const s of [1, -1]) {
-        const ear = mesh(head, cone(0.005, 0.05, 0.18, 7), skin, 0.065 * s, 0.14, 0.05);
-        ear.rotation.set(0.75, 0, -0.18 * s);
-        ear.scale.set(1, 1, 0.55);
-        blob(head, lam(0x140e0c), 0.022, 0.03, 0.036, 0.105 * s, 0.065, -0.04, false); // eyes
-        blob(head, lam(0x140e0c), 0.018, 0.028, 0.02, 0.05 * s, 0.01, -0.645, false); // nostrils
-    }
-    // forelock over the forehead
-    mesh(head, cached('horseForelock', () => sweep([v3(0, 0.12, 0.04), v3(0, 0.125, -0.08), v3(0, 0.1, -0.2)], (t) => [0.05 * (1 - t * 0.6), 0.025, 0], { rings: 6, sides: 6 })), lamV(hair), 0, 0, 0, false);
-
-    // tail: from the top of the rump, arched out, the hair falls to the hocks
-    const tail = group(g, 'tail', 0, 1.8, 0.93);
-    // (the dock, then hair: thin strands that fan out a little and end at different lengths —
-    // one smooth paddle looked like rubber)
-    mesh(tail, cached('horseTailDock', () => sweep([v3(0, 0, -0.04), v3(0, 0.02, 0.14), v3(0, -0.12, 0.26)], keys([
-        [0, 0.05, 0.055], [0.5, 0.055, 0.06], [1, 0.04, 0.045],
-    ]), { rings: 6, sides: 7 })), lamV(hair));
-    const STRANDS = [[0, 0, 1.0], [0.05, 0.03, 0.92], [-0.05, 0.02, 0.95], [0.03, -0.04, 0.86], [-0.035, -0.035, 0.9], [0.015, 0.05, 0.8], [-0.02, 0.06, 0.84]];
-    STRANDS.forEach(([sx, sz, len], i) => {
-        mesh(tail, cached('horseTailStrand' + i, () => sweep([v3(0, -0.1, 0.25), v3(sx * 1.2, -0.45 * len, 0.33 + sz), v3(sx * 2.2, -0.82 * len, 0.33 + sz * 1.6), v3(sx * 2.8, -1.06 * len, 0.28 + sz * 2)], keys([
-            [0, 0.03, 0.03], [0.3, 0.034, 0.03], [0.8, 0.022, 0.02], [1, 0.006, 0.006],
-        ]), { rings: 8, sides: 5 })), lamV(hair));
-    });
-
-    // legs: forearm → knee → cannon → fetlock → hoof in front; gaskin → hock behind
-    const fUp = [[0, 0.1, 0.16], [0.25, 0.115, 0.14], [0.75, 0.072, 0.085], [0.92, 0.078, 0.09], [1, 0.07, 0.08]];
-    const hUp = [[0, 0.1, 0.2], [0.3, 0.115, 0.17], [0.8, 0.068, 0.1], [0.94, 0.07, 0.1], [1, 0.06, 0.085]];
-    const low = [[0, 0.065, 0.075], [0.15, 0.052, 0.065], [0.62, 0.05, 0.062], [0.75, 0.068, 0.08], [0.88, 0.052, 0.06], [1, 0.07, 0.075]];
-    const hoof = [0.085, 0.11, 0x2a2420];
-    // (a bay or a dark coat: black lower legs; a light one: its own colour a shade darker)
-    const points = pegasus ? (coat.legs ? lamV(coat.legs) : skin) : base.getHSL({}).l < 0.45 ? lamV(hair) : lamV(base.clone().multiplyScalar(0.8).getHex());
-    const legPaint = pegasus ? { uv: [0.3, 0.5] } : null;
-    for (const [x, z, front] of [[0.15, -0.6, true], [-0.15, -0.6, true], [0.15, 0.6, false], [-0.15, 0.6, false]]) {
-        const name = (front ? 'front' : 'hind') + (x > 0 ? 'Right' : 'Left') + 'Leg';
-        if (front) leg(g, legs, name, x, 1.3, z, true, 'horseF' + K, [0, 0.6, fUp], [0, 0.7, low], hoof, skin, points, legPaint);
-        else leg(g, legs, name, x, 1.3, z, false, 'horseH' + K, [0.13, 0.6, hUp], [-0.1, 0.7, low], hoof, skin, points, legPaint);
-    }
-
-    // saddle (shown while ridden): a blanket, the seat rising to the pommel and the cantle, the flaps
-    const saddle = group(g, 'saddle');
-    blob(saddle, lam(0x7a1f1f), 0.385, 0.1, 0.44, 0, 1.83, 0.0);
-    mesh(saddle, cached('saddleSeat', () => sweep([v3(0, 0, 0.36), v3(0, 0, -0.34)], keys([
-        [0, 0.12, 0.05, 1.99], [0.12, 0.22, 0.06, 1.96], [0.45, 0.28, 0.05, 1.91], [0.8, 0.22, 0.06, 1.94], [0.92, 0.14, 0.07, 1.99], [1, 0.08, 0.05, 2.01],
-    ]), { rings: 14, sides: 12 })), lamV(0x5a2d0c));
-    for (const s of [1, -1]) {
-        const flap = mesh(saddle, cached('flap', () => new THREE.BoxGeometry(0.025, 0.34, 0.3)), lam(0x4a2509), 0.36 * s, 1.68, -0.02);
-        flap.rotation.z = 0.2 * s;
-        mesh(saddle, cached('strap', () => new THREE.BoxGeometry(0.012, 0.3, 0.035)), lam(0x2a1a0e), 0.385 * s, 1.43, -0.05, false);
-        const stirrup = mesh(saddle, cached('stirrup', () => new THREE.TorusGeometry(0.05, 0.012, 4, 10)), lam(0x9a9a9a), 0.385 * s, 1.25, -0.05, false);
-        stirrup.rotation.y = Math.PI / 2;
-    }
-    saddle.visible = false;
-
-    g.userData.grazePitch = -1.8; // (the long neck right down: the muzzle at the grass)
-    let wings;
-    if (pegasus) {
-        // great feathered wings on the withers, folded along the sides (the pig's wing shape, much bigger; the feathers in the coat's colour)
-        wings = [];
-        for (const s of [1, -1]) {
-            const w = group(g, s > 0 ? 'wingRight' : 'wingLeft', 0.3 * s, 1.93, -0.42);
-            w.scale.set(1.7 * s, 1.7, 1.7);
-            w.userData.side = s;
-            const m = mesh(w, pigWingGeo(), wingMat(coat.feather, coat.glow));
-            m.name = 'wing';
-            w.userData.mesh = m;
-            wings.push(w);
-        }
-    }
-    return finish(g, { body, neck, head, tail, legs, saddle, wings, pegasus });
-}
+// (the horse and the Pegasus: HorseModel.js — coats, markings, locks of hair, hooves, the feathered wing)
+export { HORSE_COLORS, HORSE_LOOKS, PEGASUS_COATS, PEGASUS_COLOR, isPegasusColor, pegasusCoat, randomPegasusColor } from './HorseModel.js';
 
 // ================================================================== pig
 /**
@@ -473,7 +312,7 @@ function pigSkin(look) { return hideTexture('pig' + look, PIG_LOOKS[look], 9001 
  */
 function hideTexture(key, L, seed) {
     if (_skins.has(key)) return _skins.get(key);
-    const W = 128, H = 256;
+    const W = L.W || 128, H = L.H || 256;
     const r = rng(seed);
     // value noise on a wrapping grid (so the picture closes round the body)
     const grid = (n) => { const a = new Float32Array(n * n * 2); for (let i = 0; i < a.length; i++) a[i] = r(); return a; };
@@ -501,7 +340,7 @@ function hideTexture(key, L, seed) {
 
 /** Pores (tiny darker dots) and bristles (short hairs along the body, pale ones catch the light): mark(p, kr, kg, kb) per touch, in order. */
 function hideMarks(W, H, L, r, mark) {
-    for (let i = 0; i < 2600; i++) { const p = Math.floor(r() * W * H); mark(p, 0.9, 0.88, 0.88); }
+    for (let i = 0; i < (L.pores ?? 2600); i++) { const p = Math.floor(r() * W * H); mark(p, 0.9, 0.88, 0.88); }
     const [h0, h1] = L.hairLen || [2, 5];
     for (let i = 0; i < (L.hairs ?? 1500); i++) {
         const x0 = Math.floor(r() * W), y0 = Math.floor(r() * H), len = h0 + Math.floor(r() * (h1 - h0 + 1));
@@ -1080,7 +919,7 @@ export function animalModel(type, color) {
     if (type === 'cow') return cow(color); // (color: the look, 1…4)
     if (type === 'pig') return pig(color); // (color: the look, 1…4)
     if (type === 'sheep') return sheep();
-    return horse(color);
+    return horseModel(color);
 }
 
 /**
