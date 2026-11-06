@@ -177,7 +177,7 @@ import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -508,6 +508,7 @@ export class Game {
             ghostCastle: this.gen >= GHOST_CASTLE_FROM_GEN, // (the Castle of Ghosts — only a hero who sees the invisible has it in his land: GhostCastleLife.js)
             iceArena: this.gen >= ICE_ARENA_FROM_GEN, // (the Ice Queen's palace on the great ice arena — IceCastle.ICE_CASTLE.ARENA)
             caveLake: this.gen >= CAVE_LAKE_FROM_GEN, // (rock between a cave and a lake — Terrain._nearWater)
+            vampire: this.gen >= VAMPIRE_FROM_GEN, // (Count Sracula's castle on its crag, one in the world: VampireCastle.js, VampireLife.js)
             wizShops: this.gen >= WIZ_SHOPS_FROM_GEN, // (the wizards' settlements' potion hall and scroll hall — ShopHalls.js)
             seabed: this.gen >= SEABED_FROM_GEN, // (the sea's bottom a landscape: canyons, ridges, reefs, dunes — Sea.seabedDepth)
             hell: this.gen >= HELL_FROM_GEN, // (hell: a far map of the same world — HellMap.js; every world: the Earth's land is not changed)

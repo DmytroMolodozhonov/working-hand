@@ -34,6 +34,7 @@ import { SeaIndex, SEA, seaDepth, seabedDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
+import { VampireCastleSite } from './VampireCastle.js';
 import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE, iceMount } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
@@ -279,7 +280,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 25;
+export const WORLD_GEN = 26;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -395,6 +396,8 @@ export const SEABED_FROM_GEN = 24;
  * src/world/ShopHalls.js; older worlds keep their settlements as they were (the lots there stay houses).
  */
 export const WIZ_SHOPS_FROM_GEN = 25;
+/** The first generation with Count Sracula's castle on its crag over a gorge, a bridge to its gates (VampireCastle.js; one in the world). */
+export const VAMPIRE_FROM_GEN = 26;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -694,7 +697,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false } = {}) {
         this.seed = seed;
         this.hell = !!hell; // (hell: a far map of this world — HellMap.js; in every world, the Earth's land is not touched)
         this._hellPlan = null;
@@ -721,7 +724,7 @@ export class TerrainData {
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = null;
         this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
@@ -738,8 +741,13 @@ export class TerrainData {
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
             const iceL = 2.4 * iceMount({ test: ice ? !!ice.testAt : this.test, arena: !!iceArena }).BACK;
             const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries, !!arenaX2); // (the duel arenas: DuelArenas.js)
-            const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
+            let near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
+            // Count Sracula's castle (VampireCastle.js; generation 26): one in the world, on flat dry land away from every site and the Ice Queen's mountain
+            this.vamp = vampire && this.lush ? new VampireCastleSite(seed, raw, (x, z, r) => near(x, z, r) || busy(x, z)) : null;
+            void this.vamp?.plan; // (worked out now: finding it re-samples `raw`, which the height function reads in a certain order)
+            const near0 = near;
+            near = (x, z, r) => near0(x, z, r) || !!this.vamp?.near(x, z, r);
             // (generation 11: the spider's den has a butte of its own, away from every site — SpiderDens.js)
             // (a dragon's lair nearer than 420 m: another place — tried by the raw land, before the butte is made)
             const lairNear = (x, z, r) => {
@@ -764,7 +772,7 @@ export class TerrainData {
             if (this.ghost && ghostSeen) this.ghost.on = true;
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas, this.dungeons);
             this.iceCastle = ice;
-            const den = this.den;
+            const den = this.den, vamp = this.vamp;
             const fn = (ix, iz) => {
                 let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach, bank = raw.bank; // (read before landAt: finding a site re-samples raw)
                 const kind = raw.kind;
@@ -773,6 +781,8 @@ export class TerrainData {
                 fn.iceRock = false;
                 if (ice) { const m = ice.shapeAt(ix, iz, h); if (ice.lifted) { h = m; wet = 0; sea = false; beach = false; fn.iceRock = true; } }
                 if (den) { const m = den.liftAt(ix, iz, h); if (den.lifted) { h = m; wet = 0; sea = false; beach = false; fn.iceRock = true; } } // (the spider's butte: bare rock)
+                fn.vampRock = false;
+                if (vamp) { const m = vamp.shapeAt(ix, iz, h); if (vamp.lifted) { h = m; wet = 0; sea = false; beach = false; fn.vampRock = true; } } // (Count Sracula's crag and ridge: dark bare rock)
                 const land = idx.landAt(ix, iz);
                 fn.sea = sea; fn.beach = beach; fn.kind = kind; fn.bank = bank && !land;
                 fn.mesa = mesa; fn.emer = emer; fn.moon = moon; fn.fant = fant;
@@ -789,7 +799,7 @@ export class TerrainData {
                 const F = land.castle.F;
                 return land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w));
             };
-            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.iceRock = false;
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.iceRock = false; fn.vampRock = false;
             fn.mesa = fn.emer = fn.moon = fn.fant = 0;
             this.heightAt = fn;
         } else this.heightAt = raw;
@@ -1005,7 +1015,7 @@ export class TerrainData {
                 if (px === 0 || pz === 0 || px === P - 1 || pz === P - 1) continue;
                 const col = (pz - 1) * CHUNK + (px - 1);
                 water[col] = H.water;
-                iceR[col] = H.iceRock ? 1 : 0;
+                iceR[col] = H.iceRock ? 1 : H.vampRock ? 2 : 0;
                 flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0) | (H.bank ? 8 : 0);
                 kinds[col] = H.kind || 0;
                 fx.mesa = H.mesa || 0; fx.emer = H.emer || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
@@ -1031,7 +1041,11 @@ export class TerrainData {
                 const snow = land.snowLine(x, z, _lush.T[col]);
                 snowL[col] = Math.round(snow);
                 const m = mesa[col] / 255;
-                if (iceR[col] || this.iceCastle?.rocky(x, z)) {
+                if (iceR[col] === 2 || (!iceR[col] && this.vamp?.rocky(x, z))) {
+                    // Count Sracula's crag and ridge: dark bare rock — deep stone, scree, here and there basalt; never grass, never snow
+                    const patch = hashLand(x >> 1, z >> 1, this.seed + 97);
+                    surf = patch > 0.82 ? BLOCK.GRAVEL : patch > 0.55 ? BLOCK.HELL_BASALT : BLOCK.DEEPSTONE; soil = BLOCK.DEEPSTONE; deep = 0;
+                } else if (iceR[col] || this.iceCastle?.rocky(x, z)) {
                     // the Ice Castle's peak: no grass up there — snow where it can lie, bare rock and scree on the crags
                     // (snow in drifts, not speckles: clumps of 4 m, on the gentle ground; the crags bare)
                     const patch = hashLand(x >> 2, z >> 2, this.seed + 91);
@@ -1201,11 +1215,11 @@ export class TerrainData {
                 const b = BIOMES[this.biomeAt(tx, tz)];
                 if (roll > b.trees * grove(tx, tz)) continue;
                 const h = H(tx, tz);
-                if (h < 1 || H.water || H.beach || H.kind === KIND.MESA || H.iceRock) continue; // (the Ice Castle's mountain: bare rock)
+                if (h < 1 || H.water || H.beach || H.kind === KIND.MESA || H.iceRock || H.vampRock) continue; // (the Ice Castle's mountain, Count Sracula's crag: bare rock)
                 const kind = b.kinds[Math.floor(hashLand(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * b.kinds.length)];
                 if (h > LUSH.TREE_LINE + (kind === 2 ? 8 : 0)) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
-                if (this.iceCastle?.rocky(tx, tz)) continue; // (the Ice Castle's peak: bare rock)
+                if (this.iceCastle?.rocky(tx, tz) || this.vamp?.rocky(tx, tz)) continue; // (the Ice Castle's peak, the vampire's crag: bare rock)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue;
                 if (this.ghost?.on && (this.ghost.insideAt(tx, tz, 6) || this.ghost.insideAt(tx + 1, tz + 1, 6))) continue; // (the Castle of Ghosts has no trees on its terrace)
                 const wide = kind === 0 || kind === 4; // (oak and dark oak: a 2×2 trunk)
@@ -1379,6 +1393,7 @@ export class TerrainData {
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
         let lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
+        if (this.vamp) { const v = this.vamp.partsForChunk(c.cx, c.cz, CHUNK); if (v.length) lists = lists.length ? lists.concat(v) : v; } // (Count Sracula's castle: VampireCastle.js)
         if (this.ghost?.on) { const g = this.ghost.partsForChunk(c.cx, c.cz, CHUNK); if (g.length) lists = lists.length ? lists.concat(g) : g; } // (the Castle of Ghosts: only in a seer's land — GhostCastle.js)
         if (!lists.length) return;
         const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
@@ -1934,6 +1949,7 @@ export class TerrainData {
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue; // not on a beach (nor its crown)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue; // no trees in villages
                 if (this.ghost?.on && this.ghost.insideAt(tx, tz, 6)) continue;
+                if (this.vamp?.rocky(tx, tz)) continue; // (the vampire's crag)
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
                 // Only on level dry ground (the 2×2 trunk and its surroundings)
