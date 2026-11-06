@@ -378,12 +378,63 @@ function bodyPart(look, base, size, r, out) {
 }
 
 const BUILD = { iron: 1, lava: 2, rock: 3, ice: 4, shade: 5 };
+/**
+ * Each walker's own body (the author 06.11: «титаны такие одинаковые» — the «Hercules» titans differ in their very shape): the iron smith
+ * upright and square; the rock one a hunched mountain — huge shoulders, a ridge of crags on its back, arms down to the ground, short legs,
+ * a small head thrust low and forward; the ice one tall and gaunt, skeletal limbs, a long beast's skull, a row of ice spikes down its back,
+ * ribs of ice; the lava one has no legs — it rises out of a mound of flowing lava, long dripping arms; the shade has no legs either — a
+ * tail of mist, very long thin arms. Sizes in the body's own unit (the game scales it by the titan's height).
+ *   legL / thigh — the legs (hipY — where the hips stand); chest, torso [across, front-back], torsoH — the trunk; armL / armR / hand — the
+ *   arms; neckY / neckZ / headS — the head; lean — the hunch (the pose bends the trunk forward by it, the head looking up from it);
+ *   reach — the arms hang forward by it (the rock one's knuckles to the ground).
+ */
+const BODY = {
+    iron: { legs: true, legL: 0.4, thigh: 0.065, hipY: 0.42, chest: 0.18, torso: [1.3, 0.78], torsoH: 1, armL: 0.4, armR: 0.052, hand: 1.9, neckY: 0.55, neckZ: 0, headS: 0.13, lean: 0, reach: 0 },
+    rock: { legs: true, legL: 0.26, thigh: 0.1, hipY: 0.28, chest: 0.27, torso: [1.45, 1.05], torsoH: 0.95, armL: 0.56, armR: 0.09, hand: 2.2, neckY: 0.36, neckZ: -0.16, headS: 0.1, lean: 0.55, reach: 0.5 },
+    ice: { legs: true, legL: 0.48, thigh: 0.034, hipY: 0.5, chest: 0.12, torso: [1.15, 0.7], torsoH: 1.05, armL: 0.5, armR: 0.028, hand: 3.2, neckY: 0.53, neckZ: -0.04, headS: 0.12, headLong: true, lean: 0.32, reach: 0.15 },
+    lava: { legs: false, legL: 0.4, thigh: 0.06, hipY: 0.36, chest: 0.19, torso: [1.25, 0.9], torsoH: 1, armL: 0.5, armR: 0.055, hand: 2.4, neckY: 0.48, neckZ: -0.03, headS: 0.13, lean: 0.18, reach: 0.25 },
+    shade: { legs: false, legL: 0.4, thigh: 0.05, hipY: 0.4, chest: 0.13, torso: [1.15, 0.75], torsoH: 1.1, armL: 0.62, armR: 0.032, hand: 3, neckY: 0.56, neckZ: -0.05, headS: 0.12, headLong: false, lean: 0.25, reach: 0.2 },
+};
+/** What the legless ones stand on: the lava one's mound of flowing lava (on the root — it stays on the ground), the shade's tail of mist. */
+function lowerBody(look, B, root, hips, M, r, part) {
+    if (B.legs) return;
+    if (look === 'lava') {
+        const prof = [[0, 0.3], [0.03, 0.31], [0.08, 0.27], [0.15, 0.22], [0.24, 0.19], [0.32, 0.18], [B.hipY + 0.04, 0.16], [B.hipY + 0.08, 0.001]];
+        root.add(part((o) => {
+            bodyPart(look, lathe(prof, 18, 1, 1), 1.4, r, o);
+            // tongues of lava running out over the ground round it
+            for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2 + r() * 0.4, len = 0.12 + r() * 0.12; (o.glow || (o.glow = [])).push({ geo: tinted(new THREE.SphereGeometry(1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), C(0xffffff), r, 0), pos: [Math.cos(a) * (0.26 + len * 0.5), 0, Math.sin(a) * (0.26 + len * 0.5)], rot: [0, -a, 0], scale: [len, 0.02, 0.05 + r() * 0.04] }); }
+        }));
+    } else if (look === 'shade') {
+        // (a wisp: as wide as the waist where it leaves the body, swelling a little, then thinning to a point that trails behind)
+        const prof = [[-B.hipY * 0.95, 0.001], [-B.hipY * 0.8, 0.018], [-0.24, 0.05], [-0.13, 0.078], [-0.04, 0.08], [0.03, 0.07], [0.07, 0.001]];
+        const tail = part((o) => bodyPart(look, lathe(prof, 16, 1.1, 0.9), 0.8, r, o));
+        tail.rotation.x = 0.4; // (it trails back as it glides)
+        hips.add(tail);
+    }
+}
+/** The back: the rock one's ridge of crags, the ice one's spikes and ribs of ice. */
+function backOf(look, B, chest, M, r, part, chestR) {
+    if (look === 'rock') {
+        chest.add(part((o) => {
+            for (let i = 0; i < 9; i++) {
+                const t = i / 8, x = (r() - 0.5) * chestR * 1.4, y = 0.18 + t * 0.3 * B.torsoH, h = 0.08 + r() * 0.1 + Math.sin(t * Math.PI) * 0.08;
+                (o.body || (o.body = [])).push({ geo: tinted(rough(new THREE.ConeGeometry(0.045 + r() * 0.03, h, 6, 2), r, 0.3), C([0x8e8a82, 0x7c7870, 0x9a968e][i % 3]), r), pos: [x, y, chestR * 0.85 + h * 0.25], rot: [0.9 + r() * 0.3, r() * 3, (r() - 0.5) * 0.4] });
+            }
+        }));
+    } else if (look === 'ice') {
+        chest.add(part((o) => {
+            for (let i = 0; i < 6; i++) { const y = 0.12 + i * 0.065, h = 0.1 + Math.sin((i / 5) * Math.PI) * 0.1; (o.body || (o.body = [])).push({ geo: tinted(new THREE.ConeGeometry(0.018, h, 5), C(0xeaf8ff), r), pos: [0, y, chestR * 0.7 + h * 0.3], rot: [1.15, 0, 0] }); }
+            for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) (o.glow || (o.glow = [])).push({ geo: tinted(new THREE.TorusGeometry(chestR * 0.95, 0.006, 4, 12, Math.PI * 0.55), C(0xffffff), r, 0), pos: [0, 0.2 + i * 0.05, 0], rot: [Math.PI / 2, 0, sd > 0 ? -Math.PI * 0.95 : Math.PI * 0.4], scale: [1.15, 0.75, 1] }); // (ribs of ice across the chest)
+        }));
+    }
+}
 /** A walker titan 1 unit tall (feet at y 0, facing −z). userData.rig — its joints; userData.glow — materials to pulse. */
 function walker(look) {
     const r = rng(BUILD[look] * 7919);
     const M = mats(look), root = new THREE.Group();
     root.name = 'titan-' + look;
-    const bulk = look === 'rock' ? 1.25 : look === 'iron' ? 1.05 : look === 'shade' ? 0.9 : 1; // (the rock one massive, the shade thin)
+    const B = BODY[look]; // (each its own body: the author 06.11 — «титаны такие одинаковые»)
     const segs = LOOK[look].segs;
     const mk = (parts) => {
         const g = new THREE.Group();
@@ -397,11 +448,11 @@ function walker(look) {
     };
     const part = (fn) => { const o = {}; fn(o); return mk(o); };
     // the proportions of a heavy giant: long thick arms, short legs, a broad chest, the head low between the shoulders
-    const legL = 0.4, thighR = 0.062 * bulk, armL = 0.4, armR = 0.05 * bulk, chestR = 0.17 * bulk;
-    const hips = new THREE.Group(); hips.position.y = legL + 0.02; root.add(hips);
+    const legL = B.legL, thighR = B.thigh, armL = B.armL, armR = B.armR, chestR = B.chest;
+    const hips = new THREE.Group(); hips.position.y = B.hipY; root.add(hips);
     const chest = new THREE.Group(); chest.position.y = 0.0; hips.add(chest);
     chest.add(part((o) => {
-        bodyPart(look, lathe(TORSO.map(([y, k]) => [y, k * chestR]), segs, 1.3, 0.78), 1.2, r, o);
+        bodyPart(look, lathe(TORSO.map(([y, k]) => [y * B.torsoH, k * chestR]), segs, B.torso[0], B.torso[1]), 1.2, r, o);
         if (look === 'iron') {
             const add = (k, geo, c, pos, rot = [0, 0, 0], sc = [1, 1, 1]) => (o[k] || (o[k] = [])).push({ geo: tinted(geo, C(c), r), pos, rot, scale: sc });
             for (const sd of [-1, 1]) add('body', new THREE.SphereGeometry(chestR * 0.62, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0x8c867e, [sd * chestR * 1.2, 0.41, 0], [0, 0, sd * -0.45], [1, 0.75, 1]); // (the pauldrons)
@@ -410,16 +461,17 @@ function walker(look) {
             add('body', new THREE.TorusGeometry(chestR * 0.43, 0.01, 6, 28), 0x4c4640, [0, 0.32, -chestR * 0.76]);
         }
     }));
-    const neck = new THREE.Group(); neck.position.y = look === "iron" ? 0.55 : 0.5; chest.add(neck); // (the head rises clear of the shoulders: it was sunk to the crest)
+    const neck = new THREE.Group(); neck.position.set(0, B.neckY, B.neckZ); chest.add(neck); // (the head clear of the shoulders — or thrust forward, low, as the rock one's)
     const hd = new THREE.Group(); hd.position.y = 0.06; neck.add(hd);
-    hd.add(part((o) => head(look, 0.13 * (look === 'rock' ? 0.85 : 1), r, o)));
+    hd.add(part((o) => head(look, B.headS, r, o)));
+    if (B.headLong) hd.scale.set(0.85, 0.9, 1.7); // (the ice one: a long skull, like a beast's)
     const arm = (sd) => {
-        const sh = new THREE.Group(); sh.position.set(sd * chestR * 1.18, 0.39, 0); chest.add(sh);
+        const sh = new THREE.Group(); sh.position.set(sd * chestR * B.torso[0] * 0.9, 0.39 * B.torsoH, 0); chest.add(sh);
         sh.add(part((o) => bodyPart(look, lathe(limbProfile(armL * 0.5, armR * 1.15, armR * 0.85), segs), 0.35, r, o)));
         const el = new THREE.Group(); el.position.y = -armL * 0.5; sh.add(el);
         el.add(part((o) => bodyPart(look, lathe(limbProfile(armL * 0.5, armR * 0.95, armR * 0.75), segs), 0.3, r, o)));
         const hand = new THREE.Group(); hand.position.y = -armL * 0.5; el.add(hand);
-        hand.add(part((o) => extremity(look, armR * (look === 'iron' ? 1.9 : 2.4), r, o)));
+        hand.add(part((o) => extremity(look, armR * B.hand, r, o)));
         return { sh, el, hand };
     };
     const leg = (sd) => {
@@ -432,8 +484,11 @@ function walker(look) {
         return { hp, kn, ft };
     };
     const L = arm(-1), R = arm(1), LL = leg(-1), RL = leg(1);
+    if (!B.legs) { LL.hp.visible = false; RL.hp.visible = false; } // (no legs: the lava one rises from its mound, the shade trails a tail of mist)
     if (look === 'ice') hd.add(part((o) => segment('ice', 0.01, 0.12, r, o, { crown: true })));
-    const rig = { hips, chest, neck, head: hd, armL: L, armR: R, legL: LL, legR: RL, prop: null, club: null, chips: [], blades: [], shell: [] };
+    const rig = { hips, chest, neck, head: hd, armL: L, armR: R, legL: LL, legR: RL, prop: null, club: null, chips: [], blades: [], shell: [], hipY: B.hipY, body: B };
+    lowerBody(look, B, root, hips, M, r, part);
+    backOf(look, B, chest, M, r, part, chestR);
     props(look, rig, M, r, { chestR, armR });
     root.userData.rig = rig;
     root.userData.glow = [M.glow, M.body].filter(Boolean);
@@ -700,6 +755,10 @@ export function poseWalker(model, { ph = 0, k = 0, blow = 0, arm = 1, stomp = 0,
     R.armL.el.rotation.x = 0.3 + Math.max(0, -s) * 0.3; R.armR.el.rotation.x = 0.3 + Math.max(0, s) * 0.3;
     R.head.rotation.set(0.05 + Math.sin(breathe * 0.7) * 0.03, 0, 0);
     R.neck.rotation.set(0, 0, 0);
+    // its own posture: the hunch (the head lifted to look ahead from it), the long arms hanging forward
+    const Bd = R.body;
+    if (Bd?.lean) { R.chest.rotation.x -= Bd.lean; R.head.rotation.x += Bd.lean * 0.75; R.armL.sh.rotation.x += Bd.reach; R.armR.sh.rotation.x += Bd.reach; }
+    if (Bd && !Bd.legs) { R.hips.rotation.z = Math.sin(ph) * 0.04 * k; R.hips.position.y = 0.42; } // (the legless glide: a sway, no stride)
     if (act && ACTS[act] && w > 0) { _P.w = Math.min(1, w); ACTS[act](R, Math.max(0, Math.min(1, a)), breathe); }
     if (blow > 0) {
         // the wind-up (arm raised high and back, the body turned with it), then the strike down and forward
@@ -710,6 +769,8 @@ export function poseWalker(model, { ph = 0, k = 0, blow = 0, arm = 1, stomp = 0,
         R.chest.rotation.x += blow > 0.6 ? -0.3 * (1 - up) : 0.15 * up; // (the upper body: −x leans forward)
     }
     if (stomp > 0) { const L = R.legR, up = stomp < 0.6 ? ease(stomp / 0.6) : 1 - (stomp - 0.6) / 0.4; L.hp.rotation.x = 1.2 * up; L.kn.rotation.x = -1.1 * up; R.armL.sh.rotation.z -= 0.6 * up; R.armR.sh.rotation.z += 0.6 * up; }
+    // (the poses are made for hips at 0.42 of a body with legs 0.4: brought to this body's own height)
+    if (R.hipY) R.hips.position.y *= R.hipY / 0.42;
 }
 const ease = (t) => t * t * (3 - 2 * t);
 const lerp = (x, y, t) => x + (y - x) * t;
