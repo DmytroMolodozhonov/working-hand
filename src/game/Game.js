@@ -5091,7 +5091,7 @@ export class Game {
             this.hud.setVoice('🚫 На картах «Флайн» не работает — только в режимах «Творческий», «Хардкор» и «Выживание»', true);
             return false;
         }
-        if (!force && this._poseHint('Flight')) return false; // (руки не подняты на всю длину — одна понятная подсказка, мана не тратится)
+        if (!force && this.config?.mode !== 'creative' && this._poseHint('Flight')) return false; // (Creative: «Флайн» needs no raised arms or head — the author 06.11) // (руки не подняты на всю длину — одна понятная подсказка, мана не тратится)
         this.flight.start();
         this.character.flying = true;
         if (this.sound) this.sound.playBombardoCast();
