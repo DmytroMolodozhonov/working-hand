@@ -24,6 +24,7 @@
  *   hammer  — Thor's hammer: catches lightning in a storm (3 strikes).
  */
 
+import { newAppleModel } from './AppleModel.js';
 import { scrollKindLabel } from './DarkMagic.js';
 import { enchantValueMul, describeEnchant } from './Enchant.js';
 import { addEnchantGlow } from '../fx/EnchantGlow.js';
@@ -1163,14 +1164,7 @@ function hammerModel() {
     return g;
 }
 
-function appleModel(it, red = false) {
-    const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), red ? mat(0xc8202a) : mat(0xffd700, { standard: true, metal: 0.7, rough: 0.3, emissive: 0x332200 })));
-    g.add(cyl(0.008, 0.008, 0.06, mat(0x5a3a1e), 0, 0.12));
-    const leaf = box(0.06, 0.01, 0.03, mat(0x2e8b2e), 0.03, 0.13);
-    g.add(leaf);
-    return g;
-}
+function appleModel(it, red = false) { return newAppleModel(red); } // (AppleModel.js: a lathe body, a skin painted on a canvas, a stem and a leaf with veins)
 
 /** A Baksadi pear in the hand: the tree's pear (AppleTrees.pearGeometry — the same shape), a faint lilac glow, a little leaf on the stalk. */
 function pearModel() {

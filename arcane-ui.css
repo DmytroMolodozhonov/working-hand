@@ -313,3 +313,12 @@
 /* the old look never shows: the menu waits (hidden) for its shapes — arcaneBoot.js gives them at once; if something fails it shows anyway */
 #main-menu > .menu-container:not(.ar-shaped) { visibility: hidden; animation: ar-show 0s linear 2.5s forwards; }
 @keyframes ar-show { to { visibility: visible; } }
+
+/* ---- the magic cursor (the author 07.11): a wand with a glowing star at its tip; a brighter golden star over what can be pressed.
+   SVG, 32 px, the tip is the hot spot (assets/cursors/). Text fields keep the text beam; the game itself hides the cursor (pointer lock). */
+html, body, #main-menu, #pause-menu, .menu-container { cursor: url("assets/cursors/wand.svg") 6 6, auto; }
+button:not(:disabled), a[href], summary, label, select, [role="button"], [role="tab"], .tab-btn, .sub-tab, .pause-tab, .win-btn, .world-fav,
+.mp-server-row, .ce-skin, .ce-arrow, .hero-seg, .world-opt, input[type="checkbox"], input[type="radio"], input[type="range"], input[type="color"],
+.item-card[data-pent], .boss-card { cursor: url("assets/cursors/wand-hover.svg") 7 7, pointer !important; }
+input[type="search"], input[type="text"], input[type="number"], input[type="password"], textarea { cursor: text !important; }
+button:disabled { cursor: url("assets/cursors/wand.svg") 6 6, default !important; }
