@@ -35,7 +35,7 @@ function canvasTex(name, S, draw) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
-    t.userData.shared = true;
+    (t.userData || (t.userData = {})).shared = true; // (this three's textures may have no userData)
     _tex.set(name, t);
     return t;
 }
@@ -427,10 +427,12 @@ function worm(n = 30) {
 
 // ------------------------------------------------------------------ the living storm
 let _stormMat = null;
+/** The storm's shader reads its `map` (vUv exists only with a map): a one-pixel texture where there is no canvas (tests). */
+function stormFallbackTex() { const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); t.needsUpdate = true; (t.userData || (t.userData = {})).shared = true; return t; }
 /** The funnel's material: a cloud texture wound round and rising (uT), lit from within by the lightning (uFlash). */
 function stormMaterial() {
     if (_stormMat) return _stormMat;
-    const m = new THREE.MeshBasicMaterial({ map: TEX.storm(), color: 0xf0d8b8, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+    const m = new THREE.MeshBasicMaterial({ map: TEX.storm() || stormFallbackTex(), color: 0xf0d8b8, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
     m.userData.shared = true;
     m.userData.uT = { value: 0 }; m.userData.uFlash = { value: 0 };
     m.onBeforeCompile = (sh) => {

@@ -2039,6 +2039,7 @@ export class Game {
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
+        if (this.godhood?.noMagic) { if (isFinal) this.hud.setVoice('✨ У вас пока нет магии — подождите, сила придёт', true); this.lastCastWhy = 'нет магии (ждёт божественной силы)'; return null; } // («Почти стал богом»: Godhood.js)
         // в кулаке Дьяволоса колдовать нельзя — только «стоп» (DiabolosRules.GRAB)
         if (this.diabolos?.holding && !(name === 'Stand' && /стоп|stop/i.test(text))) {
             if (isFinal) this.hud.setVoice('😈 В кулаке Дьяволоса не поколдуешь', true);
@@ -3909,7 +3910,7 @@ export class Game {
         zoo.add(makeItemModel(newMagicBackpack()), makeItemModel({ kind: 'backpack', uid: 'prewarm', color: 0x7a4a24, slots: 3 })); // (the golden backpack: its own materials — a shader at start, not in play)
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), ...(this.diabolos?.sampleModels() || []), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of VampireLife.samples()) zoo.add(m);
-        for (const m of Titans.samples()) zoo.add(m); // (the seven titans' bodies, their fire, spikes, ray) // (Count Sracula's bats (their wing-beating shader), his coffin, his bat shape)
+        try { for (const m of Titans.samples()) zoo.add(m); } catch (e) { console.error('prewarm titans', e); } // (the seven titans' bodies, their fire, spikes, ray; a sample that fails never stops the entry into the world) // (Count Sracula's bats (their wing-beating shader), his coffin, his bat shape)
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
