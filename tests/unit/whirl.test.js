@@ -134,3 +134,10 @@ test('гость просит хост забрать дуэль; хост от�
 test('таблица «кто/что»: у каждого вида — решение с причиной', () => {
     for (const [k, T] of Object.entries(WHIRL_TARGETS)) assert.ok(['caster', 'opponent', 'none', 'refused'].includes(T.does) && T.why.length > 8, k);
 });
+
+test('«Спиралис» проходит сквозь «занято: идёт дуэль» (в дуэли разрешены «Максима», «Спиралис» и щит; остальное — нет)', async () => {
+    const { mayCast } = await import('../../src/game/Concentration.js');
+    assert.equal(mayCast('Duel', 'Spiralis'), true, 'это жалоба автора: «занято: идёт дуэль»');
+    assert.equal(mayCast('Duel', 'Maxima'), true);
+    assert.equal(mayCast('Duel', 'Bombardo'), false, 'остальное в дуэли — по-прежнему нельзя');
+});

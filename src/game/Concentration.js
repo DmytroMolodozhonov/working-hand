@@ -51,7 +51,7 @@ export const HELD = {
     Ward: { ru: 'Защита дома', icon: '🛡️', own: ['WardGrow', 'Maxima', 'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'WardDispel'] },
     WardBeam: { ru: 'Усиление дома', icon: '🛡️', own: ['StrengthenHouse'] }, // (the beam feeding a sphere with mana: HouseWards.js)
     Build: { ru: 'Стройка', icon: '🧱', own: [] },
-    Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'], strict: true }, // (the beams' clash, while it goes: only «Максима» — and the shield)
+    Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima', 'Spiralis'], strict: true }, // (the beams' clash, while it goes: only «Максима», «Спиралис» (the beams taken and whirled — Whirl.js) — and the shield)
     Wave: { ru: 'Волна', icon: '🌊', own: ['WaveAttack', 'WaveAttackMaxima'] },
     Lightning: { ru: 'Молния', icon: '⚡', own: ['LightningStrike', 'Hammer'] },
     SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'Furl'] },
