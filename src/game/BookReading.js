@@ -1,29 +1,18 @@
 /**
- * BookReading.js — the spell book in the hands, like a real book.
+ * BookReading.js — the spell book in the hand, like a real book (the author 06.11: «по умолчанию она будет открыта»).
  *
  * Nothing moves by itself: the book does what the hands and fingers do to it.
- *   - In one hand it is closed: an edge of it deep in the web between the thumb and the
- *     fingers, the covers between the palm and the thumb (the fore-edge towards the other
- *     hand — so the hand holds the fore-edge or the spine). The fingers close on the
- *     covers only until they touch them (SimplifiedHand.fitGrip).
- *   - The other (empty) hand comes OPEN to the covers' edge and closes on it (a fist arriving,
- *     or a pointing hand — the index out — takes nothing): now each hand holds one half by
- *     its outer edge (low on it), and the book is exactly as open as the hands are apart
- *     (a hinge: φ = 2·asin((d/2 − t) / w)); it tilts as the hands' fingers do. Pulled wider
- *     than the book, it lies flat between them; spread the arms wide — the cover slips out
- *     of the second hand's fingers.
- *   - Open a hand: it lets go; the book stays open in the other hand, its half held rigidly
- *     (it turns with that hand); the free hand turns the pages: the index fingertip slides
- *     under the edge of a page and lifts it; the page rests on the finger and follows it;
- *     over the top it falls on by itself; let go before the middle — it falls back.
- *   - The holding hand opens palm up: the book lies on the palm; it falls only from an
- *     opened stretched arm. Closing the hand on it holds it where it lies.
- *   - Take the free half again: both hands; bring them together: it closes, and
- *     letting one go leaves it closed in the other hand. Lower the holding arm: it closes.
- *   - Fingers never go through it: the free hand is pushed back out of the pages. The free
- *     hand is never tied to the book: it touches, lifts a page, takes a cover — or goes away.
- * The pose comes from the hands only — the same in both camera modes.
- * Reading a spread for a moment teaches its spell.
+ *   - Taken into one hand with the arm raised it is OPEN at once (`_fist` → mode 'one'): the hand holds a half by its outer edge, the pages face the eyes. With the arm
+ *     lowered it is carried closed in the fist (`holdClosed`) and opens when the arm comes up again.
+ *   - The other hand draws an index finger across the open book, just above the paper: a page is turned — from the right to the left forward, from the left to the right
+ *     back; a little way is enough (`_swipe`, `SWIPE`). A finger that only hovers, trembles or is high above turns nothing. The page is thrown with a flick
+ *     and falls on the other side by itself (the page physics: BookPhysics.PageSheet).
+ *   - The holding fist squeezes: the book shuts as much as the hand closes (`HOLD.SQUEEZE0` … `SQUEEZE1`), the whole way if squeezed hard; loosened, it opens by itself.
+ *   - The holding hand opens palm up: the book lies on the palm; it falls only from an opened stretched arm.
+ *   - Fingers never go through it: the free hand is pushed back out of the pages. The free hand is never tied to the book.
+ *   - (The old two-handed opening — a hand closing on the second cover and drawing it apart — is gone; mode 'two' below is only what the lecterns and the code of old saves
+ *     still pass through: nothing enters it any more.)
+ * The pose comes from the hands only — the same in both camera modes. Reading a spread for a moment teaches its spell.
  */
 
 import * as THREE from 'three';
@@ -52,7 +41,14 @@ export const HOLD = {
     PUSH_MAX: 0.15, // m: the most a hand is held back out of the pages in a frame
     SLIP: 1.0, // m: hands this much further apart than the open book reaches (arms spread wide) — the cover slips out of the second hand…
     SLIP_T: 0.3, // …after this long (s) (a little wider it just lies flat between them: nothing lets go by accident)
+    OPEN_T: 0.3, // s with the arm raised: the book in the hand opens by itself (the author 06.11: «по умолчанию она открыта»)
+    SQUEEZE0: 0.62, // the hand's closing up to this: the book stays fully open…
+    SQUEEZE1: 0.95, // …and from this on it is shut (between — as much as the fist is squeezed)
+    OPEN_RATE: 3, // 1/s: how fast it opens (a loosened hand / just taken)
+    CLOSE_RATE: 9, // 1/s: how fast the squeezing hand shuts it
 };
+/** A fingertip drawn across the open book turns a page (the author: «проводит пальцем по книге. И даже немного»): metres along the page, within WINDOW s, just above the paper. */
+export const SWIPE = { DIST: 0.07, WINDOW: 0.4, BACK: 0.025, ABOVE: 0.22, BELOW: 0.03, COOL: 0.5, MIN_PHI: 1.2, OMEGA: 11 };
 // a fingertip catches a page by its edge: the outer part of the page, close to it
 // (a fingertip hovering over the page, or anywhere on it, catches nothing: only at the very edge, on it)
 const CATCH = { R0: 0.72, R1: 1.1, ABOVE: 0.07, BELOW: 0.1, T: 0.1, LOST_IN: 0.1, LOST_OUT: 1.18 };
@@ -369,40 +365,32 @@ export class BookReading {
         this._readCam(s);
     }
 
-    /** Closed in one fist: the other hand may take it by the covers' edge (the fore-edge). */
+    /**
+     * The book in one hand, the arm raised: it opens at once and stays open (the author 06.11: «по умолчанию она будет открыта»). The arm lowered — it is
+     * carried closed in the fist (Items asks `holdClosed`) and opens again when the arm comes up. The other hand turns the pages (`_swipe`), the holding
+     * fist squeezes it shut (`_one`).
+     */
     _fist(hb, dt) {
-        const B = other(hb.side);
-        if (!this._free(B) || !this.game.currentPose && !this.input) { this._grab[B] = 0; this._armed[B] = false; return; }
-        const h = this._hand(B);
+        const h = this._hand(hb.side);
+        this._openT = h.up ? (this._openT || 0) + dt : 0;
+        if (this._openT < HOLD.OPEN_T) return;
+        this._openT = 0;
         const m = hb.model;
         m.updateMatrixWorld(true);
-        const { W, H } = BOOK;
-        const a = m.localToWorld(_v3.set(0, -H / 2, W)), b = m.localToWorld(_v4.set(0, H / 2, W));
-        // at the fore-edge — or anywhere on the covers' outer half (a hand closing on the covers there
-        // pinches them; on the spine's half it would only hold the book shut)
-        const l = m.worldToLocal(_v5.copy(h.G)), sc = m.scale.x || 1;
-        const onCovers = l.z > W * 0.45 && l.z < W && Math.abs(l.y) < H / 2 + 0.1 / sc && Math.abs(l.x) < BOOK.T + BOOK.B + 0.15 / sc;
-        const near = onCovers || distToSegment(h.G, a, b) < HOLD.REACH;
-        if (!this._takes(B, h, near, dt)) return;
-        // both hands now: each holds a half by its outer edge — the one on the reader's left
-        // the left half; the book turns from how the fist held it into how both hands hold it
+        // the half on the palm is the one the hand holds (the other lifts away from it as the book opens): the cover that is nearer to the palm
+        const F = h.f ? _v5.copy(h.f.Z).negate() : null;
+        const X = _v6.set(1, 0, 0).applyQuaternion(m.quaternion);
+        const half = F ? (X.dot(F) > 0 ? 'left' : 'right') : hb.side;
         const eye = this._eye(_v1);
-        const right = viewRight(eye, m.position, _v2);
-        const hA = this._hand(hb.side);
-        const aLeft = hA.G.dot(right) < h.G.dot(right);
-        const Y = new THREE.Vector3(0, 1, 0).applyQuaternion(m.quaternion);
-        const lim = H * m.scale.x / 2 - 0.1;
-        const gy = Math.max(-lim, Math.min(lim, (_v5.subVectors(hA.G, m.position).dot(Y) + _v6.subVectors(h.G, m.position).dot(Y)) / 2));
         this.s = {
-            mode: 'two', model: m, item: hb.item, owner: hb.side,
-            hold: { left: aLeft ? hb.side : B, right: aLeft ? B : hb.side },
-            phi: 0, pos: m.position.clone(), quat: m.quaternion.clone(), gy,
+            mode: 'one', model: m, item: hb.item, owner: hb.side,
+            hold: { left: null, right: null, [half]: hb.side },
+            half, phi: 0.05, pos: m.position.clone(), quat: m.quaternion.clone(), gy: 0,
             from: { pos: m.position.clone(), quat: m.quaternion.clone(), t: 0 },
             pL: null, pR: null, spread: 0, sheet: null, readT: 0, lowT: 0, support: false, slipT: 0,
         };
-        this._setGrip(B, 0.55, 'book');
+        void eye;
         this._initPages(this.s);
-        this.game.hud.setVoice?.('📖 Разведите руки — книга раскроется. Чтобы листать, отпустите одну руку и подденьте пальцем край страницы', true);
     }
 
     /** Which way the hands' fingers point (both together; each hand's sign as before). */
@@ -494,23 +482,28 @@ export class BookReading {
         s.rig = { q: inv.clone().multiply(hq), h: hinge.sub(P).applyQuaternion(inv).clone() };
     }
 
-    /** Open in one hand: its half held rigidly by the edge — or lying on the open palm; the other hand is free for the pages. */
+    /**
+     * Open in one hand (the way a book is held now — always open, until the fist squeezes it): the hand holds a half by its outer edge, the book faces the eyes;
+     * the fist squeezing makes it close (the whole way if squeezed hard), loosening opens it again by itself. Or it lies on the open palm. The other hand is
+     * free: an index finger drawn across the book turns a page (`_swipe`).
+     */
     _one(s, dt) {
         const g = this.game;
         const H = s.hold[s.half];
         const h = this._hand(H);
-        // (a book held open in one hand settles about so open)
-        s.phi += (HOLD.ONE_HAND_PHI - s.phi) * Math.min(1, dt * 1.5);
-        const { P, q } = this._palm(h);
+        // the squeeze: as open as the fist is loose
+        const c = this._closed(h);
+        const k = c <= HOLD.SQUEEZE0 ? 1 : c >= HOLD.SQUEEZE1 ? 0 : 1 - (c - HOLD.SQUEEZE0) / (HOLD.SQUEEZE1 - HOLD.SQUEEZE0);
+        const want = HOLD.ONE_HAND_PHI * k;
+        s.phi += (want - s.phi) * Math.min(1, dt * (want < s.phi ? HOLD.CLOSE_RATE : HOLD.OPEN_RATE));
+        const { P } = this._palm(h);
         const f1 = this._f1 || (this._f1 = {});
         const F = h.f ? _v5.copy(h.f.Z).negate() : null; // where the palm looks
         if (s.support && F) {
-            const Yp = h.f.Y;
-            frameOnPalm(P, Yp, F, 0.07 + BOOK.B * (ITEM_SCALE.book || 1.6) + 0.01, f1);
+            frameOnPalm(P, h.f.Y, F, 0.07 + BOOK.B * (ITEM_SCALE.book || 1.6) + 0.01, f1);
         } else {
-            const hq = _q.copy(q).multiply(s.rig.q);
-            const hinge = _v4.copy(s.rig.h).applyQuaternion(q).add(P);
-            bookFromHinge(hinge, hq, s.half, s.phi, this.t, f1);
+            // (the hand's tremble smoothed: a real move is followed at once)
+            frameFromOneHand(this._steady(s, 'gripP', h.G, dt), s.half, s.phi, this._eye(_v1), this.w, f1);
         }
         this._place(s, f1.pos, f1.quat, dt);
         this._fitHand(H, this._openBoxes(s.model));
@@ -531,37 +524,50 @@ export class BookReading {
         } else if (s.support) {
             if (open && !palmUp && h.ext) { this._let[H] = 0; this._end(false); g.items._throw(H, new THREE.Vector3(), { why: 'книга: вытянутая рука разжата' }); return; }
             // the fingers close on it again: it is held where it lies
-            if (this._dwell(this._grab, H, h.curl > HOLD.GRAB_CURL, dt) >= HOLD.GRAB_T) {
-                this._grab[H] = 0;
-                s.support = false;
-                this._rig(s, h);
-            }
+            if (this._dwell(this._grab, H, h.curl > HOLD.GRAB_CURL, dt) >= HOLD.GRAB_T) { this._grab[H] = 0; s.support = false; s.steady = null; }
         }
-        // the holding arm lowered: it closes in that hand
+        // the holding arm lowered: it is carried closed in that hand
         s.lowT = !h.up ? s.lowT + dt : 0;
         if (s.lowT >= HOLD.LOWERED_T) { this._end(false); return; }
-        // the free hand: takes the free half by its edge again, or turns the pages
+        // the free hand: turns the pages with a swipe of the finger
         const Fr = other(H);
-        if (!this._free(Fr)) return;
+        if (!this._free(Fr)) { s.swp = null; return; }
         const fh = this._hand(Fr);
-        const freeHalf = other(s.half);
-        // (its outer edge, top to bottom: the hand closes on it there — and only there)
-        const hs = BOOK.H * (ITEM_SCALE.book || 1.6) / 2;
-        const ea = edgeInBook(freeHalf, s.phi, this.w, -hs, this.t, _v2).applyQuaternion(s.quat).add(s.pos);
-        const eb = edgeInBook(freeHalf, s.phi, this.w, hs, this.t, _v6).applyQuaternion(s.quat).add(s.pos);
-        const near = !s.support && s.sheet?.finger == null && distToSegment(fh.G, ea, eb) < HOLD.REACH;
-        if (this._takes(Fr, fh, near, dt)) {
-            s.mode = 'two';
-            s.slipT = 0;
-            s.hold = { [s.half]: H, [freeHalf]: Fr };
-            s.pL = s.pR = null; s.steady = null;
-            s.hy0 = s.hyPrev = null;
-            s.from = { pos: s.model.position.clone(), quat: s.model.quaternion.clone(), t: 0 };
-            this._setGrip(Fr, 0.55, 'book');
+        this._swipe(s, fh, dt);
+        this._pushOut(s, Fr, fh);
+    }
+
+    /**
+     * A fingertip of the free hand drawn across the open book, just above the paper, turns a page: from the right to the left — forward, from the left to the right —
+     * back. A little way is enough (SWIPE.DIST); a finger only hovering, trembling or going back and forth turns nothing. The page is thrown with a flick and falls on the other side by itself.
+     */
+    _swipe(s, fh, dt) {
+        s.swipeCool = Math.max(0, (s.swipeCool || 0) - dt);
+        const tip = fh.tip;
+        if (!tip || s.sheet || s.phi < SWIPE.MIN_PHI || s.tex.length < 2) { s.swp = null; return; }
+        const { W, H, T } = BOOK;
+        const sc = s.model.scale?.x || ITEM_SCALE.book || 1.6;
+        const l = s.model.worldToLocal(_v3.copy(tip));
+        const above = (l.z - T) * sc; // metres over the paper
+        const over = Math.abs(l.x) < W * 1.1 && Math.abs(l.y) < H / 2 + 0.04 / sc && above > -SWIPE.BELOW && above < SWIPE.ABOVE;
+        if (!over) { s.swp = null; return; }
+        const w = s.swp || (s.swp = { x: l.x, ext: l.x, t: 0 });
+        w.t += dt;
+        const dx = (l.x - w.x) * sc; // metres along the reader's right
+        // the furthest it has gone one way; a turn back of more than BACK starts over from there (a trembling finger)
+        if (Math.sign(dx) * (l.x - w.ext) * sc < -SWIPE.BACK) { w.x = w.ext; w.t = 0; }
+        else if (Math.sign(dx) * (l.x - w.ext) > 0 || Math.abs(dx) < 1e-6) w.ext = l.x;
+        const dx2 = (l.x - w.x) * sc;
+        if (Math.abs(dx2) >= SWIPE.DIST && s.swipeCool <= 0) {
+            const dir = dx2 < 0 ? 1 : -1;
+            s.swp = null;
+            if ((dir > 0 && s.spread >= s.tex.length - 1) || (dir < 0 && s.spread <= 0)) return; // (the first / the last spread: nothing to turn)
+            s.swipeCool = SWIPE.COOL;
+            this._startSheet(s, dir);
+            s.sheet.omega = dir * SWIPE.OMEGA;
             return;
         }
-        this._finger(s, fh, dt);
-        this._pushOut(s, Fr, fh);
+        if (w.t > SWIPE.WINDOW) { w.x = l.x; w.ext = l.x; w.t = 0; } // too slow: a finger that only lingers turns nothing
     }
 
     /** The book's pose: from the hands (turned in from how it was at first). */
@@ -725,9 +731,9 @@ export class BookReading {
                 this.game.fx?.lightFlash?.(s.pos, 0xffe9a8, 2, 0.3, 10);
             }
         }
-        if (!s.toldPages && s.mode === 'one' && s.phi > 2) {
+        if (!s.toldPages && s.mode === 'one' && s.phi > 2 && s.tex.length > 1) {
             s.toldPages = true;
-            this.game.hud.setVoice?.(`📖 Страница ${s.spread + 1} из ${s.tex.length}: подденьте пальцем край страницы и переведите её на другую сторону`, true);
+            this.game.hud.setVoice?.(`📖 Страница ${s.spread + 1} из ${s.tex.length}: проведите пальцем другой руки по книге — страница перевернётся (в другую сторону — назад); сожмите кисть — книга прикроется`, true);
         }
     }
 

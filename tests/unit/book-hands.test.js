@@ -64,137 +64,96 @@ function bookInRightHand() {
     return { m, g, R, H, run, foreEdge };
 }
 
-/** Both hands on the covers, then apart: open. */
-function openWithTwoHands(t) {
-    t.H.left.grip = 0.1; t.H.left.curl = 0.1;
-    t.H.left.G.copy(t.foreEdge());
-    t.run(0.1);
-    t.H.left.grip = 0.9; t.H.left.curl = 0.9;
-    t.run(0.4);
-    assert.equal(t.R.s?.mode, 'two', 'the open hand closing on the edge took the cover');
-}
+const CALM = 0.55; // a hand holding the book (not squeezing it)
 
-test('a pointing hand (index out to turn a page) or a fist arriving at the edge takes no cover', () => {
+test('a book in a raised hand opens by itself and stays open; the arm lowered — it is carried closed; raised again — open again', () => {
     const t = bookInRightHand();
-    // pointing: the index out, the others in — the old «curl» said 0.67 («closed»)
-    t.H.left.curl = 0.67; t.H.left.grip = 0.02;
-    t.H.left.G.copy(t.foreEdge());
-    t.run(1.5);
-    assert.equal(t.R.s, null, 'a pointing finger at the edge is not a hand on the cover');
-    // a fist that comes from far away, already closed
-    t.H.left.G.set(-1.5, 1.0, 0); t.H.left.curl = 0.9; t.H.left.grip = 0.9;
+    t.H.right.curl = t.H.right.grip = CALM;
+    t.H.right.up = false;
+    t.run(1);
+    assert.equal(t.R.s, null, 'carried with the arm down: closed in the fist');
+    t.H.right.up = true;
+    t.run(0.15);
+    assert.equal(t.R.s, null, 'not at once: the arm must stay up a moment');
+    t.run(1.8);
+    assert.equal(t.R.s?.mode, 'one', 'open in the one hand by itself');
+    assert.ok(t.R.s.phi > 2.3, 'open: ' + t.R.s.phi);
+    t.H.right.up = false;
+    t.run(1);
+    assert.equal(t.R.s, null, 'the arm lowered: closed in the fist');
+    t.H.right.up = true;
+    t.run(2);
+    assert.ok(t.R.s && t.R.s.phi > 2.3, 'raised again: open again');
+});
+
+test('squeezing the fist shuts the book as much as it is squeezed, all the way if hard; loosened — it opens by itself', () => {
+    const t = bookInRightHand();
+    t.H.right.curl = t.H.right.grip = CALM;
+    t.run(2.5);
+    const open = t.R.s.phi;
+    assert.ok(open > 2.3);
+    t.H.right.curl = t.H.right.grip = 0.8;
+    t.run(1.2);
+    const half = t.R.s.phi;
+    assert.ok(half < open - 0.4 && half > 0.3, 'a little squeezed: a little shut: ' + half);
+    t.H.right.curl = t.H.right.grip = 1.0;
+    t.run(1.2);
+    assert.ok(t.R.s.phi < HOLD.CLOSED_PHI, 'squeezed hard: shut: ' + t.R.s.phi);
+    assert.ok(t.R.s, 'still in the hand (shut, not gone)');
+    t.H.right.curl = t.H.right.grip = CALM;
+    t.run(3);
+    assert.ok(t.R.s.phi > 2.3, 'loosened: it opens by itself: ' + t.R.s.phi);
+});
+
+test('an index finger drawn across the open book turns a page — right to left forward, left to right back; hovering, trembling, too high or at the end — nothing', () => {
+    const t = bookInRightHand();
+    t.H.right.curl = t.H.right.grip = CALM;
+    t.run(2.5);
+    const s = t.R.s, { W, T } = BOOK, sc = 1.6;
+    const at = (x, above = 0.05) => t.m.localToWorld(V(x * W, 0, T + above / sc));
+    const swipe = (x0, x1, sec = 0.25, above = 0.05) => { const n = Math.round(sec / DT); t.run(sec + DT, (i) => { t.H.left.tip = at(x0 + (x1 - x0) * Math.min(1, i / n), above); }); };
+    const settle = () => { t.H.left.tip = null; t.run(2); };
+    assert.equal(s.spread, 0);
+    // nothing to turn back at the first spread
+    swipe(-0.5, 0.2); settle();
+    assert.equal(s.spread, 0, 'the first spread: nothing before it');
+    // a finger lingering, trembling, or high above: nothing
+    t.run(1.0, () => { t.H.left.tip = at(0.4); });
+    t.run(1.5, (i) => { t.H.left.tip = at(0.4 + (i % 2 ? 0.02 : -0.02)); });
+    swipe(0.6, -0.4, 0.25, 0.5); settle();
+    assert.equal(s.spread, 0, 'hovering / trembling / too high turns nothing');
+    // from the right to the left: forward
+    swipe(0.6, -0.1);
+    assert.ok(s.sheet || s.spread === 1, 'the swipe threw a page');
+    settle();
+    assert.equal(s.spread, 1, 'forward');
+    // a short swipe is enough
+    t.run(0.6);
+    swipe(0.3, 0.05, 0.15); settle();
+    assert.equal(s.spread, 2, 'even a little way turns it');
+    t.run(0.6);
+    swipe(0.5, -0.5); settle();
+    assert.equal(s.spread, 2, 'the last spread: nothing after it');
+    // the other way: back
+    t.run(0.6);
+    swipe(-0.5, 0.3); settle();
+    assert.equal(s.spread, 1, 'left to right: back');
+});
+
+test('the other hand is never tied to the book: it takes no cover, a hand that goes away leaves the book as it is', () => {
+    const t = bookInRightHand();
+    t.H.right.curl = t.H.right.grip = CALM;
+    t.run(2.5);
+    const s = t.R.s, phi = s.phi;
+    t.H.left.G.copy(t.foreEdge()); t.H.left.curl = t.H.left.grip = 0.1;
     t.run(0.3);
-    t.H.left.G.copy(t.foreEdge());
-    t.run(1.5);
-    assert.equal(t.R.s, null, 'a fist arriving takes nothing');
-    // an open hand closing a little away from the edge (out of reach): nothing
-    t.H.left.curl = t.H.left.grip = 0.1;
-    t.H.left.G.copy(t.foreEdge()).add(V(-HOLD.REACH - 0.15, 0, 0));
-    t.run(0.2);
     t.H.left.curl = t.H.left.grip = 0.9;
-    t.run(1);
-    assert.equal(t.R.s, null, 'closing beside the book takes nothing');
-    // the hand comes open to the edge and closes on it: now it holds the cover
-    t.H.left.curl = t.H.left.grip = 0.1;
-    t.H.left.G.copy(t.foreEdge());
-    t.run(0.2);
-    t.H.left.curl = t.H.left.grip = 0.9;
-    t.run(0.4);
-    assert.equal(t.R.s?.mode, 'two');
-});
-
-test('two hands: as open as the hands are apart; together again — closed', () => {
-    const t = bookInRightHand();
-    openWithTwoHands(t);
-    const C = V(0, 1.3, -0.8);
-    const phiAt = (d) => { t.H.left.G.copy(C).add(V(-d / 2, 0, 0)); t.H.right.G.copy(C).add(V(d / 2, 0, 0)); t.run(0.6); return t.R.s.phi; };
-    const p1 = phiAt(0.8), p2 = phiAt(1.2);
-    assert.ok(Math.abs(p1 - 2 * Math.asin((0.4 - t.R.t) / t.R.w)) < 0.05, 'open as far as the hands are apart: ' + p1);
-    assert.ok(p2 > p1 + 0.3, 'wider: more open');
-    const p3 = phiAt(2 * t.R.t + 0.02);
-    assert.ok(p3 < HOLD.CLOSED_PHI, 'hands together: closed ' + p3);
-});
-
-test('the second hand lets go and is free at once: the book does not follow it', () => {
-    const t = bookInRightHand();
-    openWithTwoHands(t);
-    const C = V(0, 1.3, -0.8);
-    t.H.left.G.copy(C).add(V(-0.6, 0, 0)); t.H.right.G.copy(C).add(V(0.6, 0, 0));
     t.run(0.6);
-    // the left hand points its index (to turn a page): it lets the cover go
-    t.H.left.grip = 0.02; t.H.left.curl = 0.67;
-    t.run(0.5);
-    assert.equal(t.R.s?.mode, 'one', 'a pointing hand let the cover go');
-    assert.equal(t.R.s.hold.left, null);
-    t.run(4); // (it settles open in the right hand)
-    const at = t.m.position.clone(), q = t.m.quaternion.clone();
-    // the free hand goes anywhere — as a fist, pointing, open, even close by the edge: the book stays in the right hand
-    for (const [g, x] of [[0.9, -1.4], [0.02, -0.2], [0.1, 0.9], [0.9, 0.2]]) {
-        t.H.left.grip = g; t.H.left.curl = Math.max(g, 0.6);
-        t.run(0.5, (i) => t.H.left.G.set(x + 0.2 * Math.sin(i / 5), 1.0 + 0.3 * Math.cos(i / 7), -0.3));
-        assert.equal(t.R.s?.mode, 'one', 'the free hand took nothing: ' + JSON.stringify([g, x]));
-        assert.ok(t.m.position.distanceTo(at) < 1e-3 && t.m.quaternion.angleTo(q) < 1e-3, 'the book did not follow the free hand: ' + t.m.position.distanceTo(at) + ' ' + t.m.quaternion.angleTo(q));
-    }
-});
-
-test('pulled wider than the open book reaches: the cover slips out of the second hand', () => {
-    const t = bookInRightHand();
-    openWithTwoHands(t);
-    const C = V(0, 1.3, -0.8);
-    const far = 2 * (t.R.w + t.R.t) + HOLD.SLIP + 0.3;
-    t.H.left.G.copy(C).add(V(-far / 2, 0, 0)); t.H.right.G.copy(C).add(V(far / 2, 0, 0));
-    t.run(0.6);
-    assert.equal(t.R.s?.mode, 'one', 'the book did not stretch after the hand');
-    assert.equal(t.R.s.owner, 'right');
-});
-
-test('a page goes with the fingertip; a finger hovering above catches nothing; let go before the middle — it falls back, over the middle — it turns', () => {
-    const t = bookInRightHand();
-    openWithTwoHands(t);
-    const C = V(0, 1.3, -0.8);
-    t.H.left.G.copy(C).add(V(-0.6, 0, 0)); t.H.right.G.copy(C).add(V(0.6, 0, 0));
-    t.run(0.6);
-    // the right hand lets go: the book stays open in the left one, the right fingertip turns pages
-    t.H.right.grip = t.H.right.curl = 0.05;
-    t.run(0.5);
-    assert.equal(t.R.s?.mode, 'one');
-    assert.equal(t.R.s.owner, 'left');
-    t.run(2);
-    const s = t.R.s, b = t.m.userData.book;
-    const { W, T } = BOOK;
-    const onPage = (x, z) => { b.R.updateWorldMatrix(true, false); return b.R.localToWorld(V(x, 0, z)); };
-    // (round the spine, in the book's own frame: from the right page up and over)
-    const round = (a) => t.m.localToWorld(V(Math.cos(a) * W * 0.9, 0, T + Math.sin(a) * W * 0.9));
-    // hovering a hand's breadth above the page: nothing
-    t.H.right.tip = onPage(W * 0.9, T + 0.2);
+    assert.equal(s.mode, 'one', 'a fist closing on the edge is no two-handed hold any more');
+    assert.ok(Math.abs(s.phi - phi) < 0.05, 'the book is as open as before');
+    t.H.left.G.set(-3, 1, 1);
     t.run(1);
-    assert.equal(s.sheet, null, 'a finger above the page does not lift it');
-    // on the middle of the page (not its edge): nothing
-    t.H.right.tip = onPage(W * 0.4, T + 0.01);
-    t.run(1);
-    assert.equal(s.sheet, null, 'the middle of a page is not its edge');
-    // under the edge, then lifted a little — and let go before the middle
-    const spread0 = s.spread;
-    const a0 = Math.PI / 2 - s.phi / 2 + 0.02;
-    t.H.right.tip = round(a0);
-    t.run(0.2);
-    assert.ok(s.sheet, 'the fingertip at the edge caught the page');
-    const seen = [];
-    for (let i = 0; i <= 20; i++) { t.H.right.tip = round(a0 + i * 0.03); t.R.update(DT); seen.push(s.sheet?.beta); }
-    assert.ok(Math.abs(seen.at(-1) - (a0 + 0.6)) < 0.12, 'the page is where the finger is: ' + seen.at(-1));
-    t.H.right.tip = null;
-    t.run(2);
-    assert.equal(s.sheet, null);
-    assert.equal(s.spread, spread0, 'let go before the middle: it fell back');
-    // again — carried over the middle and let go: it turns over by itself
-    t.H.right.tip = round(a0);
-    t.run(0.2);
-    assert.ok(s.sheet);
-    for (let i = 0; i <= 40; i++) { t.H.right.tip = round(a0 + i * (Math.PI / 2 + 0.3 - a0) / 40); t.R.update(DT); }
-    t.H.right.tip = null;
-    t.run(2);
-    assert.equal(s.sheet, null);
-    assert.equal(s.spread, spread0 + 1, 'over the middle: the next spread');
+    assert.ok(Math.abs(s.phi - phi) < 0.05 && t.R.s === s, 'the hand gone away: nothing changes');
 });
 
 test('a scroll: one hand holds it, the other takes the other roller and unrolls it as far as it pulls; let go — it rolls back up', () => {
