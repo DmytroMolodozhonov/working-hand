@@ -134,7 +134,7 @@ test('«Вингардиум Левиоса Максима» decides every creat
     const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Tarons of the underworld': 'taron', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'Count Sracula\'s castle (the count, his skeleton guards, his bats)': 'vampire', 'Pharaoh Sandy\'s pyramids (the pharaoh, mummies, guards)': 'pharaoh', 'the titans (seven, one on each planet but the Earth)': 'titan', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     for (const k of ALL) assert.ok(T[names[k]]?.why, `«Левиоса Максима» forgets: ${k}`);
     const m = src('src/game/LevitationMaxima.js');
-    check('LevitationMaxima._bodies (who rises in a group)', body(m, '    _bodies() {'), ALL.filter((k) => !/book-birds|dragons|phoenixes|owls|Spencer|ghosts|Ice Castle|Sracula|titans/.test(k))); // (Count Sracula's castle: MAXIMA_TARGETS.vampire — «не действует»)
+    check('LevitationMaxima._bodies (who rises in a group)', body(m, '    _bodies() {'), ALL.filter((k) => !/book-birds|dragons|phoenixes|owls|Spencer|ghosts|Ice Castle|Sracula|Pharaoh|titans/.test(k))); // (Count Sracula's castle: MAXIMA_TARGETS.vampire — «не действует»)
     check('LevitationMaxima.crush (who is under what falls)', body(m, '    crush(b, dmg, by, kind, ship = null) {'), ['zombies', 'castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
 });
 
@@ -315,7 +315,7 @@ test('the Ice Castle\'s creatures: every place that finds targets knows them; th
     const has = (f, re, why) => assert.match(src(f), re, `${f}: ${why}`);
     const g = src('src/game/Game.js');
     has('src/game/Game.js', /z\.isIce\) \{ this\.iceCastle\.hit/, 'swords, axes, fists');
-    has('src/game/Game.js', /this\.iceCastle\.targets\(\)(, this\.gargoyles\.targets\(\))?(, this\.canaries\.targets\(\))?(, this\.tarons\.targets\(\))?(, this\.customCreatures\.targets\(\))?(, this\.vampire\.targets\(\))?(, this\.pharaoh\.targets\(\))?(, this\.titans\.targets\(\))?\), dt\)/, 'blades look for them');
+    has('src/game/Game.js', /this\.iceCastle\.targets\(\)(, this\.gargoyles\.targets\(\))?(, this\.canaries\.targets\(\))?(, this\.tarons\.targets\(\))?(, this\.customCreatures\.targets\(\))?(, this\.vampire\.targets\(\))?(, this\.titans\.targets\(\))?(, this\.pharaoh\.targets\(\))?\), dt\)/, 'blades look for them');
     has('src/game/Gear.js', /iceCastle\?\.targets\(\)/, 'arrows');
     has('src/game/BodyStrikes.js', /iceCastle/, 'fists and pushes');
     has('src/game/Levitation.js', /iceCreature/, '«Левиоса» says no');
@@ -355,7 +355,7 @@ test('the clever owl: every place blows, arrows, spells, water, fire and «Бр�
         assert.ok(TARGETS[k]?.why, `Owls.TARGETS forgets: ${k}`);
     }
     const g = src('src/game/Game.js');
-    assert.match(g, /this\.owls\.targets\(\), this\.iceCastle\.targets\(\)(, this\.gargoyles\.targets\(\))?(, this\.canaries\.targets\(\))?(, this\.tarons\.targets\(\))?(, this\.customCreatures\.targets\(\))?(, this\.vampire\.targets\(\))?(, this\.pharaoh\.targets\(\))?(, this\.titans\.targets\(\))?\), dt\)/, 'swords and axes (Weapons.checkHits)');
+    assert.match(g, /this\.owls\.targets\(\), this\.iceCastle\.targets\(\)(, this\.gargoyles\.targets\(\))?(, this\.canaries\.targets\(\))?(, this\.tarons\.targets\(\))?(, this\.customCreatures\.targets\(\))?(, this\.vampire\.targets\(\))?(, this\.titans\.targets\(\))?(, this\.pharaoh\.targets\(\))?\), dt\)/, 'swords and axes (Weapons.checkHits)');
     assert.match(body(g, '    onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {'), /isOwl/, 'a blow lands on it');
     assert.match(body(g, '    _castBrainrot(isFinal) {'), /owls/, '«Брейнрот» says it does not act');
     assert.match(src('src/game/Gear.js'), /owls\?\.targets\(\)/, 'arrows');
