@@ -81,9 +81,131 @@ function sidePicture(gold) {
         }
     });
 }
-/** The nemes' stripes (gold and lapis), for the pharaoh's headdress. */
+/** The nemes' cloth (gold and lapis bands across, u across the cloth, v down it): woven threads, a fold line at every band, soft shade at the edges, a darker hem. */
 function nemesPicture() {
-    return canvasTex('nemes', 128, 128, (g, W, H) => { for (let x = 0; x < W; x += 8) { g.fillStyle = (x / 8) % 2 ? '#e8b830' : '#1f3a8a'; g.fillRect(x, 0, 8, H); } g.fillStyle = 'rgba(0,0,0,0.08)'; for (let y = 0; y < H; y += 6) g.fillRect(0, y, W, 1); });
+    return canvasTex('nemes', 256, 256, (g, W, H, r) => {
+        const BAND = 32;
+        for (let y = 0; y < H; y += BAND) {
+            const gold = (y / BAND) % 2 === 0;
+            const gr = g.createLinearGradient(0, y, 0, y + BAND);
+            if (gold) { gr.addColorStop(0, '#f0c443'); gr.addColorStop(0.55, '#d9a424'); gr.addColorStop(1, '#a87818'); }
+            else { gr.addColorStop(0, '#2a4aa6'); gr.addColorStop(0.55, '#1c3787'); gr.addColorStop(1, '#10215a'); }
+            g.fillStyle = gr; g.fillRect(0, y, W, BAND);
+            g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(0, y, W, 1); // (the fold's light edge)
+            g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, y + BAND - 2, W, 2); // (and its shadow)
+        }
+        g.globalAlpha = 0.16; // woven threads: fine lines both ways
+        for (let x = 0; x < W; x += 2) { g.fillStyle = x % 4 ? '#000' : '#fff'; g.fillRect(x, 0, 1, H); }
+        for (let y = 0; y < H; y += 2) { g.fillStyle = y % 4 ? '#000' : '#fff'; g.fillRect(0, y, W, 1); }
+        g.globalAlpha = 1;
+        for (let i = 0; i < 900; i++) { g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,240,190,0.14)'; g.fillRect(r() * W, r() * H, 1 + r() * 3, 1); } // (slubs)
+        for (let i = 0; i < 6; i++) { // age stains
+            const x = r() * W, y = r() * H, rad = 14 + r() * 26, rg = g.createRadialGradient(x, y, 1, x, y, rad);
+            rg.addColorStop(0, 'rgba(70,45,10,0.28)'); rg.addColorStop(1, 'rgba(70,45,10,0)'); g.fillStyle = rg; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+        }
+        const eg = g.createLinearGradient(0, 0, W, 0); // soft shade at the side edges (the cloth turns away)
+        eg.addColorStop(0, 'rgba(0,0,0,0.35)'); eg.addColorStop(0.12, 'rgba(0,0,0,0)'); eg.addColorStop(0.88, 'rgba(0,0,0,0)'); eg.addColorStop(1, 'rgba(0,0,0,0.35)');
+        g.fillStyle = eg; g.fillRect(0, 0, W, H);
+        g.fillStyle = '#6a4a12'; g.fillRect(0, H - 6, W, 6); g.fillStyle = '#e8b830'; g.fillRect(0, H - 6, W, 1); // the hem
+    });
+}
+/** Old linen: woven threads, long pleats (light and shade), stains, a gold-and-lapis hem; u across, v down. `pleat`: the number of pleats across. */
+function linenPicture(name, pleat, hem) {
+    return canvasTex(name, 256, 256, (g, W, H, r) => {
+        g.fillStyle = '#ece3c6'; g.fillRect(0, 0, W, H);
+        const pw = W / pleat;
+        for (let i = 0; i < pleat; i++) { // each pleat: a light ridge, a shadow in the fold
+            const x = i * pw, gr = g.createLinearGradient(x, 0, x + pw, 0);
+            gr.addColorStop(0, 'rgba(90,70,30,0.30)'); gr.addColorStop(0.18, 'rgba(255,250,225,0.18)'); gr.addColorStop(0.75, 'rgba(120,95,45,0.10)'); gr.addColorStop(1, 'rgba(70,50,20,0.34)');
+            g.fillStyle = gr; g.fillRect(x, 0, pw, H);
+        }
+        g.globalAlpha = 0.10;
+        for (let x = 0; x < W; x += 2) { g.fillStyle = x % 4 ? '#5a4520' : '#fff'; g.fillRect(x, 0, 1, H); }
+        for (let y = 0; y < H; y += 2) { g.fillStyle = y % 4 ? '#5a4520' : '#fff'; g.fillRect(0, y, W, 1); }
+        g.globalAlpha = 1;
+        for (let i = 0; i < 1100; i++) { g.fillStyle = r() < 0.5 ? 'rgba(80,60,25,0.16)' : 'rgba(255,255,240,0.18)'; g.fillRect(r() * W, r() * H, 1 + r() * 4, 1); } // (slubs, a thread out of line)
+        for (let i = 0; i < 9; i++) { // yellowed stains and a sand-dust dusk toward the hem
+            const x = r() * W, y = r() * H * 0.9, rad = 10 + r() * 30, rg = g.createRadialGradient(x, y, 1, x, y, rad);
+            rg.addColorStop(0, 'rgba(120,85,30,0.26)'); rg.addColorStop(1, 'rgba(120,85,30,0)'); g.fillStyle = rg; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+        }
+        const dg = g.createLinearGradient(0, H * 0.5, 0, H); dg.addColorStop(0, 'rgba(150,115,60,0)'); dg.addColorStop(1, 'rgba(150,115,60,0.35)'); g.fillStyle = dg; g.fillRect(0, H * 0.5, W, H * 0.5);
+        if (hem) { // the hem: gold band, a lapis zigzag, the fringe
+            g.fillStyle = '#c89a2a'; g.fillRect(0, H - 30, W, 10);
+            g.fillStyle = '#e8c860'; g.fillRect(0, H - 30, W, 2);
+            for (let x = 0; x < W; x += 16) { g.fillStyle = '#1f3a8a'; g.beginPath(); g.moveTo(x, H - 20); g.lineTo(x + 8, H - 6); g.lineTo(x + 16, H - 20); g.closePath(); g.fill(); g.fillStyle = '#2aa89a'; g.fillRect(x + 6, H - 14, 4, 4); }
+            g.fillStyle = 'rgba(60,40,10,0.45)'; for (let x = 0; x < W; x += 3) g.fillRect(x, H - 6, 1, 6);
+        }
+    });
+}
+/** The broad collar (usekh): rows of beads — lapis, turquoise, gold, carnelian — and a fringe of teardrops; u around, v from the neck (0) down (1). */
+function collarPicture() {
+    return canvasTex('usekh', 512, 128, (g, W, H, r) => {
+        g.fillStyle = '#6a4a12'; g.fillRect(0, 0, W, H);
+        const rows = [['#e0a82a', 12], ['#1f3a8a', 14], ['#2aa89a', 14], ['#e0a82a', 12], ['#a63a28', 14], ['#1f3a8a', 14]];
+        let y = 0;
+        for (const [col, h] of rows) {
+            for (let x = 0; x < W; x += h * 0.8) {
+                const cx = x + h * 0.4, cy = y + h / 2, rg = g.createRadialGradient(cx - 2, cy - 2, 1, cx, cy, h * 0.55);
+                rg.addColorStop(0, '#fff6c8'); rg.addColorStop(0.35, col); rg.addColorStop(1, 'rgba(0,0,0,0.65)');
+                g.fillStyle = rg; g.beginPath(); g.ellipse(cx, cy, h * 0.4, h * 0.5, 0, 0, 7); g.fill();
+            }
+            y += h;
+        }
+        for (let x = 0; x < W; x += 14) { // the fringe of teardrops
+            const col = ['#a63a28', '#2aa89a', '#e0a82a', '#1f3a8a'][(x / 14) & 3];
+            g.fillStyle = '#4a3208'; g.beginPath(); g.moveTo(x + 1, y); g.lineTo(x + 13, y); g.lineTo(x + 7, H); g.closePath(); g.fill();
+            g.fillStyle = col; g.beginPath(); g.moveTo(x + 3, y); g.lineTo(x + 11, y); g.lineTo(x + 7, H - 3); g.closePath(); g.fill();
+            g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x + 4, y + 1, 2, 7);
+        }
+    });
+}
+/** The braided false beard: two strands crossing (lapis and gold), a bright thread on each ridge; u across, v down. */
+function beardPicture() {
+    return canvasTex('fbeard', 64, 256, (g, W, H) => {
+        g.fillStyle = '#10215a'; g.fillRect(0, 0, W, H);
+        for (let y = -16; y < H; y += 16) for (const [x0, col] of [[0, '#1f3a8a'], [W / 2, '#d9a424']]) {
+            g.fillStyle = col; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + W / 2, y + 8); g.lineTo(x0 + W / 2, y + 20); g.lineTo(x0, y + 12); g.closePath(); g.fill();
+            g.strokeStyle = 'rgba(255,240,170,0.5)'; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + W / 2, y + 8); g.stroke();
+            g.strokeStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.moveTo(x0, y + 12); g.lineTo(x0 + W / 2, y + 20); g.stroke();
+        }
+        g.fillStyle = '#e8c860'; g.fillRect(0, H - 22, W, 6); g.fillStyle = '#a87818'; g.fillRect(0, H - 16, W, 16); // the curled tip's gold cap
+    });
+}
+/** Hammered gold with lapis and carnelian inlay — the belt: a plaque with a scarab, a lapis-and-turquoise border. */
+function goldPicture() {
+    return canvasTex('pharaoh-gold', 256, 64, (g, W, H, r) => {
+        const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#f6d56a'); gr.addColorStop(0.5, '#d9a424'); gr.addColorStop(1, '#8a5e10'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+        for (let i = 0; i < 500; i++) { g.fillStyle = r() < 0.5 ? 'rgba(90,50,0,0.18)' : 'rgba(255,245,180,0.24)'; g.beginPath(); g.arc(r() * W, r() * H, 1 + r() * 2.2, 0, 7); g.fill(); } // (hammer dimples)
+        for (let x = 4; x < W; x += 12) { g.fillStyle = (x / 12) & 1 ? '#1f3a8a' : '#2aa89a'; g.fillRect(x, 3, 8, 7); g.fillRect(x, H - 10, 8, 7); }
+        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(0, 0, W, 1); g.fillRect(0, H - 1, W, 1);
+        const cx = W / 2; // a scarab: body, wings, a sun disc
+        g.fillStyle = '#1f3a8a'; g.beginPath(); g.ellipse(cx, H / 2, 11, 14, 0, 0, 7); g.fill();
+        g.strokeStyle = '#e8c860'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, 14); g.lineTo(cx, H - 14); g.moveTo(cx - 30, H / 2); g.quadraticCurveTo(cx - 14, H / 2 - 16, cx - 10, H / 2); g.moveTo(cx + 30, H / 2); g.quadraticCurveTo(cx + 14, H / 2 - 16, cx + 10, H / 2); g.stroke();
+        g.fillStyle = '#a63a28'; g.beginPath(); g.arc(cx, 11, 5, 0, 7); g.fill();
+    });
+}
+/** The face of a dried king, a transparent skin to lay on the face: cracks, hollow shadows under the eyes and temples, kohl with long wings, lips, grey bandage fibres at the jaw. */
+function facePicture() {
+    return canvasTex('pharaoh-face', 256, 256, (g, W, H, r) => {
+        g.clearRect(0, 0, W, H);
+        const shade = (x, y, rx, ry, a) => { const rg = g.createRadialGradient(x, y, 1, x, y, Math.max(rx, ry)); rg.addColorStop(0, `rgba(40,25,10,${a})`); rg.addColorStop(1, 'rgba(40,25,10,0)'); g.save(); g.translate(x, y); g.scale(rx / Math.max(rx, ry), ry / Math.max(rx, ry)); g.translate(-x, -y); g.fillStyle = rg; g.beginPath(); g.arc(x, y, Math.max(rx, ry), 0, 7); g.fill(); g.restore(); };
+        for (const sx of [-1, 1]) { shade(W / 2 + sx * 58, H * 0.5, 30, 18, 0.5); shade(W / 2 + sx * 100, H * 0.52, 22, 40, 0.35); shade(W / 2 + sx * 62, H * 0.78, 34, 26, 0.3); } // under the eyes, temples, cheeks
+        for (let i = 0; i < 700; i++) { g.fillStyle = r() < 0.5 ? 'rgba(40,25,10,0.10)' : 'rgba(255,230,180,0.07)'; g.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2); } // (pores)
+        g.strokeStyle = 'rgba(30,18,6,0.5)'; g.lineWidth = 1;
+        for (let i = 0; i < 26; i++) { // cracks of dry skin
+            let x = r() * W, y = r() * H; g.beginPath(); g.moveTo(x, y);
+            for (let k = 0; k < 5; k++) { x += (r() - 0.5) * 22; y += (r() - 0.3) * 16; g.lineTo(x, y); }
+            g.stroke();
+        }
+        g.fillStyle = 'rgba(10,8,4,0.85)'; // kohl: a heavy line over each eye, a long wing outward
+        for (const sx of [-1, 1]) {
+            const cx = W / 2 + sx * 58, cy = H * 0.43;
+            g.beginPath(); g.moveTo(cx - sx * 36, cy + 10); g.lineTo(cx + sx * 36, cy + 4); g.lineTo(cx + sx * 76, cy + 16); g.lineTo(cx + sx * 36, cy + 14); g.lineTo(cx - sx * 36, cy + 20); g.closePath(); g.fill();
+            g.fillRect(cx - 34, cy + 36, 68, 4); // under-line
+        }
+        g.fillStyle = 'rgba(90,40,30,0.55)'; g.beginPath(); g.ellipse(W / 2, H * 0.84, 26, 6, 0, 0, 7); g.fill(); // dry lips
+        g.strokeStyle = 'rgba(200,190,160,0.45)'; for (let i = 0; i < 24; i++) { const x = r() * W, y = H * 0.9 + r() * H * 0.1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 30, y + 14); g.stroke(); } // bandage fibres
+    });
 }
 
 // ------------------------------------------------------------------ materials
@@ -147,8 +269,8 @@ export function sarcophagusModel(gold = false) {
 // ------------------------------------------------------------------ looks
 /** The pharaoh: a tall dried king in white linen, gold at the neck, eyes of a hot yellow; his staff (a gold crook) is the VillagerModel's tool `heka`. */
 export function pharaohLook() {
-    const L = villagerLook(2626, 'king', false, {});
-    Object.assign(L, { coat: 0xe6dcbc, shirt: 0xe9e0c2, accent: 0xe8b830, pants: 0xe2d8b6, boots: 0x6a5a3a, hair: 'bald', hairColor: 0x1a1208, beard: 'none', hat: 'none',
+    const L = villagerLook(2626, 'farmer', false, {}); // (a plain body: the king's gold plate and ermine would hide under the linen robe below — dressPharaoh)
+    Object.assign(L, { dress: false, apron: null, coat: 0xe6dcbc, shirt: 0xe9e0c2, accent: 0xe8b830, pants: 0xe2d8b6, boots: 0x6a5a3a, hair: 'bald', hairColor: 0x1a1208, beard: 'none', hat: 'none',
         skin: 0x8a7860, eyes: 0xf0c020, tool: 'heka', crown: false });
     return L;
 }
@@ -165,25 +287,54 @@ export function guardLook(i) {
     return L;
 }
 
-/** The pharaoh's finery on a VillagerModel: a nemes headdress over the head, a broad collar on the chest, a braided false beard. Returns the meshes (for disposal). */
+/**
+ * The pharaoh's finery on a VillagerModel (measured from VillagerModel: the head is a 1.2 cube, its pivot at the neck, y 0…1.2, the face at z −0.6;
+ * the torso 1.2 × 1.5 × 0.8 about its middle, the neck at y +0.75): a striped nemes (a cap over the brow, two lappets down the chest, a tail behind) with a gold
+ * brow band and a cobra, kohl and cracks drawn on the face, a pleated linen robe and kilt with a gold-and-lapis hem, a bead collar, a gold belt with a scarab,
+ * a braided false beard. Returns the meshes (for disposal). Pictures and shapes are shared.
+ */
 export function dressPharaoh(model) {
     const out = [];
     const head = model.head, torso = model.torso;
+    const lam = (map, extra = {}) => new THREE.MeshLambertMaterial({ color: 0xffffff, map, ...extra });
+    const add = (parent, key, make, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+        const m = new THREE.Mesh(geo(key, make), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.userData.noFar = true; parent.add(m); out.push(m); return m;
+    };
+    const stand = (k, c, rough = 0.35, metal = 0.7) => _mat[k] || (_mat[k] = shared(new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: metal, emissive: 0x3a2400, emissiveIntensity: 0.35 })));
     if (head) {
-        const nem = new THREE.Mesh(geo('nemesHead', () => new THREE.BoxGeometry(0.98, 0.5, 0.98)), new THREE.MeshLambertMaterial({ color: 0xffffff, map: nemesPicture() }));
-        nem.position.set(0, 0.62, 0.02); head.add(nem); out.push(nem);
-        for (const s of [-1, 1]) { const lap = new THREE.Mesh(geo('nemesLap', () => new THREE.BoxGeometry(0.2, 0.7, 0.62)), nem.material); lap.position.set(s * 0.52, 0.2, 0.05); head.add(lap); out.push(lap); }
-        const cobra = new THREE.Mesh(geo('uraeus', () => new THREE.ConeGeometry(0.07, 0.3, 6)), plainMat(0xe8b830, 'ura')); cobra.position.set(0, 0.95, -0.5); head.add(cobra); out.push(cobra);
-        const beard = new THREE.Mesh(geo('fbeard', () => new THREE.BoxGeometry(0.12, 0.62, 0.12)), new THREE.MeshLambertMaterial({ color: 0x1f3a8a })); beard.position.set(0, -0.12, -0.52); head.add(beard); out.push(beard);
+        const nemMat = _mat.nemesM || (_mat.nemesM = shared(lam(nemesPicture())));
+        add(head, 'nemCap', () => new THREE.BoxGeometry(1.38, 0.44, 1.38), nemMat, 0, 1.17, 0.02); // the cap, over the brow
+        add(head, 'nemBack', () => new THREE.BoxGeometry(1.3, 1.0, 0.16), nemMat, 0, 0.5, 0.68); // the cloth behind the head
+        for (const sx of [-1, 1]) {
+            add(head, 'nemLap', () => new THREE.BoxGeometry(0.26, 1.3, 0.62), nemMat, sx * 0.72, 0.25, -0.18); // the lappets: beside the face, down onto the chest
+            add(head, 'nemTail', () => new THREE.BoxGeometry(0.34, 0.18, 0.22), stand('goldM', 0xe0a82a), sx * 0.72, -0.42, -0.18); // gold clasps at their ends
+        }
+        add(head, 'browBand', () => new THREE.BoxGeometry(1.4, 0.1, 1.4), stand('goldM', 0xe0a82a), 0, 0.99, 0.02); // the gold brow band
+        add(head, 'browGem', () => new THREE.BoxGeometry(0.16, 0.16, 0.05), _mat.gemLapis || (_mat.gemLapis = shared(new THREE.MeshStandardMaterial({ color: 0x1f3a8a, roughness: 0.2, metalness: 0.3, emissive: 0x0a1a50, emissiveIntensity: 0.6 }))), 0, 0.99, -0.7, 0, 0, Math.PI / 4);
+        // the uraeus: a gold cobra rearing on the brow — a body, a flared hood, a head, a lapis eye
+        add(head, 'uraBody', () => new THREE.CylinderGeometry(0.06, 0.09, 0.34, 8), stand('goldM', 0xe0a82a), 0, 1.3, -0.72, -0.2, 0, 0);
+        add(head, 'uraHood', () => new THREE.ConeGeometry(0.15, 0.2, 8), stand('goldM', 0xe0a82a), 0, 1.42, -0.76, Math.PI + 0.2, 0, 0).scale.set(1.2, 1, 0.45);
+        add(head, 'uraHead', () => new THREE.SphereGeometry(0.075, 8, 6), stand('goldM', 0xe0a82a), 0, 1.54, -0.78);
+        add(head, 'uraEye', () => new THREE.BoxGeometry(0.03, 0.03, 0.03), plainMat(0x1f3a8a, 'uraEye'), 0, 1.56, -0.85);
+        // the face: cracks, kohl, hollows — a transparent skin laid on the face (under the nose and the eyes, which stand out of it)
+        const fm = _mat.faceM || (_mat.faceM = shared(new THREE.MeshLambertMaterial({ color: 0xffffff, map: facePicture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
+        add(head, 'faceSkin', () => new THREE.PlaneGeometry(1.2, 1.2), fm, 0, 0.6, -0.604, 0, Math.PI, 0);
+        // the false beard: a braided plait under the chin, curling out at the tip
+        const bm = _mat.beardM || (_mat.beardM = shared(lam(beardPicture())));
+        add(head, 'fbeard', () => new THREE.BoxGeometry(0.2, 0.6, 0.2), bm, 0, -0.3, -0.68, 0.12, 0, 0);
+        add(head, 'fbeardTip', () => new THREE.BoxGeometry(0.26, 0.14, 0.3), stand('goldM', 0xe0a82a), 0, -0.62, -0.74, 0.4, 0, 0);
     }
     if (torso) {
-        const collar = new THREE.Mesh(geo('usekh', () => new THREE.CylinderGeometry(0.62, 0.78, 0.18, 18, 1, true)), new THREE.MeshStandardMaterial({ color: 0xffffff, map: collarPicture(), side: THREE.DoubleSide, roughness: 0.4, metalness: 0.4 }));
-        collar.position.set(0, 1.0, 0); torso.add(collar); out.push(collar);
+        const linenA = _mat.linenA || (_mat.linenA = shared(lam(linenPicture('linen-robe', 6, false))));
+        const linenB = _mat.linenB || (_mat.linenB = shared(lam(linenPicture('linen-kilt', 9, true))));
+        add(torso, 'robe', () => new THREE.BoxGeometry(1.3, 1.52, 0.92), linenA, 0, 0, 0); // the robe over the chest and belly: pleats, weave, age
+        add(torso, 'kilt', () => new THREE.BoxGeometry(1.2, 1.05, 0.06), linenB, 0, -1.12, -0.5); // the kilt's apron, hanging from the belt, with its hem
+        const col = new THREE.Mesh(geo('usekh', () => new THREE.CylinderGeometry(0.62, 0.92, 0.52, 22, 1, true, Math.PI * 0.5, Math.PI)), lam(collarPicture(), { side: THREE.DoubleSide }));
+        col.scale.set(1.05, 1, 0.62); col.position.set(0, 0.55, -0.02); col.userData.noFar = true; torso.add(col); out.push(col); // the bead collar, the front half-ring
+        add(torso, 'beltGold', () => new THREE.BoxGeometry(1.36, 0.22, 0.98), lam(goldPicture()), 0, -0.62, 0);
+        add(torso, 'beltBuckle', () => new THREE.BoxGeometry(0.34, 0.3, 0.05), stand('goldM', 0xe0a82a), 0, -0.62, -0.5);
     }
     return out;
-}
-function collarPicture() {
-    return canvasTex('usekh', 256, 32, (g, W, H) => { const cols = ['#27408a', '#2aa89a', '#e8b830', '#a63a28']; for (let x = 0; x < W; x += 8) { g.fillStyle = cols[(x / 8) % 4 | 0]; g.fillRect(x, 0, 8, H * 0.5); g.fillStyle = cols[((x / 8) + 2) % 4 | 0]; g.fillRect(x, H * 0.5, 8, H * 0.5); } });
 }
 
 // ------------------------------------------------------------------ small things

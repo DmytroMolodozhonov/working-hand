@@ -16,10 +16,10 @@ export default async function (h) {
     await h.frames(30);
     h.bare();
     // the camera on the far side of him from the sarcophagus (the lid would be in front of his face), the chamber lit a little for the picture
-    const ux = Math.cos(c.yaw), uz = -Math.sin(c.yaw), hp = c.pos, look = [hp.x, hp.y + 3.0, hp.z];
-    h.cam([hp.x - uz * 4.2 - ux * 1.2, hp.y + 3.2, hp.z + ux * 4.2 - uz * 1.2], look);
-    await h.shot('1-pharaoh', { settle: 20, light: 0.9 });
-    await h.shot('portrait', { to: 'assets/bosses/pharaoh.png', settle: 1, light: 0.9 });
-    h.cam([hp.x - uz * 9 - ux * 3, hp.y + 5, hp.z + ux * 9 - uz * 3], [hp.x, hp.y + 2.2, hp.z]);
-    await h.shot('2-wide', { settle: 20, light: 0.9 });
+    const fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw), sx = fz, sz = -fx, hp = c.pos; // (his front is -Z of the model; s — to his side)
+    h.cam([hp.x + fx * 5.4 + sx * 0.9, hp.y + 3.3, hp.z + fz * 4.6 + sz * 0.9], [hp.x, hp.y + 2.7, hp.z]);
+    await h.shot('1-pharaoh', { settle: 20, light: 1.2 });
+    await h.shot('portrait', { to: 'assets/bosses/pharaoh.png', settle: 1, light: 1.2 });
+    h.cam([hp.x + fx * 9 + sx * 3, hp.y + 5, hp.z + fz * 9 + sz * 3], [hp.x, hp.y + 2.2, hp.z]);
+    await h.shot('2-wide', { settle: 20, light: 1.2 });
 }
