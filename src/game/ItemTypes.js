@@ -394,6 +394,21 @@ export function rollIceQueenLoot(r = Math.random, first = true) {
     return out;
 }
 
+/**
+ * Count Sracula's chests by his coffin (CLAUDE.md «Боссы»: by the boss's meaning — a vampire count's: old blood-red magic and the night):
+ * the precious things, mana crystals, two healing potions red as wine; in the first — his own cloak (a strong magic robe, crimson and black),
+ * in the second now and then a dark wand of black wood with a red stone.
+ */
+export function rollVampireLoot(r = Math.random, first = true) {
+    const out = [rollKeyItem(r), rollKeyItem(r)];
+    out.push({ kind: 'crystal', uid: newUid(), count: randInt(r, 2, 5) });
+    out.push({ kind: 'potion', uid: newUid(), rec: 'heal', color: 0x8a0a14 }, { kind: 'potion', uid: newUid(), rec: 'heal', color: 0xa0141e });
+    if (first) out.push({ kind: 'robe', uid: newUid(), magic: true, color: 0x5a0a12, named: 'Плащ графа Сракулы', tier: 'strong', mag: 1000, magMax: 1000, strong: ['Hellfire', 'LightningStrike'] });
+    else if (r() < 0.5) out.push({ kind: 'wand', uid: newUid(), model: 3, color: 0x1a0c10, power: 25, named: 'Палочка из чёрного дерева' });
+    else out.push(rollKeyItem(r));
+    return out;
+}
+
 export function rollDragonLoot(r = Math.random) {
     const out = [rollKeyItem(r), rollKeyItem(r)];
     if (r() < 0.5) out.push(rollKeyItem(r));

@@ -44,7 +44,7 @@ function oneShape(model) {
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { seesInvisible, isGhostItem } from './Invisibles.js';
 import { packAccepts, packPut, PACK_TEXT } from './MagicPack.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollWreckLoot, rollSeaTempleLoot, rollGhostLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollVampireLoot, rollWreckLoot, rollSeaTempleLoot, rollGhostLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
@@ -287,6 +287,7 @@ export class ItemSystem {
         const royal = !!chest?.castle && ROYAL_ROOMS.has(chest.room);
         const boss = chest?.room;
         const bossItems = boss === 'dragon' ? rollDragonLoot(rng)
+            : boss === 'vampire' ? rollVampireLoot(rng, String(chest.id).endsWith('0')) // (Count Sracula's chests by his coffin)
             : boss === 'iceQueen' ? rollIceQueenLoot(rng, String(chest.id).endsWith('0')) // (her own robe in the first chest)
             : boss === 'wreck' || boss === 'wreckCaptain' ? rollWreckLoot(rng, boss === 'wreckCaptain', Math.max(1, CHEST_THINGS - extra.length)) // (a sunken ship's chest — SunkenSites.js; the room's name goes to the host too: NetSync chest-ask)
             : boss === 'seaTemple' || boss === 'seaAltar' ? rollSeaTempleLoot(rng, boss === 'seaAltar') // (the sunken temple's offerings)

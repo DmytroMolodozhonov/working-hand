@@ -140,7 +140,7 @@ export class Storm {
         const now = performance.now();
         const want = Math.max(this.raining ? 1 : 0, this.seaK || 0);
         const cloud = this.gathering;
-        const garg = this.game.gargoyles?.skyDark?.() || 0; // (the infernal gargoyles' ritual: black-crimson clouds over its place — GargoyleRitual; no rain, only the dark)
+        const garg = Math.max(this.game.gargoyles?.skyDark?.() || 0, this.game.vampire?.skyDark?.() || 0); // (+ Count Sracula's clouds — VampireLife.skyDark) // (the infernal gargoyles' ritual: black-crimson clouds over its place — GargoyleRitual; no rain, only the dark)
         if (want === 0 && this.k <= 0 && cloud <= 0 && garg <= 0 && !(this._dark > 0)) { if (this._sound) { this._sound = false; this.game.sound?.setRain?.(0); } return; }
         // darkens over ~5 s (a spell's storm) or slowly — the weather's rain grows from a drizzle
         // over ~40 s after the clouds have gathered; clears over ~3 s

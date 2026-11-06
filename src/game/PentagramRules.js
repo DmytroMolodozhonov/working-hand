@@ -210,6 +210,7 @@ export const PENTAGRAM_TARGETS = {
     livingTrees: { does: 'none', why: 'не задевает' },
     bookBirds: { does: 'none', why: 'не задевает' },
     iceCastle: { does: 'none', why: 'на льду Королевы рисунок не держится: лёд — не земля для чёрной магии; Королеву не задевает' },
+    vampire: { does: 'none', why: 'на земле графа рисунок не держится, пока он жив: его магия туч и тьмы глушит чужую тьму' },
     blackship: { does: 'none', why: 'в море нет земли; сам корабль заклинанием не повреждается' },
     dragon: { does: 'none', why: 'дракон не замечает; огонь ритуала дракона не жжёт' },
     phoenix: { does: 'none', why: 'не касается' },

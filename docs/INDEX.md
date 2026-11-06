@@ -167,6 +167,7 @@
 - `Beds.js` — beds, «Create a Bed», «Change a color», sleeping through the night, and throwing wood out of the hand (bundles of logs).
 - `BeslanGrass.js` — «Трава Беслана»: the plant that only a hero who sees the invisible sees (the places and the shape: world/InvisibleFlora.js).
 - `Blackbeard.js` — Captain Black Moustache («капитан Чёрные Усы») and his black ship.
+- `VampireLife.js` / `VampireRules.js` — Count Sracula («граф Сракула»): the count, his 50 bats, 10 skeleton guards, the dark clouds over his land (rules pure, tests/unit/vampire.test.js); the castle on its crag — world/VampireCastle.js (gen 26); sounds — audio/VampireSounds.js.
 - `BladeClash.js` — blade against blade (players fighting with swords / axes).
 - `Blame.js` — who do the people (villagers, knights, the king, wizards, sailors…) think did it? (pure logic: CastleLife and WizardLife ask it.)
 - `Bleeding.js` — a blade stuck in a body, blood, and «Rescue».

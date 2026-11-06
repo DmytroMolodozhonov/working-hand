@@ -25,10 +25,11 @@ export const BOSS_WORDS = {
     spider: [/пауч/, /паук/],
     dragon: [/дракон/, /драко/],
     king: [/корол/, /(^|\s)цар/],
+    vampire: [/сраку/, /вампир/, /(^|\s)граф/],
     devilSlayer: [/дьявол/, /сатан/, /(^|\s)ч[её]рт/, /бес(\s|$|а|у)/],
 };
 /** In this order (the more particular first). */
-const ORDER = ['iceQueen', 'blackbeard', 'tower', 'spider', 'dragon', 'devilSlayer', 'king'];
+const ORDER = ['iceQueen', 'blackbeard', 'vampire', 'tower', 'spider', 'dragon', 'devilSlayer', 'king'];
 
 /** «Find / show / lead / where…»: the phrase is a request, not a word in a talk. */
 const ASK = /(найд|найт|наход|ищ|иска|отыщ|покаж|показ|где|веди|отвед|провод|приведи|отнеси|лети|полет|хочу|нужн|ищу)/;
@@ -66,6 +67,7 @@ export function bossOfWords(text) {
 export const BOSS_TO = {
     king: 'к королю', iceQueen: 'к Ледяной Королеве', spider: 'к гигантской паучихе', dragon: 'к дракону',
     blackbeard: 'к капитану Чёрные Усы', tower: 'к Мастеру башни волшебников', devilSlayer: 'к Дьяволосу',
+    vampire: 'к графу Сракуле',
 };
 export function bossTo(id) {
     if (BOSS_TO[id]) return BOSS_TO[id];
@@ -193,6 +195,12 @@ export const BOSS_FINDERS = {
         const lair = job.best;
         if (live && (!lair || d2(live.p, from.x, from.z) < d2(lair, from.x, from.z))) { const d = live.d; return { x: live.p.x, z: live.p.z, live: () => (d.dead ? null : { x: d.model.position.x, z: d.model.position.z }) }; }
         return lair;
+    },
+    // Count Sracula: one castle on its crag in the world (VampireCastle.js; none in old worlds)
+    vampire(g) {
+        const V = g.vampire, P = V?.plan;
+        if (!P || V.state?.countDead) return null;
+        return { x: P.x, z: P.z, live: () => (V.count && !V.count.dead ? { x: V.count.pos.x, z: V.count.pos.z } : null) };
     },
     // Captain Black Moustache: his black ship on its round on the sea (Blackbeard.js)
     blackbeard(g) {

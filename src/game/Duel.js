@@ -51,6 +51,7 @@ import { owlBody, owlCenter } from './Owls.js';
 import { spencerBody, spencerCenter } from './SpencerBirds.js';
 import { gargoyleBody, gargoyleCenter } from './GargoyleModel.js';
 import { iceBody, iceCenter } from './IceQueen.js';
+import { vampBody, vampCenter } from './VampireLife.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { AvadaLook, AVADA } from '../fx/AvadaLook.js';
 import { IceLook } from '../fx/IceLook.js';
@@ -150,6 +151,7 @@ export const JOLT_TARGETS = {
     livingTrees: 'rooted: it only reels (never falls — its own fall is its death); no damage',
     dragon: 'a great heavy body: it only sways a little, the jolt wakes and angers it (no damage) — Dragons.boltHit',
     iceCastle: 'a snowman is thrown back; the queen and her ice monsters only sway (no damage: a spell without a scroll) — IceCastleLife.boltHit',
+    vampire: 'Count Sracula and his skeleton guards: −6 (the count: dark magic half, «Nihilis» twice — VampireRules.vampDamage; the guards: bones by Sailors.pirateBoneDamage) — VampireLife.boltHit',
     blackship: 'Captain Black Moustache: thrown back as a man — unless his rapier beats the charge aside (Sailors.parryBolt); a skeleton: thrown back, no harm (no duel charge harms it — Sailors.pirateBoneDamage)',
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     owl: 'no effect: a simple charge — the clever owl darts away untouched (and no longer loves the caster) — Owls.boltHit',
@@ -607,6 +609,8 @@ export class Duel {
         for (const o of g.diabolos?.targets() || []) o.bodyCapsule(put('Y', o.id));
         // the Ice Castle's creatures: the queen, the snowmen, the ice monsters (IceQueen.iceBolt says what a charge does)
         for (const c of g.iceCastle?.targets() || []) iceBody(c, put('I', c.id));
+        // Count Sracula and his skeleton guards (VampireLife.boltHit: his own scale — dark magic half, «Nihilis» twice)
+        for (const c of g.vampire?.targets() || []) vampBody(c, put('V', c.id));
         // plant creatures (telewilpins, carnivorous heads): a charge hits the stem and the head (Plants.boltHit says what it does)
         for (const p of g.plants?.near || []) if (!p.dead) this._plantBody(p, put('P', p.id));
         // the fire serpents («Serpent» out of a Hellfire): a charge hits the neck and the head (FireSerpent.boltHit: cold and water hurt it, «Авада» passes through)
@@ -640,6 +644,7 @@ export class Duel {
         if (kind === 'g') { const o = g.gargoyles?.byId(id); return o ? gargoyleBody(o, e) : null; }
         if (kind === 'Y') { const o = g.diabolos?.byId(id); return o ? o.bodyCapsule(e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
+        if (kind === 'V') { const c = g.vampire?.byId(id); return c && !c.dead ? vampBody(c, e) : null; }
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? this._plantBody(p, e) : null; }
         if (kind === 'F') { const s = g.fireSerpent?.byId(id); return s && s.fade === 0 ? s.bodyCapsule(e) : null; }
         const c = this._creature(kind, id);
@@ -823,6 +828,7 @@ export class Duel {
         if (kind === 'G') return g.ghosts?.byId(id) || null; // (a ghost of the Castle of Ghosts)
         if (kind === 'C') return g.customCreatures?.byId(id) || null; // (a creature of one's own)
         if (kind === 'g') return g.gargoyles?.byId(id) || null; // (an infernal gargoyle)
+        if (kind === 'V') return g.vampire?.byId(id) || null; // (Count Sracula, a guard of his)
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? p : null; } // (a plant creature)
         if (kind === 'F') { const s = g.fireSerpent?.byId(id); return s && s.fade === 0 ? s : null; } // (a fire serpent)
         return null;
@@ -835,6 +841,7 @@ export class Duel {
         if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
         if (b.tk === 'Y') return g.diabolos?.byId(b.tid) ? g.diabolos._centre(out) : null;
         if (b.tk === 'I') { const c = g.iceCastle?.byId(b.tid); return c ? iceCenter(c, out) : null; }
+        if (b.tk === 'V') { const c = g.vampire?.byId(b.tid); return c && !c.dead ? vampCenter(c, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
             const r = g.remotes.get(b.tid);
@@ -1171,6 +1178,7 @@ export class Duel {
         // («Электром» is held: a hit on a boss starts the lightning on it, so it ends as a hit, not a fizzle)
         if (b.tk === 'Y' && this._referee()) { const o = this.game.diabolos?.byId(b.tid); this._end(b, 'fizzle'); if (o) this.game.diabolos.boltHit(o, b.spell, b.by); return; } // (Дьяволос: ни один заряд не действует — только злит)
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
+        if (b.tk === 'V' && this._referee()) { const c = this.game.vampire?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.vampire.boltHit(c, b.spell, b.by, b.front); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
         // a fire serpent: its owner's computer counts it (the others see the charge end there)
         if (b.tk === 'F') { const s = this.game.fireSerpent?.byId(b.tid); if (s && s === this.game.fireSerpent.mine) { this._end(b, 'hit'); this.game.fireSerpent.boltHit(s, b.spell, b.by); return; } if (!s) { this._end(b, 'fizzle', false); return; } }
