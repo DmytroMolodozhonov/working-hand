@@ -52,6 +52,23 @@ export function aimedAt(origin, dir, target, cos = WHIRL.AIM_COS) {
     return (dx * dir.x + dy * dir.y + dz * dir.z) / l >= cos;
 }
 
+/**
+ * A tower's wizard whose beam was taken — does he lose his head? (the author 06.11: «слабые и средние NPC теряются на несколько секунд: не знают, что делать; маг высокого уровня — процентов 60, что сразу
+ * поймёт и растерянности не будет; глава башни никогда не растеряется. Растеряться: лицо искривится, особая анимация, не бросает заклинания, опускает палочку».)
+ * By the reaction level of his rank (WizardMind.REACT_LEVEL: 1 novice, 2 adept, 3 teacher / elder, 4 the head of the tower). → seconds lost (0: he understood at once).
+ */
+export const BEWILDER = {
+    UNDERSTANDS: { 1: 0, 2: 0, 3: 0.6, 4: 1 }, // the chance he gets it at once, by level
+    SECS: { 1: [6, 8], 2: [5, 7], 3: [3, 4.5], 4: [0, 0] }, // how long a lost one is lost
+};
+export function bewilderFor(level, rnd = Math.random) {
+    const L = BEWILDER.UNDERSTANDS[level] !== undefined ? level : 2;
+    if (rnd() < BEWILDER.UNDERSTANDS[L]) return 0;
+    const [a, b] = BEWILDER.SECS[L];
+    return a + (b - a) * rnd();
+}
+export const BEWILDER_LINES = { lost: ['Что?.. Где мой луч?!', 'Я… не понимаю, что происходит!', 'Куда он делся?..'], knows: ['Занятный приём… но я знаю его.', 'Старый фокус! Меня так не взять.'] };
+
 /** May the whirl be started in this clash? (the spells of both sides: «Дай» — no.) → null | the reason */
 export function whirlRefusal(spellA, spellB, maxMana) {
     if (spellA === 'Die' || spellB === 'Die') return '«Дай» сильнее любого вихря: с ним «Спиралис» не работает';

@@ -35,7 +35,7 @@ const BASE = [
     { id: 'stop', ru: 'выставляет ладонь — «стоп»', arm: { x: 1.6, z: 0.1, w: -1.6 }, dur: 1.6, ctx: ['refuse', 'warn', 'wait'], emo: ['angry', 'afraid', 'determined'] },
     { id: 'dismiss', ru: 'отмахивается', arm: { x: 1.2, z: 0.55, sz: 0.45 }, f: 2.6, dur: 1.5, ctx: ['refuse', 'bye', 'joke'], emo: ['contempt', 'disgusted', 'tired'] },
     { id: 'shrug', ru: 'пожимает плечами', arm: { x: 0.45, z: 0.55, w: -1.1 }, both: true, head: { z: 0.1 }, body: { hx: -0.05 }, dur: 1.5, ctx: ['unknown', 'answer', 'refuse'], emo: ['neutral', 'embarrassed', 'sad'] },
-    { id: 'scratch_head', ru: 'чешет затылок', arm: { x: 2.9, z: -0.3, sw: 0.1, sz: 0.1 }, f: 2.2, head: { z: 0.1 }, dur: 2.0, ctx: ['unknown', 'think', 'sorry'], emo: ['embarrassed', 'thoughtful', 'worried'] },
+    { id: 'scratch_head', ru: 'чешет затылок', arm: { x: 2.9, z: -0.3, sw: 0.1, sz: 0.1 }, f: 2.2, head: { z: 0.1 }, dur: 2.0, ctx: ['unknown', 'think', 'sorry'], emo: ['embarrassed', 'thoughtful', 'worried', 'confused'] },
     { id: 'chin', ru: 'трёт подбородок', arm: { x: 2.3, z: -0.45, w: -1.4, sx: 0.05 }, f: 1.0, head: { x: 0.1, z: 0.05 }, dur: 2.6, ctx: ['think', 'question', 'unknown'], emo: ['thoughtful', 'suspicious'] },
     { id: 'temple', ru: 'касается виска', arm: { x: 2.6, z: -0.2 }, head: { z: 0.08 }, dur: 1.8, ctx: ['think', 'idea'], emo: ['thoughtful', 'determined'] },
     { id: 'cross_arms', ru: 'скрещивает руки', arm: { x: 1.1, z: -0.9 }, both: true, body: { hx: -0.04 }, dur: 3.2, ctx: ['refuse', 'wait', 'doubt'], emo: ['angry', 'suspicious', 'contempt', 'proud'] },

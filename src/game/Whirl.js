@@ -14,7 +14,8 @@
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
 import { castingHand } from './WandAim.js';
-import { WHIRL, newWhirl, stepWhirl, attackNow, aimedAt, whirlRefusal } from './WhirlRules.js';
+import { WHIRL, newWhirl, stepWhirl, attackNow, aimedAt, whirlRefusal, bewilderFor, BEWILDER_LINES } from './WhirlRules.js';
+import { reactLevel } from './WizardMind.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3();
 
@@ -23,6 +24,7 @@ export class Whirl {
         this.game = game;
         this.states = new Map(); // casterId → {by, side, opp, oppKind, spells: [mine, his], marks: [hexA, hexB], S, trail: [], trailT, t, ...}
         this.pools = null;
+        this.dazed = []; // [{id, t}] the tower's wizards that lost their heads: their `bewilderT` counts down
         this._sayAt = -1e9;
     }
 
@@ -79,8 +81,15 @@ export class Whirl {
         duel.clashes = duel.clashes.filter((x) => x !== c);
         duel.bolts.delete(c.a.id); duel.bolts.delete(c.b.id);
         g.sync?.duelClashEnd?.(c.a.id, c.b.id, null);
-        const w = duel._npcWizard?.(his.by); // (a tower's wizard whose beam was taken: dazed a moment)
-        if (w && !w.dead) w.stunT = Math.max(w.stunT || 0, 2.5);
+        // (a wizard whose beam was taken: a weak or a middle one loses his head for some seconds — the face twists, the wand goes down, no spells; a strong one may get it at once; the head of the tower never — WhirlRules.bewilderFor)
+        const w = duel._npcWizard?.(his.by);
+        const bw = w && !w.dead ? bewilderFor(reactLevel(w.rank)) : 0;
+        if (w && !w.dead) {
+            const pick = (a) => a[Math.floor(Math.random() * a.length)];
+            if (bw > 0) { w.stunT = Math.max(w.stunT || 0, bw); g.castleLife?._say?.(w, pick(BEWILDER_LINES.lost), 3); }
+            else if (reactLevel(w.rank) >= 3) g.castleLife?._say?.(w, pick(BEWILDER_LINES.knows), 3);
+        }
+        info.bw = Math.round(bw * 10) / 10;
         g.sync?.net?.send({ t: 'dwhirl', ph: 'start', ...info }, true);
         this._begin(info);
     }
@@ -93,6 +102,7 @@ export class Whirl {
         const mix = new THREE.Color(cA).lerp(new THREE.Color(cB), 0.5).getHex();
         const S = { ...info, S: newWhirl(), trail: [], trailT: 0, t: 0, ended: false, cols: [cA, cB, mix] };
         this.states.set(info.by, S);
+        if (info.bw > 0) { const w = duel?._npcWizard?.(info.opp); if (w) { w.bewilderT = info.bw; this.dazed.push({ id: info.opp, t: info.bw }); } } // (every computer shows the lost face: it counts down here)
         g.sound?.playThunder?.();
         if (info.by === g.localId) g.hud.setVoice('🌀 Оба луча стекаются в вашу палочку! Машите рукой по кругу — не останавливайтесь; потом наведите на соперника и замрите (или скажите «Attack»)', true);
         else if (info.opp === g.localId) g.hud.setVoice('🌀 Соперник забрал оба луча и крутит их вокруг себя — берегитесь!', true);
@@ -101,7 +111,7 @@ export class Whirl {
     /** (everybody) the host / the caster tells: start / end. */
     onNet(m) {
         const g = this.game;
-        if (m.ph === 'start') { if (!this.states.has(m.by)) this._begin({ by: m.by, side: m.side, opp: m.opp, hs: m.hs, spells: m.spells, marks: m.marks, m0: m.m0 }); return; }
+        if (m.ph === 'start') { if (!this.states.has(m.by)) this._begin({ by: m.by, side: m.side, opp: m.opp, hs: m.hs, spells: m.spells, marks: m.marks, m0: m.m0, bw: m.bw }); return; }
         if (m.ph === 'end') {
             if (m.res === 'none' && m.by === g.localId) { g.combat.fatigue = Math.min(g.combat.maxFatigue ?? 100, (g.combat.fatigue ?? 0) + WHIRL.COST); g.hud.setVoice('🌀 Дуэль уже закончилась — мана возвращена', true); return; }
             const S = this.states.get(m.by);
@@ -123,7 +133,8 @@ export class Whirl {
     // ============================================================ every frame
     update(dt) {
         const g = this.game, duel = g.duel;
-        if (this.pools) for (const p of this.pools) p.update(dt);
+        if (this.pools) for (const p of this.pools.values()) p.update(dt);
+        for (let i = this.dazed.length - 1; i >= 0; i--) { const d = this.dazed[i], w = duel?._npcWizard?.(d.id); d.t -= dt; if (w) w.bewilderT = Math.max(0, d.t); if (d.t <= 0 || !w) { if (w) w.bewilderT = 0; this.dazed.splice(i, 1); } }
         for (const S of [...this.states.values()]) {
             S.t += dt;
             // the wand's place: mine live, another's by their hand

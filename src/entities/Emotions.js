@@ -30,6 +30,7 @@ export const EMOTIONS = {
     determined: { ru: 'решимость', face: { brow: { y: -0.03, tilt: 0.32, asym: 0 }, mouth: { curve: 0.05, open: 0, wide: 1, asym: 0 }, lid: 0.1 }, body: { headX: 0.03, headZ: 0, lean: 0.06, shoulders: 0.08 }, tempo: 1.1, amp: 1.2 },
     suspicious: { ru: 'подозрение', face: { brow: { y: 0, tilt: 0.22, asym: 0.4 }, mouth: { curve: -0.25, open: 0, wide: 0.9, asym: -0.2 }, lid: 0.3 }, body: { headX: 0.04, headZ: 0.1, lean: -0.04, shoulders: 0 }, tempo: 0.85, amp: 0.8 },
     mischief: { ru: 'озорство', face: { brow: { y: 0.04, tilt: 0.1, asym: -0.4 }, mouth: { curve: 0.8, open: 0.1, wide: 1.1, asym: 0.5 }, lid: 0.22 }, body: { headX: -0.05, headZ: 0.1, lean: 0, shoulders: 0.04 }, tempo: 1.25, amp: 1.1 },
+    confused: { ru: 'растерянность', face: { brow: { y: 0.1, tilt: -0.3, asym: 0.85 }, mouth: { curve: -0.3, open: 0.35, wide: 0.9, asym: 0.6 }, lid: 0.2 }, body: { headX: 0.06, headZ: 0.22, lean: -0.04, shoulders: 0.05 }, tempo: 1.1, amp: 1 }, // (a wizard whose beam was taken — «Спиралис»: Whirl.js)
     pain: { ru: 'боль', face: { brow: { y: 0, tilt: -0.6, asym: 0 }, mouth: { curve: -0.8, open: 0.5, wide: 1, asym: 0 }, lid: 0.7 }, body: { headX: 0.25, headZ: 0.1, lean: 0.14, shoulders: -0.05 }, tempo: 1.2, amp: 0.8 },
 };
 export const EMOTION_KEYS = Object.keys(EMOTIONS);

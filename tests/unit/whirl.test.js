@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { WHIRL, newWhirl, stepWhirl, attackNow, aimedAt, whirlRefusal, WHIRL_TARGETS } from '../../src/game/WhirlRules.js';
+import { WHIRL, newWhirl, stepWhirl, attackNow, aimedAt, whirlRefusal, bewilderFor, WHIRL_TARGETS } from '../../src/game/WhirlRules.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { Whirl } from '../../src/game/Whirl.js';
@@ -71,7 +71,7 @@ function fakeGame() {
     const a = { id: 'A:1', by: 'A', spell: 'Stupefy', side: 'right', front: new THREE.Vector3(), state: 'clash' };
     const b = { id: 'B:1', by: 'B', spell: 'SapiraDuel', side: 'right', front: new THREE.Vector3(), state: 'clash' };
     bolts.set(a.id, a); bolts.set(b.id, b);
-    g.duel = { me: 'A', bolts, clashes: [{ a, b, marks: [0x112233, 0x445566] }], _referee: () => true, _burst() {}, _npcWizard: () => null,
+    g.duel = { me: 'A', bolts, clashes: [{ a, b, marks: [0x112233, 0x445566] }], _referee: () => true, _burst() {}, _npcWizard: () => null, _handOf: () => false, _drawBolt() {}, _markPool: () => null,
         cast(spell) { const x = { spell, twin: false }; calls.cast.push(x); return x; },
         applyToMe(spell, by, side, opts) { calls.applyToMe.push([spell, by, !!opts?.clash]); }, _wizardPos: () => null };
     g.whirl = new Whirl(g);
@@ -182,4 +182,37 @@ test('Game: слово «Спиралис» обрабатывается ДО с
     const wall = src.indexOf("if (this._inDuel()) { if (isFinal) this.hud.setVoice('⚡ Идёт дуэль — другие заклинания не работают");
     const word = src.indexOf("if (name === 'Spiralis') return this.whirl.cast(isFinal);");
     assert.ok(wall > 0 && word > 0 && word < wall, `«Спиралис» (${word}) должен стоять раньше стены (${wall})`);
+});
+
+test('растерянность: слабые и средние теряются на несколько секунд, сильный маг в 60% сразу понимает, глава башни — никогда', () => {
+    const n = 4000;
+    const stat = (level) => { let lost = 0, sum = 0; for (let i = 0; i < n; i++) { const t = bewilderFor(level); if (t > 0) { lost++; sum += t; } } return { share: lost / n, mean: lost ? sum / lost : 0 }; };
+    for (const level of [1, 2]) { const r = stat(level); assert.equal(r.share, 1, `уровень ${level}: теряется всегда`); assert.ok(r.mean >= 5 && r.mean <= 8, `несколько секунд: ${r.mean}`); }
+    const strong = stat(3);
+    assert.ok(Math.abs(strong.share - 0.4) < 0.04, `сильный: понимает сразу в ~60% (теряется ${strong.share})`);
+    assert.ok(strong.mean >= 3 && strong.mean <= 4.5);
+    assert.equal(stat(4).share, 0, 'глава башни никогда не теряется');
+});
+
+test('волшебник в дуэли, у которого забрали луч: растерян (лицо, палочка вниз, без заклинаний), и это видно всем компьютерам', async () => {
+    const g = fakeGame();
+    const w = { id: 'B', rank: 'adept', dead: false, stunT: 0 };
+    g.duel._npcWizard = (id) => (id === 'B' ? w : null);
+    g.castleLife = { _say() {} };
+    g.whirl.cast(true);
+    assert.ok(w.bewilderT >= 5 && w.stunT >= 5, 'средний маг растерян на несколько секунд и не колдует');
+    const start = g.calls.sent.find((m) => m.t === 'dwhirl' && m.ph === 'start');
+    assert.ok(start.bw >= 5, 'всем сообщено, сколько он растерян');
+    for (let i = 0; i < 200; i++) g.whirl.update(0.05);
+    assert.equal(w.bewilderT, 0, 'растерянность прошла');
+    // глава башни
+    const h = fakeGame(); const boss = { id: 'B', rank: 'master', dead: false, stunT: 0 };
+    h.duel._npcWizard = () => boss; h.castleLife = { _say() {} };
+    h.whirl.cast(true);
+    assert.ok(!(boss.bewilderT > 0) && !(boss.stunT > 0), 'глава башни не растерялся');
+    // гость: видит растерянность из сообщения хоста
+    const v = fakeGame(); const w2 = { id: 'B', rank: 'adept', dead: false };
+    v.duel._npcWizard = () => w2; v.sync.net.isHost = false;
+    v.whirl.onNet({ t: 'dwhirl', ph: 'start', by: 'C', side: 'right', opp: 'B', hs: 'right', spells: ['Stupefy', 'SapiraDuel'], marks: [1, 2], m0: [0, 1, 0], bw: 6 });
+    assert.equal(w2.bewilderT, 6);
 });

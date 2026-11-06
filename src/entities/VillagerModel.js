@@ -1683,6 +1683,7 @@ export class VillagerModel {
         T.hx = 0; T.hy = 0; T.hz = 0; T.headX = 0; T.headZ = 0;
         T.headY = mode === 'idle' ? Math.sin(t * 0.45) * 0.25 : 0;
         T.aLX = 0; T.aLZ = -0.06; T.aRX = 0; T.aRY = 0; T.aRZ = 0.06; T.wrist = REST_WRIST;
+        if (state.lost) { T.headY = Math.sin(t * 1.5) * 0.8 + Math.sin(t * 0.6) * 0.3; T.headZ = Math.sin(t * 1.1 + 1) * 0.2; T.aLZ = -0.2 + Math.sin(t * 2.2) * 0.1; T.aRZ = 0.2 - Math.sin(t * 2.2 + 1) * 0.1; } // (a lost wizard: looks about, shrugs, the wand down — Whirl.js)
         T.lL = 0; T.lR = 0; T.kL = 0; T.kR = 0; T.block = 0; T.cape = -0.1; T.bounce = 0;
         let rate = 10;
         let breathe = 0.015;
