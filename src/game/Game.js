@@ -4020,11 +4020,18 @@ export class Game {
                 if (skip.groups.has(i)) { yield { of }; continue; }
                 this._pwMark('g:' + i);
                 zoo.add(...part);
+                const t0 = performance.now();
                 sides();
+                const ms = performance.now() - t0;
+                if (ms > 300) (this._pwSlow || (this._pwSlow = [])).push({ ms, i, what: this._pwDescribe(part) }); // (the journal: which samples made the loading stall — a friend's complaint 06.11)
                 zoo.remove(...part);
                 yield { of };
             }
             this._pwMark(null);
+            if (this._pwSlow?.length) {
+                const top = this._pwSlow.sort((a, b) => b.ms - a.ms).slice(0, 5);
+                allLog('Производительность', `прогрев: долгие группы образцов — ${top.map((x) => `${Math.round(x.ms)} мс [${x.i}] ${x.what}`).join(' | ')}`);
+            }
         } finally {
             for (const c of hideRest) c.visible = true;
             this.camera.quaternion.copy(q);
