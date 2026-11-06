@@ -663,6 +663,16 @@ function fillCats(catsId, cats, list, current, pick) {
     }
 }
 
+/** «от 1,5 до 2,5 минут»: the brewing time in half minutes (the raw seconds / 60 printed 2.3333333333333335 — the author's complaint 06.11). */
+export function brewText(brew) {
+    const half = (sec) => Math.round(sec / 30) / 2;
+    const f = (m) => String(m).replace('.', ',');
+    const lo = half(brew[0]), hi = half(brew[1]);
+    const word = (m) => (Number.isInteger(m) ? 'минут' : 'минуты'); // (2,5 минуты, но 3 минут)
+    if (lo === hi) return `около ${f(lo)} ${word(lo)}`;
+    return `от ${f(lo)} до ${f(hi)} ${word(hi)}`;
+}
+
 /** The cards of the potions (pure data): the recipes of RECIPES, with the ingredients by name. */
 export function potionCards() {
     return RECIPES.map((r) => {
@@ -674,8 +684,16 @@ export function potionCards() {
         };
     });
 }
-const ING_ICON = { crystal: 'assets/icons/crystal.svg', web: 'assets/icons/web.svg', glass: 'assets/icons/glass.svg', owlFeather: 'assets/icons/owl_feather.svg', phoenixFeather: 'assets/icons/phoenix_feather.svg' };
-const ING_EMOJI = { apple: '🍎', minotaurHorn: '🐂', crystal: '💎', web: '🕸️', glass: '🔷', owlFeather: '🪶', phoenixFeather: '🪶', spencerFeather: '🪶', beslanGrass: '🌾' };
+// (every ingredient of RECIPES has its own picture — a white dot instead of one was the author's complaint 06.11; tests/unit/codex-potions.test.js checks the files)
+const ING_ICON = {
+    apple: 'assets/icons/golden_apple.svg', redApple: 'assets/icons/red_apple.svg', crystal: 'assets/icons/crystal.svg', web: 'assets/icons/web.svg', glass: 'assets/icons/glass.svg',
+    owlFeather: 'assets/icons/owl_feather.svg', phoenixFeather: 'assets/icons/phoenix_feather.svg', spencerFeather: 'assets/icons/spencer_feather.svg',
+    baksadi_pear: 'assets/icons/baksadi_pear.svg', carnivoreHead: 'assets/icons/carnivore_head.svg', sun_herb: 'assets/icons/sun_herb.svg', brightCore: 'assets/icons/brightcore.svg',
+    azure_berry: 'assets/icons/azure_berry.svg', magicPebble: 'assets/icons/magic_pebble.svg', glowcap_mushroom: 'assets/icons/glowcap_mushroom.svg', fern_frond: 'assets/icons/fern_frond.svg',
+    frost_shard: 'assets/icons/frost_shard.svg', magicSwanWings: 'assets/icons/swan_wings.svg', dragonEgg: 'assets/icons/dragon_egg.svg', glowfinTail: 'assets/icons/glowfin_tail.svg',
+    telewilpinLeaf: 'assets/icons/telewilpin_leaf.svg',
+};
+const ING_EMOJI = { apple: '🌟', redApple: '🍎', minotaurHorn: '🐂', crystal: '💎', web: '🕸️', glass: '🔷', owlFeather: '🪶', phoenixFeather: '🪶', spencerFeather: '🪶', beslanGrass: '🌾' };
 const ingredientIcon = (kind) => ING_ICON[kind] || '';
 
 const POTION_USE = {
@@ -693,7 +711,7 @@ export function potionEntries() {
         <div class="item-desc">${POTION_USE[p.id] || p.text}</div>
         <div class="item-desc"><b>Как приготовить:</b> бросьте в кипящий котёл за ${p.window} секунд (порядок любой):</div>
         <div class="potion-ings">${p.ingredients.map((g) => `<span class="potion-ing" title="${g.name}">${g.icon ? `<img src="${g.icon}" onerror="this.style.display='none'">` : `<span class="potion-emoji">${ING_EMOJI[g.kind] || '•'}</span>`}${g.n > 1 ? g.n + '× ' : ''}${g.name}</span>`).join('')}</div>
-        ${p.brew ? `<div class="item-desc">Варится дольше остальных: ${p.brew[0] / 60}–${p.brew[1] / 60} минуты.</div>` : ''}
+        ${p.brew ? `<div class="item-desc">Варится дольше остальных: ${brewText(p.brew)}.</div>` : ''}
         <div class="item-desc"><b>Как пользоваться:</b> зачерпните колбой из готового котла (до 10 колб) и поднесите к рту, как еду.</div>
     </div>`;
     return [

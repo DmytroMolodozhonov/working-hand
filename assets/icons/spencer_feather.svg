@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sp-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd0ee"/><stop offset="0.5" stop-color="#ff8ad0"/><stop offset="1" stop-color="#c85ae8"/></linearGradient>
+    <radialGradient id="sp-o" r="50%"><stop offset="0" stop-color="#ff9ae0" stop-opacity="0.5"/><stop offset="1" stop-color="#ff9ae0" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="62" r="58" fill="url(#sp-o)"/>
+  <g transform="rotate(-32 64 64)">
+    <path d="M64 6 C90 14 94 54 82 84 C78 94 72 100 66 102 L62 102 C54 98 44 88 42 74 C38 50 42 18 64 6 Z" fill="url(#sp-g)" stroke="#a03a9a" stroke-width="2.5" opacity="0.92"/>
+    <path d="M64 12 L64 112" stroke="#fff0fa" stroke-width="3" stroke-linecap="round"/>
+    <g fill="none" stroke="#ffffff" stroke-width="1.6" opacity="0.6"><path d="M64 30 L50 40"/><path d="M64 30 L78 40"/><path d="M64 48 L48 60"/><path d="M64 48 L80 60"/><path d="M64 66 L50 78"/><path d="M64 66 L78 78"/></g>
+  </g>
+  <g fill="#fff0fa"><circle cx="98" cy="36" r="3"/><circle cx="28" cy="88" r="2.4"/></g>
+</svg>
