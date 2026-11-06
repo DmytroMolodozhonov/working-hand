@@ -30,6 +30,8 @@ import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 /** Высота, на которой герой ждёт землю дальнего места (м): внутри дальности пробуждения кораблей и далеко от крыш. */
 const HOVER_Y = 70;
+/** How far from a titan's home the hero comes (m): out of its sight (TitanRules TITAN.SEE 320), the titan seen from there. */
+const TITAN_SPOT_DIST = 380;
 /** Корабль героя ставится на круг чёрного впереди него (м вдоль круга): так он идёт к кораблю сам, и встреча — через ~2 минуты (5 м/с). */
 const MEET_AHEAD = 650, MEET_NEAR = 120;
 
@@ -63,6 +65,16 @@ export class HeroApply {
         const port = () => { const sp = data?.test ? testSeaCastleSpot(data.seed, data.bigHouses) : null; return sp ? { x: sp.shore.x, z: sp.shore.z + 8 } : null; };
         this.pending = { id, age: 0, far: false, hold: null, origin: g.character?.group?.position?.clone?.() || null, cells: null, t: null };
         if (id === 'blackship') return;
+        if (id === 'almostgod') { this.pending = null; g.godhood?.almost(); return; } // («Почти стал богом»: no magic, the power in ~10 s — Godhood)
+        if (id.startsWith('titan_')) { // (by a titan, on its planet: far from it — it does not see the hero at once; the land waited for over it)
+            const pid = id.slice(6), h = g.space?.surfaceSpot?.(pid, 'titan');
+            if (!h) { this._fail('в этом мире нет космоса', id); return; }
+            if (g.titans?.isDead?.(pid)) { this._fail('этот титан уже побеждён в этом мире', id); return; }
+            const far = TITAN_SPOT_DIST, x = Math.round(h.x + far), z = Math.round(h.z);
+            this.pending.t = { x, z, yaw: Math.atan2(h.x - x, h.z - z), planet: pid };
+            this.pending.far = true;
+            return;
+        }
         if (id === 'potionlair') { // («Логово зельевара»: зал в небе строится блоками при входе — PotionLair)
             this.pending = null;
             if (!g.potionLair?.start()) this._fail(g.potionLair?.why || 'не получилось', id);
@@ -251,7 +263,8 @@ export class HeroApply {
             const t = p.t;
             if (!t) return;
             // (the stand and everything round it made: a cave is dug chunk by chunk — no ground made in a frame)
-            if (!data.landMade(t.x, t.z) || (t.need && !t.need.every((q) => data.landMade(q.x, q.z)))) { if (p.far) this._hover(t.x, t.z, t.layer != null ? t.layer + 30 : HOVER_Y); return; }
+            if (!data.landMade(t.x, t.z) || (t.need && !t.need.every((q) => data.landMade(q.x, q.z)))) { if (p.far) this._hover(t.x, t.z, t.planet ? 260 : t.layer != null ? t.layer + 30 : HOVER_Y); return; }
+            if (t.planet) { this._land({ x: t.x, z: t.z }, t); g.hud?.toast?.(`📍 ${spawnLabel(p.id)}`); return; } // (another planet's ground: no sea, no 'dry' test of the Earth's water level)
             if (t.refine && !p.refined) { // (a cave whose ground is here now: the exact spots by the dome's height — the same as the spider's)
                 p.refined = true;
                 p.t = t.refine((x, z) => this._headroom(data, x, z, t.layer));

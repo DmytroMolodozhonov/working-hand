@@ -391,6 +391,7 @@ export class WorldKeeper {
             spiders: g.spiders?.snapshot() || [], // the giant spider's lairs whose spider was killed (she never comes back there: Spider.js)
             diabolos: g.diabolos?.snapshot() || null, // Дьяволос: будили ли (после загрузки он спит — Diabolos.js)
             dragons: g.dragons?.snapshot() || {}, // dragons' lairs: the gold left, their dragons' health (Dragons.js)
+            godhood: g.godhood?.snapshot() || null, // a god (Godhood.js): immortal; renounced at the pentagram
             titans: g.titans?.snapshot() || null, // the titans: which are dead, how many dents each left (Titans.js)
             pharaoh: g.pharaoh?.snapshot() || null, // the pyramids: the pharaoh, mummies, guards killed, seen, torches/traps/jewels (PharaohLife.js)
             vampire: g.vampire?.snapshot() || null, // Count Sracula's castle: is he dead, the bats and guards killed, the clouds cleared, seen (VampireLife.js)
@@ -475,6 +476,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.pharaoh) g.pharaoh?.restore(save.pharaoh);
     if (save.vampire) g.vampire?.restore(save.vampire);
     if (save.titans) g.titans?.restore(save.titans);
+    if (save.godhood) g.godhood?.restore(save.godhood);
     if (save.ships) g.ships?.restore(save.ships);
     if (save.guns) g.ships?.cannons.restore(save.guns);
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses);

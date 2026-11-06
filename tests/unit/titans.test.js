@@ -278,3 +278,59 @@ test('the ice cage is made of real ice and melts away; a save in the middle neve
     assert.ok(log.edits > before, 'the cage melted after loading');
     assert.equal(T1.state.cages.length, 0);
 });
+
+// ------------------------------------------------------------------ the god (Godhood.js)
+import { Godhood, GOD } from '../../src/game/Godhood.js';
+import { SUN_HALL } from '../../src/world/SunHallPlan.js';
+
+function godGame() {
+    const { g, me } = fakeGame('earth');
+    const blocks = new Map();
+    g.world = { terrain: { data: {
+        landMade: () => true,
+        get: (x, L, z) => blocks.get(`${x},${L},${z}`) ?? BLOCK.AIR,
+        set: (x, L, z, t) => blocks.set(`${x},${L},${z}`, t),
+        surfaceY: () => 10,
+    } } };
+    g.combat.maxFatigue = 30; g.combat.fatigue = 30; g.combat.hp = 20; g.combat.maxHp = 20;
+    g.config = { mode: 'creative' };
+    g.faceYaw = () => {};
+    me.position.set(0, 12, 0);
+    return { g, me, blocks };
+}
+
+test('«Почти стал богом»: no magic for a while, then the ascension (not instant, through pain) — a god, +10 000 cells', () => {
+    const { g, me } = godGame();
+    const G = new Godhood(g);
+    G.almost();
+    assert.ok(G.noMagic && !G.god);
+    for (let t = 0; t < GOD.ALMOST_WAIT + 1; t += 0.1) G.update(0.1);
+    assert.ok(G.cer, 'the ascension began');
+    assert.ok(G.noMagic, 'no magic while it comes');
+    let maxLift = 0;
+    for (let t = 0; t < GOD.ASCEND_T + 0.5; t += 0.05) { G.update(0.05); maxLift = Math.max(maxLift, me.position.y - 12); }
+    assert.ok(maxLift > 3, 'lifted in the light');
+    assert.ok(G.god && G.immortal && !G.noMagic);
+    assert.equal(g.combat.maxFatigue, 30 + 10000);
+    assert.ok(Math.abs(me.position.y - 12) < 0.01, 'set down again');
+});
+
+test('the Hall of the Sun: built when a god comes; the pentagram makes him mortal again (the cells back), the arch home', () => {
+    const { g, me, blocks } = godGame();
+    const G = new Godhood(g);
+    G.state.god = true; G.state.cells = 10000; g.combat.maxFatigue = 10030;
+    G.enterHall();
+    for (let i = 0; i < 400 && (G.hall || !G.rect); i++) G.update(0.05);
+    assert.ok(!G.hall, 'built and placed');
+    assert.equal(blocks.get(`${SUN_HALL.CX},${SUN_HALL.F - 1},${SUN_HALL.CZ}`), BLOCK.GOLD);
+    assert.ok(Math.hypot(me.position.x - SUN_HALL.CX, me.position.z - SUN_HALL.CZ - SUN_HALL.HERO.z) < 1);
+    // into the circle
+    me.position.x = SUN_HALL.CX; me.position.z = SUN_HALL.CZ + 2;
+    for (let t = 0; t < SUN_HALL.MORTAL_T + 0.5; t += 0.1) G.update(0.1);
+    assert.ok(!G.god && G.state.renounced);
+    assert.equal(g.combat.maxFatigue, 30);
+    // the arch
+    me.position.x = SUN_HALL.CX + SUN_HALL.EXIT.x; me.position.z = SUN_HALL.CZ + SUN_HALL.EXIT.z;
+    for (let t = 0; t < SUN_HALL.EXIT_T + 0.5; t += 0.1) G.update(0.1);
+    assert.ok(Math.hypot(me.position.x, me.position.z - 8) < 1, 'home at the start');
+});

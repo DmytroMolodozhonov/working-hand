@@ -137,6 +137,7 @@ import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { VampireLife } from './VampireLife.js';
 import { Titans } from './Titans.js';
+import { Godhood } from './Godhood.js';
 import { PharaohLife } from './PharaohLife.js';
 import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
@@ -817,6 +818,7 @@ export class Game {
         this.imperius = new ImperiusControl(this); // «Империус» / «… Максима»: the mind in another body (ImperiusControl.js)
         this.fleet = new FleetOrders(this); // the king commands the crew of his own ship: guns, boarding, sails (FleetOrders.js)
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
+        this.godhood = new Godhood(this); // who killed all seven titans: a god — immortal, the Hall of the Sun (Godhood.js)
         this.titans = new Titans(this); // the seven titans on their planets (Titans.js, TitanRules.js)
         this.pharaoh = new PharaohLife(this); // Pharaoh Sandy's pyramids: the mummies, the guards, the traps, the torches (PharaohLife.js)
         this.vampire = new VampireLife(this); // Count Sracula's castle: the count, his fifty bats, ten skeleton guards, the clouds over his land (VampireLife.js)
@@ -4389,7 +4391,8 @@ export class Game {
         if (earth && !duelOnly) this.iceCastle.update(dt);
         if (earth && !duelOnly) this.pharaoh?.update(dt);
         if (earth && !duelOnly) this.vampire?.update(dt);
-        if (!duelOnly) this.titans?.update(dt); // (on the planets — it knows itself where the hero is)
+        if (!duelOnly) this.titans?.update(dt);
+        this.godhood?.update(dt); // (on the planets — it knows itself where the hero is)
         this.temple?.update(dt); // (the Gods' temple: on Venus)
         if (earth && !duelOnly) this.phoenixes.update(dt);
         if (earth && !duelOnly) this.owls.update(dt);
@@ -5537,6 +5540,7 @@ export class Game {
         this.pharaoh?.dispose();
         this.vampire?.dispose();
         this.titans?.dispose();
+        this.godhood?.dispose();
         this.temple?.dispose();
         this.fleet?.dispose();
         this.blackbeard?.dispose();
