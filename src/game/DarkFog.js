@@ -5,7 +5,7 @@
  *           taken as the middle, so the fog wraps the house) — the dome of fog grows out of it to R 60 × H 38, stays 150 s, thins away in 30 s.
  *   every computer draws the same fog (the cast goes over the net as `spell Caligo`: o = the middle, d = the way back to the wand).
  *   the picture inside — Game's render calls `begin()` / `end()` round the frame: the world's fog is swapped for a near black one (restored after, so the day cycle never notices);
- *                         a hero with the night gift (Pentagranium Noctis: `g.sight.night`) sees through it.
+ *                         a hero with the night gift (Pentagranium Noctis: `g.sight.night`) sees through it — and so does the one who cast it (his own fog only: `f.by`).
  *   the minds — Invisibility.aiPos asks `hides(pos)`: a player in the fog is only «where he was last seen» (DarkFogRules.fogClue).
  *   «стоп» takes down my own fogs (a hero must be able to leave one).
  *
@@ -194,7 +194,7 @@ export class DarkFog {
             f.mesh.scale.set(Math.max(0.01, R), Math.max(0.01, FOG.H * Math.min(1, 0.15 + R / FOG.R)), Math.max(0.01, R));
             f.mat.uniforms.uTime.value = tt;
             f.mat.uniforms.uAlpha.value = 0.96 * densityAt(f.t);
-            f.mat.uniforms.uSeer.value = night ? 1 : 0;
+            f.mat.uniforms.uSeer.value = (night || f.by === g.localId) ? 1 : 0; // (the caster sees through his own fog — the author 06.11)
             f.mesh.visible = R > 0.5 && f.mesh.position.distanceToSquared(g.camera.position) < (FOG.R * 6) ** 2;
             // the jet: smoke from the wand toward the middle while it is let out
             if (f.t < FOG.RELEASE) {
@@ -270,16 +270,17 @@ export class DarkFog {
         const g = this.game, fog = g.scene.fog;
         if (!this.fogs.length || !fog || g.hellRealm?.active || g.space?.handles) return;
         const cam = g.camera.position;
-        let inside = false;
-        for (const f of this.fogs) if (insideFog(f, cam.x, cam.y, cam.z)) { inside = true; break; }
+        let inside = false, mine = false; // (mine: in a fog I cast myself — I see through it as with the night gift)
+        for (const f of this.fogs) if (insideFog(f, cam.x, cam.y, cam.z)) { inside = true; if (f.by === g.localId) mine = true; }
+        this._seer = !!g.sight?.night || mine;
         // (eased: the picture darkens in about a second, not at a stroke)
         this._k = (this._k || 0) + ((inside ? 1 : 0) - (this._k || 0)) * Math.min(1, (g.lastDt || 1 / 60) * 3);
         if (this._k < 0.01) { this._k = 0; return; }
-        const v = insideView(!!g.sight?.night);
+        const v = insideView(this._seer);
         this._saved = { near: fog.near, far: fog.far, r: fog.color.r, g: fog.color.g, b: fog.color.b, bg: g.scene.background && g.scene.background.isColor ? g.scene.background.clone() : null };
         const k = this._k;
         fog.near = fog.near + (v.near - fog.near) * k; fog.far = fog.far + (v.far - fog.far) * k;
-        fog.color.lerp(_dark, k * (g.sight?.night ? 0.35 : 1));
+        fog.color.lerp(_dark, k * (this._seer ? 0.35 : 1));
         if (this._saved.bg) g.scene.background.copy(fog.color);
     }
 
