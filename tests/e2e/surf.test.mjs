@@ -18,6 +18,9 @@ test.after(async () => {
     await browser?.close();
     srv?.stop();
 });
+// (a test that fails leaves its page running the game: the next one's page then could not even load in 30 s on the software renderer —
+//  all four failed for one. Every page still open is closed after each test.)
+test.afterEach(async () => { for (const p of browser?.contexts?.().flatMap((c) => c.pages()) || []) await p.close().catch(() => {}); });
 
 const frames = (page, n) => page.evaluate((n) => new Promise((res) => {
     const g = window.__zns.game, end = g.frameCount + n;

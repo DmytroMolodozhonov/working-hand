@@ -103,7 +103,7 @@ function kelpBlade(len, w) {
     const P = g.getAttribute('position'), col = new Float32Array(P.count * 3);
     for (let i = 0; i < P.count; i++) {
         const v = P.getY(i) / len, u = P.getX(i) / (w / 2); // (0 root … 1 tip; −1 … 1 across)
-        const wid = Math.sin(Math.min(1, v * 1.15) * Math.PI) ** 0.7 * (1 - 0.25 * v); // (narrow at its root and its tip)
+        const wid = Math.max(0, Math.sin(Math.min(1, Math.max(0, v) * 1.15) * Math.PI)) ** 0.7 * (1 - 0.25 * v); // (narrow at its root and its tip; the root row's v is −1e-17 after translate — a negative sine ** 0.7 was NaN: «Computed radius is NaN» at every start)
         const edge = Math.abs(u);
         const ruffle = Math.sin(v * 38 + (u > 0 ? 0 : 1.3)) * 0.22 * edge * edge * w; // (the rippled edges)
         P.setXYZ(i, u * wid * w / 2, P.getY(i), ruffle + Math.sin(v * 3.1) * 0.12 * w + edge * 0.08 * w);
