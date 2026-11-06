@@ -38,12 +38,17 @@ export default async function (h, args) {
         Ti._build(id, { x: home.x, y: 0, z: home.z });
         const T = Ti.active.get(id);
         if (!T) { h.log(id, 'not built'); continue; }
-        T.yaw = 0; // (facing the camera: the models look along −z, the camera stands at +z)
+        // the camera on the sun's side (the light on its face, not behind it): the world's sun light's direction, flattened
+        let sx = 0, sz = 1;
+        g.scene.traverse((o) => { if (o.isDirectionalLight && o.intensity > 0.05 && o.castShadow) { const dx = o.position.x - o.target.position.x, dz = o.position.z - o.target.position.z, l = Math.hypot(dx, dz); if (l > 1e-3) { sx = dx / l; sz = dz / l; } } });
+        const side = 0.35, ca = Math.cos(side), sa = Math.sin(side);
+        const vx = sx * ca - sz * sa, vz = sz * ca + sx * sa; // (a little to the side of the sun: the form shaded)
+        T.yaw = Math.atan2(-vx, -vz); // (facing the camera: the models look along −z)
         T.ph = 0.9; T.speed = def.walk; T.blowT = 0.35; T.t = 3;
-        if (def.look === 'worm') { T.wm = 'up'; T.up = 1; T.yaw = 0.5; }
+        if (def.look === 'worm') { T.wm = 'up'; T.up = 1; T.yaw += 0.5; }
         if (def.look === 'shade') T.lit = 1;
         const gy = T.pos.y;
-        const cam = [home.x + far * 0.18, gy + def.height * (def.look === 'storm' ? 0.35 : 0.3), home.z + far];
+        const cam = [home.x + vx * far, gy + def.height * (def.look === 'storm' ? 0.35 : 0.3), home.z + vz * far];
         window.__pin = [cam[0], cam[1] - 2, cam[2]]; // (the hero hangs by the camera: the world stays loaded round it)
         for (let i = 0; i < 6; i++) { Ti._draw(T, 0.05); await h.frames(1); }
         h.cam(cam, [home.x, gy + (def.look === 'worm' ? def.height * 0.2 : def.height * 0.45), home.z]);
