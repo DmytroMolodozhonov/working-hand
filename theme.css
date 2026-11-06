@@ -578,7 +578,7 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ------------------------------------------------------------ «Общие настройки»: the main menu's settings page, opened over the pause */
 #pause-settings { text-align: left; max-height: min(70vh, 640px); overflow-y: auto; padding-right: 4px; }
-#pause-settings #tab-settings { animation: none; }
+#pause-settings #tab-settings, #pause-settings.pause-pane.active { animation: none; } /* (the fade-in of this pane hung at opacity 0 — the page stayed invisible; no fade here) */
 #tab-settings .set-sub { column-span: all; margin: 14px 0 8px; color: var(--ui-gold); font-size: 1rem; }
 #tab-settings .sub-pane.active > .set-sub:first-child { margin-top: 0; }
 #tab-settings .set-reset { margin-top: 6px; background: rgba(5, 3, 18, 0.6); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; padding: 4px 12px; font-size: 0.8rem; cursor: pointer; }
