@@ -10,6 +10,9 @@
  */
 
 import { ACH, ACH_BY_ID } from '../game/Achievements.js';
+import { TITANS, TITAN_IDS } from '../game/TitanRules.js';
+/** Where each titan lives (the planet, in Russian: «на Марсе»). */
+const TITAN_WHERE = { mercury: 'Меркурий', venus: 'Венера', mars: 'Марс', jupiter: 'Юпитер', saturn: 'Сатурн', uranus: 'Уран', neptune: 'Нептун' };
 import { howLearned, teachKey } from '../game/SpellBook.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { firstSpellGain, SAME_SPELL } from '../game/Mana.js';
@@ -545,6 +548,12 @@ export const BOSSES = [
     ] },
 ];
 
+/**
+ * «Боссы божественного уровня» — the titans (TitanRules.js), a section of their own under the bosses (the author 06.11). Pictures:
+ * assets/bosses/titan-<id>.webp (tools/shots/titans.mjs). Each one's only reward — its mana cells; all seven — godhood (Godhood.js).
+ */
+export const GOD_BOSSES = TITAN_IDS.map((id) => ({ ach: 'titan_' + id, img: `assets/bosses/titan-${id}.webp`, name: TITANS[id].name, where: TITAN_WHERE[id], about: [TITANS[id].about] }));
+
 /** «👑 Боссы»: a card per boss (lazy pictures — they load only when the tab is opened). */
 export function renderBossesTab(boxId = 'bosses-list', done = null) {
     const box = document.getElementById(boxId);
@@ -561,8 +570,24 @@ export function renderBossesTab(boxId = 'bosses-list', done = null) {
             </div>
         </section>`;
     }).join('');
+    const gods = GOD_BOSSES.map((b) => {
+        const a = ACH_BY_ID[b.ach];
+        return `
+        <section class="boss-card boss-card-god">
+            <img class="boss-img" src="${b.img}" alt="${b.name}" loading="lazy" decoding="async" width="800" height="450" onerror="this.style.visibility='hidden'">
+            <div class="boss-body">
+                <h3 class="boss-name">${a.icon} ${b.name} <span class="boss-where">· ${b.where}</span></h3>
+                ${b.about.map((t) => `<p class="boss-about">${t}</p>`).join('')}
+                <div class="boss-reward">${done?.has?.(b.ach) ? '✅ Побеждён — ' : '🏆 '}<b>+${a.mana}</b> ячеек маны</div>
+            </div>
+        </section>`;
+    }).join('');
     box.innerHTML = `<div class="boss-grid">${cards}</div>
-        <div class="boss-high">🌟 Победите всех — станете <b>Высшим магом</b>: ещё <b>+${ACH.HIGH_MANA}</b> ячеек маны и костюм Высшего мага.</div>`;
+        <div class="boss-high">🌟 Победите всех — станете <b>Высшим магом</b>: ещё <b>+${ACH.HIGH_MANA}</b> ячеек маны и костюм Высшего мага.</div>
+        <h2 class="boss-god-title">☀️ Боссы божественного уровня — титаны</h2>
+        <p class="boss-about boss-god-intro">Когда-то боги отдали свою силу Солнцу. Осколки этой силы упали на планеты и стали титанами — по одному на каждой планете, кроме Земли. Чтобы до них добраться, нужно лететь в космос («Flying Maxima»). Их шаги трясут землю, а удары сбивают с ног.</p>
+        <div class="boss-grid">${gods}</div>
+        <div class="boss-high">☀️ Победите всех семерых — станете <b>богом</b>: бессмертие и ещё <b>+${ACH_BY_ID.godhood?.mana ?? 10000}</b> ячеек маны. Солнце больше не сожжёт вас — оно откроет вам свой Зал.</div>`;
 }
 
 
