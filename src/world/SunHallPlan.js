@@ -58,7 +58,7 @@ export function sunHallPlan() {
         // the floor (two layers): white marble with golden rays; the pentagram in runes; its middle — gold (the marker)
         put(x, F - 2, z, B.CS_WHITE);
         let floor = ray && d > S.PENT_R + 1 ? B.GOLD : d < 2 ? B.GOLD : B.CS_WHITE;
-        if (d <= S.PENT_R + 0.6 && onPentagram(x, z)) floor = B.RUNE;
+        if (d <= S.PENT_R + 0.6 && onPentagram(x, z)) floor = B.GOLD; // (a golden star on white marble: the dark runes read as a hole in the floor)
         if (d > R - 0.5) floor = B.GOLD; // (a golden edge round the floor)
         put(x, F - 1, z, floor);
         // the wall: a ring R−0.5 … R+1.5; golden bands; windows of light every 30°; the arch in the south
