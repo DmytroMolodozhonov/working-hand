@@ -20,12 +20,13 @@ import { FOG, radiusAt, densityAt, aliveAt, insideFog, fogClue, insideView } fro
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _o = new THREE.Vector3();
 const _dark = new THREE.Color(FOG.DARK);
-const NP = 520; // the smoke jets' particles
+const NP = 640; // the smoke jets' particles
+const RIM = 72; // the billows rolling on a dome's skin, for each of the FOG.MAX fogs (one more point cloud)
 
 let _dome = null;
 function domeGeo() {
     if (_dome) return _dome;
-    _dome = new THREE.SphereGeometry(1, 40, 22, 0, Math.PI * 2, 0, Math.PI / 2);
+    _dome = new THREE.SphereGeometry(1, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
     _dome.userData.shared = true;
     return _dome;
 }
@@ -35,35 +36,66 @@ float h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.545
 float n3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+float fbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * n3(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s; }
 `;
+// (the smoke is READ by its shape: billows with a lit side and a shaded side, thin wisps at the edge, cold violet light on the rim — not one flat black)
 const DOME_VS = `
-varying vec3 vW; uniform float uTime;
+varying vec3 vW; varying vec3 vN; varying float vH; uniform float uTime;
 ${NOISE}
 void main(){
+  vH = position.y;
   vec4 w = modelMatrix * vec4(position, 1.0);
   float n = n3(w.xyz * 0.045 + vec3(0.0, uTime * 0.04, 0.0)) * 0.6 + n3(w.xyz * 0.12 - vec3(uTime * 0.05)) * 0.4;
   vec3 up = normalize(vec3(position.x, position.y * 0.4, position.z));
-  w.xyz += (modelMatrix * vec4(up, 0.0)).xyz * (n - 0.5) * 7.0; // (a billowing silhouette)
-  vW = w.xyz;
+  vec3 nrm = normalize((modelMatrix * vec4(up, 0.0)).xyz);
+  w.xyz += nrm * (n - 0.5) * 6.0; // (a billowing silhouette)
+  vW = w.xyz; vN = nrm;
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
 const DOME_FS = `
-varying vec3 vW; uniform float uTime, uAlpha, uSeer;
+varying vec3 vW; varying vec3 vN; varying float vH; uniform float uTime, uAlpha, uSeer;
 ${NOISE}
 void main(){
-  float n = n3(vW * 0.06 + vec3(0.0, uTime * 0.05, 0.0)) * 0.55 + n3(vW * 0.17 - vec3(uTime * 0.04)) * 0.3 + n3(vW * 0.5 + vec3(uTime * 0.1)) * 0.15;
-  vec3 col = mix(vec3(0.006, 0.003, 0.012), vec3(0.075, 0.025, 0.11), n * n * 1.4);
-  float a = uAlpha * (gl_FrontFacing ? (0.9 + 0.1 * n) : (0.28 + 0.3 * n));
+  vec3 p = vW * 0.045 + vec3(0.0, -uTime * 0.05, 0.0);
+  vec3 q = p + 1.6 * vec3(fbm(p + vec3(0.0, uTime * 0.03, 0.0)), fbm(p + vec3(5.2, 1.3, 2.8)), fbm(p + vec3(2.1, 7.7, 0.4))); // (domain-warped: curling smoke, not blobs)
+  float d = fbm(q * 1.3);
+  vec3 sun = normalize(vec3(0.45, 0.8, 0.35));
+  float lit = clamp(0.5 + (d - fbm(q * 1.3 + sun * 0.45)) * 5.0, 0.0, 1.0); // (the billow's side toward the sun is lighter: a cheap self-shadow)
+  vec3 V = normalize(cameraPosition - vW);
+  float facing = abs(dot(normalize(vN), V));
+  float rim = pow(1.0 - facing, 2.2);
+  float height = clamp(vH, 0.0, 1.0);
+  vec3 shade = vec3(0.012, 0.010, 0.018), mid = vec3(0.20, 0.185, 0.225), hi = vec3(0.47, 0.42, 0.52);
+  vec3 col = mix(shade, mid, smoothstep(0.1, 0.8, d));
+  col = mix(col, hi, lit * smoothstep(0.45, 0.85, d) * (0.45 + 0.55 * height));
+  col += vec3(0.20, 0.08, 0.30) * rim * 0.55; // (cold violet light on the edges: the dark mage's own)
+  col *= 0.55 + 0.45 * (0.35 + 0.65 * height);
+  float wisp = smoothstep(0.22, 0.62, d); // (thin places let the light through)
+  float a = uAlpha * (gl_FrontFacing ? mix(0.5, 1.0, wisp) * (1.0 - 0.6 * rim) : (0.20 + 0.28 * wisp));
   a *= mix(1.0, 0.14, uSeer);
   gl_FragColor = vec4(col, a);
 }`;
 
 const PT_VS = `
-attribute float aSize; attribute float aAlpha; varying float vA; uniform float uPx;
-void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vA = aAlpha; gl_PointSize = clamp(aSize * uPx / max(0.5, -mv.z), 0.0, 900.0); gl_Position = projectionMatrix * mv; }`;
+attribute float aSize; attribute float aAlpha; attribute float aSeed; varying float vA; varying float vS; uniform float uPx;
+void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vA = aAlpha; vS = aSeed; gl_PointSize = clamp(aSize * uPx / max(0.5, -mv.z), 0.0, 900.0); gl_Position = projectionMatrix * mv; }`;
 const PT_FS = `
-varying float vA;
-void main(){ vec2 c = gl_PointCoord - 0.5; float r = length(c) * 2.0; if (r > 1.0) discard; float a = vA * (1.0 - r) * (1.0 - r) * 1.6; gl_FragColor = vec4(0.03, 0.012, 0.05, min(0.95, a)); }`;
+varying float vA; varying float vS; uniform float uTime;
+${NOISE}
+void main(){
+  vec2 c = (gl_PointCoord - 0.5) * 2.0;
+  float cs = cos(vS * 6.28), sn = sin(vS * 6.28);
+  vec2 r = vec2(c.x * cs - c.y * sn, c.x * sn + c.y * cs); // (every puff turned its own way)
+  float rad = length(c);
+  if (rad > 1.0) discard;
+  vec3 p = vec3(r * 1.9, vS * 17.0 + uTime * 0.35);
+  float n = fbm(p);
+  float shape = smoothstep(1.0, 0.25, rad + (n - 0.5) * 0.95); // (a ragged billow, thin at its edges)
+  float lit = clamp(0.5 + (n - fbm(p + vec3(0.0, 0.5, 0.0))) * 3.5 + c.y * 0.35, 0.0, 1.0); // (lighter on top)
+  vec3 col = mix(vec3(0.015, 0.012, 0.022), vec3(0.30, 0.27, 0.33), lit * (0.35 + 0.65 * n));
+  col += vec3(0.14, 0.05, 0.22) * pow(rad, 2.0) * 0.5;
+  gl_FragColor = vec4(col, min(0.92, vA * shape * 1.25));
+}`;
 
 export class DarkFog {
     constructor(game) {
@@ -76,16 +108,20 @@ export class DarkFog {
         this._clue = { x: 0, y: 0, z: 0 };
         // the smoke jets: one point cloud
         this._pos = new Float32Array(NP * 3); this._vel = new Float32Array(NP * 3); this._size = new Float32Array(NP); this._alpha = new Float32Array(NP);
-        this._life = new Float32Array(NP); this._age = new Float32Array(NP); this._s1 = new Float32Array(NP);
+        this._seed = new Float32Array(NP); this._life = new Float32Array(NP); this._age = new Float32Array(NP); this._s1 = new Float32Array(NP);
         this._head = 0;
         this.points = null;
+        this.rim = null;
+        const NR = RIM * FOG.MAX;
+        this._rpos = new Float32Array(NR * 3); this._rsize = new Float32Array(NR); this._ralpha = new Float32Array(NR); this._rseed = new Float32Array(NR);
+        for (let i = 0; i < NR; i++) this._rseed[i] = ((Math.sin(i * 91.7) * 43758.5453) % 1 + 1) % 1; // (fixed: every computer rolls the same billows)
         this._sound = 0;
     }
 
     // ============================================================ materials / samples
     _domeMat() {
         return new THREE.ShaderMaterial({ vertexShader: DOME_VS, fragmentShader: DOME_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-            uniforms: { uTime: { value: 0 }, uAlpha: { value: 0.96 }, uSeer: { value: 0 } } });
+            uniforms: { uTime: { value: 0 }, uAlpha: { value: 0.85 }, uSeer: { value: 0 } } });
     }
 
     _ensurePoints() {
@@ -94,19 +130,30 @@ export class DarkFog {
         g.setAttribute('position', new THREE.BufferAttribute(this._pos, 3));
         g.setAttribute('aSize', new THREE.BufferAttribute(this._size, 1));
         g.setAttribute('aAlpha', new THREE.BufferAttribute(this._alpha, 1));
-        const m = new THREE.ShaderMaterial({ vertexShader: PT_VS, fragmentShader: PT_FS, transparent: true, depthWrite: false, fog: false, uniforms: { uPx: { value: 600 } } });
+        g.setAttribute('aSeed', new THREE.BufferAttribute(this._seed, 1));
+        const m = new THREE.ShaderMaterial({ vertexShader: PT_VS, fragmentShader: PT_FS, transparent: true, depthWrite: false, fog: false, uniforms: { uPx: { value: 600 }, uTime: { value: 0 } } });
         this.points = new THREE.Points(g, m);
         this.points.frustumCulled = false;
         this.points.renderOrder = 7;
         this.points.visible = false;
         this.game.scene.add(this.points);
+        const rg = new THREE.BufferGeometry();
+        rg.setAttribute('position', new THREE.BufferAttribute(this._rpos, 3));
+        rg.setAttribute('aSize', new THREE.BufferAttribute(this._rsize, 1));
+        rg.setAttribute('aAlpha', new THREE.BufferAttribute(this._ralpha, 1));
+        rg.setAttribute('aSeed', new THREE.BufferAttribute(this._rseed, 1));
+        this.rim = new THREE.Points(rg, m); // (the same material: the same puff, bigger and slower)
+        this.rim.frustumCulled = false;
+        this.rim.renderOrder = 6;
+        this.rim.visible = false;
+        this.game.scene.add(this.rim);
     }
 
     /** Samples for the shader warm-up (Game.prewarm): the dome and the smoke. */
     sampleMeshes() {
         this._ensurePoints();
         const d = new THREE.Mesh(domeGeo(), this._domeMat()); d.frustumCulled = false; d.scale.set(1, 1, 1);
-        const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3)); pg.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array([1]), 1)); pg.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array([1]), 1));
+        const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3)); pg.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array([1]), 1)); pg.setAttribute('aSeed', new THREE.BufferAttribute(new Float32Array([0.3]), 1)); pg.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array([1]), 1));
         const p = new THREE.Points(pg, this.points.material); p.frustumCulled = false;
         return [d, p];
     }
@@ -193,7 +240,7 @@ export class DarkFog {
             const R = radiusAt(f.t);
             f.mesh.scale.set(Math.max(0.01, R), Math.max(0.01, FOG.H * Math.min(1, 0.15 + R / FOG.R)), Math.max(0.01, R));
             f.mat.uniforms.uTime.value = tt;
-            f.mat.uniforms.uAlpha.value = 0.96 * densityAt(f.t);
+            f.mat.uniforms.uAlpha.value = 0.85 * densityAt(f.t);
             f.mat.uniforms.uSeer.value = (night || f.by === g.localId) ? 1 : 0; // (the caster sees through his own fog — the author 06.11)
             f.mesh.visible = R > 0.5 && f.mesh.position.distanceToSquared(g.camera.position) < (FOG.R * 6) ** 2;
             // the jet: smoke from the wand toward the middle while it is let out
@@ -204,6 +251,41 @@ export class DarkFog {
             }
         }
         this._stepSmoke(dt);
+        this._stepRim();
+    }
+
+    /** The billows on every dome's skin: fixed places on the dome that drift round it slowly, breathe, and swell with the dome; thin away with it. */
+    _stepRim() {
+        const P = this.rim;
+        if (!P) return;
+        const tt = performance.now() / 1000, cam = this.game.camera.position;
+        let any = false;
+        this._ralpha.fill(0);
+        for (let k = 0; k < this.fogs.length; k++) {
+            const f = this.fogs[k];
+            const R = radiusAt(f.t), dens = densityAt(f.t);
+            if (R < 3 || dens < 0.02 || !f.mesh.visible) continue;
+            if (f.by === this.game.localId || this.game.sight?.night) { /* (the caster / a seer sees through it: fewer, fainter) */ }
+            const seer = (f.by === this.game.localId || this.game.sight?.night) ? 0.3 : 1;
+            const H = FOG.H * Math.min(1, 0.15 + R / FOG.R);
+            any = true;
+            for (let n = 0; n < RIM; n++) {
+                const i = k * RIM + n, sd = this._rseed[i];
+                const th = sd * 6.2832 * 7.0 + tt * (0.012 + sd * 0.02) * (n & 1 ? 1 : -1); // (round the dome)
+                const ph = 0.12 + ((sd * 13.7) % 1) * 1.32; // (from the foot to the crown)
+                const rr = R * (0.94 + 0.08 * Math.sin(tt * 0.3 + sd * 40));
+                this._rpos[i * 3] = f.x + Math.sin(ph) * Math.cos(th) * rr;
+                this._rpos[i * 3 + 1] = f.y + Math.cos(ph) * H + Math.sin(tt * 0.25 + sd * 30) * 2;
+                this._rpos[i * 3 + 2] = f.z + Math.sin(ph) * Math.sin(th) * rr;
+                this._rsize[i] = (14 + ((sd * 7.3) % 1) * 22) * Math.min(1, R / FOG.R + 0.2);
+                this._ralpha[i] = 0.5 * dens * seer;
+            }
+        }
+        P.visible = any;
+        if (any) {
+            P.geometry.attributes.position.needsUpdate = true; P.geometry.attributes.aSize.needsUpdate = true; P.geometry.attributes.aAlpha.needsUpdate = true;
+            P.material.uniforms.uTime.value = tt;
+        }
     }
 
     _puff(from, f) {
@@ -213,7 +295,7 @@ export class DarkFog {
         this._pos[i * 3] = from.x; this._pos[i * 3 + 1] = from.y; this._pos[i * 3 + 2] = from.z;
         _v2.copy(to).sub(from).multiplyScalar(1 / life);
         this._vel[i * 3] = _v2.x; this._vel[i * 3 + 1] = _v2.y + 2; this._vel[i * 3 + 2] = _v2.z;
-        this._life[i] = life; this._age[i] = 0; this._s1[i] = 8 + Math.random() * 8;
+        this._life[i] = life; this._age[i] = 0; this._s1[i] = 10 + Math.random() * 10; this._seed[i] = Math.random();
         this._size[i] = 0.6; this._alpha[i] = 0.6;
     }
 
@@ -227,6 +309,8 @@ export class DarkFog {
             live++;
             const j = i * 3;
             this._pos[j] += this._vel[j] * dt; this._pos[j + 1] += this._vel[j + 1] * dt; this._pos[j + 2] += this._vel[j + 2] * dt;
+            const sd = this._seed[i] * 40, ag = this._age[i];
+            this._vel[j] += Math.sin(sd + ag * 1.7) * dt * 5; this._vel[j + 1] += (0.8 + Math.cos(sd * 1.3 + ag * 1.1)) * dt * 2.2; this._vel[j + 2] += Math.cos(sd * 0.7 + ag * 1.5) * dt * 5; // (curling, rising: smoke is not thrown like a stone)
             this._vel[j] *= 1 - dt * 0.4; this._vel[j + 1] *= 1 - dt * 0.4; this._vel[j + 2] *= 1 - dt * 0.4;
             this._size[i] = 0.6 + this._s1[i] * Math.sqrt(u);
             this._alpha[i] = u < 0.15 ? u / 0.15 * 0.85 : 0.85 * (1 - (u - 0.15) / 0.85);
@@ -236,6 +320,7 @@ export class DarkFog {
         P.visible = live > 0;
         if (live > 0) {
             P.geometry.attributes.position.needsUpdate = true; P.geometry.attributes.aSize.needsUpdate = true; P.geometry.attributes.aAlpha.needsUpdate = true;
+            P.material.uniforms.uTime.value = performance.now() / 1000;
             const cam = this.game.camera;
             P.material.uniforms.uPx.value = (this.game.renderer?.domElement?.height || 800) / (2 * Math.tan((cam.fov * Math.PI / 180) / 2));
         }
@@ -293,5 +378,5 @@ export class DarkFog {
         this._saved = null;
     }
 
-    dispose() { for (let i = this.fogs.length - 1; i >= 0; i--) this._drop(i); if (this.points) { this.game.scene.remove(this.points); this.points.geometry.dispose(); this.points.material.dispose(); this.points = null; } }
+    dispose() { for (let i = this.fogs.length - 1; i >= 0; i--) this._drop(i); if (this.rim) { this.game.scene.remove(this.rim); this.rim.geometry.dispose(); this.rim = null; } if (this.points) { this.game.scene.remove(this.points); this.points.geometry.dispose(); this.points.material.dispose(); this.points = null; } }
 }
