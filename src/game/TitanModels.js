@@ -303,6 +303,80 @@ function extremity(look, s, r, out, foot = false) {
 }
 
 // ------------------------------------------------------------------ a walker
+/** A lathe of a profile [[y, r], …] (bottom → top), its round cut squeezed to an oval (sx across, sz front-back). */
+function lathe(profile, segs, sx = 1, sz = 1) {
+    const g = new THREE.LatheGeometry(profile.map(([y, rr]) => new THREE.Vector2(Math.max(0.0005, rr), y)), segs);
+    g.scale(sx, 1, sz);
+    return g;
+}
+/** The torso of a giant, hips (0) to the neck (~0.49): a broad chest, a narrower waist, heavy shoulders. Radii × the chest's half-width. */
+const TORSO = [[-0.04, 0.48], [0.03, 0.62], [0.1, 0.6], [0.17, 0.56], [0.24, 0.7], [0.31, 0.9], [0.37, 1.0], [0.42, 0.94], [0.46, 0.62], [0.5, 0.3]];
+/** A limb from its joint (0) down to −len: rounded over the joint, a muscle's bulge in the upper third, tapering to the next joint. */
+const limbProfile = (len, r0, r1) => [[-len - r1 * 0.3, r1 * 0.2], [-len, r1 * 0.9], [-len * 0.85, r1 * 1.02], [-len * 0.6, (r0 + r1) * 0.55], [-len * 0.35, r0 * 1.14], [-len * 0.12, r0 * 1.06], [0, r0 * 0.9], [r0 * 0.5, r0 * 0.45], [r0 * 0.8, 0.0005]];
+const LOOK = {
+    iron: { segs: 8, rough: 0, col: 0xa49e96 },
+    rock: { segs: 9, rough: 0.22, col: 0x9a968e },
+    lava: { segs: 14, rough: 0.14, col: 0xffffff },
+    ice: { segs: 7, rough: 0.18, col: 0xd8f0ff },
+    shade: { segs: 16, rough: 0.28, col: 0xffffff },
+};
+const _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion(), _sp = new THREE.Vector3(), _ss = new THREE.Vector3(), _sup = new THREE.Vector3(0, 1, 0), _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _sc = new THREE.Vector3();
+/** Points on a shape's surface: `n` random triangles → fn(centre, normal) (centres and normals in the shape's own space). */
+function scatter(geo, n, r, fn) {
+    const g = geo.index ? geo.toNonIndexed() : geo, p = g.attributes.position, tris = p.count / 3;
+    for (let k = 0; k < n; k++) {
+        const t = Math.floor(r() * tris) * 3;
+        _sa.fromBufferAttribute(p, t); _sb.fromBufferAttribute(p, t + 1); _sc.fromBufferAttribute(p, t + 2);
+        const c = new THREE.Vector3().add(_sa).add(_sb).add(_sc).multiplyScalar(1 / 3);
+        const nrm = new THREE.Vector3().subVectors(_sb, _sa).cross(new THREE.Vector3().subVectors(_sc, _sa)).normalize();
+        if (nrm.lengthSq() < 0.5) continue;
+        fn(c, nrm);
+    }
+}
+/** A piece set on a surface, standing out along the normal (its local +Y along the normal), as a merged part with its own matrix. */
+function onSurface(out, k, geo, c, nrm, lift, scale, spin, col, r) {
+    _sq.setFromUnitVectors(_sup, nrm);
+    if (spin) _sq.multiply(new THREE.Quaternion().setFromAxisAngle(_sup, spin));
+    _sp.copy(c).addScaledVector(nrm, lift);
+    _sm.compose(_sp, _sq, _ss.set(scale[0], scale[1], scale[2]));
+    (out[k] || (out[k] = [])).push({ geo: tinted(geo, C(col), r), matrix: _sm.clone() });
+}
+/**
+ * A body part of a walker in its look: the base shape (one piece, no gaps — joints are rounded over) and its skin on it: boulders on the
+ * rock one, riveted bands and glowing cracks on the iron one, crust plates and dripping fire on the lava one, shards and an inner glow on the
+ * ice one, shells of mist on the shade. `size` — how big the part is (the count of the details follows it).
+ */
+function bodyPart(look, base, size, r, out) {
+    const L = LOOK[look];
+    let g = base;
+    if (L.rough) g = rough(g.index ? g.toNonIndexed() : g, r, L.rough);
+    (out.body || (out.body = [])).push({ geo: tinted(g, C(L.col), r, 0.08), pos: [0, 0, 0] });
+    const n = Math.max(4, Math.round(size * 90));
+    if (look === 'rock') {
+        // boulders and slabs grown out of it: the body reads as a walking mountain, not a smooth figure
+        scatter(base, n, r, (c, nrm) => { const s = 0.018 + r() * 0.035; onSurface(out, 'body', rough(new THREE.DodecahedronGeometry(1, 0), r, 0.45), c, nrm, s * 0.25, [s, s * (0.6 + r() * 0.5), s], r() * 6, [0x8e8a82, 0x7c7870, 0xa6a298][Math.floor(r() * 3)], r); });
+        scatter(base, Math.round(n * 0.25), r, (c, nrm) => { const s = 0.006 + r() * 0.01; onSurface(out, 'body', new THREE.DodecahedronGeometry(1, 0), c, nrm, s * 0.6, [s, s, s], r() * 6, 0x6e6a64, r); }); // (pebbles)
+        scatter(base, Math.max(1, Math.round(n * 0.06)), r, (c, nrm) => { if (nrm.z < 0.3) return; onSurface(out, 'glow', new THREE.CylinderGeometry(0.004, 0.004, 0.05, 4), c, nrm, 0.002, [1, 1, 1], 0, 0xffffff, r); }); // (light in a crack)
+    } else if (look === 'iron') {
+        // rivets in rows, hammered plates riding over the base, white sunlight through a few cracks
+        scatter(base, n * 2, r, (c, nrm) => onSurface(out, 'body', new THREE.SphereGeometry(1, 6, 4), c, nrm, 0.001, [0.0055, 0.004, 0.0055], 0, 0x5c5650, r));
+        scatter(base, Math.round(n * 0.35), r, (c, nrm) => onSurface(out, 'body', new THREE.BoxGeometry(1, 1, 1), c, nrm, 0.004, [0.05 + r() * 0.04, 0.008, 0.035 + r() * 0.03], r() * 0.6, [0x8c867e, 0x6c6660, 0xb0aaa2][Math.floor(r() * 3)], r));
+        scatter(base, Math.max(2, Math.round(n * 0.08)), r, (c, nrm) => onSurface(out, 'glow', new THREE.BoxGeometry(1, 1, 1), c, nrm, 0.002, [0.004, 0.003, 0.05 + r() * 0.06], r() * 3, 0xffffff, r));
+    } else if (look === 'lava') {
+        // crust plates of cooling basalt floating on the glowing body; drops of fire hanging under
+        scatter(base, n, r, (c, nrm) => { const s = 0.02 + r() * 0.03; onSurface(out, 'body', rough(new THREE.IcosahedronGeometry(1, 0), r, 0.3), c, nrm, s * 0.15, [s, s * 0.35, s], r() * 6, 0x2a1a14, r); });
+        scatter(base, Math.max(2, Math.round(n * 0.15)), r, (c, nrm) => { if (nrm.y > -0.2) return; onSurface(out, 'glow', new THREE.ConeGeometry(1, 1, 6), c, nrm, 0.01, [0.01, -0.05 - r() * 0.04, 0.01], 0, 0xffffff, r); });
+    } else if (look === 'ice') {
+        // shards of every size growing out of the clear body; a cold light inside
+        scatter(base, n, r, (c, nrm) => { const s = 0.008 + r() * 0.015; onSurface(out, 'body', new THREE.ConeGeometry(1, 1, 5), c, nrm.clone().add(new THREE.Vector3((r() - 0.5) * 0.6, r() * 0.4, (r() - 0.5) * 0.6)).normalize(), s * 2, [s, s * (4 + r() * 6), s], r() * 6, 0xeaf8ff, r); });
+        (out.glow || (out.glow = [])).push({ geo: tinted(base.clone(), C(0xffffff), r, 0), pos: [0, 0, 0], scale: [0.55, 0.98, 0.55] });
+        scatter(base, Math.round(n * 0.3), r, (c, nrm) => { if (nrm.y < 0.4) return; onSurface(out, 'frost', new THREE.SphereGeometry(1, 6, 4), c, nrm, 0.002, [0.02, 0.006, 0.02], 0, 0xffffff, r); }); // (snow on the upper faces)
+    } else if (look === 'shade') {
+        // shells of mist round the body, each looser and fainter: no hard edge
+        for (const k of [1.14, 1.3]) (out.body || (out.body = [])).push({ geo: tinted(rough(base.clone().toNonIndexed(), r, 0.4), C(0xffffff), r, 0), pos: [0, 0, 0], scale: [k, 1 + (k - 1) * 0.4, k] });
+    }
+}
+
 const BUILD = { iron: 1, lava: 2, rock: 3, ice: 4, shade: 5 };
 /** A walker titan 1 unit tall (feet at y 0, facing −z). userData.rig — its joints; userData.glow — materials to pulse. */
 function walker(look) {
@@ -310,6 +384,7 @@ function walker(look) {
     const M = mats(look), root = new THREE.Group();
     root.name = 'titan-' + look;
     const bulk = look === 'rock' ? 1.25 : look === 'iron' ? 1.05 : look === 'shade' ? 0.9 : 1; // (the rock one massive, the shade thin)
+    const segs = LOOK[look].segs;
     const mk = (parts) => {
         const g = new THREE.Group();
         for (const [k, list] of Object.entries(parts)) {
@@ -321,43 +396,39 @@ function walker(look) {
         return g;
     };
     const part = (fn) => { const o = {}; fn(o); return mk(o); };
-    // proportions of a heavy giant: long arms, short neck, the chest broad
-    const legL = 0.42, thighW = 0.1 * bulk, armL = 0.36, armW = 0.075 * bulk, chestW = 0.34 * bulk;
-    const hips = new THREE.Group(); hips.position.y = legL; root.add(hips);
-    hips.add(part((o) => segment(look, 0.1, chestW * 0.75, r, o)));
-    const chest = new THREE.Group(); chest.position.y = 0.05; hips.add(chest);
+    // the proportions of a heavy giant: long thick arms, short legs, a broad chest, the head low between the shoulders
+    const legL = 0.4, thighR = 0.062 * bulk, armL = 0.4, armR = 0.05 * bulk, chestR = 0.17 * bulk;
+    const hips = new THREE.Group(); hips.position.y = legL + 0.02; root.add(hips);
+    const chest = new THREE.Group(); chest.position.y = 0.0; hips.add(chest);
     chest.add(part((o) => {
-        const add = (k, geo, c, pos, rot = [0, 0, 0], sc = [1, 1, 1]) => (o[k] || (o[k] = [])).push({ geo: tinted(geo, C(c), r), pos, rot, scale: sc });
+        bodyPart(look, lathe(TORSO.map(([y, k]) => [y, k * chestR]), segs, 1.3, 0.78), 1.2, r, o);
         if (look === 'iron') {
-            add('body', new THREE.CylinderGeometry(chestW * 0.62, chestW * 0.44, 0.34, 8, 2), 0xa49e96, [0, 0.17, 0], [0, Math.PI / 8, 0], [1.25, 1, 0.8]);
-            for (let i = 0; i < 4; i++) add('body', new THREE.BoxGeometry(chestW * 1.1 - i * 0.04, 0.025, chestW * 0.75), 0x6c6660, [0, 0.03 + i * 0.07, 0]); // (the lames of the belly)
-            for (const sd of [-1, 1]) add('body', new THREE.SphereGeometry(chestW * 0.32, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0x8c867e, [sd * chestW * 0.72, 0.31, 0], [0, 0, sd * -0.4], [1, 0.8, 1]); // (the pauldrons)
-            o.mirror = [{ geo: tinted(new THREE.CircleGeometry(chestW * 0.3, 24), C(0xffffff), r, 0), pos: [0, 0.21, -chestW * 0.41], rot: [0, Math.PI, 0] }];
-            add('body', new THREE.TorusGeometry(chestW * 0.31, 0.012, 6, 24), 0x5c5650, [0, 0.21, -chestW * 0.4]);
-            for (let i = 0; i < 6; i++) add('glow', new THREE.BoxGeometry(0.006, 0.08 + r() * 0.1, 0.006), 0xffffff, [(r() - 0.5) * chestW, 0.06 + r() * 0.2, -chestW * 0.35], [0, 0, (r() - 0.5) * 1.2]); // (the cracks)
-        } else segment(look, 0.36, chestW, r, o);
+            const add = (k, geo, c, pos, rot = [0, 0, 0], sc = [1, 1, 1]) => (o[k] || (o[k] = [])).push({ geo: tinted(geo, C(c), r), pos, rot, scale: sc });
+            for (const sd of [-1, 1]) add('body', new THREE.SphereGeometry(chestR * 0.62, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0x8c867e, [sd * chestR * 1.2, 0.41, 0], [0, 0, sd * -0.45], [1, 0.75, 1]); // (the pauldrons)
+            for (let i = 0; i < 4; i++) add('body', new THREE.TorusGeometry(chestR * (0.62 + i * 0.02), 0.006, 5, 16), 0x5c5650, [0, 0.06 + i * 0.045, 0], [Math.PI / 2, 0, 0], [1.3, 0.78, 1]); // (the lames of the belly)
+            o.mirror = [{ geo: tinted(new THREE.CircleGeometry(chestR * 0.42, 28), C(0xffffff), r, 0), pos: [0, 0.32, -chestR * 0.77], rot: [0, Math.PI, 0] }];
+            add('body', new THREE.TorusGeometry(chestR * 0.43, 0.01, 6, 28), 0x4c4640, [0, 0.32, -chestR * 0.76]);
+        }
     }));
-    // (a segment is built from its joint DOWN; the chest grows UP from the hips to the neck — its body is lifted by its own length)
-    if (look !== 'iron') chest.children[chest.children.length - 1].position.y = 0.38;
-    const neck = new THREE.Group(); neck.position.y = look === 'iron' ? 0.38 : 0.47; chest.add(neck); // (the others' chests are a pile of blobs up to ~0.5 over the hips)
-    const hd = new THREE.Group(); hd.position.y = 0.07; neck.add(hd);
-    hd.add(part((o) => head(look, 0.15 * (look === 'rock' ? 0.85 : 1), r, o)));
+    const neck = new THREE.Group(); neck.position.y = 0.47; chest.add(neck);
+    const hd = new THREE.Group(); hd.position.y = 0.06; neck.add(hd);
+    hd.add(part((o) => head(look, 0.13 * (look === 'rock' ? 0.85 : 1), r, o)));
     const arm = (sd) => {
-        const sh = new THREE.Group(); sh.position.set(sd * chestW * 0.82, look === 'iron' ? 0.32 : 0.4, 0); chest.add(sh);
-        sh.add(part((o) => segment(look, armL * 0.5, armW, r, o)));
+        const sh = new THREE.Group(); sh.position.set(sd * chestR * 1.18, 0.39, 0); chest.add(sh);
+        sh.add(part((o) => bodyPart(look, lathe(limbProfile(armL * 0.5, armR * 1.15, armR * 0.85), segs), 0.35, r, o)));
         const el = new THREE.Group(); el.position.y = -armL * 0.5; sh.add(el);
-        el.add(part((o) => segment(look, armL * 0.5, armW * 0.9, r, o)));
+        el.add(part((o) => bodyPart(look, lathe(limbProfile(armL * 0.5, armR * 0.95, armR * 0.75), segs), 0.3, r, o)));
         const hand = new THREE.Group(); hand.position.y = -armL * 0.5; el.add(hand);
-        hand.add(part((o) => extremity(look, armW * 1.4, r, o)));
+        hand.add(part((o) => extremity(look, armR * (look === 'iron' ? 1.9 : 2.4), r, o)));
         return { sh, el, hand };
     };
     const leg = (sd) => {
-        const hp = new THREE.Group(); hp.position.set(sd * chestW * 0.42, 0, 0); hips.add(hp);
-        hp.add(part((o) => segment(look, legL * 0.5, thighW, r, o)));
+        const hp = new THREE.Group(); hp.position.set(sd * chestR * 0.55, 0, 0); hips.add(hp);
+        hp.add(part((o) => bodyPart(look, lathe(limbProfile(legL * 0.5, thighR * 1.1, thighR * 0.85), segs), 0.4, r, o)));
         const kn = new THREE.Group(); kn.position.y = -legL * 0.5; hp.add(kn);
-        kn.add(part((o) => segment(look, legL * 0.5, thighW * 0.85, r, o)));
+        kn.add(part((o) => bodyPart(look, lathe(limbProfile(legL * 0.5, thighR * 0.92, thighR * 0.8), segs), 0.35, r, o)));
         const ft = new THREE.Group(); ft.position.y = -legL * 0.5; kn.add(ft);
-        ft.add(part((o) => extremity(look, thighW * 1.3, r, o, true)));
+        ft.add(part((o) => extremity(look, thighR * 2.2, r, o, true)));
         return { hp, kn, ft };
     };
     const L = arm(-1), R = arm(1), LL = leg(-1), RL = leg(1);
@@ -376,10 +447,15 @@ function worm(n = 30) {
     // one ring: a short barrel of plates, the plate edges standing out, a crest of spines on top, the soft fold between rings darker
     const ringParts = [];
     const add = (geo, c, pos, rot = [0, 0, 0], sc = [1, 1, 1]) => ringParts.push({ geo: tinted(geo, C(c), r, 0.08), pos, rot, scale: sc });
-    add(new THREE.CylinderGeometry(0.5, 0.5, 0.42, 20, 2, true), 0xc89a70, [0, 0, 0], [Math.PI / 2, 0, 0]);
-    add(new THREE.TorusGeometry(0.505, 0.035, 6, 24), 0x8a6040, [0, 0, -0.2]);
-    add(new THREE.CylinderGeometry(0.46, 0.46, 0.08, 20, 1, true), 0x4a2e1c, [0, 0, 0.23], [Math.PI / 2, 0, 0]);
-    for (let i = 0; i < 5; i++) add(new THREE.ConeGeometry(0.035, 0.16, 5), 0x6a4630, [Math.sin((i - 2) * 0.35) * 0.5, Math.cos((i - 2) * 0.35) * 0.5 + 0.03, 0], [0, 0, -(i - 2) * 0.35]);
+    add(new THREE.CylinderGeometry(0.5, 0.47, 0.42, 20, 2, true), 0x8a4e30, [0, 0, 0], [Math.PI / 2, 0, 0]);
+    add(new THREE.TorusGeometry(0.51, 0.045, 6, 24), 0xc88c5c, [0, 0, -0.2]);
+    add(new THREE.CylinderGeometry(0.44, 0.44, 0.1, 20, 1, true), 0x2e1a10, [0, 0, 0.24], [Math.PI / 2, 0, 0]); // (the soft dark fold between rings)
+    // overlapping armour plates round the ring (their edges stand out: the silhouette is never a smooth tube), worn lighter on the back
+    for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2, top = Math.max(0, Math.cos(a));
+        add(new THREE.BoxGeometry(0.24, 0.05, 0.36), top > 0.5 ? 0xb07850 : 0x7a4428, [Math.sin(a) * 0.52, Math.cos(a) * 0.52, -0.02], [0, 0, -a], [1, 1 + top * 0.4, 1]);
+    }
+    for (let i = 0; i < 5; i++) add(new THREE.ConeGeometry(0.04, 0.2, 5), 0x3a2216, [Math.sin((i - 2) * 0.35) * 0.56, Math.cos((i - 2) * 0.35) * 0.56 + 0.03, 0], [0, 0, -(i - 2) * 0.35]);
     const ringGeo = mergeParts(ringParts);
     ringGeo.userData.shared = true;
     const rings = [];
@@ -413,7 +489,7 @@ function worm(n = 30) {
         const hinge = new THREE.Group(); hinge.position.set(0, 0.5, -0.25); piv.add(hinge);
         const pp = [];
         // a petal: a curved shell (a part of a sphere) of armour, its inner face lined with teeth
-        pp.push({ geo: tinted(new THREE.SphereGeometry(0.62, 16, 10, -Math.PI / 3, (Math.PI * 2) / 3, 0, Math.PI / 2.2), C(0xc09068), r), pos: [0, -0.5, 0], rot: [-Math.PI / 2, 0, 0], scale: [1, 1, 1.3] });
+        pp.push({ geo: tinted(new THREE.SphereGeometry(0.66, 16, 10, -Math.PI / 3, (Math.PI * 2) / 3, 0, Math.PI / 2.2), C(0x8a4e30), r), pos: [0, -0.5, 0], rot: [-Math.PI / 2, 0, 0], scale: [1, 1, 1.6] });
         const shell = new THREE.Mesh(mergeParts(pp), M.body); shell.castShadow = true; hinge.add(shell);
         const pt = [];
         for (let k = 0; k < 9; k++) pt.push({ geo: tinted(new THREE.ConeGeometry(0.02, 0.12, 4), C(0xf2ead6), r, 0.1), pos: [(k - 4) * 0.08, -0.15 - Math.abs(k - 4) * 0.03, -0.55], rot: [Math.PI / 2 + 0.6, 0, 0] });
@@ -434,7 +510,7 @@ function stormFallbackTex() { const t = new THREE.DataTexture(new Uint8Array([25
 /** The funnel's material: a cloud texture wound round and rising (uT), lit from within by the lightning (uFlash). */
 function stormMaterial() {
     if (_stormMat) return _stormMat;
-    const m = new THREE.MeshBasicMaterial({ map: TEX.storm() || stormFallbackTex(), color: 0xf0d8b8, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+    const m = new THREE.MeshBasicMaterial({ map: TEX.storm() || stormFallbackTex(), color: 0xc89870, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
     m.userData.shared = true;
     m.userData.uT = { value: 0 }; m.userData.uFlash = { value: 0 };
     m.onBeforeCompile = (sh) => {
@@ -444,8 +520,8 @@ function stormMaterial() {
                 vec2 suv = vec2(vUv.x * 3.0 + uT * 0.35 + vUv.y * 1.5, vUv.y * 2.0 - uT * 0.12);
                 vec4 tc = texture2D(map, suv);
                 vec4 tc2 = texture2D(map, suv * vec2(0.5, 1.3) + vec2(0.37, uT * 0.05));
-                float a = clamp(tc.a * 0.6 + max(tc.r, tc2.r) * 0.9, 0.0, 1.0);
-                diffuseColor.rgb *= mix(vec3(0.55, 0.45, 0.4), vec3(1.0), max(tc.r, tc2.g)) + uFlash * vec3(0.6, 0.7, 1.0);
+                float a = clamp(0.35 + tc.a * 0.5 + max(tc.r, tc2.r) * 0.9, 0.0, 1.0);
+                diffuseColor.rgb *= mix(vec3(0.28, 0.2, 0.16), vec3(1.05, 0.95, 0.85), max(tc.r, tc2.g)) + uFlash * vec3(0.6, 0.7, 1.0);
                 diffuseColor.a *= a * smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.85, vUv.y);`);
     };
     m.customProgramCacheKey = () => 'titan-storm';
@@ -470,7 +546,7 @@ function storm() {
     // the face in the whirl at 2/3 of the height: two burning eyes and a dark, howling mouth
     const face = new THREE.Group(); face.position.set(0, 0.68, -0.17); root.add(face);
     const eyeM = new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.95 }); eyeM.userData.shared = true;
-    for (const sd of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), eyeM); e.scale.set(1.8, 0.7, 0.6); e.position.set(sd * 0.045, 0, 0); face.add(e); }
+    for (const sd of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), eyeM); e.scale.set(1.9, 0.6, 0.6); e.position.set(sd * 0.055, 0, 0); face.add(e); }
     const mouthM = new THREE.MeshBasicMaterial({ color: 0x1a0c06, transparent: true, opacity: 0.7, depthWrite: false }); mouthM.userData.shared = true;
     const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.035, 16), mouthM); mouth.scale.set(1.3, 0.7, 1); mouth.position.set(0, -0.07, 0); mouth.rotation.y = Math.PI; face.add(mouth);
     // the debris it carries: rocks and clods (one InstancedMesh, the game turns them round)

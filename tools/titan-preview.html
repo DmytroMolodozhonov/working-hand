@@ -63,7 +63,7 @@ window.__shoot = (id, view) => {
             else R.rings[i].quaternion.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0, 'YXZ'));
         }
         R.head.position.copy(R.rings[0].position).y += thick * 0.25; R.head.quaternion.copy(R.rings[0].quaternion); R.head.scale.setScalar(thick);
-        for (const p of R.petals) p.rotation.x = -0.9 * 1.1;
+        for (const p of R.petals) p.rotation.x = -0.9 * 1.7;
     } else if (def.look === 'storm') {
         m.scale.setScalar(Hh);
         const mat = m.userData.stormMat; mat.userData.uT.value = 3.7;

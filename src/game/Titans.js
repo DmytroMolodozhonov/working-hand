@@ -821,7 +821,7 @@ export class Titans {
         R.head.quaternion.copy(R.rings[0].quaternion);
         R.head.scale.setScalar(thick);
         const open = T.wm === 'up' ? 0.6 + 0.3 * Math.sin(T.t * 3) : T.wm === 'rising' ? 1 : 0.2;
-        for (const p of R.petals) p.rotation.x = -open * 1.1;
+        for (const p of R.petals) p.rotation.x = -open * 1.7; // (the flower of the mouth wide open: the rings of teeth seen)
         if (T.mode === 'dying') for (const r of R.rings) r.position.y -= T.dieT * 3;
     }
 
