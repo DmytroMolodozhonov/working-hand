@@ -256,7 +256,6 @@ export class PortalLoader {
             // (the GPU's own budget: if a frame of the whirl comes slow, it is drawn smaller — the nebula is soft, the loading goes first)
             const dtf = now - (this._lastF || now); this._lastF = now;
             this.scale = this.scale || (this.soft ? 0.18 : 0.6);
-            if (!this.soft && dtf > 40 && this.scale > 0.3) this.scale -= 0.05;
             const sc = this.scale, w = Math.max(2, Math.round(window.innerWidth * sc)), h = Math.max(2, Math.round(window.innerHeight * sc));
             if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; gl.viewport(0, 0, w, h); }
             const U = this.U, P = this.pal;

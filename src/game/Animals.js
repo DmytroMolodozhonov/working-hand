@@ -64,7 +64,7 @@ export const SPECIES = {
     cow: { name: 'Корова', hp: 10, speed: 1.6, run: 6, dmg: 2, meat: 4, size: 2.0 },
     pig: { name: 'Свинья', hp: 6, speed: 1.5, run: 5.5, dmg: 1, meat: 3, size: 1.45 },
     sheep: { name: 'Баран', hp: 6, speed: 1.5, run: 5.8, dmg: 1, meat: 2, size: 1.55 },
-    horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 2.3 },
+    horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 1.955 }, // (15 % smaller than the 2.3 it was — the author 06.11)
     swan: { name: 'Лебедь', hp: 5, speed: 0.8, run: 2.6, dmg: 1, meat: 2, size: SWAN.SIZE }, // (the lakes' swans: SwanLife.js — they float, feed, hiss, fly off)
     // (the sea's creatures: SeaLife.js — they swim, never walk; size = the body's length, m)
     shark: { name: 'Акула', hp: 18, speed: 2.2, run: 7.5, dmg: 3, meat: 4, size: 6.0 },
@@ -1480,6 +1480,17 @@ export class Animals {
                 }
                 continue;
             }
+            if (a.type === 'horse' && m.apple && !a.pen && !a.rider && d < 22) {
+                // an apple held out: the horse walks up to it (its muzzle at the hand), quietly — not when they run at it
+                const stop = a.dims.len * 0.5 + 1.1;
+                if (Math.hypot(m.vx, m.vz) < 4.5 && d > stop + (a.idle === 'come' ? 0.3 : 1.2)) {
+                    a.idle = 'come'; a.idleT = 2; a.pose = POSE.stand;
+                    a.target.set(m.x + dx / d * stop, p.y, m.z + dz / d * stop);
+                    return d > 10 ? S.speed * 1.6 : S.speed;
+                }
+                if (d <= stop + 1.2) { a.idle = 'look'; a.idleT = 2; a.pose = POSE.look; return 0; } // (it waits for the apple, does not step away)
+                continue;
+            }
             const zone = a.room * 0.8 + 3;
             if (d > zone || d < 1e-3) continue;
             const app = (m.vx * dx + m.vz * dz) / d; // how fast they come at it
@@ -1649,7 +1660,14 @@ export class Animals {
                 vx = l.vx + (vx - l.vx) * Math.min(1, dt * 6); vz = l.vz + (vz - l.vz) * Math.min(1, dt * 6);
             }
             last.set(id, { x: pos.x, z: pos.z, vx, vz });
-            out.push({ id, x: pos.x, z: pos.z, vx, vz });
+            out.push({ id, x: pos.x, z: pos.z, vx, vz, apple: appleIn(id) });
+        };
+        // (an apple in the hand: a horse comes up to it instead of stepping aside — the author 06.11; anyone's hands, the guests' too)
+        const isApple = (it) => !!it && (it.kind === 'apple' || it.kind === 'redApple');
+        const appleIn = (id) => {
+            if (id === g.localId) return !!(g.items?.heldOf?.('apple') || g.items?.heldOf?.('redApple'));
+            const h = g.items?.remoteHeld?.get(id);
+            return !!h && (isApple(h.right?.item) || isApple(h.left?.item));
         };
         const riding = (id) => this.list.some((h) => h.rider === id && !h.dead);
         if (!g.isDeadLocal && !riding(g.localId)) add(g.localId, g.character.group.position);

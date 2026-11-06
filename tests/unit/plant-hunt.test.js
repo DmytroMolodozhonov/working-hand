@@ -88,14 +88,15 @@ test('the jaws are open while it reaches and shut on the prey (a slam, then the 
     assert.ok(wide > 0.65 && shut < 0.2, `wide ${wide}, shut ${shut}`);
 });
 
-test('too big does not fit: a horse is not hunted by an ordinary head, a cow only by a big one (the table maxPrey)', () => {
-    assert.equal(huntVerdict('a', PREY_SIZE.horse, 1, 'eat'), 'big');
+test('too big does not fit: a horse and a cow only by a head of ordinary size or bigger (the table maxPrey)', () => {
+    // (the author 06.11 made the horses 15 % smaller — 2.3 → 1.955: now a horse fits the jaws as a cow does; a small head still cannot)
+    assert.equal(huntVerdict('a', PREY_SIZE.horse, 1, 'eat'), 'eat');
     assert.equal(huntVerdict('a', PREY_SIZE.horse, 0.88, 'eat'), 'big');
     assert.equal(huntVerdict('a', PREY_SIZE.cow, 0.88, 'eat'), 'big', 'a small head cannot take a cow');
     assert.equal(huntVerdict('a', PREY_SIZE.cow, 1.0, 'eat'), 'eat');
     assert.equal(huntVerdict('a', PREY_SIZE.pig, 0.88, 'eat'), 'eat');
     assert.equal(huntVerdict('a', PREY_SIZE.sheep, 0.88, 'eat'), 'eat');
-    assert.ok(maxPrey(1.12) > PREY_SIZE.horse && !preyFits(PREY_SIZE.horse, 1.0), 'only the biggest heads take a horse');
+    assert.ok(maxPrey(1.12) > PREY_SIZE.horse && !preyFits(PREY_SIZE.horse, 0.88), 'a small head never takes a horse');
     assert.equal(huntVerdict('p', 3.5, 1, 'tire'), 'tire', 'a man is not "too big": he is held (armour: it tries)');
     for (const [k, v] of Object.entries(PREY_SIZE)) assert.equal(v, SPECIES[k].size, 'the table follows the animals: ' + k);
 });
@@ -249,9 +250,9 @@ test('the real head in a stub world: a pig walks up and is reached, wrapped, clo
     assert.equal(a.plantHeld, true === false ? 1 : a.plantHeld); // (it is gone; the flag does not matter)
 });
 
-test('the real head: a horse (too big) is left alone; a cow only by a big head; a pig in a wall-blocked spot is not hunted', async () => {
+test('the real head: a horse (too big for a small head) is left alone; a cow only by a big head; a pig in a wall-blocked spot is not hunted', async () => {
     const w = await world();
-    const p = w.head(0, 0, 0.5); w.g.character.group.position.set(40, 2, 40);
+    const p = w.head(0, 0, 0); // (the smallest head: since the horses are 15 % smaller — the author 06.11 — an ordinary head may take one) w.g.character.group.position.set(40, 2, 40);
     const horse = { id: 9, type: 'horse', dead: false, hp: 12, group: new w.THREE.Object3D() }; horse.group.position.set(4, 0.35, 2); w.g.animals.byId.set(9, horse); w.g.animals.list.push(horse);
     for (let i = 0; i < 60 * 6; i++) w.plants.update(1 / 60);
     assert.equal(p.hunt.st, 'idle', 'a horse does not fit the jaws');

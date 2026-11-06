@@ -12,14 +12,14 @@ import { VERT, FRAG, passageSpeed } from './PortalShader.js';
 let gl = null, U = null, cv = null, soft = false;
 let W = 2, H = 2, scale = 0.6;
 let S = null; // the passage: { pal, dir, arms, seed, t0, tOut, prog, shown, tt, last }
-let raf = 0, skip = 0, lastF = 0;
+let raf = 0, skip = 0;
 
 const now = () => performance.now();
 const nextFrame = (f) => (typeof self.requestAnimationFrame === 'function' ? self.requestAnimationFrame(f) : setTimeout(() => f(now()), 16));
 
 function setup(canvas) {
     cv = canvas;
-    gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: false, antialias: false, powerPreference: 'low-power' });
+    gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: false, antialias: false, powerPreference: 'low-power', desynchronized: false, preserveDrawingBuffer: false });
     if (!gl) return false;
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
     const pr = gl.createProgram();
@@ -52,9 +52,7 @@ function frame(t) {
     S.tt += dt * passageSpeed(elapsed, S.shown, out);
     skip = (skip + 1) % (soft ? 6 : 1); // (a software renderer: a picture every 6th frame — the processor makes the world)
     if (!skip) {
-        // (the graphics card's own budget: a slow frame — the whirl is drawn smaller; the nebula is soft anyway)
-        const dtf = t - (lastF || t); lastF = t;
-        if (!soft && dtf > 40 && scale > 0.3) scale -= 0.05;
+        // (a FIXED size while the passage runs: shrinking the canvas on a slow frame cleared and re-laid it — a visible tear, the author 06.11)
         const w = Math.max(2, Math.round(W * scale)), h = Math.max(2, Math.round(H * scale));
         if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; gl.viewport(0, 0, w, h); }
         const P = S.pal;

@@ -54,7 +54,7 @@ export const HUNT = {
  * Мелкое — глотает целиком; корова — только у крупных голов; конь и всё больше — нет; человек (3,5 м) целиком не глотается —
  * его держат в горле, как и раньше (`inside`); житель — кусает и выплёвывает.
  */
-export const PREY_SIZE = { pig: 1.45, sheep: 1.55, cow: 2.0, horse: 2.3, swan: 2.0 };
+export const PREY_SIZE = { pig: 1.45, sheep: 1.55, cow: 2.0, horse: 1.955, swan: 2.0 };
 export function preyFits(size, s = 1) { return size <= HUNT.FIT * s + 1e-9; }
 /** The biggest animal size this plant swallows. */
 export const maxPrey = (s = 1) => HUNT.FIT * s;
