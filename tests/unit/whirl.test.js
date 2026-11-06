@@ -1,4 +1,4 @@
-// «Спиралис» (WhirlRules.js, Whirl.js): 500 маны, только в дуэли лучей, не с «Дай»; машешь — держишь вихрь ≤ 10 с; замер НА соперника — двойной удар (два заклинания одним лучом);
+// «Спиралис» (WhirlRules.js, Whirl.js): 250 маны, только в дуэли лучей, не с «Дай»; машешь — держишь вихрь ≤ 10 с; замер НА соперника — двойной удар (два заклинания одним лучом);
 // остановился не на него / не начал / 10 с — оба заклинания врезаются в тебя; «Attack» — отпустить сразу (если наведено и раскручено).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,19 +8,19 @@ import { SPELL_COST } from '../../src/game/Combat.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { Whirl } from '../../src/game/Whirl.js';
 
-test('цифры автора: 500 маны, не больше 10 секунд; слово узнаётся', () => {
-    assert.equal(SPELL_COST.Spiralis, 500);
-    assert.equal(WHIRL.COST, 500);
+test('цифры автора: 250 маны, не больше 10 секунд; слово узнаётся', () => {
+    assert.equal(SPELL_COST.Spiralis, 250);
+    assert.equal(WHIRL.COST, 250);
     assert.equal(WHIRL.MAX_T, 10);
     for (const w of ['spiralis', 'Спиралис', 'спиралис']) assert.equal(matchSpell(w), 'Spiralis', w);
     for (const w of ['спираль', 'спирали', 'спиртное']) assert.notEqual(matchSpell(w), 'Spiralis', w);
 });
 
-test('не работает с «Дай» — ни у меня, ни у соперника; нужен запас маны 500', () => {
+test('не работает с «Дай» — ни у меня, ни у соперника; нужен запас маны 250', () => {
     assert.ok(whirlRefusal('Die', 'Stupefy', 1000));
     assert.ok(whirlRefusal('Stupefy', 'Die', 1000));
-    assert.ok(whirlRefusal('Stupefy', 'SapiraDuel', 300));
-    assert.equal(whirlRefusal('Stupefy', 'SapiraDuel', 500), null);
+    assert.ok(whirlRefusal('Stupefy', 'SapiraDuel', 200));
+    assert.equal(whirlRefusal('Stupefy', 'SapiraDuel', 250), null);
     assert.equal(whirlRefusal('AvadaKedavra', 'IceDuel', 1000), null, 'с остальными заклинаниями всё работает');
 });
 
@@ -66,7 +66,7 @@ function fakeGame() {
     const g = { localId: 'A', remotes: new Map(), scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(),
         character: { group: { position: new THREE.Vector3(0, 0, 0) }, handVelocity: { right: new THREE.Vector3() }, isArmRaised: () => true, getHandWorldPosition: (s, o) => o.set(0, 3, 0), getHandDirection: (s, o) => o.set(0, 0, -1) },
         hud: { setVoice: (t) => calls.said.push(t) }, sound: { playThunder() {} },
-        combat: { maxFatigue: 1000, fatigue: 1000, dead: false, check: () => null, pay() { this.fatigue -= 500; } }, isDeadLocal: false,
+        combat: { maxFatigue: 1000, fatigue: 1000, dead: false, check: () => null, pay() { this.fatigue -= 250; } }, isDeadLocal: false,
         sync: { net: { isHost: true, send: (m) => calls.sent.push(m) }, duelClashEnd() {} } };
     const a = { id: 'A:1', by: 'A', spell: 'Stupefy', side: 'right', front: new THREE.Vector3(), state: 'clash' };
     const b = { id: 'B:1', by: 'B', spell: 'SapiraDuel', side: 'right', front: new THREE.Vector3(), state: 'clash' };
@@ -79,7 +79,7 @@ function fakeGame() {
     return g;
 }
 
-test('слово в дуэли: оба луча забраны (дуэль снята, пули нет), 500 маны списано, всем сообщено; без дуэли — «только в дуэли»; с «Дай» — отказ', () => {
+test('слово в дуэли: оба луча забраны (дуэль снята, пули нет), 250 маны списано, всем сообщено; без дуэли — «только в дуэли»; с «Дай» — отказ', () => {
     const g = fakeGame();
     g.duel.clashes[0].a.spell = 'Die';
     g.whirl.cast(true);
@@ -88,7 +88,7 @@ test('слово в дуэли: оба луча забраны (дуэль сн�
     g.duel.clashes[0].a.spell = 'Stupefy';
     assert.equal(g.whirl.cast(true), 'Spiralis');
     assert.ok(g.whirl.mine, 'вихрь начат');
-    assert.equal(g.combat.fatigue, 500);
+    assert.equal(g.combat.fatigue, 750);
     assert.equal(g.duel.clashes.length, 0, 'дуэль снята');
     assert.equal(g.duel.bolts.size, 0, 'оба луча забраны');
     assert.ok(g.calls.sent.some((m) => m.t === 'dwhirl' && m.ph === 'start' && m.spells[0] === 'Stupefy' && m.spells[1] === 'SapiraDuel'));

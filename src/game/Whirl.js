@@ -1,7 +1,7 @@
 /**
  * Whirl.js — «Spiralis» («Спиралис»): the beam clash taken over and whirled (the rules and the author's words: WhirlRules.js).
  *
- *   word (in my clash)   → 500 mana; the host takes the clash over (a guest asks it: 'dwhirlreq'): both beams are taken off the wands, both spells are kept; everybody draws the whirl (`dwhirl start`)
+ *   word (in my clash)   → 250 mana; the host takes the clash over (a guest asks it: 'dwhirlreq'): both beams are taken off the wands, both spells are kept; everybody draws the whirl (`dwhirl start`)
  *   the swing            → my computer watches the wand hand: it must go on (WhirlRules.stepWhirl); the ribbon of both colours whirls along the wand's trail
  *   release / backfire   → aimed at him and still: ONE charge of mine carrying his spell too leaves my wand (Duel.cast `extra`: both hit together; in a clash it pushes ×DOUBLE_K and if it wins both reach him);
  *                          his new spell flying at me while the whirl is on: aim at him — it is let go at once against his (a new duel; no word needed);

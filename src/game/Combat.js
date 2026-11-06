@@ -119,7 +119,7 @@ export const SPELL_COST = {
     StrengthenHouse: 5, // «Strengthen House»: the least to begin — then 5 a second while the beam feeds the sphere (nothing at once; HouseWards.js)
     AvadaKedavra: 25,
     // the strong duel spells (StrongSpells.js)
-    Spiralis: 500, // «Спиралис»: in a beam clash both beams are taken and whirled, then let go as a double charge (Whirl.js)
+    Spiralis: 250, // «Спиралис»: in a beam clash both beams are taken and whirled, then let go as a double charge (Whirl.js)
     Caligo: 50, // «Caligo»: the dark mage's fog, a great jet for 10 s (DarkFog.js)
     Sectura: 50, // «Sectura» (the cutting curse of black magic): paid at the swing of the wand, not at the word (Slash.js)
     Accentric: 50, // «Акцентрик»: the haze — −40 over 8 s, a minute lost

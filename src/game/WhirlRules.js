@@ -1,17 +1,17 @@
 /**
- * WhirlRules.js — «Spiralis» («Спиралис»), the duel's spell of 500 mana (pure rules; Whirl.js plays them). The author 06.11: «Во время дуэли ты выкрикиваешь это заклинание — и оба луча (твой и
+ * WhirlRules.js — «Spiralis» («Спиралис»), the duel's spell of 250 mana (pure rules; Whirl.js plays them). The author 06.11: «Во время дуэли ты выкрикиваешь это заклинание — и оба луча (твой и
  * соперника: игрока или NPC) начинают подчиняться тебе. Дуэль — просто полоса, и ты вытягиваешь её вокруг себя: она перестаёт быть ровной, становится извилистой; у соперника она отрывается от
  * палочки, и ты вокруг себя вихрем машешь двумя слившимися полосами. Не больше 10 секунд. Если резко перестал махать — заклинание врежется в тебя, и не только его, но и твоё. Нужно направить на
  * игрока (и сказать «Attack» — не обязательно): два заклинания одним лучом летят в него. Он может крикнуть заклинание — снова дуэль: так можно сделать двойную атаку. Не работает, если у кого-то
  * из двух заклинание «Дай» (Die)».
  *
- * Play: in my beam clash I say the word (500 mana; my maximum mana must be 500+) → the clash is taken over: both beams leave the two wands and meet in MY wand; I swing the arm round (the ribbon of
+ * Play: in my beam clash I say the word (250 mana; my maximum mana must be 250+) → the clash is taken over: both beams leave the two wands and meet in MY wand; I swing the arm round (the ribbon of
  * both colours whirls round me); ≤ MAX_T s. Stop swinging (a hand held calmly) AIMED at the opponent → both spells fly at him in one go (a twin charge); stop anywhere else, or never swing, or 10 s
  * pass → both spells hit ME. «Attack» said aimed (after a swing of MIN_SWING) lets them go at once.
  */
 export const WHIRL = {
-    COST: 500, // mana, paid at the word (Combat.SPELL_COST)
-    MIN_MAX_MANA: 500, // the hero's mana maximum must be this
+    COST: 250, // mana, paid at the word (Combat.SPELL_COST)
+    MIN_MAX_MANA: 250, // the hero's mana maximum must be this
     MAX_T: 10, // s: the longest the beams are whirled
     START_GRACE: 2, // s after the word to begin the swing (else the beams fall back on me)
     SWING_SPEED: 5, // m/s: the wand hand's speed that counts as swinging
@@ -78,7 +78,7 @@ export function whirlRefusal(spellA, spellB, maxMana) {
 
 /** ON WHOM / WHAT (CLAUDE.md): the spell lives only inside a beam clash — it takes both beams; what it does to everyone. */
 export const WHIRL_TARGETS = {
-    me: { does: 'caster', why: 'колдует тот, кто в дуэли лучей; платит 500 маны; машет рукой; не удержал — оба заклинания врезаются в него' },
+    me: { does: 'caster', why: 'колдует тот, кто в дуэли лучей; платит 250 маны; машет рукой; не удержал — оба заклинания врезаются в него' },
     players: { does: 'opponent', why: 'другой игрок в дуэли: его луч отрывается от палочки; он может крикнуть новое заклинание — снова дуэль; видит вихрь' },
     npcWizards: { does: 'opponent', why: 'волшебник башни/арены в дуэли: луч отрывается, он ошеломлён на пару секунд; двойной удар по нему — как по игроку' },
     zombies: { does: 'none', why: 'зомби в дуэли лучей не участвуют' },
