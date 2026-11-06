@@ -41,6 +41,7 @@ import { BLOCK, BAKSADI_FROM_GEN } from '../world/Terrain.js';
 import { FLORA_ITEMS } from './MagicFlora.js';
 import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS, isPegasusColor, randomPegasusColor } from './AnimalModels.js';
 import { FLY, takeOff, stepFlight, wingTick, pickMigration, flockSlot } from './PigFlight.js';
+import { FlapReader, flyStep, FLYERS, armsOf } from './ImperiusFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
 import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
@@ -54,10 +55,21 @@ import { appleTreeModel, baksadiTreeModel, pulseGolden } from './AppleTrees.js';
 import { SwanLife, SWAN, swanSiteAt, swanSitesNear, swanMagic, floatY as swanFloatY } from './SwanLife.js';
 import { SeaLife, seaSiteAt, seaSitesNear, isSeaType } from './SeaLife.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
-export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1 };
+export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1, NEAR_REAL: 12 }; // (NEAR_REAL m: a horse this near is drawn as its own parts)
 const _farF = new THREE.Frustum(), _farM = new THREE.Matrix4(), _farS = new THREE.Sphere();
 
 export { animalModel };
+
+/** Water a ridden horse still walks into (blocks over the floor): deeper — he stops at its edge (his back would be under). */
+export const RIDE_DEEP = 4;
+/** A ridden horse's speed (m/s) from the rider's run effort (0 standing … 1 a run … EFFORT_MAX frantic): WALK + PER × effort; ACC / DEC how fast
+ *  he gathers / loses it (1/s); from GALLOP_U m/s he gallops. (Before: 5…15 m/s, the run measure capped at 1, the speed changed at once.) */
+export const RIDE = { WALK: 4, PER: 10, EFFORT_MAX: 2.2, ACC: 1.2, DEC: 2.2, GALLOP_U: 10 };
+/** What a horse is fed, in red apples (each 30 % that he lets you on): a golden apple 80 %, the Baksadi pear 100 % at once (the author 06.11). */
+export const FEED_W = { redApple: 1, apple: 8 / 3, baksadi_pear: 10 / 3 };
+export const FEED_MAX = 10 / 3;
+/** The chance a fed horse lets you up (apples counted in red ones). */
+export const feedChance = (n) => Math.min(1, (n || 0) * 0.3 + 1e-9);
 
 export const SPECIES = {
     // (sizes next to the ~4.6 m tall player: a cow reaches his chest)
@@ -83,6 +95,8 @@ export const PEGASUS = {
     CIRCLE_R: 9, CIRCLE_ALT: 7, DIVE_EVERY: 5, DMG: 3, DEFEND_T: 30,
     SLAP_V: 2.5, // m/s: the hand's speed into his head for a slap
     FLY_SPEED: 1.7, // × his riding speed in the air
+    TAKEOFF_U: 7, // m/s: the gallop he takes off from (the rider's strokes) — as the grown wings need a run first
+    STROKES: 2, STROKE_WIN: 1.6, // strokes within this many s while galloping lift him
 };
 /**
  * Herds live in places fixed by the world's seed (HerdSites.js: by area, nothing to do with other animals). A place wakes when any
@@ -713,8 +727,9 @@ export class Animals {
     /** Golden apple held to the head of a horse: one apple more for it. */
     _feed(dt) {
         const g = this.game;
-        const ap = g.items.heldOf('apple') || g.items.heldOf('redApple'); // (a golden apple or an ordinary red one)
-        const golden = ap?.item.kind === 'apple';
+        // (a golden apple, an ordinary red one, or the Baksadi pear — the author 06.11: a red apple 30 %, a golden 80 %, the pear 100 % at once)
+        const ap = g.items.heldOf('baksadi_pear') || g.items.heldOf('apple') || g.items.heldOf('redApple');
+        const golden = ap?.item.kind === 'apple', pear = ap?.item.kind === 'baksadi_pear';
         if (!ap) { this._feedT = 0; return; }
         let horse = null;
         for (const a of this.list) {
@@ -733,17 +748,20 @@ export class Animals {
         if (ap.item.count <= 0) g.items.releaseHand(ap.side);
         if (horse.pegasus) {
             // the Pegasus is nobody's: an apple only makes him kind to you — he lets you on: 9% for an apple, 40% for a golden one
-            if (horse.easy || Math.random() < (golden ? PEGASUS.TRUST_GOLD : PEGASUS.TRUST)) { // (Creative's test Pegasus: one apple is enough)
+            if (horse.easy || pear || Math.random() < (golden ? PEGASUS.TRUST_GOLD : PEGASUS.TRUST)) { // (Creative's test Pegasus: one apple is enough)
                 horse.trustBy = g.localId; horse.trustUntil = Date.now() + PEGASUS.TRUST_T;
                 g.hud.setVoice('🐴 Пегас съел яблоко и подпускает вас — прыгните рядом, чтобы сесть на него', true);
                 g.fx?.lightFlash?.(horse.group.position.clone().setY(horse.group.position.y + 3), 0xfff2b0, 2, 0.5, 15);
             } else g.hud.setVoice(`🐴 Пегас съел ${golden ? 'золотое яблоко' : 'яблоко'}, но пока не подпускает вас (шанс ${golden ? 40 : 9}% за ${golden ? 'золотое яблоко' : 'яблоко'})`, true);
             return;
         }
-        horse.apples = Math.min(3, horse.apples + 1);
-        if (!this.auth) g.sync?.animalFeed?.(horse.id);
-        if (horse.easy) { g.hud.setVoice('🐴 Конь съел яблоко и подпускает вас — прыгните рядом с ним, чтобы сесть', true); return; } // (Creative's test horse)
-        g.hud.setVoice(`🐴 Конь съел яблоко (${horse.apples}) — шанс, что даст запрыгнуть: ${Math.min(90, horse.apples * 30)}%. Прыгните рядом с ним`, true);
+        // (`apples` counts in red apples: each is 30 % — a golden one 80 %, the pear the whole 100 %; FEED_W)
+        const w = FEED_W[ap.item.kind] || 1;
+        horse.apples = Math.min(FEED_MAX, horse.apples + w);
+        if (!this.auth) g.sync?.animalFeed?.(horse.id, w);
+        const what = pear ? 'грушу' : golden ? 'золотое яблоко' : 'яблоко';
+        if (horse.easy) { g.hud.setVoice(`🐴 Конь съел ${what} и подпускает вас — прыгните рядом с ним, чтобы сесть`, true); return; } // (Creative's test horse)
+        g.hud.setVoice(`🐴 Конь съел ${what} — шанс, что даст запрыгнуть: ${Math.round(feedChance(horse.apples) * 100)}%. Прыгните рядом с ним`, true);
     }
 
     // ------------------------------------------------------------ the Pegasus
@@ -836,37 +854,66 @@ export class Animals {
     /** The slap: on the ground — he spreads his wings and takes off; in the air — he comes down. */
     _pegasusToggle(a) {
         if (!a.riderFly) {
-            a.riderFly = true; a.landing = false; a.vy = 4;
-            this.game.hud.setVoice('🪽 Пегас расправил крылья и взлетел! Смотрите вверх — набор высоты, вниз — снижение; присесть или хлопнуть — сесть', true);
+            this._pegasusLift(a, 0.6);
         } else a.landing = true;
     }
 
-    /** Flying the Pegasus: forward as you walk in place, up / down as you look; he lands at the ground. */
+    /**
+     * The rider's wing-strokes (the author 06.11: «Пегас может взлететь по примеру крыльев — тебе нужно махать»): both hands coming down
+     * together, fast, against the body — the same reading as the grown wings / «Империус Максима» (ImperiusFlight.FlapReader). → 0…1.
+     */
+    _pegasusStroke(dt) {
+        const hv = this.game.character?.handRelVelocity;
+        return (this._flap || (this._flap = new FlapReader())).update(dt, hv?.left, hv?.right);
+    }
+
+    /** Up into the air from his gallop (or a slap): the flight's state starts with his speed and the stroke's lift. */
+    _pegasusLift(a, stroke = 0.7) {
+        const P = FLYERS.pegasus;
+        a.riderFly = true; a.landing = false;
+        a.pst = { air: true, vf: Math.max(a.rideU || 0, P.thrust * stroke, 6), vy: Math.min(P.maxUp, P.lift * (1 + stroke)) };
+        a.vy = a.pst.vy;
+        this.game.hud.setVoice('🪽 Пегас расправил крылья и взлетел! Машите руками вверх-вниз — выше и быстрее; голову вниз — снижение, вверх — набор на скорости; руки вдоль тела или присесть — посадка', true);
+    }
+
+    /**
+     * Flying the Pegasus as the grown wings fly (ImperiusFlight.flyStep, FLYERS.pegasus): each stroke of the rider's arms lifts and drives him,
+     * between the strokes he glides (spread arms — a long glide; arms down — he folds and drops), the head steers the height, the body the way.
+     * Crouching (or tired) — he comes down and lands on his hooves.
+     */
     _rideAir(a, dt) {
         const g = this.game, ch = g.character, p = a.group.position;
         a.group.rotation.y = ch.group.rotation.y;
-        const run = ch.isRunning ? (2.5 + 5 * (ch.runIntensity || 0)) * 2 * (1 + a.bonus / 100) * PEGASUS.FLY_SPEED : 4; // (gliding on slowly)
+        const P = FLYERS.pegasus;
+        const st = a.pst || (a.pst = { air: true, vf: 6, vy: 4 });
         const tired = a.stamina <= 0;
-        a.stamina = Math.max(0, a.stamina - dt * (tired ? 0 : 4 + 4 * (ch.runIntensity || 0)));
+        let stroke = this._pegasusStroke(dt);
+        if (tired || a.landing) stroke = 0;
+        if (stroke > 0) a.stamina = Math.max(0, a.stamina - 2.5 * stroke);
         const look = g.camera?.getWorldDirection ? g.camera.getWorldDirection(_v) : _v.set(0, 0, -1);
-        let vyWant = Math.max(-1, Math.min(1, look.y * 2.2)) * 7;
-        if (a.landing || tired) vyWant = Math.min(vyWant, -3);
-        a.vy = (a.vy || 0) + (vyWant - (a.vy || 0)) * Math.min(1, dt * 3);
+        const pitch = Math.asin(Math.max(-1, Math.min(1, look.y)));
         const floorHere = this._floor(p.x, p.z);
-        let ny = Math.min(p.y + a.vy * dt, floorHere + 60);
+        const alt = p.y - (floorHere + FLY.BASE);
+        flyStep(st, P, { stroke, arms: a.landing || tired ? 'down' : armsOf(ch), alt, pitch }, dt);
+        a.vy = st.vy;
+        let ny = Math.min(p.y + st.vy * dt, floorHere + 120);
         // forward — never into a hill, a tree or a wall (it climbs over instead)
-        const step = run * (tired ? 0.5 : 1) * dt;
+        const step = st.vf * PEGASUS.FLY_SPEED * 0.6 * (1 + a.bonus / 100) * dt;
         const nx = p.x - Math.sin(a.group.rotation.y) * step, nz = p.z - Math.cos(a.group.rotation.y) * step;
-        if (this._floor(nx, nz) + FLY.BASE > ny - 0.05) { a.vy = Math.max(a.vy, 4); ny = Math.max(ny, p.y + 4 * dt); }
+        if (this._floor(nx, nz) + FLY.BASE > ny - 0.05) { st.vy = Math.max(st.vy, 4); ny = Math.max(ny, p.y + 4 * dt); }
         else { p.x = nx; p.z = nz; }
         const under = this._floor(p.x, p.z) + FLY.BASE;
         p.y = Math.max(ny, under);
-        a.flyCode = a.vy < -1 ? 2 : 1;
-        a.bank = 0; a.pitch = Math.max(-0.3, Math.min(0.3, a.vy * 0.05));
+        // (the wings: a beat on the rider's stroke, spread in the glide)
+        if (stroke > 0) a.beatT = 0.45;
+        a.beatT = Math.max(0, (a.beatT || 0) - dt);
+        a.flyCode = a.beatT > 0 ? 1 : 2;
+        a.bank = 0; a.pitch = Math.max(-0.3, Math.min(0.3, st.vy * 0.05));
         a.walkT += dt * 3;
-        if (p.y - under < 0.1 && a.vy < 0) {
+        if (!st.air || (p.y - under < 0.1 && st.vy <= 0 && (a.landing || st.vf < 3))) {
             // down: on his hooves again
-            a.riderFly = false; a.flyCode = 0;
+            a.riderFly = false; a.flyCode = 0; a.pst = null; a.rideU = Math.min(a.rideU || 0, st.vf);
+            p.y = under; // (the last few cm onto his hooves)
             if (a.landing) { a.landing = false; this.game.hud.setVoice('🐴 Пегас сел на землю', true); }
         }
         this._animate(a, 0, dt);
@@ -898,7 +945,7 @@ export class Animals {
             g.hud.setVoice('🐴 Вы на Пегасе! Шагайте на месте — он идёт. Хлопните его рукой по голове — взлетит', true);
             return;
         }
-        const ok = a.tamed === g.localId || (a.easy && a.apples > 0) || Math.random() < Math.min(0.9, a.apples * 0.3); // (Creative's test horse: one apple is enough)
+        const ok = a.tamed === g.localId || (a.easy && a.apples > 0) || Math.random() < feedChance(a.apples); // (Creative's test horse: one apple is enough)
         if (!ok) { g.hud.setVoice(a.apples ? '🐴 Конь не дал запрыгнуть — дайте ещё яблоко' : '🐴 Конь не даётся — сначала угостите его яблоком', true); return; }
         a.tamed = g.localId;
         a.rider = g.localId;
@@ -916,6 +963,7 @@ export class Animals {
         this.riding = null;
         a.rider = null;
         a.state = 'graze';
+        a.gallop = 0; a.rideU = 0; // (he stops under nobody: no gallop left in his legs)
         a.target.copy(a.group.position);
         a.spd = 0; a.idle = 'stand'; a.idleT = 3;
         const ch = this.game.character;
@@ -964,6 +1012,17 @@ export class Animals {
         return false;
     }
 
+    /** The galloping body: the croup and the withers rise in turn (a pitch with the stride), the whole horse lifts a little in its flight, the neck pumps. */
+    _gallopBody(a) {
+        const g = a.gallop, ph = a.walkT;
+        const m = a.model;
+        a._galloped = true;
+        m.rotation.x = Math.sin(ph + 0.6) * 0.07 * g;
+        m.position.y = Math.max(0, Math.sin(ph * 1 + 2.4)) * 0.12 * g;
+        const neck = m.userData.neck;
+        if (neck) neck.rotation.x += Math.sin(ph + 1.2) * 0.12 * g;
+    }
+
     _ride(dt) {
         const a = this.riding;
         const g = this.game;
@@ -974,24 +1033,46 @@ export class Animals {
         if (a.pegasus) {
             a.rideT = (a.rideT || 0) + dt;
             if (this._slap(a, dt)) this._pegasusToggle(a);
+            else if (!a.riderFly) {
+                // the wings' way up (the author 06.11): a gallop and strokes of the arms — as the grown wings take off after a run
+                const stroke = this._pegasusStroke(dt);
+                if (stroke > 0) {
+                    const now = performance.now();
+                    a.strokesAt = (a.strokesAt || []).filter((t) => now - t < PEGASUS.STROKE_WIN * 1000); a.strokesAt.push(now);
+                    if ((a.rideU || 0) >= PEGASUS.TAKEOFF_U && a.strokesAt.length >= PEGASUS.STROKES) { a.strokesAt.length = 0; this._pegasusLift(a, stroke); }
+                    else if ((a.rideU || 0) < PEGASUS.TAKEOFF_U && now - (this._pegHint || 0) > 6000) { this._pegHint = now; this.game.hud.setVoice('🪽 Чтобы взлететь, разгоните Пегаса — бегите на месте, — и машите руками сверху вниз', true); }
+                }
+            }
             if (a.riderFly && ch.isCrouching) a.landing = true;
             if (a.rideT > PEGASUS.RIDE_MAX && !a.riderFly) { this.dismount(); this.game.hud.setVoice('🐴 Пегасу надоело — он сбросил вас и уходит к табуну', true); return; }
-            if (a.riderFly) { this._rideAir(a, dt); return; }
+            if (a.riderFly) { a.gallop = 0; this._rideAir(a, dt); return; }
             a.flyCode = 0;
         }
         const S = SPECIES.horse;
         a.group.rotation.y = ch.group.rotation.y;
-        const moving = ch.isRunning;
         const tired = a.stamina <= 0;
-        const base = (2.5 + 5 * (ch.runIntensity || 0)) * 2 * (1 + a.bonus / 100) * (tired ? 0.5 : 1);
+        // HOW FAST: as hard as the rider runs in place (the author 06.11 «чем быстрее бежишь, тем быстрее бежит конь… ещё больше действий —
+        // ещё быстрее»): the effort is the run's own measure, NOT capped at a full run (PoseInterpreter.runEffort: 1 a run, up to 2.2
+        // a frantic one) — a walk, a trot, a canter, a gallop. The horse gathers speed and slows like a horse (RIDE.ACC / RIDE.DEC), not at once.
+        const effort = ch.isRunning ? Math.max(ch.runIntensity || 0, Math.min(RIDE.EFFORT_MAX, g.currentPose?.runEffort ?? 0)) : 0;
+        const want = ch.isRunning ? (RIDE.WALK + RIDE.PER * effort) * (1 + a.bonus / 100) * (tired ? 0.5 : 1) : 0;
+        a.rideU = a.rideU ?? 0;
+        a.rideU += (want - a.rideU) * Math.min(1, dt * (want > a.rideU ? RIDE.ACC : RIDE.DEC));
+        if (a.rideU < 0.05 && !want) a.rideU = 0;
+        const base = a.rideU;
+        const moving = base > 0.05;
+        // (the gait: a walk and a trot as before, a gallop from GALLOP_U — the legs' four-beat stride, the body rocking)
+        a.gallop = Math.max(0, Math.min(1, (base - RIDE.GALLOP_U) / 4));
         if (moving) {
             const nx = a.group.position.x - Math.sin(a.group.rotation.y) * base * dt, nz = a.group.position.z - Math.cos(a.group.rotation.y) * base * dt;
             // (deep water ahead: the horse stops at the edge — the rider stayed in the saddle under the water before)
-            if (deepAt(g.terrain?.data, nx, nz, a.group.position.y, 2)) {
+            // (a river, a shallow lake: he wades in — the author 06.11 «если небольшая глубина — не вижу смысла запрета»; only water
+            //  over RIDE_DEEP blocks — over his back — stops him)
+            if (deepAt(g.terrain?.data, nx, nz, a.group.position.y, RIDE_DEEP)) {
                 if (performance.now() - (this._wetSaid || 0) > 4000) { this._wetSaid = performance.now(); g.hud.setVoice('🐴 Конь не идёт в глубокую воду — объезжайте или слезьте', true); }
             } else { a.group.position.x = nx; a.group.position.z = nz; }
             a.stamina = Math.max(0, a.stamina - dt * (3 + 4 * (ch.runIntensity || 0)));
-            a.walkT += dt * base * 2;
+            a.walkT += dt * (a.gallop > 0 ? Math.min(base * 2, 9 + base * 0.55) : base * 2); // (a gallop's stride is long: its beat grows slower than its speed)
         } else a.stamina = Math.min(100, a.stamina + dt * 6);
         // the horse can't climb cliffs
         const gy = g.collision.groundAt ? g.collision.groundAt(a.group.position.x, a.group.position.z, a.group.position.y + 1) : g.collision.groundY(a.group.position.x, a.group.position.z); // (a ship's deck too)
@@ -1663,9 +1744,9 @@ export class Animals {
             out.push({ id, x: pos.x, z: pos.z, vx, vz, apple: appleIn(id) });
         };
         // (an apple in the hand: a horse comes up to it instead of stepping aside — the author 06.11; anyone's hands, the guests' too)
-        const isApple = (it) => !!it && (it.kind === 'apple' || it.kind === 'redApple');
+        const isApple = (it) => !!it && !!FEED_W[it.kind];
         const appleIn = (id) => {
-            if (id === g.localId) return !!(g.items?.heldOf?.('apple') || g.items?.heldOf?.('redApple'));
+            if (id === g.localId) return !!(g.items?.heldOf?.('apple') || g.items?.heldOf?.('redApple') || g.items?.heldOf?.('baksadi_pear'));
             const h = g.items?.remoteHeld?.get(id);
             return !!h && (isApple(h.right?.item) || isApple(h.left?.item));
         };
@@ -1764,7 +1845,9 @@ export class Animals {
         a.animAcc = 0;
         if (a.model.userData.sea) { if (!this.auth && !a.dead && !a.leap) a.group.rotation.x = a.pitch || 0; this.sea.pose(a, dt); return; } // (a fish: its tail, not legs — SeaLife.pose)
         if (dt) animatePose(a, dt, a.pose ?? POSE.stand); // (the head down to the grass / looking about)
-        animateLegs(a.model, a.walkT, k * (1 - (a.lie || 0)));
+        animateLegs(a.model, a.walkT, k * (1 - (a.lie || 0)), a.gallop || 0);
+        if (a.gallop > 0.02 && this.riding === a) this._gallopBody(a); // (the body rocks with the stride, the neck pumps)
+        else if (a._galloped) { a._galloped = false; a.model.rotation.x = 0; a.model.position.y = 0; } // (out of the gallop / off him: level again — only what the gallop set: a Pegasus' flight moves the model too)
         if (a.lie > 0.01) foldLegs(a.model, a.lie); // (lying: the legs folded under the body)
         if (a.model.userData.wings && !a.dead) this._pigBody(a, dt || 1 / 60); // (a pig's wings; Leviosa calls this without dt)
         if (a.form || a.formK || a.model.userData.minotaur || a.model.userData.bronze) this.guards.look(a, dt || 1 / 60); // (the bull / the minotaur)
@@ -1784,7 +1867,10 @@ export class Animals {
         let builds = 0;
         for (const a of this.list) {
             const p = a.group.position, d = Math.hypot(p.x - me.x, p.z - me.z);
-            const plain = !a.dead && !a.rider && a !== this.riding && !a.lev && !a.cart && !a.mount?.on && !a.guard && !a.form && !a.formK
+            // (a horse right by me — fed by hand, led, about to be mounted — is drawn as its own parts, as when ridden: the author 06.11 saw a horse's
+            //  head «fall off» by him and come back the moment he sat on it — the one-shape way lost it there; a few horses near cost a few draws)
+            const byMe = a.type === 'horse' && d < FAR.NEAR_REAL;
+            const plain = !byMe && !a.dead && !a.rider && a !== this.riding && !a.lev && !a.cart && !a.mount?.on && !a.guard && !a.form && !a.formK
                 && !a.fly && !a.flyCode && a.type !== 'runbook' && !a.model.userData.minotaur && !a.model.userData.bronze && !(a.stunT > 0);
             const seen = _farF.intersectsSphere(_farS.set(p, 4 * (a.group.scale.x || 1) + 2));
             a.animStep = !plain || d < FAR.LOD ? 0 : !seen ? 1e9 : d > FAR.DISTANT ? FAR.DISTANT_STEP : FAR.STEP;

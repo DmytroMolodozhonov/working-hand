@@ -474,6 +474,7 @@ export class PoseInterpreter {
                 for (let i = 1; i < this.shoulderHistory.length; i++) total += Math.abs(this.shoulderHistory[i] - this.shoulderHistory[i - 1]);
                 data.bob = total; // (the shoulders' bob over 8 pictures — «ходьба назад»: steps leaning back bob weakly, Game._weakSteps)
                 data.runIntensity = Math.max(0, Math.min(1, (total - 0.02) / 0.13));
+                data.runEffort = Math.max(0, Math.min(2.2, (total - 0.02) / 0.13)); // (not capped at a run: a ridden horse gallops harder — Animals.RIDE)
                 data.isRunning = data.runIntensity > 0.1;
             }
 
@@ -502,6 +503,7 @@ export class PoseInterpreter {
                 const walk = this.steps.read(data.legs, (lm[11].y + lm[12].y) / 2, data.isCrouching);
                 data.isRunning = walk.isRunning;
                 data.runIntensity = walk.runIntensity;
+                data.runEffort = Math.max(walk.runIntensity, walk.runEffort ?? 0);
             }
         }
 

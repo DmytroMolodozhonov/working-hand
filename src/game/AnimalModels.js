@@ -926,8 +926,9 @@ export function animalModel(type, color) {
  * Walk the legs: the upper segments swing in diagonal pairs (k: 0 standing … 1 full stride),
  * and a leg swinging forward folds — the front knee takes the hoof back, the hind hock under.
  */
-export function animateLegs(model, walkT, k) {
+export function animateLegs(model, walkT, k, gallop = 0) {
     const legs = model.userData.legs;
+    if (gallop > 0.02) { gallopLegs(model, walkT, k, gallop); return; }
     const s = Math.sin(walkT), c = Math.cos(walkT);
     const sw = s * 0.6 * k;
     for (let i = 0; i < legs.length; i++) {
@@ -938,6 +939,34 @@ export function animateLegs(model, walkT, k) {
         if (!lower) continue;
         const bend = Math.max(0, sign * c) * k;
         lower.rotation.x = l.userData.front ? -bend * 1.1 : bend * 0.8;
+    }
+}
+
+/**
+ * The gallop (a ridden horse at speed — the author 06.11 «крутую анимацию бега на коне»): a four-beat gait, not the trot's
+ * diagonal pairs — the hind legs strike one after the other and drive, then the fore legs reach far out one after the other,
+ * a moment of flight with all four gathered under the belly. The body rocks along (the croup up as the fore legs land), the
+ * neck pumps with the stride. `g` 0…1 blends from the trot (k: its reach). The legs are [front-right, front-left, hind-…]
+ * in the model's order: each its own phase.
+ */
+const GALLOP_PHASE = [0.55, 0.42, 0.12, 0]; // (the leading fore leg, the other fore, the leading hind, the other hind — in turns of the stride)
+function gallopLegs(model, walkT, k, g) {
+    const ud = model.userData, legs = ud.legs;
+    const tr = (i) => { const s = Math.sin(walkT), sign = i === 0 || i === 3 ? 1 : -1; return sign * s * 0.6 * k; };
+    for (let i = 0; i < legs.length; i++) {
+        const l = legs[i], front = l.userData.front ?? i < 2;
+        const ph = walkT + (GALLOP_PHASE[i] ?? 0) * Math.PI * 2;
+        const s = Math.sin(ph), c = Math.cos(ph);
+        // (a fore leg reaches far forward, a hind leg sweeps far back: a long, uneven swing)
+        const swing = front ? (s * 0.85 + 0.12) : (s * 0.75 - 0.08);
+        const want = swing * k;
+        l.rotation.x = tr(i) + (want - tr(i)) * g;
+        const lower = l.userData.lower;
+        if (!lower) continue;
+        // (a leg coming forward folds high — the knee / the hock tucked up under the body in the flight)
+        const fold = Math.max(0, c) * (front ? 1.5 : 1.1) * k;
+        const trot = Math.max(0, (i === 0 || i === 3 ? 1 : -1) * Math.cos(walkT)) * k;
+        lower.rotation.x = front ? -(trot * 1.1 + (fold - trot * 1.1) * g) : trot * 0.8 + (fold - trot * 0.8) * g;
     }
 }
 

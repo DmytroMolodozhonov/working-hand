@@ -859,7 +859,7 @@ export class NetSync {
     floraPick(id, i, side) { this.net.send({ t: 'flpick', id, i, side }); }
     floraGone(id, i, until) { if (this.net.isHost) this.net.send({ t: 'flgone', id, i, until }, true); }
     floraKill(id, how) { if (this.net.isHost) this.net.send({ t: 'flkill', id, how }, true); }
-    animalFeed(id) { this.net.send({ t: 'afeed', id }); }
+    animalFeed(id, w = 1) { this.net.send({ t: 'afeed', id, w }); }
     animalRide(id, on) { this.net.send({ t: 'aride', id, on: on ? 1 : 0, by: this.me }, true); }
     animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
     animalButt(to, dmg, p, k = 6, down = 0) { this.net.send({ t: 'abutt', to, dmg, p: [r3(p.x), r3(p.y), r3(p.z)], k, down }, true); }
@@ -1274,7 +1274,7 @@ export class NetSync {
             case 'flpick': if (this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) g.flora.pick(pl, m.i, m.from, m.side); } break;
             case 'flgone': if (!this.net.isHost) g.flora?.netGone(m.id, m.i, m.until); break;
             case 'flkill': if (!this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) { if (m.how === 'burn') g.flora.ignite(pl, true); else g.flora.kill(pl, m.how, true); } } break;
-            case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(3, a.apples + 1); } break;
+            case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(10 / 3, a.apples + Math.min(10 / 3, Math.max(0, +m.w || 1))); } break;
             case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on && !a.pegasus) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
             case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; a.flyCode = m.p[4] || 0; } } break; // (a Pegasus in flight: its wings)
             case 'abutt': if (m.to === this.me) {

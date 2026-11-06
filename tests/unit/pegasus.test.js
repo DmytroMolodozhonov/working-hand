@@ -102,7 +102,7 @@ test('golden apples: 9% each that he lets you on; he is never tamed, and after y
     assert.equal(peg.state, 'graze', 'back to his own life with the herd');
 });
 
-test('ridden: a slap on his head and he takes off; looking up he climbs; crouch and he lands', () => {
+test('ridden: a slap on his head and he takes off; beating the arms, looking up, he climbs; crouch and he lands', () => {
     const { g, A } = fakeGame();
     const herd = withPegasus(A);
     const peg = herd.find((a) => a.pegasus);
@@ -120,13 +120,17 @@ test('ridden: a slap on his head and he takes off; looking up he climbs; crouch 
     A._pegasusToggle(peg);
     assert.ok(peg.riderFly, 'he takes off');
     g.look.set(0, 0.6, -0.8).normalize(); g.character.isRunning = true; g.character.runIntensity = 0.5;
+    // (the author 06.11: the Pegasus flies as the grown wings do — the rider's arms beat: a stroke every 0.4 s here, the arms not hanging)
+    g.character.isArmRaised = () => true;
+    let beat = 0;
+    A._pegasusStroke = (dt) => ((beat += dt) >= 0.4 ? ((beat = 0), 0.8) : 0);
     const y0 = peg.group.position.y, x0 = peg.group.position.clone();
     run(A, 4);
     assert.ok(peg.group.position.y > y0 + 10, `he climbs (${(peg.group.position.y - y0).toFixed(1)} m)`);
     assert.ok(peg.group.position.distanceTo(x0) > 15, 'and flies forward');
     assert.ok(peg.wingOpen > 0.8 && (peg.flyCode & 7) >= 1, 'wings spread');
     assert.ok(Math.abs(g.character.group.position.y - (peg.group.position.y + 1.95 * SPECIES.horse.size + 0.6)) < 1e-6, 'the rider on his back');
-    g.look.set(0, 0, -1); g.character.isCrouching = true;
+    g.look.set(0, 0, -1); g.character.isCrouching = true; A._pegasusStroke = () => 0;
     run(A, 15, () => (!peg.riderFly ? false : undefined));
     assert.ok(!peg.riderFly, 'landed');
     assert.ok(Math.abs(peg.group.position.y - 0.5) < 0.2, 'on his hooves');
@@ -157,4 +161,21 @@ test('the Pegasus is no oil-black horse: many coats, a hair picture, feathers in
     const body = new THREE.Box3().setFromObject(m.userData.body);
     const span = wing.max.x - wing.min.x, len = body.max.z - body.min.z;
     assert.ok(span / len > 1.8 && span / len < 3.2, `span ${span.toFixed(2)} / body ${len.toFixed(2)}`);
+});
+
+test('the wings\' way up: galloping and beating the arms he takes off; standing, the strokes only bring a hint', () => {
+    const { g, A } = fakeGame();
+    const herd = withPegasus(A);
+    const peg = herd.find((a) => a.pegasus);
+    peg.trustBy = 'me'; peg.trustUntil = Date.now() + 60000;
+    g.character.group.position.set(peg.group.position.x + 1, 1.5, peg.group.position.z);
+    A.tryMount();
+    assert.equal(A.riding, peg);
+    let beat = 0;
+    A._pegasusStroke = (dt) => ((beat += dt) >= 0.5 ? ((beat = 0), 0.8) : 0);
+    run(A, 2);
+    assert.ok(!peg.riderFly, 'standing still: no take-off');
+    g.character.isRunning = true; g.character.runIntensity = 1;
+    run(A, 6, () => (peg.riderFly ? false : undefined));
+    assert.ok(peg.riderFly, `a gallop and strokes: up (${(peg.rideU || 0).toFixed(1)} m/s)`);
 });

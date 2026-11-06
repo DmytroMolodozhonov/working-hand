@@ -25,6 +25,9 @@ const frames = (page, n) => page.evaluate((n) => new Promise((res) => {
 }), n);
 const surf = (page) => page.evaluate(() => window.__zns.game.boards.debugState());
 
+/** The software renderer's slow frames: a paddling stroke may take longer than LEGS.STROKE_MS of real time here. */
+const slowStrokes = (page) => page.evaluate(async () => { const { LEGS } = await import('/src/input/LegReader.js'); LEGS.STROKE_MS = 60000; });
+
 test('surfboard: two hands on the rails carry it, it goes onto the sea, one foot on, paddle, catch a wave, stand, lean, fall', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
@@ -132,6 +135,9 @@ test('surfboard: two hands on the rails carry it, it goes onto the sea, one foot
     assert.ok(Math.abs(onDeck.y - (onDeck.deck + 2.09)) < 0.4 && !onDeck.swim && onDeck.legs, JSON.stringify(onDeck));
     // ---- paddle with the right leg (calm water)
     await page.evaluate(async () => { const { makeSwell } = await import('/src/game/SurfWater.js'); window.__makeSwell = makeSwell; window.__zns.game.boards.water.sea = { time: null, sample: () => null }; });
+    // (a stroke is a lift and a plant within LEGS.STROKE_MS of real time; the test's software renderer draws ~1–3 frames a second, so its
+    //  «3 frames up, 3 down» took 3–6 s and only the first stroke counted — the board drifted back. The time scale of this machine, not the rule.)
+    await slowStrokes(page);
     const start = await page.evaluate(() => { const b = window.__zns.game.boards.ride.body; return [b.x, b.z, b.yaw]; });
     for (let i = 0; i < 14; i++) {
         await feed(page, { arms: 'hang', legs: { left: 'stand', right: 'up' } }, 3);
@@ -345,6 +351,7 @@ test('a real camera: «Акцио» brings the board into both hands; getting on
             g.character.group.position.set(p.x - 1.2, -1.4, p.z + 0.5);
             B.log.length = 0;
         });
+        await slowStrokes(page);
         const legs = (l, r) => ({ arms: 'hang', ...cam, legs: { left: l, right: r } });
         await feed(page, legs('stand', 'stand'), 12);
         await feed(page, legs('up', 'stand'), 8);

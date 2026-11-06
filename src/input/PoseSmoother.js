@@ -274,6 +274,7 @@ export class PoseSmoother {
             out.headRotation = mixAngles(from.headRotation, to.headRotation, k);
             out.bodyRotation = mixNum(from.bodyRotation, to.bodyRotation, k);
             out.runIntensity = mixNum(from.runIntensity, to.runIntensity, k);
+            if (to.runEffort != null) out.runEffort = mixNum(from.runEffort ?? to.runEffort, to.runEffort, k);
             for (const key of POINT_KEYS) out[key] = mixPoint(from[key], out[key], key.startsWith('left') ? kSide.left : key.startsWith('right') ? kSide.right : k);
             for (const key of HAND_KEYS) out[key] = mixList(from[key], out[key], key.startsWith('left') ? kSide.left : kSide.right);
             if (to.torso && from.torso) {
