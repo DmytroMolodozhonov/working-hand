@@ -181,7 +181,7 @@
 @media (min-width: 601px) {
     /* the grid: the name and the window's buttons on top; the figure (buttons + panel) — all the rest; the version — a thin line under it */
     #main-menu > .menu-container.ar-shaped {
-        grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-columns: 330px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
         column-gap: 0; row-gap: 10px; padding: 18px 26px 12px 26px;
     }
     #main-menu .ar-shaped > .menu-side { display: contents; }
@@ -194,31 +194,41 @@
         display: flex; flex-direction: column; gap: 0 !important; padding: 0 !important; margin: 0;
         background: none !important; border: none !important; border-radius: 0 !important; overflow: visible; min-height: 0;
     }
-    /* each button is a slice of the figure: an equal share of the height, its right end cut by the arc (clip-path from ArcaneShapes) */
+    /* each button is a slice of the one figure (drawn under them by ArcaneShapes): clear glass over it, cut by the arc at its right */
     #main-menu .ar-shaped .tab-btn {
-        flex: 1 1 0; min-height: 48px; width: 100%; margin: 0; padding: 0 22px; font-size: 1.14rem; letter-spacing: 0.3px;
-        display: flex; align-items: center; gap: 12px; border-radius: 0 !important; transform: none !important;
+        flex: 1 1 0; min-height: 52px; width: 100%; margin: 0; padding: 0 20px 0 26px; border-radius: 0 !important; transform: none !important;
+        display: flex; align-items: center; gap: 14px; text-align: left; white-space: normal;
         color: #d9ceff !important; border: none !important; box-shadow: none !important;
-        background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 40%, rgba(0, 0, 0, 0.18)),
-            linear-gradient(90deg, rgb(40, 25, 100), rgb(26, 15, 66)) !important;
+        background: linear-gradient(90deg, rgba(255, 215, 106, 0.45), rgba(167, 139, 255, 0.28) 50%, rgba(126, 232, 255, 0.0)) 26px 0 / calc(100% - 26px) 1px no-repeat !important;
     }
-    #main-menu .ar-shaped .tab-btn:first-child { border-top-left-radius: 30px !important; }
-    #main-menu .ar-shaped .tab-btn:last-child { border-bottom-left-radius: 30px !important; }
-    /* the seams between the slices: threads of gold fading towards the arc (a background line — the ::after is the hover's sweep of light) */
-    #main-menu .ar-shaped .tab-btn + .tab-btn { background-image:
-        linear-gradient(90deg, rgba(255, 215, 106, 0.8), rgba(167, 139, 255, 0.5) 55%, rgba(126, 232, 255, 0.25)),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 40%, rgba(0, 0, 0, 0.18)),
-        linear-gradient(90deg, rgb(40, 25, 100), rgb(26, 15, 66)) !important;
-        background-size: calc(100% - 14px) 1.5px, auto, auto !important; background-position: 14px 0, 0 0, 0 0 !important; background-repeat: no-repeat !important; }
-    #main-menu .ar-shaped .tab-btn:hover { color: #fff !important; background:
-        radial-gradient(60% 120% at 20% 50%, rgba(167, 139, 255, 0.35), transparent 70%),
-        linear-gradient(90deg, rgb(66, 42, 160), rgb(34, 34, 96)) !important; }
-    #main-menu .ar-shaped .tab-btn.active { color: #fff !important; background:
-        radial-gradient(70% 160% at 10% 0%, rgba(255, 255, 255, 0.35), transparent 50%), var(--ar-gem) !important; }
-    #main-menu .ar-shaped .tab-btn.active::before { left: 8px; }
+    #main-menu .ar-shaped .tab-btn:first-child { background: none !important; }
+    #main-menu .ar-shaped .tab-btn .ar-ico { flex: 0 0 auto; width: 42px; height: 42px; display: grid; place-items: center; font-size: 24px; border-radius: 50%;
+        background: radial-gradient(circle at 40% 35%, rgba(255, 233, 168, 0.22), rgba(123, 92, 255, 0.22) 55%, rgba(10, 6, 30, 0.3));
+        box-shadow: inset 0 0 0 1px rgba(255, 215, 106, 0.35), 0 0 14px rgba(123, 92, 255, 0.25); }
+    #main-menu .ar-shaped .tab-btn .ar-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    #main-menu .ar-shaped .tab-btn .ar-txt b { font-family: var(--ui-font-title); font-weight: 700; font-size: 1.22rem; letter-spacing: 0.3px; color: #efe8ff; }
+    #main-menu .ar-shaped .tab-btn .ar-txt small { max-width: 168px; font-size: 0.8rem; font-weight: 600; color: rgba(201, 188, 255, 0.62); line-height: 1.25; }
+    #main-menu .ar-shaped .tab-btn:hover { background: radial-gradient(80% 90% at 30% 50%, rgba(167, 139, 255, 0.22), transparent 75%) !important; }
+    #main-menu .ar-shaped .tab-btn:hover .ar-ico { box-shadow: inset 0 0 0 1px rgba(255, 215, 106, 0.7), 0 0 18px rgba(255, 215, 106, 0.35); }
+    /* the chosen section: lit from inside — a soft violet light and a thin gold edge on the left, its sign glowing */
+    #main-menu .ar-shaped .tab-btn.active { background:
+        linear-gradient(90deg, rgba(255, 215, 106, 0.95), rgba(255, 215, 106, 0.95)) 0 0 / 3px 100% no-repeat,
+        radial-gradient(90% 120% at 18% 50%, rgba(176, 107, 255, 0.45), rgba(123, 92, 255, 0.18) 55%, transparent 85%) !important; }
+    #main-menu .ar-shaped .tab-btn.active .ar-txt b { color: #ffe9b0; text-shadow: 0 0 12px rgba(255, 210, 120, 0.55); }
+    #main-menu .ar-shaped .tab-btn.active .ar-txt small { color: rgba(240, 230, 255, 0.85); }
+    #main-menu .ar-shaped .tab-btn.active .ar-ico { background: radial-gradient(circle at 40% 35%, #fff4cf, #ffcf6a 40%, #b06bff 100%); box-shadow: 0 0 18px rgba(255, 200, 100, 0.65); }
+    #main-menu .ar-shaped .tab-btn.active::before { display: none; }
     /* the panel: its left edge is the same arc (the stage, drawn by ArcaneShapes); the section's contents on it */
     #main-menu > .menu-container > .ar-stage { position: absolute; z-index: 1; pointer-events: none; overflow: visible; }
     #main-menu > .menu-container.ar-shaped > .tab-content { grid-column: 2; grid-row: 2; position: relative; z-index: 3; padding: 16px 20px 12px 26px; }
 }
 @media (max-width: 600px) { #main-menu > .menu-container > .ar-stage { display: none; } }
+
+/* inside the panel: no frame in a frame in a frame — the cards are only a deeper shade with a hair of light */
+.ar-shaped .tab-content .menu-box, .ar-shaped .tab-content .settings-group, .ar-shaped .tab-content .hero-settings, .ar-shaped .tab-content .mech-card,
+.ar-shaped .tab-content .item-card, .ar-shaped .tab-content .boss-card, .ar-shaped .tab-content .sidebar-section, .ar-shaped .tab-content .map-card:not(.mode-card) {
+    background: rgba(8, 4, 26, 0.34) !important; border: 1px solid rgba(196, 178, 255, 0.13) !important; box-shadow: none !important;
+}
+.ar-shaped .tab-content .menu-box .menu-box, .ar-shaped .tab-content .menu-box .hero-settings, .ar-shaped .tab-content .menu-box .settings-group {
+    background: rgba(255, 255, 255, 0.025) !important; border-color: rgba(255, 255, 255, 0.06) !important;
+}

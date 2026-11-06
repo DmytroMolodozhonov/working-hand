@@ -78,6 +78,36 @@ function makeSvg(cls, kind) {
     return svg;
 }
 
+/** The figure (the main menu): one shape for the buttons and the panel; the buttons' side a shade deeper; the arc between them a seam of light. */
+function makeFigure() {
+    const id = 'ar' + (++uid);
+    const svg = svgEl('svg', { class: 'ar-stage', 'aria-hidden': 'true' });
+    const defs = svgEl('defs');
+    const lin = (gid, x1, y1, x2, y2, stops) => { const g = svgEl('linearGradient', { id: gid, x1, y1, x2, y2 }); for (const [o, c, a] of stops) g.appendChild(svgEl('stop', { offset: o, 'stop-color': c, 'stop-opacity': a })); defs.appendChild(g); };
+    const rad = (gid, cx, cy, r, stops) => { const g = svgEl('radialGradient', { id: gid, cx, cy, r }); for (const [o, c, a] of stops) g.appendChild(svgEl('stop', { offset: o, 'stop-color': c, 'stop-opacity': a })); defs.appendChild(g); };
+    lin(id + 'f', '0', '0', '0.25', '1', [['0', '#24165c', 0.72], ['1', '#0d0828', 0.8]]);
+    rad(id + 'a', '0.32', '0.5', '0.5', [['0', '#b06bff', 0.20], ['1', '#b06bff', 0]]);
+    rad(id + 'b', '0.95', '0.05', '0.55', [['0', '#7ee8ff', 0.10], ['1', '#7ee8ff', 0]]);
+    lin(id + 'l', '0', '0', '1', '0', [['0', '#0a0620', 0.55], ['1', '#160d40', 0.35]]);
+    lin(id + 's', '0', '0', '0', '1', [['0', '#ffd76a', 0.0], ['0.12', '#ffd76a', 0.9], ['0.5', '#c9a4ff', 1], ['0.88', '#7ee8ff', 0.9], ['1', '#7ee8ff', 0.0]]);
+    lin(id + 'r', '0', '0', '1', '1', [['0', '#ffd76a', 0.55], ['0.4', '#a78bff', 0.45], ['1', '#7ee8ff', 0.35]]);
+    const cp = svgEl('clipPath', { id: id + 'c' }); const cpp = svgEl('path'); cp.appendChild(cpp); defs.appendChild(cp);
+    svg.appendChild(defs);
+    const P = (a) => { const e = svgEl('path', a); svg.appendChild(e); return e; };
+    svg._shape = [P({ fill: `url(#${id}f)` }), P({ fill: `url(#${id}a)` }), P({ fill: `url(#${id}b)` }), cpp];
+    svg._left = P({ fill: `url(#${id}l)`, 'clip-path': `url(#${id}c)` });
+    svg._arcGlow = P({ fill: 'none', stroke: `url(#${id}s)`, 'stroke-width': '9', 'stroke-opacity': '0.22', 'stroke-linecap': 'round' });
+    svg._arc = P({ fill: 'none', stroke: `url(#${id}s)`, 'stroke-width': '2', 'stroke-linecap': 'round' });
+    svg._rim = P({ fill: 'none', stroke: `url(#${id}r)`, 'stroke-width': '1.4' });
+    return svg;
+}
+
+/** What each section is, in a few words under its name (the tall buttons say what is behind them). */
+const CAPTIONS = {
+    'tab-game': 'Свой мир — продолжить или начать новый', 'tab-mp': 'Вместе с друзьями', 'tab-character': 'Лицо, волосы, одежда героя',
+    'tab-spells': 'Заклинания, зелья, пентаграммы', 'tab-mechanics': 'Как устроен мир', 'tab-settings': 'Звук, камера, графика, голос',
+};
+
 const ringMask = (w, h, d) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='${NS}' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'><path d='${d}' fill='none' stroke='#000' stroke-width='3.2' stroke-linejoin='round'/></svg>`)}")`;
 
 export class ArcaneShapes {
@@ -97,7 +127,20 @@ export class ArcaneShapes {
             const it = { frame, seed: 1 + this.items.size * 2.7, stage: null, content: null };
             if (el.matches('#main-menu > .menu-container')) {
                 it.content = el.querySelector(':scope > .tab-content');
-                if (it.content) { it.stage = makeSvg('ar-stage', 'stage'); el.insertBefore(it.stage, it.content); this.ro.observe(it.content); }
+                if (it.content) { it.stage = makeFigure(); el.insertBefore(it.stage, it.content); this.ro.observe(it.content); }
+                // the buttons: a big sign, the name and a line of what is behind it
+                for (const b of el.querySelectorAll('.tabs .tab-btn')) {
+                    if (b.querySelector('.ar-txt')) continue;
+                    const t = b.textContent.trim(), m = t.match(/^(\S+)\s+(.*)$/u);
+                    const ico = m && !/[А-Яа-яA-Za-z]/.test(m[1]) ? m[1] : '', name = ico ? m[2] : t;
+                    b.textContent = '';
+                    if (ico) { const i = document.createElement('span'); i.className = 'ar-ico'; i.textContent = ico; b.appendChild(i); }
+                    const tx = document.createElement('span'); tx.className = 'ar-txt';
+                    const n = document.createElement('b'); n.textContent = name; tx.appendChild(n);
+                    const cap = CAPTIONS[b.dataset.tab];
+                    if (cap) { const sm = document.createElement('small'); sm.textContent = cap; tx.appendChild(sm); }
+                    b.appendChild(tx);
+                }
             }
             this.items.set(el, it);
             this.ro.observe(el);
@@ -110,7 +153,7 @@ export class ArcaneShapes {
         if (!it) return;
         const w = el.offsetWidth, h = el.offsetHeight;
         if (w < 40 || h < 40) return;
-        const d = outline(w, h, { inset: 3, rad: Math.min(46, h * 0.08), amp: 3.2, seed: it.seed, step: 10 });
+        const d = outline(w, h, { inset: 3, rad: Math.min(40, h * 0.07), amp: 1.1, seed: it.seed, step: 10 }); // (a calm living edge — no wobble)
         it.frame.setAttribute('viewBox', `0 0 ${w} ${h}`);
         it.frame.setAttribute('width', w); it.frame.setAttribute('height', h);
         for (const p of it.frame._paths) p.setAttribute('d', d);
@@ -127,23 +170,27 @@ export class ArcaneShapes {
             if (!wide) { for (const b of btns) b.style.clipPath = ''; return; }
             const yT = Math.min(tabs.offsetTop, c.offsetTop), yB = Math.max(tabs.offsetTop + tabs.offsetHeight, c.offsetTop + c.offsetHeight);
             const xE = tabs.offsetLeft + tabs.offsetWidth; // (where the arc meets the top and the bottom)
-            const B = Math.min(96, tabs.offsetWidth * 0.32); // (its depth in the middle)
-            const mid = (yT + yB) / 2, half = (yB - yT) / 2, GAP = 5;
+            const B = Math.min(70, tabs.offsetWidth * 0.24); // (its depth in the middle)
+            const mid = (yT + yB) / 2, half = (yB - yT) / 2;
             const arcX = (y) => { const u = Math.max(-1, Math.min(1, (y - mid) / half)); return xE - B * Math.sqrt(1 - u * u); };
             // the buttons: each cut along the arc (its own clip-path in its own coordinates)
             for (const b of btns) {
                 const bt = b.offsetTop, bh = b.offsetHeight, bl = b.offsetLeft, pts = ['0px 0px'];
-                for (let k = 0; k <= 10; k++) { const y = bt + bh * k / 10; pts.push(`${(arcX(y) - GAP - bl).toFixed(1)}px ${(y - bt).toFixed(1)}px`); }
+                for (let k = 0; k <= 10; k++) { const y = bt + bh * k / 10; pts.push(`${(arcX(y) - 1 - bl).toFixed(1)}px ${(y - bt).toFixed(1)}px`); }
                 pts.push(`0px ${bh}px`);
                 b.style.clipPath = `polygon(${pts.join(',')})`;
             }
-            // the panel: from the arc to the right edge of the section, top and bottom with the buttons
-            const L = xE - B + GAP, R = c.offsetLeft + c.offsetWidth, sw = R - L + 2, sh = yB - yT;
-            const lx = (yl) => arcX(yl + yT) + GAP - L;
-            const ds = outline(sw, sh, { inset: 1, rad: 30, amp: 1.6, seed: it.seed + 5, left: lx, step: 8 });
+            // the figure: one calm shape round the buttons and the panel; the buttons' side deeper; the arc a seam of light
+            const L = tabs.offsetLeft, R = c.offsetLeft + c.offsetWidth, sw = R - L, sh = yB - yT;
+            const ds = outline(sw, sh, { inset: 1, rad: 26, amp: 0, step: 8 });
+            const arcPts = []; for (let k = 0; k <= 40; k++) { const y = yT + sh * k / 40; arcPts.push(`${(arcX(y) - L).toFixed(1)} ${(y - yT).toFixed(1)}`); }
+            const arcD = 'M' + arcPts.join(' L');
             Object.assign(it.stage.style, { left: L + 'px', top: yT + 'px', width: sw + 'px', height: sh + 'px' });
             it.stage.setAttribute('viewBox', `0 0 ${sw} ${sh}`);
-            for (const p of it.stage._paths) p.setAttribute('d', ds);
+            for (const p of it.stage._shape) p.setAttribute('d', ds);
+            it.stage._left.setAttribute('d', `M0 0 L${arcPts.join(' L')} L0 ${sh} Z`);
+            it.stage._arcGlow.setAttribute('d', arcD); it.stage._arc.setAttribute('d', arcD);
+            it.stage._rim.setAttribute('d', ds);
         }
     }
 }
