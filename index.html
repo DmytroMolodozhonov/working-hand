@@ -65,6 +65,7 @@
                 <button class="pause-tab" data-pause-tab="pause-bosses" role="tab">👑 Боссы</button>
                 <button class="pause-tab" data-pause-tab="pause-settings" role="tab">⚙ Общие настройки</button>
                 <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Магия</button>
+                <button class="pause-tab" data-pause-tab="pause-search" role="tab">🔍 Поиск</button>
             </div>
             <div id="pause-main" class="pause-pane active">
                 <div class="mu-seal" aria-hidden="true"><i></i></div>
@@ -86,6 +87,8 @@
                 <div id="pause-magic-potions" class="magic-layout" hidden><div id="pause-potion-cats" class="sub-tabs"></div><div id="pause-potions-grid" class="items-grid"></div></div>
                 <div id="pause-magic-pentagrams" class="magic-layout" hidden><div id="pause-pentagram-cats" class="sub-tabs"></div><div id="pause-pentagrams-grid" class="items-grid"></div></div>
             </div>
+            <!-- «🔍 Поиск»: spells, potions, pentagrams, lore, bosses, things (CodexSearch.js) -->
+            <div id="pause-search" class="pause-pane"></div>
             <div class="pause-hint">Мир сохранится сам. Escape — продолжить игру</div>
         </div>
     </div>
@@ -144,6 +147,7 @@
         <div class="menu-container">
             <!-- the window's own bar: drags the window; its buttons on the right, as in Windows (✕ last) -->
             <div class="menu-top">
+                <input id="menu-search" class="menu-search" type="search" placeholder="🔍 Поиск" autocomplete="off" spellcheck="false" aria-label="Поиск по заклинаниям, зельям и лору">
                 <div class="win-controls" role="group" aria-label="Окно игры">
                     <button id="win-min" class="win-btn" title="Свернуть" aria-label="Свернуть">—</button>
                     <button id="win-full" class="win-btn" title="Во весь экран" aria-label="Во весь экран">⛶</button>
@@ -165,6 +169,7 @@
                     <button class="tab-btn" data-tab="tab-character">🧙 Персонаж</button>
                     <button class="tab-btn" data-tab="tab-spells">✨ Магия</button>
                     <button class="tab-btn" data-tab="tab-mechanics">🧩 Механика игры</button>
+                    <button class="tab-btn" data-tab="tab-search" hidden aria-hidden="true">🔍 Поиск</button> <!-- (no entry in the list: the search line in the top bar opens this page) -->
                     <button class="tab-btn" data-tab="tab-settings">⚙️ Общие настройки</button>
                 </div>
                 <div id="game-version-top" class="game-version-top"></div>
@@ -326,6 +331,9 @@
                     <div id="bosses-list" class="bosses-list" hidden></div>
                     <div id="items-list" hidden><div id="item-cats" class="sub-tabs"></div><div id="items-grid" class="items-grid"></div></div>
                 </div>
+
+                <!-- SEARCH: spells, potions, pentagrams, lore (CodexSearch.js) -->
+                <div id="tab-search" class="tab-pane"></div>
 
                 <!-- SETTINGS with sub-tabs -->
                 <div id="tab-settings" class="tab-pane">

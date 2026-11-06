@@ -1975,3 +1975,17 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #portal-loader .pl-lore.fade { opacity: 0; }
 #portal-loader.arrive .pl-text { opacity: 0; }
 @keyframes pl-in { 0% { opacity: 0; transform: translateY(18px); letter-spacing: 0.3em; } 60% { opacity: 0; } 100% { opacity: 1; transform: none; } }
+
+/* «🔍 Поиск» (CodexSearch.js): a line, the kinds, the cards found */
+.search-bar { padding: 4px 0 10px; }
+.search-input { width: 100%; box-sizing: border-box; padding: 12px 16px; font: inherit; font-size: 1.05rem; color: #eef1f6; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 12px; outline: none; }
+.search-input:focus { border-color: #3498db; background: rgba(255, 255, 255, 0.12); }
+.search-kinds { margin-bottom: 8px; flex-wrap: wrap; }
+.search-note { color: #9aa3b2; font-size: 0.85rem; margin: 2px 0 10px; }
+.search-results { height: auto; overflow: visible; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.search-results .mech-card { grid-column: 1 / -1; }
+
+/* the search line in the main menu's top bar (small; the page it opens is CodexSearch.js) */
+.menu-top .menu-search { width: 190px; margin-left: auto; margin-right: 12px; padding: 4px 12px; font: inherit; font-size: 0.85rem; color: #eef1f6; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 14px; outline: none; transition: width 0.15s; }
+.menu-top .menu-search:focus { width: 280px; border-color: #3498db; background: rgba(255, 255, 255, 0.13); }
+.tab-btn[hidden] { display: none !important; }

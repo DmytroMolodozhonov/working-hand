@@ -24,6 +24,7 @@ import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderMagicTab, renderItemsTab, renderMechanicsTab, renderBossesTab, SPELLS } from './ui/Codex.js';
+import { renderSearchTab, setSearchQuery } from './ui/CodexSearch.js';
 import { PlayerSheetView } from './ui/PlayerSheet.js';
 import { PlayersTabView } from './ui/PlayersTab.js';
 import { makePlayerPreview } from './ui/PlayerPreview.js';
@@ -224,10 +225,18 @@ tabBtns.forEach((btn) => {
         if (btn.dataset.tab === 'tab-game') { updateGameMapList(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-mechanics') renderMechanicsTab();
         if (btn.dataset.tab === 'tab-spells') renderMagicTab();
+        if (btn.dataset.tab === 'tab-search') renderSearchTab($('tab-search'), null, true, $('menu-search'));
         if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-character') { window.__charEditor = window.__charEditor || new CharacterEditor($('tab-character')); window.__charEditor.show(); }
         else window.__charEditor?.hide();
     });
+});
+// «🔍» in the window's top bar: typing opens the search page and fills it (the pause menu has its own line in its «Поиск» tab)
+const menuSearch = $('menu-search');
+menuSearch?.addEventListener('input', () => {
+    setSearchQuery(menuSearch.value);
+    const tabBtn = document.querySelector('[data-tab="tab-search"]');
+    if (tabBtn.classList.contains('active')) renderSearchTab($('tab-search'), null, false, menuSearch); else tabBtn.click();
 });
 // «Механика игры» sub-tabs: «Как игра работает» / «Боссы»
 document.querySelectorAll('#tab-mechanics [data-mech]').forEach((btn) => {
@@ -1620,12 +1629,17 @@ function showPauseTab(id) {
     if (id === 'pause-settings') openGeneralSettings(); else closeGeneralSettings();
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
-    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses' || id === 'pause-player' || id === 'pause-settings'); // (the spell book and the bosses need room)
+    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-search' || id === 'pause-bosses' || id === 'pause-player' || id === 'pause-settings'); // (the spell book and the bosses need room)
     // (outside Creative each spell is marked: ✅ its first-success mana had, ☐ +N not yet — Mana.spellsUsed)
     if (id === 'pause-spells') {
         const cr = game?.config?.mode === 'creative';
         renderMagicTab({ bar: 'pause-magic-sections', spells: 'pause-magic-spells', potions: 'pause-magic-potions', pents: 'pause-magic-pentagrams', cats: 'pause-spell-cats', grid: 'pause-spells-grid', pgrid: 'pause-pentagrams-grid', vgrid: 'pause-potions-grid', pcats: 'pause-pentagram-cats', vcats: 'pause-potion-cats' },
             cr ? null : (spell) => !!game?.canSaySpell?.(spell), cr ? null : (spell) => !!game?.mana?.spellsUsed?.has(spell), cr || !game?.pentagranium ? null : new Set(game.pentagranium.known() || []));
+    }
+    // «🔍 Поиск»: the same knowledge as the spell book (outside Creative: only the spells the hero can say, the pentagrams it knows)
+    if (id === 'pause-search') {
+        const cr = game?.config?.mode === 'creative';
+        renderSearchTab($('pause-search'), cr ? null : { can: (spell) => !!game?.canSaySpell?.(spell), used: (spell) => !!game?.mana?.spellsUsed?.has(spell), known: game?.pentagranium ? new Set(game.pentagranium.known() || []) : null });
     }
     // (the achievements are only the bosses: who is beaten in THIS world is ticked there — the author: no separate tab)
     if (id === 'pause-bosses') renderBossesTab('pause-bosses-list', game?.achievements?.done || null);

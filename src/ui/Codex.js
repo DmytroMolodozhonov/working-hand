@@ -393,7 +393,7 @@ export const MECHANICS = [
 
 
 /** The spell of a card (and of its Maxima: null — none of its own). */
-const cardSpell = (s) => matchSpell(s.name);
+export const cardSpell = (s) => matchSpell(s.name);
 function maximaOf(s) {
     const base = cardSpell(s);
     if (!s.max || !base) return null;
@@ -431,7 +431,7 @@ function manaMark(spell, used) {
         : `<span class='learn-badge mana-wait' title='Произнесите его удачно хотя бы раз — получите ячейки маны'>☐ +${n} к мане</span>`;
 }
 
-function card(item, can = null, used = null) {
+export function card(item, can = null, used = null) {
     const el = document.createElement('div');
     el.className = 'item-card';
     const stat = (label, v) => (v && v !== '—' ? `<div class='stat-row'><span>${label}:</span><span class='stat-val'>${v}</span></div>` : '');
@@ -636,7 +636,7 @@ export function pentagramCards(known = null) {
 export const PENT_CATEGORIES = [{ id: 'all', name: '✨ Все' }, { id: 'light', name: '☀ Светлые' }, { id: 'dark', name: '🜏 Тёмные' }];
 export const POTION_CATEGORIES = [{ id: 'all', name: '✨ Все' }, { id: 'recipe', name: '🧪 Рецепты зелий' }, { id: 'brew', name: '🫕 Как варить' }, { id: 'ingredient', name: '🌿 Ингредиенты' }];
 
-function pentagramCardHtml(c) {
+export function pentagramCardHtml(c) {
     const picture = c.learned && c.svg
         ? `<div class="pent-pic ${c.dark ? 'dark' : 'light'}">${c.svg}</div>`
         : `<div class="pent-pic locked"><span class="pent-q">?</span></div>`;
