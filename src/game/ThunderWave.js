@@ -36,6 +36,7 @@ export const THUNDER_TARGETS = {
     livingTrees: '−10 (thunder is like lightning: MIGHTY_ON_TREES)', bookBirds: 'knocked down',
     iceCastle: '−10 to the queen, her monsters and every snowman (a scroll spell: IceQueen.iceDamage)',
     vampire: '−10 to Count Sracula (his own scale: VampireRules.vampDamage) and to his skeleton guards (bones: Sailors.pirateBoneDamage); his bats in the fan die',
+    titan: '−10 to a titan as any (its own scale: TitanRules; the living storm on Jupiter takes nothing from thunder)',
     roof: 'ONE rule for everyone (roofAbove): a solid roof/ceiling within ROOF_REACH over the point (house, castle, tower, cave, canopy, a floor above) takes the bolt — it strikes the roof, nobody under it is hurt or shoved (players, zombies, people, animals, spider, dragons, Queen, trees alike); the roof of the Temple of the Gods and enchanted stone are roofs too; a hole in the roof lets it through; someone on top of the roof is struck. Not a divine spell, so a roof stops it. Below a ship\'s deck: the ship has no roof in collision — the deck is open to it (no change)',
     world: 'glass breaks, carts are chipped (the ray of the old fan: Game.birdRay); walls and mountains stop it',
 };
@@ -113,6 +114,7 @@ function strike(game, kind, id, at, o, by) {
         case 'g': { const w = game.gargoyles?.byId(id); if (w) game.gargoyles.hit(w, dmg, K, by); break; } // (an infernal gargoyle: stone — hurt by it, GargoyleRules.TARGETS.Thunderwave)
         case 'I': { const c = game.iceCastle?.byId(id); if (c) game.iceCastle.hit(c, dmg, K, by); break; }
         case 'V': { const c = game.vampire?.byId(id); if (c) game.vampire.hit(c, dmg, K, by); break; } // (Count Sracula, a guard of his)
+        case 'W': { const c = game.titans?.byId(id); if (c) game.titans.hit(c, dmg, K, by); break; } // (a titan)
         default: break;
     }
 }

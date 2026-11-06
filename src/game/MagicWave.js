@@ -47,6 +47,7 @@ export function eachBody(g, fn, at = null) {
     for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall' && b.model) fn('book', b, b.model.position);
     for (const c of g.iceCastle?.list || []) if (!c.dead && c.model) fn('ice', c, c.model.position); // (the Ice Castle: IceQueen.iceDamage)
     for (const c of g.vampire?.targets?.() || []) fn('vampire', c, c.kind === 'count' ? c.pos : c.model.group.position); // (Count Sracula, his guards: VampireLife.hit)
+    for (const c of g.titans?.targets?.() || []) fn('titan', c, c.pos); // (a titan: Titans.hit)
     for (const p of g.plants?.near || []) if (!p.dead) fn('plant', p, new THREE.Vector3(p.x, p.y + 2, p.z)); // (telewilpins, carnivorous heads: PlantLife.plantDamage)
 }
 
@@ -77,6 +78,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'book': g.books?.hitAt(pos, 0.3, by, null); break;
         case 'ice': g.iceCastle?.hit(c, dmg, spell, by); break;
         case 'vampire': g.vampire?.hit(c, dmg, spell, by); break;
+        case 'titan': g.titans?.hit(c, dmg, spell, by); break;
         case 'plant': g.plants?.hit(c, dmg, spell, by); break;
         default: break;
     }

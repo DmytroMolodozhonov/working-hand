@@ -66,6 +66,16 @@ export const ACHIEVEMENTS = [
     { id: 'devilSlayer', mana: 500, icon: '⚔️', title: 'Победитель Дьяволоса', desc: 'Уничтожить Дьяволоса — то, что не под силу ни одному заклинанию' }, // (Diabolos.pierce: только божественный меч)
     { id: 'devilWoke', boss: false, extra: true, mana: 100, icon: '😈', title: 'Разбудил дьявола', desc: 'Потревожить огромного прикованного дьявола в аду так, чтобы он проснулся' },
     // (the divine sword's first making: `extra` — not needed for «Высший маг»; its secret is never told: the line says only what was done)
+    // the titans (Titans.js, TitanRules.js — the author 06.11): «1000 ячеек маны — это вся награда» (`noRegen`: no faster mana either);
+    // not for «Высший маг» (`extra`), the owl does not lead to other planets (`boss: false`). All seven — «godhood»: 10 000 more and immortality (Godhood.js)
+    { id: 'titan_mercury', boss: false, extra: true, noRegen: true, titan: true, mana: 1000, icon: '⚙️', title: 'Железный титан', desc: 'Победить Железного титана на Меркурии' },
+    { id: 'titan_venus', boss: false, extra: true, noRegen: true, titan: true, mana: 1000, icon: '🔥', title: 'Огненный титан', desc: 'Победить Огненного титана на Венере' },
+    { id: 'titan_mars', boss: false, extra: true, noRegen: true, titan: true, mana: 1000, icon: '🪱', title: 'Песчаный змей', desc: 'Победить Песчаного змея на Марсе' },
+    { id: 'titan_jupiter', boss: false, extra: true, noRegen: true, titan: true, mana: 1000, icon: '🌪️', title: 'Титан-вихрь', desc: 'Победить Титана-вихря на Юпитере' },
+    { id: 'titan_saturn', boss: false, extra: true, noRegen: true, titan: true, mana: 1000, icon: '🪨', title: 'Каменный титан', desc: 'Победить Каменного титана на Сатурне' },
+    { id: 'titan_uranus', boss: false, extra: true, noRegen: true, titan: true, mana: 1000, icon: '🌑', title: 'Титан-тень', desc: 'Победить Титана-тень на Уране' },
+    { id: 'titan_neptune', boss: false, extra: true, noRegen: true, titan: true, mana: 1000, icon: '🧊', title: 'Ледяной титан', desc: 'Победить Ледяного титана на Нептуне' },
+    { id: 'godhood', boss: false, extra: true, noRegen: true, mana: 10000, icon: '☀️', title: 'Стал богом', desc: 'Победить всех семерых титанов — бессмертие и путь в Зал Солнца' },
     { id: 'divineBlade', boss: false, extra: true, mana: 100, icon: '⚔️', title: 'Божественный клинок', desc: 'Создать божественный меч' }, // (UnitedPower — DivineSword.js)
 ];
 /** Tarons killed for «Охотник на Таронов» (TaronRules.TARON.ACHIEVEMENT.kills). */
@@ -80,7 +90,8 @@ export function achBonus(done = []) {
     const ids = ACH_IDS.filter((id) => [...done].includes(id));
     const high = HIGH_IDS.every((id) => ids.includes(id));
     const mana = ids.reduce((s, id) => s + ACH_BY_ID[id].mana, 0) + (high ? ACH.HIGH_MANA : 0);
-    return { mana, regen: 1 + ids.length * ACH.REGEN + (high ? ACH.HIGH_REGEN : 0), high };
+    const regs = ids.filter((id) => !ACH_BY_ID[id].noRegen).length; // (the titans' only reward is the cells — no faster mana)
+    return { mana, regen: 1 + regs * ACH.REGEN + (high ? ACH.HIGH_REGEN : 0), high };
 }
 
 /**
@@ -291,7 +302,7 @@ export class Achievements {
         const g = this.game;
         if (!quiet) {
             const a = ACH_BY_ID[kind];
-            this._banner(`${a.icon} Ачивка: ${a.title}`, `+${a.mana} ячеек маны · мана восстанавливается на ${Math.round(ACH.REGEN * 100)}% быстрее · ${this.count} из ${ACH_IDS.length}`);
+            this._banner(`${a.icon} Ачивка: ${a.title}`, a.noRegen ? `+${a.mana} ячеек маны · ${this.count} из ${ACH_IDS.length}` : `+${a.mana} ячеек маны · мана восстанавливается на ${Math.round(ACH.REGEN * 100)}% быстрее · ${this.count} из ${ACH_IDS.length}`);
             g.sound?.playMagic?.(null, 1);
             this._sparkle(0xffd36e, 40);
             g.sync?.ach?.({ a: 'got', k: kind, n: this.count, hi: this.high ? 1 : 0 });

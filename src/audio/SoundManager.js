@@ -20,6 +20,7 @@ import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
 import { synthGhost, GHOST_SOUND_IDS } from './GhostSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthVampire, VAMPIRE_SOUNDS } from './VampireSounds.js';
+import { synthTitan, TITAN_SOUNDS } from './TitanSounds.js';
 import { synthDragon, DRAGON_SOUNDS } from './DragonSounds.js';
 import { synthDevil, DEVIL_SOUNDS } from './DiabolosSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
@@ -790,6 +791,7 @@ export class SoundManager {
             // (the infernal gargoyles and their ritual — Gargoyles.js: growls, shrieks, wings, bites, stone falling apart, the hellfire's swell)
             ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
             ...VAMPIRE_SOUNDS.map((k) => ['vamp_' + k, () => synthVampire(this.context, k)]),
+            ...TITAN_SOUNDS.map((k) => ['titan_' + k, () => synthTitan(this.context, k)]),
             // (the dragon in a fight — Dragons.js: steps, the landing, wing-beats, the roar, bite, claws, tail)
             ...DRAGON_SOUNDS.map((k) => ['drg_' + k, () => synthDragon(this.context, k)]),
             // (Дьяволос — Diabolos.js: храп, топот, цепь, рёв, огонь, шары, хлопок, тема босса — хор и барабаны)
@@ -2215,6 +2217,15 @@ export class SoundManager {
         if (!this.sounds[key]) { if (!VAMPIRE_SOUNDS.includes(kind)) return; this.sounds[key] = synthVampire(this.context, kind); }
         const far = kind === 'swarm' || kind === 'crumble' ? 70 : kind === 'laugh' || kind === 'turn' ? 45 : kind === 'squeak' || kind === 'flap' ? 14 : 24;
         this._playAt(this.sounds[key], position, volume, far, kind === 'squeak' ? 0.85 + Math.random() * 0.3 : 0.95 + Math.random() * 0.1);
+    }
+
+    /** The titans (Titans.js): their roar, steps, blows, fire, ice, thunder… — heard far (they are huge). */
+    playTitan(position, kind = 'roar', volume = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'titan_' + kind;
+        if (!this.sounds[key]) { if (!TITAN_SOUNDS.includes(kind)) return; this.sounds[key] = synthTitan(this.context, kind); }
+        const far = kind === 'thunder' || kind === 'death' || kind === 'roar' ? 400 : kind === 'step' || kind === 'slam' || kind === 'rumble' ? 220 : 120;
+        this._playAt(this.sounds[key], position, volume, far, 0.92 + Math.random() * 0.12);
     }
 
     /** The dragon in a fight (Dragons.js): 'step' | 'land' | 'wing' | 'roar' | 'bite' | 'claw' | 'tail' at a place — made ahead (prewarmStep). */

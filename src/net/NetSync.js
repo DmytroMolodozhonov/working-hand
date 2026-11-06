@@ -880,6 +880,7 @@ export class NetSync {
     ice(m) { this.net.send({ t: 'ice', ...m }); }
     /** Count Sracula's castle (VampireLife.js): the host's state, a guest's blows, the host's bites on a guest. */
     vamp(m) { this.net.send({ t: 'vamp', ...m }); }
+    titan(m) { this.net.send({ t: 'titan', ...m }); } // (the titans: Titans.js)
 
     // ---- «Alive»: living trees (the host moves them), servants of «Брейнрот»
     livingTrees(list, servants) { if (this.net.isHost) this.net.send({ t: 'ltree', l: list, sv: servants }); }
@@ -1205,6 +1206,7 @@ export class NetSync {
             case 'dvl': case 'dvb': g.diabolos?.onNet(m, m.from, this.net.isHost); break; // (Дьяволос: Diabolos.js)
             case 'arn': g.arenaDuels?.onNet(m, m.from); break; // (the duel arenas: ArenaDuels.js)
             case 'ice': g.iceCastle?.onNet(m, m.from); break;
+            case 'titan': g.titans?.onNet(m, m.from); break; // (the titans: Titans.js)
             case 'vamp': g.vampire?.onNet(m, m.from); break; // (Count Sracula's castle: VampireLife.js) // (the Ice Castle: IceQueen.js)
             case 'bbd': g.blackbeard?.onNet(m, this.net.isHost); break; // (the black ship: its grapnels, the plank, the pistols — Blackbeard.js)
             case 'phx': g.phoenixes?.onNet(m, this.net.isHost); break; // (phoenixes: Phoenixes.js)
