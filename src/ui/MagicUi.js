@@ -16,7 +16,7 @@
 
 import { uiSound } from '../audio/MagicSound.js';
 import { PALETTES } from './PortalLoader.js';
-import { ArcaneShapes } from './ArcaneShapes.js';
+import { arcaneShapes } from './ArcaneShapes.js';
 import { MagicPainter, UI_PAL } from './MagicPainter.js';
 
 const MENUS = '#main-menu, #pause-menu, #death-screen, #game-over, #victory-screen';
@@ -120,7 +120,7 @@ export class MagicUi {
 
     _sync() {
         this._rings();
-        try { (this.shapes ||= new ArcaneShapes()).apply(); } catch (e) { console.warn('ArcaneShapes:', e?.message || e); }
+        try { (this.shapes ||= arcaneShapes()).apply(); } catch (e) { console.warn('ArcaneShapes:', e?.message || e); }
         const host = this._which();
         if (host !== this.host) {
             this.host = host;

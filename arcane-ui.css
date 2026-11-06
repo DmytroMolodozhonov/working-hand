@@ -253,7 +253,7 @@
     #main-menu .ar-shaped .tab-pane.ar-banded > * { grid-column: 2; min-width: 0; }
     #main-menu .ar-shaped .tab-pane.ar-banded > .ar-band {
         grid-column: 1; grid-row: 1 / span 40; position: sticky; top: 0; align-self: start;
-        display: flex; flex-direction: column; margin: -16px 0 -12px; /* (from the panel's top to its bottom) */
+        display: flex; flex-direction: column; margin: 0; overflow: hidden; /* (its height — the panel's visible height, ArcaneShapes) */
         background: linear-gradient(90deg, rgba(10, 6, 30, 0.0), rgba(10, 6, 30, 0.35));
         border-right: 1px solid transparent; border-image: linear-gradient(180deg, transparent, rgba(255, 215, 106, 0.45), rgba(126, 232, 255, 0.35), transparent) 1;
     }
@@ -273,7 +273,8 @@
             linear-gradient(90deg, rgba(56, 36, 132, 0.55), rgba(30, 18, 76, 0.35)) !important;
     }
     /* the section's own parts (Заклинания / Зелья / Пентаграммы, Как игра работает / Боссы / Предметы): bigger, in the title's letters */
-    #main-menu .ar-band > .ar-band-group:first-child .sub-tab { flex-grow: 1.35; font-family: var(--ui-font-title); font-size: 1.12rem; color: #f0e6ff;
+    /* (the section's own parts never change their size: clicking «Зелья» must not move «Пентаграммы» — the author: «размер меняется каждый раз, я путаюсь») */
+    #main-menu .ar-band > .ar-band-group:first-child .sub-tab { flex: 0 0 64px; font-family: var(--ui-font-title); font-size: 1.12rem; color: #f0e6ff;
         background: linear-gradient(90deg, rgba(80, 52, 170, 0.6), rgba(40, 24, 96, 0.45)) !important; }
     #main-menu .ar-band > .ar-band-group:first-child + .ar-band-group .sub-tab:first-child { box-shadow: inset 0 2px 0 rgba(255, 215, 106, 0.85) !important; }
     #main-menu .ar-band .sub-tab:hover { color: #fff; background: radial-gradient(90% 120% at 30% 50%, rgba(167, 139, 255, 0.4), rgba(56, 36, 132, 0.4) 80%) !important; }
@@ -302,3 +303,13 @@
 :is(#main-menu, #pause-menu) .items-grid .item-card .item-desc { font-size: 0.92rem; line-height: 1.5; margin-bottom: 6px; flex-grow: 0; }
 :is(#main-menu, #pause-menu) .items-grid .item-card .item-learn { margin-bottom: 6px; }
 :is(#main-menu, #pause-menu) .items-grid .item-card:hover { transform: translateY(-2px); }
+
+/* steady: the scroll bar's place is always kept (its coming and going used to shift the section by its width) */
+#main-menu .ar-shaped > .tab-content { scrollbar-gutter: stable; }
+/* a wide card's lines sit at its top (a row of cards is as tall as its tallest one — the spare height goes below, not between the lines) */
+:is(#main-menu, #pause-menu) .items-grid .item-card { align-content: start; }
+:is(#main-menu, #pause-menu) .items-grid .item-card > .item-stats { margin-top: 8px; }
+
+/* the old look never shows: the menu waits (hidden) for its shapes — arcaneBoot.js gives them at once; if something fails it shows anyway */
+#main-menu > .menu-container:not(.ar-shaped) { visibility: hidden; animation: ar-show 0s linear 2.5s forwards; }
+@keyframes ar-show { to { visibility: visible; } }

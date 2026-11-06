@@ -227,8 +227,9 @@ export class ArcaneShapes {
         }
         // its height: the section's visible height (it stays while the section scrolls)
         const c = it.content, cs = getComputedStyle(pane);
-        const vis = (pane.scrollHeight > pane.clientHeight + 2 ? pane.clientHeight : c.clientHeight) - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-        band.style.height = Math.max(200, vis) + 'px';
+        const ccs = getComputedStyle(c);
+        const vis = c.clientHeight - parseFloat(ccs.paddingTop) - parseFloat(ccs.paddingBottom) - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+        band.style.height = Math.max(200, Math.floor(vis)) + 'px'; // (the panel's visible height: the band never runs past its bottom)
         // each slice: its left edge is the arc (the mirror of the main buttons' right ends)
         const er = el.getBoundingClientRect();
         for (const b of band.querySelectorAll('button')) {
@@ -301,3 +302,6 @@ export class ArcaneShapes {
         }
     }
 }
+
+/** The one set of shapes of the page (made at once by arcaneBoot.js — the menu never shows its old look — and used again by MagicUi). */
+export function arcaneShapes() { return (globalThis.__znsArcaneShapes ||= new ArcaneShapes()); }
