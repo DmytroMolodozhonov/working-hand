@@ -108,6 +108,17 @@ const CAPTIONS = {
     'tab-spells': 'Заклинания, зелья, пентаграммы', 'tab-mechanics': 'Как устроен мир', 'tab-settings': 'Звук, камера, графика, голос',
 };
 
+/**
+ * The sections' own navigation moves to the arc (the author 06.11: «чтобы элементы разделов стали частью дуги — в магии эти кнопки
+ * тоже будут частью дуги»): a band of slices right of the seam — the mirror of the main buttons left of it. Each entry: the element
+ * (by selector inside the section) and, if it belongs to a part shown only at times, that part (its `hidden` is followed).
+ */
+const BANDS = {
+    'tab-spells': [['#magic-sections'], ['#spell-cats', '#magic-spells'], ['#potion-cats', '#magic-potions'], ['#pentagram-cats', '#magic-pentagrams']],
+    'tab-mechanics': [['.mech-subtabs'], ['#item-cats', '#items-list']],
+    'tab-settings': [[':scope > .sub-tabs']],
+};
+
 const ringMask = (w, h, d) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='${NS}' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'><path d='${d}' fill='none' stroke='#000' stroke-width='3.2' stroke-linejoin='round'/></svg>`)}")`;
 
 export class ArcaneShapes {
@@ -172,7 +183,8 @@ export class ArcaneShapes {
             return m ? m[0] : null;
         };
         // breadth-first down the section; a box at the left edge takes the bleed and its insides are not looked at
-        const queue = [...pane.children]; let n = 0;
+        this._bands(el, it, pane);
+        const queue = [...pane.children].filter((e) => !e.classList.contains('ar-band')); let n = 0;
         while (queue.length && n++ < 600) {
             const e = queue.shift();
             if (!e.offsetParent && getComputedStyle(e).position !== 'fixed') continue; // (hidden)
@@ -186,6 +198,45 @@ export class ArcaneShapes {
                 continue;
             }
             if (r.left - left < 40) queue.push(...e.children); // (only what may hold a box at the edge)
+        }
+    }
+
+    /** The section's band at the arc: build it once (move the navigation in), follow the shown part, cut its slices along the arc. */
+    _bands(el, it, pane) {
+        const conf = BANDS[pane.id];
+        if (!conf || !it.arcX) return;
+        let band = pane.querySelector(':scope > .ar-band');
+        if (!band) {
+            band = document.createElement('div');
+            band.className = 'ar-band';
+            const groups = [];
+            for (const [sel, follow] of conf) {
+                const g = pane.querySelector(sel);
+                if (!g) continue;
+                g.classList.add('ar-band-group');
+                band.appendChild(g);
+                if (follow) {
+                    const part = pane.querySelector(follow);
+                    if (part) { const sync = () => { g.hidden = part.hidden; }; sync(); new MutationObserver(() => { sync(); this._bleedSoon(el); }).observe(part, { attributes: true, attributeFilter: ['hidden'] }); }
+                }
+                groups.push(g);
+            }
+            if (!groups.length) return;
+            pane.insertBefore(band, pane.firstChild);
+            pane.classList.add('ar-banded');
+        }
+        // its height: the section's visible height (it stays while the section scrolls)
+        const c = it.content, cs = getComputedStyle(pane);
+        const vis = (pane.scrollHeight > pane.clientHeight + 2 ? pane.clientHeight : c.clientHeight) - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+        band.style.height = Math.max(200, vis) + 'px';
+        // each slice: its left edge is the arc (the mirror of the main buttons' right ends)
+        const er = el.getBoundingClientRect();
+        for (const b of band.querySelectorAll('button')) {
+            const r = b.getBoundingClientRect();
+            if (!r.height) continue;
+            const pts = [];
+            for (let k = 0; k <= 8; k++) { const y = r.top - er.top + r.height * k / 8; pts.push(`${(it.arcX(y) + 3 - (r.left - er.left)).toFixed(1)}px ${(r.height * k / 8).toFixed(1)}px`); }
+            b.style.clipPath = `polygon(${pts.join(',')}, ${r.width}px ${r.height}px, ${r.width}px 0px)`;
         }
     }
 
@@ -215,6 +266,7 @@ export class ArcaneShapes {
             const B = Math.min(70, tabs.offsetWidth * 0.24); // (its depth in the middle)
             const mid = (yT + yB) / 2, half = (yB - yT) / 2;
             const arcX = (y) => { const u = Math.max(-1, Math.min(1, (y - mid) / half)); return xE - B * Math.sqrt(1 - u * u); };
+            it.arcX = arcX; it.B = B;
             // the buttons: each cut along the arc (its own clip-path in its own coordinates)
             for (const b of btns) {
                 // (a button's offsets count from its offsetParent — the list itself when it is positioned: into the window's coordinates,

@@ -243,3 +243,62 @@
         border-left-color: transparent !important; border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important;
     }
 }
+
+/* ======================================================================================================================
+ * THE BAND: a section's own navigation moved to the arc — a column of slices right of the seam, the mirror of the main buttons left
+ * of it; together they make one lens cut by the seam of light. The section's contents to the right of the band.
+ * ====================================================================================================================== */
+@media (min-width: 601px) {
+    #main-menu .ar-shaped .tab-pane.ar-banded.active { display: grid !important; /* (the tab switch writes display: block on the pane) */ grid-template-columns: calc(var(--ar-B, 70px) + 214px) minmax(0, 1fr); column-gap: 20px; align-items: start; padding-left: 0; }
+    #main-menu .ar-shaped .tab-pane.ar-banded > * { grid-column: 2; min-width: 0; }
+    #main-menu .ar-shaped .tab-pane.ar-banded > .ar-band {
+        grid-column: 1; grid-row: 1 / span 40; position: sticky; top: 0; align-self: start;
+        display: flex; flex-direction: column; margin: -16px 0 -12px; /* (from the panel's top to its bottom) */
+        background: linear-gradient(90deg, rgba(10, 6, 30, 0.0), rgba(10, 6, 30, 0.35));
+        border-right: 1px solid transparent; border-image: linear-gradient(180deg, transparent, rgba(255, 215, 106, 0.45), rgba(126, 232, 255, 0.35), transparent) 1;
+    }
+    #main-menu .ar-band > .ar-band-group { display: contents; }
+    #main-menu .ar-band > .ar-band-group[hidden] { display: none; }
+    /* the slices: equal shares of the height, the text in a straight column right of the arc's deepest point */
+    #main-menu .ar-band .sub-tab {
+        flex: 1 1 0; min-height: 0; overflow: hidden; width: 100%; margin: 0; border-radius: 0 !important; text-align: left;
+        display: flex; align-items: center; gap: 8px; padding: 0 14px 0 calc(var(--ar-B, 70px) + 18px);
+        font-size: 0.93rem; font-weight: 700; color: #d6ccff; white-space: nowrap; text-overflow: ellipsis; line-height: 1.15;
+        border: none !important; box-shadow: none !important;
+        background: linear-gradient(90deg, rgba(56, 36, 132, 0.55), rgba(30, 18, 76, 0.35)) !important;
+    }
+    /* the seams between the slices — threads of light running from the arc */
+    #main-menu .ar-band .sub-tab + .sub-tab, #main-menu .ar-band .ar-band-group + .ar-band-group .sub-tab:first-child {
+        background: linear-gradient(90deg, rgba(255, 215, 106, 0.6), rgba(167, 139, 255, 0.35) 45%, transparent) 0 0 / 100% 1px no-repeat,
+            linear-gradient(90deg, rgba(56, 36, 132, 0.55), rgba(30, 18, 76, 0.35)) !important;
+    }
+    /* the section's own parts (Заклинания / Зелья / Пентаграммы, Как игра работает / Боссы / Предметы): bigger, in the title's letters */
+    #main-menu .ar-band > .ar-band-group:first-child .sub-tab { flex-grow: 1.35; font-family: var(--ui-font-title); font-size: 1.12rem; color: #f0e6ff;
+        background: linear-gradient(90deg, rgba(80, 52, 170, 0.6), rgba(40, 24, 96, 0.45)) !important; }
+    #main-menu .ar-band > .ar-band-group:first-child + .ar-band-group .sub-tab:first-child { box-shadow: inset 0 2px 0 rgba(255, 215, 106, 0.85) !important; }
+    #main-menu .ar-band .sub-tab:hover { color: #fff; background: radial-gradient(90% 120% at 30% 50%, rgba(167, 139, 255, 0.4), rgba(56, 36, 132, 0.4) 80%) !important; }
+    #main-menu .ar-shaped .ar-band .ar-band-group .sub-tab.active { color: #ffe9b0 !important; text-shadow: 0 0 10px rgba(255, 210, 120, 0.55);
+        background: linear-gradient(90deg, transparent calc(100% - 3px), #ffd76a calc(100% - 3px)),
+            radial-gradient(100% 140% at 30% 50%, rgba(200, 130, 255, 0.85), rgba(120, 76, 240, 0.6) 55%, rgba(60, 36, 140, 0.55)) !important;
+        box-shadow: inset 0 0 18px rgba(255, 210, 140, 0.25) !important; }
+    #main-menu .ar-shaped .tab-pane.ar-banded .magic-layout:not([hidden]) { display: block; }
+    #main-menu .ar-shaped .tab-pane.ar-banded #items-list:not([hidden]) { display: block; }
+}
+
+/* ======================================================================================================================
+ * WIDE CARDS (the author 06.11: «заклинания и зелья — маленькие тонкие полосочки вниз; хочу толстыми, широкими»): the spells, potions,
+ * pentagrams and things lie in wide cards, two or three to a row; the sign on the left, the name and the words beside it in full lines.
+ * ====================================================================================================================== */
+:is(#main-menu, #pause-menu) .items-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)) !important; gap: 14px !important; }
+:is(#main-menu, #pause-menu) .items-grid .item-card {
+    display: grid !important; grid-template-columns: 76px minmax(0, 1fr); column-gap: 16px; row-gap: 2px;
+    align-items: start; justify-items: start; text-align: left !important; padding: 16px 18px !important;
+}
+:is(#main-menu, #pause-menu) .items-grid .item-card > * { grid-column: 2; width: 100%; }
+:is(#main-menu, #pause-menu) .items-grid .item-card > .item-icon {
+    grid-column: 1; grid-row: 1 / span 6; width: 76px !important; height: 76px !important; margin: 2px 0 0 !important;
+}
+:is(#main-menu, #pause-menu) .items-grid .item-card > .item-name { font-size: 1.22rem; margin: 2px 0 4px; }
+:is(#main-menu, #pause-menu) .items-grid .item-card .item-desc { font-size: 0.92rem; line-height: 1.5; margin-bottom: 6px; flex-grow: 0; }
+:is(#main-menu, #pause-menu) .items-grid .item-card .item-learn { margin-bottom: 6px; }
+:is(#main-menu, #pause-menu) .items-grid .item-card:hover { transform: translateY(-2px); }
