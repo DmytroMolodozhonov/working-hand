@@ -44,7 +44,8 @@ export default async function (h, args) {
         const side = 0.35, ca = Math.cos(side), sa = Math.sin(side);
         const vx = sx * ca - sz * sa, vz = sz * ca + sx * sa; // (a little to the side of the sun: the form shaded)
         T.yaw = Math.atan2(-vx, -vz); // (facing the camera: the models look along −z)
-        T.ph = 0.9; T.speed = def.walk; T.blowT = 0.35; T.t = 3;
+        T.ph = 0.9; T.speed = 0; T.t = 3; T.mode = 'fight';
+        if (def.look !== 'worm' && def.look !== 'storm') T.act = { name: 'roar', t: 0.45, dur: 3, ev: [] }; // (its roar: the chest thrown back, the arms spread)
         if (def.look === 'worm') { T.wm = 'up'; T.up = 1; T.yaw += 0.5; }
         if (def.look === 'shade') T.lit = 1;
         const gy = T.pos.y;

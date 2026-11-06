@@ -87,17 +87,112 @@ export const TITAN = {
     TURN: 0.5, // rad/s it turns
     BLOW_T: 2.2, // s a blow takes (wind-up → strike)
     BLOW_EVERY: 3.4,
-    SAY_EVERY: [16, 28],
+    ROAR_EVERY: [18, 30], // s between its roars in a fight (no words — CLAUDE.md, the author 06.11)
+    WAKE_T: 3.2, // s of its waking (it does not strike meanwhile)
+    STAGE_T: 3, // s the turn of the body between two stages
     REGEN: 0, // they do not heal (a long fight is won by patience)
 };
 
-/** Words in their fights (Russian, shown and spoken — slow, deep). The story is told by pictures, not by gods; a titan only rages. */
-export const TITAN_LINES = {
-    wake: ['Кто… ступил… на мою землю?', 'Маленький… смертный…', 'Я помню… Солнце…'],
-    fight: ['Ты — пыль.', 'Я был богом… и буду.', 'Твоя магия — искра. Я — пламя.', 'Беги… если можешь.'],
-    hurt: ['Это… больно.', 'Сила… уходит…'],
-    death: ['Наконец… покой…', 'Верни… меня… Солнцу…'],
-};
+/*
+ * They do NOT speak (the author 06.11: «не должны разговаривать как дьявол, но и не банальные»): a titan tells what it is by its body —
+ * its life while no one is near (each its own, seen from afar), its waking, its roar, its blows seen coming, its wounds on the body, the
+ * three stages of its fight (each with a new way to fight and a turn of the body between) and its staggering when struck hard and fast.
+ *
+ *   IRON (Mercury)   at peace: hammers on its anvil-rock (the clang heard far). Its mirror gathers the Sun — no ray where the Sun is down.
+ *                    In the sunlight it heats (red-hot): then cold and water crack it (×2.5). The magnet tears the weapons out of the
+ *                    hands — they fall by its feet. Stage 2: the clap (a ring of sparks along the ground); 3: both fists into the ground —
+ *                    molten iron runs.
+ *   ROCK (Saturn)    at peace: sits, a hill among hills; one who comes near sees the hill stand up. Tears a boulder out of the ground (a
+ *                    real pit stays) and throws it. Stage 2: curls into a boulder and rolls at the foe; its stones break off as it is
+ *                    hurt; 3: tears out a stone pillar — a club.
+ *   LAVA (Venus)     at peace: sits in its lava lake and pours lava over itself. Hot — fast and burning; water and ice crust it (slow;
+ *                    then blasts break the crust ×2) — crusted, it goes back to the lake to heat (a frozen lake does not heat it).
+ *                    Stage 2: the eruption (geysers running at the foe); 3: the rain of fire.
+ *   WORM (Mars)      hears steps: one who stands or creeps is not found; a loud blast elsewhere lures it there; never rises out of rock.
+ *                    It swallows (dark inside, then spat out); a spell into the open mouth hurts it most. Stage 3: it leaps out whole and
+ *                    falls head first on the foe.
+ *   ICE (Neptune)    at peace: a still guard with its spear, breathing frost. Its steps leave ice; the frost breath; a cage of ice round
+ *                    the foe (real blocks — break them). Stage 2: grows a shell of ice — only fire melts it; 3: the blizzard.
+ *   SHADE (Uranus)   looked at in a light it freezes, its arms over its face (and is hurt fully); turned from — it creeps near, silent.
+ *                    Its dark puts out the lights. Stage 2: shadows of itself (they melt in light; the true one does not).
+ *   STORM (Jupiter)  draws in and throws; a spot of light on the ground before each lightning; its calm eye — the heart inside hurt ×3,
+ *                    but none stays in long; the wind's spells feed it (it grows). Stage 2: throws what it has drawn up; 3: three whirls.
+ */
+
+/** The stages of a titan's fight by its health: 1 (full) · 2 (≤ 2/3) · 3 (≤ 1/3). */
+export const titanStage = (hp, hpMax) => (hp > hpMax * (2 / 3) ? 1 : hp > hpMax / 3 ? 2 : 3);
+
+/**
+ * Staggering: so much harm (a part of its health) within WINDOW s — it reels (the walkers fall on one knee, the worm thrashes on the
+ * sand, the storm sags) for T s; blows on it then MUL more. Not again for COOL s.
+ */
+export const STAGGER = { WINDOW: 4, PART: 0.07, T: 4.5, MUL: 1.5, COOL: 14 };
+/** The harm in the window after a new blow: {sum, stagger} (`log` — [t, dmg] pairs, kept short). */
+export function staggerAfter(log, t, dmg, hpMax, coolUntil = 0) {
+    log.push([t, dmg]);
+    while (log.length && log[0][0] < t - STAGGER.WINDOW) log.shift();
+    let sum = 0;
+    for (const e of log) sum += e[1];
+    const stagger = t >= coolUntil && sum >= hpMax * STAGGER.PART;
+    if (stagger) log.length = 0;
+    return { sum, stagger };
+}
+
+/** The sandworm's ear: how far it hears a player (m) — by his speed (a runner far, one who creeps hardly, one who stands not at all). */
+export function wormHears(speed, crouching = false) {
+    if (!(speed > 0.4)) return 0;
+    const k = Math.min(1, speed / 6);
+    return TITAN.SEE * (crouching ? 0.08 : 0.2 + 0.8 * k);
+}
+/** A blast heard by the worm from this far (a Bombardo, a lightning, a thrown boulder): it goes there. */
+export const WORM_LURE_R = 600;
+
+/** The shade moves only when no one looks at it in a light: `looks` — [{dot (view · to it), lit}] of the players near. */
+export function shadeFrozen(looks) {
+    for (const l of looks) if (l.lit && l.dot > 0.82) return true;
+    return false;
+}
+
+/** Heat (lava, iron) — what a blow of this kind does with it: {mul, cool} (cool — how much heat it takes away). */
+export const COLD_RE = /Ice|Frozen|cold|Water|Wave|Firefighting|Drawdown|Aqua|Snow/;
+export const BLUNT_RE = /Bombardo|Earthquake|Pilbidrio|Thunder|blast|melee|Jolt/;
+export function heatBlow(look, heat, kind) {
+    const k = String(kind || '');
+    if (look === 'lava') {
+        if (COLD_RE.test(k)) return { mul: heat > 0.4 ? 2 : 1, cool: 0.22 }; // (hot: water bursts into steam and hurts; it cools)
+        if (heat < 0.4 && BLUNT_RE.test(k)) return { mul: 2, cool: 0 }; // (the crust breaks)
+        return { mul: 1, cool: 0 };
+    }
+    if (look === 'iron') {
+        if (heat > 0.7 && COLD_RE.test(k)) return { mul: 2.5, cool: 0.35 }; // (red-hot iron quenched: it cracks)
+        return { mul: 1, cool: 0 };
+    }
+    return { mul: 1, cool: 0 };
+}
+/** The lava titan's heat over dt: in its lake it heats fast (not when the lake is frozen), out of it — slowly. */
+export const lavaHeatStep = (heat, dt, inLake, lakeFrozen) => Math.min(1, heat + dt * (inLake && !lakeFrozen ? 0.25 : 0.012));
+/** The iron titan's heat over dt: under a high Sun it heats, in the dark it cools. `sun` — the Sun's elevation (−1…1). */
+export const ironHeatStep = (heat, dt, sun) => Math.max(0, Math.min(1, heat + dt * (sun > 0.15 ? 0.03 * sun : -0.02)));
+/** Crusted (slow, dark): the lava titan below this heat. */
+export const LAVA_CRUST = 0.4;
+
+/** The ice titan's shell (stage 2): its strength (a part of the health); fire takes FIRE_MUL of a blow, the rest SHELL_MUL. */
+export const ICE_SHELL = { PART: 0.15, FIRE_MUL: 3, OTHER_MUL: 0.25, FIRE_RE: /fire|Fire|Inferno|Hellfire|Burn|Lava|Sun/ };
+/** A blow on the shell: {shell (left), through (what reaches the body)} */
+export function shellBlow(shell, dmg, kind) {
+    if (!(shell > 0)) return { shell: 0, through: dmg };
+    const fire = ICE_SHELL.FIRE_RE.test(String(kind || ''));
+    const eat = dmg * (fire ? ICE_SHELL.FIRE_MUL : ICE_SHELL.OTHER_MUL);
+    if (eat < shell) return { shell: shell - eat, through: fire ? 0 : dmg * 0.1 };
+    return { shell: 0, through: (eat - shell) / (fire ? ICE_SHELL.FIRE_MUL : ICE_SHELL.OTHER_MUL) };
+}
+
+/** The storm: its calm eye (a part of its radius); its heart there takes HEART_MUL; one inside is thrown out after EYE_T s. */
+export const STORM_EYE = { PART: 0.4, HEART_MUL: 3, EYE_T: 4, GROW: 0.06, GROW_MAX: 1.5, WIND_RE: /Wind|Tornado|Storm|Gust/ };
+/** The worm's open mouth: a blow there (when it is up) — MOUTH_MUL. */
+export const WORM_MOUTH_MUL = 2.5;
+/** Pieces of the rock titan breaking off as it is hurt: how many have fallen at this health (of `n`). */
+export const rockChips = (hp, hpMax, n) => Math.max(0, Math.min(n, Math.floor((1 - hp / hpMax) * (n + 1))));
 
 /** What a spell does to a titan: the gods' spells ×3 (they are the gods' own power), «Дай» a third of the titan at most — never at once. */
 export function titanDamage(spell, dmg, { god = false, hpMax = 3000 } = {}) {

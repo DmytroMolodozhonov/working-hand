@@ -8,9 +8,13 @@
  *   ray     the sun ray: a bright, roaring hiss                                            magnet  the magnet: a deep hum and metallic rattles
  *   dark    a wave of darkness: a falling whoosh, a hollow drone                           rumble  under the sand: a long, growing rumble
  *   thunder a thunderclap with its long roll                                               death   its fall: a long groan falling, the crash, a ringing chord rising (the shard)
+ *   anvil   the iron one's hammer on its anvil: a bright clang ringing far, overtones        crack   ice / crust / hot iron cracking: sharp splits
+ *   quench  water on red-hot iron or lava: a roaring hiss of steam                           swallow the worm's mouth shutting: a wet, deep gulp, the sand pouring
+ *   rise    a mountain standing up: a long grinding groan, stones pouring off               erupt   lava bursting out of the ground: a deep chug, a hiss, a splash
+ *   howl    the storm's voice: a hollow howl of wind rising and falling                      clap    the iron fists clapped: a metal crack and a ringing shock
  */
-export const TITAN_SOUNDS = ['roar', 'windup', 'step', 'slam', 'fire', 'throw', 'burst', 'crash', 'frost', 'charge', 'ray', 'magnet', 'dark', 'rumble', 'thunder', 'death'];
-const DUR = { roar: 2.6, windup: 1.4, step: 1.6, slam: 2.2, fire: 1.0, throw: 1.2, burst: 1.8, crash: 1.8, frost: 1.2, charge: 1.4, ray: 1.4, magnet: 1.8, dark: 2.2, rumble: 2.6, thunder: 3.2, death: 5.5 };
+export const TITAN_SOUNDS = ['roar', 'windup', 'step', 'slam', 'fire', 'throw', 'burst', 'crash', 'frost', 'charge', 'ray', 'magnet', 'dark', 'rumble', 'thunder', 'death', 'anvil', 'crack', 'quench', 'swallow', 'rise', 'erupt', 'howl', 'clap'];
+const DUR = { roar: 2.6, windup: 1.4, step: 1.6, slam: 2.2, fire: 1.0, throw: 1.2, burst: 1.8, crash: 1.8, frost: 1.2, charge: 1.4, ray: 1.4, magnet: 1.8, dark: 2.2, rumble: 2.6, thunder: 3.2, death: 5.5, anvil: 2.6, crack: 1.0, quench: 2.2, swallow: 2.0, rise: 4.5, erupt: 2.4, howl: 3.5, clap: 2.4 };
 const TAU = Math.PI * 2;
 const VOWEL = { a: [[700, 140, 1], [1150, 180, 0.5], [2500, 300, 0.12]], o: [[430, 100, 1], [780, 140, 0.5], [2300, 300, 0.08]], u: [[320, 90, 1], [700, 130, 0.35], [2300, 300, 0.05]] };
 
@@ -82,6 +86,18 @@ export function synthTitan(ctx, kind) {
             noise(d, sr, 2.4, 0.1, 1, 0.6, 30, 6000); tone(d, sr, 2.4, 1.6, 55, 25, 1, 2, 2000); noise(d, sr, 2.4, 3, 0.6, 0.04, 1, 200);
             for (const f of [262, 330, 392, 523]) tone(d, sr, 3.0, 2.4, f, f * 1.02, 0.12, 1.1, 2);
             break;
+        case 'anvil': // (a struck bar: inharmonic partials ringing long, a hard click on top)
+            noise(d, sr, 0, 0.02, 0.9, 0.9, 200, 20000);
+            for (const [f, a, dk] of [[420, 0.5, 1.6], [1130, 0.35, 2.2], [1720, 0.25, 2.8], [2480, 0.18, 3.5], [3350, 0.1, 4.5]]) tone(d, sr, 0, 2.5, f, f * 0.998, a, dk, 6000);
+            tone(d, sr, 0, 0.4, 90, 60, 0.5, 9, 3000);
+            break;
+        case 'crack': for (let k = 0; k < 7; k++) noise(d, sr, k * 0.05 + Math.random() * 0.05, 0.03, 0.8 - k * 0.08, 0.95, 90, 12000); tone(d, sr, 0, 0.6, 140, 70, 0.4, 7, 4000); break;
+        case 'quench': swell(d, sr, 0, 2.2, 0.8, 0.85, 0.08); for (let k = 0; k < 40; k++) noise(d, sr, Math.random() * 1.6, 0.01, 0.3, 0.95, 150, 9000); break;
+        case 'swallow': tone(d, sr, 0, 0.5, 95, 40, 0.9, 4, 600); noise(d, sr, 0.05, 0.4, 0.4, 0.08, 6, 300); swell(d, sr, 0.3, 1.7, 0.5, 0.05, 0.4); break;
+        case 'rise': swell(d, sr, 0, 4.4, 0.7, 0.03, 2.4); tone(d, sr, 0, 4.2, 28, 40, 0.5, 0.3, 2); for (let k = 0; k < 40; k++) noise(d, sr, 0.5 + Math.random() * 3.6, 0.06, 0.2, 0.4, 35, 2000); voice(d, sr, 1.0, 3.2, 45, 52, 'u', 0.3, { rough: 0.9, att: 0.8, decay: 0.4 }); break;
+        case 'erupt': tone(d, sr, 0, 0.6, 50, 30, 1, 5, 900); noise(d, sr, 0.05, 2.3, 0.5, 0.3, 1.6, 60); for (let k = 0; k < 25; k++) noise(d, sr, 0.2 + Math.random() * 1.8, 0.04, 0.25, 0.6, 40, 3000); break;
+        case 'howl': { const i0 = 0, n = Math.floor(3.4 * sr); let y = 0, y2 = 0; for (let i = 0; i < n; i++) { const t = i / sr, f = 0.02 + 0.015 * Math.sin(TAU * 0.4 * t); y += (Math.random() * 2 - 1 - y) * f; y2 += (y - y2) * f; d[i0 + i] += y2 * 6 * Math.sin(Math.PI * t / 3.4); } tone(d, sr, 0, 3.4, 160, 120, 0.12, 0.6, 2); break; }
+        case 'clap': noise(d, sr, 0, 0.03, 1, 0.95, 120, 20000); for (const f of [610, 1460, 2210]) tone(d, sr, 0, 2.2, f, f, 0.25, 2.2, 8000); tone(d, sr, 0, 0.8, 70, 35, 0.8, 4, 3000); break;
         default: break;
     }
     let peak = 0;

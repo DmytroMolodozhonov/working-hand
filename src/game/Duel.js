@@ -1191,7 +1191,7 @@ export class Duel {
         // («Электром» is held: a hit on a boss starts the lightning on it, so it ends as a hit, not a fizzle)
         if (b.tk === 'Y' && this._referee()) { const o = this.game.diabolos?.byId(b.tid); this._end(b, 'fizzle'); if (o) this.game.diabolos.boltHit(o, b.spell, b.by); return; } // (Дьяволос: ни один заряд не действует — только злит)
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
-        if (b.tk === 'W' && this._referee()) { const c = this.game.titans?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.titans.boltHit(c, b.spell, b.by); return; }
+        if (b.tk === 'W' && this._referee()) { const c = this.game.titans?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.titans.boltHit(c, b.spell, b.by, b.front); return; } // (where it struck: the storm's heart, the worm's mouth)
         if (b.tk === 'V' && this._referee()) { const c = this.game.vampire?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.vampire.boltHit(c, b.spell, b.by, b.front); return; }
         if (b.tk === 'H' && this._referee()) { const c = this.game.pharaoh?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.pharaoh.boltHit(c, b.spell, b.by, b.front); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
@@ -1601,6 +1601,7 @@ export class Duel {
         if (!this.bolts.has(b.id)) return;
         this.bolts.delete(b.id);
         if (b.dbg) this._chargeEnd(b, res);
+        if (b.front && /^(Ice|IceMaxima|Frozen)$/.test(b.spell)) this.game.titans?.coldAt?.(b.front); // (a cold charge on the lava titan's lake freezes it over — Titans.js)
         if (res === 'hit' && b.extra && !b.extraFired) { // (a double charge: its second spell hits the same body at the same moment — «Спиралис», Whirl.js)
             b.extraFired = true;
             const c2 = { ...b, id: b.id + 'x', spell: b.extra, extra: null, state: 'arrived', meWait: 99, noted: true, noMana: true };

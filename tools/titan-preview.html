@@ -6,7 +6,7 @@
 <script type="module">
 // tools/titan-preview.mjs drives this page: window.__shoot(id, view) → a PNG data URL of that titan on its planet's ground.
 import * as THREE from 'three';
-import { titanModel, poseWalker } from '../src/game/TitanModels.js';
+import { titanModel, poseWalker, titanSite } from '../src/game/TitanModels.js';
 import { TITANS } from '../src/game/TitanRules.js';
 
 const W = 960, H = 540;
@@ -37,12 +37,17 @@ scene.add(ground);
 const camera = new THREE.PerspectiveCamera(55, W / H, 1, 8000);
 let current = null;
 
-window.__shoot = (id, view) => {
+const models = new Map();
+let site = null;
+window.__shoot = (id, view, pose = null) => {
     const def = TITANS[id], P = PLANET[id];
     if (current) scene.remove(current);
-    const m = titanModel(def.look);
+    if (site) { scene.remove(site); site = null; }
+    const m = models.get(id) || titanModel(def.look);
+    models.set(id, m);
     current = m;
     scene.add(m);
+    if (pose?.site) { site = titanSite(def.look); site.scale.setScalar(def.height); site.position.set(pose.site[0] * def.height, 0, pose.site[1] * def.height); scene.add(site); }
     m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     scene.background = new THREE.Color(P.sky);
     scene.fog = new THREE.Fog(P.fog, 600, 3500);
@@ -50,7 +55,7 @@ window.__shoot = (id, view) => {
     hemi.color.set(P.sky); hemi.groundColor.set(P.ground); hemi.intensity = P.amb;
     sun.color.set(P.sun); sun.intensity = P.sunI;
     const Hh = def.height;
-    sun.position.set(Hh * 1.2, Hh * 2, Hh * 1.6); sun.target.position.set(0, 0, 0);
+    sun.position.set(Hh * 1.2, Hh * 2, -Hh * 1.6); sun.target.position.set(0, 0, 0);
     const sc = sun.shadow.camera; sc.left = sc.bottom = -Hh * 1.5; sc.right = sc.top = Hh * 1.5; sc.far = Hh * 6; sc.updateProjectionMatrix();
     if (def.look === 'worm') {
         // the worm's rings along an arch out of the ground, as Titans._drawWorm lays them (risen, mouth open)
@@ -69,15 +74,20 @@ window.__shoot = (id, view) => {
         const mat = m.userData.stormMat; mat.userData.uT.value = 3.7;
     } else {
         m.scale.setScalar(Hh);
-        poseWalker(m, { ph: 0.9, k: 1, blow: 0.35, arm: 1, breathe: 1 });
+        poseWalker(m, pose || { ph: 0.9, k: 1, blow: 0.35, arm: 1, breathe: 1 });
+        const R = m.userData.rig;
+        for (const b of R.blades) b.visible = !!pose?.blades;
+        for (const b of R.shell) b.visible = !!pose?.shell;
+        if (R.club) R.club.visible = !!pose?.club;
+        if (R.prop) R.prop.visible = !pose?.noProp;
         if (def.look === 'shade') m.traverse((o) => { if (o.material && o.material.transparent) o.material.opacity = 0.9; });
     }
     m.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(m), c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
     const big = Math.max(sz.y, sz.x, sz.z);
-    const at = view === 'close' ? new THREE.Vector3(c.x, box.max.y - sz.y * 0.18, c.z) : c;
-    const d = view === 'close' ? big * 0.55 : big * 1.25;
-    const a = view === 'front' ? 0 : view === 'three' ? 0.7 : 0.35;
+    const at0 = view === 'close' ? new THREE.Vector3(c.x, box.max.y - sz.y * 0.18, c.z) : c;
+    const at = at0; const d = view === 'close' ? big * 0.55 : big * 1.25;
+    const a = view === 'front' ? Math.PI : view === 'three' ? Math.PI - 0.7 : view === 'side' ? Math.PI / 2 : Math.PI - 0.35; // (the bodies face −z)
     camera.position.set(at.x + Math.sin(a) * d, Math.max(4, at.y * (view === 'close' ? 1 : 0.55)), at.z + Math.cos(a) * d);
     camera.lookAt(at);
     renderer.render(scene, camera);

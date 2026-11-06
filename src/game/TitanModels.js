@@ -433,10 +433,115 @@ function walker(look) {
     };
     const L = arm(-1), R = arm(1), LL = leg(-1), RL = leg(1);
     if (look === 'ice') hd.add(part((o) => segment('ice', 0.01, 0.12, r, o, { crown: true })));
-    root.userData.rig = { hips, chest, neck, head: hd, armL: L, armR: R, legL: LL, legR: RL };
+    const rig = { hips, chest, neck, head: hd, armL: L, armR: R, legL: LL, legR: RL, prop: null, club: null, chips: [], blades: [], shell: [] };
+    props(look, rig, M, r, { chestR, armR });
+    root.userData.rig = rig;
     root.userData.glow = [M.glow, M.body].filter(Boolean);
     root.userData.look = look;
     return root;
+}
+
+/**
+ * What a walker carries and what can fall off it (each a Group on a joint):
+ *   iron  `prop` — the smith's hammer in its right fist (the handle along the forearm, the head beyond the fist: a blow lands head
+ *         first); `blades` — the weapons its magnet tore away, stuck to its breast (hidden until then — Titans.js shows them)
+ *   ice   `prop` — a double-headed glaive of ice held across the fist (upright when the forearm is level); `shell` — plates of ice
+ *         grown over its body at the second stage (hidden)
+ *   rock  `chips` — boulders piled on its shoulders and back that break off as it is hurt; `club` — a pillar of stone torn from the
+ *         ground at the third stage (hidden)
+ * The hands' frame: the forearm runs along −y; local z is down when the forearm is level forward.
+ */
+function props(look, R, M, r, { chestR, armR }) {
+    const mk = (parts, mat) => { const m = new THREE.Mesh(mergeParts(parts), mat); m.castShadow = true; return m; };
+    const hand = R.armR.hand;
+    if (look === 'iron') {
+        const g = new THREE.Group(); hand.add(g);
+        const P = [];
+        P.push({ geo: tinted(new THREE.CylinderGeometry(armR * 0.32, armR * 0.38, 0.3, 8), C(0x4a3a2a), r), pos: [0, -0.15, 0] }); // (the haft: dark, iron-bound)
+        for (let i = 0; i < 4; i++) P.push({ geo: tinted(new THREE.CylinderGeometry(armR * 0.42, armR * 0.42, 0.012, 8), C(0x6c6660), r), pos: [0, -0.04 - i * 0.07, 0] });
+        P.push({ geo: tinted(new THREE.BoxGeometry(armR * 2.6, armR * 1.5, armR * 1.5), C(0x7c766e), r), pos: [0, -0.31, 0] }); // (the head)
+        for (const sd of [-1, 1]) P.push({ geo: tinted(new THREE.CylinderGeometry(armR * 0.85, armR * 0.75, armR * 0.5, 8), C(0x5c5650), r), pos: [sd * armR * 1.5, -0.31, 0], rot: [0, 0, Math.PI / 2] }); // (the faces, worn bright)
+        g.add(mk(P, M.body));
+        R.prop = g;
+        // the stuck weapons: four blades across its breast (the game shows as many as it took)
+        for (let i = 0; i < 4; i++) {
+            const b = new THREE.Group();
+            b.position.set((i - 1.5) * chestR * 0.35, 0.22 + (i % 2) * 0.08, -chestR * 0.8);
+            b.rotation.set(0.5 + r() * 0.4, (r() - 0.5) * 0.6, (r() - 0.5) * 1.2);
+            b.add(mk([{ geo: tinted(new THREE.BoxGeometry(0.006, 0.07, 0.002), C(0xd8dce0), r, 0.04), pos: [0, 0.035, 0] }, { geo: tinted(new THREE.BoxGeometry(0.018, 0.004, 0.004), C(0x8a6a2a), r), pos: [0, 0, 0] }, { geo: tinted(new THREE.CylinderGeometry(0.002, 0.002, 0.016, 5), C(0x3a2a1a), r), pos: [0, -0.009, 0] }], M.body));
+            b.visible = false;
+            R.chest.add(b);
+            R.blades.push(b);
+        }
+    } else if (look === 'ice') {
+        const g = new THREE.Group(); hand.add(g);
+        const P = [], G = [];
+        P.push({ geo: tinted(new THREE.CylinderGeometry(armR * 0.22, armR * 0.22, 0.95, 6), C(0xd8f0ff), r), pos: [0, 0, 0.1], rot: [Math.PI / 2, 0, 0] });
+        for (const end of [-1, 1]) {
+            const z = 0.1 + end * 0.48;
+            G.push({ geo: tinted(new THREE.OctahedronGeometry(armR * 0.9, 0), C(0xffffff), r), pos: [0, 0, z + end * armR * 0.6], rot: [Math.PI / 2, 0, 0], scale: [0.55, 2.6, 0.55] }); // (a long crystal point)
+            for (let k = 0; k < 3; k++) P.push({ geo: tinted(new THREE.ConeGeometry(armR * 0.25, armR * 1.4, 5), C(0xbfe6ff), r), pos: [Math.cos(k * 2.1) * armR * 0.5, Math.sin(k * 2.1) * armR * 0.5, z], rot: [Math.PI / 2 * end, 0, k], scale: [1, 1, 1] }); // (the barbs)
+        }
+        g.add(mk(P, M.body));
+        const gl = new THREE.Mesh(mergeParts(G), M.glow); g.add(gl);
+        R.prop = g;
+        // the shell (stage 2): thick plates of clouded ice on the chest, shoulders and thighs
+        const at = [[R.chest, 0, 0.25, -chestR * 0.85, 1.6], [R.chest, 0, 0.25, chestR * 0.85, 1.6], [R.armL.sh, 0, -0.08, 0, 1.1], [R.armR.sh, 0, -0.08, 0, 1.1], [R.legL.hp, 0, -0.1, 0, 1.2], [R.legR.hp, 0, -0.1, 0, 1.2], [R.chest, chestR * 0.9, 0.35, 0, 1], [R.chest, -chestR * 0.9, 0.35, 0, 1]];
+        for (const [j, x, y, z, s] of at) {
+            const parts = [];
+            for (let k = 0; k < 5; k++) parts.push({ geo: tinted(new THREE.OctahedronGeometry(0.035 * s, 0), C(0xeaf8ff), r), pos: [(r() - 0.5) * 0.06 * s, (r() - 0.5) * 0.08 * s, (r() - 0.5) * 0.04 * s], rot: [r() * 3, r() * 3, r() * 3], scale: [1, 1.8, 0.6] });
+            const m = mk(parts, M.body);
+            m.position.set(x, y, z);
+            m.visible = false;
+            j.add(m);
+            R.shell.push(m);
+        }
+    } else if (look === 'rock') {
+        // boulders on the shoulders and the back (they break off one by one)
+        const spots = [[R.chest, -chestR * 0.9, 0.42, 0.02], [R.chest, chestR * 0.95, 0.44, 0], [R.chest, 0, 0.3, chestR * 0.8], [R.chest, -chestR * 0.4, 0.15, chestR * 0.85], [R.chest, chestR * 0.5, 0.2, chestR * 0.8], [R.armL.sh, -0.02, -0.06, 0], [R.armR.sh, 0.02, -0.06, 0], [R.chest, 0, 0.47, chestR * 0.4]];
+        for (const [j, x, y, z] of spots) {
+            const s = 0.05 + r() * 0.03;
+            const m = mk([{ geo: tinted(rough(new THREE.DodecahedronGeometry(s, 1), r, 0.35), C([0x9a968e, 0x86827a, 0xa8a49a][Math.floor(r() * 3)]), r), pos: [0, 0, 0], rot: [r() * 3, r() * 3, r() * 3], scale: [1.2, 0.9, 1] }], M.body);
+            m.position.set(x, y, z);
+            m.userData.s = s;
+            j.add(m);
+            R.chips.push(m);
+        }
+        // the pillar (stage 3): a column of layered stone, cracked, earth still on its root
+        const g = new THREE.Group(); hand.add(g);
+        const P = [];
+        for (let i = 0; i < 6; i++) P.push({ geo: tinted(rough(new THREE.CylinderGeometry(armR * (1.1 + r() * 0.3), armR * (1.2 + r() * 0.3), 0.085, 7), r, 0.2), C([0x8c887f, 0x9a968e, 0x7a766e][i % 3]), r), pos: [(r() - 0.5) * 0.01, -0.04 - i * 0.08, (r() - 0.5) * 0.01], rot: [0, r() * 3, 0] });
+        P.push({ geo: tinted(rough(new THREE.DodecahedronGeometry(armR * 1.6, 1), r, 0.4), C(0x6a5a48), r), pos: [0, -0.52, 0], scale: [1, 0.8, 1] }); // (the root with earth)
+        g.add(mk(P, M.body));
+        g.visible = false;
+        R.club = g;
+    }
+}
+
+/** Things that stand by a titan's home (its life at peace): the iron one's anvil-rock, the lava one's lake. 1 unit = its height. */
+export function titanSite(look) {
+    const r = rng(BUILD[look] * 31 + 5), g = new THREE.Group();
+    if (look === 'iron') {
+        const M = mats('iron'), P = [];
+        P.push({ geo: tinted(rough(new THREE.DodecahedronGeometry(0.12, 1), r, 0.3), C(0x6a6660), r), pos: [0, 0.05, 0], scale: [1.4, 0.7, 1.1] }); // (the rock)
+        P.push({ geo: tinted(new THREE.BoxGeometry(0.2, 0.05, 0.1), C(0x3c3834), r), pos: [0, 0.13, 0] }); // (the anvil's face — black, beaten)
+        P.push({ geo: tinted(new THREE.ConeGeometry(0.05, 0.12, 6), C(0x3c3834), r), pos: [0.15, 0.13, 0], rot: [0, 0, -Math.PI / 2], scale: [1, 1, 0.8] }); // (its horn)
+        for (let i = 0; i < 7; i++) P.push({ geo: tinted(new THREE.BoxGeometry(0.03 + r() * 0.04, 0.008, 0.01 + r() * 0.02), C(0x9a9088), r), pos: [(r() - 0.5) * 0.5, 0.004, (r() - 0.5) * 0.5], rot: [0, r() * 3, 0] }); // (scraps of iron round it)
+        const m = new THREE.Mesh(mergeParts(P), M.body); m.castShadow = true; m.receiveShadow = true; g.add(m);
+        const hot = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.04), M.glow); hot.position.set(-0.03, 0.165, 0); g.add(hot); // (a bar on it, white-hot)
+    } else if (look === 'lava') {
+        const M = mats('lava');
+        const lake = new THREE.Mesh(new THREE.CircleGeometry(0.42, 40), M.body);
+        lake.rotation.x = -Math.PI / 2; lake.position.y = 0.012; lake.receiveShadow = true; lake.name = 'lake';
+        g.add(lake);
+        const P = [];
+        for (let i = 0; i < 22; i++) { const a = (i / 22) * Math.PI * 2, rr = 0.42 + r() * 0.05; P.push({ geo: tinted(rough(new THREE.DodecahedronGeometry(0.03 + r() * 0.03, 0), r, 0.3), C(0x2a2420), r), pos: [Math.cos(a) * rr, 0.01, Math.sin(a) * rr], rot: [r() * 3, r() * 3, 0], scale: [1.4, 0.6, 1] }); } // (the black rim of cooled rock)
+        const rim = new THREE.Mesh(mergeParts(P), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })); rim.material.userData.shared = true; g.add(rim);
+        const crust = new THREE.Mesh(new THREE.CircleGeometry(0.43, 40), new THREE.MeshStandardMaterial({ color: 0x9ab8d0, roughness: 0.3, transparent: true, opacity: 0, depthWrite: false }));
+        crust.material.userData.shared = true; crust.rotation.x = -Math.PI / 2; crust.position.y = 0.016; crust.name = 'frozen'; g.add(crust); // (frozen over: the lake can't heat it)
+    }
+    g.userData.look = look;
+    return g;
 }
 
 // ------------------------------------------------------------------ the sandworm
@@ -573,28 +678,197 @@ export function titanSamples() {
 }
 
 /**
- * Pose a walker (the joints): `walk` 0…1 the step phase (0…2π in `ph`), `blow` 0…1 a blow's wind-up → strike (arm 'R'), `stomp` 0…1.
- * Heavy and slow: the body sways from side to side, the arms swing against the legs.
+ * Pose a walker. The joints' sense (the body faces −z): a hip / shoulder turned +x swings the limb FORWARD; a knee bends with −x (the
+ * shin goes back), an elbow with +x (the forearm comes forward); the chest, the neck and the head lean forward with −x. Layers, each over the one before:
+ *   the walk  `ph` the step's phase, `k` 0…1 how much it walks — heavy: the body sways side to side, the arms swing against the legs
+ *   `breathe` the slow breath (the chest, the head)
+ *   `act` + `a` (0…1 its progress) + `w` (0…1 its weight): an action of the whole body (ACTS) — its life at peace (forge, sit, bathe,
+ *        guard, crouch), its waking (rise, roar), its blows (throw, breath, clap, slam2, thrust), its wounds (kneel), the shade's cover,
+ *        the rock's curl, the iron's shake
+ *   `blow` 0…1 a fist's wind-up → strike (`arm` +1 right, −1 left); `stomp` 0…1 a foot raised and brought down
  */
-export function poseWalker(model, { ph = 0, k = 0, blow = 0, arm = 1, stomp = 0, breathe = 0 } = {}) {
+export function poseWalker(model, { ph = 0, k = 0, blow = 0, arm = 1, stomp = 0, breathe = 0, act = null, a = 0, w = 1 } = {}) {
     const R = model.userData.rig;
     if (!R || !R.legL) return;
     const s = Math.sin(ph) * k, c = Math.cos(ph) * k;
-    R.legL.hp.rotation.x = s * 0.55; R.legR.hp.rotation.x = -s * 0.55;
-    R.legL.kn.rotation.x = Math.max(0, -c) * 0.8; R.legR.kn.rotation.x = Math.max(0, c) * 0.8;
+    R.legL.hp.rotation.set(s * 0.5, 0, 0); R.legR.hp.rotation.set(-s * 0.5, 0, 0);
+    R.legL.kn.rotation.x = -Math.max(0, c) * 0.75; R.legR.kn.rotation.x = -Math.max(0, -c) * 0.75; // (the leg that swings forward bends)
     R.legL.ft.rotation.x = -s * 0.2; R.legR.ft.rotation.x = s * 0.2;
-    R.hips.rotation.z = s * 0.05; R.hips.position.y = 0.42 - Math.abs(c) * 0.012 * k;
-    R.chest.rotation.z = -s * 0.04; R.chest.rotation.x = 0.06 + Math.sin(breathe) * 0.015;
-    R.armL.sh.rotation.x = -s * 0.45; R.armR.sh.rotation.x = s * 0.45;
-    R.armL.el.rotation.x = -0.35 - Math.max(0, s) * 0.3; R.armR.el.rotation.x = -0.35 - Math.max(0, -s) * 0.3;
-    R.armL.sh.rotation.z = -0.12; R.armR.sh.rotation.z = 0.12;
+    R.hips.rotation.set(0, 0, s * 0.05); R.hips.position.y = 0.42 - Math.abs(c) * 0.012;
+    R.chest.rotation.set(-0.06 + Math.sin(breathe) * 0.015, 0, -s * 0.04); // (the upper body leans forward with −x)
+    R.armL.sh.rotation.set(-s * 0.42, 0, -0.12); R.armR.sh.rotation.set(s * 0.42, 0, 0.12);
+    R.armL.el.rotation.x = 0.3 + Math.max(0, -s) * 0.3; R.armR.el.rotation.x = 0.3 + Math.max(0, s) * 0.3;
+    R.head.rotation.set(0.05 + Math.sin(breathe * 0.7) * 0.03, 0, 0);
+    R.neck.rotation.set(0, 0, 0);
+    if (act && ACTS[act] && w > 0) { _P.w = Math.min(1, w); ACTS[act](R, Math.max(0, Math.min(1, a)), breathe); }
     if (blow > 0) {
-        // the wind-up (arm raised high and back), then the strike down and forward
-        const A = arm > 0 ? R.armR : R.armL, up = blow < 0.6 ? blow / 0.6 : 1 - (blow - 0.6) / 0.4;
-        A.sh.rotation.x = blow < 0.6 ? -2.6 * up : -2.6 + (blow - 0.6) / 0.4 * 3.4;
-        A.el.rotation.x = -0.9 * up;
-        R.chest.rotation.y = (arm > 0 ? -1 : 1) * 0.35 * up;
+        // the wind-up (arm raised high and back, the body turned with it), then the strike down and forward
+        const A = arm > 0 ? R.armR : R.armL, up = blow < 0.6 ? ease(blow / 0.6) : 1 - (blow - 0.6) / 0.4;
+        A.sh.rotation.x = blow < 0.6 ? -2.6 * up : -2.6 + ease((blow - 0.6) / 0.4) * 3.5;
+        A.el.rotation.x = blow < 0.6 ? 0.9 * up : 0.9 * up + 0.1;
+        R.chest.rotation.y = (arm > 0 ? 1 : -1) * 0.35 * up;
+        R.chest.rotation.x += blow > 0.6 ? -0.3 * (1 - up) : 0.15 * up; // (the upper body: −x leans forward)
     }
-    if (stomp > 0) { const L = R.legR, up = stomp < 0.6 ? stomp / 0.6 : 1 - (stomp - 0.6) / 0.4; L.hp.rotation.x = -1.1 * up; L.kn.rotation.x = 1.0 * up; }
-    R.head.rotation.x = -0.08 + Math.sin(breathe * 0.7) * 0.03;
+    if (stomp > 0) { const L = R.legR, up = stomp < 0.6 ? ease(stomp / 0.6) : 1 - (stomp - 0.6) / 0.4; L.hp.rotation.x = 1.2 * up; L.kn.rotation.x = -1.1 * up; R.armL.sh.rotation.z -= 0.6 * up; R.armR.sh.rotation.z += 0.6 * up; }
+}
+const ease = (t) => t * t * (3 - 2 * t);
+const lerp = (x, y, t) => x + (y - x) * t;
+const _P = { w: 1 };
+/** Turn a joint's angle towards `v` by the action's weight. */
+const to = (o, k, v) => { o[k] = lerp(o[k], v, _P.w); };
+/** One leg / arm at once: hip, knee, foot (or shoulder x, z, elbow). */
+const legTo = (L, hp, kn, ft = 0, z = null) => { to(L.hp.rotation, 'x', hp); to(L.kn.rotation, 'x', kn); to(L.ft.rotation, 'x', ft); if (z != null) to(L.hp.rotation, 'z', z); };
+const armTo = (A, x, z, el) => { to(A.sh.rotation, 'x', x); if (z != null) to(A.sh.rotation, 'z', z); to(A.el.rotation, 'x', el); };
+/** A rise and fall over parts of `a`: 0 before t0, up to 1 at t1, 1 to t2, back to 0 at t3. */
+const env = (a, t0, t1, t2, t3) => (a <= t0 || a >= t3 ? 0 : a < t1 ? ease((a - t0) / (t1 - t0)) : a <= t2 ? 1 : 1 - ease((a - t2) / (t3 - t2)));
+
+const ACTS = {
+    /** The iron smith at its anvil (a cycle): feet apart, bent over the work; the hammer raised high — and down on the anvil. */
+    forge(R, a, br) {
+        const up = a < 0.55 ? ease(a / 0.55) : a < 0.66 ? 1 - (a - 0.55) / 0.11 : 0;
+        to(R.hips.position, 'y', 0.38); legTo(R.legL, 0.6, -0.9, 0.3, -0.12); legTo(R.legR, 0.3, -0.9, 0.6, 0.12); // (bent knees: the hips lower, the feet stay on the ground)
+        to(R.chest.rotation, 'x', -(0.42 + Math.sin(br) * 0.02)); to(R.chest.rotation, 'y', 0.12 * up);
+        armTo(R.armR, lerp(0.95, -2.5, up), 0.15, lerp(0.35, 1.1, up));
+        armTo(R.armL, 1.05, 0.25, 0.9); // (the left hand holds the work on the anvil)
+        to(R.head.rotation, 'x', -(0.4));
+    },
+    /** Sitting on the ground, knees up, arms on the knees, head bowed — asleep (a: 1 sat; less — standing up). */
+    sit(R, a) {
+        const k = ease(a);
+        R.hips.position.y = lerp(R.hips.position.y, 0.09, k * _P.w);
+        legTo(R.legL, 2.0 * k, -2.0 * k, 0.1 * k, -0.15 * k); legTo(R.legR, 2.0 * k, -2.0 * k, 0.1 * k, 0.15 * k);
+        to(R.chest.rotation, 'x', -(0.55 * k)); to(R.head.rotation, 'x', -(0.5 * k));
+        armTo(R.armL, 1.05 * k, -0.15, 0.7 * k); armTo(R.armR, 1.05 * k, 0.15, 0.7 * k);
+    },
+    /** Standing up from sitting (a 0 sat → 1 standing): a hand pushed on the ground, the body heaved up, the head last. */
+    rise(R, a) {
+        const k = 1 - ease(a);
+        ACTS.sit(R, 1 - a);
+        const push = env(a, 0.1, 0.35, 0.55, 0.85);
+        armTo(R.armR, lerp(R.armR.sh.rotation.x, 0.5, push), 0.5 * push, 0);
+        to(R.chest.rotation, 'x', -(lerp(0.55 * k, 0.9, push)));
+        to(R.head.rotation, 'x', -(lerp(0.5 * k, -0.3, env(a, 0.6, 0.85, 1, 1.01))));
+    },
+    /** The lava one in its lake: sat, the right hand scooping lava and pouring it over its head (a cycle). */
+    bathe(R, a) {
+        ACTS.sit(R, 1);
+        const pour = env(a, 0.3, 0.6, 0.75, 0.95);
+        const scoop = env(a, 0, 0.12, 0.25, 0.4);
+        armTo(R.armR, lerp(lerp(1.05, 1.5, scoop), -2.7, pour), lerp(0.3, 0.15, pour), lerp(0.6, 1.4, pour));
+        to(R.head.rotation, 'x', -(lerp(0.3, -0.35, pour)));
+        to(R.chest.rotation, 'x', -(lerp(0.6, 0.15, pour)));
+    },
+    /** The ice guard: upright, the glaive held level-fisted (upright), the head slowly turning to look round. */
+    guard(R, a, br) {
+        armTo(R.armR, 0.25, 0.1, 1.45);
+        armTo(R.armL, 0, -0.2, 0.35);
+        to(R.chest.rotation, 'x', -(0.02 + Math.sin(br) * 0.025));
+        to(R.head.rotation, 'y', Math.sin(a * Math.PI * 2) * 0.6);
+        legTo(R.legL, 0, 0, 0, -0.05); legTo(R.legR, 0, 0, 0, 0.05);
+    },
+    /** The shade creeping: low on bent legs, the body forward, the head raised to look ahead, long arms reaching. */
+    crouch(R) {
+        to(R.hips.position, 'y', 0.29);
+        R.legL.hp.rotation.x += 0.76 * _P.w; R.legR.hp.rotation.x += 0.76 * _P.w;
+        to(R.legL.kn.rotation, 'x', R.legL.kn.rotation.x - 1.5); to(R.legR.kn.rotation, 'x', R.legR.kn.rotation.x - 1.5);
+        to(R.legL.ft.rotation, 'x', 0.7); to(R.legR.ft.rotation, 'x', 0.7);
+        to(R.chest.rotation, 'x', -(0.8)); to(R.head.rotation, 'x', -(-0.7));
+        R.armL.sh.rotation.x += 0.9 * _P.w; R.armR.sh.rotation.x += 0.9 * _P.w;
+    },
+    /** The shade caught in light: frozen, hunched, both forearms over its face. */
+    cover(R, a) {
+        const t = Math.sin(a * 40) * 0.02; // (a tremble)
+        to(R.hips.position, 'y', 0.36);
+        legTo(R.legL, 0.55, -0.9, 0.35); legTo(R.legR, 0.35, -0.9, 0.55);
+        to(R.chest.rotation, 'x', -(0.45 + t)); to(R.head.rotation, 'x', -(0.5));
+        armTo(R.armL, 2.4, 0.45, 2.0); armTo(R.armR, 2.4 + t, -0.45, 2.0);
+    },
+    /** The roar: the chest thrown back, the head up, the arms spread wide, fists clenched; the legs set wide. */
+    roar(R, a) {
+        const k = env(a, 0, 0.25, 0.75, 1);
+        legTo(R.legL, lerp(0, 0.2, k), -0.3 * k, 0, -0.18 * k); legTo(R.legR, lerp(0, -0.15, k), -0.2 * k, 0, 0.18 * k);
+        to(R.chest.rotation, 'x', -(lerp(0.06, -0.35, k))); to(R.head.rotation, 'x', -(lerp(-0.08, -0.6, k)));
+        armTo(R.armL, -0.4 * k, -1.3 * k, 0.7 * k); armTo(R.armR, -0.4 * k, 1.3 * k, 0.7 * k);
+    },
+    /** Staggered: down on the right knee, the right hand on the ground, the left on the left knee, swaying. */
+    kneel(R, a) {
+        const k = env(a, 0, 0.12, 0.85, 1), sway = Math.sin(a * 18) * 0.04 * k;
+        R.hips.position.y = lerp(R.hips.position.y, 0.24, k * _P.w);
+        legTo(R.legR, 0.1 * k, -1.57 * k, 0.6 * k); legTo(R.legL, 1.4 * k, -1.4 * k, 0);
+        to(R.chest.rotation, 'x', -(0.5 * k + sway)); to(R.chest.rotation, 'z', sway);
+        armTo(R.armR, 0.9 * k, 0.25 * k, -0.05); armTo(R.armL, 0.7 * k, -0.2 * k, 0.9 * k);
+        to(R.head.rotation, 'x', -(0.35 * k + Math.sin(a * 11) * 0.06));
+    },
+    /** A boulder torn from the ground and thrown with both hands: bend and grip (0–0.35), heave overhead (–0.7), hurl (–0.8), recover. */
+    throw(R, a) {
+        const grab = env(a, 0, 0.25, 0.35, 0.55), over = env(a, 0.35, 0.62, 0.7, 0.8), hurl = env(a, 0.7, 0.78, 0.82, 1);
+        R.hips.position.y = lerp(R.hips.position.y, 0.32, grab * _P.w);
+        legTo(R.legL, 0.72 * grab, -1.44 * grab, 0.72 * grab, -0.1); legTo(R.legR, 0.72 * grab - 0.2 * hurl, -1.44 * grab, 0.72 * grab, 0.1);
+        to(R.chest.rotation, 'x', -(0.95 * grab - 0.3 * over + 0.5 * hurl));
+        const x = 1.3 * grab - 2.9 * over + 0.6 * hurl;
+        armTo(R.armL, x, -0.25, 0.25 + 0.4 * over); armTo(R.armR, x, 0.25, 0.25 + 0.4 * over);
+        to(R.head.rotation, 'x', -(0.4 * grab - 0.4 * over));
+    },
+    /** The frost breath: drawn in (the chest swells, the head back), then out — the head thrust forward, the arms back. */
+    breath(R, a) {
+        const draw = env(a, 0, 0.35, 0.4, 0.5), out = env(a, 0.4, 0.5, 0.9, 1);
+        to(R.chest.rotation, 'x', -(-0.3 * draw + 0.35 * out)); to(R.head.rotation, 'x', -(-0.5 * draw + 0.15 * out));
+        R.neck.rotation.x = -0.25 * out * _P.w;
+        armTo(R.armL, -0.4 * out, -0.5 * draw - 0.3 * out, 0.4); armTo(R.armR, -0.4 * out, 0.5 * draw + 0.3 * out, 0.4);
+        legTo(R.legL, 0.35 * out, -0.4 * out, 0); legTo(R.legR, -0.2 * out, -0.1 * out, 0);
+    },
+    /** The clap: the arms spread wide and forward — then brought together before the chest with a crack. */
+    clap(R, a) {
+        const open = env(a, 0, 0.4, 0.5, 0.55), shut = env(a, 0.5, 0.58, 0.85, 1);
+        armTo(R.armL, 1.4 * (open + shut), -1.3 * open + 0.15 * shut, 0.2 + 0.3 * shut); armTo(R.armR, 1.4 * (open + shut), 1.3 * open - 0.15 * shut, 0.2 + 0.3 * shut);
+        to(R.chest.rotation, 'x', -(-0.2 * open + 0.2 * shut)); to(R.head.rotation, 'x', -(-0.2 * open));
+        legTo(R.legL, 0.3 * shut, -0.3 * shut, 0, -0.1); legTo(R.legR, -0.2 * shut, -0.1 * shut, 0, 0.1);
+    },
+    /** Both fists into the ground: raised high together (0–0.55), brought down with the whole body (–0.68), held there. */
+    slam2(R, a) {
+        const up = env(a, 0, 0.5, 0.55, 0.62), down = env(a, 0.56, 0.66, 0.85, 1);
+        R.hips.position.y = lerp(R.hips.position.y, 0.3, down * _P.w);
+        legTo(R.legL, 0.75 * down, -1.5 * down, 0.75 * down, -0.15); legTo(R.legR, 0.75 * down, -1.5 * down, 0.75 * down, 0.15);
+        to(R.chest.rotation, 'x', -(-0.25 * up + 1.0 * down)); to(R.head.rotation, 'x', -(-0.4 * up + 0.2 * down));
+        const x = -2.8 * up + 1.25 * down;
+        armTo(R.armL, x, -0.15, 0.3 * up); armTo(R.armR, x, 0.15, 0.3 * up);
+    },
+    /** A thrust of the glaive: drawn back (the fist by the shoulder), then driven down and forward with the body behind it. */
+    thrust(R, a) {
+        const back = env(a, 0, 0.5, 0.55, 0.6), drive = env(a, 0.55, 0.65, 0.85, 1);
+        armTo(R.armR, -0.6 * back + 1.6 * drive, 0.2, 2.0 * back + 0.1 * drive);
+        to(R.chest.rotation, 'y', 0.4 * back - 0.2 * drive); to(R.chest.rotation, 'x', -(-0.1 * back + 0.45 * drive));
+        legTo(R.legL, 0.5 * drive, -0.5 * drive, 0); legTo(R.legR, -0.3 * drive, -0.1, 0);
+    },
+    /** The rock one curled into a boulder (to roll): all tucked in. */
+    curl(R, a) {
+        const k = ease(a);
+        R.hips.position.y = lerp(R.hips.position.y, 0.22, k * _P.w);
+        legTo(R.legL, 2.3 * k, -2.4 * k, 0.4 * k); legTo(R.legR, 2.3 * k, -2.4 * k, 0.4 * k);
+        to(R.chest.rotation, 'x', -(1.3 * k)); to(R.head.rotation, 'x', -(0.9 * k));
+        armTo(R.armL, 1.9 * k, 0.4 * k, 1.6 * k); armTo(R.armR, 1.9 * k, -0.4 * k, 1.6 * k);
+    },
+    /** The iron one shaking off what clings to it: the body twisting hard, the arms flung out. */
+    shake(R, a) {
+        const k = env(a, 0, 0.1, 0.85, 1), tw = Math.sin(a * 34) * 0.35 * k;
+        to(R.chest.rotation, 'y', tw); to(R.chest.rotation, 'z', tw * 0.3);
+        armTo(R.armL, 0.3 * k, -0.9 * k - tw, 0.4); armTo(R.armR, 0.3 * k, 0.9 * k - tw, 0.4);
+        to(R.head.rotation, 'y', -tw * 0.6);
+    },
+};
+export const WALKER_ACTS = Object.keys(ACTS);
+
+/**
+ * A copy of a titan's body sharing its shapes and materials (the shade's shadows of itself, the storm's small whirls): Object3D.clone
+ * keeps `userData` by reference — the rig would still point at the first body's joints; here it is pointed at the copy's own.
+ */
+export function cloneTitan(model) {
+    const c = model.clone();
+    const map = new Map(), a = [], b = [];
+    model.traverse((o) => a.push(o));
+    c.traverse((o) => b.push(o));
+    for (let i = 0; i < a.length; i++) map.set(a[i], b[i]);
+    const remap = (v) => (v && v.isObject3D ? map.get(v) || v : Array.isArray(v) ? v.map(remap) : v && typeof v === 'object' && !v.isMaterial ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, remap(x)])) : v);
+    c.userData = { ...model.userData, rig: remap(model.userData.rig) };
+    return c;
 }
