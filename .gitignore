@@ -19,3 +19,4 @@ vendor/onnx-tools/
 zns-arms.log*
 docs/media/shots/
 tools/tmp-*/
+assets/bosses/*.png
