@@ -62,7 +62,7 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, baksadiModel, bonesModels } from './Animals.js';
-import { PEGASUS_COATS, PEGASUS_COLOR } from './AnimalModels.js';
+import { PEGASUS_COATS, PEGASUS_COLOR, HORSE_COLORS } from './AnimalModels.js';
 import { FarShape, skinnedSamples } from '../core/FarShape.js';
 import { installSceneMatrices } from '../core/SceneMatrices.js';
 import { updateFarBatches, resetFarBatches } from '../core/FarBatch.js';
@@ -3878,6 +3878,7 @@ export class Game {
         if (this.darkFog) for (const m of this.darkFog.sampleMeshes()) zoo.add(m); // («Caligo»: the dome's and the smoke's shaders)
         if (this.slash) zoo.add(this.slash.sampleMesh()); // («Sectura»: the flying crescent's material)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
+        for (const c of HORSE_COLORS) zoo.add(animalModel('horse', c)); // (every horse coat's hair picture made now)
         for (let i = 0; i < PEGASUS_COATS.length; i++) zoo.add(animalModel('horse', PEGASUS_COLOR - 5 + i)); // (the Pegasus of some herds, every coat's hair picture made now)
         // (each animal as the video card draws it — one shape per material moved by its parts, FarShape: the skinned
         // shaders, with and without the shadow, and the kinds' shapes made now — not when the first herd comes into view)
