@@ -54,10 +54,12 @@ export default async function (h, args) {
         h.cam(cam, [home.x, gy + (def.look === 'worm' ? def.height * 0.2 : def.height * 0.45), home.z]);
         g.character.group.visible = false;
         h.bare();
-        const fog = g.scene.fog; g.scene.fog = null; // (no haze between: a portrait — the planet's own fog is put back after)
         await h.frames(30);
         Ti._draw(T, 0.05);
-        await h.shot('titan-' + id, { to: `assets/bosses/titan-${id}.png`, settle: 10 });
+        // (no haze between: the planet's dust and mist are put back every frame by Space — so they are taken away at the very moment of the
+        //  picture, after the last frame: a portrait, the game's own fog stays as it is)
+        const fog = g.scene.fog; g.scene.fog = null;
+        await h.shot('titan-' + id, { to: `assets/bosses/titan-${id}.png`, settle: 0 });
         g.scene.fog = fog;
         h.log(id, 'on', g.space?.realm, 'h', def.height, 'ground', Math.round(gy));
     }
