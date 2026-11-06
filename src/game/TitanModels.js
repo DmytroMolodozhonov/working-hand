@@ -337,11 +337,13 @@ function walker(look) {
             for (let i = 0; i < 6; i++) add('glow', new THREE.BoxGeometry(0.006, 0.08 + r() * 0.1, 0.006), 0xffffff, [(r() - 0.5) * chestW, 0.06 + r() * 0.2, -chestW * 0.35], [0, 0, (r() - 0.5) * 1.2]); // (the cracks)
         } else segment(look, 0.36, chestW, r, o);
     }));
-    const neck = new THREE.Group(); neck.position.y = 0.38; chest.add(neck);
+    // (a segment is built from its joint DOWN; the chest grows UP from the hips to the neck — its body is lifted by its own length)
+    if (look !== 'iron') chest.children[chest.children.length - 1].position.y = 0.38;
+    const neck = new THREE.Group(); neck.position.y = look === 'iron' ? 0.38 : 0.47; chest.add(neck); // (the others' chests are a pile of blobs up to ~0.5 over the hips)
     const hd = new THREE.Group(); hd.position.y = 0.07; neck.add(hd);
     hd.add(part((o) => head(look, 0.15 * (look === 'rock' ? 0.85 : 1), r, o)));
     const arm = (sd) => {
-        const sh = new THREE.Group(); sh.position.set(sd * chestW * 0.82, 0.32, 0); chest.add(sh);
+        const sh = new THREE.Group(); sh.position.set(sd * chestW * 0.82, look === 'iron' ? 0.32 : 0.4, 0); chest.add(sh);
         sh.add(part((o) => segment(look, armL * 0.5, armW, r, o)));
         const el = new THREE.Group(); el.position.y = -armL * 0.5; sh.add(el);
         el.add(part((o) => segment(look, armL * 0.5, armW * 0.9, r, o)));
