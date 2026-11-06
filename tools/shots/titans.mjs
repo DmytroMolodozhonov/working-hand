@@ -12,7 +12,7 @@ export default async function (h, args) {
     for (const id of ids) {
         for (const k of [...Ti.active.keys()]) Ti._drop(k);
         const def = (await import('/src/game/TitanRules.js')).TITANS[id];
-        const far = def.look === 'storm' ? 420 : def.look === 'worm' ? 330 : def.height * 2.1;
+        const far = def.look === 'storm' ? 300 : def.look === 'worm' ? 230 : def.height * 1.35;
         const x = me.x, z = me.z - far * 0.55;
         Ti._build(id, { x, y: 0, z });
         const T = Ti.active.get(id);
@@ -24,9 +24,11 @@ export default async function (h, args) {
         const cy = T.pos.y + (def.look === 'worm' ? def.height * 0.2 : def.height * 0.45);
         h.cam([x + far * 0.18, T.pos.y + def.height * (def.look === 'storm' ? 0.35 : 0.3), z + far], [x, cy, z]);
         g.character.group.visible = false;
+        const fog = g.scene.fog; g.scene.fog = null; // (no haze between: a portrait — the world's own fog is put back after)
         await h.frames(30);
         Ti._draw(T, 0.05);
         await h.shot('titan-' + id, { to: `assets/bosses/titan-${id}.png`, settle: 10 });
+        g.scene.fog = fog;
         h.log(id, 'h', def.height, 'pos', [T.pos.x, T.pos.y, T.pos.z].map(Math.round));
         void THREE;
     }
