@@ -37,7 +37,7 @@ function setup(canvas) {
     const dbg = gl.getExtension('WEBGL_debug_renderer_info');
     const ren = String(dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER) || '');
     soft = /swiftshader|llvmpipe|software|basic render/i.test(ren);
-    scale = soft ? 0.18 : 0.6;
+    scale = soft ? 0.18 : 0.5; // (the whirl is soft light: half the screen's pixels are plenty)
     return true;
 }
 
@@ -51,6 +51,16 @@ function frame(t) {
     const out = S.tOut ? Math.min(1, (t - S.tOut) / 1500) : 0;
     S.tt += dt * passageSpeed(elapsed, S.shown, out);
     skip = (skip + 1) % (soft ? 6 : 1); // (a software renderer: a picture every 6th frame — the processor makes the world)
+    // (a weak card: the whirl and the game's shaders share it — a friend's loading «дико садится фпс», 06.11. While the passage only fades in
+    //  (open < 1: the picture still faint) the frames are timed; slow ones — the picture is made smaller, twice at most, never after: no tear)
+    if (!soft && open < 1 && elapsed > 0.25) {
+        S.fT = (S.fT || 0) + dt; S.fN = (S.fN || 0) + 1;
+        if (S.fN >= 12) {
+            const avg = S.fT / S.fN;
+            if (avg > 0.028 && (S.down || 0) < 2) { scale *= avg > 0.05 ? 0.55 : 0.72; S.down = (S.down || 0) + 1; }
+            S.fT = 0; S.fN = 0;
+        }
+    }
     if (!skip) {
         // (a FIXED size while the passage runs: shrinking the canvas on a slow frame cleared and re-laid it — a visible tear, the author 06.11)
         const w = Math.max(2, Math.round(W * scale)), h = Math.max(2, Math.round(H * scale));
