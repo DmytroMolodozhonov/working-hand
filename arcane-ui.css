@@ -225,10 +225,21 @@
 @media (max-width: 600px) { #main-menu > .menu-container > .ar-stage { display: none; } }
 
 /* inside the panel: no frame in a frame in a frame — the cards are only a deeper shade with a hair of light */
-.ar-shaped .tab-content .menu-box, .ar-shaped .tab-content .settings-group, .ar-shaped .tab-content .hero-settings, .ar-shaped .tab-content .mech-card,
-.ar-shaped .tab-content .item-card, .ar-shaped .tab-content .boss-card, .ar-shaped .tab-content .sidebar-section, .ar-shaped .tab-content .map-card:not(.mode-card) {
+#main-menu .ar-shaped .tab-content .menu-box, #main-menu .ar-shaped .tab-content .settings-group, #main-menu .ar-shaped .tab-content .hero-settings, #main-menu .ar-shaped .tab-content .mech-card,
+#main-menu .ar-shaped .tab-content .item-card, #main-menu .ar-shaped .tab-content .boss-card, #main-menu .ar-shaped .tab-content .sidebar-section, #main-menu .ar-shaped .tab-content .map-card:not(.mode-card) {
     background: rgba(8, 4, 26, 0.34) !important; border: 1px solid rgba(196, 178, 255, 0.13) !important; box-shadow: none !important;
 }
-.ar-shaped .tab-content .menu-box .menu-box, .ar-shaped .tab-content .menu-box .hero-settings, .ar-shaped .tab-content .menu-box .settings-group {
+#main-menu .ar-shaped .tab-content .menu-box .menu-box, #main-menu .ar-shaped .tab-content .menu-box .hero-settings, #main-menu .ar-shaped .tab-content .menu-box .settings-group {
     background: rgba(255, 255, 255, 0.025) !important; border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* the section's contents reach the arc (ArcaneShapes: the scroller is cut along the arc; boxes at its left edge pour their colour to it) */
+@media (min-width: 601px) {
+    /* (the section itself reaches over the crescent — a section that scrolls on its own would cut the colour at its edge otherwise) */
+    #main-menu > .menu-container.ar-shaped > .tab-content { margin-left: calc(-1 * var(--ar-B, 0px)); padding-left: 0 !important; }
+    #main-menu .ar-shaped > .tab-content > .tab-pane { padding-left: calc(var(--ar-B, 0px) + 26px); }
+    #main-menu .ar-shaped .tab-content .ar-bleed {
+        box-shadow: calc(-1 * var(--ar-B, 0px) - 30px) 0 0 0 var(--ar-bc, rgba(14, 8, 40, 0.6)) !important; /* (the colour pours left to the arc) */
+        border-left-color: transparent !important; border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important;
+    }
 }

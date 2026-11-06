@@ -127,7 +127,12 @@ export class ArcaneShapes {
             const it = { frame, seed: 1 + this.items.size * 2.7, stage: null, content: null };
             if (el.matches('#main-menu > .menu-container')) {
                 it.content = el.querySelector(':scope > .tab-content');
-                if (it.content) { it.stage = makeFigure(); el.insertBefore(it.stage, it.content); this.ro.observe(it.content); }
+                if (it.content) {
+                    it.stage = makeFigure(); el.insertBefore(it.stage, it.content); this.ro.observe(it.content);
+                    const ask = () => this._bleedSoon(el);
+                    new MutationObserver(ask).observe(it.content, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+                    el.addEventListener('click', () => setTimeout(ask, 30));
+                }
                 // the buttons: a big sign, the name and a line of what is behind it
                 for (const b of el.querySelectorAll('.tabs .tab-btn')) {
                     if (b.querySelector('.ar-txt')) continue;
@@ -144,6 +149,43 @@ export class ArcaneShapes {
             }
             this.items.set(el, it);
             this.ro.observe(el);
+        }
+    }
+
+    /** Mark the boxes at the section's left edge (after a tab, a sub-tab, new contents, a new size) — once per frame at most. */
+    _bleedSoon(el) {
+        const it = this.items.get(el);
+        if (!it || it._bleedAsk) return;
+        it._bleedAsk = requestAnimationFrame(() => { it._bleedAsk = 0; this._bleed(el, it); });
+    }
+
+    _bleed(el, it) {
+        const c = it.content;
+        if (!c || !c.style.clipPath) return;
+        const pane = c.querySelector('.tab-pane.active') || c;
+        for (const o of c.querySelectorAll('.ar-bleed')) o.classList.remove('ar-bleed');
+        const pr = pane.getBoundingClientRect(), left = pr.left + parseFloat(getComputedStyle(pane).paddingLeft || '0'); // (where the section's contents begin)
+        const boxy = (cs) => cs.backgroundImage !== 'none' || (cs.backgroundColor && !/rgba\([^)]*,\s*0\)|transparent/.test(cs.backgroundColor)) || parseFloat(cs.borderLeftWidth) > 0;
+        const firstColour = (cs) => {
+            if (cs.backgroundColor && !/rgba\([^)]*,\s*0\)|transparent/.test(cs.backgroundColor)) return cs.backgroundColor;
+            const m = cs.backgroundImage.match(/rgba?\([^)]+\)|#[0-9a-f]{3,8}\b/i);
+            return m ? m[0] : null;
+        };
+        // breadth-first down the section; a box at the left edge takes the bleed and its insides are not looked at
+        const queue = [...pane.children]; let n = 0;
+        while (queue.length && n++ < 600) {
+            const e = queue.shift();
+            if (!e.offsetParent && getComputedStyle(e).position !== 'fixed') continue; // (hidden)
+            const r = e.getBoundingClientRect();
+            if (r.width < 40 || r.height < 12) continue;
+            const cs = getComputedStyle(e);
+            if (Math.abs(r.left - left) < 4 && boxy(cs)) {
+                const col = firstColour(cs);
+                if (col) e.style.setProperty('--ar-bc', col);
+                e.classList.add('ar-bleed');
+                continue;
+            }
+            if (r.left - left < 40) queue.push(...e.children); // (only what may hold a box at the edge)
         }
     }
 
@@ -194,6 +236,16 @@ export class ArcaneShapes {
             it.stage._left.setAttribute('d', `M0 0 L${arcPts.join(' L')} L0 ${sh} Z`);
             it.stage._arcGlow.setAttribute('d', arcD); it.stage._arc.setAttribute('d', arcD);
             it.stage._rim.setAttribute('d', ds);
+            // the section's contents reach the arc too (the author: «все элементы — частью дуги, без пустого пространства»): the scroller
+            // reaches left over the crescent (CSS: --ar-B), is cut along the arc (in its own box — the cut does not scroll), and the boxes
+            // standing at its left edge pour their colour to the arc (.ar-bleed — a shadow to the left, no layout change)
+            el.style.setProperty('--ar-B', B.toFixed(1) + 'px');
+            requestAnimationFrame(() => {
+                const cl = c.offsetLeft, ct = c.offsetTop, ch = c.offsetHeight, cw = c.offsetWidth, pts = [];
+                for (let k = 0; k <= 30; k++) { const y = ct + ch * k / 30; pts.push(`${(arcX(y) + 2 - cl).toFixed(1)}px ${(y - ct).toFixed(1)}px`); }
+                c.style.clipPath = `polygon(${cw}px 0px, ${pts.join(',')}, ${cw}px ${ch}px)`;
+                this._bleedSoon(el);
+            });
         }
     }
 }
