@@ -35,6 +35,7 @@ import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor,
 import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
 import { VampireCastleSite } from './VampireCastle.js';
+import { PyramidSite, PYR, isPyramidBlock } from './Pyramids.js';
 import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE, iceMount } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
@@ -79,6 +80,9 @@ export const BLOCK = {
     // with glowing veins, ash, lava (solid to walk on — it burns: HellLava.js), the titans' bone, dressed black stone of the roads and bridges, forged iron
     // (the ring of the devil's chain). 78–85 are hell's; the next free number is 86.
     HELL_BASALT: 78, HELL_OBSIDIAN: 79, HELL_EMBER: 80, HELL_ASH: 81, HELL_LAVA: 82, HELL_BONE: 83, HELL_BRICK: 84, HELL_IRON: 85,
+    // THE PYRAMIDS of Pharaoh Sandy (Pyramids.js, generation 27): dressed sandstone, pale fine stone, four paints (lapis, ochre, turquoise, black), a torch put out and one
+    // burning, a pressure plate. 86–94; their numbers are PB in Pyramids.js (a test keeps them equal). The next free number is 95.
+    PYR_STONE: 86, PYR_BRICK: 87, PYR_BLUE: 88, PYR_RED: 89, PYR_TURQ: 90, PYR_BLACK: 91, PYR_TORCH_OFF: 92, PYR_TORCH_ON: 93, PYR_PLATE: 94,
 };
 /** A block of hell's land (HellLand.js). */
 export const isHellBlock = (t) => t >= BLOCK.HELL_BASALT && t <= BLOCK.HELL_IRON;
@@ -233,6 +237,8 @@ export const BASE_COLORS = {
     [BLOCK.HELL_BONE]: 0xc8b896,
     [BLOCK.HELL_BRICK]: 0x2e2a2c,
     [BLOCK.HELL_IRON]: 0x3a3634,
+    [BLOCK.PYR_STONE]: 0xe6cb8c, [BLOCK.PYR_BRICK]: 0xf1e2b6, [BLOCK.PYR_BLUE]: 0x25489c, [BLOCK.PYR_RED]: 0xa63a28, [BLOCK.PYR_TURQ]: 0x24a398,
+    [BLOCK.PYR_BLACK]: 0x1b1822, [BLOCK.PYR_TORCH_OFF]: 0x4a3a2a, [BLOCK.PYR_TORCH_ON]: 0xffb14a, [BLOCK.PYR_PLATE]: 0xa8743a,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -250,6 +256,7 @@ Object.assign(PATTERN_OF, {
     [BLOCK.GHOST_STONE]: PATTERN.GHOST_STONE, [BLOCK.GHOST_BRICK]: PATTERN.GHOST_BRICK, [BLOCK.GHOST_TILE]: PATTERN.GHOST_TILE, [BLOCK.GHOST_ROOF]: PATTERN.GHOST_ROOF, [BLOCK.GHOST_LAMP]: PATTERN.GHOST_LAMP,
     [BLOCK.HELL_BASALT]: PATTERN.HELL_BASALT, [BLOCK.HELL_OBSIDIAN]: PATTERN.HELL_OBSIDIAN, [BLOCK.HELL_EMBER]: PATTERN.HELL_EMBER, [BLOCK.HELL_ASH]: PATTERN.HELL_ASH,
     [BLOCK.HELL_LAVA]: PATTERN.HELL_LAVA, [BLOCK.HELL_BONE]: PATTERN.HELL_BONE, [BLOCK.HELL_BRICK]: PATTERN.HELL_BRICK, [BLOCK.HELL_IRON]: PATTERN.HELL_IRON,
+    [BLOCK.PYR_STONE]: PATTERN.ASHLAR, [BLOCK.PYR_BRICK]: PATTERN.ASHLAR, [BLOCK.PYR_TORCH_OFF]: PATTERN.COBBLE, [BLOCK.PYR_TORCH_ON]: PATTERN.GLOW, [BLOCK.PYR_PLATE]: PATTERN.TILES,
 });
 /** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
 const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
@@ -280,7 +287,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 26;
+export const WORLD_GEN = 27;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -398,6 +405,8 @@ export const SEABED_FROM_GEN = 24;
 export const WIZ_SHOPS_FROM_GEN = 25;
 /** The first generation with Count Sracula's castle on its crag over a gorge, a bridge to its gates (VampireCastle.js; one in the world). */
 export const VAMPIRE_FROM_GEN = 26;
+/** The first generation with the three pyramids of Pharaoh Sandy in a desert of their own, one in the world (Pyramids.js). */
+export const PYRAMIDS_FROM_GEN = 27;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -697,7 +706,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false } = {}) {
         this.seed = seed;
         this.hell = !!hell; // (hell: a far map of this world — HellMap.js; in every world, the Earth's land is not touched)
         this._hellPlan = null;
@@ -724,7 +733,7 @@ export class TerrainData {
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = this.pyr = null;
         this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
@@ -748,6 +757,11 @@ export class TerrainData {
             void this.vamp?.plan; // (worked out now: finding it re-samples `raw`, which the height function reads in a certain order)
             const near0 = near;
             near = (x, z, r) => near0(x, z, r) || !!this.vamp?.near(x, z, r);
+            // the three pyramids of Pharaoh Sandy (Pyramids.js; generation 27): one desert in the world, away from every site
+            this.pyr = pyramids && this.lush ? new PyramidSite(seed, raw, (x, z, r) => near(x, z, r) || busy(x, z)) : null;
+            void this.pyr?.plan; // (worked out now, in the same order everywhere: finding it re-samples `raw`)
+            const near1 = near;
+            near = (x, z, r) => near1(x, z, r) || !!this.pyr?.near(x, z, r);
             // (generation 11: the spider's den has a butte of its own, away from every site — SpiderDens.js)
             // (a dragon's lair nearer than 420 m: another place — tried by the raw land, before the butte is made)
             const lairNear = (x, z, r) => {
@@ -772,7 +786,7 @@ export class TerrainData {
             if (this.ghost && ghostSeen) this.ghost.on = true;
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas, this.dungeons);
             this.iceCastle = ice;
-            const den = this.den, vamp = this.vamp;
+            const den = this.den, vamp = this.vamp, pyr = this.pyr;
             const fn = (ix, iz) => {
                 let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach, bank = raw.bank; // (read before landAt: finding a site re-samples raw)
                 const kind = raw.kind;
@@ -783,6 +797,8 @@ export class TerrainData {
                 if (den) { const m = den.liftAt(ix, iz, h); if (den.lifted) { h = m; wet = 0; sea = false; beach = false; fn.iceRock = true; } } // (the spider's butte: bare rock)
                 fn.vampRock = false;
                 if (vamp) { const m = vamp.shapeAt(ix, iz, h); if (vamp.lifted) { h = m; wet = 0; sea = false; beach = false; fn.vampRock = true; } } // (Count Sracula's crag and ridge: dark bare rock)
+                fn.pyrSand = false;
+                if (pyr) { const m = pyr.shapeAt(ix, iz, h); if (pyr.lifted) { h = m; wet = 0; sea = false; beach = false; fn.pyrSand = true; } } // (the pyramids' desert: levelled sand)
                 const land = idx.landAt(ix, iz);
                 fn.sea = sea; fn.beach = beach; fn.kind = kind; fn.bank = bank && !land;
                 fn.mesa = mesa; fn.emer = emer; fn.moon = moon; fn.fant = fant;
@@ -799,7 +815,7 @@ export class TerrainData {
                 const F = land.castle.F;
                 return land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w));
             };
-            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.iceRock = false; fn.vampRock = false;
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.iceRock = false; fn.vampRock = false; fn.pyrSand = false;
             fn.mesa = fn.emer = fn.moon = fn.fant = 0;
             this.heightAt = fn;
         } else this.heightAt = raw;
@@ -815,6 +831,7 @@ export class TerrainData {
                         const h = planetHeight(def, ix, iz);
                         fn.water = planetHeight.water; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
                         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
+                        fn.pyrSand = false;
                         return h;
                     }
                     if (qmap && inQueenMap(ix, iz, 2)) {
@@ -822,6 +839,7 @@ export class TerrainData {
                         fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
                         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
                         fn.iceRock = true; // (no grass, no trees: snow where it can lie, bare rock on the crags)
+                        fn.pyrSand = false;
                         return h;
                     }
                 }
@@ -829,6 +847,7 @@ export class TerrainData {
                 const h = earthH(ix, iz);
                 fn.water = earthH.water; fn.sea = earthH.sea; fn.beach = earthH.beach; fn.bank = earthH.bank; fn.kind = earthH.kind;
                 fn.mesa = earthH.mesa; fn.emer = earthH.emer; fn.moon = earthH.moon; fn.fant = earthH.fant;
+                fn.pyrSand = !!earthH.pyrSand; // (the pyramids' desert: the sand under them)
                 return h;
             };
             fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
@@ -845,11 +864,12 @@ export class TerrainData {
                     fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
                     fn.mesa = fn.emer = fn.moon = fn.fant = 0;
                     fn.iceRock = true; // (no grass, no trees)
+                    fn.pyrSand = false;
                     return h;
                 }
                 const h = inner(ix, iz);
                 fn.water = inner.water; fn.sea = inner.sea; fn.beach = inner.beach; fn.bank = inner.bank; fn.kind = inner.kind;
-                fn.mesa = inner.mesa; fn.emer = inner.emer; fn.moon = inner.moon; fn.fant = inner.fant; fn.iceRock = inner.iceRock;
+                fn.mesa = inner.mesa; fn.emer = inner.emer; fn.moon = inner.moon; fn.fant = inner.fant; fn.iceRock = inner.iceRock; fn.pyrSand = !!inner.pyrSand;
                 return h;
             };
             fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
@@ -1015,7 +1035,7 @@ export class TerrainData {
                 if (px === 0 || pz === 0 || px === P - 1 || pz === P - 1) continue;
                 const col = (pz - 1) * CHUNK + (px - 1);
                 water[col] = H.water;
-                iceR[col] = H.iceRock ? 1 : H.vampRock ? 2 : 0;
+                iceR[col] = H.iceRock ? 1 : H.vampRock ? 2 : H.pyrSand ? 3 : 0;
                 flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0) | (H.bank ? 8 : 0);
                 kinds[col] = H.kind || 0;
                 fx.mesa = H.mesa || 0; fx.emer = H.emer || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
@@ -1041,7 +1061,10 @@ export class TerrainData {
                 const snow = land.snowLine(x, z, _lush.T[col]);
                 snowL[col] = Math.round(snow);
                 const m = mesa[col] / 255;
-                if (iceR[col] === 2 || (!iceR[col] && this.vamp?.rocky(x, z))) {
+                if (iceR[col] === 3) {
+                    // the pyramids' desert: sand all the way down, a little pale stone under it; never grass
+                    surf = BLOCK.SAND; soil = BLOCK.SAND; deep = 0;
+                } else if (iceR[col] === 2 || (!iceR[col] && this.vamp?.rocky(x, z))) {
                     // Count Sracula's crag and ridge: dark bare rock — deep stone, scree, here and there basalt; never grass, never snow
                     const patch = hashLand(x >> 1, z >> 1, this.seed + 97);
                     surf = patch > 0.82 ? BLOCK.GRAVEL : patch > 0.55 ? BLOCK.HELL_BASALT : BLOCK.DEEPSTONE; soil = BLOCK.DEEPSTONE; deep = 0;
@@ -1215,11 +1238,11 @@ export class TerrainData {
                 const b = BIOMES[this.biomeAt(tx, tz)];
                 if (roll > b.trees * grove(tx, tz)) continue;
                 const h = H(tx, tz);
-                if (h < 1 || H.water || H.beach || H.kind === KIND.MESA || H.iceRock || H.vampRock) continue; // (the Ice Castle's mountain, Count Sracula's crag: bare rock)
+                if (h < 1 || H.water || H.beach || H.kind === KIND.MESA || H.iceRock || H.vampRock || H.pyrSand) continue; // (the Ice Castle's mountain, Count Sracula's crag: bare rock)
                 const kind = b.kinds[Math.floor(hashLand(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * b.kinds.length)];
                 if (h > LUSH.TREE_LINE + (kind === 2 ? 8 : 0)) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
-                if (this.iceCastle?.rocky(tx, tz) || this.vamp?.rocky(tx, tz)) continue; // (the Ice Castle's peak, the vampire's crag: bare rock)
+                if (this.iceCastle?.rocky(tx, tz) || this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz)) continue; // (the Ice Castle's peak, the vampire's crag: bare rock)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue;
                 if (this.ghost?.on && (this.ghost.insideAt(tx, tz, 6) || this.ghost.insideAt(tx + 1, tz + 1, 6))) continue; // (the Castle of Ghosts has no trees on its terrace)
                 const wide = kind === 0 || kind === 4; // (oak and dark oak: a 2×2 trunk)
@@ -1274,7 +1297,7 @@ export class TerrainData {
             H(x, z);
             const chance = 0.025 + 0.55 * ((H.moon || 0) + (H.emer || 0)) + 0.15 * (H.mesa || 0);
             const R = ISLE.R_MIN + Math.floor(hashLand(gx + 5, gz - 2, S + 303) * (ISLE.R_MAX - ISLE.R_MIN + 1));
-            if (hashLand(gx - 9, gz + 4, S + 304) < chance && !(this.sites && this.sites.near(x, z, R * 2 + 40).length)) {
+            if (hashLand(gx - 9, gz + 4, S + 304) < chance && !(this.sites && this.sites.near(x, z, R * 2 + 40).length) && !this.pyr?.near(x, z, R * 2 + 40)) { // (no floating island over the pyramids' desert)
                 // the highest ground under it and round it
                 let g = 0;
                 for (let k = 0; k < 13; k++) {
@@ -1393,6 +1416,7 @@ export class TerrainData {
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
         let lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
+        if (this.pyr) { const p = this.pyr.partsForChunk(c.cx, c.cz, CHUNK); if (p.length) lists = lists.length ? lists.concat(p) : p; } // (the three pyramids: Pyramids.js)
         if (this.vamp) { const v = this.vamp.partsForChunk(c.cx, c.cz, CHUNK); if (v.length) lists = lists.length ? lists.concat(v) : v; } // (Count Sracula's castle: VampireCastle.js)
         if (this.ghost?.on) { const g = this.ghost.partsForChunk(c.cx, c.cz, CHUNK); if (g.length) lists = lists.length ? lists.concat(g) : g; } // (the Castle of Ghosts: only in a seer's land — GhostCastle.js)
         if (!lists.length) return;
@@ -1949,7 +1973,7 @@ export class TerrainData {
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue; // not on a beach (nor its crown)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue; // no trees in villages
                 if (this.ghost?.on && this.ghost.insideAt(tx, tz, 6)) continue;
-                if (this.vamp?.rocky(tx, tz)) continue; // (the vampire's crag)
+                if (this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz)) continue; // (the vampire's crag, the pyramids' desert)
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
                 // Only on level dry ground (the 2×2 trunk and its surroundings)
@@ -2300,6 +2324,10 @@ export class TerrainData {
         const ip = this.iceCastle?.plan;
         const dense = ip && cx + radius >= ip.x0 && cx - radius <= ip.x1 && cz + radius >= ip.z0 && cz - radius <= ip.z1 ? ip : null;
         const d2 = r2 * PALACE_ICE.BLAST * PALACE_ICE.BLAST;
+        // (the pyramids' stone: four times as hard — a blast breaks it only in the heart of it, PYR.BLAST)
+        const pp = this.pyr?.plan;
+        const pyrNear = pp && cx + radius >= pp.x0 && cx - radius <= pp.x1 && cz + radius >= pp.z0 && cz - radius <= pp.z1;
+        const pd2 = r2 * PYR.BLAST * PYR.BLAST;
         for (let iz = z0; iz <= z1; iz++) {
             for (let ix = x0; ix <= x1; ix++) {
                 const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
@@ -2314,6 +2342,7 @@ export class TerrainData {
                     const type = c.blocks[idx];
                     if (type === BLOCK.AIR || type === BLOCK.BEDROCK || type === BLOCK.WATER) continue;
                     if (dense && dd > d2 && isPalaceIce(type) && inIcePalace(dense, ix, iz)) continue;
+                    if (pyrNear && dd > pd2 && isPyramidBlock(type)) continue;
                     if (keep && keep(ix, by, iz)) continue; // (inside a house's sphere of protection)
                     if (this.godGiftAt && this.godGiftAt(ix, by, iz)) continue; // (a gift of the gods: the temple's ground)
                     if (isEnchanted(type) && !enchantMayBreak(this, ix, iz)) continue; // (the enchanted stone: the blast is, the stone stays)

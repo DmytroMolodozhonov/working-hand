@@ -110,7 +110,7 @@ const STUFF = [];
     put(['LEAVES', 'BIRCH_LEAVES', 'SPRUCE_LEAVES', 'CHERRY_LEAVES', 'DARK_LEAVES', 'PLANET_LEAF'], S_LEAVES);
     put(['CLOTH_WHITE', 'CLOTH_YELLOW'], S_CLOTH);
     put(['CARPET_RED', 'CARPET_BLUE', 'CARPET_GREEN', 'CARPET_PURPLE'], S_CARPET);
-    put(['LANTERN', 'ARCANE_LAMP', 'ARCANE_LAMP_VIOLET'], S_LAMP);
+    put(['LANTERN', 'ARCANE_LAMP', 'ARCANE_LAMP_VIOLET', 'PYR_TORCH_OFF', 'PYR_TORCH_ON'], S_LAMP);
     put(['WHEAT', 'VEG', 'FLOWERS'], S_PLANT);
     put(['BOOKS', 'POTION'], S_SHELF);
 })();
@@ -120,7 +120,7 @@ export const stuffOf = (t) => STUFF[t] || S_DEFAULT;
 /** What never gives way and holds whatever leans on it: natural ground (here and on the planets), bedrock, frozen water, the enchanted stone. */
 const HOLDS = new Set();
 export function holdsFast(t) {
-    if (!HOLDS.size) for (const k of ['GRASS', 'DIRT', 'STONE', 'SNOW', 'SAND', 'ICE', 'BEDROCK', 'FARMLAND', 'PATH', 'ICE_SHAPE', 'GRAVEL', 'DEEPSTONE', 'REGOLITH', 'PLANET_ROCK', 'PLANET_ICE', 'PLANET_DARK', 'PLANET_GRASS']) if (BLOCK[k] != null) HOLDS.add(BLOCK[k]);
+    if (!HOLDS.size) for (const k of ['GRASS', 'DIRT', 'STONE', 'SNOW', 'SAND', 'ICE', 'BEDROCK', 'FARMLAND', 'PATH', 'ICE_SHAPE', 'GRAVEL', 'DEEPSTONE', 'REGOLITH', 'PLANET_ROCK', 'PLANET_ICE', 'PLANET_DARK', 'PLANET_GRASS', 'PYR_STONE', 'PYR_BRICK', 'PYR_BLUE', 'PYR_RED', 'PYR_TURQ', 'PYR_BLACK', 'PYR_PLATE']) if (BLOCK[k] != null) HOLDS.add(BLOCK[k]);
     return HOLDS.has(t) || isEnchanted(t);
 }
 
