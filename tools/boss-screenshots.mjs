@@ -106,6 +106,21 @@ const SCENES = {
         const p = v.group.position;
         return { ...h.view(v.group, { d: 6, up: 1.8, at: 1.4 }), info: `captain at ${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)}; ship ${ship.st.x.toFixed(1)},${ship.st.z.toFixed(1)}` };
     },
+    vampire: async (h) => {
+        const g = h.g, V = g.vampire, P = V?.plan;
+        if (!P) return { skip: 'no vampire castle (an old world?)' };
+        h.time(0.3);
+        await h.go(P.hall.x, P.hall.y + 2.2, P.hall.z, true);
+        await h.until(() => V.count, 30000);
+        const k = V.count;
+        if (!k) return { skip: 'no count' };
+        V._wake?.('guest'); // (peaceful: he talks to the guest — parley)
+        await h.frames(40);
+        k.pos.set(P.throne.x, P.floor + 0.5, P.throne.z);
+        k.parleyT = -1e9; // (no warnings, no attack while the picture is taken)
+        await h.frames(20);
+        return h.view(k.model.group, { d: 5, up: 1.6, at: 2.2 });
+    },
 };
 
 function toWebp(png, webp) {
