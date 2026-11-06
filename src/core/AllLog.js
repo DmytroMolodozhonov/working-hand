@@ -139,6 +139,15 @@ export function hookAllLog() {
     };
     window.addEventListener('error', (ev) => err(`${ev.message || 'ошибка'}${ev.filename ? ` (${String(ev.filename).split('/').slice(-2).join('/')}:${ev.lineno})` : ''}`));
     window.addEventListener('unhandledrejection', (ev) => err(`необработанный отказ: ${String(ev.reason?.message || ev.reason).slice(0, 300)}`));
+    // (a tab the browser killed — out of memory, a graphics crash — leaves no error and no «pagehide»: a heartbeat in the browser's storage says so at the next start)
+    const KEY = 'zns-alive';
+    try {
+        const prev = JSON.parse(localStorage.getItem(KEY) || 'null');
+        if (prev && prev.t) allLog('Игра', `⚠ прошлая игра закрылась не по-хорошему (вкладку убил браузер, сбой видеокарты или питание): последний знак жизни ${new Date(prev.t).toLocaleTimeString()}, ${prev.s || '—'}`, 'warn');
+        const beat = () => { try { const m = performance?.memory?.usedJSHeapSize; localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), s: `память ${m ? Math.round(m / 1048576) + ' МБ' : '?'}, ${String(window.__zns?.game?.config?.mode || 'меню')}, последнее: ${ALL._last ? ALL._last.tag + ': ' + String(ALL._last.text).slice(0, 80) : ''}`.slice(0, 200) })); } catch (_) { /* no storage */ } };
+        beat(); setInterval(beat, 5000);
+        window.addEventListener('pagehide', () => { try { localStorage.removeItem(KEY); } catch (_) { /* closing */ } });
+    } catch (_) { /* no storage */ }
     window.addEventListener('pagehide', () => ALL.flush({ beacon: true }));
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') ALL.flush({ beacon: true }); });
 }

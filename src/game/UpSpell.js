@@ -147,7 +147,8 @@ export class UpSpell {
         const what = upAction({ down, swimming, armUp, standing });
         if (what !== 'rise' && what !== 'leap') { if (what && isFinal) g.hud.setVoice(what, true); return null; }
         // (the author 05.11: «Stand Up — только в пещере, в воде или когда реально застрял; на пустой поляне не работает»)
-        if (what === 'leap' && !swimming && !g.ships?.rigging?.climbing && !g._inCave && !this.boxedIn()) {
+        // (Creative: no terrain exceptions — the author 06.11: «Stand Up должен быть без исключений на местность для творческого режима»)
+        if (what === 'leap' && !swimming && !g.ships?.rigging?.climbing && !g._inCave && g.config?.mode !== 'creative' && !this.boxedIn()) {
             if (isFinal) g.hud.setVoice('⬆️ «Up» подбрасывает только в пещере, в воде или когда вы застряли — здесь можно просто идти', true);
             return null;
         }
