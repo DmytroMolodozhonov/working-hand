@@ -196,6 +196,8 @@ function mats(look) {
     } else if (look === 'lava') {
         m.body = std({ map: TEX.lava(), emissiveMap: TEX.lavaGlow(), emissive: 0xff6a10, emissiveIntensity: 1.6, roughness: 0.85 });
         m.glow = std({ color: 0xffb040, emissive: 0xff7a10, emissiveIntensity: 3, roughness: 1, transparent: true, opacity: 0.85, depthWrite: false });
+        m.crust = std({ map: TEX.lava(), color: 0x2a1e1a, roughness: 0.95, emissiveMap: TEX.lavaGlow(), emissive: 0xff3a00, emissiveIntensity: 0.35 }); // (the cooled crust: dark rock, the lava showing only in its cracks)
+        m.eye = std({ color: 0xffd23a, emissive: 0xffb800, emissiveIntensity: 1.6, roughness: 1 });
     } else if (look === 'rock') {
         m.body = std({ map: TEX.rock(), roughness: 0.95 });
         m.glow = std({ color: 0xffe9a0, emissive: 0xffc860, emissiveIntensity: 2.6 });
@@ -236,8 +238,9 @@ function segment(look, len, w, r, out, { crown = false } = {}) {
     } else if (look === 'lava') {
         // blobs of crusted lava, flowing into each other; drips of fire hang below
         const n = Math.max(3, Math.round(len / w * 1.3));
-        for (let i = 0; i < n; i++) { const t = (i + 0.5) / n; add('body', rough(new THREE.IcosahedronGeometry(w * (0.48 + 0.12 * Math.sin(t * Math.PI)), 2), r, 0.22), 0xffffff, [(r() - 0.5) * w * 0.15, -t * len, (r() - 0.5) * w * 0.15], [r(), r(), r()], [1, 1.3, 1]); }
-        for (let i = 0; i < 2; i++) add('glow', new THREE.ConeGeometry(w * 0.08, w * 0.6, 6), 0xffffff, [(r() - 0.5) * w * 0.8, -len * (0.3 + r() * 0.6), w * 0.42], [Math.PI, 0, 0]);
+        // (melting: the blobs sag — wider below, as a thing about to drip — and long strands of fire hang from them)
+        for (let i = 0; i < n; i++) { const t = (i + 0.5) / n; add('body', rough(new THREE.IcosahedronGeometry(w * (0.5 + 0.18 * t), 2), r, 0.22), 0xffffff, [(r() - 0.5) * w * 0.15, -t * len, (r() - 0.5) * w * 0.15], [r(), r(), r()], [1, 1.45, 1]); }
+        for (let i = 0; i < 4; i++) { const dl = w * (0.8 + r() * 1.6); add('glow', new THREE.CylinderGeometry(w * 0.05, w * 0.02, dl, 5), 0xffffff, [(r() - 0.5) * w * 0.8, -len * (0.25 + r() * 0.7) - dl / 2, (r() - 0.5) * w * 0.8]); add('glow', new THREE.SphereGeometry(w * 0.07, 6, 4), 0xffffff, [0, 0, 0]); }
     } else if (look === 'ice') {
         // a core of clear ice and shards of every size sticking out from it; frost on the upper faces
         add('body', rough(new THREE.CylinderGeometry(w * 0.42, w * 0.36, len, 6, 2), r, 0.12), 0xd8f0ff, [0, -len / 2, 0]);
@@ -265,8 +268,12 @@ function head(look, s, r, out) {
         add('body', new THREE.ConeGeometry(s * 0.12, s * 0.5, 4), 0x7c7670, [0, s * 0.6, 0]); // (the crest)
         add('glow', new THREE.BoxGeometry(s * 0.75, s * 0.07, s * 0.06), 0xffffff, [0, s * 0.02, -s * 0.47]); // (the eye-slit: the sun inside him)
     } else if (look === 'lava') {
-        add('body', rough(new THREE.IcosahedronGeometry(s * 0.5, 2), r, 0.2), 0xffffff, [0, 0, 0], [0, 0, 0], [1, 1.1, 1]);
-        eyes(s * 0.08, -s * 0.44, s * 0.18, s * 0.08);
+        // a head of solid igneous rock (the one hard part of it), heavy and low, a brow over two bright yellow eyes, a glowing maw
+        add('crust', rough(new THREE.IcosahedronGeometry(s * 0.55, 2), r, 0.22), 0xffffff, [0, 0, 0], [0, 0, 0], [1.15, 0.95, 1.05]);
+        add('crust', rough(new THREE.DodecahedronGeometry(s * 0.34, 1), r, 0.3), 0xffffff, [0, s * 0.2, -s * 0.28], [0.3, 0, 0], [1.7, 0.45, 0.8]); // (the brow)
+        add('crust', rough(new THREE.DodecahedronGeometry(s * 0.3, 1), r, 0.3), 0xffffff, [0, -s * 0.38, -s * 0.22], [0, 0, 0], [1.4, 0.6, 1]); // (the jaw)
+        add('glow', new THREE.BoxGeometry(s * 0.55, s * 0.08, s * 0.12), 0xffffff, [0, -s * 0.22, -s * 0.48]); // (the maw's glow)
+        for (const sd of [-1, 1]) add('eye', new THREE.SphereGeometry(s * 0.1, 10, 8), 0xffffff, [sd * s * 0.2, s * 0.06, -s * 0.5], [0, 0, sd * 0.2], [1.5, 0.75, 0.5]);
         for (let i = 0; i < 9; i++) add('glow', new THREE.ConeGeometry(s * (0.1 + r() * 0.08), s * (0.6 + r() * 0.9), 6), 0xffffff, [(r() - 0.5) * s * 0.7, s * (0.55 + r() * 0.2), (r() - 0.3) * s * 0.6], [(r() - 0.5) * 0.5, 0, (r() - 0.5) * 0.6]); // (hair of flames)
     } else if (look === 'ice') {
         add('body', rough(new THREE.IcosahedronGeometry(s * 0.5, 1), r, 0.25), 0xd8f0ff, [0, 0, 0]);
@@ -288,6 +295,12 @@ function extremity(look, s, r, out, foot = false) {
         else if (look === 'lava') add('body', rough(new THREE.IcosahedronGeometry(s * 0.55, 2), r, 0.25), 0xffffff, [0, -s * 0.12, -s * 0.25], [0, 0, 0], [1, 0.55, 1.5]);
         else if (look === 'ice') add('body', rough(new THREE.IcosahedronGeometry(s * 0.55, 1), r, 0.25), 0xd8f0ff, [0, -s * 0.12, -s * 0.25], [0, 0, 0], [1, 0.5, 1.5]);
         else if (look === 'shade') add('body', rough(new THREE.SphereGeometry(s * 0.55, 10, 6), r, 0.4), 0xffffff, [0, -s * 0.1, -s * 0.1], [0, 0, 0], [1.2, 0.5, 1.4]);
+        return;
+    }
+    if (look === 'lava') {
+        // a hand melting away: a heavy blob, three stubs of fingers running into drops of fire
+        add('body', rough(new THREE.IcosahedronGeometry(s * 0.5, 2), r, 0.25), 0xffffff, [0, -s * 0.35, 0], [0, 0, 0], [1, 1.35, 0.8]);
+        for (let i = 0; i < 3; i++) { const fx = (i - 1) * s * 0.22, fl = s * (0.45 + r() * 0.25); add('body', rough(new THREE.ConeGeometry(s * 0.14, fl, 7, 2), r, 0.15), 0xffffff, [fx, -s * 0.75 - fl * 0.3, 0], [Math.PI, 0, 0]); add('glow', new THREE.SphereGeometry(s * 0.08, 6, 4), 0xffffff, [fx, -s * 0.85 - fl * 0.8, 0]); }
         return;
     }
     // a hand: a palm and four thick fingers (curled a little) and a thumb
@@ -364,7 +377,7 @@ function bodyPart(look, base, size, r, out) {
         scatter(base, Math.max(2, Math.round(n * 0.08)), r, (c, nrm) => onSurface(out, 'glow', new THREE.BoxGeometry(1, 1, 1), c, nrm, 0.002, [0.004, 0.003, 0.05 + r() * 0.06], r() * 3, 0xffffff, r));
     } else if (look === 'lava') {
         // crust plates of cooling basalt floating on the glowing body; drops of fire hanging under
-        scatter(base, n, r, (c, nrm) => { const s = 0.02 + r() * 0.03; onSurface(out, 'body', rough(new THREE.IcosahedronGeometry(1, 0), r, 0.3), c, nrm, s * 0.15, [s, s * 0.35, s], r() * 6, 0x2a1a14, r); });
+        scatter(base, Math.round(n * 1.8), r, (c, nrm) => { if (c.y < 0.05 && r() < 0.6) return; const s = 0.022 + r() * 0.04; onSurface(out, 'crust', rough(new THREE.IcosahedronGeometry(1, 0), r, 0.3), c, nrm, s * 0.12, [s, s * 0.32, s], r() * 6, 0xffffff, r); }); // (a cracked lining of cooled rock, thicker on the shoulders and the back)
         scatter(base, Math.max(2, Math.round(n * 0.15)), r, (c, nrm) => { if (nrm.y > -0.2) return; onSurface(out, 'glow', new THREE.ConeGeometry(1, 1, 6), c, nrm, 0.01, [0.01, -0.05 - r() * 0.04, 0.01], 0, 0xffffff, r); });
     } else if (look === 'ice') {
         // shards of every size growing out of the clear body; a cold light inside
@@ -392,7 +405,7 @@ const BODY = {
     iron: { legs: true, legL: 0.4, thigh: 0.065, hipY: 0.42, chest: 0.18, torso: [1.3, 0.78], torsoH: 1, armL: 0.4, armR: 0.052, hand: 1.9, neckY: 0.55, neckZ: 0, headS: 0.13, lean: 0, reach: 0 },
     rock: { legs: true, legL: 0.26, thigh: 0.1, hipY: 0.28, chest: 0.27, torso: [1.45, 1.05], torsoH: 0.95, armL: 0.56, armR: 0.09, hand: 2.2, neckY: 0.36, neckZ: -0.16, headS: 0.1, lean: 0.55, reach: 0.5 },
     ice: { legs: true, legL: 0.48, thigh: 0.034, hipY: 0.5, chest: 0.12, torso: [1.15, 0.7], torsoH: 1.05, armL: 0.5, armR: 0.028, hand: 3.2, neckY: 0.53, neckZ: -0.04, headS: 0.12, headLong: true, lean: 0.32, reach: 0.15 },
-    lava: { legs: false, legL: 0.4, thigh: 0.06, hipY: 0.36, chest: 0.19, torso: [1.25, 0.9], torsoH: 1, armL: 0.5, armR: 0.055, hand: 2.4, neckY: 0.48, neckZ: -0.03, headS: 0.13, lean: 0.18, reach: 0.25 },
+    lava: { legs: false, legL: 0.4, thigh: 0.06, hipY: 0.34, chest: 0.21, torso: [1.3, 1.0], torsoH: 0.95, armL: 0.52, armR: 0.065, hand: 2.2, neckY: 0.4, neckZ: -0.1, headS: 0.16, lean: 0.4, reach: 0.35 }, // (a hunched mass: the head sunk forward between the shoulders, the arms drooping)
     shade: { legs: false, legL: 0.4, thigh: 0.05, hipY: 0.4, chest: 0.13, torso: [1.15, 0.75], torsoH: 1.1, armL: 0.62, armR: 0.032, hand: 3, neckY: 0.56, neckZ: -0.05, headS: 0.12, headLong: false, lean: 0.25, reach: 0.2 },
 };
 /** What the legless ones stand on: the lava one's mound of flowing lava (on the root — it stays on the ground), the shade's tail of mist. */
