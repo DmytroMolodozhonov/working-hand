@@ -84,7 +84,7 @@ export class Godhood {
         const g = this.game;
         if (this._warm || !g.renderer?.compile || !g.camera) return;
         this._warm = true;
-        const run = () => { try { const c0 = this.cer; this.cer = {}; this._pillar(); const sc = new THREE.Scene(), c = this.cer; g.scene.remove(c.pillar); g.scene.remove(c.ring); sc.add(c.pillar, c.ring); g.renderer.compile(sc, g.camera); c.geo.dispose(); c.core.material.dispose(); c.veil.material.dispose(); c.ring.geometry.dispose(); c.ring.material.dispose(); this.cer = c0; } catch (e) { console.warn('godhood warm', e); } };
+        const run = () => { try { const c0 = this.cer; this.cer = {}; this._pillar(); const sc = new THREE.Scene(), c = this.cer; g.scene.remove(c.pillar); g.scene.remove(c.ring); sc.add(c.pillar, c.ring); const D = this.decor ? null : this._makeDecor(); if (D) { g.scene.remove(D.root); sc.add(D.root); } g.renderer.compile(sc, g.camera); if (D) sc.remove(D.root); c.geo.dispose(); // (the hall's sun and shafts too) c.core.material.dispose(); c.veil.material.dispose(); c.ring.geometry.dispose(); c.ring.material.dispose(); this.cer = c0; } catch (e) { console.warn('godhood warm', e); } };
         if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2000 }); else setTimeout(run, 0);
     }
 
@@ -278,6 +278,7 @@ export class Godhood {
         const g = this.game, S = SUN_HALL, me = g.character.group.position;
         const dx = me.x - S.CX, dz = me.z - S.CZ, floorY = S.F - 1.5 + PLAYER_GROUND_OFFSET;
         this.inHall = Math.hypot(dx, dz) < S.R + 1 && Math.abs(me.y - floorY) < 8;
+        this._decorStep(dt, Math.hypot(dx, dz, me.y - S.F));
         if (!this.inHall) { this.pentT = 0; this.exitT = 0; return; }
         const onFloor = Math.abs(me.y - floorY) < 1.5;
         // the pentagram: stand in its circle
@@ -292,6 +293,77 @@ export class Godhood {
             this.exitT += dt;
             if (this.exitT >= S.EXIT_T) this._home('');
         } else this.exitT = 0;
+    }
+
+    /**
+     * The Hall's own light (the author: «он не светится… должен изображать цветом солнца»): a small sun hanging under the dome (a white-gold
+     * core in layers of glow, slowly breathing), shafts of light slanting down from the windows to the floor, motes of gold rising, and a
+     * golden glow round the whole hall seen from far off in the sky. Made when one is near (≤ 400 m), taken away when far — nothing piles up.
+     */
+    _decorStep(dt, dist) {
+        const g = this.game, S = SUN_HALL;
+        if (dist > 400) { if (this.decor) { g.scene.remove(this.decor.root); this.decor = null; } return; }
+        if (!this.decor) this.decor = this._makeDecor();
+        const D = this.decor, t = (this._decT = (this._decT || 0) + dt);
+        const breathe = 1 + 0.06 * Math.sin(t * 1.3) + 0.03 * Math.sin(t * 3.7);
+        D.core.scale.setScalar(2.2 * breathe);
+        D.glow.forEach((m, i) => { m.scale.setScalar((4 + i * 3.5) * breathe); m.material.uniforms.uT.value = t; });
+        D.shafts.forEach((m, i) => { m.material.uniforms.uT.value = t + i; });
+        D.halo.material.uniforms.uT.value = t;
+        // gold motes rising in the hall (from the pool of sparks)
+        if (this.inHall && g.fx?.spark) {
+            this._moteT = (this._moteT || 0) - dt;
+            while (this._moteT <= 0) {
+                this._moteT += 0.05;
+                const a = Math.random() * 6.28, r = Math.random() * (S.R - 3);
+                g.fx.spark(_v.set(S.CX + Math.cos(a) * r, S.F - 1 + Math.random() * 6, S.CZ + Math.sin(a) * r), Math.random() < 0.7 ? 0xffd36a : 0xfff6d8, 0.12 + Math.random() * 0.1, _w.set((Math.random() - 0.5) * 0.4, 0.6 + Math.random() * 0.8, (Math.random() - 0.5) * 0.4), 3 + Math.random() * 2);
+            }
+        }
+    }
+
+    _makeDecor() {
+        const g = this.game, S = SUN_HALL, root = new THREE.Group();
+        const sunY = S.F + S.WALL + S.DOME * 0.35;
+        // a soft glow shell: bright where seen face-on, fading to its rim (no hard edge), slowly shimmering
+        const glowMat = (col, k) => new THREE.ShaderMaterial({
+            uniforms: { uT: { value: 0 }, uC: { value: new THREE.Color(col) }, uK: { value: k } },
+            vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+            fragmentShader: 'uniform float uT; uniform vec3 uC; uniform float uK; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(uC, f * uK * (0.9 + 0.1 * sin(uT * 2.0))); }',
+            transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const ball = new THREE.SphereGeometry(1, 32, 16);
+        const core = new THREE.Mesh(ball, new THREE.MeshBasicMaterial({ color: 0xfffbea }));
+        core.position.set(S.CX, sunY, S.CZ);
+        const glow = [glowMat(0xffe7a0, 0.75), glowMat(0xffc850, 0.45), glowMat(0xff9a30, 0.22)].map((mat) => { const m = new THREE.Mesh(ball, mat); m.position.copy(core.position); return m; });
+        root.add(core, ...glow);
+        // the shafts: from each window down and in towards the middle of the floor, soft-edged, with motes of light running along them
+        const shaftMat = () => new THREE.ShaderMaterial({
+            uniforms: { uT: { value: 0 } },
+            vertexShader: 'varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+            fragmentShader: 'uniform float uT; varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(abs(dot(vN, vV)), 1.5); float along = smoothstep(0.0, 0.25, vUv.y) * smoothstep(1.0, 0.7, vUv.y); float dust = 0.8 + 0.2 * sin(vUv.y * 40.0 - uT * 1.5); gl_FragColor = vec4(vec3(1.0, 0.86, 0.55), f * along * dust * 0.16); }',
+            transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        });
+        const shaftGeo = new THREE.CylinderGeometry(1.6, 3.2, 1, 16, 1, true);
+        const shafts = [];
+        for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
+            const from = new THREE.Vector3(S.CX + Math.cos(a) * (S.R - 1), S.F + 6, S.CZ + Math.sin(a) * (S.R - 1));
+            const to = new THREE.Vector3(S.CX + Math.cos(a) * 6, S.F - 1, S.CZ + Math.sin(a) * 6);
+            const m = new THREE.Mesh(shaftGeo, shaftMat());
+            const len = from.distanceTo(to);
+            m.position.copy(from).add(to).multiplyScalar(0.5);
+            m.scale.set(1, len, 1);
+            m.quaternion.setFromUnitVectors(_v.set(0, 1, 0), _w.subVectors(from, to).normalize());
+            root.add(m);
+            shafts.push(m);
+        }
+        // the halo round the whole hall: seen from far off in the sky, a second small sun over the land
+        const halo = new THREE.Mesh(ball, glowMat(0xffd27a, 0.35));
+        halo.position.set(S.CX, S.F + S.WALL * 0.6, S.CZ);
+        halo.scale.setScalar(S.R * 2.2);
+        root.add(halo);
+        g.scene.add(root);
+        return { root, core, glow, shafts, halo, geos: [ball, shaftGeo] };
     }
 
     /** Mortal again (the pentagram of renewal): no immortality, the 10 000 cells taken back; the titans and bosses stay dead. */
@@ -342,5 +414,5 @@ export class Godhood {
     // ------------------------------------------------------------------ the save
     snapshot() { return { god: this.state.god, renounced: this.state.renounced, cells: this.state.cells || 0 }; }
     restore(s) { if (!s) return; this.state = { god: !!s.god, renounced: !!s.renounced, cells: s.cells || 0 }; }
-    dispose() { if (this.cer) this._endAscend(false); this.hall = null; }
+    dispose() { if (this.cer) this._endAscend(false); this.hall = null; if (this.decor) { this.game.scene.remove(this.decor.root); this.decor = null; } }
 }

@@ -21,6 +21,7 @@ const _c2 = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
 const _caveFog = new THREE.Color(0x020203); // (deep in a cave: black beyond the light)
 const _hellFog = new THREE.Color(0x3a0f08), _hellAmb = new THREE.Color(0xff9a70), _hellSky = new THREE.Color(0x5a1a10), _hellGround = new THREE.Color(0xff5a14), _hellSun = new THREE.Color(0xff6a3a); // (hell: the red haze, warm low light, lava's orange from below — setHell)
+const _sunAmb = new THREE.Color(0xffe0a0), _sunSky = new THREE.Color(0xfff2c8), _sunGround = new THREE.Color(0xffc45a), _sunDir = new THREE.Color(0xffe8b0), _sunFog = new THREE.Color(0xffe6a8); // (the Hall of the Sun's light — setSunHall)
 const _ghostFog = new THREE.Color(0x474c63); // (the haze round the Castle of Ghosts: a cold grey-violet mist)
 
 /** The night is the last quarter of the day: 6 of the 24 hours (18 hours of daylight). */
@@ -272,6 +273,29 @@ export class VoxelWorld {
         this.sky?.setOvercast?.(k); // (the clouds cover the sunset and the stars)
         this.sky?.setClouds((this._cloudsWanted ?? true) || k > 0.1);
         this._hellLight();
+        this._sunHallLight();
+    }
+
+    /** The Hall of the Sun (Godhood.js): inside, the light is the Sun's own — warm gold from everywhere, no shadow side (`k` 0…1). */
+    setSunHall(k) {
+        if (Math.abs(k - (this.sunHall || 0)) < 0.01) return;
+        this.sunHall = k;
+        this.setStorm(this.storm || 0);
+    }
+    _sunHallLight() {
+        const s = this.sunHall || 0;
+        if (s <= 0) return;
+        this.ambientLight.color.lerp(_sunAmb, s);
+        this.ambientLight.intensity += (1.15 - this.ambientLight.intensity) * s;
+        this.hemiLight.color.lerp(_sunSky, s);
+        this.hemiLight.groundColor.lerp(_sunGround, s);
+        this.hemiLight.intensity += (1.35 - this.hemiLight.intensity) * s;
+        this.dirLight.color.lerp(_sunDir, s);
+        this.dirLight.intensity += (1.1 - this.dirLight.intensity) * s;
+        if (this.scene.fog) {
+            this.scene.fog.color.lerp(_sunFog, s);
+            if (this.scene.background && this.scene.background.isColor) this.scene.background.lerp(_sunFog, s);
+        }
     }
 
     /** Hell's light over whatever the day, the storm, the cave made (setHell). */

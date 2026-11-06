@@ -1740,6 +1740,9 @@ export class Game {
         // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
         const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;
         let dark = sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
+        if (this.godhood?.inHall) dark = 0; // (the Hall of the Sun: no darkness at all)
+        this._sunHallK = (this._sunHallK || 0) + ((this.godhood?.inHall ? 1 : 0) - (this._sunHallK || 0)) * Math.min(1, dt * 1.2);
+        this.world.setSunHall?.(this._sunHallK);
         if (this.potionLair?.inLair) dark = this.potionLair.darkness(); // (the potion-maker's lair: lit, but dimmed — «светло, но затемнено»)
         this._caveK = (this._caveK || 0) + (dark - (this._caveK || 0)) * Math.min(1, dt * 1.5);
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);

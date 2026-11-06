@@ -58,7 +58,7 @@ export function sunHallPlan() {
         // the floor (two layers): white marble with golden rays; the pentagram in runes; its middle — gold (the marker)
         put(x, F - 2, z, B.CS_WHITE);
         let floor = ray && d > S.PENT_R + 1 ? B.GOLD : d < 2 ? B.GOLD : B.CS_WHITE;
-        if (d <= S.PENT_R + 0.6 && onPentagram(x, z)) floor = B.GOLD; // (a golden star on white marble: the dark runes read as a hole in the floor)
+        if (d <= S.PENT_R + 0.6 && onPentagram(x, z)) floor = B.LANTERN; // (a star of glowing gold on white marble: the dark runes read as a hole in the floor — the author: «он должен светиться»)
         if (d > R - 0.5) floor = B.GOLD; // (a golden edge round the floor)
         put(x, F - 1, z, floor);
         // the wall: a ring R−0.5 … R+1.5; golden bands; windows of light every 30°; the arch in the south
@@ -70,14 +70,14 @@ export function sunHallPlan() {
             if (inWall && h < S.WALL) {
                 t = h === 0 || h === 6 || h === S.WALL - 1 ? B.GOLD : B.CS_WHITE;
                 const win = Math.abs(Math.sin(a * 6 + Math.PI / 2)) > 0.93 && h >= 3 && h <= 8; // (tall windows of the Sun's light)
-                if (win) t = B.ARCANE_LAMP;
+                if (win) t = B.LANTERN; // (the windows full of the Sun's own warm light — never the cold blue of the arcane lamps)
                 if (arch && h < 7) t = h === 6 || (Math.abs(x) === 2 && h < 6) ? B.GOLD : B.AIR; // (the arch home: gold round an open way)
                 if (arch && h < 7 && Math.abs(x) < 2 && d > R + 0.5) t = B.AIR;
             } else if (h >= S.WALL) {
                 // the dome: a shell over the hall — r(h) shrinks as a quarter circle; golden ribs along the rays; a sun of light at the top
                 const k = (h - S.WALL) / S.DOME, rr = R * Math.sqrt(Math.max(0, 1 - k * k));
                 if (d <= rr + 0.6 && d >= rr - 1.2) t = ray ? B.GOLD : B.CS_WHITE;
-                if (d < 3 && h >= S.WALL + S.DOME - 1) t = B.ARCANE_LAMP;
+                if (d < 3 && h >= S.WALL + S.DOME - 1) t = B.LANTERN;
                 if (h === S.WALL && d >= R - 0.5) t = B.GOLD;
             }
             // the columns: twelve, 2 × 2, gold with white capitals
