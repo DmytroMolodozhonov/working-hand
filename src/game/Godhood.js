@@ -60,7 +60,9 @@ export class Godhood {
     titanDied() {
         const g = this.game;
         if (this.state.god || this.state.renounced || this.cer) return;
-        if (!allTitansDead(g.titans?.state?.dead || [])) return;
+        const dead = g.titans?.state?.dead || [];
+        if (dead.length >= TITAN_IDS.length - 1) this.warm(); // (the last one left: the pillar's shader readied now, not at the ascension)
+        if (!allTitansDead(dead)) return;
         // (the one who fought them: has every titan's achievement — in Creative achievements are off: there, the one present)
         const ach = g.achievements;
         const mine = g.config?.mode === 'creative' || !ach?.done || TITAN_IDS.every((id) => ach.done.has('titan_' + id));
@@ -72,8 +74,18 @@ export class Godhood {
     almost() {
         const g = this.game;
         this.almostT = GOD.ALMOST_WAIT;
+        this.warm();
         this.state.renounced = false;
         g.hud?.toast?.('☀️ Вы почти бог. Магии у вас пока нет совсем — подождите: сила богов вот-вот придёт');
+    }
+
+    /** The pillar's shaders compiled ahead (an idle moment), never in the ascension's first frame (CLAUDE.md «Шейдеры только на загрузке»). */
+    warm() {
+        const g = this.game;
+        if (this._warm || !g.renderer?.compile || !g.camera) return;
+        this._warm = true;
+        const run = () => { try { const c0 = this.cer; this.cer = {}; this._pillar(); const sc = new THREE.Scene(), c = this.cer; g.scene.remove(c.pillar); g.scene.remove(c.ring); sc.add(c.pillar, c.ring); g.renderer.compile(sc, g.camera); c.geo.dispose(); c.core.material.dispose(); c.veil.material.dispose(); c.ring.geometry.dispose(); c.ring.material.dispose(); this.cer = c0; } catch (e) { console.warn('godhood warm', e); } };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2000 }); else setTimeout(run, 0);
     }
 
     ascend(test = false) {
@@ -89,13 +101,24 @@ export class Godhood {
         this._pillar();
     }
 
+    /**
+     * The pillar of the Sun's light: two open cylinders (a white core, a wide gold veil) of one soft shader — bright where seen
+     * face-on, fading to the edges and towards the top, bands of light running down it; and the ring of the burst.
+     */
     _pillar() {
         const g = this.game, c = this.cer;
-        const mat = new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-        const m = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.4, 1, 24, 1, true), mat);
-        m.scale.set(3.2, 400, 3.2);
-        g.scene.add(m);
-        c.pillar = m;
+        const mk = (col, w) => new THREE.ShaderMaterial({
+            uniforms: { uT: { value: 0 }, uK: { value: 0 }, uC: { value: new THREE.Color(col) }, uW: { value: w } },
+            vertexShader: 'varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+            fragmentShader: 'uniform float uT; uniform float uK; uniform vec3 uC; uniform float uW; varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ float face = pow(abs(dot(vN, vV)), uW); float top = smoothstep(1.0, 0.55, vUv.y) * smoothstep(0.0, 0.02, vUv.y); float bands = 0.7 + 0.3 * sin(vUv.y * 140.0 + uT * 14.0) * sin(vUv.y * 37.0 + uT * 5.0); gl_FragColor = vec4(uC * (0.8 + 0.4 * face), face * top * bands * uK); }',
+            transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        });
+        const geo = new THREE.CylinderGeometry(1, 1, 1, 32, 1, true);
+        const core = new THREE.Mesh(geo, mk(0xfffbe8, 3)), veil = new THREE.Mesh(geo, mk(0xffc84a, 1.5));
+        core.scale.set(1.3, 400, 1.3); veil.scale.set(4, 400, 4);
+        const P = new THREE.Group(); P.add(core, veil);
+        g.scene.add(P);
+        c.pillar = P; c.core = core; c.veil = veil; c.geo = geo;
         const rm = new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
         const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 64), rm);
         ring.rotation.x = -Math.PI / 2;
@@ -116,9 +139,9 @@ export class Godhood {
         g.knockback?.set?.(0, 0, 0);
         // the pillar of light: coming down, brightening, gone after the burst
         const P = c.pillar, k = t < 2.5 ? t / 2.5 : t < 7.2 ? 1 : Math.max(0, 1 - (t - 7.2) / 1.2);
-        P.position.set(c.base.x, c.base.y + 200 * (1 + (1 - Math.min(1, t / 2.5)) * 2), c.base.z);
-        P.material.opacity = 0.45 * k * (0.85 + 0.15 * Math.sin(t * 9));
-        P.scale.x = P.scale.z = 3.2 + Math.max(0, t - 5) * 0.8;
+        P.position.set(c.base.x, c.base.y + 200 * (1 + (1 - Math.min(1, t / 2.5)) * 2), c.base.z); // (it comes down from the sky)
+        for (const m of [c.core, c.veil]) { m.material.uniforms.uT.value = t; m.material.uniforms.uK.value = k * (m === c.core ? 1.1 : 0.55); }
+        c.veil.scale.x = c.veil.scale.z = 4 + Math.max(0, t - 5) * 1.2; // (it widens before the burst)
         // gold sparks spiralling up round him, more and faster as it goes
         const fx = g.fx;
         if (fx?.spark && t < 7.3) {
@@ -157,7 +180,10 @@ export class Godhood {
         const g = this.game, c = this.cer;
         this.cer = null;
         painRed(-1);
-        if (c) for (const m of [c.pillar, c.ring]) if (m) { g.scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+        if (c) {
+            if (c.pillar) { g.scene.remove(c.pillar); c.geo.dispose(); c.core.material.dispose(); c.veil.material.dispose(); }
+            if (c.ring) { g.scene.remove(c.ring); c.ring.geometry.dispose(); c.ring.material.dispose(); }
+        }
         if (!done) return;
         this.state.god = true;
         this.state.renounced = false;
