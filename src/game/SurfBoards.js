@@ -555,7 +555,10 @@ export class SurfBoards {
             // both hands opened (together): the board is let go
             if (openFor(side) > 250 && openFor(other) > 150) { this._dropHold(true); return; }
             // only this one: it comes off, the other hand keeps the board (a little later: the other may be opening too)
-            if (openFor(side) > 450 && !H.openSince[other]) this._release(side);
+            // (the other hand must be FIRMLY closed, not just «not open yet»: two hands opening together never open on the same frame — on a
+            //  slow frame (a heavy moment, 2–3 frames a second) the first one's 450 ms passed before the second crossed LET_GO, and the board
+            //  stayed tucked under one arm instead of falling)
+            if (openFor(side) > 450 && !H.openSince[other] && this.game.character.getGripCurl(other) >= CLOSE_CURL) this._release(side);
             return;
         }
         // the last hand: the outstretched hand clearly opened, or the board lies on something that holds it
@@ -648,6 +651,9 @@ export class SurfBoards {
             const pA = ch.armState ? ch.armState('left', {}).palmUp : 0, pB = ch.armState ? ch.armState('right', {}).palmUp : 0;
             res = solveTwoHands({ gA: H.grips.left, gB: H.grips.right, hA, hB, curlA: ch.getGripCurl('left'), curlB: ch.getGripCurl('right'), palmUpA: pA, palmUpB: pB, prevTheta: H.theta, torso, floorY, surfaceY });
             H.theta = res.theta;
+            // (a slip: one hand too far from its rail. But both hands opening is letting go, not a slip — the open fingers no longer hold, so the
+            //  hands drift off the rails: «slipped out of one» left the board tucked under the other arm instead of falling — the whole board goes)
+            if (res.slip && ch.getGripCurl('left') < OPEN_CURL && ch.getGripCurl('right') < OPEN_CURL) { this._dropHold(true); return; }
             if (res.slip) { this._release(res.slip === 'A' ? 'left' : 'right'); this._say('🏄 Руки слишком далеко — доска выскользнула из одной руки', 'slip', 3000); }
             ch.reachHand('left', res.drawA, 1, 0.13);
             ch.reachHand('right', res.drawB, 1, 0.13);

@@ -197,6 +197,8 @@ test('«Create a Board» outside Creative: learned from a scroll, a tree becomes
         window.__tree = t;
         g.character.group.position.set(t.x, g.collision.groundY(t.x, t.z + 5) + 2.0, t.z + 5);
         g.cameraBaseRotation = 0; g.smoothBody = 0; g.character.setBodyRotation(0); // facing −Z: the tree
+        // (outside Creative spells need the wand in the hand — «Без палочки вы можете творить только Акцио и Protection»: the rule came after this test)
+        g.items.takeIntoHand({ kind: 'wand', uid: 'surf-wand', color: 0x8844aa, model: 2, power: 10 }, 'right', { closed: true });
     });
     await feed(page, { arms: 'forward', wristOffset: [0, -0.02] }, 20);
     const first = await page.evaluate(() => { const g = window.__zns.game; g.lastMagicHand = 'right'; const r = g.castLocalSpell('Create a Board', true); return { r, voice: g.hud.lastVoice || document.body.innerText }; });
@@ -209,9 +211,10 @@ test('«Create a Board» outside Creative: learned from a scroll, a tree becomes
         const before = g.boards.reg.map.size;
         const r = g.castLocalSpell('Create a Board', true);
         const made = [...g.boards.reg.map.values()].slice(before);
-        return { r, made: made.map((b) => ({ id: b.id, st: b.st, d: Math.hypot(b.p[0] - window.__tree.x, b.p[2] - window.__tree.z) })), alive: window.__tree.alive, mana: g.combat.fatigue };
+        g.items.releaseHand('right'); // (the wand out of the hand: the hand carries the board next)
+        return { r, made: made.map((b) => ({ id: b.id, st: b.st, d: Math.hypot(b.p[0] - window.__tree.x, b.p[2] - window.__tree.z) })), alive: window.__tree.alive, mana: g.combat.fatigue, voice: g.hud.lastVoice };
     });
-    assert.equal(after.r, 'CreateBoard');
+    assert.equal(after.r, 'CreateBoard', JSON.stringify(after));
     assert.equal(after.made.length, 1);
     assert.ok(after.made[0].d < 3 && after.made[0].st === 'stand', JSON.stringify(after.made));
     assert.equal(after.alive, false, 'the tree became the board');
