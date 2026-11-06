@@ -149,7 +149,19 @@ export class MagicUi {
     }
 
     /** The whirl moves to the open menu (or sleeps). */
+    /** The running ring of colour round each window (put in once; a window made later gets it at its first showing). */
+    _rings() {
+        for (const el of document.querySelectorAll('#main-menu > .menu-container, #pause-menu .pause-box, .death-box')) {
+            if (el.querySelector(':scope > .mu-ring')) continue;
+            const r = document.createElement('span');
+            r.className = 'mu-ring'; r.setAttribute('aria-hidden', 'true');
+            r.appendChild(document.createElement('i'));
+            el.appendChild(r);
+        }
+    }
+
     _sync() {
+        this._rings();
         const host = this._which();
         if (host !== this.host) {
             this.host = host;
@@ -219,6 +231,7 @@ export class MagicUi {
         const p = this.sp[this.spI]; this.spI = (this.spI + 1) % N_SPARKS;
         p.on = true; p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = life; p.s = s;
         p.c = SPARK_COLORS[(Math.random() * SPARK_COLORS.length) | 0];
+        this._live = true;
     }
 
     _frame(now) {
@@ -255,12 +268,15 @@ export class MagicUi {
 
     _drawSparks(dt) {
         if (this.reduce) return;
-        const c = this.sx, cv = this.sc, dpr = Math.min(2, devicePixelRatio || 1);
+        // (only where sparks were and are is cleared and drawn: the whole screen was cleared 60 times a second before — even with no spark)
+        const D = this._dirty;
+        if (!this._live && !D) return;
+        const c = this.sx, cv = this.sc, dpr = Math.min(1.5, devicePixelRatio || 1);
         if (!this._sized || cv.width !== Math.round(innerWidth * dpr)) { cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); this._sized = true; }
         c.setTransform(dpr, 0, 0, dpr, 0, 0);
-        c.clearRect(0, 0, innerWidth, innerHeight);
+        if (D) c.clearRect(D[0], D[1], D[2] - D[0], D[3] - D[1]);
         c.globalCompositeOperation = 'lighter';
-        let any = false;
+        let any = false, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
         for (const p of this.sp) {
             if (!p.on) continue;
             p.life -= dt;
@@ -271,18 +287,22 @@ export class MagicUi {
             const k = p.life / p.max, tw = 0.7 + 0.3 * Math.sin((p.x + p.y) * 0.3 + this.t * 20);
             c.globalAlpha = k * tw;
             c.fillStyle = p.c;
-            const s = p.s * (0.5 + k * 0.8);
+            const s = p.s * (0.5 + k * 0.8), r = s * 3 + 2;
+            if (p.x - r < x0) x0 = p.x - r; if (p.y - r < y0) y0 = p.y - r; if (p.x + r > x1) x1 = p.x + r; if (p.y + r > y1) y1 = p.y + r;
             c.beginPath(); c.arc(p.x, p.y, s * 2.6, 0, 6.283); c.globalAlpha = k * 0.18; c.fill(); // (a halo)
             c.globalAlpha = k * tw;
             c.beginPath(); c.arc(p.x, p.y, s, 0, 6.283); c.fill();
             if (p.s > 2.2) { c.fillRect(p.x - s * 3, p.y - 0.4, s * 6, 0.8); c.fillRect(p.x - 0.4, p.y - s * 3, 0.8, s * 6); } // (a star's cross on the big ones)
         }
         c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
-        this._anySparks = any;
+        this._live = any;
+        if (any) { if (D) { D[0] = x0; D[1] = y0; D[2] = x1; D[3] = y1; } else this._dirty = [x0, y0, x1, y1]; } else this._dirty = null;
     }
 
     _clearSparks() {
         for (const p of this.sp) p.on = false;
+        this.sx.setTransform(1, 0, 0, 1, 0, 0);
         this.sx.clearRect(0, 0, this.sc.width, this.sc.height);
+        this._live = false; this._dirty = null;
     }
 }

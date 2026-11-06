@@ -17,57 +17,7 @@
  */
 
 import { passageStart, passageTick, passageArrive, passageStop } from '../audio/MagicSound.js';
-
-const VERT = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }';
-
-const FRAG = `
-precision highp float;
-uniform vec2 uRes; uniform float uT, uOpen, uOut, uProg, uDir, uArms, uSeed;
-uniform vec3 uC0, uC1, uC2, uC3;
-float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float noise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), u.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), u.x), u.y); }
-float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++){ v += a * noise(p); p = p * 2.03 + vec2(17.1, 9.7); a *= 0.5; } return v; }
-vec3 pal(float t){ t = fract(t); return t < 0.333 ? mix(uC0, uC1, t * 3.0) : t < 0.666 ? mix(uC1, uC2, (t - 0.333) * 3.0) : mix(uC2, uC0, (t - 0.666) * 3.0); }
-void main(){
-  vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / min(uRes.x, uRes.y);
-  float r = length(p), a = atan(p.y, p.x);
-  float rush = uT * (0.55 + uOut * 4.0);
-  float depth = 0.32 / (r + 0.035) + rush;                      // (into the tunnel: the nearer the middle, the farther away)
-  float sw = a * uDir + 2.4 * log(r + 0.04) * uDir + uT * 0.45 * uDir; // (the spiral's turn)
-  vec2 q = vec2(cos(sw), sin(sw));
-  float n1 = fbm(q * 1.6 + vec2(depth * 0.55, -depth * 0.3) + uSeed);
-  float n2 = fbm(q * 3.1 - vec2(depth * 0.9, depth * 0.2) + uSeed * 1.7);
-  float arms = 0.5 + 0.5 * sin(sw * uArms + n1 * 5.0 - depth * 0.8);
-  float band = smoothstep(0.25, 0.95, arms) * (0.55 + 0.6 * n2);
-  vec3 col = pal(n1 * 0.9 + depth * 0.035 + uT * 0.02) * band * 1.25;
-  col += pal(n2 + 0.35) * pow(n2, 3.0) * 0.9;
-  // the dark between the arms keeps a deep tint (never flat black)
-  col += uC3 * 0.18 * (1.0 - band) * smoothstep(1.4, 0.1, r);
-  // the eye: a white-hot core far ahead, breathing
-  float eye = exp(-r * (9.0 - uProg * 3.5 - uOut * 5.0)) * (0.8 + 0.2 * sin(uT * 2.3) + uProg * 0.5); // (the light ahead grows as the world comes near)
-  col += mix(uC1, vec3(1.0, 0.97, 0.9), 0.6) * eye * 1.6;
-  // sparks and star streaks rushing inward (cells along the angle and the depth)
-  vec2 sc = vec2(a * 6.0 / 6.2831 * 8.0, depth * 3.0);
-  vec2 ci = floor(sc), cf = fract(sc) - 0.5;
-  float hh = h21(ci + uSeed);
-  float star = step(0.82 - uProg * 0.12, hh) * smoothstep(0.08, 0.0, abs(cf.x)) * smoothstep(0.45 + uProg * 0.4, 0.0, abs(cf.y + (hh - 0.5) * 0.4)) * smoothstep(0.02, 0.25, r);
-  col += mix(vec3(1.0), uC2, 0.35) * star * (1.2 + uOut * 2.0);
-  // the ring of runes' glow (the runes themselves are drawn over it): lit as far round as the loading has gone
-  float ringR = 0.26 + uOut * 0.6;
-  float ring = smoothstep(0.022, 0.0, abs(r - ringR));
-  float ang = fract((a / 6.2831) + 0.25);
-  col += uC2 * ring * (0.25 + 1.2 * step(ang, uProg)) * (1.0 - uOut);
-  // the edges darker: the walls of the tunnel close round the eye
-  col *= smoothstep(1.6, 0.25, r) * 0.85 + 0.15;
-  // the arrival: the light floods out from the eye
-  col = mix(col, vec3(1.0, 0.98, 0.93), smoothstep(0.35, 1.0, uOut) * smoothstep(1.2 * uOut + 0.05, 0.0, r) );
-  col = mix(col, vec3(1.0, 0.98, 0.93), smoothstep(0.75, 1.0, uOut));
-  // the pull: the swirl opens from the middle (outside it the menu is still seen)
-  float op = pow(uOpen, 1.7) * 1.9;
-  float open = smoothstep(op, op - 0.25, r);
-  gl_FragColor = vec4(col, open);
-}`;
+import { VERT, FRAG, passageSpeed } from './PortalShader.js';
 
 /** Eight palettes (c0 c1 c2 — the arms, the eye's glow, the runes; c3 — the deep tint between the arms). */
 export const PALETTES = [
@@ -150,6 +100,20 @@ export class PortalLoader {
     }
 
     _gl() {
+        // the whirl in its own thread (portal.worker.js): it turns smoothly while the page's thread makes the world (the author 06.11:
+        // «подтормаживает сильно» — drawn here, it stood still between the loading's long tasks). No OffscreenCanvas — drawn here.
+        if (typeof Worker === 'function' && this.cv.transferControlToOffscreen && !globalThis.__ZNS_PORTAL_NO_WORKER__) {
+            try {
+                const off = this.cv.transferControlToOffscreen();
+                const w = new Worker(new URL('./portal.worker.js', import.meta.url), { type: 'module' });
+                w.onmessage = (e) => { if (e.data?.type === 'ready' && !e.data.ok) { console.warn('PortalLoader: the whirl\'s thread has no WebGL —', e.data.why || ''); this.el.classList.add('no-gl'); } };
+                w.onerror = (e) => { console.warn('PortalLoader: the whirl\'s thread failed —', e?.message || e); this.el.classList.add('no-gl'); };
+                w.postMessage({ type: 'init', canvas: off, w: window.innerWidth, h: window.innerHeight }, [off]);
+                addEventListener('resize', () => w.postMessage({ type: 'size', w: window.innerWidth, h: window.innerHeight }));
+                this.worker = w; this.gl = null;
+                return;
+            } catch (e) { console.warn('PortalLoader: no thread for the whirl —', e?.message || e); this.worker = null; }
+        }
         const gl = this.cv.getContext('webgl', { alpha: true, premultipliedAlpha: false, antialias: false, powerPreference: 'low-power' });
         if (!gl) { this.gl = null; this.el.classList.add('no-gl'); return; }
         const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
@@ -228,6 +192,7 @@ export class PortalLoader {
         }
         this.on = true;
         this.tt = 0; this._lastT = 0;
+        this.worker?.postMessage({ type: 'start', pal: this.pal, dir: this.dir, arms: this.arms, seed: this.seed });
         passageStart((this.pal === PALETTES[0] ? 0 : PALETTES.indexOf(this.pal) / PALETTES.length));
         if (!this._raf) this._raf = requestAnimationFrame((t) => this._frame(t));
     }
@@ -243,6 +208,7 @@ export class PortalLoader {
     /** The loading's progress (0…100) and its words. */
     progress(pct, text) {
         this.prog = Math.max(this.prog, Math.min(1, (pct || 0) / 100));
+        this.worker?.postMessage({ type: 'prog', v: this.prog });
         void text; // (no words nor numbers of the loading: the passage itself shows it — the author)
     }
 
@@ -251,6 +217,7 @@ export class PortalLoader {
         if (!this.on) { done?.(); return; }
         this.phase = 'arrive'; this.tOut = performance.now(); this.prog = 1;
         this.el.classList.add('arrive');
+        this.worker?.postMessage({ type: 'arrive' });
         this._done = done;
         passageArrive();
     }
@@ -264,7 +231,7 @@ export class PortalLoader {
         const t = (now - this.t0) / 1000;
         // (the passage speeds up as the world comes near: the whirl's own clock runs faster with the progress — and faster still at the arrival)
         const dts = Math.min(0.1, (now - (this._lastT || now)) / 1000); this._lastT = now;
-        this.tt = (this.tt || 0) + dts * (0.55 + this.shown * 2.6 + this.out * 6);
+        this.tt = (this.tt || 0) + dts * passageSpeed(t, this.shown, this.out);
         passageTick(this.shown);
         this.open = Math.min(1, (now - this.tOpen) / 1400);
         if (this.open >= 1 && this.menu) { this.menu.classList.add('hidden'); this.menu.style.transform = ''; this.menu.style.filter = ''; this.menu.style.opacity = ''; this.menu.style.transition = ''; this.menu = null; }
@@ -280,10 +247,10 @@ export class PortalLoader {
         if (now - this.loreAt > 5200 && this.phase !== 'arrive') this._lore();
         // the runes' ring: lit as far round as the loading has gone (a conic mask), turning slowly the way the whirl turns
         this.litC.style.webkitMaskImage = this.litC.style.maskImage = `conic-gradient(#000 ${this.shown * 360}deg, transparent ${this.shown * 360 + 0.5}deg)`;
-        this.ring.style.transform = `translate(-50%, -50%) rotate(${this.dir * this.tt * 9}deg) scale(${1 + this.out * 2.5})`;
+        this.ring.style.transform = `translate(-50%, -50%) scale(${1 + this.out * 2.5})`; // (its turning — CSS, runs while the page is busy)
         this.ring.style.opacity = String(Math.min(1, this.open * 1.5) * (1 - this.out));
         const gl = this.gl;
-        if (gl) {
+        if (this.worker) { /* (drawn in its own thread) */ } else if (gl) {
             this._skip = ((this._skip || 0) + 1) % (this.soft ? 6 : 1); // (soft: a picture every 6th frame)
             if (this._skip) { this._raf = requestAnimationFrame((tt) => this._frame(tt)); return; }
             // (the GPU's own budget: if a frame of the whirl comes slow, it is drawn smaller — the nebula is soft, the loading goes first)
@@ -308,6 +275,7 @@ export class PortalLoader {
         this.phase = 'off';
         this.el.style.display = 'none';
         this.el.classList.add('done');
+        this.worker?.postMessage({ type: 'stop' });
         const d = this._done; this._done = null;
         d?.();
     }

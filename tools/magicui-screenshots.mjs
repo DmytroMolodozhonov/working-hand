@@ -9,7 +9,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
 const out = path.resolve(arg('--out', 'docs/media'));
 fs.mkdirSync(out, { recursive: true });
 const srv = await startServer(Number(arg('--port', 8797)));
-const exe = ['/opt/pw-browsers/chromium-1243/chrome-linux64/chrome'].find((f) => fs.existsSync(f));
+const exe = process.env.ZNS_CHROME || undefined;
 const browser = await chromium.launch({ executablePath: exe, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const kill = setTimeout(() => { console.error('timeout'); process.exit(2); }, 240000);
 try {
