@@ -26,8 +26,10 @@ import { VAMP, vampUV, inVampKeep } from '../world/VampireCastle.js';
 import { GOD_SPELLS } from './Mana.js';
 import { pirateBoneDamage } from './Sailors.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
+import { stormDeck } from './GargoyleRitual.js';
 
 const ACTIVE_R = 240, GONE_R = 320; // m: the castle's life is made / put away
+const CLOUD = { R: VAMP.DARK_R + 80, H: 95, SEE: 2200, FADE_T: 8 }; // his cloud (the author 06.11: «тёмная туча, как у горгулий, только больше»): radius, m over the floor, seen from, s to melt away
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const r2 = (x) => Math.round(x * 100) / 100;
@@ -239,8 +241,29 @@ export class VampireLife {
 
     _fightNear() { const c = this.count; return !!c && !c.dead && (c.mode === 'fight' || c.mode === 'bat'); }
 
+    /** His cloud over the crag: two decks of the gargoyles' black-crimson storm cloud (bigger), lightning flickering inside; melts away once cleared. */
+    _cloud(dt, d) {
+        const g = this.game, P = this.plan;
+        const want = this.state.cleared ? 0 : 1;
+        this._cloudK = (this._cloudK ?? want) + Math.sign(want - (this._cloudK ?? want)) * Math.min(Math.abs(want - (this._cloudK ?? want)), dt / CLOUD.FADE_T);
+        const show = d < CLOUD.SEE && this._cloudK > 0.003 && !g.space?.offEarth;
+        if (!show) { if (this._decks) for (const m of this._decks) m.visible = false; return; }
+        if (!this._decks) { this._decks = [0, 1].map((i) => { const m = stormDeck(CLOUD.R - i * 40, 31.7 + i * 9.1); g.scene.add(m); return m; }); this._cloudT = 0; this._flashT = 4; this._flash = 0; }
+        this._cloudT += dt;
+        this._flashT -= dt;
+        if (this._flashT <= 0) { this._flashT = 5 + Math.random() * 12; this._flash = 1; if (d < 600) g.sound?.playTitan?.(_v.set(P.x + (Math.random() - 0.5) * 300, P.floor + CLOUD.H, P.z + (Math.random() - 0.5) * 300), 'thunder', 0.5); }
+        this._flash = Math.max(0, this._flash - dt * 2.5);
+        this._decks.forEach((m, i) => {
+            m.visible = true;
+            m.position.set(P.x, P.floor + CLOUD.H + i * 18, P.z);
+            const u = m.material.uniforms;
+            u.uTime.value = this._cloudT * (1 + i * 0.4); u.uStr.value = this._cloudK * (i ? 0.75 : 1); u.uFlash.value = this._flash * (0.6 + 0.4 * Math.random());
+        });
+    }
+
     _weather(dt, d) {
         const g = this.game;
+        this._cloud(dt, d);
         if (this.state.cleared || d > VAMP.DARK_R) return;
         // (rain now and then over his land — not always: «может быть дождь, но может и не быть»)
         this._rainT -= dt;
@@ -748,7 +771,7 @@ export class VampireLife {
         if (this.on) { this._drop(); }
     }
 
-    dispose() { if (this.on) this._drop(); }
+    dispose() { if (this.on) this._drop(); if (this._decks) { for (const m of this._decks) { this.game.scene?.remove(m); m.geometry.dispose(); } this._decks = null; } }
 
     /** Shapes and materials to compile on the loading screen (Game.prewarm). */
     static samples() {

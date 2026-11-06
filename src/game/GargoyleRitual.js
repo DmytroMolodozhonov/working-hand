@@ -212,6 +212,19 @@ function shared() {
     return _shared;
 }
 
+/**
+ * A deck of the same black-crimson storm cloud for another place (Count Sracula's clouds — VampireLife.js): its own disc of `radius` m, the
+ * ritual's shader (uTime, uStr — how thick, uFlash — a lightning inside). Its geometry is its own (one in the world), the shader the shared one.
+ */
+export function stormDeck(radius, seed = 0) {
+    const S = shared();
+    const geo = new THREE.CircleGeometry(radius, 56);
+    geo.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(geo, S.skyMat(seed));
+    m.frustumCulled = false; m.renderOrder = 4;
+    return m;
+}
+
 export class RitualFx {
     constructor(game) {
         this.game = game;
