@@ -175,7 +175,10 @@ export class ArcaneShapes {
             const arcX = (y) => { const u = Math.max(-1, Math.min(1, (y - mid) / half)); return xE - B * Math.sqrt(1 - u * u); };
             // the buttons: each cut along the arc (its own clip-path in its own coordinates)
             for (const b of btns) {
-                const bt = b.offsetTop, bh = b.offsetHeight, bl = b.offsetLeft, pts = ['0px 0px'];
+                // (a button's offsets count from its offsetParent — the list itself when it is positioned: into the window's coordinates,
+                //  else the button's light ran ~30 px past the arc — the author saw it on a press)
+                const op = b.offsetParent === el ? null : b.offsetParent;
+                const bt = b.offsetTop + (op ? op.offsetTop : 0), bh = b.offsetHeight, bl = b.offsetLeft + (op ? op.offsetLeft : 0), pts = ['0px 0px'];
                 for (let k = 0; k <= 10; k++) { const y = bt + bh * k / 10; pts.push(`${(arcX(y) - 1 - bl).toFixed(1)}px ${(y - bt).toFixed(1)}px`); }
                 pts.push(`0px ${bh}px`);
                 b.style.clipPath = `polygon(${pts.join(',')})`;

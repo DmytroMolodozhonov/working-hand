@@ -22,7 +22,7 @@
 @keyframes mu-turn { to { transform: rotate(360deg); } }
 @keyframes mu-turn-back { to { transform: rotate(-360deg); } }
 @keyframes mu-breathe { 0%, 100% { opacity: 0.75; filter: drop-shadow(0 0 2px rgba(255, 215, 106, 0.4)); } 50% { opacity: 1; filter: drop-shadow(0 0 7px rgba(255, 215, 106, 0.85)); } }
-@keyframes mu-shimmer { to { background-position: -250% 0; } }
+@keyframes mu-shimmer { 0% { background-position: 0 0; } 22%, 100% { background-position: -250% 0; } } /* (a pass of light every few seconds; still between) */
 @keyframes mu-sweep { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(220%) skewX(-20deg); } }
 @keyframes mu-mist { from { opacity: 0; transform: translateY(8px) scale(0.99); } to { opacity: 1; transform: none; } }
 @keyframes mu-swirl-in {
@@ -85,11 +85,11 @@
 #game-title, .pause-title, #death-text {
     background: linear-gradient(100deg, #f0a93c 0%, #ffd76a 20%, #fff6d0 30%, #ffd76a 40%, #f0a93c 60%, #ffd76a 80%, #fff6d0 90%, #f0a93c 100%) 0 0 / 250% 100%;
     -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
-    animation: mu-shimmer 7s linear infinite;
+    animation: mu-shimmer 8s ease-in-out infinite;
     filter: drop-shadow(0 0 12px rgba(255, 215, 106, 0.35));
 }
 #death-text { background-image: linear-gradient(100deg, #ff9ab0 0%, #ffd0da 25%, #fff 32%, #ffd0da 40%, #ff9ab0 60%, #ffd0da 85%, #ff9ab0 100%); }
-.brand-logo { animation: mu-breathe 5s ease-in-out infinite; }
+.brand-logo { filter: drop-shadow(0 0 8px rgba(255, 215, 106, 0.55)); animation: mu-breathe-o 5s ease-in-out infinite; will-change: opacity; } /* (opacity only — the graphics card's own) */
 
 /* ------------------------------------------------------------ buttons: glow and a sweep of light */
 :is(#main-menu, #pause-menu, #death-screen) button:not(.win-btn):not(:disabled) { position: relative; overflow: hidden; }
@@ -128,7 +128,8 @@
 /* the main page of the pause: a turning seal of runes, its core breathing — and the two ways out of it */
 #pause-main.pause-pane.active { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 6px 0; }
 .mu-seal { position: relative; width: min(230px, 34vh); aspect-ratio: 1; margin: 2px auto 10px; pointer-events: none; }
-.mu-seal::before { content: ''; position: absolute; inset: 0; background: var(--mu-seal) center / contain no-repeat; animation: mu-turn 60s linear infinite; filter: drop-shadow(0 0 6px rgba(255, 215, 106, 0.55)) drop-shadow(0 0 16px rgba(167, 139, 255, 0.45)); }
+.mu-seal { border-radius: 50%; box-shadow: 0 0 26px rgba(255, 215, 106, 0.22), 0 0 60px rgba(167, 139, 255, 0.25), inset 0 0 30px rgba(167, 139, 255, 0.18); }
+.mu-seal::before { content: ''; position: absolute; inset: 0; background: var(--mu-seal) center / contain no-repeat; animation: mu-turn 60s linear infinite; will-change: transform; }
 .mu-seal::after { content: ''; position: absolute; inset: 34%; border-radius: 50%;
     background: radial-gradient(circle, #fffbe9 0%, rgba(255, 233, 168, 0.85) 18%, rgba(167, 139, 255, 0.55) 45%, rgba(126, 232, 255, 0.15) 70%, transparent 72%);
     animation: mu-core 3.6s ease-in-out infinite; }
