@@ -8,3 +8,6 @@
 18:19:20.082 · [Заклинания] === игра началась 06.11.2026, 18:19:20 — журнал заклинаний: что услышано и что из этого вышло
 ════════════════════════════════════════════════════════════════
 
+18:19:41.928 ‼ [Сеть] ❌ вход в мир (место «start», поколение 27): Cannot set properties of undefined (setting 'shared') | TypeError: Cannot set properties of undefined (setting 'shared') ←     at canvasTex (http://localhost:8000/src/game/TitanModels.js:38:23) ←     at Object.iron (http://localhost:8000/src/game/TitanModels.js:93:17) ←     at mats (http://localhost:8000/src/game/TitanModels.js:193:33)
+18:19:47.761 · [Игра] === игра открыта 06.11.2026, 18:19:47
+18:19:48.943 · [Сеть] список серверов: нет
