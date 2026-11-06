@@ -111,9 +111,12 @@ const GRIPPED = {
     bow: { axis: 'y', handle: 0, pose: 'thick', at: [0.13, -0.155] },
     scroll: { axis: 'x', handle: 0, curl: 0.5, pose: 'roll', at: [0.15, -0.194] },
     shield: { axis: 'y', handle: 0, face: 'back', pose: 'thin', at: [0.13, -0.115] },
-    apple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (cupped, its stem out of the hand)
-    redApple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
-    baksadi_pear: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    // (cupped, its stem out of the hand. The fruit is drawn ×1.8 in the hand (ITEM_SCALE: radius ~0.2 m) — its middle IN the cup of the palm, against
+    //  it: 0.12 towards the fingers, its side touching the palm's face (z −0.07 − ~0.85 of its radius). Before: 0.2 / −0.272 — out past the
+    //  fingertips, a gap between the palm and the apple, seen most with the hand raised — the author 06.11 «яблоко отошло от кисти»)
+    apple: { axis: 'body', pose: 'ball', at: [0.12, -0.235], out: true },
+    redApple: { axis: 'body', pose: 'ball', at: [0.12, -0.235], out: true },
+    baksadi_pear: { axis: 'body', pose: 'ball', at: [0.12, -0.235], out: true },
     glowcap_mushroom: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     fern_frond: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     azure_berry: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
