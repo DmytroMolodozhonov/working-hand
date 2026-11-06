@@ -1313,7 +1313,8 @@ async function startGameInner(config, welcome) {
         await new Promise((r) => requestAnimationFrame(r));
         B.begin('шейдеры');
         // every shader and picture sent to the video card in pieces (the page keeps answering; the bar moves)
-        await game.prewarmAsync((f) => updateProgress(90 + Math.round(f * 9), `Компиляция шейдеров... ${Math.round(f * 100)}%`));
+        // (tools/shot.mjs --fast: pictures only — the shaders compile as they are seen; never in the real game)
+        if (!window.__ZNS_SHOT_FAST__) await game.prewarmAsync((f) => updateProgress(90 + Math.round(f * 9), `Компиляция шейдеров... ${Math.round(f * 100)}%`));
         B.end('шейдеры');
         game.revealed = false;
         B.begin('до «можно играть»');
