@@ -11,7 +11,7 @@ import { howLearned } from '../../src/game/SpellBook.js';
 
 test('lore books: the author\'s seven, no spells, every picture painted, the text fits the pages', () => {
     // (почему длиннее: автор 05.11 добавил книги о драконах, о королях и тайную книгу о главе башни — она только у магов-одиночек)
-    assert.deepEqual(LORE_BOOKS.map((b) => b.id), ['coprus', 'jovalilius', 'liliazina', 'gods', 'iceQueen', 'blackbeard', 'dragons', 'kings', 'towerSecret', 'flyingMaxima', 'diabolos']);
+    assert.deepEqual(LORE_BOOKS.map((b) => b.id), ['coprus', 'jovalilius', 'liliazina', 'gods', 'iceQueen', 'blackbeard', 'dragons', 'kings', 'towerSecret', 'flyingMaxima', 'diabolos', 'sunGold']); // (sunGold — the Hall of the Sun's golden book, for a god only: Godhood.js, 06.11)
     const measure = (font, s) => s.length * (font.includes('19px') ? 10 : 7.5); // (about a serif's width)
     for (const b of LORE_BOOKS) {
         const it = loreItem(b.id, 'u1');

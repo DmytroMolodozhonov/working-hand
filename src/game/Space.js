@@ -539,6 +539,8 @@ export class Space {
             const def = b.def;
             if (def.kind === 'star') {
                 heat = clamp((SPACE.HEAT_R - b.dist) / (SPACE.HEAT_R - SPACE.DEATH_R), 0, 1);
+                // a god is not burned by the Sun: it takes him into its Hall (Godhood.js — after all seven titans)
+                if (g.godhood?.god && b.dist < SPACE.DEATH_R + 1500) { this.heat = heat * 0.4; g.godhood.enterHall(); return; }
                 if (b.dist < SPACE.DEATH_R) { this._die('☀️ Вы сгорели у Солнца. Так близко к нему не выживает никто — никакая защита не помогает'); return; }
                 continue;
             }

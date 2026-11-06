@@ -17,3 +17,5 @@ vendor/mediapipe/models/v5/
 vendor/ort-gpu/
 vendor/onnx-tools/
 zns-arms.log*
+docs/media/shots/
+tools/tmp-*/

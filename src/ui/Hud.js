@@ -502,6 +502,23 @@ export class Hud {
         try { this.setVoice(html, true, big); } finally { this.hintFilter = f; this._asAnswer = false; }
     }
 
+    /** The whole screen washed with a colour that fades (a titan's sun ray blinds — white; the shade's darkness — black; the ascension — gold). */
+    flash(color = '#ffffff', alpha = 0.9, ms = 1500) {
+        if (typeof document === 'undefined') return;
+        let el = this._flashEl;
+        if (!el) {
+            el = this._flashEl = document.createElement('div');
+            el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:40;opacity:0;transition:none';
+            document.body.appendChild(el);
+        }
+        el.style.background = color;
+        el.style.transition = 'none';
+        el.style.opacity = String(alpha);
+        void el.offsetWidth; // (the start drawn before the fade begins)
+        el.style.transition = `opacity ${Math.max(100, ms)}ms ease-in`;
+        el.style.opacity = '0';
+    }
+
     setVoice(html, show = true, big = false) { // (big: a short answer to a spell, a little larger — «Щёлк! …»)
         const v = this.el.voice;
         if (!v) return;
