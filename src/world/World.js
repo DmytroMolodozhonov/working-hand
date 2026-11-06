@@ -21,7 +21,7 @@ const _c2 = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
 const _caveFog = new THREE.Color(0x020203); // (deep in a cave: black beyond the light)
 const _hellFog = new THREE.Color(0x3a0f08), _hellAmb = new THREE.Color(0xff9a70), _hellSky = new THREE.Color(0x5a1a10), _hellGround = new THREE.Color(0xff5a14), _hellSun = new THREE.Color(0xff6a3a); // (hell: the red haze, warm low light, lava's orange from below — setHell)
-const _sunAmb = new THREE.Color(0xffe0a0), _sunSky = new THREE.Color(0xfff2c8), _sunGround = new THREE.Color(0xffc45a), _sunDir = new THREE.Color(0xffe8b0), _sunFog = new THREE.Color(0xffe6a8); // (the Hall of the Sun's light — setSunHall)
+const _sunAmb = new THREE.Color(0xfff0d8), _sunSky = new THREE.Color(0xfff6e6), _sunGround = new THREE.Color(0xffdcae), _sunDir = new THREE.Color(0xfff0d0), _sunFog = new THREE.Color(0xffe6a8); // (the Hall of the Sun's light — setSunHall)
 const _ghostFog = new THREE.Color(0x474c63); // (the haze round the Castle of Ghosts: a cold grey-violet mist)
 
 /** The night is the last quarter of the day: 6 of the 24 hours (18 hours of daylight). */
@@ -286,12 +286,12 @@ export class VoxelWorld {
         const s = this.sunHall || 0;
         if (s <= 0) return;
         this.ambientLight.color.lerp(_sunAmb, s);
-        this.ambientLight.intensity += (0.55 - this.ambientLight.intensity) * s;
+        this.ambientLight.intensity += (0.38 - this.ambientLight.intensity) * s;
         this.hemiLight.color.lerp(_sunSky, s);
         this.hemiLight.groundColor.lerp(_sunGround, s);
-        this.hemiLight.intensity += (0.7 - this.hemiLight.intensity) * s;
+        this.hemiLight.intensity += (0.5 - this.hemiLight.intensity) * s;
         this.dirLight.color.lerp(_sunDir, s);
-        this.dirLight.intensity += (0.65 - this.dirLight.intensity) * s; // (warm and bright, never burnt white: the first try washed the hall out)
+        this.dirLight.intensity += (0.45 - this.dirLight.intensity) * s; // (warm and bright, never burnt white: the first try washed the hall out)
         if (this.scene.fog) {
             this.scene.fog.color.lerp(_sunFog, s);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.lerp(_sunFog, s);
