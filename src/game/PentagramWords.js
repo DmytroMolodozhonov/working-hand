@@ -26,6 +26,8 @@ export const PENT_NAMES = {
     sight: { en: 'Spectris', say: ['спектрис', 'спектрес', 'спектрэс'], stems: ['spectris', 'spektris', 'spectres', 'спектрис', 'спектрес', 'спектрэс', 'спектриз', 'спекрис'] },
     firm: { en: 'Firmitas', say: ['фирмитас', 'фермитас', 'фирмитес', 'фирмитэс'], stems: ['firmitas', 'firmitus', 'фирмитас', 'фермитас', 'фирмитес', 'фирмитэс', 'фирмитус', 'фирмитос', 'фермитес'] },
     infernum: { en: 'Infernum', say: ['инфернум', 'инфэрнум', 'инфернус', 'инферно'], stems: ['infernum', 'infernus', 'infernom', 'inferno', 'инфернум', 'инфэрнум', 'инфернус', 'инфёрнум', 'инфер нум', 'инфернам', 'инферно', 'инфэрно', 'инфёрно'] }, // («…Инферно»: the author says it so — with «Пентаграниум» in the phrase it is the gates of hell, never the fire spell)
+    darkward: { en: 'Albedo', say: ['альбедо', 'албедо', 'альбидо'], stems: ['albedo', 'albido', 'albeido', 'альбедо', 'албедо', 'альбидо', 'альбейдо', 'альб едо'] },
+    fireward: { en: 'Ignaris', say: ['игнарис', 'игнарес', 'игнариз'], stems: ['ignaris', 'ignares', 'ignarys', 'игнарис', 'игнарес', 'игнариз', 'игнорис', 'игнарус'] },
     gargoyles: { en: 'Gargoylis', say: ['гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргульес', 'гаргулес', 'гаргулис'], stems: ['gargoylis', 'gargoyles', 'gargules', 'gargulis', 'gargoyl', 'гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргойлз', 'гаргульес', 'гаргулес', 'гаргулис', 'гаргуль', 'гаргул', 'гаргойл', 'гаргоил'] },
 };
 

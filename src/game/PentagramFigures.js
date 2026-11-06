@@ -128,3 +128,38 @@ export const INFERNUM_LINES = (() => {
     const horn = (k) => curve([pt(-0.42 * k, 0.12), pt(-0.6 * k, 0.2), pt(-0.7 * k, 0.4), ringPt(k > 0 ? 2 : 14)]);
     return [...curve(gate), ...steps, flame, ...horn(1), ...horn(-1)];
 })();
+
+// ---------------------------------------------------------------- the two wards (white magic): against the dark, against fire
+/**
+ * «Защита от тёмной магии» (Pentagranium Albedo, белая): ЦВЕТОК О ТРЁХ ЛЕПЕСТКАХ (три цветка в обряде) — прямой лепесток-капля вверх и два боковых, что раскинулись
+ * в стороны, круглая сердцевина и тонкий стебель с двумя листочками вниз к кольцу. Ни звезда, ни колонна, ни глаз: свой рисунок.
+ */
+export const DARKWARD_LINES = (() => {
+    const petal = (cx, cy, ang, len, wid) => { // a pointed drop: the base at (cx, cy), the tip `len` away along `ang`
+        const out = [], n = 7;
+        for (let k = 0; k <= n; k++) { const t = k / n, w = Math.sin(t * Math.PI) * wid * (1 - 0.25 * t); out.push([t * len, w]); }
+        for (let k = n - 1; k >= 1; k--) { const t = k / n, w = Math.sin(t * Math.PI) * wid * (1 - 0.25 * t); out.push([t * len, -w]); }
+        const c = Math.cos(ang), s = Math.sin(ang);
+        return out.map(([u, v]) => pt(cx + u * c - v * s, cy + u * s + v * c));
+    };
+    const mid = petal(0, 0.05, Math.PI / 2, 0.8, 0.2);
+    const left = petal(0, 0.05, Math.PI / 2 + 1.0, 0.66, 0.17);
+    const right = petal(0, 0.05, Math.PI / 2 - 1.0, 0.66, 0.17);
+    const heart = arc(0, 0.05, 0.08, 0, Math.PI * 2, 10).slice(0, -1);
+    const stem = [pt(0, -0.03), pt(0.02, -0.3), pt(0, -0.58), pt(-0.02, -0.8)];
+    const leaves = [petal(0.01, -0.3, -0.5, 0.34, 0.09), petal(0.01, -0.46, Math.PI + 0.5, 0.34, 0.09)];
+    return [mid, left, right, heart, ...curve(stem), ...leaves];
+})();
+
+/**
+ * «Защита от огня» (Pentagranium Ignaris, белая): ЩИТ — остроконечный (вершиной вниз), по верхней кромке волнистая кайма, а в нём — капля пламени, которую щит
+ * не пускает наружу, и три искры над ним. Не врата ада (там стрельчатая арка и ступени), не колонна, не цветок.
+ */
+export const FIREWARD_LINES = (() => {
+    const top = Array.from({ length: 9 }, (_, k) => pt(-0.62 + (k * 1.24) / 8, 0.62 + (k % 2 ? 0.05 : -0.05))); // the wavy crest
+    const shield = [...top, pt(0.62, 0.0), pt(0.4, -0.42), pt(0, -0.8), pt(-0.4, -0.42), pt(-0.62, 0.0)];
+    const flame = [pt(0, 0.4), pt(0.17, 0.12), pt(0.2, -0.12), pt(0.1, -0.3), pt(0, -0.34), pt(-0.1, -0.3), pt(-0.2, -0.12), pt(-0.17, 0.12)];
+    const core = [pt(0, 0.08), pt(0.07, -0.08), pt(0, -0.2), pt(-0.07, -0.08)];
+    const sparks = [[pt(-0.3, 0.84), pt(-0.3, 0.97)], [pt(0, 0.9), pt(0, 1.0)], [pt(0.3, 0.84), pt(0.3, 0.97)]];
+    return [shield, flame, core, ...sparks];
+})();

@@ -171,6 +171,7 @@ export class Burning {
         if (g.isDeadLocal || c?.dead) return false;
         if (g.config?.mode === 'creative' && !c?.enabled) return false; // (Творческий: no harm to burn)
         if (this._wetMe() || this._noAir()) return false;
+        if (g.resist?.fireproof) return false; // (the white pentagram of protection from fire: no fire — ordinary or the hell's — sets me alight: PentagramResist.js)
         if (g.monster?.active) return false; // (the monster form: fire does not take it, as a dragon — MonsterForm.MONSTER_VS.fire)
         if (!this.me) {
             this.me = { left: 0, tickT: BURN.TICK, by };

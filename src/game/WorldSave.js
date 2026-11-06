@@ -187,6 +187,7 @@ export function playerSnapshot(game) {
         pentBare: game.pentagranium?.bareSnapshot() || null, // the bare-hand power (BareHand.js: the rite of «Palmaris» done)
         pentSeen: game.pentagranium?.snapshot() || null, // the pentagrams' drawings the hero has looked at (Pentagrams.js: without it nothing is counted)
         hell: game.hellGate?.snapshot() || null, // the gates of hell: where I went in (the way back) and whether I have been (HellGate.js)
+        resist: game.resist?.snapshot() || null, // protection from the dark magic / from fire (PentagramResist.js)
         sight: game.sight?.snapshot() || null, // the night eyes and the sight of the invisible (SecondSight.js)
         steady: game.steady?.snapshot() || null, // «Устойчивость»: the skill and the run towards the next +1
         mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
@@ -249,6 +250,7 @@ export function applyPlayerSnapshot(game, s) {
     if (s.bw) game.breakward?.restore(s.bw);
     if (s.steady) game.steady?.restore(s.steady);
     if (s.hell) game.hellGate?.restore(s.hell);
+    if (s.resist) game.resist?.restore(s.resist);
     if (s.sight) game.sight?.restore(s.sight);
     if (s.pentSeen) game.pentagranium?.restore(s.pentSeen);
     game.pentagranium?.bareRestore(s.pentBare);

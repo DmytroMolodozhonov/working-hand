@@ -15,6 +15,7 @@ import { manaRules } from './HeroSetup.js';
 import { BREAKWARD, BlackBar, breakwardMishap, canBypass, deficitOf, holdOutcome, MARK_HINT, MARK_NOTE, BLACK_HINT } from './Breakward.js';
 import * as THREE from 'three';
 import { addDark } from './DarkMagic.js';
+import { RESIST_HINT } from './ResistRules.js';
 
 const _v = { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
 const DRY_MS = 250; // «мана кончилась» держится столько после последнего drain
@@ -36,6 +37,7 @@ export class BreakwardMark {
     /** Встал на пентаграмму. @returns {string|null} почему нельзя, иначе null */
     activate() {
         const g = this.game, c = g.combat;
+        if (g.resist?.dark) { g.hud?.toast?.('🜏 ' + RESIST_HINT.breakRefused); return 'есть защита от тёмной магии'; } // (the opposite: only one of the two marks)
         if (this.marked) { g.hud?.toast?.('🜏 Защита уже сломана'); return 'защита уже сломана'; } // (одноразовая: мана не списывается, пентаграмма не гаснет)
         if (!this.known && !(c && !c.enabled)) return 'рисунок не выучен'; // (в Творческом известно всё)
         if (manaRules(this.game) && !this.prepaid) { // (prepaid: the 50 mana were taken when the pentagram was made — Pentagranium.cast)

@@ -241,6 +241,7 @@ import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
+import { PentagramResist } from './PentagramResist.js';
 import { Firmitas } from './Firmitas.js';
 import { HellGate } from './HellGate.js';
 import { HellRealm } from './HellRealm.js';
@@ -711,6 +712,7 @@ export class Game {
         this.hellGate = new HellGate(this); // the gates of hell: «Pentagranium Infernum», the passage down and back (HellGate.js; rules — HellRules.js, the map — HellMap.js)
         this.hellRealm = new HellRealm(this); // hell's sky, fog, light, lava, sparks and sound — where the hero is (HellRealm.js)
         this.firm = new Firmitas(this); // the gift of the white pentagram of absolute steadiness: the rite's picture (Firmitas.js; the flag is Steadiness.absolute)
+        this.resist = new PentagramResist(this); // the white pentagrams of protection: from the dark magic, from fire (PentagramResist.js)
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
@@ -4419,6 +4421,7 @@ export class Game {
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
         if (earth && !duelOnly) this.servants.update(dt);
         this.invis?.update(dt);
+        this.resist?.update(dt);
         this.sight?.update(dt);
         this.hellGate?.update(dt);
         this.hellRealm?.update(dt);
@@ -5547,6 +5550,7 @@ export class Game {
         this.spencers?.dispose();
         this.ghosts?.dispose();
         this.beslan?.dispose();
+        this.resist?.dispose();
         this.sight?.dispose();
         this.hellGate?.dispose();
         this.hellRealm?.dispose();

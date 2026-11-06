@@ -719,7 +719,7 @@ export const SCROLL_WEIGHTS = [
     ['AvadaKedavra', 4], ['Sectura', 2.5], ['Caligo', 2], ['Spiralis', 0.6], ['Accentric', 2.5], ['Electrum', 2.5], ['Pilbidrio', 1.2], ['TotalDestruction', 1.5], ['Hellfire', 1.5],
     ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],
     ['pent:devil', 0.9], ['pent:*', 0.7], // (the pentagrams' scrolls — rare, Pentagrams.js)
-    ['pent:night', 0.6], ['pent:sight', 0.6], ['pent:firm', 0.6], // (…and the white pentagram of absolute steadiness — FirmRules.js)
+    ['pent:night', 0.6], ['pent:sight', 0.6], ['pent:firm', 0.6], ['pent:darkward', 0.6], ['pent:fireward', 0.6], // (…and the white pentagram of absolute steadiness — FirmRules.js)
     // (the white pentagrams of sight — SightRules.js: as rare as the devil's, so a hero can find them)
     ['Imperius', 1.2], // (the mind into another body: rare, as the strong ones; a plain chest rerolls it most of the time — MIGHTY)
 ];

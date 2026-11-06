@@ -1221,6 +1221,8 @@ export class Combat {
         // the monster form (MonsterForm.js): simple spells and fire do nothing, blades a quarter, strong spells a half…
         const mon = this.game.monster?.active ? this.game.monster : null;
         if (mon) { amount = mon.filterDamage(amount, kind, byId); if (!(amount > 0)) return; }
+        // the white pentagrams of protection (PentagramResist.js): dark spells twice as weak; ordinary fire does nothing, the fire serpent half
+        if (this.game.resist) { amount = this.game.resist.filterDamage(amount, kind); if (!(amount > 0)) return; }
         // Any hit on a frozen player shatters them, whatever their HP
         // (the ice's own bite while it holds — «Айс» −3/s, «Айс Максима» −10/s — is not a blow: StrongMagic; the monster form's ice does not shatter: it takes the filtered harm)
         if (this.frozen && !mon && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }

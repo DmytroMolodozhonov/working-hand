@@ -13,7 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
-import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES } from './PentagramFigures.js';
+import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES } from './PentagramFigures.js';
 import { INFERNUM } from './HellRules.js';
 
 export const PENT = {
@@ -114,6 +114,16 @@ registerPentagram({
 registerPentagram({
     id: 'firm', title: 'Пентаграмма абсолютной устойчивости', dark: false, glow: 0xf0b25a, cost: 300, permanent: true, scroll: 'PentagramFirm', lines: FIRM_LINES,
     effect: 'Положите на круг волшебный камушек, встаньте в него и заплатите 300 маны — вас навсегда (до смерти) больше не повалит ни ветер, ни заклинание, ни падение с любой высоты.',
+});
+
+// The two WHITE pentagrams of protection (ResistRules.js, PentagramResist.js): from the dark magic (three flowers, 150 mana, only a hero of the dark level ≤ 10) and from fire (the Brightflower's heart, 150 mana).
+registerPentagram({
+    id: 'darkward', title: 'Пентаграмма защиты от тёмной магии', dark: false, glow: 0xf4f0ff, cost: 150, permanent: true, scroll: 'PentagramDarkward', lines: DARKWARD_LINES,
+    effect: 'Бросьте в круг три цветка (солнечницу, светлошляпку и лазурницу), встаньте в него и заплатите 150 маны — тёмные заклинания против вас станут вдвое слабее. Не для тех, у кого уровень тёмного мага выше 10: потеряете защиту, а метка слома магической защиты с ней несовместима.',
+});
+registerPentagram({
+    id: 'fireward', title: 'Пентаграмма защиты от огня', dark: false, glow: 0xff9a3a, cost: 150, permanent: true, scroll: 'PentagramFireward', lines: FIREWARD_LINES,
+    effect: 'Бросьте в круг сердцевину Ярколета, встаньте в него и заплатите 150 маны — обычный огонь вас больше не берёт и не поджигает. Адский огонь всё ещё жжёт (но не поджигает), а огненный змей — вдвое слабее.',
 });
 
 // «Пентаграмма ада» (HellRules.js, HellGate.js): чёрная; 150 маны и +10 к тьме при слове, жертва — одно тело любого убитого существа, шаг в открытый круг — в ад.

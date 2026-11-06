@@ -17,6 +17,7 @@
  */
 import * as THREE from 'three';
 import { OFFERINGS, OFFER, OFFER_HINT, assess } from './PentagramOfferings.js';
+import { RESIST_HINT } from './ResistRules.js';
 import { manaRules } from './HeroSetup.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3();
@@ -114,6 +115,7 @@ export class Offerings {
             if (g.monster?.phase) return '🐺 Вы уже монстр';
         } else if (m.offer === 'breakward') {
             if (g.breakward?.marked) return '🜏 Защита уже сломана — второй раз не нужно';
+            if (g.resist?.dark) return '🜏 ' + RESIST_HINT.breakRefused; // (the opposite of the protection from the dark magic)
         } else if (m.offer === 'infernum' || m.offer === 'hellBack') {
             if (m.gateOpen > 0) return null; // (already open: nothing more is burnt — HellGate.js)
         }

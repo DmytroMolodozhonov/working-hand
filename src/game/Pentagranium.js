@@ -58,6 +58,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { addDark } from './DarkMagic.js';
 import { BARE } from './BareHand.js';
 import { OFFERINGS } from './PentagramOfferings.js';
+import { RESIST_HINT } from './ResistRules.js';
 
 /** ms: a pentagram's name still being said must hold this long unchanged before it casts (the author: «после Pentagranium подождать полсекунды»). */
 export const PAUSE_MS = 500;
@@ -96,6 +97,8 @@ const USE_TEXT = {
     night: 'Встаньте в круг (50 маны) — вы навсегда начнёте лучше видеть в темноте',
     sight: 'Встаньте в круг с пером птички Спенсера (150 маны) — вы начнёте видеть невидимое',
     infernum: 'Встаньте в круг и постойте немного — врата в ад открыты',
+    darkward: 'Бросьте в круг три цветка — солнечницу, светлошляпку и лазурницу, — встаньте в него (150 маны): тёмные заклинания против вас станут вдвое слабее (пока уровень тёмного мага не выше 10)',
+    fireward: 'Бросьте в круг сердцевину Ярколета, встаньте в него (150 маны): обычный огонь вас больше не берёт; адский всё ещё жжёт, но не поджигает',
     firm: 'Положите на круг волшебный камушек, встаньте в него (300 маны) — вас больше не повалит ничто, до самой смерти',
 };
 
@@ -181,6 +184,7 @@ export class Pentagranium {
         if (aim) this.aim = aim;
         const hand = this.aim ? { side: 'right', origin: this.aim.origin, dir: this.aim.dir } : castingHand(g);
         if (!this.known().includes(id)) return hint(`🩸 Вы не знаете «${figureOf(id).ru}» — найдите её свиток и сожгите («Инферно»): тогда её можно будет создать`);
+        if (id === 'breakward' && g.resist?.dark) return hint('🜏 ' + RESIST_HINT.breakRefused); // (the opposite of the dark ward: only one of the two marks — PentagramResist.js)
         if (id === 'bare' && this.bare && !this.creative) return hint('🙌 Вы уже умеете колдовать без палочки — пентаграмма второй раз не нужна');
         if (!hand) return hint(`🩸 Поднимите палочку (руку), направьте на землю и скажите «${name}»`);
         if (g.swim?.underwater) return hint('🩸 Под водой пентаграмма не держится');
@@ -502,6 +506,10 @@ export class Pentagranium {
             if (s.cd > 0) return;
             const done = g.sight?.useCircle(m.pent, { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
             if (done) s.cd = 30; // (a gift given once: standing on in the circle gives no more)
+        } else if (m.pent === 'darkward' || m.pent === 'fireward') {
+            if (s.cd > 0) return;
+            const done = g.resist?.useCircle(m.pent === 'darkward' ? 'dark' : 'fire', { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
+            if (done) s.cd = 30; // (a gift given once)
         } else if (m.pent === 'firm') {
             if (s.cd > 0) return;
             const done = g.firm?.useCircle({ m, pays, hint, mana, fx: () => this._useFx('firm', m, true) });
@@ -541,7 +549,7 @@ export class Pentagranium {
 
     /** The glow of a use: a pillar of sparks, a ring spreading, a flash (the shared flash light) and a sound; shown to everybody (`pgm` fx). */
     _useFx(kind, m, send = false) {
-        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8] }[kind] || [0xffffff, 0xffe9a8];
+        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8], darkward: [0xf4f0ff, 0xfff4d0], fireward: [0xff9a3a, 0xffe0a0] }[kind] || [0xffffff, 0xffe9a8];
         if (fx) {
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 2;
@@ -550,7 +558,7 @@ export class Pentagranium {
             for (let i = 0; i < 40; i++) fx.spark(_o.set(m.x + (Math.random() - 0.5) * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * 1.6), col[i % 2], 0.2, _d.set((Math.random() - 0.5) * 0.6, 4 + Math.random() * 6, (Math.random() - 0.5) * 0.6), 1.6);
             fx.lightFlash?.(_o.set(m.x, m.y + 1.5, m.z), col[1], 3, 0.5, m.r * 4 + 10);
         }
-        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : kind === 'firm' ? 'fxFirm' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
+        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : kind === 'firm' || kind === 'fireward' ? 'fxFirm' : kind === 'darkward' ? 'fxLife' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
         if (send) g.sync?.pentagram?.({ k: 'fx', kind, x: m.x, y: m.y, z: m.z, r: m.r });
     }
 
