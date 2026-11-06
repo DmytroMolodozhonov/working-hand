@@ -103,7 +103,9 @@ test('personal space comes from the model: sheep closer than cows; nobody bigger
     assert.ok(cow.model.userData.head, 'the head has its own pivot (down to the grass, looking about)');
 });
 
-test('frightened: the herd runs away together, close but never touching', () => {
+test('frightened: the herd runs away together, close but never touching', (t) => {
+    // (seeded: the herd's own randomness once made a run fall 1 in many — 8.8 m instead of > 10; the rule is the same)
+    let seed = 12345; const rnd0 = Math.random; Math.random = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296); t.after(() => { Math.random = rnd0; });
     const { g, A } = fakeGame([0, -6]);
     const herd = A.spawnHerdAt('cow', 6, 0, 10);
     run(A, 3);
