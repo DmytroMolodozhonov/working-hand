@@ -141,3 +141,10 @@ test('«Спиралис» проходит сквозь «занято: идё�
     assert.equal(mayCast('Duel', 'Maxima'), true);
     assert.equal(mayCast('Duel', 'Bombardo'), false, 'остальное в дуэли — по-прежнему нельзя');
 });
+
+test('Game: слово «Спиралис» обрабатывается ДО стены «в дуэли другие заклинания не работают» (жалоба автора: «опять не хочет»)', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Game.js', import.meta.url), 'utf8');
+    const wall = src.indexOf("if (this._inDuel()) { if (isFinal) this.hud.setVoice('⚡ Идёт дуэль — другие заклинания не работают");
+    const word = src.indexOf("if (name === 'Spiralis') return this.whirl.cast(isFinal);");
+    assert.ok(wall > 0 && word > 0 && word < wall, `«Спиралис» (${word}) должен стоять раньше стены (${wall})`);
+});

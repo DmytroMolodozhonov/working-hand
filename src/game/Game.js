@@ -2129,6 +2129,8 @@ export class Game {
         }
         // «Максима» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
         if (name === 'Maxima' && this._inDuel() && !this.water?.active) return this.duel.maxima(isFinal);
+        // «Спиралис» — the clash's own spell (the beams taken and whirled): before the «nothing else in a duel» wall below (Whirl.js)
+        if (name === 'Spiralis') return this.whirl.cast(isFinal);
         // In a duel nothing else can be cast (only the shield, with the other hand)
         if (this._inDuel()) { if (isFinal) this.hud.setVoice('⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)', true); return null; }
         if (name === 'AirBubble' || name === 'AirBubbleMaxima') {
