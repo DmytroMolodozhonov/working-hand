@@ -14,8 +14,21 @@ export default async function (h, args) {
     const ids = args?.only || ['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'];
     for (const id of ids) {
         for (const k of [...Ti.active.keys()]) Ti._drop(k);
-        const def = TITANS[id], home = Ti.home(id);
-        if (!home) { h.log(id, 'no home (planet?)'); continue; }
+        const def = TITANS[id], home0 = Ti.home(id);
+        if (!home0) { h.log(id, 'no home (planet?)'); continue; }
+        // (each planet turns: its day is where the Sun is up now — the portrait is taken on the day side of the same planet, the
+        //  longitude runs along x: the first spot from the home where the Sun stands high)
+        const pdef = g.space.planets.get(def.planet), now = g.space.now();
+        let home = home0, best = -2;
+        const { slotRect } = await import('/src/world/Planets.js');
+        const R = slotRect(pdef);
+        for (let k = 0; k < 32; k++) {
+            const x = R.x0 + 2000 + ((home0.x - R.x0 - 2000 + k * 1024) % (R.w - 4000) + (R.w - 4000)) % (R.w - 4000); // (round the planet, never over its seam)
+            const el = g.space.localSun(pdef, x, home0.z, now).y;
+            if (el > best) { best = el; home = { x, z: home0.z }; }
+            if (el > 0.55) break;
+        }
+        h.log(id, 'sun elevation', best.toFixed(2));
         const far = def.look === 'storm' ? 300 : def.look === 'worm' ? 230 : def.height * 1.35;
         // the hero on that planet's ground, where the camera will stand (the land round the home is made meanwhile)
         await h.go(home.x + far * 0.18, 400, home.z + far, true);
