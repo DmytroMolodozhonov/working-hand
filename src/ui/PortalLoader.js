@@ -155,7 +155,7 @@ export class PortalLoader {
         this.el.style.setProperty('--pl-rune', `rgb(${c})`);
         this.el.style.setProperty('--pl-c0', `rgb(${this.pal[0].map((x) => Math.round(x * 255)).join(',')})`);
         this.el.style.setProperty('--pl-c3', `rgb(${this.pal[3].map((x) => Math.round(x * 255)).join(',')})`);
-        this.el.style.setProperty('--pl-spin', this.dir > 0 ? '1turn' : '-1turn');
+        this.el.style.setProperty('--pl-spin', this.dir > 0 ? '-1turn' : '1turn'); // (the runes turn the way the whirl's stream turns: +angle in the shader = against the clock on the screen)
     }
 
     _runes() {

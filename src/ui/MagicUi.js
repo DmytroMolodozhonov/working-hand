@@ -16,6 +16,7 @@
 
 import { uiSound } from '../audio/MagicSound.js';
 import { PALETTES } from './PortalLoader.js';
+import { ArcaneShapes } from './ArcaneShapes.js';
 
 const MENUS = '#main-menu, #pause-menu, #death-screen, #game-over, #victory-screen';
 const HOVERABLE = 'button, .tab-btn, .pause-tab, .sub-tab, a[href], [role="tab"], label, select, summary, .world-card, .save-card';
@@ -44,11 +45,11 @@ void main(){
   vec2 d = p - uM * 0.1;                                   // (the eye leans after the cursor)
   float g = rip(uR0, p, d) + rip(uR1, p, d) + rip(uR2, p, d); // (rings of light from the clicks)
   float r = length(d), a = atan(d.y, d.x);
-  float sw = a + 1.7 * log(r + 0.08) + uT * 0.07;
+  float sw = a + 1.7 * log(r + 0.08);               // (no turn of its own: it turns by streaming inward along its arms)
   vec2 q = vec2(cos(sw), sin(sw));
-  float n1 = fbm(q * 1.4 + vec2(r * 1.3 - uT * 0.05, uT * 0.03) + uSeed);
+  float n1 = fbm(q * 1.4 + vec2(r * 1.3 + uT * 0.06, uT * 0.02) + uSeed); // (the nebula drifts inward)
   float n2 = fbm(d * 2.3 + n1 * 1.6 + vec2(uT * 0.02, -uT * 0.015));
-  float arms = 0.5 + 0.5 * sin(sw * 3.0 + n1 * 4.0 - r * 3.0);
+  float arms = 0.5 + 0.5 * sin(sw * 3.0 + n1 * 4.0 - r * 3.0 - uT * 0.35); // (the crests ride inward with it)
   float band = smoothstep(0.3, 1.0, arms) * (0.4 + 0.7 * n2);
   vec3 col = pal(n1 * 0.8 + r * 0.2 + uT * 0.008) * band * 0.8;
   col += uC3 * 0.42 * (1.0 - band);
@@ -162,6 +163,7 @@ export class MagicUi {
 
     _sync() {
         this._rings();
+        try { (this.shapes ||= new ArcaneShapes()).apply(); } catch (e) { console.warn('ArcaneShapes:', e?.message || e); }
         const host = this._which();
         if (host !== this.host) {
             this.host = host;
@@ -193,8 +195,8 @@ export class MagicUi {
             if (el.disabled) return;
             uiSound('hover');
             if (!this.reduce) {
-                const b = el.getBoundingClientRect();
-                for (let i = 0; i < 5; i++) this._spark(b.left + Math.random() * b.width, b.bottom - 2, (Math.random() - 0.5) * 20, -30 - Math.random() * 40, 0.7 + Math.random() * 0.6, 1 + Math.random() * 1.4);
+                // (from the pointer: reading the element's box here forced the page to lay itself out on every hover — a hitch)
+                for (let i = 0; i < 5; i++) this._spark(e.clientX + (Math.random() - 0.5) * 60, e.clientY + 8, (Math.random() - 0.5) * 20, -30 - Math.random() * 40, 0.7 + Math.random() * 0.6, 1 + Math.random() * 1.4);
             }
         }, { passive: true });
         document.addEventListener('pointerdown', (e) => {

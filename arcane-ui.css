@@ -1,0 +1,198 @@
+/*
+ * arcane-ui.css — the interface itself made of magic (the author 06.11: «ты улучшил эффекты взаимодействия и звуки, но не изменил сам
+ * интерфейс; я не чувствую магии в цвете, в самом интерфейсе; он не должен быть такой ровный — может быть кривой, со своими
+ * градиентами, изображающий магию»).
+ *
+ * The language of it — «the whirl's nebula»:
+ *  - no straight boxes: every window, card, tab and button has its own uneven, living outline (elliptic corners, each different —
+ *    a drop, a leaf, a crystal), the windows lean like pages of a spell book;
+ *  - inside — the whirl's colours: clouds of violet, teal, rose and gold over the deep night, and in each window a soft nebula
+ *    that slowly turns (one blurred layer turned by the graphics card — painted once, never repainted);
+ *  - edges of light: gradient rims (gold → violet → teal → rose) instead of flat grey lines;
+ *  - the chosen things glow like gems; the gold buttons are molten gold with a swirl in them;
+ *  - headings — gold with a flourish of light under them.
+ * Cheap: static gradients (painted once), the only motion is transform/opacity (magic-ui.css has the rest).
+ */
+
+:root {
+    --ar-nebula:
+        radial-gradient(120% 85% at 0% 0%, rgba(123, 92, 255, 0.34), transparent 56%),
+        radial-gradient(90% 75% at 100% 100%, rgba(60, 200, 255, 0.16), transparent 60%),
+        radial-gradient(70% 60% at 92% 6%, rgba(255, 110, 200, 0.16), transparent 62%),
+        radial-gradient(60% 50% at 12% 96%, rgba(255, 200, 90, 0.08), transparent 62%),
+        linear-gradient(165deg, rgba(26, 16, 66, 0.93), rgba(9, 5, 26, 0.95));
+    --ar-card:
+        radial-gradient(110% 120% at 0% 0%, rgba(123, 92, 255, 0.22), transparent 60%),
+        radial-gradient(90% 100% at 100% 100%, rgba(80, 210, 255, 0.10), transparent 62%),
+        linear-gradient(160deg, rgba(30, 20, 76, 0.72), rgba(10, 6, 30, 0.78));
+    --ar-rim: linear-gradient(125deg, rgba(255, 215, 106, 0.85), rgba(167, 139, 255, 0.75) 30%, rgba(126, 232, 255, 0.55) 62%, rgba(255, 122, 200, 0.75));
+    --ar-rim-soft: linear-gradient(125deg, rgba(255, 215, 106, 0.45), rgba(167, 139, 255, 0.4) 35%, rgba(126, 232, 255, 0.28) 65%, rgba(255, 122, 200, 0.4));
+    --ar-gem: linear-gradient(118deg, #5a3cf0 0%, #9447ff 38%, #e05cc8 72%, #ffb070 100%);
+    --ar-gold: radial-gradient(60% 120% at 30% 0%, rgba(255, 255, 240, 0.85), transparent 55%),
+        conic-gradient(from 200deg at 70% 60%, #f0a93c, #ffd76a, #fff1b8, #ffd76a, #e8932a, #f0a93c);
+    /* the outlines: none of them straight, each its own */
+    --ar-shape-win: 64px 26px 70px 30px / 44px 62px 34px 58px;
+    --ar-shape-a: 22px 8px 26px 10px / 14px 24px 12px 22px;
+    --ar-shape-b: 10px 24px 12px 28px / 22px 12px 26px 14px;
+    --ar-shape-c: 26px 12px 18px 30px / 18px 28px 14px 20px;
+    --ar-shape-btn: 18px 6px 20px 7px / 12px 18px 10px 16px;
+    --ar-shape-leaf: 22px 6px 22px 6px / 20px 6px 20px 6px;
+}
+
+/* ------------------------------------------------------------ a rim of light round anything (the border is the gradient) */
+.ar-rim, #main-menu .menu-box, #main-menu .settings-group, #tab-settings .settings-group, .mech-card, .boss-card, .item-card, .hero-settings,
+#main-menu .tabs, #pause-menu .pause-tabs, .map-card, .sidebar-section, .boss-high {
+    border: 1.5px solid transparent !important;
+    background: var(--ar-card) padding-box, var(--ar-rim-soft) border-box !important;
+}
+
+/* ------------------------------------------------------------ the windows: leaning pages with a living nebula in them */
+#main-menu > .menu-container, #pause-menu .pause-box, .death-box {
+    border-radius: var(--ar-shape-win) !important;
+    background: var(--ar-nebula) !important;
+    overflow: hidden;
+}
+#main-menu > .menu-container::before, #pause-menu .pause-box::before, .death-box::before {
+    content: ''; position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; z-index: -1; pointer-events: none;
+    /* (soft by its own gradients — no blur filter: a blurred layer that turns is blurred anew by the graphics card every frame) */
+    background:
+        radial-gradient(38% 30% at 30% 28%, rgba(123, 92, 255, 0.30), transparent 70%),
+        radial-gradient(34% 28% at 72% 36%, rgba(126, 232, 255, 0.18), transparent 70%),
+        radial-gradient(36% 30% at 62% 74%, rgba(255, 110, 200, 0.22), transparent 70%),
+        radial-gradient(30% 26% at 30% 70%, rgba(255, 210, 110, 0.12), transparent 70%);
+    will-change: transform;
+    animation: ar-nebula-turn 90s linear infinite; /* (the cloud turns slowly — a transform, painted once) */
+}
+.death-box::before { background: radial-gradient(40% 32% at 32% 30%, rgba(255, 70, 110, 0.32), transparent 70%), radial-gradient(36% 30% at 66% 70%, rgba(255, 160, 90, 0.18), transparent 70%); }
+@keyframes ar-nebula-turn { to { transform: rotate(360deg); } }
+/* the rune corners sit inside the rounder outline */
+#main-menu > .menu-container::after, #pause-menu .pause-box::after, .death-box::after { inset: 16px 20px !important; }
+
+/* ------------------------------------------------------------ headings: gold with a flourish of light */
+#main-menu .menu-h4, #main-menu h3, #pause-menu h3, .mech-card h3, .settings-group > h3, .settings-group > h4 {
+    color: #ffe3a0 !important; text-transform: none; letter-spacing: 0.4px; font-family: var(--ui-font-title);
+    text-shadow: 0 0 12px rgba(255, 200, 90, 0.45), 0 0 26px rgba(167, 139, 255, 0.35);
+    position: relative;
+}
+#main-menu .menu-h4::after, .settings-group > h3::after {
+    content: ''; display: block; height: 2px; margin-top: 5px; width: min(240px, 80%); border-radius: 2px;
+    background: linear-gradient(90deg, rgba(255, 215, 106, 0.95), rgba(167, 139, 255, 0.7) 40%, rgba(126, 232, 255, 0.35) 70%, transparent);
+    box-shadow: 0 0 8px rgba(255, 215, 106, 0.5);
+}
+.sp-head .menu-h4::after { position: absolute; left: 0; bottom: -7px; margin: 0; }
+
+/* ------------------------------------------------------------ the side's sections: leaves of light; the chosen one a gem */
+#main-menu .tabs { border-radius: var(--ar-shape-c) !important; padding: 10px 8px; gap: 6px; }
+.tab-btn { border-radius: var(--ar-shape-leaf) !important; position: relative; padding-left: 16px; }
+.tab-btn:nth-child(even) { border-radius: 6px 22px 6px 22px / 6px 20px 6px 20px !important; }
+.tab-btn:hover { background: linear-gradient(100deg, rgba(123, 92, 255, 0.28), rgba(126, 232, 255, 0.08) 70%, transparent) !important; color: #fff; }
+.tab-btn.active, .pause-box .pause-tab.active {
+    background: radial-gradient(80% 140% at 15% 10%, rgba(255, 255, 255, 0.35), transparent 50%), var(--ar-gem) !important;
+    border: 1px solid rgba(255, 230, 170, 0.55) !important;
+}
+.tab-btn.active::before {
+    content: ''; position: absolute; left: -4px; top: 50%; width: 9px; height: 9px; transform: translateY(-50%) rotate(45deg);
+    background: radial-gradient(circle, #fff 0%, #ffe9a8 40%, #ffb84a 100%); box-shadow: 0 0 10px #ffd76a, 0 0 20px rgba(255, 180, 70, 0.8);
+}
+
+/* ------------------------------------------------------------ cards: each its own outline, a rim of light */
+#main-menu .menu-box, #main-menu .settings-group, #tab-settings .settings-group, .hero-settings, .sidebar-section { border-radius: var(--ar-shape-a) !important; }
+#main-menu .menu-box:nth-of-type(even), #tab-settings .settings-group:nth-of-type(even) { border-radius: var(--ar-shape-b) !important; }
+.mech-card:nth-child(3n + 1), .item-card:nth-child(3n + 1), .boss-card:nth-child(3n + 1) { border-radius: var(--ar-shape-a) !important; }
+.mech-card:nth-child(3n + 2), .item-card:nth-child(3n + 2), .boss-card:nth-child(3n + 2) { border-radius: var(--ar-shape-b) !important; }
+.mech-card:nth-child(3n), .item-card:nth-child(3n), .boss-card:nth-child(3n) { border-radius: var(--ar-shape-c) !important; }
+.item-card:hover, .mech-card:hover, .map-card:hover { background: var(--ar-card) padding-box, var(--ar-rim) border-box !important; box-shadow: 0 0 22px rgba(167, 139, 255, 0.35); }
+.item-icon { border-radius: 40% 60% 55% 45% / 50% 40% 60% 50% !important; background: radial-gradient(circle at 40% 35%, rgba(255, 233, 168, 0.35), rgba(123, 92, 255, 0.35) 45%, rgba(5, 3, 18, 0.7)) !important; }
+
+/* the mode chips (Творческий / Выживание / Карты): crystals of their colour */
+.map-card.mode-card {
+    border-radius: var(--ar-shape-btn) !important;
+    background: radial-gradient(90% 140% at 20% 0%, color-mix(in srgb, var(--mode-a) 35%, transparent), transparent 60%) padding-box,
+        linear-gradient(160deg, color-mix(in srgb, var(--mode-b) 45%, rgba(20, 14, 50, 0.95)), rgba(12, 8, 32, 0.95)) padding-box,
+        linear-gradient(125deg, var(--mode-a), rgba(255, 255, 255, 0.25), var(--mode-a)) border-box !important;
+}
+.map-card.mode-card:nth-child(even) { border-radius: 7px 20px 6px 18px / 16px 10px 18px 12px !important; }
+.map-card.mode-card.selected { box-shadow: 0 0 0 2px color-mix(in srgb, var(--mode-a) 35%, transparent), 0 0 24px color-mix(in srgb, var(--mode-a) 55%, transparent); }
+
+/* the worlds' list: rows on a thread of light */
+.world-row { border-top: none !important; border-radius: 14px 4px 14px 4px; margin: 2px 0; background: linear-gradient(95deg, rgba(123, 92, 255, 0.12), transparent 70%); }
+.world-row:hover { background: linear-gradient(95deg, rgba(123, 92, 255, 0.28), rgba(126, 232, 255, 0.08) 60%, transparent); }
+.world-mode, .world-spot { border-radius: 10px 3px 10px 3px !important; }
+
+/* ------------------------------------------------------------ buttons: crystals; the main ones molten gold */
+#main-menu button:not(.win-btn):not(.tab-btn):not(.sub-tab):not(.world-fav):not(.pause-tab):not(.ce-arrow), #pause-menu button:not(.pause-tab), #death-screen button, .ui-btn {
+    border-radius: var(--ar-shape-btn) !important;
+}
+#main-menu .mp-btn:not(.mp-btn-grey):not(#start-btn):not(#mp-enter-btn), .ui-btn:not(.primary):not(.danger) {
+    background: radial-gradient(90% 140% at 20% 0%, rgba(255, 255, 255, 0.22), transparent 55%), linear-gradient(118deg, #4a32c8, #8a45f0 55%, #c955c0) !important;
+    border: 1px solid rgba(255, 230, 170, 0.45) !important; color: #fff !important;
+}
+#start-btn, #mp-enter-btn, #pause-main #pause-continue-btn, #death-respawn-btn:not(:disabled), .ui-btn.primary {
+    background: var(--ar-gold) !important; color: #2a1605 !important; border: 1px solid rgba(255, 250, 220, 0.8) !important;
+    box-shadow: 0 0 0 2px rgba(120, 70, 10, 0.35), 0 0 26px rgba(255, 190, 70, 0.55), inset 0 -3px 8px rgba(160, 80, 0, 0.35) !important;
+    text-shadow: 0 1px 0 rgba(255, 245, 210, 0.7);
+}
+#start-btn { border-radius: 30px 10px 34px 12px / 22px 30px 18px 28px !important; font-family: var(--ui-font-title); letter-spacing: 0.6px; }
+#pause-main #pause-exit-btn, .mp-btn-grey, #death-menu-btn {
+    background: linear-gradient(118deg, rgba(60, 40, 130, 0.55), rgba(20, 12, 50, 0.7)) padding-box, var(--ar-rim-soft) border-box !important;
+    border: 1.5px solid transparent !important; color: #eee6ff !important;
+}
+#pause-main #pause-exit-btn { border-radius: 8px 20px 8px 22px / 18px 8px 20px 10px !important; }
+.sub-tab { border-radius: 14px 4px 14px 4px !important; }
+.sub-tab.active { background: var(--ar-gem) !important; border-color: rgba(255, 230, 170, 0.5) !important; }
+
+/* inputs: a slot of night with a glowing underline */
+#main-menu input[type="text"], #main-menu input[type="number"], #main-menu select, #pause-menu select {
+    border-radius: 14px 4px 14px 4px !important;
+    background: linear-gradient(180deg, rgba(10, 6, 30, 0.85), rgba(26, 16, 66, 0.75)) padding-box, var(--ar-rim-soft) border-box !important;
+    border: 1.5px solid transparent !important;
+}
+#main-menu input[type="checkbox"], #main-menu input[type="radio"], #pause-menu input[type="checkbox"], #pause-menu input[type="radio"] { accent-color: #b06bff; }
+#main-menu input[type="range"], #pause-menu input[type="range"] { accent-color: #ffd76a; }
+
+/* ------------------------------------------------------------ the pause: tabs as gems on a curved band */
+#pause-menu .pause-tabs { border-radius: 30px 10px 30px 10px / 20px 12px 20px 12px !important; }
+#pause-menu .pause-box .pause-tab { border-radius: var(--ar-shape-leaf) !important; }
+#pause-menu .pause-box .pause-tab:nth-child(even) { border-radius: 6px 22px 6px 22px / 6px 20px 6px 20px !important; }
+
+/* ------------------------------------------------------------ the HUD: the vials and stones lose their straight lines too */
+#hp-container, #fatigue-container, #armor-hp, #boss-bar .boss-track { border-radius: 26px 10px 26px 10px / 20px 12px 20px 12px !important; }
+.hotbar-slot { border-radius: 18px 6px 18px 6px / 16px 8px 16px 8px !important; }
+.hotbar-slot:nth-child(even) { border-radius: 6px 18px 6px 18px / 8px 16px 8px 16px !important; }
+#minimap-container { border-radius: 34px 12px 34px 12px / 26px 14px 26px 14px !important; }
+#hud-toast, #voice-debug.hint, .hud-notify-item, #voice-heard { border-radius: 20px 6px 20px 6px / 16px 8px 16px 8px !important;
+    background: radial-gradient(100% 140% at 0% 0%, rgba(123, 92, 255, 0.35), transparent 60%), linear-gradient(160deg, rgba(30, 20, 76, 0.9), rgba(10, 6, 30, 0.9)) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+    #main-menu > .menu-container::before, #pause-menu .pause-box::before, .death-box::before { animation: none !important; }
+}
+
+/* ======================================================================================================================
+ * THE SHAPES (ArcaneShapes.js, from the author's drawing): the window's hand-drawn outline and, in the main menu, the stage —
+ * the section's panel whose left edge is one arc bulging over the buttons' ends.
+ * ====================================================================================================================== */
+.ar-shaped { background: transparent !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
+.ar-shaped > .ar-frame { position: absolute; left: 0; top: 0; z-index: -2; pointer-events: none; overflow: visible; }
+.ar-shaped > .mu-ring.ar-masked { padding: 0; border-radius: 0; inset: 0;
+    -webkit-mask-composite: source-over; mask-composite: add; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.ar-shaped::after { inset: 18px 22px !important; }
+/* the stage over the buttons' ends, under the section's own contents */
+#main-menu > .menu-container > .ar-stage { position: absolute; z-index: 2; pointer-events: none; overflow: visible; }
+#main-menu > .menu-container > .menu-side { position: relative; z-index: 1; }
+#main-menu > .menu-container > .tab-content { position: relative; z-index: 3; padding: 14px 18px 10px 12px; }
+#main-menu > .menu-container.ar-shaped { grid-template-columns: 290px minmax(0, 1fr); column-gap: 24px; padding: 14px 18px 22px 22px; }
+/* the buttons: rows of light, one under another, running under the arc (it cuts their ends — the drawing) */
+#main-menu .ar-shaped .tabs { background: none !important; border: none !important; padding: 4px 0 !important; gap: 0 !important; border-radius: 0 !important; overflow: visible; }
+#main-menu .ar-shaped .tab-btn {
+    border-radius: 16px 0 0 16px !important; padding: 15px 18px; margin: 0; font-size: 1.02rem;
+    border: none !important; border-bottom: 1px solid transparent !important;
+    color: #d9ceff !important;
+    background: linear-gradient(90deg, rgb(38, 24, 96), rgb(22, 13, 58)) padding-box,
+        linear-gradient(90deg, rgba(255, 215, 106, 0.55), rgba(167, 139, 255, 0.35) 50%, rgba(126, 232, 255, 0.2)) border-box !important;
+    transform: none !important;
+}
+#main-menu .ar-shaped .tab-btn:nth-child(even) { border-radius: 16px 0 0 16px !important; }
+#main-menu .ar-shaped .tab-btn:hover { color: #fff !important; background: linear-gradient(90deg, rgb(70, 46, 170), rgb(36, 40, 100)) padding-box,
+        linear-gradient(90deg, rgba(255, 215, 106, 0.8), rgba(167, 139, 255, 0.5) 50%, rgba(126, 232, 255, 0.3)) border-box !important; }
+#main-menu .ar-shaped .tab-btn.active { color: #fff !important; background: radial-gradient(70% 160% at 10% 0%, rgba(255, 255, 255, 0.35), transparent 50%), var(--ar-gem) !important; border-bottom-color: rgba(255, 230, 170, 0.8) !important; }
+@media (max-width: 600px) { #main-menu > .menu-container.ar-shaped { grid-template-columns: minmax(0, 1fr); } #main-menu .ar-shaped .tab-btn { border-radius: var(--ar-shape-leaf) !important; } }

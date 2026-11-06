@@ -26,8 +26,8 @@
 @keyframes mu-sweep { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(220%) skewX(-20deg); } }
 @keyframes mu-mist { from { opacity: 0; transform: translateY(8px) scale(0.99); } to { opacity: 1; transform: none; } }
 @keyframes mu-swirl-in {
-    0% { opacity: 0; transform: scale(0.72) rotate(-7deg); filter: blur(10px) brightness(1.8); }
-    60% { opacity: 1; filter: blur(0) brightness(1.15); }
+    0% { opacity: 0; transform: scale(0.72) rotate(-7deg); filter: brightness(1.8); }
+    60% { opacity: 1; filter: brightness(1.15); }
     100% { opacity: 1; transform: none; filter: none; }
 }
 @keyframes mu-core { 0%, 100% { opacity: 0.55; transform: scale(0.92); } 50% { opacity: 1; transform: scale(1.06); } }

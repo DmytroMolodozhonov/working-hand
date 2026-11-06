@@ -27,12 +27,15 @@ void main(){
   vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / min(uRes.x, uRes.y);
   float r = length(p), a = atan(p.y, p.x);
   float rush = uT * (0.9 + uOut * 3.0);
-  float depth = 0.32 / (r + 0.035) + rush;                      // (into the tunnel: the nearer the middle, the farther away)
-  float sw = a * uDir + 2.4 * log(r + 0.04) * uDir + uT * 0.45 * uDir; // (the spiral's turn)
+  // ONE motion for everything (the author 06.11: «рисунок в одну сторону, а эффект водоворота — в другую; не кажется, что углубляешься»):
+  // the arms, the nebula between them and the sparks all stream INWARD along the same spiral, quicker and quicker towards the eye —
+  // the drain of a whirlpool that pulls you in. (Before: the arms turned one way while the nebula and the stars flew outward.)
+  float depth = 0.32 / (r + 0.035) - rush;                      // (falls as time goes: a thing at one depth comes nearer the middle)
+  float sw = a + uDir * 2.4 * log(r + 0.04);                     // (the spiral: its arms trail behind the turn they make inward)
   vec2 q = vec2(cos(sw), sin(sw));
   float n1 = fbm(q * 1.6 + vec2(depth * 0.55, -depth * 0.3) + uSeed);
   float n2 = fbm(q * 3.1 - vec2(depth * 0.9, depth * 0.2) + uSeed * 1.7);
-  float arms = 0.5 + 0.5 * sin(sw * uArms + n1 * 5.0 - depth * 0.8);
+  float arms = 0.5 + 0.5 * sin(sw * uArms + n1 * 5.0 + depth * 0.8); // (the arms' crests ride the same inward stream)
   float band = smoothstep(0.25, 0.95, arms) * (0.55 + 0.6 * n2);
   vec3 col = pal(n1 * 0.9 + depth * 0.035 + uT * 0.02) * band * 1.25;
   col += pal(n2 + 0.35) * pow(n2, 3.0) * 0.9;
@@ -42,7 +45,7 @@ void main(){
   float eye = exp(-r * (9.0 - uProg * 3.5 - uOut * 5.0)) * (0.8 + 0.2 * sin(uT * 2.3) + uProg * 0.5); // (the light ahead grows as the world comes near)
   col += mix(uC1, vec3(1.0, 0.97, 0.9), 0.6) * eye * 1.6;
   // sparks and star streaks rushing inward (cells along the angle and the depth)
-  vec2 sc = vec2(a * 6.0 / 6.2831 * 8.0, depth * 3.0);
+  vec2 sc = vec2(sw * 6.0 / 6.2831 * 8.0, depth * 3.0); // (along the spiral, falling inward with it)
   vec2 ci = floor(sc), cf = fract(sc) - 0.5;
   float hh = h21(ci + uSeed);
   float star = step(0.82 - uProg * 0.12, hh) * smoothstep(0.08, 0.0, abs(cf.x)) * smoothstep(0.45 + uProg * 0.4, 0.0, abs(cf.y + (hh - 0.5) * 0.4)) * smoothstep(0.02, 0.25, r);
