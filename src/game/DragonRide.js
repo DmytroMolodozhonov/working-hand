@@ -70,10 +70,7 @@ export class DragonRide {
         if (this.active) { if (isFinal) this._say('🐉 Вы уже держите дракона. «Стоп» — отпустить', 'held'); return null; }
         if (this._pending || now - this._lastCast < 1500) return null;
         const d = this._aimed();
-        if (!d) {
-            if (isFinal) this._say('🐉 «Брейнрот Максима» — для драконов. Посмотрите на дракона (не дальше ' + TAME.CAST_R + ' м) и скажите заклинание. Мелких существ подчиняет «Брейнрот»', 'noaim');
-            return null;
-        }
+        if (!d) return g.castBrainrotGroup?.(isFinal) || null; // (no dragon: the whole group looked at — Game.castBrainrotGroup)
         const tired = g.combat.check('BrainrotMaxima');
         if (tired) { g.hud.setVoice(tired, true); return null; }
         this._lastCast = now;

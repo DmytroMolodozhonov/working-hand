@@ -126,14 +126,14 @@ export class Servants {
 
     // ------------------------------------------------------------ «Брейнрот»
     /** (authority) The creature becomes `by`'s servant for SERVANT.TIME. */
-    make(k, id, by) {
+    make(k, id, by, opts = null) {
         const g = this.game;
         if (k === 'v') return false; // humanoids are immune, including direct guest requests
         // (the author 05.11: one creature at a time — a new one lets the old go)
-        if (k === 'z') { this.freeAll(by, { k, id }); g.applyBrainrot?.(id, by); return true; }
+        if (k === 'z') { if (!opts?.keep) this.freeAll(by, { k, id }); g.applyBrainrot?.(id, by); return true; }
         const c = this.find(k, id);
         if (!c || k === 'p' || k === 's') return false;
-        this.freeAll(by, { k, id });
+        if (!opts?.keep) this.freeAll(by, { k, id });
         const until = performance.now() + SERVANT.TIME;
         if (k === 't') {
             if (c.owner === by && c.master === by) return false;

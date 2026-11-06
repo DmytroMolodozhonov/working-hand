@@ -426,7 +426,10 @@ test('«Brain Rot Maxima» (DragonTame.js): every kind of creature and thing is 
     for (const k of ['dragons', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'livingTrees', 'bookBirds', 'phoenix', 'owls', 'iceCastle', 'players', 'servants', 'items', 'world', 'space'])
         assert.ok(TARGETS[k]?.why && TARGETS[k].does, `DragonTame.TARGETS forgets: ${k}`);
     assert.equal(TARGETS.dragons.does, 'takes');
-    for (const [k, t] of Object.entries(TARGETS)) if (k !== 'dragons') assert.equal(t.does, 'none', k);
+    // (the author 06.11: not at a dragon — the whole group looked at: zombies, animals, others' living trees, Game.castBrainrotGroup)
+    for (const [k, t] of Object.entries(TARGETS)) if (k !== 'dragons') assert.equal(t.does, ['zombies', 'animals', 'livingTrees'].includes(k) ? 'group' : 'none', k);
+    assert.match(src('src/game/DragonRide.js'), /castBrainrotGroup/, 'no dragon: the group');
+    assert.match(body(src('src/game/Game.js'), '    castBrainrotGroup(isFinal) {'), /BRAINROT_GROUP_MAX/, 'the group is capped');
     assert.equal(TAME.COST_PER_S, 0.5);
     const g = src('src/game/Game.js');
     assert.match(g, /name === 'BrainrotMaxima'\) return this\.dragonRide\.cast/, 'the cast goes to DragonRide');

@@ -307,6 +307,7 @@ const _q = new THREE.Quaternion();
 const LIGHTNING_AIM = { T: 0.6, MOVE: 0.6 };
 /** (Game._brainrotUpkeep) mana a second while a «Брейнрот» servant serves me */
 const BRAINROT_UPKEEP = 1;
+const BRAINROT_GROUP_MAX = 8; // «Брейнрот Максима» takes up to this many creatures at once
 
 /**
  * (Settings «Ходьба назад») Is the back leaning back now (the author 05.11: «когда я иду вперёд, держу прямо спину; когда назад — хоть
@@ -2843,6 +2844,55 @@ export class Game {
             if (this.authority) this.servants.make(k, id, this.localId);
             else if (this.sync) this.sync.brainrot(id, k);
         }, arrive);
+        return 'Brainrot';
+    }
+
+    /**
+     * «Брейнрот Максима» not at a dragon (the author 06.11: «должна работать на сразу всех животных, на которых игрок указал, как комплекс»):
+     * EVERY creature the player looks at — zombies, animals, somebody else's living trees, in the cone of the look, up to GROUP_MAX — becomes
+     * a servant at once (the old servants are freed first: one «complex»). Humanoids, bosses, birds etc. are skipped exactly as in «Брейнрот»
+     * (`_castBrainrot`); a dragon in the cone is the other half of the spell (DragonRide). Cost: BrainrotMaxima once (+ the usual 1 mana/s upkeep).
+     * → 'Brainrot' (cast) | null
+     */
+    castBrainrotGroup(isFinal) {
+        const now = Date.now();
+        if (now - (this._lastBrainrot || 0) < 1200) return null;
+        const head = this.character.head.getWorldPosition(new THREE.Vector3());
+        const look = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        const picks = [];
+        const consider = (k, id, pos, up) => {
+            const to = _v1.copy(pos).add(_v2.set(0, up, 0)).sub(head);
+            const d = to.length();
+            if (d > 30) return;
+            const ang = look.angleTo(to.normalize());
+            if (ang > 0.5 && d > 10) return; // (the same cone as «Брейнрот»; very near ones count from any side)
+            if (ang > 1.2) return;
+            picks.push({ k, id, pos: pos.clone(), up, d });
+        };
+        for (const z of this.zombies) if (!z.isDead && !z.isDying && !z.isThrall) consider('z', z.id, z.group.position, 1.4);
+        for (const a of this.animals?.targets() || []) if (a.servantOf !== this.localId) consider('a', a.id, a.group.position, 1);
+        for (const t of this.livingTrees?.targets() || []) if (t.master !== this.localId) consider('t', t.id, t.model.position, 5);
+        if (!picks.length) { if (isFinal) this.hud.setVoice('🌀 «Брейнрот Максима»: посмотрите на дракона — или на зверей, зомби, чужие живые деревья (не дальше 30 м): возьмёт всех сразу', true); return null; }
+        picks.sort((a, b) => a.d - b.d);
+        picks.length = Math.min(picks.length, BRAINROT_GROUP_MAX);
+        const tired = this.combat.check('BrainrotMaxima');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('BrainrotMaxima');
+        this.mana?.success('BrainrotMaxima');
+        this._lastBrainrot = now;
+        const origin = head.add(_v1.set(0, 1.3, 0)).clone();
+        if (this.authority) this.servants.freeAll(this.localId); else this.sync?.brainrot?.(null, 'free');
+        for (const p of picks) {
+            const vec = new THREE.Vector3().copy(p.pos).add(_v2.set(0, p.up, 0)).sub(origin);
+            this.spells.cast('Brainrot', origin, vec.clone(), null, this.localId);
+            this.sync?.spell?.('Brainrot', origin, vec, null);
+            const arrive = Math.round(Math.min(2500, (vec.length() / 11) * 1000 + 300));
+            setTimeout(() => {
+                if (this.authority) this.servants.make(p.k, p.id, this.localId, { keep: true });
+                else this.sync?.brainrot?.(p.id, p.k, true);
+            }, arrive);
+        }
+        this.hud.setVoice(`🌀 «Брейнрот Максима»: подчинено существ — ${picks.length}`, true);
         return 'Brainrot';
     }
 
