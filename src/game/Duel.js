@@ -65,6 +65,7 @@ import { duelStrength, duelPower, strengthGap, wizardMastery } from './WizardAI.
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
+import { WHIRL } from './WhirlRules.js';
 import { manaRules, creativeFiniteMana } from './HeroSetup.js';
 import { segmentToSegment } from './SegmentContact.js';
 import { DUEL_RANGE, emptyRange } from './DuelRange.js';
@@ -873,7 +874,7 @@ export class Duel {
      * @param {string} spell  key of DUEL_SPELLS
      * @param {object} [aim] {side, t} from pickSide (else: from the spell hand, at whatever it points at)
      */
-    cast(spell, aim = null, handSide = null, reach = null) {
+    cast(spell, aim = null, handSide = null, reach = null, extra = null) { // (extra: a second spell that flies in the same charge and hits with it — «Спиралис», Whirl.js)
         const side = aim ? aim.side : (handSide || this.game.magicHand || this.game.lastMagicHand || this.game.dom || 'right');
         const origin = new THREE.Vector3(), dir = new THREE.Vector3();
         this._myRay(side, origin, dir);
@@ -888,7 +889,7 @@ export class Duel {
         if (body) { tk = t.kind; tid = t.id; ak = rayToSegment(origin, dir, body.a, body.b).k; }
         // («Левиоса» lifts the body by its middle: pointed at the feet, it must not dive into the ground beside them)
         if (spell === 'LevitateDuel') ak = Math.max(0.3, Math.min(0.75, ak));
-        const b = this._addBolt({ id: `${this.me}:${nextId++}`, by: this.me, spell, side, tk, tid, ak, o: origin, d: dir });
+        const b = this._addBolt({ id: `${this.me}:${nextId++}`, by: this.me, spell, side, tk, tid, ak, o: origin, d: dir, ...(extra && DUEL_SPELLS[extra] ? { extra } : {}) });
         // (the reach: the caster's mana before the price — DuelRange.js; nobody on the line: it goes out sooner)
         if (reach != null) b.rng = emptyRange(reach, !!pickBody(origin, dir, this._bodies(this.me, reach + 5, true), reach));
         b.aim = tk === 'p' ? tid : null; // (whom it was cast at: Leviosa tells why it did not lift them)
@@ -921,7 +922,7 @@ export class Duel {
         if (had) { if (m.s === 'JoltMaxima' && had.spell === 'Jolt') had.spell = m.s; return; } // (it became «Джолт Максима»: upgradeJolt)
         if (m.up) return; // (an upgrade of a charge already gone here: nothing new flies)
         if (!DUEL_SPELLS[m.s]) return; // (a charge of a spell this game doesn't know — another version: nothing to draw)
-        const b = this._addBolt({ rng: Number.isFinite(m.rg) ? Math.min(DUEL_RANGE.MAX, Math.max(0, m.rg)) : undefined, id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
+        const b = this._addBolt({ ...(typeof m.x === 'string' && DUEL_SPELLS[m.x] ? { extra: m.x } : {}), rng: Number.isFinite(m.rg) ? Math.min(DUEL_RANGE.MAX, Math.max(0, m.rg)) : undefined, id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
         if (b.spell === 'AvadaKedavra') this.avada.cast(b.o, b.dir); // (seen and heard here as at the caster's)
     }
 
@@ -1577,8 +1578,14 @@ export class Duel {
         if (!this.bolts.has(b.id)) return;
         this.bolts.delete(b.id);
         if (b.dbg) this._chargeEnd(b, res);
-        if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
-        if (res === 'hit' && b.by === this.me && b.spell === 'Electrum') this.game.strong?.startElectrum(b.side, b.tk, b.tid); // (now the lightning is held on it)
+        if (res === 'hit' && b.extra && !b.extraFired) { // (a double charge: its second spell hits the same body at the same moment — «Спиралис», Whirl.js)
+            b.extraFired = true;
+            const c2 = { ...b, id: b.id + 'x', spell: b.extra, extra: null, state: 'arrived', meWait: 99, noted: true, noMana: true };
+            this.bolts.set(c2.id, c2);
+            this._arrive(c2, 0);
+        }
+        if (res === 'hit' && b.by === this.me && !b.noMana) this._manaHit(b.spell);
+        if (res === 'hit' && b.by === this.me && b.spell === 'Electrum' && !b.noMana) this.game.strong?.startElectrum(b.side, b.tk, b.tid); // (now the lightning is held on it)
         else this._pressShield(b, res);
         if (res === 'blocked' || res === 'fizzle') this._hitBurst(b.spell, b.front, 15);
         // (my «Левиоса» at a wizard: why it did not lift them — a house's sphere, or it flew past)
@@ -1925,8 +1932,8 @@ export class Duel {
         // A hand off the opponent doesn't push at all
         // (the strong charges push harder: Accentric ×1.2, Pilbidrio ×1.4, «Дай» ×5 — StrongSpells.CLASH_POWER)
         // (the wand counts as everywhere: +15 % and its own bonuses — WandMagic.wandPower)
-        const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) * this._wandK(a.by, a.spell) : 0;
-        const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) * this._wandK(b.by, b.spell) : 0;
+        const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) * this._wandK(a.by, a.spell) * (a.extra ? WHIRL.DOUBLE_K : 1) : 0; // (a double charge — two spells in one beam — pushes harder: Whirl.js)
+        const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) * this._wandK(b.by, b.spell) * (b.extra ? WHIRL.DOUBLE_K : 1) : 0;
         c.pwA = sa; c.pwB = sb; // (what each side pushes with now: the bar shows mine)
         this._clashArcs(c, (sa + sb) / 2, dt);
         const S = c.stat || (c.stat = { n: 0, sa: 0, sb: 0, ca: 0, cb: 0 }); // (for the duel journal: what each side really pushed with)
@@ -2015,8 +2022,8 @@ export class Duel {
         }
         // a wizard of a tower lost: the player's spell reaches him (the host decides the castle people)
         const lw = this._referee() ? this._npcWizard(loser) : null;
-        if (lw && !lw.dead) this.applyToCreature(winnerBolt.spell, lw, winnerBolt.by, null, null, { clash: true });
-        if (loser === this.me) this.applyToMe(winnerBolt.spell, winnerBolt.by, winnerBolt.side, { clash: true });
+        if (lw && !lw.dead) { this.applyToCreature(winnerBolt.spell, lw, winnerBolt.by, null, null, { clash: true }); if (winnerBolt.extra) this.applyToCreature(winnerBolt.extra, lw, winnerBolt.by, null, null, { clash: true }); }
+        if (loser === this.me) { this.applyToMe(winnerBolt.spell, winnerBolt.by, winnerBolt.side, { clash: true }); if (winnerBolt.extra) this.applyToMe(winnerBolt.extra, winnerBolt.by, winnerBolt.side, { clash: true }); } // (a double charge won: both spells reach the loser)
         else if (winnerBolt.by === this.me) {
             this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);
             this._manaHit(winnerBolt.spell); // (my charge reached them)

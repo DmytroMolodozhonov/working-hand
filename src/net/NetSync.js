@@ -701,7 +701,7 @@ export class NetSync {
     }
 
     duelCast(b) {
-        this.net.send({ t: 'duel', id: b.id, by: b.by, s: b.spell, side: b.side, tk: b.tk, tid: b.tid, ak: Math.round((b.ak ?? 0.5) * 100) / 100, o: [r3(b.o.x), r3(b.o.y), r3(b.o.z)], d: [r3(b.d0.x), r3(b.d0.y), r3(b.d0.z)], ...(b.up ? { up: 1 } : {}), ...(b.rng != null ? { rg: Math.round(b.rng * 10) / 10 } : {}) }, true);
+        this.net.send({ t: 'duel', ...(b.extra ? { x: b.extra } : {}), id: b.id, by: b.by, s: b.spell, side: b.side, tk: b.tk, tid: b.tid, ak: Math.round((b.ak ?? 0.5) * 100) / 100, o: [r3(b.o.x), r3(b.o.y), r3(b.o.z)], d: [r3(b.d0.x), r3(b.d0.y), r3(b.d0.z)], ...(b.up ? { up: 1 } : {}), ...(b.rng != null ? { rg: Math.round(b.rng * 10) / 10 } : {}) }, true);
     }
 
     duelEnd(id, res) {

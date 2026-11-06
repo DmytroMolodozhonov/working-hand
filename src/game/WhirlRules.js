@@ -18,6 +18,9 @@ export const WHIRL = {
     STOP_GRACE: 0.5, // s of a calm hand that ends the swing
     MIN_SWING: 1.2, // s of swinging before the beams may be let go (a whirl must be raised first)
     AIM_COS: 0.9, // the wand at the opponent: the cosine of the angle (≈ 25°)
+    DOUBLE_K: 1.7, // a double charge (two spells in one beam) pushes this much harder in a clash
+    MORPH_T: 1.8, // s: the clash's two beams flow into the wand and the whirl grows out of them (not a cut-and-redraw)
+    BLEND_T: 5, // s the two colours take to run together (never to white: each keeps its own at first)
     TRAIL: 44, // points of the ribbon
     TRAIL_DT: 0.03, // s between them
 };

@@ -97,14 +97,14 @@ test('слово в дуэли: оба луча забраны (дуэль сн�
     assert.ok(g2.calls.said.some((t) => /только в дуэли/.test(t)));
 });
 
-test('отпускание: два заклинания (моё и его) летят одним лучом, не дерутся друг с другом; остановился не на него — оба врезаются в меня', () => {
+test('отпускание: ОДИН заряд моего заклинания несёт и его заклинание (extra); остановился не на него — оба врезаются в меня', () => {
     const g = fakeGame();
+    g.duel.cast = (spell, aim, side, reach, extra) => { g.calls.cast.push({ spell, extra }); return { spell, extra }; };
     g.whirl.cast(true);
     const S = g.whirl.mine;
     g.whirl._oppPos = (s, out) => out.set(0, 1, -10);
     g.whirl._release(S);
-    assert.deepEqual(g.calls.cast.map((x) => x.spell), ['Stupefy', 'SapiraDuel']);
-    assert.ok(g.calls.cast.every((x) => x.twin), 'двойной удар: пара не клашится сама с собой');
+    assert.deepEqual(g.calls.cast, [{ spell: 'Stupefy', extra: 'SapiraDuel' }], 'один луч, два заклинания');
     assert.equal(g.whirl.mine, null);
     assert.ok(g.calls.sent.some((m) => m.t === 'dwhirl' && m.ph === 'end' && m.res === 'release'));
     // обратный удар
@@ -114,6 +114,41 @@ test('отпускание: два заклинания (моё и его) ле�
     assert.deepEqual(h.calls.applyToMe.map((c) => c[0]).sort(), ['SapiraDuel', 'Stupefy'], 'в меня оба');
     assert.ok(h.calls.applyToMe.every((c) => c[2]), 'как проигравшему: броня и мантия не отводят');
     assert.equal(h.whirl.mine, null);
+});
+
+test('соперник сразу крикнул новое заклинание: навожу на него — пучок уходит навстречу без слов (новая дуэль), если вихрь уже начат', () => {
+    const g = fakeGame();
+    const casts = [];
+    g.duel.cast = (spell, aim, side, reach, extra) => { casts.push({ spell, extra }); return {}; };
+    g.whirl.cast(true);
+    const S = g.whirl.mine;
+    g.whirl._oppPos = (s, out) => out.set(0, 3, -10);
+    g.whirl._wand = () => false;
+    S.S.started = true; S.S.swing = 0.3; S.t = 3;
+    g.duel.bolts.set('B:9', { id: 'B:9', by: 'B', state: 'flying', tk: 'p', tid: 'A' }); // его новый заряд летит в меня
+    assert.ok(g.whirl._incoming(S));
+    g.character.handVelocity.right.set(8, 0, 0);
+    g.whirl.update(0.05);
+    assert.equal(casts.length, 1, 'пучок ушёл сам');
+    assert.deepEqual(casts[0], { spell: 'Stupefy', extra: 'SapiraDuel' });
+    assert.equal(g.whirl.mine, null);
+    // а без его заряда и без раскрутки — не уходит
+    const h = fakeGame(); const c2 = [];
+    h.duel.cast = (...a) => { c2.push(a); return {}; };
+    h.whirl.cast(true); h.whirl._oppPos = (s, out) => out.set(0, 3, -10); h.whirl._wand = () => false;
+    h.character.handVelocity.right.set(8, 0, 0);
+    h.whirl.update(0.05);
+    assert.equal(c2.length, 0);
+});
+
+test('цвета: у вихря свои цвета заклинаний (не белый), смешиваются не сразу; лучи дуэли втекают за MORPH_T, а не пропадают', () => {
+    const g = fakeGame();
+    g.duel.colors = (spell) => ({ glow: spell === 'Stupefy' ? 0xff2200 : 0x2200ff });
+    g.whirl.cast(true);
+    const S = g.whirl.mine;
+    assert.deepEqual(S.cols.slice(0, 2), [0xff2200, 0x2200ff], 'свои цвета');
+    assert.notEqual(S.cols[2], 0xffffff);
+    assert.ok(WHIRL.MORPH_T >= 1 && WHIRL.BLEND_T >= 3, 'медленно');
 });
 
 test('гость просит хост забрать дуэль; хост отвечает; дуэль уже кончилась — мана возвращается', () => {
