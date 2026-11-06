@@ -62,6 +62,8 @@ export const RECIPES = [
         window: 30, brew: [150, 210], portions: 1, crumble: 6,
         effect: { lordCure: true }, desc: 'Выпейте: снимает проклятие тёмного мага полностью (цена — ячейки маны)',
     },
+    // (the author 06.11: «зелье крепкого здоровья» — three ingredients no other potion uses; ONE flask, drunk once: +10 maximum health for good — Vigor.js)
+    { id: 'vigor', name: 'Зелье крепкого здоровья', ingredients: { minotaurHorn: 1, steak: 1, cheese: 1 }, window: 30, brew: [120, 180], portions: 1, crumble: 6, effect: { maxHp: 10 }, desc: 'Выпейте: ваше здоровье станет крепче — на 10 больше навсегда. Выпить такое зелье можно один раз' },
     // (the author 05.11: three ingredients, one may be rare — the timed ones: PotionEffects.js)
     { id: 'disguise', name: 'Зелье скрытия личности', ingredients: { spencerFeather: 1, carnivoreHead: 1, sun_herb: 1 }, window: 30, brew: [90, 140], effect: { timed: 'disguise' }, desc: 'Выпейте: на 24 минуты другое лицо и одежда — вас никто не узнаёт' },
     { id: 'dazzle', name: 'Зелье ослепительности', ingredients: { brightCore: 1, azure_berry: 1, sun_herb: 1 }, window: 30, effect: { timed: 'dazzle' }, desc: 'Выпейте: 24 минуты дружба и любовь к вам растут втрое быстрее' },

@@ -53,6 +53,7 @@ export function captureLegacy(g) {
     const rec = {
         owner: legacyOwner(g),
         hp: Math.max(0, B.hp || 0),
+        vigor: B.vigor ? 1 : null, // (the potion of firm health was drunk: its +10 are in `hp`; the flag keeps it from being drunk twice)
         fatigue: Math.max(0, B.fatigue || 0),
         flight: !!B.flight,
         spells: Object.keys(B.spells || {}).filter((k) => B.spells[k]),
@@ -127,6 +128,7 @@ export function absorbLegacy(g, rec) {
     }
     if (rec.fatigue > 0) { B.fatigue += rec.fatigue; g.combat?.addMaxFatigue?.(rec.fatigue); }
     if (rec.flight) B.flight = true;
+    if (rec.vigor) B.vigor = 1;
     if (rec.spells?.length) B.spells = { ...(B.spells || {}), ...Object.fromEntries(rec.spells.map((k) => [k, true])) };
     for (const k of rec.learned || []) g.books?.learned?.add(k);
     if (rec.dark) g.dark?.restore(rec.dark);

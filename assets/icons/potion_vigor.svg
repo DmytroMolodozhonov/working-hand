@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="pv-h" cx="0.5" cy="0.55" r="0.6"><stop offset="0" stop-color="#ff9a7a" stop-opacity="0.5"/><stop offset="1" stop-color="#ff5a3a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="pv-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a5a"/><stop offset="1" stop-color="#c8281a"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="72" r="54" fill="url(#pv-h)"/>
+  <rect x="54" y="14" width="20" height="14" rx="3" fill="#b8884a" stroke="#6a4a20" stroke-width="2.5"/>
+  <path d="M56 28 L56 46 C40 58 30 70 32 88 C34 106 48 114 64 114 C80 114 94 106 96 88 C98 70 88 58 72 46 L72 28 Z" fill="#e8f4ff" fill-opacity="0.35" stroke="#7a8aa8" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M36 82 C36 100 48 110 64 110 C80 110 92 100 92 82 C80 76 50 76 36 82 Z" fill="url(#pv-l)"/>
+  <path d="M64 56 C60 50 52 52 52 60 C52 68 64 76 64 76 C64 76 76 68 76 60 C76 52 68 50 64 56 Z" fill="#fff2e8" stroke="#8a2a1a" stroke-width="2.5"/>
+  <path d="M44 74 C46 62 54 54 58 50" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+</svg>
