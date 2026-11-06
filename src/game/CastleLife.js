@@ -72,6 +72,7 @@ import { teaches, placeOf, darkOfEntry, isDark } from './DarkMagic.js';
 import { setDarkVillager } from '../entities/DarkSkin.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
 import { VANISH, inTalkWith, vanishVerdict } from './Vanish.js';
+import { isWeakOne } from './Dread.js';
 import { WANDER, wandererClass, missZone, isLoud, missVerdict, wandererLag, dieOf, isWeak, commonerDecide, commonerText, missText } from './WandererMind.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { Bodyguard, isLord } from './Bodyguard.js';
@@ -3034,7 +3035,7 @@ export class CastleLife {
         const knows = this._knows(v, by, null, null);
         if (v.party) this.game.travelers?.alert?.(v.party, knows && (wc !== 'commoner' || hit) ? by : null); // (a cart stops, the riders get down; a shot that missed travellers is no blow at them)
         if (v.seated && v.job !== 'cart') v.seated = false;
-        const r = startleReaction({ fights: this._fights(v), knows });
+        const r = startleReaction({ fights: this._fights(v) && !this.game.dread?.scares(v, by), knows }); // (the potion of fear on the hero: a weak one runs instead — Dread.js)
         if (r === 'fight' || r === 'flee') {
             cs.hostile.set(by, now + HOSTILE_MS);
             if (r === 'fight') { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : v.role === 'king' ? SHOUT.king : SHOUT.knight), 3); }
@@ -3063,7 +3064,7 @@ export class CastleLife {
         if (!zone) return false;
         const knows = this._knows(v, by, null, null);
         v.missN = (v.missN || 0) + 1;
-        const verdict = missVerdict({ cls: wc, rank: v.rank, zone, knows, roll: dieOf(v.id, v.missN, 'm') });
+        const verdict = missVerdict({ cls: wc, rank: v.rank, zone, knows, roll: dieOf(v.id, v.missN, 'm'), dread: !!this.game.dread?.on(by) && isWeakOne(v) });
         v.startleAt = now;
         if (v.sleep) this.night?.wake?.(v, 'alarm');
         v.readyUntil = now + STARTLE.READY_MS;

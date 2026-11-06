@@ -66,6 +66,6 @@ test('лишняя вещь или холодная вода портят зел
 test('у каждого зелья есть то, что оно делает при питье', () => {
     for (const r of RECIPES) {
         const fx = r.effect || {};
-        assert.ok(fx.hp || fx.skin || fx.lordCure || fx.wings || fx.maxHp || fx.reset || (fx.timed && POTION_FX[fx.timed]), `${r.id}: эффект известен`);
+        assert.ok(fx.hp || fx.skin || fx.lordCure || fx.wings || fx.maxHp || fx.dread || fx.reset || (fx.timed && POTION_FX[fx.timed]), `${r.id}: эффект известен`);
     }
 });

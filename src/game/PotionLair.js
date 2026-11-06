@@ -54,7 +54,7 @@ export function potionColor(i, n) {
 export const SHELF_OF = {
     sun_herb: 'herbs', fern_frond: 'herbs', azure_berry: 'herbs', glowcap_mushroom: 'herbs', telewilpinLeaf: 'herbs', baksadi_pear: 'herbs', redApple: 'herbs',
     bread: 'herbs', cheese: 'herbs', pie: 'herbs', carnivoreHead: 'herbs',
-    owlFeather: 'beasts', spencerFeather: 'beasts', wool: 'beasts', meat: 'beasts', steak: 'beasts', minotaurHorn: 'beasts', web: 'beasts', glowfinTail: 'beasts', swanWings: 'beasts',
+    bone: 'beasts', bronzeHorn: 'beasts', owlFeather: 'beasts', spencerFeather: 'beasts', wool: 'beasts', meat: 'beasts', steak: 'beasts', minotaurHorn: 'beasts', web: 'beasts', glowfinTail: 'beasts', swanWings: 'beasts',
     crystal: 'minerals', magicPebble: 'minerals', glass: 'minerals', frost_shard: 'minerals',
     apple: 'rare', phoenixFeather: 'rare', dragonEgg: 'rare', magicSwanWings: 'rare', brightCore: 'rare',
 };

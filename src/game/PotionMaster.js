@@ -39,6 +39,7 @@ export const POTION_WORDS = {
     dazzle: ['ослепит', 'dazzle', 'обаят'],
     luck: ['удач', 'везен', 'luck'],
     waterbreath: ['дыхани', 'под водой', 'подводн', 'breath'],
+    dread: ['страха', 'страх', 'пугающ', 'dread', 'fear'],
     vigor: ['крепкого здоровья', 'крепкое здоровье', 'крепк', 'vigor'],
     wings: ['крыльев', 'крылья', 'крылы', 'wings'],
     dragonform: ['дракон', 'превращен', 'dragon'],

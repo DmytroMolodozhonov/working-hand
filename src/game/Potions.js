@@ -64,6 +64,8 @@ export const RECIPES = [
     },
     // (the author 06.11: «зелье крепкого здоровья» — three ingredients no other potion uses; ONE flask, drunk once: +10 maximum health for good — Vigor.js)
     { id: 'vigor', name: 'Зелье крепкого здоровья', ingredients: { minotaurHorn: 1, steak: 1, cheese: 1 }, window: 30, brew: [120, 180], portions: 1, crumble: 6, effect: { maxHp: 10 }, desc: 'Выпейте: ваше здоровье станет крепче — на 10 больше навсегда. Выпить такое зелье можно один раз' },
+    // (the author 06.11: «зелье страха» — three ingredients no other potion uses; ONE flask, drunk once: the weak run more often — Dread.js)
+    { id: 'dread', name: 'Зелье страха', ingredients: { web: 1, bone: 1, bronzeHorn: 1 }, window: 30, brew: [120, 180], portions: 1, crumble: 6, effect: { dread: true }, desc: 'Выпейте: слабые — простые жители и неопытные маги — будут чаще убегать от вас, чем нападать. Навсегда; выпить такое зелье можно один раз' },
     // (the author 05.11: three ingredients, one may be rare — the timed ones: PotionEffects.js)
     { id: 'disguise', name: 'Зелье скрытия личности', ingredients: { spencerFeather: 1, carnivoreHead: 1, sun_herb: 1 }, window: 30, brew: [90, 140], effect: { timed: 'disguise' }, desc: 'Выпейте: на 24 минуты другое лицо и одежда — вас никто не узнаёт' },
     { id: 'dazzle', name: 'Зелье ослепительности', ingredients: { brightCore: 1, azure_berry: 1, sun_herb: 1 }, window: 30, effect: { timed: 'dazzle' }, desc: 'Выпейте: 24 минуты дружба и любовь к вам растут втрое быстрее' },
@@ -85,7 +87,7 @@ export const DURABLE = new Set(['wand', 'bow', 'shield', 'backpack', 'hammer', '
 export const INGREDIENT_RU = {
     apple: 'золотое яблоко', crystal: 'кристалл маны', wool: 'шерсть', meat: 'сырое мясо', steak: 'стейк',
     bread: 'хлеб', cheese: 'сыр', pie: 'пирог', scroll: 'свиток', fish: 'рыба',
-    web: 'связка паутины', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
+    web: 'связка паутины', bone: 'кость', bronzeHorn: 'бронзовый рог', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
     baksadi_pear: 'груша Баксади', spencerFeather: 'перо птички Спенсера', carnivoreHead: 'головка плотоядной', sun_herb: 'солнечница',
     brightCore: 'сердцевина Ярколета', azure_berry: 'лазурная ягода', magicPebble: 'волшебный камушек', glowcap_mushroom: 'светящийся гриб',
     redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина', dragonEgg: 'яйцо дракона', magicSwanWings: 'магические крылья лебедя', swanWings: 'крылья лебедя', glowfinTail: 'хвост светлохвоста',

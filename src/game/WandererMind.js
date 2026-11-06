@@ -19,6 +19,7 @@
 
 import { hashString } from '../core/math.js';
 import { seededRng, reactLag, REACT_LEVEL } from './WizardMind.js';
+import { dreadedChance } from './Dread.js';
 
 export const WANDER = {
     ZONE: { HIT: 6, NEAR: 15, HEARD: 30 }, // m from the body
@@ -83,13 +84,13 @@ export function fightChance(cls, rank = 'adept') {
  *   turn   — face the source, flinch, stay alert (the shield ready);
  *   search — he did not see who: look at the place it came from (a hunt: WizardMind.HUNT / investigate).
  */
-export function missVerdict({ cls, rank = 'adept', zone, knows = false, roll = 0.5 }) {
+export function missVerdict({ cls, rank = 'adept', zone, knows = false, roll = 0.5, dread = false }) {
     if (!zone || (cls !== 'knight' && cls !== 'wizard')) return { act: 'none', zone: zone || null };
     if (zone === 'heard') return { act: 'turn', zone };
     if (zone === 'hit') return { act: knows ? 'fight' : 'search', zone };
     // near
     if (!knows) return { act: 'search', zone };
-    return { act: roll < fightChance(cls, rank) ? 'fight' : 'turn', zone };
+    return { act: roll < dreadedChance(fightChance(cls, rank), dread && cls === 'wizard') ? 'fight' : 'turn', zone }; // (the potion of fear on the caster: a weak wizard answers rarely — Dread.js)
 }
 
 /** The reaction lag of a road fighter (s): a wizard by rank, a knight like a strong one (level 3). */

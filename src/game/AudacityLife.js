@@ -23,6 +23,7 @@ import {
 import { isForgiven } from './Ranks.js';
 import { isWizSite } from './WizardLife.js';
 import { isWeak } from './WandererMind.js';
+import { dreadedBrave, isWeakOne } from './Dread.js';
 
 const TICK = 0.5; // s between two looks per record (not per frame)
 const RUN = 5.4, WALK = 2.3;
@@ -155,7 +156,7 @@ export class AudacityLife {
         this.life.fright._traits(v); // (brave, elder — from the seed: the same person is always the same)
         const E = v.entry || {};
         return {
-            role: v.role, trade: E.trade || null, female: !!E.female, brave: v.brave ?? 0.5, elder: !!v.elder, weak: isWeak(v), child: !!v.child, kid: !!v.kid,
+            role: v.role, trade: E.trade || null, female: !!E.female, brave: dreadedBrave(v.brave ?? 0.5, !!this.game.dread?.on(this.game.localId) && isWeakOne(v)), elder: !!v.elder, weak: isWeak(v), child: !!v.child, kid: !!v.kid,
             hpFrac: v.maxHp > 0 ? v.hp / v.maxHp : 1, atStall: v.job === 'stall' || (v.role === 'seller'), tool: v.mobTool0 ?? v.model?.toolKind,
         };
     }

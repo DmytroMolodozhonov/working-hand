@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="pd-h" cx="0.5" cy="0.55" r="0.6"><stop offset="0" stop-color="#9a7aff" stop-opacity="0.5"/><stop offset="1" stop-color="#5a3aa0" stop-opacity="0"/></radialGradient>
+    <linearGradient id="pd-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a6ad8"/><stop offset="1" stop-color="#3a1c78"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="72" r="54" fill="url(#pd-h)"/>
+  <rect x="54" y="14" width="20" height="14" rx="3" fill="#b8884a" stroke="#6a4a20" stroke-width="2.5"/>
+  <path d="M56 28 L56 46 C40 58 30 70 32 88 C34 106 48 114 64 114 C80 114 94 106 96 88 C98 70 88 58 72 46 L72 28 Z" fill="#e8f4ff" fill-opacity="0.3" stroke="#7a8aa8" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M36 82 C36 100 48 110 64 110 C80 110 92 100 92 82 C80 76 50 76 36 82 Z" fill="url(#pd-l)"/>
+  <!-- a little skull in the potion -->
+  <path d="M64 50 C54 50 50 58 52 66 C53 70 56 72 56 76 L72 76 C72 72 75 70 76 66 C78 58 74 50 64 50 Z" fill="#f4ecd8" stroke="#4a3a6a" stroke-width="2.5"/>
+  <circle cx="59" cy="62" r="3.2" fill="#2a1c48"/><circle cx="69" cy="62" r="3.2" fill="#2a1c48"/><path d="M62 69 L64 66 L66 69" fill="none" stroke="#2a1c48" stroke-width="2"/>
+  <path d="M44 74 C46 62 54 54 58 50" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+</svg>
