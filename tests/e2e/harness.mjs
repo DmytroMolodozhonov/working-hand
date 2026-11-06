@@ -14,7 +14,7 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 export async function startServer(port, { python = 'python3', env = {} } = {}) {
     const proc = spawn(python, ['server.py', '--no-browser'], {
         cwd: ROOT,
-        env: { ...process.env, ZNS_PORT: String(port), ZNS_NO_BROWSER: '1', ZNS_NO_PIP: '1', ...env },
+        env: { ...process.env, ZNS_PORT: String(port), ZNS_NO_BROWSER: '1', ZNS_NO_PIP: '1', ZNS_LOG_UPLOAD: '0', ...env },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
     let log = '';

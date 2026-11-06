@@ -45,6 +45,8 @@ import socketserver
 import sys
 import threading
 import webbrowser
+
+import log_upload
 from urllib.parse import parse_qs, urlparse
 
 # (numpy's maths library starts a thread on every core for any sum of some size, and they spin on
@@ -352,6 +354,8 @@ def append_game_log(text, new_game):
     try:
         os.makedirs(GAMES_DIR, exist_ok=True)
         if new_game or not _game_file:
+            if new_game and _game_file:
+                log_upload.upload_soon(ROOT, GAMES_DIR)  # (the game before is over: its journal goes to GitHub — log_upload.py)
             now = time.time()
             for f in os.listdir(GAMES_DIR):
                 fp = os.path.join(GAMES_DIR, f)
@@ -363,6 +367,7 @@ def append_game_log(text, new_game):
             _game_file = os.path.join(GAMES_DIR, "game-" + time.strftime("%Y%m%d-%H%M%S") + ".log")
         with open(_game_file, "a", encoding="utf-8") as f:
             f.write(anon(text))
+        log_upload.touched(ROOT, GAMES_DIR)  # (quiet for 5 min: the game is over — it goes up)
     except OSError as e:
         print(f"  [Логи игр] не записать: {e}")
 
@@ -1322,11 +1327,14 @@ def ensure_voice_native():
 
 def main():
     no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
+    if no_browser:
+        os.environ["ZNS_LOG_UPLOAD"] = "0"  # (tests and benches run the server so: their journals never go to GitHub)
     start_server_log()
     threading.Thread(target=ensure_pose_native, daemon=True).start()
     threading.Thread(target=ensure_voice_native, daemon=True).start()
     update_desktop_launcher()
     adopt_app_launcher()
+    log_upload.upload_soon(ROOT, GAMES_DIR)  # (the games of the last run: the window may have been closed before they went up)
     httpd, port = open_server()
     url = f"http://localhost:{port}"
     print("=" * 50)
@@ -1342,6 +1350,7 @@ def main():
         print("\nСервер остановлен.")
     finally:
         httpd.server_close()
+        log_upload.at_exit(ROOT, GAMES_DIR)
 
 
 if __name__ == "__main__":
