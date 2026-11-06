@@ -1497,6 +1497,7 @@ export class ItemSystem {
         const r = recipeById(h.item.rec);
         if (r && !r.effect) { g.hud.setVoice?.(`🧪 ${r.name}: что оно делает, автор скоро расскажет — пока его не выпить`, true); return; }
         const fx = r?.effect || {};
+        if (fx.skin) { const why = g.skin?.cantDrink?.(); if (why) { g.hud.setVoice?.(why, true); return; } } // (the potion of firm skin: once — Skin.js)
         if (fx.dread) { const why = g.dread?.cantDrink?.(); if (why) { g.hud.setVoice?.(why, true); return; } } // (the potion of fear: once — Dread.js)
         if (fx.maxHp) { const why = g.vigor?.cantDrink?.(); if (why) { g.hud.setVoice?.(why, true); return; } } // (the potion of firm health: once — Vigor.js)
         if (fx.wings) { const why = g.wings?.cantDrink?.(); if (why) { g.hud.setVoice?.(why, true); return; } } // (wings already / growing: not drunk — HeroWings)
@@ -1523,6 +1524,7 @@ export class ItemSystem {
             said.push(`+${fx.hp} HP`);
         }
         if (fx.timed) { const line = g.potionFx?.start(fx.timed); if (line) said.push(line); } // (PotionEffects.js)
+        if (fx.skin && g.skin) { g.skin.drink(); said.push('простое лезвие вас больше не ранит'); }
         if (fx.dread && g.dread) { g.dread.drink(); said.push('слабые теперь чаще будут бежать от вас'); }
         if (fx.maxHp && g.vigor) { const m = g.vigor.drink(fx.maxHp); said.push(`здоровье крепче: теперь до ${m}`); }
         if (fx.wings && g.wings?.start()) said.push('крылья начали расти');

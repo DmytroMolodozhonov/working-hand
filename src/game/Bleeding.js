@@ -216,6 +216,8 @@ export class Bleeding {
 
     /** (network) a blade went into / out of a player. */
     noteImpale(wid, pid, rel = null) {
+        const g0 = this.game;
+        if (pid === g0.localId && g0.skin?.on() && !g0.weapons?.byId?.get(wid)?.magic) { g0.skin.slid(0); g0.sync?.pullOut?.(wid); return; } // (firm skin: a plain blade does not go in — it is pulled out at once; Skin.js)
         this.impaled.set(wid, pid);
         if (Array.isArray(rel) && rel.length === 7 && rel.every(Number.isFinite)) {
             this.anchors.set(wid, { pid, p: new THREE.Vector3(rel[0], rel[1], rel[2]), q: new THREE.Quaternion(rel[3], rel[4], rel[5], rel[6]).normalize() });

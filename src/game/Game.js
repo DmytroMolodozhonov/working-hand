@@ -230,6 +230,7 @@ import { Slash } from './Slash.js';
 import { DarkFog } from './DarkFog.js';
 import { Vigor } from './Vigor.js';
 import { Dread } from './Dread.js';
+import { Skin } from './Skin.js';
 import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
@@ -688,6 +689,7 @@ export class Game {
         this.liquidation = new Liquidation(this); // «Liquidation»: a splash — a thing crumbles into dust (Liquidation.js)
         this.stitching = new Stitching(this); // «Stitching»: a passage sewn shut with stones (Stitching.js)
         this.darkFog = new DarkFog(this); // «Caligo»: the dark mage's fog — a jet from the wand, a dome nobody sees through (DarkFog.js)
+        this.skin = new Skin(this); // «Зелье крепкой кожи»: простое лезвие больше не ранит — навсегда, один раз (Skin.js)
         this.dread = new Dread(this); // «Зелье страха»: слабые чаще бегут, чем нападают — навсегда, один раз (Dread.js)
         this.vigor = new Vigor(this); // «Зелье крепкого здоровья»: +10 к максимуму здоровья навсегда, один раз (Vigor.js)
         this.slash = new Slash(this); // «Sectura»: the cutting curse of black magic — the wand arms, a swing lets the blade go (Slash.js)

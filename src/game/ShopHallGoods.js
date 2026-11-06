@@ -30,7 +30,7 @@ export const HALL_PRICE = {
 /** The potions by their might (the author: 700…5000; the transformations dear — the wings 4800, the mermaid 3800). A recipe not here — by its ingredients (potionPrice). */
 export const POTION_PRICE = {
     heal: 700, potionreset: 900, waterbreath: 1200, clearmind: 1500, dazzle: 1800, disguise: 2200,
-    luck: 2600, dread: 2400, mermaid: 3800, vigor: 4200, wings: 4800, // (the potions of 06.11: fear — a lasting nerve effect; firm health — +10 HP for good)
+    luck: 2600, dread: 2400, skin: 4400, mermaid: 3800, vigor: 4200, wings: 4800, // (the potions of 06.11: fear — a lasting nerve effect; firm health — +10 HP for good)
 };
 /** Never sold (the author 05.11): the dragon's — «вообще его не будет»; the cure of the dark mage's curse — «лучше вообще его не будет». */
 export const NOT_SOLD = new Set(['dragonform', 'lordcure']);

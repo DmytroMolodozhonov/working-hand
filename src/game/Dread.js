@@ -11,8 +11,8 @@
  */
 /** The hero's lasting gifts that change the WORLD (NPC minds, other players' rules) go over the net in the pose packet as a bit mask (`pk`): the host is only the one who holds the server — a player like all, so the
  * minds must ask about ANY player, not just the host's own hero (the author 06.11). New such gift: a new bit here, read with `perksOf(id)`. */
-export const PERK = { DREAD: 1, VIGOR: 2 };
-export const perkBits = (bonus) => (bonus?.dread ? PERK.DREAD : 0) | (bonus?.vigor ? PERK.VIGOR : 0);
+export const PERK = { DREAD: 1, VIGOR: 2, SKIN: 4 };
+export const perkBits = (bonus) => (bonus?.dread ? PERK.DREAD : 0) | (bonus?.vigor ? PERK.VIGOR : 0) | (bonus?.skin ? PERK.SKIN : 0);
 
 export const DREAD = {
     FLEE_P: 0.7, // the share of the times a weak one runs instead of fighting back

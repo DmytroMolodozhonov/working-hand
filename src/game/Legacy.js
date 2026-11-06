@@ -53,6 +53,7 @@ export function captureLegacy(g) {
     const rec = {
         owner: legacyOwner(g),
         hp: Math.max(0, B.hp || 0),
+        skin: B.skin ? 1 : null, // (the potion of firm skin was drunk — Skin.js)
         dread: B.dread ? 1 : null, // (the potion of fear was drunk — Dread.js)
         vigor: B.vigor ? 1 : null, // (the potion of firm health was drunk: its +10 are in `hp`; the flag keeps it from being drunk twice)
         fatigue: Math.max(0, B.fatigue || 0),
@@ -73,7 +74,7 @@ export function captureLegacy(g) {
         steady: g.steady?.snapshot() || null, // («Устойчивость»: Steadiness.js)
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.lord && !rec.bw && !rec.pent && !rec.bare && !rec.sight;
+    const empty = !rec.hp && !rec.vigor && !rec.dread && !rec.skin && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.lord && !rec.bw && !rec.pent && !rec.bare && !rec.sight;
     return empty ? null : rec;
 }
 
@@ -131,6 +132,7 @@ export function absorbLegacy(g, rec) {
     if (rec.flight) B.flight = true;
     if (rec.vigor) B.vigor = 1;
     if (rec.dread) B.dread = 1;
+    if (rec.skin) B.skin = 1;
     if (rec.spells?.length) B.spells = { ...(B.spells || {}), ...Object.fromEntries(rec.spells.map((k) => [k, true])) };
     for (const k of rec.learned || []) g.books?.learned?.add(k);
     if (rec.dark) g.dark?.restore(rec.dark);

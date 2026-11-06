@@ -502,6 +502,11 @@ export class Dismemberment {
         if (g.sync?.weaponOwners && ![...g.sync.weaponOwners.values()].includes(by)) return false; // no blade in their hand
         if (g.gear?.shieldFaces?.(att.position)) { g.gear.shieldTook?.('melee'); return false; }
         if (g.combat.frozen) return false; // (the hit shatters me instead)
+        if (g.skin?.on()) { // (firm skin: a plain blade does not cut — only a magic one; Skin.js)
+            let magic = false;
+            if (g.sync?.weaponOwners) for (const [wid, owner] of g.sync.weaponOwners) if (owner === by && g.weapons?.byId?.get(wid)?.magic) magic = true;
+            if (!magic) { g.skin.slid(0); return false; }
+        }
         if (armourCovers(g.character.look, sv.limb, sv.d, g.character.armorWorn)) { g.hud?.setVoice?.('🛡️ Латы выдержали удар', true); return false; }
         return this._cutMine(sv, by, true);
     }

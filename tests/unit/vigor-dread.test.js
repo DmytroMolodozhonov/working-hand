@@ -99,3 +99,17 @@ test('страх: слабый маг отвечает заклинанием в
     assert.ok(!fightsInMob({ ...p, brave: dreadedBrave(0.45, true) }));
     assert.equal(dreadedBrave(0.1, true), 0);
 });
+
+test('страх один (без здоровья) тоже сохраняется при смерти и возвращается «Give Me My Power»', () => {
+    const g = fakeGame();
+    g.bonus = { hp: 0, fatigue: 0 };
+    g.dread = new Dread(g);
+    g.dread.drink();
+    const rec = captureLegacy(g);
+    assert.equal(rec?.dread, 1, 'запись не пустая, хоть здоровья и нет');
+    wipeHero(g);
+    assert.ok(!g.bonus.dread);
+    g.mana = null; g.achievements = null;
+    absorbLegacy(g, rec);
+    assert.equal(g.bonus.dread, 1);
+});

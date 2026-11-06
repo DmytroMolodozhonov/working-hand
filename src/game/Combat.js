@@ -1202,6 +1202,7 @@ export class Combat {
             const p = this.center(_v1);
             for (let i = 0; i < 25; i++) this.game.fx.spark(p, 0x7fd8ff, 0.12, _v2.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.6);
         }
+        if (cut && !magic && this.game.skin?.on()) { this.game.skin.slid(dmg, 'melee'); return false; } // (a plain blade's blow on firm skin: nothing — no wound, no cut, no shove; Skin.js)
         if (this.frozen) { this.die(byId, 'shatter'); return; }
         this.damage(dmg, byId, 'melee');
         // a slash with a blade leaves a light cut (heals by itself)
@@ -1211,6 +1212,7 @@ export class Combat {
 
     damage(amount, byId, kind) {
         if (this.dead) return;
+        if (this.game.skin?.shrugs(kind)) { this.game.skin.slid(amount, kind); return; } // (the potion of firm skin: a plain blade's / an arrow's blow does nothing, the steel I wear takes its wear — Skin.js)
         if (this.game.dragonForm?.active) return; // (the body is inside the dragon of the potion: the dragon takes the blows — DragonForm.js)
         if (this.game.darkLord?.lifting) return; // (the rite of a true dark mage: the ball of darkness is round the body — nothing gets in, nothing is half-done; DarkLord.js)
         if (this.godsKeepsOff(kind)) { this._godsFx(null); return; } // (the gods' shield: no spell but the gods' own gets through — ProtectionGods.js)
