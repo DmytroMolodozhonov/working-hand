@@ -84,7 +84,7 @@ export class Godhood {
         const g = this.game;
         if (this._warm || !g.renderer?.compile || !g.camera) return;
         this._warm = true;
-        const run = () => { try { const c0 = this.cer; this.cer = {}; this._pillar(); const sc = new THREE.Scene(), c = this.cer; g.scene.remove(c.pillar); g.scene.remove(c.ring); sc.add(c.pillar, c.ring); const D = this.decor ? null : this._makeDecor(); if (D) { g.scene.remove(D.root); sc.add(D.root); } g.renderer.compile(sc, g.camera); if (D) sc.remove(D.root); c.geo.dispose(); // (the hall's sun and shafts too) c.core.material.dispose(); c.veil.material.dispose(); c.ring.geometry.dispose(); c.ring.material.dispose(); this.cer = c0; } catch (e) { console.warn('godhood warm', e); } };
+        const run = () => { try { const c0 = this.cer; this.cer = {}; this._pillar(); const sc = new THREE.Scene(), c = this.cer; g.scene.remove(c.pillar); g.scene.remove(c.ring); sc.add(c.pillar, c.ring); const D = this.decor ? null : this._makeDecor(); if (D) { g.scene.remove(D.root); sc.add(D.root); } g.renderer.compile(sc, g.camera); if (D) sc.remove(D.root); c.geo.dispose(); /* (the hall's sun and shafts too) */ c.core.material.dispose(); c.veil.material.dispose(); c.ring.geometry.dispose(); c.ring.material.dispose(); this.cer = c0; } catch (e) { console.warn('godhood warm', e); } };
         if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2000 }); else setTimeout(run, 0);
     }
 
