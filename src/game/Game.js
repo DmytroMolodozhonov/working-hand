@@ -265,7 +265,6 @@ import { spellPhrase } from '../audio/SpellPhrase.js';
 import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 import { restartsCreative } from './CreativeRestart.js';
-import { CreativeMirror, mirrorSamples } from './CreativeMirror.js';
 import { PotionEffects } from './PotionEffects.js';
 import { Flourish } from './Flourish.js';
 import { randomLook as _rollLook, cleanLook as _cleanLook } from '../entities/Appearance.js';
@@ -1013,8 +1012,11 @@ export class Game {
                 this.castleLife.addSite(lairDef()); // (the Potion-maker's lair: his place in the sky; he is seated when the hall stands — PotionLair)
                 // a training dummy: a plain zombie that only stands (see _updateDummy)
                 if (this.authority) this.dummyHome = { x: 0, z: -10 };
-                // a tall mirror on its stand by the start: to see oneself, every pose and face (CreativeMirror.js)
-                if (this.renderer) this.mirror = new CreativeMirror(this);
+                // (the mirror by the start is gone — the author 06.11: «зеркало убрать, творческое начало почистить»; CreativeMirror.js stays unused)
+                // the start cleared of trees: room to walk, ride and try spells (the ones farther off stand)
+                this.world.clearTreesNear?.(0, 0, 48);
+                // a stable to try riding: two horses and the Pegasus that let you up after one apple, an apple tree beside them (Animals.creativeStable)
+                this.animals?.creativeStable?.(-30, 16);
             }
         }
     }
@@ -3884,7 +3886,6 @@ export class Game {
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), ...(this.diabolos?.sampleModels() || []), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
-        for (const m of mirrorSamples()) zoo.add(m); // (the Creative mirror's glass and frame)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
         for (const m of [...darkLordSamples(), ...lordSamples(), ...knightSamples()]) zoo.add(m); // («настоящий тёмный маг»: шар тьмы, воронка, круг рун, наряд — DarkLordFx.js, DarkLordLook.js)
         zoo.add(monsterSamples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js)

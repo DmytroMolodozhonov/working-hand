@@ -534,6 +534,15 @@ export class VoxelWorld {
         else if (!t && this.forest) this.forest.goneById(i);
     }
 
+    /**
+     * Creative's start cleared (the author 06.11: «много деревьев — почистить»): the start area's trees nearer than `r` to (x, z) are taken
+     * away (both looks: the block trees and the real ones) — as if gathered, so a save keeps them gone.
+     */
+    clearTreesNear(x, z, r) {
+        for (const t of this.trees || []) if (t.alive && Math.hypot(t.x - x, t.z - z) < r) this.removeTree(t);
+        if (this.forest) for (const t of [...this.forest.byId.values()]) if (t.fixed && t.alive && Math.hypot(t.x - x, t.z - z) < r) this.forest.removeTree(t);
+    }
+
     /** A tree burnt down: the crown is gone, the trunk is charred (it still blocks the way). */
     /** «Gather»: a spawn-area tree is taken away whole. */
     removeTree(t) {

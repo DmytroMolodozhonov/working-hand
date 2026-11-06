@@ -625,6 +625,7 @@ export class Animals {
         const FAR = 3; // cells
         const picked = this._applesPicked || (this._applesPicked = new Map());
         for (const [key, tr] of this.trees) {
+            if (tr?.fixed) continue; // (Creative's apple tree by the stable)
             const [kx, kz] = key.split(',').map(Number);
             if (kx >= gx0 - FAR && kx <= gx1 + FAR && kz >= gz0 - FAR && kz <= gz1 + FAR) continue;
             this.trees.delete(key);
@@ -647,25 +648,51 @@ export class Animals {
             if (t.landMade && !t.landMade(x, z)) continue; // (the workers have not brought that land yet: asked again in 2 s — never made here in the frame, 20–50 ms in a fast flight)
             const top = t.topLayer(x, z);
             if (t.get(x, top, z) !== BLOCK.GRASS) { this.trees.set(key, null); continue; }
-            const y = top - 0.5;
-            const baksadi = kind === 'baksadi';
-            const model = baksadi ? baksadiModel(h(gx + 17, gz - 11)) : goldenTreeModel(kind === 'red', h(gx + 17, gz - 11));
-            model.position.set(x, y, z);
-            model.rotation.y = h(gx - 7, gz + 29) * Math.PI * 2;
-            this.game.scene.add(model);
-            // (its apples (and bark) drawn as one shape by the video card — FarShape; the leaves' cut-out shadow: as themselves)
-            model.updateMatrixWorld(true);
-            model.userData.farRadius = new THREE.Box3().setFromObject(model).getSize(_v2).length() * 0.6 + 1;
-            const one = new FarShape(model);
-            const rr = baksadi ? Math.max(0.9, model.userData.trunkR * 1.05) : 0.45; // (the Baksadi's trunk is thick: you walk round it)
-            const boxId = this.game.collision.addBox({ minX: x - rr, maxX: x + rr, minY: y, maxY: y + (baksadi ? 9 : 4), minZ: z - rr, maxZ: z + rr, kind: 'tree', noSupport: true });
-            const was = picked.get(key);
-            picked.delete(key);
-            const tr = { key, x, y, z, model, boxId, red: kind === 'red', baksadi, one, apples: model.userData.apples.map((_, i) => ({ until: was?.[i] || 0 })) };
-            const A = model.userData.apples, now = Date.now();
-            for (let i = 0; i < A.length; i++) { const grown = tr.apples[i].until <= now; A[i].userData.noFar = !grown; A[i].visible = grown; }
-            one.set(true);
-            this.trees.set(key, tr);
+            this.trees.set(key, this._makeTree(key, x, top - 0.5, z, kind, h(gx + 17, gz - 11), h(gx - 7, gz + 29) * Math.PI * 2, picked));
+        }
+    }
+
+    /** An apple tree at (x, y, z) of `kind` ('golden' | 'red' | 'baksadi'): its model, its one shape, its trunk's box, its apples. */
+    _makeTree(key, x, y, z, kind, pick, turn, picked = null) {
+        const baksadi = kind === 'baksadi';
+        const model = baksadi ? baksadiModel(pick) : goldenTreeModel(kind === 'red', pick);
+        model.position.set(x, y, z);
+        model.rotation.y = turn;
+        this.game.scene.add(model);
+        // (its apples (and bark) drawn as one shape by the video card — FarShape; the leaves' cut-out shadow: as themselves)
+        model.updateMatrixWorld(true);
+        model.userData.farRadius = new THREE.Box3().setFromObject(model).getSize(_v2).length() * 0.6 + 1;
+        const one = new FarShape(model);
+        const rr = baksadi ? Math.max(0.9, model.userData.trunkR * 1.05) : 0.45; // (the Baksadi's trunk is thick: you walk round it)
+        const boxId = this.game.collision.addBox({ minX: x - rr, maxX: x + rr, minY: y, maxY: y + (baksadi ? 9 : 4), minZ: z - rr, maxZ: z + rr, kind: 'tree', noSupport: true });
+        const was = picked?.get(key);
+        picked?.delete(key);
+        const tr = { key, x, y, z, model, boxId, red: kind === 'red', baksadi, one, apples: model.userData.apples.map((_, i) => ({ until: was?.[i] || 0 })) };
+        const A = model.userData.apples, now = Date.now();
+        for (let i = 0; i < A.length; i++) { const grown = tr.apples[i].until <= now; A[i].userData.noFar = !grown; A[i].visible = grown; }
+        one.set(true);
+        return tr;
+    }
+
+    /**
+     * Creative's test ground for riding (the author 06.11: «в Творческом тестовый конь, два коня и Пегас, рядом яблоня; накормил с первого
+     * раза — и сразу можно сесть»): two horses and the Pegasus that let you up after one apple, and a red apple tree beside them.
+     * The same ids on every computer and every start; kept near (never put away far), not a herd.
+     */
+    creativeStable(x, z) {
+        const g = this.game, col = g.collision;
+        const at = (dx, dz) => new THREE.Vector3(x + dx, col.groundY(x + dx, z + dz) + 0.5, z + dz);
+        const spots = [['cH1', 0, 0, HORSE_COLORS[0], 25], ['cH2', 6, 2, HORSE_COLORS[4], 35], ['cPeg', 12, -1, randomPegasusColor(0.05), 30]]; // (a bay, a light grey; the Pegasus white)
+        for (const [id, dx, dz, color, bonus] of spots) {
+            if (this.byId.has(id)) { const a = this.byId.get(id); a.easy = true; a.keep = true; continue; }
+            const a = this._spawn('horse', at(dx, dz), { id, color, bonus, yaw: Math.PI * 0.5 });
+            a.easy = true; a.keep = true; a.home = { x: x + dx, z: z + dz };
+        }
+        if (!this.trees.has('creative-apple')) {
+            const tx = x - 7, tz = z + 1;
+            const tr = this._makeTree('creative-apple', tx, col.groundY(tx, tz), tz, 'red', 0.37, 0.8);
+            tr.fixed = true;
+            this.trees.set('creative-apple', tr);
         }
     }
 
@@ -692,8 +719,11 @@ export class Animals {
         let horse = null;
         for (const a of this.list) {
             if (a.dead || a.type !== 'horse' || a.tamed === g.localId) continue;
-            const head = _v.copy(a.group.position).add(_v2.set(0, 2.4 * SPECIES.horse.size, 0).add(new THREE.Vector3(0, 0, -1.2).applyAxisAngle(_v2.set(0, 1, 0), a.group.rotation.y)));
-            if (ap.model.position.distanceTo(head) < 1.4) horse = a;
+            // the apple at his muzzle: by his real head (the model's head pivot) — or, as before, a little above his body and 1.2 m ahead
+            // (the old formula overwrote its own vector: its point was ~1 m up, by the chest — kept, so nothing that worked stops working)
+            const yaw = a.group.rotation.y, hd = a.model.userData.head;
+            const near = _v.copy(a.group.position).add(_v2.set(-Math.sin(yaw) * 1.2, 1, -Math.cos(yaw) * 1.2));
+            if (ap.model.position.distanceTo(near) < 1.4 || (hd && ap.model.position.distanceTo(hd.getWorldPosition(_v)) < 1.6)) horse = a;
         }
         if (!horse) { this._feedT = 0; return; }
         this._feedT += dt;
@@ -703,7 +733,7 @@ export class Animals {
         if (ap.item.count <= 0) g.items.releaseHand(ap.side);
         if (horse.pegasus) {
             // the Pegasus is nobody's: an apple only makes him kind to you — he lets you on: 9% for an apple, 40% for a golden one
-            if (Math.random() < (golden ? PEGASUS.TRUST_GOLD : PEGASUS.TRUST)) {
+            if (horse.easy || Math.random() < (golden ? PEGASUS.TRUST_GOLD : PEGASUS.TRUST)) { // (Creative's test Pegasus: one apple is enough)
                 horse.trustBy = g.localId; horse.trustUntil = Date.now() + PEGASUS.TRUST_T;
                 g.hud.setVoice('🐴 Пегас съел яблоко и подпускает вас — прыгните рядом, чтобы сесть на него', true);
                 g.fx?.lightFlash?.(horse.group.position.clone().setY(horse.group.position.y + 3), 0xfff2b0, 2, 0.5, 15);
@@ -712,6 +742,7 @@ export class Animals {
         }
         horse.apples = Math.min(3, horse.apples + 1);
         if (!this.auth) g.sync?.animalFeed?.(horse.id);
+        if (horse.easy) { g.hud.setVoice('🐴 Конь съел яблоко и подпускает вас — прыгните рядом с ним, чтобы сесть', true); return; } // (Creative's test horse)
         g.hud.setVoice(`🐴 Конь съел яблоко (${horse.apples}) — шанс, что даст запрыгнуть: ${Math.min(90, horse.apples * 30)}%. Прыгните рядом с ним`, true);
     }
 
@@ -867,7 +898,7 @@ export class Animals {
             g.hud.setVoice('🐴 Вы на Пегасе! Шагайте на месте — он идёт. Хлопните его рукой по голове — взлетит', true);
             return;
         }
-        const ok = a.tamed === g.localId || Math.random() < Math.min(0.9, a.apples * 0.3);
+        const ok = a.tamed === g.localId || (a.easy && a.apples > 0) || Math.random() < Math.min(0.9, a.apples * 0.3); // (Creative's test horse: one apple is enough)
         if (!ok) { g.hud.setVoice(a.apples ? '🐴 Конь не дал запрыгнуть — дайте ещё яблоко' : '🐴 Конь не даётся — сначала угостите его яблоком', true); return; }
         a.tamed = g.localId;
         a.rider = g.localId;
@@ -888,11 +919,30 @@ export class Animals {
         a.target.copy(a.group.position);
         a.spd = 0; a.idle = 'stand'; a.idleT = 3;
         const ch = this.game.character;
-        ch.group.position.x += Math.cos(a.group.rotation.y) * 1.5;
-        ch.group.position.z -= Math.sin(a.group.rotation.y) * 1.5;
+        const off = this._dismountSpot(a);
+        ch.group.position.set(off.x, off.y, off.z);
         this.game.sync?.animalRide?.(a.id, false);
         this.game.hud.setVoice(a.pegasus ? '🐴 Вы слезли с Пегаса — он уходит к своему табуну' : '🐴 Вы слезли с коня', true);
         if (a.pegasus) { a.flyCode = 0; a.landing = false; a.riderFly = false; }
+    }
+
+    /**
+     * Where the rider steps down (CLAUDE.md: «нигде нельзя застрять»): the right side, the left, behind, ahead — the first with room for a
+     * body (no wall, rock or tree from the feet to the head) and not deep water; none — onto the horse's own place (he steps aside).
+     */
+    _dismountSpot(a) {
+        const g = this.game, col = g.collision, p = a.group.position, yaw = a.group.rotation.y;
+        const sides = [[Math.cos(yaw), -Math.sin(yaw)], [-Math.cos(yaw), Math.sin(yaw)], [Math.sin(yaw), Math.cos(yaw)], [-Math.sin(yaw), -Math.cos(yaw)]];
+        for (const D of [1.9, 2.6]) for (const [dx, dz] of sides) {
+            const x = p.x + dx * D, z = p.z + dz * D;
+            const gy = col.groundAt ? col.groundAt(x, z, p.y + 1.5) : col.groundY(x, z);
+            if (gy > p.y + 1.2 || gy < p.y - 3) continue; // (a wall up, a drop down)
+            let free = true;
+            for (const h of [0.4, 1.4, 2.4, 3.2]) if (col.pointBlocked?.(x, gy + h, z)) { free = false; break; }
+            if (!free || deepAt(g.terrain?.data, x, z, gy + 0.5)) continue;
+            return { x, y: gy + 2.0, z }; // (PLAYER_GROUND_OFFSET: the body's origin 2 m over the feet)
+        }
+        return { x: p.x, y: (col.groundAt ? col.groundAt(p.x, p.z, p.y + 1) : col.groundY(p.x, p.z)) + 2.0, z: p.z };
     }
 
     /** A real jump (JumpReader — the same one the hero jumps with): true once per jump. */
@@ -919,6 +969,7 @@ export class Animals {
         const g = this.game;
         const ch = g.character;
         if (!a || a.dead) { this.riding = null; return; }
+        if ((g.combat?.dead || g.isDeadLocal) && !a.riderFly) { this.dismount(); return; } // (the rider died: the body falls off, not glued to the saddle)
         if (ch.isCrouching && !a.riderFly) { this.dismount(); return; }
         if (a.pegasus) {
             a.rideT = (a.rideT || 0) + dt;
@@ -934,8 +985,11 @@ export class Animals {
         const tired = a.stamina <= 0;
         const base = (2.5 + 5 * (ch.runIntensity || 0)) * 2 * (1 + a.bonus / 100) * (tired ? 0.5 : 1);
         if (moving) {
-            a.group.position.x -= Math.sin(a.group.rotation.y) * base * dt;
-            a.group.position.z -= Math.cos(a.group.rotation.y) * base * dt;
+            const nx = a.group.position.x - Math.sin(a.group.rotation.y) * base * dt, nz = a.group.position.z - Math.cos(a.group.rotation.y) * base * dt;
+            // (deep water ahead: the horse stops at the edge — the rider stayed in the saddle under the water before)
+            if (deepAt(g.terrain?.data, nx, nz, a.group.position.y, 2)) {
+                if (performance.now() - (this._wetSaid || 0) > 4000) { this._wetSaid = performance.now(); g.hud.setVoice('🐴 Конь не идёт в глубокую воду — объезжайте или слезьте', true); }
+            } else { a.group.position.x = nx; a.group.position.z = nz; }
             a.stamina = Math.max(0, a.stamina - dt * (3 + 4 * (ch.runIntensity || 0)));
             a.walkT += dt * base * 2;
         } else a.stamina = Math.min(100, a.stamina + dt * 6);
@@ -946,7 +1000,7 @@ export class Animals {
         a.pose = POSE.stand; a.spd = 0;
         this._animate(a, moving ? Math.min(1, base / 10) : 0, dt);
         ch.group.position.set(a.group.position.x, a.group.position.y + 1.95 * S.size + 0.6, a.group.position.z);
-        if (tired && moving && Math.random() < dt) g.hud.setVoice('🐴 Конь устал — дайте ему отдохнуть', true);
+        if (tired && moving && performance.now() - (this._tiredSaid || 0) > 8000) { this._tiredSaid = performance.now(); g.hud.setVoice('🐴 Конь устал — дайте ему отдохнуть', true); }
     }
 
     // ---------------------------------------------------------------- AI
@@ -1813,7 +1867,7 @@ export class Animals {
             for (const a of [...this.list]) {
                 // (gone only far away and out of sight: never vanishing in front of the player)
                 const ap = a.group.position;
-                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && !a.cart && !a.mount && !a.imp && !this._nearEyes(ap) && outOfSight(me, look, ap.x, ap.z, 1.2) && this._farFromGuests(ap)) { a.site?.members.delete(a.id); this._remove(a); continue; } // (the herd place sleeps: it is full again when somebody comes)
+                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.keep && !a.rider && !a.cart && !a.mount && !a.imp && !this._nearEyes(ap) && outOfSight(me, look, ap.x, ap.z, 1.2) && this._farFromGuests(ap)) { a.site?.members.delete(a.id); this._remove(a); continue; } // (the herd place sleeps: it is full again when somebody comes)
                 if (a.dead) {
                     if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)
