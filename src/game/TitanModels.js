@@ -410,7 +410,7 @@ function walker(look) {
             add('body', new THREE.TorusGeometry(chestR * 0.43, 0.01, 6, 28), 0x4c4640, [0, 0.32, -chestR * 0.76]);
         }
     }));
-    const neck = new THREE.Group(); neck.position.y = 0.47; chest.add(neck);
+    const neck = new THREE.Group(); neck.position.y = look === "iron" ? 0.55 : 0.5; chest.add(neck); // (the head rises clear of the shoulders: it was sunk to the crest)
     const hd = new THREE.Group(); hd.position.y = 0.06; neck.add(hd);
     hd.add(part((o) => head(look, 0.13 * (look === 'rock' ? 0.85 : 1), r, o)));
     const arm = (sd) => {
@@ -787,8 +787,8 @@ const ACTS = {
     roar(R, a) {
         const k = env(a, 0, 0.25, 0.75, 1);
         legTo(R.legL, lerp(0, 0.2, k), -0.3 * k, 0, -0.18 * k); legTo(R.legR, lerp(0, -0.15, k), -0.2 * k, 0, 0.18 * k);
-        to(R.chest.rotation, 'x', -(lerp(0.06, -0.35, k))); to(R.head.rotation, 'x', -(lerp(-0.08, -0.6, k)));
-        armTo(R.armL, -0.4 * k, -1.3 * k, 0.7 * k); armTo(R.armR, -0.4 * k, 1.3 * k, 0.7 * k);
+        to(R.chest.rotation, 'x', -(lerp(0.06, -0.16, k))); to(R.head.rotation, 'x', -(lerp(-0.08, -0.28, k))); // (back a little: the face still seen)
+        armTo(R.armL, 0.5 * k, -1.1 * k, 0.9 * k); armTo(R.armR, 0.5 * k, 1.1 * k, 0.9 * k); // (spread wide and forward, the forearms raised — the fists clenched)
     },
     /** Staggered: down on the right knee, the right hand on the ground, the left on the left knee, swaying. */
     kneel(R, a) {
