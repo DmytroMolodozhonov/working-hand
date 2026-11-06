@@ -230,15 +230,15 @@ export class ArcaneShapes {
         const ccs = getComputedStyle(c);
         const vis = c.clientHeight - parseFloat(ccs.paddingTop) - parseFloat(ccs.paddingBottom) - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
         band.style.height = Math.max(200, Math.floor(vis)) + 'px'; // (the panel's visible height: the band never runs past its bottom)
-        // each slice: its left edge is the arc (the mirror of the main buttons' right ends)
-        const er = el.getBoundingClientRect();
-        for (const b of band.querySelectorAll('button')) {
-            const r = b.getBoundingClientRect();
-            if (!r.height) continue;
+        // the band's left edge is the arc — the band is cut as a whole (it stays put while the section scrolls), so the cut always meets the
+        // seam however many slices it holds (cutting each slice once went stale when a part switched and the slices moved — the author saw it)
+        const er = el.getBoundingClientRect(), r = band.getBoundingClientRect();
+        if (r.height) {
             const pts = [];
-            for (let k = 0; k <= 8; k++) { const y = r.top - er.top + r.height * k / 8; pts.push(`${(it.arcX(y) + 3 - (r.left - er.left)).toFixed(1)}px ${(r.height * k / 8).toFixed(1)}px`); }
-            b.style.clipPath = `polygon(${pts.join(',')}, ${r.width}px ${r.height}px, ${r.width}px 0px)`;
+            for (let k = 0; k <= 32; k++) { const y = r.top - er.top + r.height * k / 32; pts.push(`${(it.arcX(y) + 3 - (r.left - er.left)).toFixed(1)}px ${(r.height * k / 32).toFixed(1)}px`); }
+            band.style.clipPath = `polygon(${pts.join(',')}, ${r.width}px ${r.height}px, ${r.width}px 0px)`;
         }
+        for (const b of band.querySelectorAll('button')) b.style.clipPath = '';
     }
 
     _redraw(target) {
