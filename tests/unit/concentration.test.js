@@ -50,7 +50,7 @@ test('concentration: a spell said while holding is refused with a hint (also in 
     assert.equal(f.held(), 'Waterball');
     assert.equal(f.gate('Bombardo', true), null); // (no concentration in it)
     assert.equal(f.gate('Inferno', true), 'Waterball');
-    assert.match(g.said[0], /Сначала «стоп» — вы держите «Водяной шар»/);
+    assert.match(g.said[0], /Вы держите концентрацию на «Водяной шар».*«стоп»/);
     assert.equal(f.gate('Lumos', true), null);
     g.water.active = false; g.livingTrees.n = 0;
     assert.equal(f.gate('Inferno', true), null);
@@ -103,7 +103,7 @@ test('a living tree / the risen dead: spells without concentration work, one wit
     assert.equal(f.held(), 'Alive');
     assert.equal(f.gate('Bombardo', true), null);
     assert.equal(f.gate('Inferno', true), 'Alive');
-    assert.match(g.said.at(-1), /Сначала «стоп» — вы держите «Живое дерево»/);
+    assert.match(g.said.at(-1), /Вы держите концентрацию на «Живое дерево».*«стоп»/);
 });
 
 test('every spell said to take concentration is a real spell', async () => {

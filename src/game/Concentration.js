@@ -151,7 +151,7 @@ export class Concentration {
         const ru = HELD[held]?.ru || held;
         const say = held === 'Duel' ? '⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)'
             : held === 'Imperius' ? '🌀 Вы в чужом теле — колдовать нельзя. «Стоп» — вернуться в своё'
-            : held === 'Puppet' ? '🌀 Вашим телом управляет чужой разум — колдовать нельзя' : `🧘 Сначала «стоп» — вы держите «${ru}»`;
+            : held === 'Puppet' ? '🌀 Вашим телом управляет чужой разум — колдовать нельзя' : `🧘 Вы держите концентрацию на «${ru}» и не можете взять другое заклинание, которое тоже требует концентрации. Скажите «стоп», чтобы отпустить`; // (the author 06.11: the hint says it in these words)
         this.game.lastCastWhy = held === 'Duel' ? 'занято: идёт дуэль' : `занято: вы держите «${ru}» — сначала «стоп» (концентрация)`; // (the spell journal)
         if (isFinal && this._gate.pass(held + ':' + name)) this.game.hud?.setVoice?.(say, true);
         return held;
