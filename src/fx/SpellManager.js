@@ -223,6 +223,7 @@ export function matchSpell(text) {
     if (has('импульс', 'импулс', 'импалс', 'импэлс', 'импульз', 'импелс', 'импольс', 'impuls', 'impals', 'impulse')) return mx() ? 'WindImpulseMaxima' : 'WindImpulse';
     if (has('drawdown', 'draw down', 'drowdown', 'drow down', 'дравдаун', 'драв даун', 'дродаун', 'дро даун', 'драудаун', 'драу даун', 'дровдаун', 'дров даун', 'драфдаун', 'дравдан', 'дродан', 'дравдаон', 'просядь')) return mx() ? 'DrawdownMaxima' : 'Drawdown';
     if (has('ликвидейш', 'ликвидэйш', 'ликвидеш', 'ликвидайш', 'ликвидац', 'ликвидир', 'ликвидей', 'liquidat', 'liquidation', 'ликвидейтион')) return mx() ? 'LiquidationMaxima' : 'Liquidation';
+    if (has('spiralis', 'спиралис', 'спиралес', 'спирализ', 'spiralus', 'спираллис')) return 'Spiralis'; // (the beams of a clash whirled: Whirl.js)
     if (has('caligo', 'kaligo', 'калиго', 'калигу', 'каллиго', 'каліго', 'caligu')) return 'Caligo'; // (the dark fog: DarkFog.js)
     if (has('sectura', 'sektura', 'сектура', 'сэктура', 'сектюра', 'сектура', 'sectur')) return 'Sectura'; // (the cutting curse: Slash.js — «сектора» is the everyday word, not taken)
     if (has('стичинг', 'стичин', 'ститчинг', 'ститчин', 'стиччинг', 'стичен', 'стечинг', 'стичэнг', 'stitching', 'stitchin', 'stiching', 'stitch', 'сшив', 'сшей')) return 'Stitching';

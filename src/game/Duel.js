@@ -1628,6 +1628,7 @@ export class Duel {
             for (let j = i + 1; j < list.length; j++) {
                 let a = list[i], b = list[j];
                 if (a.by === b.by || a.state === 'clash' || b.state === 'clash') continue;
+                if (a.twin || b.twin) continue; // (a whirled pair «Спиралис» let go: two spells of one flight, they never take a clash of their own — Whirl.js)
                 if (a.npc && b.npc && !this.game.arenaDuels?.pair(a.by, b.by)) continue; // (two wizards of a tower never fight each other — but at the arena (ArenaDuels.js); a wizard's charge and a player's — a duel)
                 if (a.id > b.id) [a, b] = [b, a]; // (the same order on every computer)
                 const m = this._meeting(a, b, _v1);

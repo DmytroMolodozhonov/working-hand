@@ -231,6 +231,7 @@ import { DarkFog } from './DarkFog.js';
 import { Vigor } from './Vigor.js';
 import { Dread } from './Dread.js';
 import { Skin } from './Skin.js';
+import { Whirl } from './Whirl.js';
 import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
@@ -688,6 +689,7 @@ export class Game {
         this.liquidation = new Liquidation(this); // «Liquidation»: a splash — a thing crumbles into dust (Liquidation.js)
         this.stitching = new Stitching(this); // «Stitching»: a passage sewn shut with stones (Stitching.js)
         this.darkFog = new DarkFog(this); // «Caligo»: the dark mage's fog — a jet from the wand, a dome nobody sees through (DarkFog.js)
+        this.whirl = new Whirl(this); // «Спиралис»: в дуэли лучей оба луча забираются и крутятся вихрем — потом двойной удар (Whirl.js)
         this.skin = new Skin(this); // «Зелье крепкой кожи»: простое лезвие больше не ранит — навсегда, один раз (Skin.js)
         this.dread = new Dread(this); // «Зелье страха»: слабые чаще бегут, чем нападают — навсегда, один раз (Dread.js)
         this.vigor = new Vigor(this); // «Зелье крепкого здоровья»: +10 к максимуму здоровья навсегда, один раз (Vigor.js)
@@ -2141,6 +2143,7 @@ export class Game {
         if (name === 'Lumos' || name === 'LumosMaxima' || name === 'LumosFlashlight' || name === 'LumosAhead' || name === 'LumosFollowing' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
         if (name === 'Rescue') return this.bleeding.rescue(isFinal);
         if (name === 'Breakthrough' || name === 'BreakthroughMaxima') return this._castBreakthrough(name, isFinal);
+        if (name === 'Attack' && this.whirl?.mine) return this.whirl.attack(isFinal); // (the whirled beams: let them go at him — Whirl.js)
         if (name === 'Attack') {
             // the Ice Rod: the snowmen go for whom it points at (IceQueen.rodAttack)
             if (this.iceCastle?.myRod() && this.iceCastle.rodAttack(isFinal)) return 'Attack';
@@ -2243,6 +2246,7 @@ export class Game {
         if (name === 'Drawdown' || name === 'DrawdownMaxima') return this.drawdown.cast(name, isFinal);
         if (name === 'Liquidation' || name === 'LiquidationMaxima') return this.liquidation.cast(name, isFinal);
         if (name === 'Stitching') return this.stitching.cast(isFinal);
+        if (name === 'Spiralis') return this.whirl.cast(isFinal); // (only in a beam clash — Whirl.js)
         if (name === 'Caligo') return this.darkFog.cast(isFinal); // (a jet of black smoke for 10 s — DarkFog.js)
         if (name === 'Sectura') return this.slash.cast(isFinal); // (the word arms the wand; the swing lets the blade go — Slash.js)
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
@@ -2441,6 +2445,7 @@ export class Game {
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
         if (this.darkFog?.stopMine()) done.push('тёмный туман');
+        if (this.whirl?.stopMine()) done.push('вихрь дуэли');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.sunContest?.stop('stop')) done.push('To the Sun');
@@ -3867,6 +3872,7 @@ export class Game {
         for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
         for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
         for (const m of this.buildingFx?.sampleModels?.() || []) zoo.add(m); // (a mill's sails, a church bell)
+        this.whirl?.sampleMeshes();
         if (this.darkFog) for (const m of this.darkFog.sampleMeshes()) zoo.add(m); // («Caligo»: the dome's and the smoke's shaders)
         if (this.slash) zoo.add(this.slash.sampleMesh()); // («Sectura»: the flying crescent's material)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
@@ -4255,6 +4261,7 @@ export class Game {
         this.bleeding.update(dt);
         this.slash?.update(dt);
         this.darkFog?.update(dt);
+        this.whirl?.update(dt);
         const duelOnly = this.duelOnly; // (the duel-only start: no animals, no roads' people, no zombies, no bosses — only the arena)
         if (earth && !duelOnly) this.animals.update(dt);
         if (earth) this.runner.update(dt);

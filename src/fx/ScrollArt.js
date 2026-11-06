@@ -41,7 +41,7 @@ const SCHOOL_OF = {
     GroundVortex: 'earth', Groundprud: 'earth', Drawdown: 'earth', EarthquakeMaxima: 'earth', Earthquake: 'earth', LiquidationMaxima: 'earth', Breakthrough: 'earth', Unfurl: 'earth',
     WindImpulse: 'wind', LevitationMaxima: 'wind', LevitationSuperMaxima: 'wind', Levitation: 'wind', Wind: 'wind', Flight: 'wind',
     Alive: 'life', Overgrown: 'life', OvergrownMaxima: 'life',
-    AvadaKedavra: 'dark', Sectura: 'dark', Caligo: 'dark', Die: 'dark', TotalDestruction: 'dark', Accentric: 'dark', GiveMyPower: 'dark', Invisibility: 'dark', Pentagranium: 'dark',
+    AvadaKedavra: 'dark', Sectura: 'dark', Caligo: 'dark', Spiralis: 'lightning', Die: 'dark', TotalDestruction: 'dark', Accentric: 'dark', GiveMyPower: 'dark', Invisibility: 'dark', Pentagranium: 'dark',
     LumosFollowing: 'light', Lumos: 'light', Inspirius: 'light', ProtectionGods: 'light', ProtectionGodsMaxima: 'light', VisibleGodi: 'light',
     ProtectionMaxima: 'shield', Protection: 'shield',
     CreateHouse: 'build', ImproveHouse: 'build', CreateCastle: 'build',

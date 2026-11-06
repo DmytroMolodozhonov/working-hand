@@ -390,6 +390,16 @@ const TUNES = {
         bell(o, sr, hz('C3'), 0.4, 0.14, 3.2, 0.4);
         return finish(o, sr, { rms: 0.16 });
     },
+    /** «Спиралис» — the beams of a clash whirled round the caster: a rising, circling swirl (glides spiralling up) over a pulsing low pad, a bright bell at the turn, a sweeping rush. A tune of 9 s. */
+    thSpiralis(sr) {
+        const o = buf(sr, 9.2), r = rng(347);
+        pad(o, sr, ['D2', 'A2', 'F3'], 0, 4.6, 0.45, { att: 0.7, rel: 1, vib: 0.006, harm: 4, det: 0.012 });
+        pad(o, sr, ['E2', 'B2', 'G3'], 4.2, 9, 0.45, { att: 0.6, rel: 1.4, vib: 0.007, harm: 4, det: 0.014 });
+        for (let k = 0; k < 3; k++) glide(o, sr, 0.3 + k * 2.6, 2.6, 0.2, (u) => 330 * Math.pow(2, 1.6 * u) * (1 + 0.04 * Math.sin(u * 60)), swell(0.2, 0.3), 2);
+        noise(o, sr, 0.4, 8.2, 0.34, (u) => 0.06 + 0.2 * Math.abs(Math.sin(u * 9.4)), swell(0.15, 0.3), r);
+        for (const t of [1.2, 3.4, 5.8, 8]) bell(o, sr, hz('A4'), t, 0.14, 2.4, 0.45);
+        return finish(o, sr, { rms: 0.15 });
+    },
     thDie(sr) {
         const o = buf(sr, 8.5), r = rng(173);
         pad(o, sr, ['D2', 'A2', 'D3', 'F3'], 0, 3.4, 0.5, { att: 1.2, rel: 1, vib: 0.006, harm: 4, det: 0.01 });
@@ -1032,6 +1042,7 @@ export const SPELL_SOUND = {
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
     Nihilis: { cast: 'fxNihilis' }, // («Nihilis Atra»: a short bright shimmer — an instant, not a tune; Nihilis.js)
+    Spiralis: { theme: 'thSpiralis' }, // («Спиралис»: the clash's beams whirled, 9 s — Whirl.js)
     Caligo: { theme: 'thCaligo' }, // («Caligo»: the black jet, 10 s — a tune; DarkFog.js)
     Sectura: { cast: 'fxSectura' }, SecturaSwing: { cast: 'fxSecturaSwing' }, // («Sectura»: the word arms the wand — a «shing»; the swing — the air tears: Slash.js)
     Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' }, MonsterForm: { cast: 'fxMonsterRoar', theme: 'thMonster' }, MonsterBack: { cast: 'fxMonsterBack' }, // («Пентаграмма страшного монстра» — MonsterForm.js: not a spoken spell, the pentagram's)

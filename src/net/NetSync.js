@@ -1393,6 +1393,8 @@ export class NetSync {
             case 'ppush': if (m.to === this.me) g.impact?.onStrike(m, false); break;
             case 'cimp': if (!this.net.isHost) g.creatureImpact?.onNet(m.l); break;
             case 'cstrike': if (this.net.isHost) g.creatureImpact?.onStrike(m, m.from); break;
+            case 'dwhirl': g.whirl?.onNet(m); break; // («Спиралис»: the clash taken over and whirled — Whirl.js)
+            case 'dwhirlreq': if (this.net.isHost) g.whirl?.onReq(m); break; // (a guest asks the host to take its clash over)
             case 'dmax': if (m.by !== this.me) g.duel.applyMaxima(m.a, m.b, this.net.isHost ? (m.from || m.by) : m.by); break;
             case 'hgrip': case 'hfree': case 'vhand': case 'vfree': g.handHold?.onNet(m); break;
             case 'cut': {
