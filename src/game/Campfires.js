@@ -232,6 +232,8 @@ export class Campfires {
         if (!side) return say('🔥 Поднимите руку, покажите на землю и скажите «Fire»', 'рука не поднята');
         const tired = g.combat.check('Fire');
         if (tired) { g.hud.setVoice(tired, true); return null; } // (Combat.check writes the reason itself: lastCastWhy)
+        // a put-out torch in the pyramids under the hand: «Fire» lights it (PharaohLife.torchAim)
+        { const ph = g.character.getHandWorldPosition(side, new THREE.Vector3()), pd = g.character.getHandDirection(side, new THREE.Vector3()).normalize(); const tt = g.pharaoh?.torchAim?.(ph, pd); if (tt) { g.combat.pay('Fire'); this._lastCast = now; if (g.pharaoh.lightTorch(tt, g.localId)) { g.hud.setVoice('🔥 Факел вспыхнул!', true); return 'Fire'; } } }
         let spot = this.aim(side);
         // a ship's gun (its fuse is lit — no campfire needed) or a ship's deck (it burns): Ships.js
         const onShip = g.ships?.fireSpell(side, spot?.wall ? null : spot, isFinal);

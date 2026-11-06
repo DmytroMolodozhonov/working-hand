@@ -225,6 +225,7 @@ export const CREATURE_BODY = {
     tree: { mass: 3.5 },
     phoenix: { mass: 0.4 }, // (a bird half a hero tall, hollow bones: a gust throws it far)
     gargoyle: { mass: 1.6 }, // (stone, a little smaller than a hero but heavier than a man; held up by wings: it reels and is thrown aside, never falls over — Gargoyles.js)
+    pharaoh: { mass: 2.2 }, // (Pharaoh Sandy, taller and heavier than a man: PharaohLife)
     snowman: { mass: 0.8 }, iceQueen: { mass: 3 }, iceMonster: { mass: 7 }, // (the Ice Castle: IceQueen.js)
 };
 export const bodyOf = (kind) => CREATURE_BODY[kind] || CREATURE_BODY.person;

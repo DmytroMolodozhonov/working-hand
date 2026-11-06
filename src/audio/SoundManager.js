@@ -21,6 +21,7 @@ import { synthGhost, GHOST_SOUND_IDS } from './GhostSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthVampire, VAMPIRE_SOUNDS } from './VampireSounds.js';
 import { synthTitan, TITAN_SOUNDS } from './TitanSounds.js';
+import { synthPharaoh, PHARAOH_SOUNDS } from './PharaohSounds.js';
 import { synthDragon, DRAGON_SOUNDS } from './DragonSounds.js';
 import { synthDevil, DEVIL_SOUNDS } from './DiabolosSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
@@ -792,6 +793,7 @@ export class SoundManager {
             ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
             ...VAMPIRE_SOUNDS.map((k) => ['vamp_' + k, () => synthVampire(this.context, k)]),
             ...TITAN_SOUNDS.map((k) => ['titan_' + k, () => synthTitan(this.context, k)]),
+            ...PHARAOH_SOUNDS.map((k) => ['pyr_' + k, () => synthPharaoh(this.context, k)]),
             // (the dragon in a fight — Dragons.js: steps, the landing, wing-beats, the roar, bite, claws, tail)
             ...DRAGON_SOUNDS.map((k) => ['drg_' + k, () => synthDragon(this.context, k)]),
             // (Дьяволос — Diabolos.js: храп, топот, цепь, рёв, огонь, шары, хлопок, тема босса — хор и барабаны)
@@ -2208,6 +2210,15 @@ export class SoundManager {
         if (!this.sounds[key]) { if (!GARGOYLE_SOUNDS.includes(kind)) return; this.sounds[key] = synthGargoyle(this.context, kind); }
         const far = kind === 'sunBang' ? 180 : kind === 'thunder' || kind === 'groan' ? 130 : kind === 'ignite' || kind === 'burst' ? 60 : kind === 'screech' || kind === 'roar' ? 22 : kind === 'crumble' ? 16 : 10;
         this._playAt(this.sounds[key], position, volume, far, 0.94 + Math.random() * 0.12);
+    }
+
+    /** The pyramids (PharaohLife.js): the lids, the pharaoh's words, the sand, the locusts, the traps — made ahead (prewarmStep). */
+    playPharaoh(position, kind = 'chant', volume = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'pyr_' + kind;
+        if (!this.sounds[key]) { if (!PHARAOH_SOUNDS.includes(kind)) return; this.sounds[key] = synthPharaoh(this.context, kind); }
+        const far = kind === 'sand' || kind === 'die' || kind === 'floor' ? 60 : kind === 'locust' || kind === 'chant' || kind === 'curse' ? 40 : kind === 'torch' ? 14 : 28;
+        this._playAt(this.sounds[key], position, volume, far, 0.95 + Math.random() * 0.1);
     }
 
     /** Count Sracula's castle (VampireLife.js): the bats, the count, his coffin — made ahead (prewarmStep). */

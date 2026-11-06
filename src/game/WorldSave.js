@@ -390,6 +390,7 @@ export class WorldKeeper {
             diabolos: g.diabolos?.snapshot() || null, // Дьяволос: будили ли (после загрузки он спит — Diabolos.js)
             dragons: g.dragons?.snapshot() || {}, // dragons' lairs: the gold left, their dragons' health (Dragons.js)
             titans: g.titans?.snapshot() || null, // the titans: which are dead, how many dents each left (Titans.js)
+            pharaoh: g.pharaoh?.snapshot() || null, // the pyramids: the pharaoh, mummies, guards killed, seen, torches/traps/jewels (PharaohLife.js)
             vampire: g.vampire?.snapshot() || null, // Count Sracula's castle: is he dead, the bats and guards killed, the clouds cleared, seen (VampireLife.js)
             iceCastle: g.iceCastle?.snapshot() || null, // the Ice Castle: the queen dead or her health, the monsters, seen on the map (IceQueen.js; its melted ice — the block edits)
             ships: g.ships?.snapshot() || [], // ships that moved, burnt, sank, were captured…
@@ -469,6 +470,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.dragons) g.dragons?.restore(save.dragons);
     if (save.diabolos) g.diabolos?.restore(save.diabolos);
     if (save.iceCastle) g.iceCastle?.restore(save.iceCastle);
+    if (save.pharaoh) g.pharaoh?.restore(save.pharaoh);
     if (save.vampire) g.vampire?.restore(save.vampire);
     if (save.titans) g.titans?.restore(save.titans);
     if (save.ships) g.ships?.restore(save.ships);

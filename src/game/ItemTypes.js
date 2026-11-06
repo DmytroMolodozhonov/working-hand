@@ -25,6 +25,7 @@
  */
 
 import { newAppleModel } from './AppleModel.js';
+import { JEWEL_INFO, JEWEL_VALUE, JEWEL_SMALL, JEWEL_BIG, isJewel, jewelModelScaled, jewelText } from './PyramidItems.js';
 import { scrollKindLabel } from './DarkMagic.js';
 import { enchantValueMul, describeEnchant } from './Enchant.js';
 import { addEnchantGlow } from '../fx/EnchantGlow.js';
@@ -135,6 +136,7 @@ export function foodHeal(it) {
 }
 
 export const ITEM_INFO = {
+    ...JEWEL_INFO, // the pyramids' gold (PyramidItems.js)
     wand: { name: 'Волшебная палочка', icon: '🪄', weight: 0.15 },
     scroll: { name: 'Свиток', icon: '📜', weight: 0.2 },
     shield: { name: 'Щит', icon: '🛡️', weight: 3 },
@@ -230,6 +232,7 @@ function baseValue(it) {
     switch (it.kind) {
         case 'wand': return wandValue(it);
         case 'dragonEgg': return 700;
+        case 'goldScarab': case 'goldAnkh': case 'goldBracelet': case 'goldNecklace': case 'goldMask': case 'goldIdol': return JEWEL_VALUE[it.kind]; // (pure gold)
         case 'weapon': return isDivine(it) ? 5000 : it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
         case 'scroll': return it.stat === 'flight' || it.stat === 'spell' || it.stat === 'pentagram' ? 220 : 60;
@@ -407,6 +410,26 @@ export function rollVampireLoot(r = Math.random, first = true) {
     else if (r() < 0.5) out.push({ kind: 'wand', uid: newUid(), model: 3, color: 0x1a0c10, power: 25, named: 'Палочка из чёрного дерева' });
     else out.push(rollKeyItem(r));
     return out;
+}
+
+/**
+ * The pyramids' chests (CLAUDE.md «Боссы»: by the meaning — an Egyptian tomb's: gold jewels, the sun's crystals, the old magic): an ordinary chest of the pyramids —
+ * a jewel or two, a key thing, now and then crystals; `room` 'maze' gives a weapon or a shield more often (the guards' own).
+ */
+export function rollPyramidLoot(r = Math.random, room = 'rooms') {
+    const jewel = () => ({ kind: JEWEL_SMALL[randInt(r, 0, JEWEL_SMALL.length - 1)], uid: newUid(), count: 1 });
+    const out = [jewel()];
+    if (r() < 0.6) out.push(jewel());
+    out.push(room === 'maze' && r() < 0.6 ? { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: r() < 0.4, bonus: randInt(r, 1, 40), uid: newUid() } : rollKeyItem(r));
+    if (r() < 0.35) out.push({ kind: 'crystal', uid: newUid(), count: randInt(r, 1, 3) });
+    return out;
+}
+/** Pharaoh Sandy's three chests in the burial chamber: the great treasure — a golden mask, a golden cat, jewels, crystals, his own robe, a staff-wand. */
+export function rollPharaohLoot(r = Math.random, i = 0) {
+    const jewel = (k) => ({ kind: k, uid: newUid(), count: 1 });
+    if (i === 0) return [jewel('goldMask'), jewel('goldNecklace'), jewel('goldAnkh'), { kind: 'robe', uid: newUid(), magic: true, color: 0xe8c040, named: 'Мантия Фараона', tier: 'strong', mag: 1000, magMax: 1000, strong: ['Hellfire', 'LightningStrike'] }];
+    if (i === 1) return [jewel('goldScarab'), jewel('goldBracelet'), jewel('goldNecklace'), jewel('goldScarab'), { kind: 'crystal', uid: newUid(), count: randInt(r, 3, 6) }];
+    return [jewel('goldIdol'), jewel('goldBracelet'), rollKeyItem(r), rollKeyItem(r), { kind: 'potion', uid: newUid(), rec: 'heal', color: 0xd8a82a }];
 }
 
 export function rollDragonLoot(r = Math.random) {
@@ -934,6 +957,7 @@ function describeItemBase(it) {
             return { title: `🧪 ${r ? r.name : 'Зелье'}`, color: it.color ?? 0x9fd8ff, lines: [(it.count || 1) > 1 ? `Колб: <b>${it.count}</b> (до 10 в одной ячейке)` : '', r ? r.desc : 'Неизвестное зелье', r?.effect ? 'Поднесите ко рту и подержите — выпьете (колба останется)' : 'Пока его не выпить'].filter(Boolean) };
         }
         case 'web': return { title: '🕸️ Связка паутины', color: 0xf2f2ff, lines: ['Осталась от гигантской паучихи', 'Ингредиент зелья невидимости: бросьте в кипящий котёл'] };
+        case 'goldScarab': case 'goldAnkh': case 'goldBracelet': case 'goldNecklace': case 'goldMask': case 'goldIdol': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xffd45a, lines: [jewelText(it.kind), `Цена у купца: около <b>${JEWEL_VALUE[it.kind]}</b> монет`] };
         case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         case 'armor': case 'robe': return describeArmor(it);
@@ -1242,6 +1266,7 @@ function buildItemModel(it) {
     switch (it.kind) {
         case 'wand': return it.united ? unitedWandModel(it) : it.dragon ? dragonWandModel() : wandModel(it);
         case 'dragonEgg': return dragonEggModel(it.of);
+        case 'goldScarab': case 'goldAnkh': case 'goldBracelet': case 'goldNecklace': case 'goldMask': case 'goldIdol': return jewelModelScaled(it.kind);
         case 'scroll': return scrollModel(it);
         case 'shield': return shieldModel(it);
         case 'backpack': return backpackModel(it);

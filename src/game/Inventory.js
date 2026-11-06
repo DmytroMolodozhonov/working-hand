@@ -134,7 +134,7 @@ function pocketHintMesh() {
 }
 /** How many things go on the back (the author: two cells, on the right like the armour's) */
 export const BACK_COUNT = 2;
-export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield', 'dragonEgg', 'iceRod']); // (a dragon's egg is too big for a pocket)
+export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield', 'dragonEgg', 'iceRod', 'goldMask', 'goldIdol']); // (a dragon's egg is too big for a pocket)
 
 /** The hand is over the shoulder, behind the head, and keeps still there. */
 export function behindBack(local, speed) {

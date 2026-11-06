@@ -91,7 +91,7 @@ export class HeroApply {
             return;
         }
         const iceApproach = () => { const P = data?.apart ? data.iceCastle?.plan : null; return P && !P.test ? queenApproach(P) : null; };
-        const t = ['tower', 'arena', 'village', 'magevillage', 'magehut', 'port', 'vampire'].includes(id) ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate, iceApproach, apart: !!data?.apart });
+        const t = ['tower', 'arena', 'village', 'magevillage', 'magehut', 'port', 'vampire', 'pyramids'].includes(id) ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate, iceApproach, apart: !!data?.apart });
         if (!t) { this._fail(`в этом мире такого места нет — вы на начальной площадке`, id); return; }
         this.pending.t = t;
         this._far(t);

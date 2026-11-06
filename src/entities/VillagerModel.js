@@ -36,7 +36,7 @@ export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'studen
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage']);
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
-export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife'];
+export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife', 'heka'];
 export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
@@ -1061,6 +1061,15 @@ function toolBoxes(kind) {
             b(B, 0.11, 0.05, 0.11, 0, 0.16, 0, GOLD_DARK);
             b(B, 0.06, 0.75, 0.06, 0, 0.55, 0, 0x6b4426);
             b(B, 0.07, 0.07, 0.07, 0, 0.96, 0, 0xe8e0c8);
+            break;
+        case 'heka': // Pharaoh Sandy's staff (PharaohLife.js): a long gilded shaft with bands of lapis, a shepherd's crook on top, a hanging flail's thongs
+            b(B, 0.1, 0.34, 0.1, 0, 0.0, 0, 0x3a2a14);
+            b(B, 0.075, 2.5, 0.075, 0, 1.2, 0, 0xd9a52a);
+            for (const y of [0.5, 1.2, 1.9]) b(B, 0.11, 0.09, 0.11, 0, y, 0, 0x2a4fa8);
+            b(B, 0.12, 0.08, 0.12, 0, 2.5, 0, 0xf0c649);
+            b(B, 0.075, 0.075, 0.42, 0, 2.62, -0.16, 0xd9a52a); // the crook: forward, then down
+            b(B, 0.075, 0.3, 0.075, 0, 2.5, -0.38, 0xd9a52a);
+            b(B, 0.05, 0.4, 0.05, 0.12, 2.3, 0.0, 0xc89a2a); b(B, 0.05, 0.4, 0.05, -0.12, 2.3, 0.0, 0xc89a2a); // the flail's thongs
             break;
         case 'wandMaster':
             b(B, 0.1, 0.3, 0.1, 0, 0.0, 0, 0x1c1410);

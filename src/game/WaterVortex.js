@@ -109,6 +109,7 @@ export const VORTEX_TARGETS = {
     T: { push: 'none', bubble: false, fill: false, carry: false, why: 'Тарон слишком тяжёл: шар не заберёт и не собьёт с ног, вода тушит на нём огонь, лагерь сердится на колдующего (Taron.hit)' },
     S: { push: 'none', bubble: false, fill: false, carry: false, why: 'птичка Спенсера слишком мала для шара: вода лишь вспугивает её (SpencerRules.SPENCER_TARGETS.water)' },
     G: { push: 'none', bubble: false, fill: false, carry: false, why: 'призрак бестелесный: вода проходит сквозь него, шар его не берёт — не действует' },
+    H: { push: 'knock', bubble: false, fill: false, carry: false, why: 'Фараон Песчаный, мумии и стражи: вода сбивает мумий и стражей с ног и будит спящих, фараона только качает; шар их не берёт — тела иссохшие, рассыпаются в брызгах (PharaohLife)' },
     V: { push: 'knock', bubble: false, fill: false, carry: false, why: 'граф Сракула и его стражи: вода сбивает с ног и будит графа, но шар их не берёт — граф обращается в туман-мышь, скелеты рассыпаются в нём (VampireLife)' },
     W: { push: 'none', bubble: false, fill: false, carry: false, why: 'титан — гора силы богов: вихрь его не поднимет и не собьёт; огненного (Венера) вода ранит вдвое — Titans.hit' },
     C: { push: 'knock', bubble: false, fill: false, carry: false, why: 'своё существо: вода сбивает с ног и тушит, шар его не берёт — у каждого своё тело (CustomCreatures.watered)' },
@@ -848,6 +849,7 @@ export class WaterVortex {
         else if (tk === 'C') g.customCreatures?.watered?.(cr, null, by); // (a creature of one's own)
         else if (tk === 'W') { g.titans?.hit?.(cr, 4, 'WaterVortex', by, 'Water'); return; } // (a titan: only the fire one feels it — TitanRules.titanResist)
         else if (tk === 'V') { g.creatureImpact?.apply(cr, { v: dir.clone().multiplyScalar(speed), by, kind: 'WaterVortex', noSlide: true, always: knock ? { down: 1.5 } : null }); g.vampire?.attacked?.(cr.pos || cr.position, by); } // (Count Sracula, his guards: knocked, he wakes)
+        else if (tk === 'H') { g.creatureImpact?.apply(cr, { v: dir.clone().multiplyScalar(speed), by, kind: 'WaterVortex', noSlide: true, always: knock ? { down: 1.5 } : null }); g.pharaoh?.attacked?.(cr.model?.group?.position, by); } // (Pharaoh Sandy, mummies, guards: knocked, a sleeper wakes)
         else if (tk === 'N') g.canaries?.hit?.(cr, 0, 'Water', by); // (a canary: water shoves it and angers the camp)
         else if (tk === 'T') g.tarons?.hit?.(cr, 0, 'Water', by); // (a Taron: water puts his fire out, angers the camp)
         else if (tk === 'S') { g.spencers?.hit?.(cr, 0, 'Water', by); return; } // (the invisible bird: water startles it, no harm)

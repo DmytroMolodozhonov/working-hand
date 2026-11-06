@@ -48,6 +48,7 @@ export function eachBody(g, fn, at = null) {
     for (const c of g.iceCastle?.list || []) if (!c.dead && c.model) fn('ice', c, c.model.position); // (the Ice Castle: IceQueen.iceDamage)
     for (const c of g.vampire?.targets?.() || []) fn('vampire', c, c.kind === 'count' ? c.pos : c.model.group.position); // (Count Sracula, his guards: VampireLife.hit)
     for (const c of g.titans?.targets?.() || []) fn('titan', c, c.pos); // (a titan: Titans.hit)
+    for (const c of g.pharaoh?.targets?.() || []) fn('pharaoh', c, c.model.group.position); // (Pharaoh Sandy, his mummies, guards: PharaohLife.hit)
     for (const p of g.plants?.near || []) if (!p.dead) fn('plant', p, new THREE.Vector3(p.x, p.y + 2, p.z)); // (telewilpins, carnivorous heads: PlantLife.plantDamage)
 }
 
@@ -79,6 +80,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'ice': g.iceCastle?.hit(c, dmg, spell, by); break;
         case 'vampire': g.vampire?.hit(c, dmg, spell, by); break;
         case 'titan': g.titans?.hit(c, dmg, spell, by); break;
+        case 'pharaoh': g.pharaoh?.hit(c, dmg, spell, by); break;
         case 'plant': g.plants?.hit(c, dmg, spell, by); break;
         default: break;
     }

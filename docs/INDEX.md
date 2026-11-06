@@ -168,6 +168,7 @@
 - `BeslanGrass.js` — «Трава Беслана»: the plant that only a hero who sees the invisible sees (the places and the shape: world/InvisibleFlora.js).
 - `Blackbeard.js` — Captain Black Moustache («капитан Чёрные Усы») and his black ship.
 - `VampireLife.js` / `VampireRules.js` — Count Sracula («граф Сракула»): the count, his 50 bats, 10 skeleton guards, the dark clouds over his land (rules pure, tests/unit/vampire.test.js); the castle on its crag — world/VampireCastle.js (gen 26); sounds — audio/VampireSounds.js.
+- `world/Pyramids.js` / `PharaohLife.js` / `PharaohRules.js` / `PharaohModels.js` / `PyramidItems.js` — three pyramids in the sand desert and Pharaoh Sandy (mummy boss, traps, torches lit by Fire/Inferno; tests/unit/pharaoh.test.js, pyramids.test.js; stand tools/pyramid-screenshots.mjs)
 - `BladeClash.js` — blade against blade (players fighting with swords / axes).
 - `Blame.js` — who do the people (villagers, knights, the king, wizards, sailors…) think did it? (pure logic: CastleLife and WizardLife ask it.)
 - `Bleeding.js` — a blade stuck in a body, blood, and «Rescue».
