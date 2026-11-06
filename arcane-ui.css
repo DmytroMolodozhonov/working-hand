@@ -168,31 +168,57 @@
 }
 
 /* ======================================================================================================================
- * THE SHAPES (ArcaneShapes.js, from the author's drawing): the window's hand-drawn outline and, in the main menu, the stage —
- * the section's panel whose left edge is one arc bulging over the buttons' ends.
+ * THE SHAPES (ArcaneShapes.js, from the author's drawing): one figure inside the window — the buttons fill the whole height on the
+ * left, one under another, and their right ends ARE the arc; the section's panel starts right at the arc. Nothing empty under them.
+ * The window's hand-drawn outline round it all.
  * ====================================================================================================================== */
 .ar-shaped { background: transparent !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
 .ar-shaped > .ar-frame { position: absolute; left: 0; top: 0; z-index: -2; pointer-events: none; overflow: visible; }
 .ar-shaped > .mu-ring.ar-masked { padding: 0; border-radius: 0; inset: 0;
     -webkit-mask-composite: source-over; mask-composite: add; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
-.ar-shaped::after { inset: 18px 22px !important; }
-/* the stage over the buttons' ends, under the section's own contents */
-#main-menu > .menu-container > .ar-stage { position: absolute; z-index: 2; pointer-events: none; overflow: visible; }
-#main-menu > .menu-container > .menu-side { position: relative; z-index: 1; }
-#main-menu > .menu-container > .tab-content { position: relative; z-index: 3; padding: 14px 18px 10px 12px; }
-#main-menu > .menu-container.ar-shaped { grid-template-columns: 290px minmax(0, 1fr); column-gap: 24px; padding: 14px 18px 22px 22px; }
-/* the buttons: rows of light, one under another, running under the arc (it cuts their ends — the drawing) */
-#main-menu .ar-shaped .tabs { background: none !important; border: none !important; padding: 4px 0 !important; gap: 0 !important; border-radius: 0 !important; overflow: visible; }
-#main-menu .ar-shaped .tab-btn {
-    border-radius: 16px 0 0 16px !important; padding: 15px 18px; margin: 0; font-size: 1.02rem;
-    border: none !important; border-bottom: 1px solid transparent !important;
-    color: #d9ceff !important;
-    background: linear-gradient(90deg, rgb(38, 24, 96), rgb(22, 13, 58)) padding-box,
-        linear-gradient(90deg, rgba(255, 215, 106, 0.55), rgba(167, 139, 255, 0.35) 50%, rgba(126, 232, 255, 0.2)) border-box !important;
-    transform: none !important;
+.ar-shaped::after { inset: 14px 18px !important; }
+
+@media (min-width: 601px) {
+    /* the grid: the name and the window's buttons on top; the figure (buttons + panel) — all the rest; the version — a thin line under it */
+    #main-menu > .menu-container.ar-shaped {
+        grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+        column-gap: 0; row-gap: 10px; padding: 18px 26px 12px 26px;
+    }
+    #main-menu .ar-shaped > .menu-side { display: contents; }
+    #main-menu .ar-shaped .brand { grid-column: 1; grid-row: 1; padding: 4px 6px 0; }
+    #main-menu .ar-shaped > .menu-top { grid-column: 2; grid-row: 1; }
+    #main-menu .ar-shaped .game-version-top { grid-column: 1 / -1; grid-row: 3; margin: 0; padding: 0 8px 0 46px; }
+    #main-menu .ar-shaped .win-note { grid-column: 1 / -1; grid-row: 3; justify-self: end; }
+    #main-menu .ar-shaped > .menu-side > .tabs {
+        grid-column: 1; grid-row: 2; position: relative; z-index: 2;
+        display: flex; flex-direction: column; gap: 0 !important; padding: 0 !important; margin: 0;
+        background: none !important; border: none !important; border-radius: 0 !important; overflow: visible; min-height: 0;
+    }
+    /* each button is a slice of the figure: an equal share of the height, its right end cut by the arc (clip-path from ArcaneShapes) */
+    #main-menu .ar-shaped .tab-btn {
+        flex: 1 1 0; min-height: 48px; width: 100%; margin: 0; padding: 0 22px; font-size: 1.14rem; letter-spacing: 0.3px;
+        display: flex; align-items: center; gap: 12px; border-radius: 0 !important; transform: none !important;
+        color: #d9ceff !important; border: none !important; box-shadow: none !important;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 40%, rgba(0, 0, 0, 0.18)),
+            linear-gradient(90deg, rgb(40, 25, 100), rgb(26, 15, 66)) !important;
+    }
+    #main-menu .ar-shaped .tab-btn:first-child { border-top-left-radius: 30px !important; }
+    #main-menu .ar-shaped .tab-btn:last-child { border-bottom-left-radius: 30px !important; }
+    /* the seams between the slices: threads of gold fading towards the arc (a background line — the ::after is the hover's sweep of light) */
+    #main-menu .ar-shaped .tab-btn + .tab-btn { background-image:
+        linear-gradient(90deg, rgba(255, 215, 106, 0.8), rgba(167, 139, 255, 0.5) 55%, rgba(126, 232, 255, 0.25)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 40%, rgba(0, 0, 0, 0.18)),
+        linear-gradient(90deg, rgb(40, 25, 100), rgb(26, 15, 66)) !important;
+        background-size: calc(100% - 14px) 1.5px, auto, auto !important; background-position: 14px 0, 0 0, 0 0 !important; background-repeat: no-repeat !important; }
+    #main-menu .ar-shaped .tab-btn:hover { color: #fff !important; background:
+        radial-gradient(60% 120% at 20% 50%, rgba(167, 139, 255, 0.35), transparent 70%),
+        linear-gradient(90deg, rgb(66, 42, 160), rgb(34, 34, 96)) !important; }
+    #main-menu .ar-shaped .tab-btn.active { color: #fff !important; background:
+        radial-gradient(70% 160% at 10% 0%, rgba(255, 255, 255, 0.35), transparent 50%), var(--ar-gem) !important; }
+    #main-menu .ar-shaped .tab-btn.active::before { left: 8px; }
+    /* the panel: its left edge is the same arc (the stage, drawn by ArcaneShapes); the section's contents on it */
+    #main-menu > .menu-container > .ar-stage { position: absolute; z-index: 1; pointer-events: none; overflow: visible; }
+    #main-menu > .menu-container.ar-shaped > .tab-content { grid-column: 2; grid-row: 2; position: relative; z-index: 3; padding: 16px 20px 12px 26px; }
 }
-#main-menu .ar-shaped .tab-btn:nth-child(even) { border-radius: 16px 0 0 16px !important; }
-#main-menu .ar-shaped .tab-btn:hover { color: #fff !important; background: linear-gradient(90deg, rgb(70, 46, 170), rgb(36, 40, 100)) padding-box,
-        linear-gradient(90deg, rgba(255, 215, 106, 0.8), rgba(167, 139, 255, 0.5) 50%, rgba(126, 232, 255, 0.3)) border-box !important; }
-#main-menu .ar-shaped .tab-btn.active { color: #fff !important; background: radial-gradient(70% 160% at 10% 0%, rgba(255, 255, 255, 0.35), transparent 50%), var(--ar-gem) !important; border-bottom-color: rgba(255, 230, 170, 0.8) !important; }
-@media (max-width: 600px) { #main-menu > .menu-container.ar-shaped { grid-template-columns: minmax(0, 1fr); } #main-menu .ar-shaped .tab-btn { border-radius: var(--ar-shape-leaf) !important; } }
+@media (max-width: 600px) { #main-menu > .menu-container > .ar-stage { display: none; } }

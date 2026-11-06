@@ -117,18 +117,31 @@ export class ArcaneShapes {
         el.style.clipPath = `path('${d}')`;
         const ring = el.querySelector(':scope > .mu-ring');
         if (ring) { const m = ringMask(w, h, d); ring.style.webkitMaskImage = ring.style.maskImage = m; ring.classList.add('ar-masked'); }
-        // the stage: the chosen section's panel, its left edge one big arc bulging over the buttons' ends
+        // the figure (the author's drawing): the buttons fill the height on the left and their right ends ARE one arc; the section's
+        // panel starts right at that arc. One arc for both: x(y) — in the container's coordinates.
         if (it.stage && it.content) {
-            const c = it.content, side = el.querySelector(':scope > .menu-side');
-            const one = getComputedStyle(el).gridTemplateColumns.split(' ').length < 2; // (a narrow window: one column — no arc)
-            it.stage.style.display = one ? 'none' : '';
-            if (one) return;
-            const B = side ? Math.min(78, Math.max(40, side.offsetWidth * 0.3)) : 60; // (the arc's depth)
-            const top = c.offsetTop - 8, left = c.offsetLeft - B - 4, sw = c.offsetWidth + B + 10, sh = c.offsetHeight + 14;
-            const half = sh / 2;
-            const lx = (y) => { const u = Math.max(-1, Math.min(1, (y - half) / (half - 4))); return 4 + B * (1 - Math.sqrt(1 - u * u)); };
-            const ds = outline(sw, sh, { inset: 4, rad: 28, amp: 2.2, seed: it.seed + 5, left: lx, step: 9 });
-            Object.assign(it.stage.style, { left: left + 'px', top: top + 'px', width: sw + 'px', height: sh + 'px' });
+            const c = it.content, tabs = el.querySelector('.tabs');
+            const wide = innerWidth > 600 && tabs && getComputedStyle(tabs).flexDirection === 'column';
+            it.stage.style.display = wide ? '' : 'none';
+            const btns = tabs ? [...tabs.querySelectorAll('.tab-btn')].filter((b) => b.offsetParent) : [];
+            if (!wide) { for (const b of btns) b.style.clipPath = ''; return; }
+            const yT = Math.min(tabs.offsetTop, c.offsetTop), yB = Math.max(tabs.offsetTop + tabs.offsetHeight, c.offsetTop + c.offsetHeight);
+            const xE = tabs.offsetLeft + tabs.offsetWidth; // (where the arc meets the top and the bottom)
+            const B = Math.min(96, tabs.offsetWidth * 0.32); // (its depth in the middle)
+            const mid = (yT + yB) / 2, half = (yB - yT) / 2, GAP = 5;
+            const arcX = (y) => { const u = Math.max(-1, Math.min(1, (y - mid) / half)); return xE - B * Math.sqrt(1 - u * u); };
+            // the buttons: each cut along the arc (its own clip-path in its own coordinates)
+            for (const b of btns) {
+                const bt = b.offsetTop, bh = b.offsetHeight, bl = b.offsetLeft, pts = ['0px 0px'];
+                for (let k = 0; k <= 10; k++) { const y = bt + bh * k / 10; pts.push(`${(arcX(y) - GAP - bl).toFixed(1)}px ${(y - bt).toFixed(1)}px`); }
+                pts.push(`0px ${bh}px`);
+                b.style.clipPath = `polygon(${pts.join(',')})`;
+            }
+            // the panel: from the arc to the right edge of the section, top and bottom with the buttons
+            const L = xE - B + GAP, R = c.offsetLeft + c.offsetWidth, sw = R - L + 2, sh = yB - yT;
+            const lx = (yl) => arcX(yl + yT) + GAP - L;
+            const ds = outline(sw, sh, { inset: 1, rad: 30, amp: 1.6, seed: it.seed + 5, left: lx, step: 8 });
+            Object.assign(it.stage.style, { left: L + 'px', top: yT + 'px', width: sw + 'px', height: sh + 'px' });
             it.stage.setAttribute('viewBox', `0 0 ${sw} ${sh}`);
             for (const p of it.stage._paths) p.setAttribute('d', ds);
         }
