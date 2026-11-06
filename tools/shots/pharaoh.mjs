@@ -15,9 +15,11 @@ export default async function (h) {
     c.pos.set(P.pharaoh.x + Math.cos(c.yaw) * 2.8, P.pharaoh.y - 2.0 + 1.5, P.pharaoh.z - Math.sin(c.yaw) * 2.8);
     await h.frames(30);
     h.bare();
-    h.view(c.model.group, { d: 5.5, up: 1.8, at: 2.4 });
-    await h.shot('1-pharaoh', { settle: 20 });
-    await h.shot('portrait', { to: 'assets/bosses/pharaoh.png', settle: 1 });
-    h.view(c.model.group, { d: 11, up: 3.5, at: 2.2 });
-    await h.shot('2-wide', { settle: 20 });
+    // the camera on the far side of him from the sarcophagus (the lid would be in front of his face), the chamber lit a little for the picture
+    const ux = Math.cos(c.yaw), uz = -Math.sin(c.yaw), hp = c.pos, look = [hp.x, hp.y + 3.0, hp.z];
+    h.cam([hp.x + ux * 5.2 - uz * 0.8, hp.y + 3.3, hp.z + uz * 5.2 + ux * 0.8], look);
+    await h.shot('1-pharaoh', { settle: 20, light: 2.2 });
+    await h.shot('portrait', { to: 'assets/bosses/pharaoh.png', settle: 1, light: 2.2 });
+    h.cam([hp.x + ux * 10 - uz * 3, hp.y + 5, hp.z + uz * 10 + ux * 3], [hp.x, hp.y + 2.2, hp.z]);
+    await h.shot('2-wide', { settle: 20, light: 2.2 });
 }
