@@ -358,7 +358,7 @@ export class Godhood {
             shafts.push(m);
         }
         // the halo round the whole hall: seen from far off in the sky, a second small sun over the land
-        const halo = new THREE.Mesh(ball, glowMat(0xffd27a, 0.35));
+        const halo = new THREE.Mesh(ball, glowMat(0xffd27a, 0.16));
         halo.position.set(S.CX, S.F + S.WALL * 0.6, S.CZ);
         halo.scale.setScalar(S.R * 2.2);
         root.add(halo);

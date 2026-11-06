@@ -286,12 +286,12 @@ export class VoxelWorld {
         const s = this.sunHall || 0;
         if (s <= 0) return;
         this.ambientLight.color.lerp(_sunAmb, s);
-        this.ambientLight.intensity += (1.15 - this.ambientLight.intensity) * s;
+        this.ambientLight.intensity += (0.55 - this.ambientLight.intensity) * s;
         this.hemiLight.color.lerp(_sunSky, s);
         this.hemiLight.groundColor.lerp(_sunGround, s);
-        this.hemiLight.intensity += (1.35 - this.hemiLight.intensity) * s;
+        this.hemiLight.intensity += (0.7 - this.hemiLight.intensity) * s;
         this.dirLight.color.lerp(_sunDir, s);
-        this.dirLight.intensity += (1.1 - this.dirLight.intensity) * s;
+        this.dirLight.intensity += (0.65 - this.dirLight.intensity) * s; // (warm and bright, never burnt white: the first try washed the hall out)
         if (this.scene.fog) {
             this.scene.fog.color.lerp(_sunFog, s);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.lerp(_sunFog, s);
