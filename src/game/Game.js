@@ -3921,7 +3921,8 @@ export class Game {
         zoo.add(makeItemModel(newMagicBackpack()), makeItemModel({ kind: 'backpack', uid: 'prewarm', color: 0x7a4a24, slots: 3 })); // (the golden backpack: its own materials — a shader at start, not in play)
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), ...(this.diabolos?.sampleModels() || []), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of VampireLife.samples()) zoo.add(m);
-        try { for (const m of Titans.samples()) zoo.add(m); } catch (e) { console.error('prewarm titans', e); } // (the seven titans' bodies, their fire, spikes, ray; a sample that fails never stops the entry into the world) // (Count Sracula's bats (their wing-beating shader), his coffin, his bat shape)
+        // (the titans are NOT warmed here: they live on the planets only, and painting their textures made the loading screen stall — a friend's
+        //  complaint 06.11. Titans.warm() readies one titan when its planet is reached, behind the burning air of the landing.)
         try { for (const m of PharaohLife.samples()) zoo.add(m); } catch (e) { console.error('prewarm pharaoh', e); } // (the pharaoh's locusts, darts, sarcophagus, wave ring)
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)

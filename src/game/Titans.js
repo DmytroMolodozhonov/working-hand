@@ -92,12 +92,32 @@ export class Titans {
         return L + 1;
     }
 
+    /**
+     * Ready one titan's body ahead (its textures painted, its shaders compiled) when the hero reaches its planet — never on the loading
+     * screen (the friend's stalling load, 06.11). Done once per look, in an idle moment; the body is kept for _build.
+     */
+    warm(id) {
+        const def = TITANS[id];
+        if (!def || this._warmed?.has(id)) return;
+        (this._warmed || (this._warmed = new Set())).add(id);
+        const run = () => {
+            try {
+                const g = this.game, m = titanModel(def.look);
+                (this._spare || (this._spare = new Map())).set(id, m);
+                if (g.renderer?.compile && g.camera) { const sc = new THREE.Scene(); sc.add(m); g.renderer.compile(sc, g.camera); sc.remove(m); }
+                if (!this._fxWarm && g.renderer?.compile && g.camera) { this._fxWarm = true; const sc = new THREE.Scene(); for (const x of Titans.samplesFx()) sc.add(x); g.renderer.compile(sc, g.camera); }
+            } catch (e) { console.warn('titan warm', id, e); }
+        };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 1500 }); else setTimeout(run, 0);
+    }
+
     // ------------------------------------------------------------------ in the world / out
     update(dt) {
         const g = this.game;
         if (!(dt > 0)) return;
         dt = Math.min(dt, 0.1);
         const realm = g.space?.realm;
+        for (const id of TITAN_IDS) if (realm === TITANS[id].planet && !this.isDead(id)) this.warm(id); // (on its planet: its body readied in an idle moment)
         const me = g.character?.group?.position;
         for (const id of TITAN_IDS) {
             const T = this.active.get(id), def = TITANS[id];
@@ -124,7 +144,8 @@ export class Titans {
 
     _build(id, h) {
         const g = this.game, def = TITANS[id];
-        const model = titanModel(def.look);
+        const model = this._spare?.get(id) || titanModel(def.look);
+        this._spare?.delete(id);
         const scale = def.look === 'worm' ? def.radius * 2 : def.height;
         if (def.look !== 'worm') model.scale.setScalar(scale);
         g.scene.add(model);
@@ -148,6 +169,7 @@ export class Titans {
         const T = this.active.get(id);
         if (!T) return;
         this.game.scene.remove(T.model);
+        if (T.mode !== 'dying') { T.model.rotation.set(0, 0, 0); (this._spare || (this._spare = new Map())).set(id, T.model); } // (kept for a return: never made twice)
         this.active.delete(id);
         this.list = this.list.filter((x) => x !== T);
     }
@@ -910,6 +932,10 @@ export class Titans {
     dispose() { for (const id of [...this.active.keys()]) this._drop(id); for (const f of this.fxList) this._endFx(f); this.fxList.length = 0; }
 
     /** Shapes and materials to compile on the loading screen (Game.prewarm). */
+    static samplesFx() {
+        const S = fxShapes();
+        return [new THREE.Mesh(S.ball, S.fireM), new THREE.Mesh(S.spike, S.iceM), new THREE.Mesh(S.spike, S.stoneM), new THREE.Mesh(S.cyl, S.rayM), new THREE.Mesh(S.ball, S.darkM)];
+    }
     static samples() {
         const S = fxShapes();
         return [...titanSamples(), new THREE.Mesh(S.ball, S.fireM), new THREE.Mesh(S.spike, S.iceM), new THREE.Mesh(S.spike, S.stoneM), new THREE.Mesh(S.cyl, S.rayM), new THREE.Mesh(S.ball, S.darkM)];
