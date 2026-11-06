@@ -152,11 +152,11 @@ export class AudacityLife {
     }
 
     // ------------------------------------------------------------------ people
-    _traits(v) {
-        this.life.fright._traits(v); // (brave, elder — from the seed: the same person is always the same)
+    _traits(v, pid = null) {
+        this.life.fright._traits(v); // (brave, elder — from the seed: the same person is always the same; `brave` is lowered when the player the crowd is gathered against drank the potion of fear — any player's: Dread.PERK)
         const E = v.entry || {};
         return {
-            role: v.role, trade: E.trade || null, female: !!E.female, brave: dreadedBrave(v.brave ?? 0.5, !!this.game.dread?.on(this.game.localId) && isWeakOne(v)), elder: !!v.elder, weak: isWeak(v), child: !!v.child, kid: !!v.kid,
+            role: v.role, trade: E.trade || null, female: !!E.female, brave: dreadedBrave(v.brave ?? 0.5, pid != null && !!this.game.dread?.on(pid) && isWeakOne(v)), elder: !!v.elder, weak: isWeak(v), child: !!v.child, kid: !!v.kid,
             hpFrac: v.maxHp > 0 ? v.hp / v.maxHp : 1, atStall: v.job === 'stall' || (v.role === 'seller'), tool: v.mobTool0 ?? v.model?.toolKind,
         };
     }
@@ -389,7 +389,7 @@ export class AudacityLife {
                 if (Math.max(Math.abs(v.x - def.x), Math.abs(v.z - def.z)) > def.zone + 12) continue;
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
                 if (d > MOB.R) continue;
-                const t = this._traits(v);
+                const t = this._traits(v, pid);
                 if (!fightsInMob(t)) continue;
                 if (!life._sees(v, pos) && d > 35 && !e.bellAt) continue; // (hears the bell: any; else sees him or is near)
                 cand.push({ v, t, d });

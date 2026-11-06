@@ -139,6 +139,7 @@ export class RemoteAvatar {
         if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)
         this.firm = !!s.ab; // (absolute steadiness: FirmRules.js)
         this.sees = !!s.sg; // (they see the invisible: Invisibles.seesInvisible)
+        this.perks = s.pk | 0; // (their lasting gifts that change the world — the potion of fear: Dread.PERK)
         if (Array.isArray(s.sk)) this.known = new Set(s.sk.slice(0, 400).map(String)); // (the scrolls they already know: a chest they open gives none of them)
         this.imperius = !!s.im; // («Империус»: their mind is in another body — their eyes burn white)
         this.monsterForm = Array.isArray(s.mo) ? s.mo : null; // (the monster form: drawn in update — MonsterTransform.applyRemoteMonster)

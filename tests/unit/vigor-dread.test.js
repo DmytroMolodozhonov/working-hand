@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RECIPES, matchRecipe, INGREDIENT_RU } from '../../src/game/Potions.js';
 import { Vigor, VIGOR } from '../../src/game/Vigor.js';
-import { Dread, DREAD, isWeakOne, dreadedChance, dreadedBrave } from '../../src/game/Dread.js';
+import { Dread, DREAD, PERK, perkBits, isWeakOne, dreadedChance, dreadedBrave } from '../../src/game/Dread.js';
 import { missVerdict, fightChance } from '../../src/game/WandererMind.js';
 import { fightsInMob } from '../../src/game/Audacity.js';
 import { captureLegacy, absorbLegacy, wipeHero } from '../../src/game/Legacy.js';
@@ -74,7 +74,13 @@ test('страх: «чаще бегут, чем нападают» — доля 
     for (let i = 0; i < 10000; i++) if (D.scares(weak, 'A', Math.random)) flee++;
     assert.ok(flee / 10000 > 0.5 && flee / 10000 < 0.9, `доля побегов ${flee / 10000}`);
     assert.equal(D.scares(strong, 'A', () => 0), false, 'рыцаря не пугает');
-    assert.equal(D.scares(weak, 'B', () => 0), false, 'другой игрок (хост не знает его флага)');
+    assert.equal(D.scares(weak, 'B', () => 0), false, 'другой игрок без зелья');
+    // чужой игрок выпил зелье: его компьютер шлёт флаг в позе (pk), и NPC хоста боятся ЕГО так же, как хостового героя
+    g.remotes = new Map([['B', { perks: perkBits({ dread: 1 }) }], ['C', { perks: perkBits({ vigor: 1 }) }]]);
+    assert.equal(D.scares(weak, 'B', () => 0), true, 'гость выпил — слабые боятся и его');
+    assert.equal(D.scares(weak, 'C', () => 0), false, 'у другого гостя иное зелье — страха нет');
+    assert.equal(D.scares(strong, 'B', () => 0), false, 'сильных не пугает и гость');
+    assert.equal(perkBits({ dread: 1, vigor: 1 }), PERK.DREAD | PERK.VIGOR);
 });
 
 test('страх: слабый маг отвечает заклинанием втрое реже; толпа смелеет меньше; сильные — как раньше', () => {

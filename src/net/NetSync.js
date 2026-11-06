@@ -48,6 +48,7 @@ import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 import { PlayerPresence, noticeText } from './PlayerPresence.js';
+import { perkBits } from '../game/Dread.js';
 import { netLog } from './Network.js';
 import { keepIn } from '../game/HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
@@ -378,6 +379,7 @@ export class NetSync {
                 sk: this._knownKeys(), // (the scrolls I already know: a chest I open gives me none of them — SpellBook.knownScroll)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
                 mo: g.monster?.netFlag(), // (the monster form: [size, how far changed, the roar] — MonsterForm.js)
+                pk: perkBits(g.bonus) || undefined, // (my lasting gifts that change the world: the potion of fear — the host's NPCs ask every player's, not only the host's: Dread.js)
             }, true);
         }
         // Water ball in my hand
