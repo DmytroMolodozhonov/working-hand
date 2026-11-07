@@ -55,7 +55,8 @@ export class SchoolLesson {
         if (this.done) return;
         this.t += dt;
         const me = this.game.character.group.position, here = this._inRoom(me), tea = this.teacher;
-        if (this.attended && !here && !this.left && this.phase !== 'outro') { // (walked out: indignant, still counted)
+        this._outT = here ? 0 : (this._outT || 0) + dt; // (out for a moment — thrown, a step through the door — is not leaving)
+        if (this.attended && this._outT > 4 && !this.left && this.phase !== 'outro') { // (walked out: indignant, still counted)
             this.left = true;
             this._say('Куда вы? Урок ещё не окончен! …Что ж, будем считать, что вы были.', 5);
             return this._finish();
@@ -156,7 +157,7 @@ export class SchoolLesson {
             if (this.t < (this._next || 0)) return;
             const tea = this.teacher;
             if (!tea || tea.dead || tea.noWand) { if (this.t > 40) this._outro(); return; }
-            this._say(T.spell === 'Jolt' ? 'Джолт!' : T.spell, 1.5);
+            this._say(T.word || T.spell, 1.5);
             const b = this.school.castAtHero?.(tea, T.spell);
             if (b) { this._bolt = b; this._boltAt = this.t; } else this._next = this.t + 1.5; // (not facing yet / no clear line: a moment later)
         }
