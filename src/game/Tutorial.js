@@ -34,6 +34,7 @@ export const TUT = {
     ZOMBIE_HP_FLOOR: 4, // the hero below this in the fight — the stage again
     WIZ_SITE: 'tutorial-wizard',
     MARKET: { id: 'tutorial-market', at: { x: 20, z: 0 }, coins: 150 }, // (the stall right of the hero: its buyer's place ~(20, 3.5))
+    VOICE_WAIT: 25, // s a piece waits for the voices to load (the first start) — then it is only written
     SAY_MAX: 110, // chars: a longer line is told in pieces (the voice gets lost in long ones — the author)
 };
 
@@ -284,7 +285,7 @@ export class Tutorial {
         if (this.ctx.lightT > 0) return;
         this.ctx.lightT = 2;
         const b = this._brightness();
-        if (b != null && b < 55 && !this.ctx.toldDark) { this.ctx.toldDark = true; this._narrate('Слишком темно: камера плохо видит. Включите свет. Лучше, чтобы он падал на вас спереди, а не из окна за спиной.'); }
+        if (b != null && b < 55 && !this.ctx.toldDark) { this.ctx.toldDark = true; this._narrate('Слишком темно: камера плохо видит. Включите свет. Лучше, чтобы он падал на вас спереди, а не из окна за спиной.', false); }
     }
     _looked(kind) {
         const h = this.game.smoothHead;
@@ -294,7 +295,7 @@ export class Tutorial {
         c.max = Math.max(c.max ?? 0, kind === 'side' ? h.yaw : h.pitch);
         // (the body turned instead of the head: told once)
         const body = this._pose()?.bodyRotation;
-        if (Number.isFinite(body)) { c.body0 ??= body; if (Math.abs(body - c.body0) > 0.45 && !c.toldBody) { c.toldBody = true; this._narrate('Не поворачивайте туловище — только голову.'); } }
+        if (Number.isFinite(body)) { c.body0 ??= body; if (Math.abs(body - c.body0) > 0.45 && !c.toldBody) { c.toldBody = true; this._narrate('Не поворачивайте туловище — только голову.', false); } }
         return kind === 'side' ? c.max > 0.4 && c.min < -0.4 : c.max > 0.3 && c.min < -0.25;
     }
     _setHand(text) {
@@ -489,11 +490,13 @@ export class Tutorial {
     update(dt) {
         if (!(dt > 0)) return;
         this._dt = dt;
+        this._narrStep(dt);
+        if (this._failT > 0 && this.talking) return; // (the failure's words first, then the step again)
         if (this._failT > 0) { this._failT -= dt; if (this._failT <= 0) this._next(); return; }
         if (this.done) return;
         const st = this._cur();
         if (!st) return;
-        this.t += dt;
+        if (!this.talking) this.t += dt; // (a step's time — its waits and hints — counts from the end of its words: never ahead of the voice)
         this._placeT = (this._placeT || 0) - dt;
         if (this._placeT <= 0) { this._placeT = 0.3; this._place(); }
         this._modeT = (this._modeT || 0) - dt;
@@ -506,40 +509,78 @@ export class Tutorial {
         let why = null;
         try { why = st.fail?.() || null; } catch { why = null; }
         if (why) { this._fail(why); return; }
-        if (st.hint && !this.hinted && this.t > TUT.HINT_AFTER) { this.hinted = true; this._narrate(st.hint); }
-        if (st.hint && this.hinted && this.t > TUT.HINT_AFTER * 2.5) { this.t = TUT.HINT_AFTER; this._narrate(st.hint); } // (again, now and then)
+        if (st.hint && !this.hinted && this.t > TUT.HINT_AFTER) { this.hinted = true; this._narrate(st.hint, false); }
+        if (st.hint && this.hinted && this.t > TUT.HINT_AFTER * 2.5) { this.t = TUT.HINT_AFTER; this._narrate(st.hint, false); } // (again, now and then)
     }
 
     // ------------------------------------------------------------------ the narrator and the screen
-    _narrate(text) {
-        const g = this.game;
-        if (this._sub) {
-            this._sub.innerHTML = '<span class="tut-badge"></span><span class="tut-text"></span>';
-            this._sub.querySelector('.tut-text').textContent = text;
-            this._sub.classList.remove('tut-in'); void this._sub.offsetWidth; this._sub.classList.add('tut-in');
-        }
-        this._narrAt = typeof performance !== 'undefined' ? performance.now() : 0;
-        this._talkUntil = (typeof performance !== 'undefined' ? performance.now() : 0) + 600 + text.length * 70; // (no voice: as long as it takes to read it out)
-        this._mode(true);
+    /**
+     * The narrator says `text`: in pieces of whole sentences, one after another, each written on the screen the moment its voice
+     * starts (never ahead of the voice — the author), each waiting for the voice to be ready (the very first line was lost while
+     * the voices loaded). `replace` (a new step, a failure): what the old step still had to say is dropped (the piece being said
+     * ends); a hint or a remark is added after. No voice (off, none): the words are shown for as long as it takes to read them.
+     */
+    _narrate(text, replace = true) {
         this._said = text;
-        const talk = g.castleLife?.talk, sp = talk?.speech;
-        try {
-            if (sp?.supported) {
-                if (!sp.neural?.ready) sp.preload?.();
-                // (a long line in pieces of whole sentences: the voice gets lost in a long one — the author)
-                splitSay(text).forEach((piece, i) => sp.say(piece, { voiceKey: TUT.VOICE_KEY, role: 'narrator', female: true, volume: 1, reply: true, append: i > 0 }));
-            }
-        } catch (e) { /* the words are written anyway */ }
+        if (replace) this._q = [];
+        (this._q || (this._q = [])).push(...splitSay(text));
+        this._pump();
+        this._mode(true);
     }
+    _speech() { const sp = this.game.castleLife?.talk?.speech; return sp && sp.supported && sp.enabled !== false ? sp : null; }
+    _clockNow() { return this._clock || 0; }
+    _subText(piece) {
+        if (!this._sub) return;
+        this._sub.innerHTML = '<span class="tut-badge"></span><span class="tut-text"></span>';
+        this._sub.querySelector('.tut-text').textContent = piece;
+        this._sub.classList.remove('tut-in'); void this._sub.offsetWidth; this._sub.classList.add('tut-in');
+        this._m = null; this._mode(true);
+    }
+    /** The next piece, if nothing is being said. */
+    _pump() {
+        if (this._talking || !this._q?.length) return;
+        const piece = this._q[0], now = this._clockNow(), sp = this._speech();
+        const silent = () => { this._q.shift(); this._talking = true; this._subText(piece); this._talkEnd = now + 0.6 + piece.length * 0.065; };
+        if (!sp) { silent(); return; }
+        if (sp.neuralUsable && !sp.neural?.ready) { // (the voices still loading: the piece waits — at most VOICE_WAIT, then it is only written)
+            sp.preload?.();
+            this._waitFrom ??= now;
+            if (now - this._waitFrom < TUT.VOICE_WAIT) { this._waiting = true; return; }
+            silent(); return;
+        }
+        this._waiting = false; this._waitFrom = null;
+        this._q.shift();
+        this._talking = true;
+        this._shown = false;
+        const tok = (this._tok = (this._tok || 0) + 1);
+        this._talkEnd = now + 3 + piece.length * 0.14; // (a guard: the voice never told its end)
+        this._showBy = now + 2.5; // (the voice is slow to start: the words are shown anyway)
+        this._piece = piece;
+        let ok = false;
+        try {
+            ok = sp.say(piece, {
+                voiceKey: TUT.VOICE_KEY, role: 'narrator', female: true, volume: 1, reply: true,
+                onStart: () => { if (tok === this._tok && !this._shown) { this._shown = true; this._subText(piece); } },
+                onEnd: () => { if (tok !== this._tok) return; this._talking = false; if (!this._shown) { this._shown = true; this._subText(piece); } this._pump(); },
+            });
+        } catch { ok = false; }
+        if (!ok && this._talking && tok === this._tok) { this._talking = false; this._q.unshift(piece); this._waitFrom = now - TUT.VOICE_WAIT; this._pump(); } // (no voice for it: only written)
+    }
+    /** (each frame) the narrator's clock: guards, the voice that finished loading. */
+    _narrStep(dt) {
+        this._clock = (this._clock || 0) + dt;
+        const now = this._clock;
+        if (this._talking) {
+            if (!this._shown && this._showBy && now > this._showBy) { this._shown = true; this._subText(this._piece); }
+            if (now > this._talkEnd) { this._talking = false; this._tok = (this._tok || 0) + 1; this._pump(); }
+        } else if (this._q?.length) this._pump();
+    }
+    get talking() { return !!(this._talking || this._q?.length); }
 
     /** The narrator's words: «🔊 Слушайте» while he speaks, «✋ Ваш ход» (green) when the step waits for the player's deed. */
     _mode(force = false) {
         if (!this._sub) return;
-        const sp = this.game.castleLife?.talk?.speech, now = performance.now();
-        const voice = !!(sp && ((sp._current && sp._current.voiceKey === TUT.VOICE_KEY) || sp._pending?.opts?.voiceKey === TUT.VOICE_KEY));
-        // (the voice is being made the first moments; a voice heard before is trusted — else the time to read it out)
-        const talking = voice || now < (this._narrAt || 0) + 1500 || (now < (this._talkUntil || 0) && !(sp?.supported && this._heardVoice));
-        if (voice) this._heardVoice = true;
+        const talking = this.talking;
         const act = !talking && !!this._cur()?.act && !this.done && !(this._failT > 0);
         const m = act ? 'act' : 'listen';
         if (!force && m === this._m) return;

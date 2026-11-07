@@ -116,7 +116,7 @@ test('a player walked through every stage, step by step, to the end', () => {
         if (/«Экспеллиармус»/.test(txt)) T.ctx.wizDown = true;
         if (/«Фрозен»/.test(txt)) for (const z of T.zombies) z.isFrozen = true;
         run(st.done && /wait/.test('') ? 0 : 1);
-        if (at() === before) run(16); // (a narrator's pause)
+        if (at() === before) run(45); // (the narrator speaks, then the step's pause)
         if (at() === before && !T.done) assert.fail(`stuck at ${before}: ${txt.slice(0, 60)}`);
     }
     assert.ok(T.done, 'the end');
@@ -140,4 +140,24 @@ test('a dropped wand takes the step back, the wand given again; the hero never d
     assert.ok(g.inventory.slots.some((s) => s?.kind === 'wand'), 'the wand back in the pocket');
     assert.ok(!loose.has('w'));
     assert.ok(T.intercept());
+});
+
+test('the narrator: the first line waits for the voices to load (it was lost), the step\'s time starts after the words', () => {
+    const { g } = fake();
+    const said = [];
+    const sp = { supported: true, enabled: true, neuralUsable: true, neural: { ready: false }, preload() {}, say(text, o) { said.push(text); this.cur = o; return true; } };
+    g.castleLife = { talk: { speech: sp } };
+    const T = new Tutorial(g);
+    for (let i = 0; i < 30; i++) T.update(0.1);
+    assert.equal(said.length, 0, 'nothing said while the voices load');
+    assert.equal(T.t, 0, 'the step waits for its words');
+    sp.neural.ready = true;
+    T.update(0.1);
+    assert.equal(said.length, 1);
+    assert.match(said[0], /^Добро пожаловать/, 'the very first line is said, not skipped');
+    sp.cur.onStart(); sp.cur.onEnd();
+    assert.equal(said.length, 2, 'the next piece only after the first ended');
+    sp.cur.onStart(); sp.cur.onEnd();
+    T.update(0.1);
+    assert.ok(T.t > 0 && !T.talking, 'the step\'s time runs once the words are said');
 });
