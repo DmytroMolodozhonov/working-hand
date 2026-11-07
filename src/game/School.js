@@ -70,6 +70,7 @@ export class School {
         // the year: from the record kept («Продолжить учёбу») or a new one — then the arrival first
         const kept = game.config?.schoolContinue ? loadRecord(this._store()) : null;
         this._rec = kept && kept.arrived ? kept : newRecord();
+        if (this._rec.eve) this._rec.eve = false; // (left on the arrival's evening: the morning of day 1)
         this._beds();
         if (this._rec.arrived) { this.phase = 'free'; this.t = 0; this._morning(true); }
         else this._placeHero(this.plan.arrive);
@@ -353,7 +354,11 @@ export class School {
      */
     _free(dt) {
         const r = this.record, g = this.game;
-        if (!r.arrived) { r.arrived = true; this._applyRecord(); this._dayLesson = lessonOfDay(r.day)?.id || null; this.dayT = 0; this._save(); }
+        if (!r.arrived) { // (after the Director's speech: the evening of the arrival — the first lesson is tomorrow, «Завтра начинается учёба»)
+            r.arrived = true; r.eve = true; this._applyRecord(); this._dayLesson = null; this.dayT = 0; this._save();
+            g.hud?.setVoice?.('🌙 Вечер первого дня. Ваша спальня — в южном крыле, справа от ворот: выберите кровать и ложитесь спать — утром первый урок.', true);
+            this._freeSaid = true;
+        }
         this.dayT = (this.dayT || 0) + dt;
         if (this.lesson && !this.lesson.done) return this.lesson.update(dt);
         if (this.lesson?.done) {
@@ -376,6 +381,7 @@ export class School {
     /** The night passes: the next day (or the year's end). */
     _nextDay() {
         const r = this.record;
+        if (r.eve) { r.eve = false; this._save(); this.game.hud?.toast?.('🌙 Ночь прошла…', 2500); this._morning(); return; } // (the arrival's night: day 1 begins)
         if (r.day >= yearLength()) { r.done = true; this._save(); this.game.hud?.setVoice?.('🎓 Учебный год окончен! Выпускной и путь в новый мир — скоро.', true); this._sleepT = -1e9; return; }
         r.day++;
         this._save();

@@ -15,7 +15,7 @@ export default async function (h) {
     g.character.group.position.set(P.centre.x, P.F + 3, (H.z0 + H.z1) / 2);
     h.cam([P.centre.x + 8, P.F + 5, H.z1 - 4], [P.centre.x, P.F + 11, H.z0 + 8]); await h.shot('0-hall-candles', { settle: 60 });
     window.__shotCam = null;
-    S.phase = 'free'; S.t = 9;
+    S.phase = 'free'; S.record.arrived = true; S._applyRecord(); S._dayLesson = 'def1'; S.dayT = 9; // (the morning of day 1: the lesson at once)
     const t0 = performance.now();
     let last = '', shots = {};
     while (performance.now() - t0 < 1200000) {
