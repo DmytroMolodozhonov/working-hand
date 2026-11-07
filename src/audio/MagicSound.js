@@ -152,3 +152,36 @@ export function passageStop() {
     Q.out.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
     setTimeout(() => { for (const x of Q.osc) try { x.o.stop(); } catch (e) { /* gone */ } try { Q.lfo.stop(); } catch (e) { /* gone */ } }, 2000);
 }
+
+/** «Ва-ва-ва-ваааа»: a sad trombone — four falling notes, the last one long and wobbling (synthesised: a buzzing reed through a closing «wah»). */
+export function sadTrombone() {
+    try {
+        const ctx = ac(); // (the menu's own sound: the game's effects slider — vol())
+        if (!ctx) return;
+        const out = ctx.createGain(); out.gain.value = 0.32 * Math.max(0.15, vol() * 2); out.connect(master);
+        const notes = [[293.7, 0.42], [277.2, 0.42], [261.6, 0.42], [246.9, 1.5]]; // (D4 → C#4 → C4 → B3, the last held)
+        let t = ctx.currentTime + 0.05;
+        notes.forEach(([f, d], i) => {
+            const last = i === notes.length - 1;
+            const o = ctx.createOscillator(), o2 = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+            o.type = 'sawtooth'; o2.type = 'square'; o.frequency.value = f; o2.frequency.value = f * 0.5;
+            const g2 = ctx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(lp);
+            o.connect(lp); lp.connect(g); g.connect(out);
+            lp.type = 'lowpass'; lp.Q.value = 6;
+            // the «wah»: the mute opens and closes on each note
+            lp.frequency.setValueAtTime(350, t); lp.frequency.linearRampToValueAtTime(1500, t + 0.12); lp.frequency.linearRampToValueAtTime(500, t + d * 0.9);
+            g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9, t + 0.05); g.gain.setValueAtTime(0.9, t + d * 0.7); g.gain.linearRampToValueAtTime(0, t + d);
+            o.frequency.setValueAtTime(f * 1.03, t); o.frequency.linearRampToValueAtTime(f, t + 0.08); // (a little scoop up into it)
+            if (last) { // (the long one wobbles and sags)
+                const lfo = ctx.createOscillator(), lg = ctx.createGain();
+                lfo.frequency.setValueAtTime(5, t); lfo.frequency.linearRampToValueAtTime(7, t + d);
+                lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * 0.035, t + 0.4);
+                lfo.connect(lg); lg.connect(o.frequency);
+                o.frequency.linearRampToValueAtTime(f * 0.94, t + d);
+                lfo.start(t); lfo.stop(t + d + 0.05);
+            }
+            o.start(t); o2.start(t); o.stop(t + d + 0.05); o2.stop(t + d + 0.05);
+            t += d + 0.04;
+        });
+    } catch { /* no sound: the devil is enough */ }
+}

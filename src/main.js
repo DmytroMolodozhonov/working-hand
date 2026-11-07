@@ -48,6 +48,7 @@ import { WORLD_GEN } from './world/Terrain.js';
 import { STAGE_TITLES as TUT_STAGES } from './game/Tutorial.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, SCHOOL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
+import { sadTrombone } from './audio/MagicSound.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
 import { hookAllLog, allLog } from './core/AllLog.js';
 import { watchServer } from './ui/ServerLost.js';
@@ -1291,39 +1292,6 @@ function startTutorial(cont = true) {
     startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, tutorialFrom: only ? 0 : from, tutorialOnly: only, map: null, worldName: 'Обучение' }); // (a small bounded map, never saved — Tutorial.js)
 }
 
-/** «Ва-ва-ва-ваааа»: a sad trombone — four falling notes, the last one long and wobbling (synthesised: a buzzing reed through a closing «wah»). */
-function sadTrombone() {
-    try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        const ctx = sadTrombone.ctx || (sadTrombone.ctx = new AC());
-        ctx.resume?.();
-        const out = ctx.createGain(); out.gain.value = 0.32; out.connect(ctx.destination);
-        const notes = [[293.7, 0.42], [277.2, 0.42], [261.6, 0.42], [246.9, 1.5]]; // (D4 → C#4 → C4 → B3, the last held)
-        let t = ctx.currentTime + 0.05;
-        notes.forEach(([f, d], i) => {
-            const last = i === notes.length - 1;
-            const o = ctx.createOscillator(), o2 = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
-            o.type = 'sawtooth'; o2.type = 'square'; o.frequency.value = f; o2.frequency.value = f * 0.5;
-            const g2 = ctx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(lp);
-            o.connect(lp); lp.connect(g); g.connect(out);
-            lp.type = 'lowpass'; lp.Q.value = 6;
-            // the «wah»: the mute opens and closes on each note
-            lp.frequency.setValueAtTime(350, t); lp.frequency.linearRampToValueAtTime(1500, t + 0.12); lp.frequency.linearRampToValueAtTime(500, t + d * 0.9);
-            g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9, t + 0.05); g.gain.setValueAtTime(0.9, t + d * 0.7); g.gain.linearRampToValueAtTime(0, t + d);
-            o.frequency.setValueAtTime(f * 1.03, t); o.frequency.linearRampToValueAtTime(f, t + 0.08); // (a little scoop up into it)
-            if (last) { // (the long one wobbles and sags)
-                const lfo = ctx.createOscillator(), lg = ctx.createGain();
-                lfo.frequency.setValueAtTime(5, t); lfo.frequency.linearRampToValueAtTime(7, t + d);
-                lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * 0.035, t + 0.4);
-                lfo.connect(lg); lg.connect(o.frequency);
-                o.frequency.linearRampToValueAtTime(f * 0.94, t + d);
-                lfo.start(t); lfo.stop(t + d + 0.05);
-            }
-            o.start(t); o2.start(t); o.stop(t + d + 0.05); o2.stop(t + d + 0.05);
-            t += d + 0.04;
-        });
-    } catch { /* no sound: the devil is enough */ }
-}
 
 /**
  * The first time ever a game is started or a server joined (the author 07.11): a window asks «Вы уже прошли обучение?» —

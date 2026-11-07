@@ -1389,6 +1389,23 @@ export class SoundManager {
 
     // --------------------------------------------- «Create a House» (HouseMagic.js)
     /** A short bright sparkle of magic (a spell takes hold); at a place it fades with the distance. */
+    /** A rising bell arpeggio (the tutorial's bright reminder — TutorialNudge): a few oscillators on the effects bus, nothing to synthesize ahead. */
+    playChime() {
+        try {
+            const ctx = this.context, bus = this.effectsGain;
+            if (!ctx || !bus) return;
+            const t0 = ctx.currentTime + 0.02;
+            [659.3, 830.6, 987.8, 1318.5, 1661.2].forEach((f, i) => {
+                for (const [mul, vol] of [[1, 0.16], [2.01, 0.05], [3.02, 0.025]]) {
+                    const o = ctx.createOscillator(), gn = ctx.createGain(), t = t0 + i * 0.11;
+                    o.type = 'sine'; o.frequency.value = f * mul;
+                    gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(vol, t + 0.012); gn.gain.exponentialRampToValueAtTime(0.0008, t + 1.1);
+                    o.connect(gn); gn.connect(bus); o.start(t); o.stop(t + 1.15);
+                }
+            });
+        } catch { /* no sound: the words are enough */ }
+    }
+
     playMagic(position = null, volume = 1) {
         if (!this.enabled || !this.context) return;
         if (!this.sounds.magic) this.sounds.magic = this._synthChime([880, 1320, 1760], 0.9, 6);
