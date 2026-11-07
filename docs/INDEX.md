@@ -621,6 +621,8 @@
 - `SeeThroughFx.js` — the window of «Visible Godi» (the rules: game/VisibleGodi.js; the steam itself: SteamFx.js).
 - `SpellManager.js` — voice spells.
 - `SteamFx.js` — the steam of «Visible Godi» as everybody sees it (the rules: game/VisibleGodi.js).
+- `RainSummon.js` — «Let it rain»: the calling (a beam that follows the wand, a gathering cloud deck, rings of shock, curtains of rain, bolts; blood palette in hell) — modelled on SunBeam.js
+- `RainDouse.js` — the rain puts fires out under the open sky (blocks, trees, campfires, burning bodies, Inferno, Fire Maxima, Hellfire, fire serpent); in hell the rain is blood and puts nothing out; tests/unit/rain-douse.test.js
 - `Storm.js` — the weather of «Lightning Strike» and «Let it rain».
 - `SunBeam.js` — «To the Sun»: a golden beam from the raised hand into the sky, the clouds part round it in a widening bright ring, sun rays pour down and the rain dies away. Everybody near sees it (the spell is sent to all).
 - `TaronModel.js` — the look of the Tarons («Тароны», Taron.js / TaronRules.js): paunchy, fat, reddish men with horns, TWICE a man's size.

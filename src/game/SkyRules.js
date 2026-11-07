@@ -120,6 +120,7 @@ export const skyMessage = (why) => SKY_WHY[why] || SKY_WHY.roof;
 export function skyBlockFor(game, name) {
     const r = SKY_SPELLS[name];
     if (!r || !r.needs) return null;
+    if (name === 'LetItRain' && game?.hellGate?.inHell) return null; // (hell's clouds are called too: a blood rain — RainDouse.js)
     if (game?.space?.offEarth) return null; // (космос и планеты: Space.spellBlocked)
     const p = game?.character?.group?.position;
     if (!p) return null;

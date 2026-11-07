@@ -566,7 +566,7 @@ export class SpellManager {
             case 'BrainrotMaxima': this.castBrainrot(o, direction.clone(), true); break; // (the same rings, golden and wider: at a dragon)
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o, casterId, handSide); break; // (the beam goes with that player's wand)
-            case 'LetItRain': this.castLetItRain(o, casterId); break;
+            case 'LetItRain': this.castLetItRain(o, casterId, handSide); break;
             case 'Tornado': this.castTornado(o, direction.clone(), casterId, handSide); break; // (the direction is the spout's PLACE {x, 0, z} — never normalised: it came down by the world's middle, far from anyone — the author: «не появился»)
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
@@ -819,25 +819,8 @@ export class SpellManager {
      * «Let it rain»: a silvery-blue stream of magic rises from the hand (the wand) high
      * into the sky, a ring of sparks spreads up there — and the clouds gather into rain.
      */
-    castLetItRain(origin, casterId) {
-        const top = _a.copy(origin).add(_b.set(0, 60, 0));
-        this.fx.straightBeam(origin, top, 0.09, 0x9fd4ff, 0.85, 1.6, null, THREE.AdditiveBlending);
-        this.fx.straightBeam(origin, top, 0.3, 0x5f8fff, 0.35, 1.6, null, THREE.AdditiveBlending);
-        this.fx.lightFlash(origin, 0x9fd4ff, 4, 0.5, 30);
-        // sparks spiral up along the stream
-        for (let i = 0; i < 70; i++) {
-            const a = i * 0.7, r = 0.25 + Math.random() * 0.25;
-            _c.set(Math.cos(a) * r * 2, 14 + Math.random() * 16, Math.sin(a) * r * 2);
-            this.fx.spark(origin, i % 3 ? 0xbfe6ff : 0xffffff, 0.1, _c, 1.2 + Math.random() * 0.8);
-        }
-        // a ring of light opens high above (where the clouds will be)
-        const ringAt = origin.clone().setY(origin.y + 26);
-        for (let i = 0; i < 48; i++) {
-            const a = (i / 48) * Math.PI * 2;
-            _c.set(Math.cos(a) * 9, 0.5, Math.sin(a) * 9);
-            this.fx.spark(ringAt, 0xcfe8ff, 0.22, _c, 1.6);
-        }
-        this.hooks.rain?.(origin, casterId);
+    castLetItRain(origin, casterId, handSide) {
+        this.hooks.rain?.(origin, casterId, handSide); // (the picture is RainSummon.js — a beam that follows the wand, gathering clouds, curtains of rain)
     }
 
     /**

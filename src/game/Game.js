@@ -113,6 +113,8 @@ import { Settling } from '../world/Collapse.js';
 import { prepareStructure } from '../world/Structure.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
+import { RainSummon } from '../fx/RainSummon.js';
+import { RainDouse } from './RainDouse.js';
 import { SunContest } from './SunContest.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { divineGlow } from '../entities/DivineSwordModel.js';
@@ -185,7 +187,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { HELL_FROM_GEN } from '../world/HellMap.js';
+import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
@@ -580,7 +582,7 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin, by, side) => this.sun?.cast(origin, by, side),
             tornado: (from, at, casterId, side) => this.oceanStorm?.call(from, at, casterId, side), // («Tornado»: the sky turns, then the spout comes down there — OceanStorm.call)
-            rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
+            rain: (o, casterId, side) => { this.rainFx?.cast(o, casterId === 'local' ? this.localId : casterId, side, inHell(o.x, o.z)); this.storm?.startRain(); }, // («Let it rain»: the whole world, everybody sees it)
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.titans?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.pharaoh?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
@@ -750,6 +752,8 @@ export class Game {
         this.underwaterLight = new UnderwaterLight(this); // the light under the water: its colour by the depth, the sun's shafts, the marine snow, the caustics (UnderwaterLight.js)
         this.seaFloor = new SeaFloor(this); // the sea's bottom: kelp, seagrass, corals, glowing anemones and lilies, the fish schools (SeaFloor.js)
         this.oceanStorm = new OceanStorm(this); // the storms over the sea: rain, lightning, waterspouts (OceanStorm.js — the wind's, SeaWind.js)
+        this.rainFx = new RainSummon(this); // «Let it rain»: the beam, the gathering clouds, the curtains of rain (RainSummon.js)
+        this.rainDouse = new RainDouse(this); // the rain puts fires out — all of them (not in hell: its rain is blood — RainDouse.js)
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
         this.sunContest = new SunContest(this); // …and against the black clouds of the gargoyle ritual it fights them (SunContest.js)
         this.coinDeal = new CoinDeal(this); // coins come out of the pouch only when buying or selling (CoinDeal.js)
@@ -3190,8 +3194,7 @@ export class Game {
         const o = this.castOrigin(side);
         this.spells.cast('LetItRain', o, _v1.set(0, 1, 0), side, this.localId);
         if (this.sync) this.sync.spell('LetItRain', o, _v1.set(0, 1, 0), side);
-        if (this.sound) this.sound.playBombardoCast();
-        this.hud.setVoice('🌧️ <span style="color:#9fd4ff">Let it rain!</span> Небо затягивают тучи — гроза на 2 часа', true);
+        this.hud.setVoice(this.hellGate?.inHell ? '🩸 <span style="color:#ff6a5a">Let it rain!</span> Небо ада затягивают кровавые тучи — этот дождь ничего не тушит' : '🌧️ <span style="color:#9fd4ff">Let it rain!</span> Небо затягивают тучи — гроза на 2 часа; дождь потушит любой огонь', true);
         return 'LetItRain';
     }
 
@@ -4025,6 +4028,7 @@ export class Game {
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.gargoyles?.sampleModels?.() || []) zoo.add(m); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
         for (const m of this.wandMagic?.sampleModels?.() || []) zoo.add(m); // (the flashlight's soft beam: its shader)
+        for (const m of this.rainFx?.sampleModels?.() || []) zoo.add(m); // («Let it rain»: the beam, the deck of clouds, a ring, a curtain of rain — RainSummon.js)
         for (const m of this.sun?.sampleModels?.() || []) zoo.add(m); // («To the Sun»: the beam's column, the heart at the clouds, a ring of shock, a shaft of the sun — SunBeam.js)
         for (const m of this.customPlants?.sampleModels?.() || []) zoo.add(m); // (a plant of one's own: its lit body, its glow)
         for (const m of this.customCreatures?.sampleModels?.() || []) zoo.add(m); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)
@@ -4498,6 +4502,8 @@ export class Game {
         this.seaFloor?.update(dt);
         this.storm.update(dt);
         this.sun.update(dt);
+        this.rainFx?.update(dt);
+        this.rainDouse?.update(dt);
         this.sunContest?.update(dt);
         this._updateLightning(dt);
         this.waves.update(dt);
@@ -5561,6 +5567,7 @@ export class Game {
         this.scrolls?.dispose();
         this.swim?.dispose();
         this.waterPart?.dispose();
+        this.rainFx?.dispose();
         this.seaSurface?.dispose();
         this.steam?.dispose();
         this.groundVortex?.dispose();

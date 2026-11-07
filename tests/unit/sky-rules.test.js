@@ -71,7 +71,8 @@ test('canopy: one or two leaves do not hide the sky, a thick crown does, a roof 
 test('under water, in hell: no sky; a roof very high up is still sky; space defers to Space.js', () => {
     const g = world({ 0: BLOCK.GRASS });
     assert.match(skyBlockFor({ ...g, swim: { underwater: true } }, 'LetItRain'), /Под водой/);
-    assert.match(skyBlockFor({ ...g, hellGate: { inHell: true } }, 'LetItRain'), /нет неба/);
+    assert.equal(skyBlockFor({ ...g, hellGate: { inHell: true } }, 'LetItRain'), null, 'в аду дождь зовётся — кровавый (автор 07.11)');
+    assert.match(skyBlockFor({ ...g, hellGate: { inHell: true } }, 'ToTheSun'), /нет неба/);
     assert.equal(see(world({ [3 + SKY.REACH + 20]: BLOCK.STONE })), null);
     assert.equal(skyBlockFor({ ...world({ 5: BLOCK.STONE }), space: { offEarth: true } }, 'LetItRain'), null);
 });

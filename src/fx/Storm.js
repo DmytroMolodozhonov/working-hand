@@ -162,8 +162,10 @@ export class Storm {
         const cam = this.game.camera.position;
         const on = this.k > 0.15 && open > 0.05;
         this.rain.visible = on;
+        const blood = !!this.game.hellGate?.inHell; // (hell: the rain is BLOOD — dark red drops, red splashes; it puts nothing out: RainDouse.js)
         if (on) {
-            this.rain.material.opacity = Math.min(0.55, (this.k - 0.15) * 0.8) * open;
+            this.rain.material.color.setHex(blood ? 0xb01418 : 0xaab8c8);
+            this.rain.material.opacity = Math.min(blood ? 0.7 : 0.55, (this.k - 0.15) * 0.8) * open;
             const a = this.rain.geometry.attributes.position.array;
             const slant = 0.12;
             for (let i = 0; i < DROPS; i++) {
@@ -186,7 +188,7 @@ export class Storm {
                 _p.set(x, gy + 0.03, z);
                 for (let j = 0; j < 2; j++) {
                     _vel.set((Math.random() - 0.5) * 1.2, 1 + Math.random() * 1.2, (Math.random() - 0.5) * 1.2);
-                    fx.spark(_p, 0xc8d6e6, 0.05, _vel, 0.22);
+                    fx.spark(_p, blood ? 0xc01818 : 0xc8d6e6, 0.05, _vel, 0.22);
                 }
             }
         }

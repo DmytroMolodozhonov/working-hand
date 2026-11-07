@@ -94,7 +94,8 @@ export const HELL_TEXT = {
  * Заклинания в аду (как `spaceSpellBlock` для космоса): вода и холод в адском жаре испаряются и тают — не действуют, с причиной. Остальное (Левиоса, Бомбардо,
  * огонь, Инферно, Люмос, полёт, «стоп», «Give Me My Power»…) работает. Огонь на лаве бессмыслен, но произносится.
  */
-const STEAM = /^(Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|WaveAttack|WaveAttackMaxima|Drawdown|DrawdownMaxima|LetItRain|AirBubble|AirBubbleMaxima)$/; // («Firefighting» is no water — it takes the air away: it works in hell too and puts out the lava's fire)
+const STEAM = /^(Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|WaveAttack|WaveAttackMaxima|Drawdown|DrawdownMaxima|AirBubble|AirBubbleMaxima)$/; // («Firefighting» is no water — it takes the air away: it works in hell too and puts out the lava's fire)
+// («Let it rain» is NOT here: the author 07.11 — in hell it can be called, but the rain is BLOOD and puts out nothing: RainDouse.js)
 const COLD = /^(Ice|IceMaxima|Frozen|IceCastle|IceBridge|Snowman)$/;
 export function hellSpellBlock(name) {
     if (STEAM.test(name || '')) return '♨️ В адском жаре вода испаряется, не успев появиться — это заклинание здесь не действует';
