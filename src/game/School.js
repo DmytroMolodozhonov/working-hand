@@ -358,11 +358,14 @@ export class School {
         return P.F + (P.M - P.F) * k + 0.5;
     }
 
+    /** Is a line still being said (a shot of the scenes waits for it — Cine `hold`)? */
+    get _talking() { return () => !!this.game.castleLife?.talk?.speech?.busy; }
+
     /** The narrator's words (the author: «басистый голос диктора-рассказчика»): a deep, slow male voice (VoiceCast 'chronicler'), heard as in a film. */
     _narrate(text) {
         const sp = this.game.castleLife?.talk?.speech;
         if (!text || !sp?.say) return;
-        try { sp.say(text, { voiceKey: 'school-narrator', role: 'chronicler', female: false, volume: 0.95, reply: true }); } catch (e) { console.warn('school narrator', e); }
+        try { sp.say(text, { voiceKey: 'school-narrator', role: 'chronicler', female: false, volume: 0.95, reply: true, keep: true }); } catch (e) { console.warn('school narrator', e); }
     }
 
     /** The hero rides inside (not seen, held still) or stands out. */
@@ -389,15 +392,15 @@ export class School {
         const rel = (dx, dy, dz) => () => { const c = coach(); return [c[0] + dx, c[1] + dy, c[2] + dz]; };
         const tea = () => { const v = this.people.get(22); return v ? [v.x, v.y + 2.6, v.z] : [X, F + 3, P.bridge.v1]; };
         const by = 'Профессор Ирма Вельтон';
-        const N = (text) => ({ sub: text, start: () => this._narrate(text) }); // (the narrator says what is written)
+        const N = (text) => ({ sub: text, start: () => this._narrate(text), hold: this._talking }); // (the narrator says what is written; the shot waits for his words)
         g.cine.play([
             { dur: 1.5, black: true, pos: [X - 130, F + 22, Z + 170], look: [X, F + 22, Z] },
             { dur: 9, fadeIn: true, from: { pos: [X - 130, F + 22, Z + 170], look: [X, F + 22, Z] }, to: { pos: [X - 85, F + 30, Z + 150], look: [X, F + 26, Z - 10] }, title: 'Акселдорф<small>школа волшебства</small>' },
             { dur: 8.5, from: { pos: rel(-14, 5, 10), look: rel(0, 3, 0) }, to: { pos: rel(-10, 2, -6), look: rel(0, 3, -4) }, ...N('Каждую осень крылатая карета привозит в Акселдорф новых учеников — тех, в ком проснулась магия.') },
-            { dur: 8, from: { pos: [X + 70, M - 8, Z + 84], look: [X, F, Z + 84] }, to: { pos: [X + 55, M - 4, Z + 92], look: [X, F + 18, Z + 40] }, ...N('Замок стоит над ущельем уже много веков. Говорят, мост построили сами основатели школы — и с тех пор из него не выпал ни один камень.') },
+            { dur: 8, from: { pos: [X + 62, F + 4, Z + 96], look: [X, F - 4, Z + 84] }, to: { pos: [X + 48, F + 8, Z + 104], look: [X, F + 14, Z + 40] }, ...N('Замок стоит над ущельем уже много веков. Говорят, мост построили сами основатели школы — и с тех пор из него не выпал ни один камень.') },
             { dur: 7.5, from: { pos: [X - 16, F + 7, this._coachStop - 18], look: rel(0, 3, 0) }, to: { pos: [X - 12, F + 5, this._coachStop - 12], look: rel(0, 2, 0) }, ...N('Год учёбы. Четыре предмета. И целый мир, который ждёт за этими стенами.') },
             { dur: 7, from: { pos: () => { const t = tea(); return [t[0] + 2.5, t[1] + 0.4, t[2] + 5]; }, look: tea }, who: by, sub: 'Добро пожаловать в Акселдорф! Выходите — не бойтесь, здесь вас никто не обидит.',
-                start: () => { const v = this.people.get(22); if (v) v.lookAt = { x: X, z: this._coachStop }; this._say(v, 'Добро пожаловать в Акселдорф! Выходите — не бойтесь, здесь вас никто не обидит.', 6); } },
+                hold: this._talking, start: () => { const v = this.people.get(22); if (v) v.lookAt = { x: X, z: this._coachStop }; this._say(v, 'Добро пожаловать в Акселдорф! Выходите — не бойтесь, здесь вас никто не обидит.', 6); } },
             { dur: 5, from: { pos: rel(9, 3, 3), look: rel(1.6, 2, -0.6) }, to: { pos: rel(8, 2.8, 1), look: rel(2, 2, -0.6) }, start: () => this._getOut() },
         ], { onEnd: () => this._startBridge() });
     }
@@ -456,7 +459,7 @@ export class School {
             const gz = P.gateZ, F0 = P.F;
             g.cine.play([
                 { dur: 4.5, from: { pos: [X + 7, F0 + 4, gz + 16], look: [X, F0 + 6, gz] }, to: { pos: [X + 3, F0 + 4, gz + 11], look: [X, F0 + 6, gz - 6] }, who: 'Профессор Ирма Вельтон', sub: 'Акселдорф открывает ворота только своим. Теперь и вам.',
-                    start: () => { this._say(tea, 'Акселдорф открывает ворота только своим. Теперь и вам.', 5); this.openGates(); } },
+                    hold: this._talking, start: () => { this._say(tea, 'Акселдорф открывает ворота только своим. Теперь и вам.', 5); this.openGates(); } },
                 ...this._tour(),
             ], { onEnd: () => { this._goal(null); this._startSpeech(); } });
         }
@@ -468,7 +471,7 @@ export class School {
      */
     _tour() {
         const P = this.plan, X = P.centre.x, F = P.F, R = P.rooms, H = P.hall;
-        const N = (text) => ({ sub: text, start: () => this._narrate(text) });
+        const N = (text) => ({ sub: text, start: () => this._narrate(text), hold: this._talking });
         const room = (r, text, dur = 8) => { const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, w = r.x1 - r.x0, d = r.z1 - r.z0;
             return { dur, from: { pos: [r.x0 + 2, F + 6.5, r.z1 - 2], look: [cx, F + 2, cz] }, to: { pos: [r.x0 + 2 + w * 0.25, F + 6, r.z1 - 2 - d * 0.2], look: [cx, F + 1.5, cz - d * 0.1] }, ...N(text) }; };
         return [
@@ -491,11 +494,19 @@ export class School {
         this._placeHero({ x: X + 1.5, y: F + 0.5, z: H.z1 - 8 }, 0); // (the hero among the new pupils, at the hall's door end)
         // the pupils who have not got there yet are put at their places (no waiting on a slow walker)
         const T = H.tables;
-        this.pupilsOf().forEach((v, k) => { const tb = T[k % T.length], at = { x: tb.x + (k % 2 ? -1.5 : 1.5), y: F + 0.5, z: tb.z0 + 4 + Math.floor(k / T.length) * 5, yaw: 0 }; v.x = at.x; v.y = at.y; v.z = at.z; v.yaw = 0; v.goal = null; v.post = at; v.lookAt = { x: X, z: H.z0 }; });
-        const tea = this.people.get(22); if (tea) { tea.x = H.dais.x - 5; tea.y = F + 2.5; tea.z = H.dais.z + 1; tea.goal = null; tea.yaw = 0; tea.lookAt = { x: X, z: H.z1 }; }
+        this.pupilsOf().forEach((v, k) => { const tb = T[k % T.length], at = { x: tb.x + (k % 2 ? -2.5 : 2.5), y: F + 0.5, z: tb.z0 + 4 + Math.floor(k / T.length) * 5, yaw: 0 }; v.x = at.x; v.y = at.y; v.z = at.z; v.yaw = 0; v.goal = null; v.post = at; v.lookAt = { x: X, z: H.z0 }; });
+        // the teachers and the Director on the dais, BEHIND their long table (not on it — the author: «учителя стоят на столах»)
+        const behind = H.dais.z, yD = F + 2.5; // (between their seats and their table: the free row of the dais)
+        [[20, 0], [21, -7], [22, -3.5], [23, 3.5], [24, 7]].forEach(([i, dx]) => {
+            const at = { x: H.dais.x + dx, y: yD, z: behind, yaw: Math.PI };
+            const v = this.people.get(i) || this._person(i, at, Math.PI);
+            if (!v) return;
+            v.x = at.x; v.y = at.y; v.z = at.z; v.yaw = Math.PI; v.goal = null; v.post = at; v.lookAt = { x: X, z: H.z1 };
+        });
+        if (this._lit) this._lit = null; // (the teacher's lit wand: not in the hall)
         const dir = () => { const v = this.people.get(20); return v ? [v.x, v.y + 3.2, v.z] : [X, F + 6, H.z0 + 6]; };
         const mz = (H.z0 + H.z1) / 2, who = 'Директор Дардолус Пантифус Мудрый';
-        const line = (i, extra = {}) => ({ dur: 6.5, who, sub: SPEECH[i], start: () => this._say(this.people.get(20), SPEECH[i], 6), ...extra });
+        const line = (i, extra = {}) => ({ dur: 6.5, who, sub: SPEECH[i], hold: this._talking, start: () => this._say(this.people.get(20), SPEECH[i], 6), ...extra });
         g.cine.play([
             { dur: 7, from: { pos: [X + 10, F + 6, H.z1 - 4], look: [X, F + 14, mz] }, to: { pos: [X + 4, F + 9, mz + 6], look: [X, F + 15, H.z0 + 6] } },
             line(0, { from: { pos: () => { const d = dir(); return [d[0] + 3, d[1] + 0.5, d[2] + 9]; }, look: dir } }),

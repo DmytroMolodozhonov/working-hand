@@ -80,13 +80,15 @@ export class Cine {
         const S = this.shots?.[this.i];
         if (!S) return;
         this.t += dt;
-        const k = ease(Math.min(1, this.t / (S.dur || 1)), S.ease);
+        const k = ease(Math.min(1, this.t / ((S.dur || 1) + (S._extra || 0))), S.ease);
         const a = val(S.from?.pos || S.pos, _a), b = val(S.to?.pos || S.from?.pos || S.pos, _b);
         const la = val(S.from?.look || S.look, _l), lb = val(S.to?.look || S.from?.look || S.look, _l2);
         if (a && b) camera.position.copy(a).lerp(b, k);
         if (la && lb) camera.lookAt(la.lerp(lb, k));
         if (S.fadeOut && this.el && this.t > (S.dur || 1) - 0.9) this.el.querySelector('.fade').classList.add('on');
-        if (this.t >= (S.dur || 1)) this._next();
+        // (a shot waits for its words to be said — the narrator's line is never cut by the next shot; at most 12 s longer)
+        const held = S.hold && this.t < (S.dur || 1) + 12 && (() => { try { return S.hold(); } catch { return false; } })();
+        if (this.t >= (S.dur || 1) && !held) this._next();
     }
 
     skip() {

@@ -253,6 +253,13 @@ export class Speech {
                 this._pending = { text: clean, opts: o };
                 return true;
             }
+            // (a line that must not be cut — the school's narrator, the scenes' words (opts.keep) — goes on; the new one waits its turn after it;
+            //  the author: «учительница перебивает диктора»)
+            if (this._current.opts?.keep || opts.keep) {
+                (this._after || (this._after = [])).push({ text: clean, opts: o });
+                if (this._after.length > 6) this._after.shift();
+                return true;
+            }
             this.cancel();
         }
         return this._speak(clean, o);
@@ -279,10 +286,12 @@ export class Speech {
         if (this._current !== entry) return;
         this._current = null;
         this._safeCall(entry.opts.onEnd, ok);
-        const next = this._pending;
+        const next = this._pending || this._after?.shift() || null;
         this._pending = null;
         if (next) this._speak(next.text, next.opts);
     }
+    /** Is anything being said or waiting to be (the scenes wait for it — Cine `hold`)? */
+    get busy() { return !!(this._current || this._pending || this._after?.length); }
 
     _audio() {
         if (this._ctx) return this._ctx;
@@ -502,6 +511,7 @@ export class Speech {
     /** Stops the current line and drops the pending one. */
     cancel() {
         const cur = this._current, pend = this._pending;
+        if (this._after) this._after.length = 0;
         this._current = null;
         this._pending = null;
         if (cur?.stop) cur.stop();
