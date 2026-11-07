@@ -377,7 +377,7 @@ export class Tutorial {
 
     // ------------------------------------------------------------------ the wizard and the zombies
     _wizDef() {
-        const G = TUTORIAL.G + 0.5, at = { x: -14, z: -10 }; // (beside the hill, ~26 m before the hero)
+        const G = TUTORIAL.G + 0.5, at = { x: -4, z: 0 }; // (~12 m before the hero, a little left of the hill's line: a beginner casts only to 14 m and keeps his place — farther he never fought)
         const spot = { x: at.x, y: G, z: at.z, yaw: Math.PI };
         return {
             id: TUT.WIZ_SITE, kind: 'wander', name: 'Обучение', // (a wizards' place that keeps no day and night: the wizard's own fighting mind runs — WizardLife.crowd)
