@@ -369,7 +369,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
         shelf(x0, x0, z0 + 2, zm - 4, 6, 0); shelf(x0, x0, zm + 4, z1 - 2, 6, 1);
         for (const z of [z0 + 7, z1 - 8]) { table(x1 - 9, x1 - 4, z, z + 1); box(x1 - 8, x1 - 8, z, z, F + 3, F + 3, B.POTION); tableSpots.push({ x: x1 - 6 + OX, z: z + 0.5 + OZ }, { x: x1 - 5 + OX, z: z + 0.5 + OZ }); }
         box(x1 - 3, x1 - 1, z0 + 1, z0 + 3, F + 1, F + 1, B.CS_DARK); box(x1 - 2, x1 - 2, z0 + 2, z0 + 2, F + 1, F + 1, B.WATER); // (the basin)
-        for (let x = x0 + 4; x <= x1 - 4; x += 5) for (const z of [z0 + 3, z1 - 3]) { box(x, x, z, z, F + 7, F + 7, B.FENCE); box(x, x, z, z, F + 6, F + 6, (x / 5) & 1 ? B.FLOWERS : B.LEAVES); }
+        for (let x = x0 + 4; x <= x1 - 4; x += 5) for (const z of [z0 + 3, z1 - 3]) box(x, x, z, z, F + 7, F + 7, (x / 5) & 1 ? B.FLOWERS : B.LEAVES); // (bunches of herbs drying under the roof)
         for (const z of [z0 + 6, z1 - 6]) box(x0 + 18, x0 + 18, z, z, F + 7, F + 7, B.ARCANE_LAMP_VIOLET);
     }
     // HISTORY (west wing, south): desks in rows facing the teacher, a great map of the world on the far wall, bookcases, a pedestal with a
@@ -389,7 +389,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
         const x0 = exi + 1, x1 = exo - 1, z0 = HZ0 + 1, z1 = HZ0 + 23;
         for (const [x, z] of [[x0 + 1, z0 + 1], [x1 - 1, z0 + 1], [x0 + 1, z1 - 1], [x1 - 1, z1 - 1]]) pillar(x, z, 5, B.ARCANE_LAMP);
         for (const z of [z0 + 6, z0 + 11, z0 + 16]) box(x1, x1, z, z + 1, F + 2, F + 3, B.ARCANE_WARD);
-        box(x0 + 8, x0 + 14, z0, z0, F + 1, F + 1, B.PLANKS_DARK); for (let x = x0 + 8; x <= x0 + 14; x += 2) box(x, x, z0, z0, F + 2, F + 3, B.FENCE); // (the wand rack)
+        box(x0 + 8, x0 + 14, z0, z0, F + 1, F + 2, B.PLANKS_DARK); for (let x = x0 + 8; x <= x0 + 14; x += 2) box(x, x, z0, z0, F + 3, F + 3, B.ENCHANTED); // (the cabinet of practice wands: enchanted cases on a dark chest)
         rug(x0 + 2, x0 + 9, z1 - 6, z1 - 1, B.CARPET_RED, B.GOLD); // (the teacher's corner)
         table(x0 + 4, x0 + 6, z1 - 3, z1 - 2); box(x0 + 5, x0 + 5, z1 - 3, z1 - 3, F + 3, F + 3, B.ENCHANTED); // (the teacher's table, a warded box on it)
         // the DUELLING PISTE across the room, flush with the floor (nothing to trip on): dark stone, rune borders, a rune circle at each end
@@ -399,7 +399,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
         // the targets on the far wall: warding shields in gilt frames, crystal lights over them
         for (const z of [z0 + 5, z0 + 11, z0 + 17]) { box(x1, x1, z - 1, z + 1, F + 2, F + 4, TRIM); box(x1, x1, z, z, F + 3, F + 3, B.ARCANE_WARD); box(x1, x1, z - 1, z + 1, F + 5, F + 5, B.GOLD); box(x1, x1, z, z, F + 6, F + 6, B.ARCANE_LAMP); }
         // lamps hanging on chains from the beams (5.5 m over the floor: over every hat)
-        for (let x = x0 + 8; x <= x1 - 8; x += 8) for (const z of [z0 + 5, z1 - 5]) { box(x, x, z, z, F + 7, F + 7, B.FENCE); box(x, x, z, z, F + 6, F + 6, B.ARCANE_LAMP); }
+        for (let x = x0 + 8; x <= x1 - 8; x += 8) for (const z of [z0 + 5, z1 - 5]) box(x, x, z, z, F + 7, F + 7, B.ARCANE_LAMP); // (crystal lights set in the ceiling — a «chain» of fence read as a floating box)
         // the pupils' benches along the south wall (sitting height), a rack of practice shields behind them
         for (let x = x0 + 14; x <= x1 - 10; x += 7) { box(x, x + 4, z1 - 1, z1 - 1, F + 1, F + 1, B.PLANKS); box(x, x + 4, z1, z1, F + 3, F + 3, B.ARCANE_WARD); }
     }
