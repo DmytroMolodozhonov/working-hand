@@ -4533,7 +4533,7 @@ export class Game {
         this.mana?.update(dt); // (the beaten wizard's power flying to me)
         mark('эффекты'); // (sparks, smoke, flashes — apart from «мир», the land and its pieces)
         // See further while flying (smoothly), terrain streams in around the player
-        this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : this.monster?.viewBoost || 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8); // (a 24 m monster sees further too)
+        this._viewBoost = (this._viewBoost || 0) + ((this.flight.active || this.cine?.active ? 1 : this.monster?.viewBoost || 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8); // (a 24 m monster sees further too)
         // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)
         // («Империус»: the eyes are in the creature, up to 1800 m off — the world streams round it, not round the body left standing)
         const focus = this.imperius?.focusPos?.(this._focusV || (this._focusV = new THREE.Vector3())) || this.character.group.position;
