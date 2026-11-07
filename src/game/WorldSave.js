@@ -175,6 +175,7 @@ export function playerSnapshot(game) {
         purseMagic: inv?.purse?.magic ? inv.purse.magicUid || true : undefined, // the pouch is on the belt (all the coins in it)
         ownWand: inv?.ownWand || undefined, // my own wand (lying on the ground when the game was left: «Акцио» brings it back, the stand-in goes — Inventory.gotWand)
         learned: game.books ? [...game.books.learned] : [],
+        look: game.character?.look ? { ...game.character.look } : undefined, // the skin (author 07.11): fixed for this world at the first entry — a new pick in «Персонаж» applies to NEW worlds only
         pos: [r2(p.x), r2(p.y), r2(p.z)],
         hp: game.monster?.active ? game.monster.origHp : game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
         mp: manaRules(game) ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
@@ -208,6 +209,11 @@ export function applyPlayerSnapshot(game, s) {
     if (!s) return;
     retireScrollsIn(s); // (the scrolls of health and of mana cells are gone from the game: an old one is an apple)
     game._playerRestored = true; // (a player of this world before: their own things, no starting gifts)
+    if (s.look && typeof s.look === 'object' && game.character?.setLook) { // (the skin they began this world with — not the one picked in «Персонаж» since)
+        game.config.look = s.look;
+        game.character.setLook(s.look);
+        game.sync?.sendLook?.();
+    }
     const inv = game.inventory;
     let owed = 0; // coins of an old save that wait for the pouch
     if (inv && Array.isArray(s.slots)) {

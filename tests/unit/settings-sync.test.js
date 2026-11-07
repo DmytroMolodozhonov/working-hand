@@ -73,7 +73,8 @@ test('the pause menu has no settings copies — «Общие настройки�
     assert.ok(pause.includes('data-pause-tab="pause-settings"'), '«Общие настройки» is a tab of the pause');
     assert.ok(!pause.includes('general-settings'), 'no second window');
     for (const gone of ['pause-audio', 'pause-graphics', 'pause-creative', 'pause-quick', 'pause-hands', 'data-pause-tab="pause-audio"', 'data-pause-tab="pause-graphics"', 'data-pause-tab="pause-creative"']) assert.ok(!pause.includes(gone), gone);
-    assert.ok(!/<input|<select/.test(pause.replace(/<div id="pause-settings"[^>]*><\/div>/, '')), 'no controls in the pause menu');
+    // (the search line at the top of the pause window — author 07.11 — is not a setting)
+    assert.ok(!/<input|<select/.test(pause.replace(/<div id="pause-settings"[^>]*><\/div>/, '').replace(/<input id="pause-top-search"[^>]*>/, '')), 'no controls in the pause menu');
 });
 test('every setting is in ONE place: no id twice, the hand version once', () => {
     const html = page();

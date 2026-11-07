@@ -64,6 +64,7 @@ export class CharacterEditor {
                 </div>
                 <div class="ce-controls">
                     <div class="ce-heroes" id="ce-heroes"></div>
+                    <div class="ce-note" id="ce-note"><button class="mp-btn mp-btn-grey" id="ce-info" type="button" title="Герой закрепляется за картой при первом входе" aria-label="Информация">ℹ️</button> <span class="mp-hint" id="ce-info-text" hidden>Выбранный герой (со звездой) применится на <b>новых</b> картах. В уже начатой карте вид героя не меняется — чтобы играть новым, создайте новую карту.</span></div>
                     <div class="mp-row">
                         <input type="text" id="ce-name" maxlength="20" placeholder="Имя героя">
                         <button class="mp-btn" id="ce-new">➕ Новый</button>
@@ -106,6 +107,7 @@ export class CharacterEditor {
             this.editing = c.id;
             this._changed();
         };
+        this.root.querySelector('#ce-info').onclick = () => { const t = this.root.querySelector('#ce-info-text'); t.hidden = !t.hidden; };
         this.root.querySelector('#ce-random').onclick = () => { this.current.look = randomLook(); this._changed(); };
         this.root.querySelector('#ce-del').onclick = () => {
             if (this.data.list.length <= 1) return;

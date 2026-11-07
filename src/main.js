@@ -1637,7 +1637,7 @@ syncHandVersion(); syncResets();
 // «🧙 Игрок»: the hero's sheet (data refreshed on open and every 0.5 s while the tab is open; the 3D hero is drawn only then)
 const playerSheet = new PlayerSheetView($('pause-player'), () => game, {
     spells: [...new Set(SPELLS.map((s) => matchSpell(s.name)).filter(Boolean))],
-    look: () => activeLook(),
+    look: () => game?.character?.look || activeLook(), // (in a world: the skin it was begun with — WorldSave.applyPlayerSnapshot)
     name: () => activeName(), // (the hero made in «Персонаж»; in a network game the server name wins — PlayerSheet.heroName)
     openCodex: () => { const b = document.querySelector('[data-pause-tab="pause-spells"]'); if (b && !b.hidden) showPauseTab('pause-spells'); },
     makeCharacter: makePlayerPreview,
@@ -1657,12 +1657,22 @@ function showPauseTab(id) {
             cr ? null : (spell) => !!game?.canSaySpell?.(spell), cr ? null : (spell) => !!game?.mana?.spellsUsed?.has(spell), cr || !game?.pentagranium ? null : new Set(game.pentagranium.known() || []));
     }
     // «🔍 Поиск»: the same knowledge as the spell book (outside Creative: only the spells the hero can say, the pentagrams it knows)
-    if (id === 'pause-search') {
-        const cr = game?.config?.mode === 'creative';
-        renderSearchTab($('pause-search'), cr ? null : { can: (spell) => !!game?.canSaySpell?.(spell), used: (spell) => !!game?.mana?.spellsUsed?.has(spell), known: game?.pentagranium ? new Set(game.pentagranium.known() || []) : null });
-    }
+    if (id === 'pause-search') renderPauseSearch(true);
     // (the achievements are only the bosses: who is beaten in THIS world is ticked there — the author: no separate tab)
     if (id === 'pause-bosses') renderBossesTab('pause-bosses-list', game?.achievements?.done || null);
+}
+// (the search line sits at the top of the pause window on every tab, as the main menu's: typing opens the search page and fills it — the author 07.11: «в Escape, где заклинания, не заметил графы поиска»)
+const pauseTopSearch = $('pause-top-search');
+function renderPauseSearch(focus = false) {
+    const cr = game?.config?.mode === 'creative';
+    renderSearchTab($('pause-search'), cr ? null : { can: (spell) => !!game?.canSaySpell?.(spell), used: (spell) => !!game?.mana?.spellsUsed?.has(spell), known: game?.pentagranium ? new Set(game.pentagranium.known() || []) : null }, focus, pauseTopSearch);
+}
+if (pauseTopSearch) {
+    for (const ev of ['keydown', 'keyup']) pauseTopSearch.addEventListener(ev, (e) => { if (e.key !== 'Escape') e.stopPropagation(); }); // (typed letters must not reach the game — walking, spells, slots)
+    pauseTopSearch.addEventListener('input', () => {
+        setSearchQuery(pauseTopSearch.value);
+        if (document.querySelector('[data-pause-tab="pause-search"]')?.classList.contains('active')) renderPauseSearch(false); else showPauseTab('pause-search');
+    });
 }
 document.querySelectorAll('.pause-tab').forEach((b) => { b.onclick = () => showPauseTab(b.dataset.pauseTab); });
 function togglePauseMenu(show) {

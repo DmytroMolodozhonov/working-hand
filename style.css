@@ -1853,7 +1853,7 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .potion-ing { display: inline-flex; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 14px; padding: 3px 10px 3px 6px; font-size: 0.8rem; }
 .potion-ing img { width: 20px; height: 20px; object-fit: contain; }
 .potion-emoji { font-size: 1.05rem; }
-#tab-spells, #pause-spells { overflow-y: auto; }
+#tab-spells, #pause-spells, #pause-search { overflow-y: auto; } /* (the search page of the pause scrolls inside, so the window's top — with its search line — stays in view) */
 
 /* «Настройки героя» в окне создания Творческого мира (HeroSettingsUi.js) */
 .hero-settings { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(5, 3, 18, 0.45); border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); text-align: left; max-height: 60vh; overflow-y: auto; }
@@ -1989,3 +1989,8 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .menu-top .menu-search { width: 190px; margin-left: auto; margin-right: 12px; padding: 4px 12px; font: inherit; font-size: 0.85rem; color: #eef1f6; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 14px; outline: none; transition: width 0.15s; }
 .menu-top .menu-search:focus { width: 280px; border-color: #3498db; background: rgba(255, 255, 255, 0.13); }
 .tab-btn[hidden] { display: none !important; }
+
+/* the search line at the top of the pause window (as in the main menu's top bar) */
+.pause-top-search { display: block; width: min(260px, 80%); margin: 0 auto 10px; padding: 5px 14px; font: inherit; font-size: 0.9rem; color: #eef1f6; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 14px; outline: none; transition: width 0.15s; }
+.pause-top-search:focus { width: min(380px, 94%); border-color: #3498db; background: rgba(255, 255, 255, 0.13); }
+#pause-menu #pause-search .search-kinds .sub-tab { width: auto; margin: 0; padding: 7px 14px; font-size: 0.95rem; } /* (the kinds of the pause's search in a row, not a column) */
