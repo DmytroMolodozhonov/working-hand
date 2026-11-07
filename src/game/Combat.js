@@ -1246,6 +1246,7 @@ export class Combat {
         if (this.game.bossRetry?.intercept?.()) { this.game._deathHow = null; return; } // (a start at a boss: a fall is a window to try again, not a death — BossRetry.js)
         if (this.game.arenaDuels?.duelDeath?.()) { this.game._deathHow = null; return; } // (the duel mode: a lost duel and at once the next, no death — ArenaDuels.duelDeath)
         if (this.game.monster?.active && this.game.monster.saves(how, byId)) { this.game._deathHow = null; return; }
+        if (this.game.tutorial && !this.game.tutorial.done) { this.game._deathHow = null; this.hp = this.maxHp || 20; this.game.tutorial.intercept(); return; } // («Обучение»: no death — the stage again)
         if (this.game.godhood?.immortal) { this.game._deathHow = null; this.hp = Math.max(1, this.maxHp ? this.maxHp * 0.25 : 5); this.game.godhood.saved?.(how); return; } // (a god does not die — Godhood.js) // (a beheading, a shatter… tear the monster's body, not the man)
         this.dead = true;
         this.game.levitation?.dropMe?.(false);

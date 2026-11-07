@@ -22,6 +22,9 @@ export const MODES = {
 /** «Карты»: hand-made maps from the map editor (internally a 'survival' game with a map — that internal value stays for maps only). */
 export const MAPS_ENTRY = { label: 'Карты', icon: '🗺️', hint: 'Пройдите карту до финиша' };
 
+/** «Обучение» (Tutorial.js): a small bounded map where the hero learns the game step by step (internally a 'freeworld' game with `tutorial`). */
+export const TUTORIAL_ENTRY = { label: 'Обучение', icon: '🎓', hint: 'Пошаговое обучение: камера и микрофон, взгляд, руки и палочка, заклинания, вещи, ходьба и первый бой. Начните с него, если играете впервые' };
+
 /** A world/server mode from an older version: the removed «Хардкор» ('survival', no map) is now 'freeworld'. */
 export function legacyMode(mode, map) {
     return mode === 'survival' && !map ? 'freeworld' : mode;

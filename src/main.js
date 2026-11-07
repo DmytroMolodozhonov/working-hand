@@ -44,7 +44,7 @@ import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
 import { WORLD_GEN } from './world/Terrain.js';
-import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
+import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
 import { hookAllLog, allLog } from './core/AllLog.js';
@@ -445,8 +445,8 @@ async function updateGameMapList(forceRefresh = false) {
     const modeRow = document.createElement('div');
     modeRow.className = 'mode-row';
     mapListDiv.appendChild(modeRow);
-    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps' };
-    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY]];
+    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps', tutorial: 'mode-card tutorial' };
+    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY], ['tutorial', TUTORIAL_ENTRY]]; // («Обучение» — the author 07.11: beside Творческий, Выживание, Карты)
     for (const [id, m] of choices) {
         const card = document.createElement('div');
         const on = id === 'maps' ? pickingMap : !pickingMap && selectedMode === id;
@@ -462,7 +462,7 @@ async function updateGameMapList(forceRefresh = false) {
             if (pickingMap) { // (the map chosen last time is chosen again)
                 const nm = createMem.load('maps')?.map;
                 if (nm && maps[nm]) selectedMap = { ...maps[nm], name: nm };
-            } else { createMem.setLastMode(id); restoreCreateMemory(id); }
+            } else if (id !== 'tutorial') { createMem.setLastMode(id); restoreCreateMemory(id); }
             applyFps();
             updateGameMapList();
         };
@@ -471,7 +471,7 @@ async function updateGameMapList(forceRefresh = false) {
     }
     const hint = document.createElement('div');
     hint.className = 'mode-hint';
-    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : MODES[selectedMode]?.hint || '';
+    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
     mapListDiv.appendChild(hint);
 
     // the maps themselves: only when «Карты» is chosen
@@ -526,7 +526,7 @@ async function updateGameMapList(forceRefresh = false) {
     if (creativeSettings) creativeSettings.style.display = selectedMode === 'creative' && !pickingMap ? 'block' : 'none';
     const start = $('start-btn');
     start.disabled = pickingMap && !selectedMap;
-    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : '✨ Создать и играть';
+    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : '✨ Создать и играть';
 }
 // «Карты» → «🛠️ Создать карту»: the map editor opens right here (it was a tab of its own)
 function openMapEditor(on) {
@@ -804,6 +804,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         }
     }
     if (game && game.active) {
+        if (isFinal && game.tutorial?.hear(command)) { journal(command, isFinal, meta, null, false, 'обучение'); return; } // («Обучение»: «я правша / левша», the microphone's check)
         game.walkRec?.heard(command); // (F8 recording: «иду вперёд / назад / стою» — the label)
         game._voiceMeta = meta; // (when the words were said: the journal counts how late the spell came — Game.castLocalSpell)
         // the words being caught: a big short line, only in Creative (partly a developer mode)
@@ -1382,6 +1383,7 @@ $('start-btn').addEventListener('click', () => {
         return;
     }
     const cfg = readConfig();
+    if (cfg.mode === 'tutorial') { startGame({ ...cfg, mode: 'freeworld', tutorial: true, map: null, worldName: 'Обучение' }); return; } // (a small bounded map, never saved — Tutorial.js)
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
@@ -1994,6 +1996,8 @@ for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'wal
     if (vol20) for (const id of ['zombie-vol', 'music-vol', 'spell-vol']) saved[id] = '20';
     // the villagers' net is always on now — once for everybody who had switched it off (the author: no setting to find)
     if (!saved.aiOn) { saved['villager-ai'] = 'auto'; }
+    // «Ходьба назад от нападающих» — on by default (the author 07.11), once for everybody who had it off
+    if (!saved.threatOn) { saved['walk-back-threat'] = true; saved['walk-back'] = false; }
     // the weak old nets chosen once by hand → «Авто» (Gemma 4 on the graphics card), once for everybody
     if (!saved.aiGemma4 && ['light', 'smart'].includes(saved['villager-ai'])) saved['villager-ai'] = 'auto';
     const save = () => {
@@ -2006,6 +2010,7 @@ for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'wal
         if (hv) out.handVersion = hv.value;
         out.vol20 = true;
         out.aiOn = true;
+        out.threatOn = true;
         out.aiGemma4 = true;
         try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* private mode: just not remembered */ }
     };

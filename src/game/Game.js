@@ -138,6 +138,7 @@ import { IceCastleLife } from './IceQueen.js';
 import { VampireLife } from './VampireLife.js';
 import { Titans } from './Titans.js';
 import { Godhood } from './Godhood.js';
+import { Tutorial } from './Tutorial.js';
 import { PharaohLife } from './PharaohLife.js';
 import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
@@ -498,7 +499,8 @@ export class Game {
         const isTest = config.mode === 'test';
         this.world = new VoxelWorld(this.scene, {
             seed: this.seed,
-            mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map,
+            mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map && !config.tutorial, // («Обучение»: its own small map — TutorialLand.js)
+            tutorial: !!config.tutorial,
             map: config.map || null,
             seas: this.gen >= 2, // (generation 2: seas, sea castles, deeper bedrock)
             testGround: this.gen >= 3 && config.mode === 'creative' && !config.map, // (a river by the pedestals, a castle close by)
@@ -530,7 +532,7 @@ export class Game {
         this.world.viewDistance = viewDistanceScale(config.viewDistance); // «Прорисовка мира» (this computer only)
         // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
         // Everyone in a game shares the host's clock (sent in the welcome message).
-        this.dayCycle = !config.map && !isTest && (config.mode === 'creative' || config.mode === 'freeworld');
+        this.dayCycle = !config.map && !isTest && !config.tutorial && (config.mode === 'creative' || config.mode === 'freeworld');
         // a fresh world starts in the morning; Creative — in the full day (the author: «просто обычный день»)
         this.dayStart = Date.now() - DAY_CYCLE_MS * (config.mode === 'creative' ? 0.3 : 0.04);
         if (this.dayCycle) this.world.setDayPhase(this.dayPhase());
@@ -909,7 +911,7 @@ export class Game {
         this.hud.setMultiplayer(null);
 
         // The world is saved by itself on the host's (or single player's) computer
-        if (!isTest && !config.map && this.authority) {
+        if (!isTest && !config.map && !config.tutorial && this.authority) { // («Обучение» is never saved)
             const sv = config.saved;
             this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players, gen: sv.gen ?? 1, createdVersion: sv.createdVersion, fav: sv.fav } : { name: config.worldName });
             if (sv) {
@@ -941,6 +943,8 @@ export class Game {
                 chest.boxId = this.collision.addBox(chest.getCollisionBox());
                 this.chests.push(chest);
             });
+        } else if (config.tutorial) {
+            this.tutorial = new Tutorial(this); // («Обучение»: the steps, the narrator, the frozen hero — Tutorial.js)
         } else if (config.mode === 'freeworld') {
             // Free world: no tables; players appear around spawn, not on top of each other
             const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 14;
@@ -1883,7 +1887,7 @@ export class Game {
         this._manaLater = false;
         this.lastCastWhy = null; // (why it did not work — the spell journal: set where a spell is refused)
         const name = this._castWithHints(text, isFinal);
-        if (name) { this._castAt = performance.now(); this._castName = name; } // (the wand never leaves the hand while a spell is going: spellBusy; a thrown Lumos waits after another spell's gesture: WandMagic)
+        if (name) { this._castAt = performance.now(); this._castName = name; this.tutorial?.onCast?.(name); } // (the wand never leaves the hand while a spell is going: spellBusy; a thrown Lumos waits after another spell's gesture: WandMagic)
         // its sound (SpellMusic.SPELL_SOUND: a tune for the great ones, a short effect for the others) — the others hear it too
         if (name && this.sound?.spellHasCastSound?.(name)) {
             const at = _castSnd.copy(this.character.group.position);
@@ -2051,6 +2055,8 @@ export class Game {
         if (name === 'IceMaxima' && (this.water?.active || this.vortex?.state)) name = 'Frozen';
         // «Дай» only when the phrase is over: never from an unfinished one (an everyday word — StrongSpells.dieWords)
         if (name === 'Die' && !isFinal) return null;
+        // («Обучение»: only the spell the step teaches — nothing done by chance; Tutorial.allows)
+        if (name && this.tutorial && !this.tutorial.allows(name)) { if (isFinal) this.hud.setVoice('🎓 Сейчас нужно другое — послушайте подсказку', true); return null; }
         // the vortex waits for «Bubble»: a word that sounds like it is it (the recognizer writes it many ways)
         if (this.vortex?.bubbleOpen?.() && name !== 'AirBubble' && (!name || name === 'Sands' || name === 'Sapira') && bubbleLike(text)) name = 'AirBubble';
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
@@ -4395,7 +4401,8 @@ export class Game {
         if (earth && !duelOnly) this.pharaoh?.update(dt);
         if (earth && !duelOnly) this.vampire?.update(dt);
         if (!duelOnly) this.titans?.update(dt);
-        this.godhood?.update(dt); // (on the planets — it knows itself where the hero is)
+        this.godhood?.update(dt);
+        this.tutorial?.update(dt); // (on the planets — it knows itself where the hero is)
         this.temple?.update(dt); // (the Gods' temple: on Venus)
         if (earth && !duelOnly) this.phoenixes.update(dt);
         if (earth && !duelOnly) this.owls.update(dt);
@@ -4629,7 +4636,7 @@ export class Game {
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
             ch.setCrouching(flying || down ? false : pose.isCrouching);
             ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || (this.boards?.mounted || this.boats?.riding) ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
-            ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
+            ch.setRunning(flying || down || this.tutorial?.frozen ? false : pose.isRunning, pose.runIntensity); // («Обучение»: the hero stands until the walking stage — Tutorial.frozen)
             const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning) : 0;
             // (the author's F8 records of 05.11: stepping while leaning back, the shoulders bob 3–10 times weaker than stepping forward —
             // the steps went unseen, the hero stood. Leaning back (against its own upright) with a weak but lasting bob — steps back.)
@@ -5544,6 +5551,7 @@ export class Game {
         this.vampire?.dispose();
         this.titans?.dispose();
         this.godhood?.dispose();
+        this.tutorial?.dispose();
         this.temple?.dispose();
         this.fleet?.dispose();
         this.blackbeard?.dispose();

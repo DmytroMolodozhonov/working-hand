@@ -87,7 +87,7 @@ export async function startFromMenu(page, mode = 'creative', { zombies = 0, smoo
     // «Одиночная игра»: my worlds first; «Создать мир» opens the choice (open by itself while there are none)
     await page.waitForFunction(() => document.getElementById('saved-worlds')?.children.length > 0 && document.querySelector('.mode-row .mode-card'));
     if (await page.isHidden('#create-world')) await page.click('#create-world-btn');
-    if (['creative', 'freeworld'].includes(mode)) await page.click(`.mode-card[data-mode="${mode}"]`);
+    if (['creative', 'freeworld', 'tutorial'].includes(mode)) await page.click(`.mode-card[data-mode="${mode}"]`); // («Обучение» too)
     else {
         await page.click('.mode-card[data-mode="maps"]');
         await page.click(`.map-card[data-name="${mode}"]`);

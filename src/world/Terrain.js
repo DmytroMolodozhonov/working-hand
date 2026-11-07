@@ -44,6 +44,7 @@ import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurf
 import { IceCastleMapSite, inQueenMap, queenChunk } from './QueenMap.js';
 import { hellPlan, hellChunk, inHell, hellFloor } from './HellMap.js';
 import { generateHellChunk } from './HellLand.js';
+import { generateTutorialChunk, tutorialHeight } from './TutorialLand.js';
 import { SHAPE, canShape, shapeTop, shapeBottom, shapeHas, isCeilShape, cornerHeights, shapeDiag, FULL_FACES, sideCovered, SHAPE_COUNT } from './BlockShapes.js';
 
 export const BLOCK = {
@@ -706,8 +707,9 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false } = {}) {
         this.seed = seed;
+        this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
         this.hell = !!hell; // (hell: a far map of this world — HellMap.js; in every world, the Earth's land is not touched)
         this._hellPlan = null;
         this.mountains = mountains;
@@ -877,6 +879,11 @@ export class TerrainData {
             fn.land = inner.land;
             this.heightAt = fn;
         }
+        if (this.tutorial) { // («Обучение»: its own land only — the meadow, the hill, the cliffs)
+            const fn = (ix, iz) => tutorialHeight(ix, iz);
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.mesa = fn.emer = fn.moon = fn.fant = 0; fn.iceRock = false; fn.vampRock = false; fn.pyrSand = false;
+            this.heightAt = fn;
+        }
         this._caves = new Map();
         this._lairs = new Map(); // (dragons' lairs high in the mountains: DragonLairs.js)
         this._isles = new Map(); // (generation 5: the floating islands)
@@ -953,6 +960,7 @@ export class TerrainData {
     get hellPlan() { return this._hellPlan || (this._hellPlan = hellPlan(this.seed)); }
 
     _generateChunk(cx, cz) {
+        if (this.tutorial) return generateTutorialChunk(cx, cz);
         if (this.hell && cx >= ZONE_CX && hellChunk(cx, cz, CHUNK)) return generateHellChunk(cx, cz, this.hellPlan, this.bedrockTop ?? OLD_BEDROCK);
         const planet = this.planetOfChunk(cx, cz);
         if (planet) return generatePlanetChunk(cx, cz, planet, this.bedrockTop ?? OLD_BEDROCK);

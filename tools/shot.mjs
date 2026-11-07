@@ -8,7 +8,7 @@
 //
 // The helpers `h` (in the page): g, THREE, frames(n), until(fn, ms), go(x, y, z, fly), time(dayPhase), hold(list), bare(),
 //   cam([x,y,z], [x,y,z]) — the camera there; view(obj, {d, up, at, side}) — a camera that sees obj's face with nothing in front;
-//   shot(name) — save the picture now; log(...) — printed here. Example: tools/shots/vampire.mjs. Skill: .claude/skills/screenshots.
+//   shot(name) — save the picture now; page(name) — the whole page with the HUD; log(...) — printed here. Example: tools/shots/vampire.mjs. Skill: .claude/skills/screenshots.
 import { startServer, launch, openPage, startFromMenu, waitHudVisible } from '../tests/e2e/harness.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,6 +42,7 @@ try {
         saved.push(dst);
         console.log('📷', path.relative(process.cwd(), dst));
     });
+    await page.exposeFunction('__shotPage', async (n) => { const dst = path.join(out, n + '.png'); await page.screenshot({ path: dst }); saved.push(dst); console.log('📷', path.relative(process.cwd(), dst)); }); // (the whole page: the HUD too)
     await page.exposeFunction('__shotLog', (...a) => console.log('  ', ...a));
     if (!process.env.ZNS_START_TIMEOUT) process.env.ZNS_START_TIMEOUT = String(30 * 60 * 1000);
     const t0 = Date.now();
@@ -101,6 +102,8 @@ try {
                 window.__follow = { obj, dc: f.clone().multiplyScalar(d).setY(up), da: new THREE.Vector3(0, at, 0) };
                 return false;
             },
+            /** The whole page as the player sees it — the HUD, panels and words too (shot() is the 3D picture alone). */
+            async page(n, settle = 20) { await frames(settle); await window.__shotPage(n); },
             /** Save the picture now (after 20 frames for the camera to settle). to: a path of its own (e.g. assets/bosses/x.png). */
             async shot(n, { to = null, settle = 20, light = 0 } = {}) {
                 await frames(settle);
