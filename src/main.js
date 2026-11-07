@@ -30,6 +30,7 @@ import { PlayersTabView } from './ui/PlayersTab.js';
 import { makePlayerPreview } from './ui/PlayerPreview.js';
 import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel, worldHoverNote, worldSpawnLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js';
+import { renderSpecsTab } from './ui/SystemSpecsUi.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
 import { spellPhrase, PHRASE_WHY_RU, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
@@ -238,6 +239,17 @@ menuSearch?.addEventListener('input', () => {
     const tabBtn = document.querySelector('[data-tab="tab-search"]');
     if (tabBtn.classList.contains('active')) renderSearchTab($('tab-search'), null, false, menuSearch); else tabBtn.click();
 });
+// «💻 Требования к ПК»: what the settings «Графика» / «Прорисовка мира» are now, and how to put the tuned ones there (the same controls, so that they are remembered)
+const specsEnv = {
+    get: () => ({ graphics: $('graphics-quality')?.value || 'auto', view: $('view-distance')?.value || 'medium' }),
+    set: ({ graphics, view }) => {
+        for (const [id, val] of [['graphics-quality', graphics], ['view-distance', view]]) {
+            const el = $(id);
+            if (el && [...el.options].some((o) => o.value === val)) { el.value = val; el.dispatchEvent(new Event('change', { bubbles: true })); }
+        }
+    },
+    busy: () => !!game?.active,
+};
 // «Механика игры» sub-tabs: «Как игра работает» / «Боссы»
 document.querySelectorAll('#tab-mechanics [data-mech]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -247,6 +259,7 @@ document.querySelectorAll('#tab-mechanics [data-mech]').forEach((btn) => {
         });
         if (btn.dataset.mech === 'bosses-list') renderBossesTab('bosses-list');
         if (btn.dataset.mech === 'items-list') renderItemsTab();
+        if (btn.dataset.mech === 'specs-list') renderSpecsTab($('specs-list'), specsEnv);
     });
 });
 // Settings sub-tabs
