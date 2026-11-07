@@ -3,6 +3,7 @@ export default async function (h) {
     const g = h.g, THREE = h.THREE;
     await h.frames(20);
     h.time(0.3); h.bare();
+    { const q = g.character.group.position; await h.go(q.x + 180, q.y + 25, q.z + 90); } // (the Creative start stands under an awning: out into the open)
     const p = g.character.group.position, o = new THREE.Vector3(p.x, p.y + 1.5, p.z);
     const fwd = new THREE.Vector3(-Math.sin(g.character.group.rotation.y), 0, -Math.cos(g.character.group.rotation.y));
     const look = (y) => h.cam([p.x - fwd.x * 14, p.y + 4, p.z - fwd.z * 14], [p.x + fwd.x * 10, p.y + y, p.z + fwd.z * 10]);
