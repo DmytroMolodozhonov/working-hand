@@ -297,7 +297,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     box(-1, 1, DZ + 1, DZ + 2, F + 3, F + 3, B.CARPET_PURPLE); // (the Director's seat)
     box(-1, 1, DZ, DZ, F + 3, F + 9, B.PLANKS_DARK); box(0, 0, DZ, DZ, F + 10, F + 11, B.GOLD); // (its high back, a gilt crest)
     box(-1, 1, DZ + 1, DZ + 1, F + 4, F + 8, B.CARPET_PURPLE);
-    for (const s of [-1, 1]) box(s * 12, s * 12, DZ + 3, DZ + 3, F + 3, F + 6, B.GOLD), box(s * 12, s * 12, DZ + 3, DZ + 3, F + 7, F + 7, B.LANTERN); // (candelabra)
+    for (const s of [-1, 1]) box(s * 12, s * 12, DZ + 3, DZ + 3, F + 3, F + 6, B.GOLD), box(s * 12, s * 12, DZ + 3, DZ + 3, F + 7, F + 7, B.ARCANE_LAMP_VIOLET); // (crystal lamps on gilt posts — no candles: the author)
     // the floating candles under the roof (models, not blocks — SchoolDecor.js): rows, each a little off its row, at 13…16 m
     for (let z = HZ0 + 6; z <= HZ1 - 4; z += 4) for (let x = -13; x <= 13; x += 3.25) floatCandles.push({ x: x + OX + ((z * 7 + x * 3) % 5) * 0.2, y: F + 13 + ((x * 11 + z * 5) % 7) * 0.45, z: z + OZ + ((x * 5) % 3) * 0.3 });
 
@@ -321,8 +321,6 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     for (const [zA, zB] of [[HZ0 + 3, HZ0 + 21], [HZ0 + 29, HZ0 + 47]]) { windowsAlong(wxi, true, zA, zB, 5); windowsAlong(exi, true, zA, zB, 5); }
     windowsAlong(SZ1, false, -W.u + 3, -W.u + 19, 5); windowsAlong(SZ1, false, W.u - 19, W.u - 3, 5);
     // inside: the potions room's hearths (cauldrons go on them — the school's life), the library's shelves, the dormitory's beds' places
-    for (let z = HZ0 + 5; z <= HZ0 + 19; z += 7) for (const x of [-48, -40]) { box(x - 1, x + 1, z - 1, z + 1, F + 1, F + 1, B.COBBLE); box(x, x, z, z, F + 1, F + 1, B.LANTERN); }
-    for (let z = SZ0 + 3; z <= SZ1 - 3; z += 4) { box(-W.u + 2, -W.u + 2, z, z + 2, F + 1, F + 6, B.BOOKS); box(-W.u + 8, -W.u + 12, z, z, F + 1, F + 5, B.BOOKS); }
     // the pentagram room's floor: a great circle of runes; the defence room: a duelling strip
     cyl(39, HZ0 + 38, 8, 7, F, F, B.RUNE); box(30, 50, HZ0 + 12, HZ0 + 12, F, F, B.CARPET_BLUE);
     // the defence room: red banners with gilt tops on the outer wall, bookcases (books of the protective arts) along the end walls,
@@ -332,6 +330,87 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     cyl(Math.round((exi + exo) / 2) + 5, HZ0 + 6, 2, 1, F, F, B.CARPET_RED);
     // lamps in the wings
     for (const [x, z] of [[-40, HZ0 + 12], [-40, HZ0 + 38], [40, HZ0 + 12], [40, HZ0 + 38], [-W.u + 11, (SZ0 + SZ1) / 2 | 0], [W.u - 11, (SZ0 + SZ1) / 2 | 0]]) box(x, x, z, z, F + 7, F + 7, B.ARCANE_LAMP);
+
+    // ---- THE ROOMS FURNISHED (the author 07.11: «кабинеты пустые… должны быть реально заполнены, интересно, красиво, подробно; чтобы
+    // чувствовалась магия»). Measures from the world: a table at the waist (2 m), a shelf's boards every metre, nothing lower than 5 m over a
+    // free floor cell, a free way 3 wide from the door to the middle; the magic: rune stone (ARCANE), crystal lamps, wards, potions' glass.
+    const cauldrons = [], tableSpots = [];
+    const shelf = (x0, x1, z0, z1, h, alt) => { // a tall rack against a wall: a dark frame, boards of potions' glass / books by turns
+        box(x0, x1, z0, z1, F + 1, F + h, B.PLANKS_DARK);
+        for (let L = F + 1; L < F + h; L++) box(x0, x1, z0, z1, L, L, (L + (alt || 0)) % 3 === 0 ? B.BOOKS : (L % 2 ? B.POTION : B.BOOKS));
+        box(x0, x1, z0, z1, F + h, F + h, B.PLANKS_DARK);
+    };
+    const table = (x0, x1, z0, z1) => { box(x0, x1, z0, z1, F + 2, F + 2, B.PLANKS_DARK); for (const x of [x0, x1]) for (const z of [z0, z1]) box(x, x, z, z, F + 1, F + 1, B.PLANKS_DARK); };
+    const pillar = (x, z, h, top) => { box(x, x, z, z, F + 1, F + h, B.ARCANE); box(x, x, z, z, F + h + 1, F + h + 1, top); };
+    const rug = (x0, x1, z0, z1, c, edge) => { box(x0, x1, z0, z1, F, F, edge); box(x0 + 1, x1 - 1, z0 + 1, z1 - 1, F, F, c); };
+    // POTIONS (west wing, north): the teacher's great cauldron on a rune ring by the far wall, four pupils' hearths in two rows, racks of
+    // potions and books along both long walls, work tables with ingredients (real things — School puts them there), bunches of herbs drying
+    // under the roof, a stone basin of water by the door (the author: «вода для котла»), violet crystal lamps
+    {
+        const x0 = wxo + 1, x1 = wxi - 1, z0 = HZ0 + 1, z1 = HZ0 + 23, zm = HZ0 + 12;
+        cyl(x0 + 6, zm, 3.5, 2.5, F, F, B.RUNE); box(x0 + 5, x0 + 7, zm - 1, zm + 1, F, F, B.CS_DARK);
+        cauldrons.push({ x: x0 + 6 + OX, z: zm + OZ, big: true });
+        for (const [x, z] of [[x0 + 14, z0 + 5], [x0 + 23, z0 + 5], [x0 + 14, z1 - 5], [x0 + 23, z1 - 5]]) { cyl(x, z, 2, 1.2, F, F, B.CS_DARK); cauldrons.push({ x: x + OX, z: z + OZ }); }
+        for (let x = x0 + 2; x <= x1 - 6; x += 6) { shelf(x, x + 3, z0, z0, 5, x); shelf(x, x + 3, z1, z1, 5, x + 1); }
+        shelf(x0, x0, z0 + 2, zm - 4, 6, 0); shelf(x0, x0, zm + 4, z1 - 2, 6, 1);
+        for (const z of [z0 + 7, z1 - 8]) { table(x1 - 9, x1 - 4, z, z + 1); box(x1 - 8, x1 - 8, z, z, F + 3, F + 3, B.POTION); tableSpots.push({ x: x1 - 6 + OX, z: z + 0.5 + OZ }, { x: x1 - 5 + OX, z: z + 0.5 + OZ }); }
+        box(x1 - 3, x1 - 1, z0 + 1, z0 + 3, F + 1, F + 1, B.CS_DARK); box(x1 - 2, x1 - 2, z0 + 2, z0 + 2, F + 1, F + 1, B.WATER); // (the basin)
+        for (let x = x0 + 4; x <= x1 - 4; x += 5) for (const z of [z0 + 3, z1 - 3]) { box(x, x, z, z, F + 7, F + 7, B.FENCE); box(x, x, z, z, F + 6, F + 6, (x / 5) & 1 ? B.FLOWERS : B.LEAVES); }
+        for (const z of [z0 + 6, z1 - 6]) box(x0 + 18, x0 + 18, z, z, F + 7, F + 7, B.ARCANE_LAMP_VIOLET);
+    }
+    // HISTORY (west wing, south): desks in rows facing the teacher, a great map of the world on the far wall, bookcases, a pedestal with a
+    // slowly turning globe of crystal (the light), old banners
+    {
+        const x0 = wxo + 1, x1 = wxi - 1, z0 = HZ0 + 27, z1 = HZ0 + 49, zm = HZ0 + 38;
+        box(x0, x0, z0 + 4, z1 - 4, F + 2, F + 6, B.CARPET_GREEN); box(x0, x0, z0 + 6, z0 + 10, F + 3, F + 5, B.CARPET_BLUE); box(x0, x0, zm, zm + 6, F + 2, F + 4, B.CARPET_BLUE); box(x0, x0, z0 + 3, z1 - 3, F + 7, F + 7, B.GOLD); // (the map: seas, lands, a gilt frame)
+        box(x0 + 3, x0 + 3, zm - 1, zm + 1, F + 1, F + 1, B.PLANKS_DARK); box(x0 + 3, x0 + 3, zm, zm, F + 2, F + 2, B.BOOKS); // (the teacher's lectern)
+        pillar(x0 + 3, zm + 5, 2, B.ARCANE_LAMP); // (the crystal globe on its pedestal)
+        for (let x = x0 + 8; x <= x1 - 4; x += 5) for (const z of [zm - 7, zm - 3, zm + 3, zm + 7]) { table(x, x + 1, z, z + 1); box(x, x, z, z, F + 3, F + 3, B.BOOKS); } // (rows of two desks — the way from the door (zm−1…zm+1) stays free)
+        for (let x = x0 + 5; x <= x1 - 4; x += 5) { shelf(x, x + 2, z0, z0, 5, x); shelf(x, x + 2, z1, z1, 5, x + 2); }
+        for (const z of [z0 + 6, z1 - 6]) box(x0 + 16, x0 + 16, z, z, F + 7, F + 7, B.ARCANE_LAMP);
+    }
+    // DEFENCE (east wing, north): crystal ward-pillars in the corners, a rack of practice wands, shields of warding on the wall, the duelling
+    // strip; the dummy stands on its ring (School)
+    {
+        const x0 = exi + 1, x1 = exo - 1, z0 = HZ0 + 1, z1 = HZ0 + 23;
+        for (const [x, z] of [[x0 + 1, z0 + 1], [x1 - 1, z0 + 1], [x0 + 1, z1 - 1], [x1 - 1, z1 - 1]]) pillar(x, z, 5, B.ARCANE_LAMP);
+        for (const z of [z0 + 6, z0 + 11, z0 + 16]) box(x1, x1, z, z + 1, F + 2, F + 3, B.ARCANE_WARD);
+        box(x0 + 8, x0 + 14, z0, z0, F + 1, F + 1, B.PLANKS_DARK); for (let x = x0 + 8; x <= x0 + 14; x += 2) box(x, x, z0, z0, F + 2, F + 3, B.FENCE); // (the wand rack)
+        table(x0 + 4, x0 + 6, z1 - 3, z1 - 2); box(x0 + 5, x0 + 5, z1 - 3, z1 - 3, F + 3, F + 3, B.ENCHANTED); // (the teacher's table, a warded box on it)
+    }
+    // PENTAGRAMS (east wing, south): the great rune circle with eight crystal pillars round it, star charts on the walls, grimoires, a dark
+    // board with a white figure drawn on it
+    {
+        const x0 = exi + 1, x1 = exo - 1, z0 = HZ0 + 27, z1 = HZ0 + 49;
+        for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4, px = Math.round(39 + Math.cos(a) * 10), pz = Math.round(HZ0 + 38 + Math.sin(a) * 10); if (pz > z0 && pz < z1 && px > x0 && px < x1) pillar(px, pz, 3, B.ARCANE_LAMP_VIOLET); }
+        for (const z of [z0 + 4, z1 - 8]) { box(x1, x1, z, z + 4, F + 2, F + 6, B.CARPET_PURPLE); for (let i = 0; i < 5; i++) box(x1, x1, z + (i * 3) % 5, z + (i * 3) % 5, F + 3 + (i % 3), F + 3 + (i % 3), B.GOLD); } // (star charts)
+        const zb = (z0 + z1) / 2 | 0; box(x1, x1, zb - 2, zb + 2, F + 2, F + 6, B.CS_DARK); box(x1, x1, zb - 1, zb + 1, F + 4, F + 4, B.CS_WHITE); box(x1, x1, zb, zb, F + 3, F + 5, B.CS_WHITE); // (the board — on the far wall, not before the door)
+        for (let x = x0 + 4; x <= x1 - 4; x += 6) { shelf(x, x + 2, z0, z0, 5, x); shelf(x, x + 2, z1, z1, 5, x + 1); }
+    }
+    // the LIBRARY (south-west): rows of tall bookcases across the room with ladders, reading tables with crystal lamps between them
+    {
+        const x0 = -W.u + 1, x1 = -W.u + 21, z0 = SZ0 + 1, z1 = SZ1 - 1, zm = (SZ0 + SZ1) / 2 | 0;
+        for (let z = z0 + 2; z <= z1 - 2; z += 6) if (Math.abs(z - zm) > 2) { box(x0, x0 + 9, z, z, F + 1, F + 6, B.BOOKS); box(x0, x0 + 9, z, z, F + 7, F + 7, B.PLANKS_DARK); box(x0 + 10, x0 + 10, z, z, F + 1, F + 5, B.FENCE); }
+        for (let z = z0 + 5; z <= z1 - 5; z += 6) if (Math.abs(z - zm) > 3) { table(x1 - 7, x1 - 4, z, z + 1); box(x1 - 6, x1 - 6, z, z, F + 3, F + 3, B.ARCANE_LAMP); box(x1 - 5, x1 - 5, z + 1, z + 1, F + 3, F + 3, B.BOOKS); }
+        rug(x1 - 9, x1 - 2, zm - 2, zm + 2, B.CARPET_RED, B.GOLD);
+    }
+    // the DORMITORY (south-east): the beds are the game's own (School puts twelve by the long walls); trunks at their feet, nightstands with
+    // little crystal lamps between them, a long rug, a hearth of stone on the end wall
+    const dormBeds = [];
+    {
+        const x0 = W.u - 21, x1 = W.u - 1, z0 = SZ0 + 1, z1 = SZ1 - 1, n = 6, step = Math.min(6, (z1 - z0 - 10) / (n - 1));
+        for (let i = 0; i < n; i++) {
+            const z = Math.round(z0 + 6 + i * step);
+            for (const side of [0, 1]) {
+                const bx = side ? x1 - 3.2 : x0 + 3.2;
+                dormBeds.push({ x: bx + OX, z: z + OZ, yaw: side ? -Math.PI / 2 : Math.PI / 2, side, i });
+                const tx = side ? x1 - 7 : x0 + 7; box(tx, tx, z - 1, z + 1, F + 1, F + 1, B.PLANKS_DARK); box(tx, tx, z, z, F + 1, F + 1, B.GOLD); // (the trunk at the foot)
+                const nx = side ? x1 - 1 : x0 + 1; if (i < n - 1) { box(nx, nx, z + 3, z + 3, F + 1, F + 1, B.PLANKS_DARK); box(nx, nx, z + 3, z + 3, F + 2, F + 2, B.ARCANE_LAMP); } // (the nightstand)
+            }
+        }
+        rug((x0 + x1) / 2 - 2 | 0, (x0 + x1) / 2 + 2 | 0, z0 + 3, z1 - 3, B.CARPET_PURPLE, B.CARPET_BLUE);
+        box((x0 + x1) / 2 - 2 | 0, (x0 + x1) / 2 + 2 | 0, z1, z1, F + 1, F + 4, B.COBBLE); box((x0 + x1) / 2 - 1 | 0, (x0 + x1) / 2 + 1 | 0, z1, z1, F + 1, F + 2, B.LANTERN); // (the hearth)
+    }
 
     // ---- the courtyard: a round fountain (stone basin, water, a column with a gilt crown), lamp posts along the way
     const FZ = Math.round((HZ1 + W.v1) / 2);
@@ -392,7 +471,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
             library: { x0: -W.u + 1, x1: -W.u + 21, z0: SZ0 + 1, z1: SZ1 - 1, door: at(-W.u + 24, (SZ0 + SZ1) / 2) },
             dormitory: { x0: W.u - 21, x1: W.u - 1, z0: SZ0 + 1, z1: SZ1 - 1, door: at(W.u - 24, (SZ0 + SZ1) / 2) },
         },
-        arrive, coachFrom, road: { z0: OZ + S.HEAD.v1, len: S.ROAD.len }, gateZ: OZ + GZ, bridge: { v0: OZ + BR.v0, v1: OZ + BR.v1, x: OX }, centre: { x: OX, z: OZ }, F, M: P.M ?? F - S.RISE, tableCandles, floatCandles,
+        cauldrons: cauldrons.map((c) => ({ ...c, y: F + 0.5 })), tableSpots: tableSpots.map((t) => ({ ...t, y: F + 2.5 })), dormBeds, arrive, coachFrom, road: { z0: OZ + S.HEAD.v1, len: S.ROAD.len }, gateZ: OZ + GZ, bridge: { v0: OZ + BR.v0, v1: OZ + BR.v1, x: OX }, centre: { x: OX, z: OZ }, F, M: P.M ?? F - S.RISE, tableCandles, floatCandles,
     };
     // (the rooms' and the hall's bounds and the tables: laid out round (0, 0) — to the world's place too)
     for (const r of [out.hall, ...Object.values(out.rooms)]) { r.x0 += OX; r.x1 += OX; r.z0 += OZ; r.z1 += OZ; }

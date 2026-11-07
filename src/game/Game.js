@@ -140,6 +140,7 @@ import { Titans } from './Titans.js';
 import { Godhood } from './Godhood.js';
 import { Cine } from './Cine.js';
 import { coachSamples } from '../fx/SchoolCoach.js';
+import { schoolDecorSamples } from '../fx/SchoolDecor.js';
 import { Tutorial } from './Tutorial.js';
 import { TutorialNudge } from './TutorialNudge.js';
 import { School } from './School.js';
@@ -4021,7 +4022,7 @@ export class Game {
         for (const m of this.customCreatures?.sampleModels?.() || []) zoo.add(m); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)
         for (const m of this.spencers?.sampleModels?.() || []) zoo.add(m); // (the rose bird, its halo and the see-through material — only a seer ever has them in play, but the shader is compiled now)
         for (const m of this.ghosts?.sampleModels?.() || []) zoo.add(m);
-        if (this.config.school) for (const m of coachSamples()) zoo.add(m); // (the school's magic coach — SchoolCoach.js) // (the sheet-ghost's outside and inside, the castle's chairs and candles, the flame — GhostFx.js, GhostProps.js)
+        if (this.config.school) for (const m of [...coachSamples(), ...schoolDecorSamples()]) zoo.add(m); // (the school's magic coach — SchoolCoach.js) // (the sheet-ghost's outside and inside, the castle's chairs and candles, the flame — GhostFx.js, GhostProps.js)
         for (const m of this.beslan?.sampleModels?.() || []) zoo.add(m); // (Beslan's grass: its shader)
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
         zoo.add(this.plants.sampleModels()); // (the Brightflower: stems, petals that open in the shader, flame, heart — BrightFlowerFx)

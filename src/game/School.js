@@ -26,6 +26,7 @@ import { SchoolLesson } from './SchoolLesson.js';
 import { lessonById } from './SchoolLessons.js';
 import { lessonOfDay, yearLength, newRecord, loadRecord, saveRecord, YEAR, SCHEDULE } from './SchoolYear.js';
 import { newUid } from './ItemTypes.js';
+import { CAULDRON, newBrew } from './Potions.js';
 
 export const SCHOOL_SITE = 'akseldorf';
 const FLIGHT = { T: 36 }; // s: the winged coach's flight in (and out)
@@ -133,13 +134,38 @@ export class School {
         if (F == null) return; // (the dormitory not made yet: later)
         this._bedsWanted = false;
         this.bedIds = [];
-        const n = 6, z0 = R.z0 + 6, step = Math.min(6, (R.z1 - R.z0 - 10) / (n - 1));
-        for (let i = 0; i < n; i++) for (const side of [0, 1]) {
-            const x = side ? R.x1 - 3.2 : R.x0 + 3.2, z = z0 + i * step;
-            const b = B.spawnBed({ x, y: F, z }, side ? -Math.PI / 2 : Math.PI / 2, side ? 'blue' : 'red', { id: `school-bed-${side}-${i}`, broadcast: false });
+        for (const d of this.plan.dormBeds || []) { // (the plan's places: the trunks and the nightstands are laid out round them — SchoolLand)
+            const b = B.spawnBed({ x: d.x, y: this._floor(d.x, d.z, F0) ?? F, z: d.z }, d.yaw, d.side ? 'blue' : 'red', { id: `school-bed-${d.side}-${d.i}`, broadcast: false });
             if (b) this.bedIds.push(b.id);
         }
         this.myBed = this.bedIds[0] || null;
+    }
+
+    /**
+     * The classrooms' living things (the author: «зельеварение — всё интересно, подробно»): in the potions room five cauldrons — the
+     * teacher's and four pupils' — full of water over burning fires (real ones: Cauldrons, Campfires — a potion can be brewed in them), and
+     * ingredients lying on the work tables (real things, a few of the world's). Made once, when the room's floor is there.
+     */
+    _props() {
+        const g = this.game, P = this.plan;
+        const c0 = P.cauldrons?.[0];
+        if (!c0 || !g.cauldrons?.spawn) { this._propsMade = true; return; }
+        if (this._floor(c0.x, c0.z, c0.y) == null) return;
+        this._propsMade = true;
+        P.cauldrons.forEach((c, i) => {
+            const id = 'school_cauldron_' + i, y = this._floor(c.x, c.z, c.y) ?? c.y;
+            if (!g.cauldrons.list.has(id)) g.cauldrons.spawn({ id, x: c.x, y, z: c.z, yaw: 0, st: { ...newBrew(), phase: 'water', water: CAULDRON.FULL, heat: 1 } });
+            const cc = g.cauldrons.list.get(id); if (cc) cc.fixed = true; // (fastened over its fire: no «Левиоса», no pushing)
+            let fire = null;
+            for (const f of g.campfires?.list?.values?.() || []) if (Math.hypot(f.x - c.x, f.z - c.z) < 1.2) fire = f;
+            if (!fire) { const f = g.campfires?.kindle?.(c.x, y, c.z); if (f) f.left = 1e6; } // (the school's fires do not go out by themselves)
+        });
+        const kinds = ['sun_herb', 'azure_berry', 'glowcap_mushroom', 'crystal', 'owlFeather', 'fern_frond', 'magicPebble', 'frost_shard'];
+        (P.tableSpots || []).forEach((t, i) => {
+            const y = (this._floor(t.x, t.z, t.y) ?? t.y) + 0.1;
+            const L = g.items?.spawnLoose?.({ kind: kinds[i % kinds.length], uid: newUid(), count: 1, school: 1 }, new THREE.Vector3(t.x, y, t.z), { broadcast: false });
+            if (L) { L.rest = true; L.vel?.set?.(0, 0, 0); L.spin?.set?.(0, 0, 0); }
+        });
     }
 
     /** Morning: the hero up beside his bed (the first time — a word on the day). */
@@ -290,6 +316,7 @@ export class School {
         this.decor?.update(dt, this.t);
         this._wandLight(dt);
         if (this._bedsWanted && (this._bedT = (this._bedT || 0) + dt) > 1) { this._bedT = 0; this._beds(); }
+        if (!this._propsMade && (this._propT = (this._propT || 0) + dt) > 1.3) { this._propT = 0; this._props(); }
         this._gates(dt);
         switch (this.phase) {
             case 'ride': case 'intro': return this._intro(dt);
