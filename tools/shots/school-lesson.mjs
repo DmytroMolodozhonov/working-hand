@@ -28,9 +28,9 @@ export default async function (h) {
         if (ph === 'demo' && !shots.d) { shots.d = 1; await h.frames(60); const tea = L.teacher; if (tea) { h.cam([tea.x + 5, P.F + 4.5, tea.z + 9], [tea.x, P.F + 3, tea.z]); await h.shot('2-demo', { settle: 5 }); window.__shotCam = null; } }
         if (h.fast && ph === 'intro' && shots.i) { L.line = L.L.intro.length; L.t = 1e3; }
         if (h.fast && ph === 'demo' && shots.d && L.t < 6) L.t = 6.4;
-        if (ph === 'task' && (h._dbg = (h._dbg || 0) + 1) % 30 === 1) {
-            const v = L.teacher, me = g.character.group.position;
-            h.log('teacher', v && JSON.stringify({ wiz: v.wizard, W: !!v.W, mana: v.mana, noWand: v.noWand, dead: v.dead, x: Math.round(v.x), z: Math.round(v.z), yaw: +v.yaw.toFixed(2), me: [Math.round(me.x), Math.round(me.z)], fight: !!g.castleLife?.wizards?.fight, bolt: !!L._bolt, next: L._next, t: +L.t.toFixed(1), stun: v.stunT, mode: v.mode }));
+        if ((h._dbg = (h._dbg || 0) + 1) % 30 === 1) {
+            const v = L?.teacher, me = g.character.group.position;
+            h.log('teacher', ph, S.phase, Math.round((performance.now() - t0) / 1000) + 's', v && JSON.stringify({ wiz: v.wizard, W: !!v.W, mana: v.mana, noWand: v.noWand, dead: v.dead, x: Math.round(v.x), z: Math.round(v.z), yaw: +v.yaw.toFixed(2), me: [Math.round(me.x), Math.round(me.z)], fight: !!g.castleLife?.wizards?.fight, bolt: !!L?._bolt, next: L?._next, t: L && +L.t.toFixed(1), stun: v.stunT, mode: v.mode }));
         }
         if (ph === 'task') {
             // the hero raises the shield when a charge is in the air (by script: Combat's shield — no camera here)
