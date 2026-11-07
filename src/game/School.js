@@ -291,7 +291,16 @@ export class School {
     }
 
     /** A line said by a person (its voice, its bubble). */
-    _say(v, text, s = 5) { if (v && !v.dead) this.game.castleLife?._say?.(v, text, s, true, true); }
+    _say(v, text, s = 5) {
+        if (!v || v.dead || !text) return;
+        const sp = this.game.castleLife?.talk?.speech;
+        if (this.loudScene && sp?.say) { // (a scene: the voice straight to the speech — as the narrator's, queued, never cut; the words are the film's subtitles)
+            try { sp.say(text, { voiceKey: v.id, role: v.entry?.rank === 'master' ? 'king' : 'wizard', female: !!v.entry?.female, volume: 1, keep: true }); } catch (e) { console.warn('school say', e); }
+            if (!this.game.cine?.active) { v.bubble?.show?.(text, { name: `${v.title || ''} ${v.name || ''}`.trim(), seconds: s, color: '#5b2d8e' }); }
+            return;
+        }
+        this.game.castleLife?._say?.(v, text, s, true, true);
+    }
 
     /** Is the hero held still (in the coach, in a cut-scene, listening to the Director)? */
     get frozen() { return this.phase === 'intro' || this.phase === 'speech' || !!this.game.cine?.active; }
@@ -312,6 +321,10 @@ export class School {
     update(dt) {
         if (!this.plan || !(dt > 0)) return;
         dt = Math.min(dt, 0.1);
+        // (nothing of the opening behind the loading screen: the people may not speak then, the music is under the passage's sound — the
+        //  author heard no Director and no opening music; the scene begins once the world is shown and the passage's light is gone)
+        if (this.game.revealed === false) { this._shownT = 0; if (this.phase === 'ride') this._hideHero(true, this.plan.arrive); return; }
+        if ((this._shownT = (this._shownT || 0) + dt) < 2.6 && this.phase === 'ride') { this._hideHero(true, this.plan.arrive); return; }
         this.t += dt;
         this.decor?.update(dt, this.t);
         this._wandLight(dt);
@@ -322,7 +335,20 @@ export class School {
             case 'ride': case 'intro': return this._intro(dt);
             case 'bridge': return this._bridge(dt);
             case 'speech': return this._speech(dt);
-            case 'free': return this._free(dt);
+            case 'free': this._bedWalk(dt); return this._free(dt);
+        }
+    }
+
+    /** (after the speech) the pupils on their way to bed: the ones stuck after 60 s are put at their beds, out of the hero's sight. */
+    _bedWalk(dt) {
+        if (!this._bedsGo || (this._bedWalkT = (this._bedWalkT || 0) + dt) < 60) return;
+        this._bedsGo = false;
+        const me = this.game.character.group.position;
+        for (const v of this.pupilsOf()) {
+            const at = v.bedAt;
+            if (!at || Math.hypot(v.x - at.x, v.z - at.z) < 3) continue;
+            if (Math.hypot(me.x - v.x, me.z - v.z) < 25 || Math.hypot(me.x - at.x, me.z - at.z) < 18) continue; // (seen: let it walk on)
+            v.x = at.x; v.y = at.y; v.z = at.z; v.goal = null; v.post = { ...at };
         }
     }
 
@@ -499,17 +525,25 @@ export class School {
     _tour() {
         const P = this.plan, X = P.centre.x, F = P.F, R = P.rooms, H = P.hall;
         const N = (text) => ({ sub: text, start: () => this._narrate(text), hold: this._talking });
-        const room = (r, text, dur = 8) => { const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, w = r.x1 - r.x0, d = r.z1 - r.z0;
-            return { dur, from: { pos: [r.x0 + 2, F + 6.5, r.z1 - 2], look: [cx, F + 2, cz] }, to: { pos: [r.x0 + 2 + w * 0.25, F + 6, r.z1 - 2 - d * 0.2], look: [cx, F + 1.5, cz - d * 0.1] }, ...N(text) }; };
+        // (the camera moves only along the room's free way from its door to its middle — 3 wide, nothing ever put in it (SchoolLand) — so it never
+        //  passes through a shelf or a table; the author: «часто проходит сквозь элементы кабинетов»; two passes, from two sides)
+        const room = (r, text, dur = 8) => {
+            const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, dz = r.door.z, sx = Math.sign(cx - r.door.x) || 1;
+            const ent = r.door.x + sx * 3.5, mid = cx;
+            const a = { dur: dur * 0.55, from: { pos: [ent, F + 4.6, dz], look: [mid, F + 2.2, dz] }, to: { pos: ent + (mid - ent) * 0.45, look: [mid + sx * 6, F + 2, dz] }, ...N(text) };
+            a.to.pos = [ent + (mid - ent) * 0.45, F + 4.2, dz];
+            const b = { dur: dur * 0.45, from: { pos: [mid, F + 5, dz + 0.5], look: [mid - sx * 8, F + 2, dz + 6] }, to: { pos: [ent + (mid - ent) * 0.6, F + 5, dz - 0.5], look: [mid + sx * 2, F + 2, dz - 8] }, hold: this._talking };
+            return [a, b];
+        };
         return [
             { dur: 8, from: { pos: [X - 22, F + 16, P.fountain.z + 24], look: [X, F + 2, P.fountain.z] }, to: { pos: [X + 18, F + 13, P.fountain.z + 18], look: [X, F + 2, P.fountain.z - 4] }, ...N('Это внутренний двор. Фонтан в его середине помнит всех, кто учился здесь до вас.') },
             { dur: 8.5, from: { pos: [X + 8, F + 9, H.z1 - 4], look: [X, F + 13, (H.z0 + H.z1) / 2] }, to: { pos: [X - 6, F + 12, (H.z0 + H.z1) / 2], look: [X, F + 14, H.z0 + 6] }, ...N('Большой зал — сердце школы. Здесь вы будете ужинать, а в первый день каждого месяца директор собирает здесь всех учеников.') },
-            room(R.dormitory, 'Спальня учеников — в южном крыле, справа от ворот. Ложитесь на кровать — и наступит новый день.'),
-            room(R.defence, 'Кабинет защиты от тёмных искусств, восточное крыло. Здесь вас научат защищать себя и других.'),
-            room(R.potions, 'Зельеварение — в западном крыле: котлы, огонь и полки с ингредиентами.'),
-            room(R.pentagrams, 'Кабинет пентаграмм. Знаки, которые чертят на земле, бывают сильнее любых заклинаний.'),
-            room(R.history, 'Здесь рассказывают об основах мира — о том, как он устроен и что было до нас.'),
-            room(R.library, 'Библиотека. Книги здесь отвечают тем, кто умеет спрашивать.'),
+            ...room(R.dormitory, 'Спальня учеников — в южном крыле, справа от ворот. Ложитесь на кровать — и наступит новый день.'),
+            ...room(R.defence, 'Кабинет защиты от тёмных искусств, восточное крыло. Здесь вас научат защищать себя и других.'),
+            ...room(R.potions, 'Зельеварение — в западном крыле: котлы, огонь и полки с ингредиентами.'),
+            ...room(R.pentagrams, 'Кабинет пентаграмм. Знаки, которые чертят на земле, бывают сильнее любых заклинаний.'),
+            ...room(R.history, 'Здесь рассказывают об основах мира — о том, как он устроен и что было до нас.'),
+            ...room(R.library, 'Библиотека. Книги здесь отвечают тем, кто умеет спрашивать.'),
             { dur: 8, from: { pos: [X + 60, F + 30, H.z0 + 30], look: [X + 35, F + 40, H.z0 + 3] }, to: { pos: [X + 52, F + 50, H.z0 + 20], look: [X + 35, F + 52, H.z0 + 3] }, ...N('А с самой высокой башни видно звёзды. Но туда — только с разрешения учителей.'), fadeOut: true },
         ];
     }
@@ -542,10 +576,29 @@ export class School {
             line(3, { from: { pos: () => { const d = dir(); return [d[0] + 5, d[1] + 1, d[2] + 11]; }, look: dir } }),
             line(4, { from: { pos: [X, F + 18, mz + 10], look: [X, F + 13, H.z0 + 4] }, to: { pos: [X, F + 16, mz], look: [X, F + 12, H.z0 + 4] } }),
             line(5, { from: { pos: () => { const d = dir(); return [d[0] + 2, d[1] + 0.2, d[2] + 7]; }, look: dir }, fadeOut: true }),
-        ], { onEnd: () => { this.phase = 'free'; this.t = 0; this._sky(0.85); } });
+        ], { onEnd: () => { this.phase = 'free'; this.t = 0; this._sky(0.85); this._toBed(); } });
     }
 
     _speech() { /* (the cut-scene plays it — _startSpeech) */ }
+
+    /**
+     * After the Director's speech (the author: «все ученики пойдут по спальням»): every pupil walks out of the hall, across the courtyard to the
+     * dormitory and to a bed; one who has not got there in 60 s (a crowd at a door, a wall) is put there when the hero does not see it.
+     */
+    _toBed() {
+        const P = this.plan, F = P.F + 0.5, D = P.rooms.dormitory, H = P.hall, door = P.hall.door;
+        const beds = (P.dormBeds || []).filter((b) => b.i > 0); // (the first bed by the door is the hero's)
+        this.pupilsOf().forEach((v, k) => {
+            const b = beds[k % Math.max(1, beds.length)];
+            const at = b ? { x: b.x + (b.side ? -3.5 : 3.5), y: F, z: b.z, yaw: b.side ? -Math.PI / 2 : Math.PI / 2 } : { x: (D.x0 + D.x1) / 2, y: F, z: (D.z0 + D.z1) / 2 };
+            v.lookAt = null;
+            v.goal = { x: door.x + (k % 3 - 1) * 1.2, y: F, z: door.z + 3, next: [{ x: P.fountain.x + 8, y: F, z: P.fountain.z }, { x: D.door.x - 2, y: F, z: D.door.z }, { x: D.door.x + 3, y: F, z: D.door.z }, at] };
+            v.bedAt = at;
+        });
+        this._bedT = 0; this._bedsGo = true;
+        this.game.hud?.setVoice?.('Ученики расходятся по спальням. Ваша спальня — в южном крыле, справа от ворот: ложитесь на кровать — наступит утро.', true);
+        void H;
+    }
 
     /**
      * The castle's gates (the author: «не было красивых ворот замка»): two great leaves of forged iron (GateModel.js) in the gatehouse's
