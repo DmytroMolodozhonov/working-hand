@@ -15,7 +15,7 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 /** Does something listen on localhost:port (a socket opened and closed — nothing read)? */
 function portOpen(port) {
     return new Promise((res) => {
-        const s = net.connect({ port, host: '127.0.0.1' });
+        const s = net.connect({ port, host: 'localhost' }); // (as the page and the fetch reach it: «localhost» may be ::1)
         const done = (ok) => { s.destroy(); res(ok); };
         s.once('connect', () => done(true));
         s.once('error', () => done(false));
