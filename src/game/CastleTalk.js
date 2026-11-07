@@ -296,6 +296,7 @@ export class CastleTalk {
         const until = performance.now() + Math.min(8000, 400 + text.length * 70);
         for (const sp of spellsIn(text)) this.game.voiceGate?.noteRemote(sp, until);
         // an answer in a talk: what is written over the head is what you hear — now, not after older lines
+        if (this._urgent && this.speech.currentKey === 'school-narrator') return false; // (the school's narrator is never cut off)
         if (this._urgent) {
             if (this.speech.speaking && this.speech.currentKey !== v.id) this.life.alog?.decision(v, `реплика прервана — причина: срочная реплика #${v.id} перебила речь #${this.speech.currentKey}`);
             this.speech.cancel();
@@ -680,6 +681,7 @@ export class CastleTalk {
     _hear(text, info = {}) {
         const g = this.game;
         if (!text || !this.life.enabled) return false;
+        if (g.school?.loudScene || g.cine?.active) return false; // (the school's scenes: the narrator's and the teachers' words come back from the speakers — no villager answers them; the author: «житель его перебил»)
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
         text = this._unecho(text); // (and his words caught with mine in one phrase: «я человек простой… а ты можешь со мной пойти»)
         if (!text) return false;

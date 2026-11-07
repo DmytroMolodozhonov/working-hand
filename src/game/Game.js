@@ -1894,6 +1894,7 @@ export class Game {
      * @param {boolean} [isFinal]  false for an unfinished (interim) phrase
      */
     castLocalSpell(text, isFinal = true) {
+        if (this.cine?.active) return null; // (a cut-scene: no spell from the narrator's words coming back from the speakers — Cine.js)
         // (a phrase still being said waits only for a longer spell the hero knows — «Бомбардо» with no «Бомбардо
         // Максима» learnt yet has nothing to wait for: it is as good as said; Creative knows them all)
         if (!isFinal) { const sp = matchSpell(text), longer = sp && LONGER_OF.get(sp); if (longer && ![...longer].some((l) => this.knowsSpell(l))) isFinal = true; }

@@ -70,6 +70,7 @@ export class School {
         this.people = new Map(); // idx → villager
         this._quiet();
         if (!this.plan) return;
+        { const md = game.sound?.musicDirector; md?._make?.('school1'); md?._make?.('school2'); } // (the school's music made while the world loads — MusicCatalog)
         // the year: from the record kept («Продолжить учёбу») or a new one — then the arrival first
         const kept = game.config?.schoolContinue ? loadRecord(this._store()) : null;
         this._rec = kept && kept.arrived ? kept : newRecord();
@@ -316,6 +317,7 @@ export class School {
             this._hideHero(true, P.coachFrom);
             if (!ready && this.t < 40) return; // (the land under the road first — the hero waits in the dark coach)
             this.phase = 'intro'; this.t = 0;
+            { const md = g.sound?.musicDirector; if (md) { md.start(); md.settled = { cat: 'schoolEpic' }; md._play('school1', 2.5); } } // (the grand theme from the first shot — made during the loading)
             this.coach = new SchoolCoach(g.scene);
             this._coachStop = P.arrive.z + 9; this._landY = this._floor(P.centre.x, this._coachStop, P.F + 0.5) ?? P.F + 0.5; this._landed = false;
             this._people();

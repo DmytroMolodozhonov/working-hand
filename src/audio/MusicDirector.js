@@ -33,7 +33,7 @@ export function musicPlace(g) {
     const p = g?.character?.group?.position;
     if (!p) return null;
     if (g.space?.realm && g.space.realm !== 'earth') return null; // (space is quiet)
-    if (g.school && g.school.phase !== 'free') return { cat: 'school' }; // («Акселдорф»: its own theme through the opening — MusicCatalog 'school')
+    if (g.school && g.school.phase !== 'free') return { cat: g.school.phase === 'ride' || g.school.phase === 'intro' ? 'schoolEpic' : 'school' }; // («Акселдорф»: the opening's grand theme, then the calm one of the tour — MusicCatalog)
     if (g.inFight?.()) return { cat: 'battle', intensity: fightIntensity(g) };
     if (g.hellGate?.inHell) return { cat: 'hell' };
     if (g._inCave) return { cat: 'cave' };
