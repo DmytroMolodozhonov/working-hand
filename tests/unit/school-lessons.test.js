@@ -34,3 +34,22 @@ test('the defence of the year: a lesson a month; what the pupil casts is a spell
     for (const l of def) for (const sp of l.task.spells || [l.task.kind === 'block' ? 'Protection' : l.task.spell]) assert.ok(said.has(sp), l.id + ' ' + sp);
     for (const w of ['джолт', 'даст', 'экспеллиармус', 'фрозен', 'остолбеней', 'граундпруд', 'сапира', 'протекшн максима', 'нихилис атра', 'электром', 'калиго']) assert.ok(said.has(matchSpell(w)), w);
 });
+
+test('the year: a lesson a day in the order of the months; the record kept and read back; a broken one forgotten', async () => {
+    const Y = await import('../../src/game/SchoolYear.js');
+    const days = Y.yearDays();
+    assert.equal(days.length, LESSONS.length);
+    for (let i = 1; i < days.length; i++) assert.ok(days[i].month >= days[i - 1].month);
+    assert.equal(Y.lessonOfDay(1).id, 'def1');
+    assert.equal(Y.lessonOfDay(days.length + 1), null);
+    const mem = new Map(), store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) };
+    assert.equal(Y.loadRecord(store), null);
+    const r = Y.newRecord(); r.day = 3; r.arrived = true; r.spells.push('Protection'); r.cells = 6;
+    Y.saveRecord(store, r);
+    const back = Y.loadRecord(store);
+    assert.deepEqual(back, r);
+    mem.set(Y.SCHOOL_SAVE_KEY, '{oops'); assert.equal(Y.loadRecord(store), null);
+    assert.equal(Y.YEAR.START_CELLS, 5);
+    // the mana the lessons grow is enough for the year's hardest spell («Электром» 50) by its lesson
+    assert.ok(Y.YEAR.START_CELLS + (days.length - 1) * Y.YEAR.LESSON_CELLS >= 35);
+});

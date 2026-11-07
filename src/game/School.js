@@ -20,9 +20,10 @@ import * as THREE from 'three';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { SchoolDecor } from '../fx/SchoolDecor.js';
 import { SchoolLesson } from './SchoolLesson.js';
-import { lessonsOfMonth } from './SchoolLessons.js';
+import { lessonOfDay, yearLength, newRecord, loadRecord, saveRecord, YEAR } from './SchoolYear.js';
 
 export const SCHOOL_SITE = 'akseldorf';
+const SUBJECTS_NAME = { defence: 'защита от тёмных искусств', potions: 'зельеварение', pentagrams: 'пентаграммы', history: 'основы мира' };
 
 /** The people of the school (idx → who): the parents, the teachers, the Director, the new pupils (ordinary and remarkable). */
 export const SCHOOL_PEOPLE = [
@@ -66,7 +67,52 @@ export class School {
         if (!this.plan) return;
         this._site();
         this.decor = new SchoolDecor(game, this.plan); // (the Great Hall's floating candles and candelabras — SchoolDecor.js)
-        this._placeHero(this.plan.arrive);
+        // the year: from the record kept («Продолжить учёбу») or a new one — then the arrival first
+        const kept = game.config?.schoolContinue ? loadRecord(this._store()) : null;
+        this._rec = kept && kept.arrived ? kept : newRecord();
+        this._beds();
+        if (this._rec.arrived) { this.phase = 'free'; this.t = 0; this._morning(true); }
+        else this._placeHero(this.plan.arrive);
+    }
+
+    _store() { try { return globalThis.localStorage || null; } catch { return null; } }
+    _save() { saveRecord(this._store(), this.record); }
+
+    /** The pupil's mana and spells from the record: 5 cells at the start (the author) + what the school grew; the lessons' spells. */
+    _applyRecord() {
+        const g = this.game, c = g.combat, r = this.record;
+        if (c) { c.maxFatigue = YEAR.START_CELLS + (r.cells || 0); c.fatigue = Math.min(c.fatigue ?? c.maxFatigue, c.maxFatigue); c._hudKey = ''; c._manaKey = ''; }
+        g.bonus = g.bonus || {};
+        const sp = { ...(g.bonus.spells || {}) };
+        for (const k of r.spells) sp[k] = true;
+        g.bonus.spells = sp;
+    }
+
+    /** The dormitory's beds (the game's real beds: lie down — sleep): two rows along the long walls, headboards at the wall. */
+    _beds() {
+        const B = this.game.beds, R = this.plan.rooms.dormitory, F = this.plan.F + 0.5;
+        if (!B?.spawnBed) return;
+        this.bedIds = [];
+        const n = 6, z0 = R.z0 + 6, step = Math.min(6, (R.z1 - R.z0 - 10) / (n - 1));
+        for (let i = 0; i < n; i++) for (const side of [0, 1]) {
+            const x = side ? R.x1 - 3.2 : R.x0 + 3.2, z = z0 + i * step;
+            const b = B.spawnBed({ x, y: F, z }, side ? -Math.PI / 2 : Math.PI / 2, side ? 'blue' : 'red', { id: `school-bed-${side}-${i}`, broadcast: false });
+            if (b) this.bedIds.push(b.id);
+        }
+        this.myBed = this.bedIds[0] || null;
+    }
+
+    /** Morning: the hero up beside his bed (the first time — a word on the day). */
+    _morning(first = false) {
+        const g = this.game, r = this.record;
+        const b = this.myBed && g.beds?.list?.get(this.myBed);
+        if (g.beds?.lying) g.beds.standUp();
+        else if (b) { const sp = g.beds._standSpot?.(b); if (sp) this._placeHero({ x: sp.x, y: sp.y, z: sp.z }, sp.ry); }
+        this._applyRecord();
+        const L = lessonOfDay(r.day);
+        this.dayT = 0; this._dayLesson = L ? L.id : null; this._freeSaid = false; this._sleepT = 0;
+        g.hud?.setVoice?.(L ? `☀️ День ${r.day}. Сегодня урок: ${SUBJECTS_NAME[L.subject] || ''}. Вас позовут.` : '🎓 Учебный год окончен!', true);
+        if (first) g.hud?.toast?.(`Школа Акселдорф — день ${r.day}`, 3000);
     }
 
     /** No creatures wander in (no herds, wild plants, birds, book-birds, bosses) — the horses of the carriage still go. */
@@ -306,16 +352,41 @@ export class School {
      * a little after the speech / the last lesson (the engine is one for all — SchoolLesson.js).
      */
     _free(dt) {
+        const r = this.record, g = this.game;
+        if (!r.arrived) { r.arrived = true; this._applyRecord(); this._dayLesson = lessonOfDay(r.day)?.id || null; this.dayT = 0; this._save(); }
+        this.dayT = (this.dayT || 0) + dt;
         if (this.lesson && !this.lesson.done) return this.lesson.update(dt);
-        if (this.lesson?.done) { (this.record.attended ||= []); if (this.lesson.attended) this.record.attended.push(this.lesson.L.id); this.lesson = null; this.t = 0; }
-        const next = lessonsOfMonth(this.month).find((l) => !this.record.seen.includes(l.id));
-        if (next && this.t > 8) { this.record.seen.push(next.id); this.lesson = new SchoolLesson(this, next.id); }
+        if (this.lesson?.done) {
+            if (this.lesson.attended && !r.attended.includes(this.lesson.L.id)) r.attended.push(this.lesson.L.id);
+            if (this.lesson.passed) { r.cells = (r.cells || 0) + YEAR.LESSON_CELLS; g.mana?.grow?.(YEAR.LESSON_CELLS, 'lesson', this.lesson.L.id); g.hud?.toast?.(`🔷 Урок пройден: +${YEAR.LESSON_CELLS} ячейки маны`, 3500); }
+            for (const sp of this.lesson.given) if (!r.spells.includes(sp)) r.spells.push(sp);
+            this.lesson = null; this._save();
+        }
+        // the day's lesson: called a little after the morning
+        const id = this._dayLesson;
+        if (id && !r.seen.includes(id)) { if (this.dayT > 10) { r.seen.push(id); this._save(); this.lesson = new SchoolLesson(this, id); } return; }
+        // free time; the bed — the next day
+        if (!this._freeSaid && this.dayT > 2) { this._freeSaid = true; g.hud?.setVoice?.(r.day >= yearLength() ? '🎓 Это был последний урок года! Ложитесь спать — утром выпускной.' : '🕊️ Уроки на сегодня окончены — свободное время. Когда захотите, ложитесь спать в спальне (южное крыло, справа от ворот): наступит следующий день.', true); }
+        const lying = g.beds?.lying, mine = lying && this.bedIds?.includes(lying);
+        this._sleepT = mine ? (this._sleepT || 0) + dt : 0;
+        if (mine && lying !== this.myBed) this.myBed = lying; // (the bed he chose is his)
+        if (this._sleepT > YEAR.SLEEP_S) this._nextDay();
     }
-    get month() { return this.record.month; }
-    get record() { return this._rec || (this._rec = { month: 1, seen: [], attended: [] }); }
+
+    /** The night passes: the next day (or the year's end). */
+    _nextDay() {
+        const r = this.record;
+        if (r.day >= yearLength()) { r.done = true; this._save(); this.game.hud?.setVoice?.('🎓 Учебный год окончен! Выпускной и путь в новый мир — скоро.', true); this._sleepT = -1e9; return; }
+        r.day++;
+        this._save();
+        this.game.hud?.toast?.('🌙 Ночь прошла…', 2500);
+        this._morning();
+    }
+    get month() { return lessonOfDay(this.record.day)?.month || 12; }
+    get record() { return this._rec || (this._rec = newRecord()); }
 
     /** The pupils of the school (made ones). */
-    pupilsOf() { return SCHOOL_PEOPLE.filter((p) => p.role === 'student').map((p) => this.people.get(p.idx)).filter((v) => v && !v.dead); }
+    pupilsOf() { return SCHOOL_PEOPLE.filter((p) => p.role === 'student' && !p.dummy).map((p) => this.people.get(p.idx)).filter((v) => v && !v.dead); }
 
     /** (a lesson) The teacher `v` sends `spell` at the hero — turned to him first; the charge (Duel's bolt) or null. */
     castAtHero(v, spell) {

@@ -28,6 +28,7 @@ export class SchoolLesson {
         this.t = 0;
         this.attended = false; this.left = false; this.done = this.phase === 'done';
         this.ok = 0; this.tries = 0;
+        this.given = []; this.passed = false; // (the spells given; the task done — School: +mana)
         this.line = 0;
         this._bolt = null;
     }
@@ -134,6 +135,7 @@ export class SchoolLesson {
         const g = this.game;
         g.bonus = g.bonus || {};
         if (!g.bonus.spells?.[spell]) g.bonus.spells = { ...(g.bonus.spells || {}), [spell]: true };
+        if (!this.given.includes(spell)) this.given.push(spell);
     }
 
     _task(dt) {
@@ -175,7 +177,7 @@ export class SchoolLesson {
         if (T.spells ? T.spells.includes(name) : name === T.spell) { this.ok++; this._say(T.good?.[(this.ok - 1) % (T.good?.length || 1)] || 'Хорошо!', 2.5); }
     }
 
-    _outro() { if (this.phase === 'outro') return; this._say(this.L.outro, 6); this.phase = 'outro'; this.t = 0; }
+    _outro() { if (this.phase === 'outro') return; if (this.ok >= (this.L.task.times || 0)) this.passed = true; this._say(this.L.outro, 6); this.phase = 'outro'; this.t = 0; }
 
     _finish() {
         this.done = true; this.phase = 'done';

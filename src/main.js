@@ -427,6 +427,7 @@ function readConfig() {
 
 // ------------------------------------------------------------------ maps
 let tutContinue = true; // («Обучение»: go on from where the player stopped — the tick under the cards, on by default)
+let schoolContinue = true; // («Школа»: go on with the year kept — the menu's tick)
 const tutPick = new Set(); // («Обучение» passed: the stages chosen to repeat)
 async function updateGameMapList(forceRefresh = false) {
     const gameTab = $('tab-game');
@@ -509,6 +510,19 @@ async function updateGameMapList(forceRefresh = false) {
             lab.className = 'world-opt tut-continue';
             lab.innerHTML = `<input type="checkbox" id="tut-continue"${tutContinue ? ' checked' : ''}> Продолжить с того места, где остановились <span class="mp-hint">— этап ${left.stage + 1}: «${String(left.title || '').replace(/[<>&"]/g, '')}». Без галочки — сначала</span>`;
             lab.querySelector('input').onchange = (e) => { tutContinue = e.target.checked; };
+            mapListDiv.appendChild(lab);
+        }
+    }
+
+    // «Школа»: go on with the year kept (SchoolYear.js) — a tick, on by default; off — the year from the start (the arrival)
+    if (selectedMode === 'school' && !pickingMap) {
+        let kept = null;
+        try { kept = JSON.parse(localStorage.getItem('zns-school') || 'null'); } catch { kept = null; }
+        if (kept && kept.arrived) {
+            const lab = document.createElement('label');
+            lab.className = 'world-opt tut-continue';
+            lab.innerHTML = `<input type="checkbox" id="school-continue"${schoolContinue ? ' checked' : ''}> Продолжить учёбу <span class="mp-hint">— день ${kept.day | 0}${kept.done ? ', год окончен' : ''}. Без галочки — новый год с приезда (прежний забудется)</span>`;
+            lab.querySelector('input').onchange = (e) => { schoolContinue = e.target.checked; };
             mapListDiv.appendChild(lab);
         }
     }
@@ -1528,7 +1542,7 @@ $('start-btn').addEventListener('click', () => {
     }
     const cfg = readConfig();
     if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
-    if (cfg.mode === 'school') { startGame({ ...cfg, mode: 'freeworld', school: true, map: null, worldName: 'Школа Акселдорф' }); return; } // (a valley of its own — SchoolLand.js; the year — School.js) // (the stage left off — if the tick is on)
+    if (cfg.mode === 'school') { if (!schoolContinue) { try { localStorage.removeItem('zns-school'); } catch { /* */ } } startGame({ ...cfg, mode: 'freeworld', school: true, schoolContinue, map: null, worldName: 'Школа Акселдорф' }); return; } // (a valley of its own — SchoolLand.js; the year — School.js) // (the stage left off — if the tick is on)
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
