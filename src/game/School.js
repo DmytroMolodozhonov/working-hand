@@ -450,6 +450,8 @@ export class School {
 
     /** The hero cast a spell (Game). */
     onCast(name) { this.lesson?.onCast?.(name); }
+    /** A spell / a blow reached a person kept safe by the school (the dummy, a lesson's duellist) — CastleLife.hit. */
+    onHit(v, by) { this.lesson?.onHit?.(v, by); }
 
     /** The glowing circle where the hero should come (null: none) — the same as the tutorial's. */
     _goal(at) {

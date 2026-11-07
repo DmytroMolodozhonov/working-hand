@@ -156,6 +156,7 @@ export class SchoolLesson {
             if (this.t > (this._hintAt ?? 25)) { this._hintAt = this.t + 30; this._hint(T.hint); }
             return;
         }
+        if (T.kind === 'duel') return this._duel(dt);
         if (T.kind === 'block') {
             if (this.t < 6) return; // (his words first: «Я пошлю в вас слабый заряд…»)
             if (this._bolt) { // (a charge in the air: where did it end?)
@@ -179,10 +180,42 @@ export class SchoolLesson {
         }
     }
 
+    /** The duel of month 10: the pupil stands opposite and sends soft charges; he is kept safe (CastleLife.hit → onHit counts). */
+    _duel(dt) {
+        const T = this.L.task, sc = this.school;
+        let v = this._foe;
+        if (!v) {
+            const sp = this._spots();
+            v = this._foe = sc.people.get(T.pupil) || sc.pupilsOf()[0];
+            if (!v) return this._outro();
+            v.schoolSafe = true;
+            v.goal = { x: sp.teacher.x + 4, y: sp.teacher.y, z: sp.teacher.z + 2, yaw: Math.PI };
+            v.lookAt = 'hero';
+            this._next = this.t + 4;
+        }
+        if (this.ok >= T.times) { if (!this._outroAt) this._outroAt = this.t + 2; if (this.t > this._outroAt) this._outro(); return; }
+        if (this.t > (this._hintAt ?? 30)) { this._hintAt = this.t + 30; this._hint(T.hint); }
+        if (this.t > this._next && !v.goal && !v.dead && !v.noWand) {
+            const spell = this._shot = this._shot === 'Jolt' ? 'SandsDuel' : 'Jolt';
+            if (sc.castAtHero(v, spell)) { sc._say(v, spell === 'Jolt' ? 'Джолт!' : 'Даст!', 1.2); this._next = this.t + 4.5; } else this._next = this.t + 1;
+        }
+        if (v.noWand && !this._pickT) this._pickT = this.t + 3; // (disarmed: he picks it up — a moment)
+        if (this._pickT && this.t > this._pickT) { v.noWand = false; v.lostWand = null; v.model?.setHeldTool?.('wand'); this._pickT = 0; }
+    }
+
+    /** (School.onHit) a safe person was hit: in the duel — the hero's hit counts. */
+    onHit(v, by) {
+        if (this.phase !== 'task' || this.L.task.kind !== 'duel' || v !== this._foe || by !== this.game.localId) return;
+        this.ok++;
+        const T = this.L.task;
+        this._say(T.good[(this.ok - 1) % T.good.length], 2);
+    }
+
     /** The hero cast a spell (Game → School.onCast). */
     onCast(name) {
-        if (this.phase !== 'task' || this.L.task.kind !== 'cast') return;
+        if (this.phase !== 'task' || (this.L.task.kind !== 'cast' && this.L.task.kind !== 'duel')) return;
         const T = this.L.task;
+        if (T.kind === 'duel') { if (name === 'Maxima' && this.game.duel?.clashes?.length) { this.ok = Math.max(this.ok + 1, T.times); this._say('«Максима»! Блестяще!', 3); } return; }
         if (T.spells ? T.spells.includes(name) : name === T.spell) { this.ok++; this._say(T.good?.[(this.ok - 1) % (T.good?.length || 1)] || 'Хорошо!', 2.5); }
     }
 
@@ -190,6 +223,7 @@ export class SchoolLesson {
 
     _finish() {
         this.done = true; this.phase = 'done';
+        if (this._foe) { this._foe.schoolSafe = false; this._foe.lookAt = null; this._foe = null; } // (the duel over: the pupil is himself again)
         this.school._goal(null);
         const tea = this.teacher; if (tea) tea.lookAt = null;
         if (this.attended && this.S.room !== 'hall') this._hint(`Урок засчитан: ${this.S.name}.`);

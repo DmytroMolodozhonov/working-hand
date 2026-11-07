@@ -2874,7 +2874,7 @@ export class CastleLife {
     /** Someone hit a villager (weapons, fists, spells). */
     hit(v, dmg, dir, by, opts = {}) {
         if (!v || v.dead) return;
-        if (v.entry?.dummy) { this._flash(v); return; } // (the school's training dummy: a magic construct — no harm, never dies, nobody minds a spell at it — School.js)
+        if (v.entry?.dummy || v.schoolSafe) { this._flash(v); this.game.school?.onHit?.(v, by); return; } // (the school's training dummy — a magic construct; a pupil in a lesson's duel: no harm, nobody minds — School.js)
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
         this._achHit(v, by);

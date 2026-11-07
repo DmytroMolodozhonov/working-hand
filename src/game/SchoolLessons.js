@@ -63,6 +63,16 @@ export const LESSONS = [
     dummyLesson('def9', 9, ['ProtectionMaxima'], null, null,
         ['Обычный щит закрывает спереди. «Протекшн Максима» — со всех сторон и даже от взрыва.', 'Он стоит дорого. Поднимайте его, только когда это действительно нужно.'],
         'Скажите «Протекшн Максима» — вокруг вас встанет купол.', 'Превосходно. Теперь вас не возьмёт и взрыв. Урок окончен!', 1),
+    {
+        // the first duel (the author: «дуэли с учениками»): a pupil against the hero, soft charges only, nobody hurt (CastleLife: schoolSafe);
+        // three of the hero's charges reach him — or one «Максима» when the beams meet — and it is won
+        id: 'def10', subject: 'defence', month: 10, spells: ['Maxima'],
+        intro: ['Сегодня — учебная дуэль. Вы будете сражаться друг с другом.', 'Дуэль — это уважение. Поклон до и после. Никто здесь не пострадает: я слежу.', 'И ещё: когда ваши заряды встретятся в воздухе, кричите «Максима!» — ваш заряд станет сильнее.'],
+        demo: { kind: 'talk', say: 'Вилмер, выходите. Встаньте напротив.' },
+        teach: 'Начинайте! Попадите в соперника три раза — или победите столкновение «Максимой».',
+        task: { kind: 'duel', pupil: 36, times: 3, spells: ['Maxima'], hint: 'Колдуйте в соперника заряды («Джолт», «Даст», «Экспеллиармус»…), закрывайтесь щитом; когда заряды встретятся — кричите «Максима!».', good: ['Попадание!', 'Хорошо!', 'Ещё!'] },
+        outro: 'Достойная дуэль. Поклонитесь друг другу. Урок окончен!',
+    },
     dummyLesson('def11', 11, ['Nihilis'], null, null,
         ['Есть чёрная магия, и есть свет, который её рассеивает: «Нихилис Атра».', 'Тёмный туман, проклятые твари — всё это боится его.'],
         'Направьте палочку на манекен и скажите «Нихилис Атра».', 'Хорошо. Свет сильнее тьмы — если не бояться. Урок окончен!', 2),
@@ -113,7 +123,7 @@ export function lessonsOfMonth(m) {
 }
 /** Every row is whole (a test): a known subject, a month 1…12, the steps the engine knows. */
 export const DEMO_KINDS = new Set(['shield', 'cast', 'talk']);
-export const TASK_KINDS = new Set(['block', 'cast', 'listen']);
+export const TASK_KINDS = new Set(['block', 'cast', 'listen', 'duel']);
 export function lessonOk(l) {
     return !!(l && SUBJECTS[l.subject] && l.month >= 1 && l.month <= 12 && l.intro?.length && DEMO_KINDS.has(l.demo?.kind) && TASK_KINDS.has(l.task?.kind)
         && (l.task.kind === 'listen' || l.task.times >= 1) && l.outro);
