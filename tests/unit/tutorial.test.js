@@ -100,7 +100,7 @@ test('a player walked through every stage, step by step, to the end', () => {
         if (/влево, а потом вправо/.test(txt)) { g.smoothHead.yaw = 0.6; run(0.2); g.smoothHead.yaw = -0.6; }
         if (/вверх, а потом вниз/.test(txt)) { g.smoothHead.pitch = 0.5; run(0.2); g.smoothHead.pitch = -0.4; }
         if (/Достаньте палочку/.test(txt)) { const i = g.inventory.slots.findIndex((s) => s?.kind === 'wand'); held.right = { item: g.inventory.slots[i] }; g.inventory.slots[i] = null; }
-        if (/«Бомбардо»/.test(txt)) { assert.ok(T.allows('Bombardo') && !T.allows('Inferno'), 'only the step\'s spell'); for (let x = -6; x <= 6; x++) for (let z = -18; z <= -6; z++) for (let L = 11; L <= 17; L++) blocks.set(`${x},${L},${z}`, 0); }
+        if (/«Бомбардо»/.test(txt)) { assert.ok(T.allowed.has('Bombardo') && !T.allows('Inferno'), 'only the step\'s spell'); assert.equal(T.talking && T.allows('Bombardo'), false, 'not while the narrator speaks'); for (let x = -6; x <= 6; x++) for (let z = -18; z <= -6; z++) for (let L = 11; L <= 17; L++) blocks.set(`${x},${L},${z}`, 0); }
         if (/уберите палочку\./.test(txt)) { g.inventory.slots[0] = held.right.item; held.right = null; }
         if (/Повернитесь кругом/.test(txt)) g.camera.dir.set(0, 0, 1);
         if (/Вот яблоко/.test(txt)) { const L = loose.get(T.ctx.apple); loose.delete(T.ctx.apple); held.left = L; }
@@ -151,6 +151,17 @@ test('a dropped wand takes the step back, the wand given again; the hero never d
     assert.ok(g.inventory.slots.some((s) => s?.kind === 'wand'), 'the wand back in the pocket');
     assert.ok(!loose.has('w'));
     assert.ok(T.intercept());
+});
+
+test('a spell before the narrator is done: «подождите» and the words again; after them — it works', () => {
+    const { g } = fake();
+    const T = new Tutorial(g);
+    T._start(2); T.step = 3; T._next(); // (the «Бомбардо» step: its words being said)
+    assert.ok(T.talking);
+    assert.equal(T.allows('Bombardo'), false);
+    assert.match(T._said, /^Подождите, я ещё не договорила/);
+    for (let i = 0; i < 400 && T.talking; i++) T.update(0.1);
+    assert.equal(T.allows('Bombardo'), true);
 });
 
 test('the narrator: the first line waits for the voices to load (it was lost), the step\'s time starts after the words', () => {

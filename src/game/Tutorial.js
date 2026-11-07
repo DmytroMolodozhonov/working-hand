@@ -110,10 +110,10 @@ export class Tutorial {
     _frontOfView(d, side = 0) {
         const p = this.game.character?.group?.position, f = this._viewDir();
         const x = (p?.x ?? this.spawn.x) + f.x * d - f.z * side, z = (p?.z ?? this.spawn.z) + f.z * d + f.x * side;
-        return new THREE.Vector3(x, TUTORIAL.G + 1.6, z);
+        return new THREE.Vector3(x, TUTORIAL.G + 2.6, z); // (at the eyes' height, 5 m: plainly seen — the author: «слишком далеко, не видно»)
     }
     /** A point `d` m behind the hero's place (he faces north there: south of him). */
-    _behind(d) { const S = this.spawn; return new THREE.Vector3(S.x, TUTORIAL.G + 1.6, S.z + d); }
+    _behind(d) { const S = this.spawn; return new THREE.Vector3(S.x, TUTORIAL.G + 2.6, S.z + d); } // (at the eyes' height: seen at once)
     /** Has the hero turned to the apple behind him (it straight before his eyes)? */
     _facingBack() {
         const L = this.game.items?.loose?.get?.(this.ctx.apple), p = this.game.character?.group?.position;
@@ -182,17 +182,18 @@ export class Tutorial {
             ], onFail: () => T._wandToPocket() },
             { title: STAGE_TITLES[3], steps: [
                 ask('Достаньте палочку, как раньше: посмотрите вниз и возьмите её основной рукой с пояса.', () => T._wandInHand(), { setup: () => T._wandToPocket(), ...W, hint: 'Основная рука — через живот к другой стороне пояса, и сожмите пальцы.' }),
-                ask('Повернитесь кругом: за вашей спиной лежит яблоко. Поворачивайте голову и смотрите в ту сторону, пока не увидите его прямо перед собой.', () => T._facingBack(), { setup: () => { T.ctx.apple = T._give({ kind: 'redApple', uid: newUid(), count: 1 }, T._behind(8))?.item?.uid; }, hint: 'Посмотрите через плечо и подержите голову повёрнутой — мир сам повернётся. Яблоко сзади.', fail: () => T._lost(T.ctx.apple) }),
-                ask('Вот яблоко. Поднимите основную руку с палочкой — из неё летит заклинание. Дочернюю руку тоже поднимите и раскройте ладонь — в неё прилетит вещь. Скажите: «Акцио».', () => !!T._heldUid(T.ctx.apple), { allow: ['Accio'], hint: 'Обе руки подняты, ладонь дочерней руки раскрыта. Скажите: «Акцио».', fail: () => T._lost(T.ctx.apple), redo: 1 }),
+                ask('Повернитесь кругом: за вашей спиной лежит яблоко. Поворачивайте голову и смотрите в ту сторону, пока не увидите его прямо перед собой.', () => T._facingBack(), { setup: () => { T.ctx.apple = T._give({ kind: 'redApple', uid: newUid(), count: 1 }, T._behind(5))?.item?.uid; }, beacon: 'apple', hint: 'Посмотрите через плечо и подержите голову повёрнутой — мир сам повернётся. Яблоко сзади.', fail: () => T._lost(T.ctx.apple) }),
+                ask('Вот яблоко — оно светится. Поднимите основную руку с палочкой — из неё летит заклинание. Дочернюю руку тоже поднимите и раскройте ладонь — в неё прилетит вещь. Скажите: «Акцио».', () => !!T._heldUid(T.ctx.apple), { allow: ['Accio'], beacon: 'apple', hint: 'Обе руки подняты, ладонь дочерней руки раскрыта. Скажите: «Акцио».', fail: () => T._lost(T.ctx.apple), redo: 1 }),
                 ask('Яблоко у вас. Зажмите кисть, чтобы его держать, и поднесите ко рту. Подержите у рта — вы его съедите.', () => T.ctx.ate, { setup: () => { T._hurtABit(); T.ctx.hp0 = T._hp(); }, tick: () => { if (!T._heldUid(T.ctx.apple) && !T._isLoose(T.ctx.apple) && T._hp() > T.ctx.hp0) T.ctx.ate = true; }, hint: 'Кулак с яблоком — к самому рту, и подождите секунду.', fail: () => (T._isLoose(T.ctx.apple) ? 'Яблоко упало' : null), redo: 2 }),
-                ask('Теперь притяните хлеб: «Акцио».', () => T._heldUid(T.ctx.bread) || T._inPocket(T.ctx.bread), { allow: ['Accio'], setup: () => { T.ctx.bread = T._give({ kind: 'bread', uid: newUid(), count: 1 }, T._frontOfView(8, -2))?.item?.uid; }, hint: 'Рука с палочкой — на хлеб, дочерняя ладонь раскрыта. «Акцио».', fail: () => T._lost(T.ctx.bread) }),
+                ask('Теперь притяните хлеб: «Акцио».', () => T._heldUid(T.ctx.bread) || T._inPocket(T.ctx.bread), { allow: ['Accio'], setup: () => { T.ctx.bread = T._give({ kind: 'bread', uid: newUid(), count: 1 }, T._frontOfView(5, -1.5))?.item?.uid; }, hint: 'Рука с палочкой — на хлеб, дочерняя ладонь раскрыта. «Акцио».', fail: () => T._lost(T.ctx.bread) }),
                 ask('Положите хлеб в карман. Карман — на поясе со стороны основной руки. Посмотрите вниз, дотянитесь туда дочерней рукой с хлебом и разожмите кисть.', () => T._inPocket(T.ctx.bread), { ...P, hint: 'Смотрите вниз. Дочерняя рука — к другому боку пояса, туда, где красная стрелка в окне камеры. Разожмите кисть.', fail: () => T._lost(T.ctx.bread) }),
                 { ...say('Так же вещи достают из кармана: пустая дочерняя рука — к карману, и вещь окажется в руке.'), ...wait(6), ...P },
-                ask('Это шлем. Притяните его: «Акцио». Чтобы надеть, НЕ разжимая кисть, прикоснитесь шлемом к голове.', () => T.game.armor?.worn?.helmet?.uid === T.ctx.helm, { allow: ['Accio'], setup: () => { T.ctx.helm = T._give(makePiece('helmet'), T._frontOfView(8, 2))?.item?.uid; }, hint: 'Кулак со шлемом — к макушке, и подержите. Кисть не разжимайте, иначе шлем упадёт.', fail: () => T._lost(T.ctx.helm) }),
-                ask('Это рюкзак. Притяните его: «Акцио». Рюкзак надевается за спину: заведите руку с ним за плечо и подержите там.', () => T.game.items?.worn?.backpack?.item?.uid === T.ctx.pack || T.game.inventory?.back?.some((s) => s?.uid === T.ctx.pack), { allow: ['Accio'], setup: () => { T.ctx.pack = T._give({ kind: 'backpack', uid: newUid(), slots: 3, color: 0x7a4a24 }, T._frontOfView(8, -2))?.item?.uid; }, hint: 'Рука с рюкзаком — через плечо назад, за голову, и подержите там секунду.', fail: () => T._lost(T.ctx.pack) }),
-                { ...say('За спину кладутся и другие большие вещи: лук, стрелы, меч, щит, топор. Для них за спиной две ячейки. Вот они.'), ...wait(7), show: 'back-cells' },
-                ask('Теперь научимся выбрасывать вещь. Притяните сыр: «Акцио». Потом бросьте его: замахнитесь и киньте. Или просто вытяните руку вперёд и разожмите кисть.', () => T.ctx.cheeseHeld && T._isLoose(T.ctx.cheese), { allow: ['Accio'], setup: () => { T.ctx.cheeseHeld = false; T.ctx.cheese = T._give({ kind: 'cheese', uid: newUid(), count: 1 }, T._frontOfView(8, 2))?.item?.uid; }, tick: () => { if (T._heldUid(T.ctx.cheese)) T.ctx.cheeseHeld = true; }, hint: 'Сначала поймайте сыр. Потом киньте его, как мяч. Или вытяните руку вперёд и раскройте ладонь.' }),
-                ask('Вот вторая палочка. Притяните её в дочернюю руку: «Акцио».', () => T._held('wand') && T._twoWands(), { allow: ['Accio'], setup: () => { if (!T._wandInHand()) T._wandToPocket(); T.ctx.wand2 = T._give({ ...rollWand(), uid: newUid() }, T._frontOfView(8))?.item?.uid; }, hint: 'Основная рука с первой палочкой поднята, дочерняя раскрыта. «Акцио».', fail: () => T._lost(T.ctx.wand2) }),
+                ask('Это шлем. Притяните его: «Акцио». Чтобы надеть, НЕ разжимая кисть, прикоснитесь шлемом к голове.', () => T.game.armor?.worn?.helmet?.uid === T.ctx.helm, { allow: ['Accio'], setup: () => { T.ctx.helm = T._give(makePiece('helmet'), T._frontOfView(5, 1.5))?.item?.uid; }, hint: 'Кулак со шлемом — к макушке, и подержите. Кисть не разжимайте, иначе шлем упадёт.', fail: () => T._lost(T.ctx.helm) }),
+                ask('Это рюкзак. Притяните его: «Акцио». Рюкзак надевается за спину: заведите руку с ним за плечо и подержите там.', () => T.game.items?.worn?.backpack?.item?.uid === T.ctx.pack || T.game.inventory?.back?.some((s) => s?.uid === T.ctx.pack), { allow: ['Accio'], setup: () => { T.ctx.pack = T._give({ kind: 'backpack', uid: newUid(), slots: 3, color: 0x7a4a24 }, T._frontOfView(5, -1.5))?.item?.uid; }, hint: 'Рука с рюкзаком — через плечо назад, за голову, и подержите там секунду.', fail: () => T._lost(T.ctx.pack) }),
+                { ...say('Рюкзак добавил вам карманов — внизу стало больше ячеек.'), ...wait(5), show: 'hotbar' },
+                { ...say('А за спину кладутся большие вещи: лук, стрелы, меч, щит, топор. Для них за спиной две ячейки — вот они, справа. Их видно, когда там что-то лежит.'), ...wait(8), show: 'back-cells', back: true },
+                ask('Теперь научимся выбрасывать вещь. Притяните сыр: «Акцио». Потом бросьте его: замахнитесь и киньте. Или просто вытяните руку вперёд и разожмите кисть.', () => T.ctx.cheeseHeld && T._isLoose(T.ctx.cheese), { allow: ['Accio'], setup: () => { T.ctx.cheeseHeld = false; T.ctx.cheese = T._give({ kind: 'cheese', uid: newUid(), count: 1 }, T._frontOfView(5, 1.5))?.item?.uid; }, tick: () => { if (T._heldUid(T.ctx.cheese)) T.ctx.cheeseHeld = true; }, hint: 'Сначала поймайте сыр. Потом киньте его, как мяч. Или вытяните руку вперёд и раскройте ладонь.' }),
+                ask('Вот вторая палочка. Притяните её в дочернюю руку: «Акцио».', () => T._held('wand') && T._twoWands(), { allow: ['Accio'], setup: () => { if (!T._wandInHand()) T._wandToPocket(); T.ctx.wand2 = T._give({ ...rollWand(), uid: newUid() }, T._frontOfView(5))?.item?.uid; }, hint: 'Основная рука с первой палочкой поднята, дочерняя раскрыта. «Акцио».', fail: () => T._lost(T.ctx.wand2) }),
                 ask('Теперь поменяем палочки руками. Сведите их так, чтобы они коснулись друг друга. В месте касания посыплются искры, как песок. Держите палочки вместе, пока они не поменяются.', () => T.game.items?.held?.[T.game.dom]?.item.uid === T.ctx.wand2, { hint: 'Палочки должны именно касаться друг друга, а не просто скреститься в воздухе. Когда посыплются искры — не двигайте руками полторы секунды.' }),
                 { ...say('Палочки поменялись. Так можно быстро взять более сильную палочку для боя.'), ...wait(5) },
             ], onFail: () => T._clearGiven() },
@@ -201,15 +202,15 @@ export class Tutorial {
                 ask('Свет горит. Он нужен в пещерах и ночью. Чтобы погасить, скажите: «Нокс».', () => !T.game.wandMagic?.light, { allow: ['Nox', 'Lumos', 'LumosMaxima'], hint: 'Скажите: «Нокс».' }),
             ] },
             { title: STAGE_TITLES[5], steps: [
-                { ...say('Посмотрите вниз экрана. Это ваши карманы: в них лежат вещи.'), ...wait(6), show: 'hotbar' },
-                { ...say('А это ячейки за спиной — для больших вещей.'), ...wait(5), show: 'back-cells' },
+                { ...say('Внизу экрана — ваши карманы: в них лежат вещи.'), ...wait(6), show: 'hotbar' },
+                { ...say('Справа — ячейки за спиной, для больших вещей. Обычно их видно, только когда там что-то лежит.'), ...wait(6), show: 'back-cells', back: true },
                 { ...say('Синяя полоса — мана. Каждое заклинание тратит ману. Потом она понемногу восстанавливается сама.'), ...wait(8), show: ['fatigue-container', 'mana-cur'] },
                 { ...say('Главное в игре — ячейки маны. Это вторая цифра: сколько маны у вас всего. Чем больше ячеек, тем сильнее заклинания вам доступны.'), ...wait(10), show: 'mana-max' },
                 { ...say('За каждое новое заклинание, которое вы произнесёте впервые, дают ячейки маны. Поэтому пробуйте все заклинания, которые знаете.'), ...wait(9), show: 'mana-max' },
                 { ...say('Красная полоса — здоровье. Еда возвращает его.'), ...wait(5), show: 'hp-container' },
                 { ...say('Слева внизу — карта местности. Она показывает, где вы и что вокруг. Здесь, в обучении, мы её спрячем, чтобы она не мешала.'), ...wait(6), show: 'minimap-container', map: true },
                 { ...say('Справа вверху — ваши монеты. Их находят в пещерах и сундуках. На них покупают вещи и свитки у торговцев.'), ...wait(8), show: 'coin-counter' },
-                ask('Ещё одно полезное заклинание. Перед вами свиток. Направьте на него палочку и скажите: «Раскрой свои секреты». Вы узнаете, что это за вещь.', () => T.events.includes('Reveal'), { allow: ['Reveal'], setup: () => { if (!T._held('wand')) T._wandToPocket(); T.ctx.scroll = T._give({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Fireworks' }, T._frontOfView(7))?.item?.uid; }, hint: 'Палочка смотрит на свиток. Скажите: «Раскрой свои секреты».' }),
+                ask('Ещё одно полезное заклинание. Перед вами свиток. Направьте на него палочку и скажите: «Раскрой свои секреты». Вы узнаете, что это за вещь.', () => T.events.includes('Reveal'), { allow: ['Reveal'], setup: () => { if (!T._held('wand')) T._wandToPocket(); T.ctx.scroll = T._give({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Fireworks' }, T._frontOfView(5))?.item?.uid; }, hint: 'Палочка смотрит на свиток. Скажите: «Раскрой свои секреты».' }),
                 { ...say('Так можно узнать, что за вещь перед вами, прежде чем её взять. Остальное о мире можно прочитать в главном меню, во вкладке «Механика игры».'), ...wait(9) },
             ], onFail: () => T._clearGiven() },
             { title: STAGE_TITLES[6], steps: [
@@ -435,7 +436,17 @@ export class Tutorial {
     allows(name) {
         if (this.done) return true;
         if (name === 'Stand' || name === 'Stop') return true;
+        if (this.allowed.has(name) && this.talking) { this._tooEarly(); return false; } // (the author: before the narrator is done — «подождите», then his words again)
         return this.allowed.has(name);
+    }
+    /** The player did the step's deed before the words were over: «подождите» — and the step's words once more, when quiet. */
+    _tooEarly() {
+        const now = this._clockNow();
+        if (now - (this._earlyAt ?? -9) < 4) return;
+        this._earlyAt = now;
+        this.game.hud?.setVoice?.('🎓 Подождите — дослушайте, потом колдуйте', true);
+        const st = this._cur();
+        if (st?.say && !this._earlyRepeat) { this._earlyRepeat = true; this._narrate('Подождите, я ещё не договорила. ' + st.say); }
     }
     /** A spell was cast. */
     onCast(name) { this.events.push(name); }
@@ -479,6 +490,9 @@ export class Tutorial {
         this.allowed = new Set(st.allow || []);
         this.frozen = !st.unfreeze;
         this.point = st.point || null;
+        this._earlyRepeat = false;
+        this.showBack = !!st.back; // (the back's cells shown, empty too, while they are told of — Inventory._renderBack)
+        try { this.game.inventory?._render?.(); } catch { /* the test's game */ }
         // (the red arrow in the camera's window: 'wand' / 'pocket' — PocketHintsDraw.pointArrow)
         if (typeof document !== 'undefined') document.body.classList.toggle('tut-map', !!st.map); // (the map is hidden in the tutorial — but for the step that shows it)
         try { st.setup?.(); } catch (e) { console.warn('tutorial setup', e); }
@@ -515,6 +529,7 @@ export class Tutorial {
         if (this._placeT <= 0) { this._placeT = 0.3; this._place(); }
         this._modeT = (this._modeT || 0) - dt;
         if (this._modeT <= 0) { this._modeT = 0.15; this._mode(); }
+        if (st.beacon) this._beacon(this.ctx[st.beacon], dt); // (the thing to take: golden sparks round it — seen at once)
         try { st.tick?.(dt); st.check?.(); } catch (e) { console.warn('tutorial tick', e); }
         // (done first: a helmet put on is no longer «in a hand, on the ground or in a pocket» — it is not lost)
         let ok = false;
@@ -525,6 +540,18 @@ export class Tutorial {
         if (why) { this._fail(why); return; }
         if (st.hint && !this.hinted && this.t > TUT.HINT_AFTER) { this.hinted = true; this._narrate(st.hint, false); }
         if (st.hint && this.hinted && this.t > TUT.HINT_AFTER * 2.5) { this.t = TUT.HINT_AFTER; this._narrate(st.hint, false); } // (again, now and then)
+    }
+
+    /** Golden sparks rising round a thing lying loose (its uid), a few a second. */
+    _beacon(uid, dt) {
+        const L = uid && this.game.items?.loose?.get?.(uid);
+        if (!L?.model) return;
+        this._beaconT = (this._beaconT || 0) - dt;
+        if (this._beaconT > 0) return;
+        this._beaconT = 0.12;
+        const p = L.model.position, a = Math.random() * Math.PI * 2;
+        _v.set(p.x + Math.cos(a) * 0.45, p.y - 0.2 + Math.random() * 0.4, p.z + Math.sin(a) * 0.45);
+        this.game.fx?.spark?.(_v, 0xffd76a, 0.12, new THREE.Vector3(Math.cos(a) * 0.3, 1.2 + Math.random(), Math.sin(a) * 0.3), 0.9);
     }
 
     // ------------------------------------------------------------------ the narrator and the screen
@@ -698,8 +725,11 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
         document.querySelectorAll('.tut-glow').forEach((e) => e.classList.remove('tut-glow'));
         const arrows = [...document.querySelectorAll('.tut-arrow')];
         let k = 0;
-        for (const name of this._shown) for (const el of this._els(name)) {
-            el.classList.add('tut-glow');
+        // (several things shown: all lit, but ONE arrow at a time, from one to the next — the author: two arrows lay one over the other)
+        const all = this._shown.flatMap((n) => this._els(n));
+        for (const el of all) el.classList.add('tut-glow');
+        const one = all.length > 1 ? [all[Math.floor(this._clockNow() / 1.5) % all.length]] : all;
+        for (const el of one) {
             const r = el.getBoundingClientRect();
             if (!(r.width > 0 || r.height > 0)) continue;
             const a = arrows[k] || document.body.appendChild(Object.assign(document.createElement('div'), { className: 'tut-arrow', innerHTML: '<svg viewBox="0 0 34 46"><path d="M12 0h10v26h12L17 46 0 26h12z" fill="#ff2a2a" stroke="#3a0000" stroke-width="2"/></svg>' }));

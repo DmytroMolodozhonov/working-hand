@@ -1282,13 +1282,14 @@ export class Inventory {
             document.body.appendChild(el);
         }
         // (the author 05.11: the back's cells are not seen until something is put there — as the armour's appear only when worn)
-        el.style.display = this.back.some(Boolean) && this._shown !== false ? 'flex' : 'none';
-        const key = this.back.map((b) => (b ? b.kind + (b.type || '') + (b.uid || b.id || '') : '')).join('|');
+        const force = !!this.game.tutorial?.showBack; // («Обучение» shows the two cells, empty too, while it tells of them)
+        el.style.display = (this.back.some(Boolean) || force) && this._shown !== false ? 'flex' : 'none';
+        const key = this.back.map((b) => (b ? b.kind + (b.type || '') + (b.uid || b.id || '') : '')).join('|') + (force ? '|f' : '');
         if (key === this._backCellKey) return;
         this._backCellKey = key;
         this.back.forEach((b, i) => {
             const cell = el.querySelector(`[data-i="${i}"]`);
-            cell.style.display = b ? '' : 'none'; // (an empty one: not shown)
+            cell.style.display = b || force ? '' : 'none'; // (an empty one: not shown — but in the tutorial's telling)
             const ic = cell.querySelector('.bc-icon');
             ic.textContent = '';
             cell.classList.toggle('on', !!b);
