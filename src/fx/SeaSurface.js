@@ -20,7 +20,7 @@ import { SPACE } from '../world/Planets.js';
 import { boomReach } from '../world/BoomCarve.js';
 import { ULTRA_PARS, addUltraUniforms } from './UltraUniforms.js';
 
-const BODIES = 8, RINGS = 8; // (what the water answers: bodies in it, rings running out from a splash)
+const BODIES = 8, RINGS = 8, CUTS = 3; // (what the water answers: bodies in it, rings running out from a splash; corridors of «Aquadivide» not drawn)
 const TEX = 256; // texels per side
 const TEXEL = 5; // m per texel → 1280 m covered
 const SLICE = 4096; // texels computed per frame while rebuilding
@@ -46,6 +46,9 @@ export class SeaSurface {
             uBodies: { value: Array.from({ length: BODIES }, () => new THREE.Vector4(0, 0, 0, -1)) },
             uBodyDir: { value: Array.from({ length: BODIES }, () => new THREE.Vector2(0, 1)) },
             uRings: { value: Array.from({ length: RINGS }, () => new THREE.Vector4(0, 0, -1, 0)) },
+            // «Aquadivide» (WaterPart.js): up to CUTS corridors where the sheet is not drawn — {px, pz, ax, az} and {halfWidth, ahead, behind, on}
+            uCutA: { value: Array.from({ length: CUTS }, () => new THREE.Vector4(0, 0, 1, 0)) },
+            uCutB: { value: Array.from({ length: CUTS }, () => new THREE.Vector4(0, 0, 0, 0)) },
         };
         this.data = new Uint8Array(TEX * TEX * 4);
         this.texture = new THREE.DataTexture(this.data, TEX, TEX, THREE.RGBAFormat);
@@ -193,6 +196,8 @@ uniform vec2 uWind;
 uniform vec4 uBodies[${BODIES}];
 uniform vec2 uBodyDir[${BODIES}];
 uniform vec4 uRings[${RINGS}];
+uniform vec4 uCutA[${CUTS}];
+uniform vec4 uCutB[${CUTS}];
 varying float vSeaS;
 varying float vSeaDepth;
 varying vec3 vSeaWorld;
@@ -222,7 +227,15 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
                 // whose corners move as the surface follows the camera — that made the shore line jump and flicker)
                 vec4 seaTex = texture2D(uShore, (vSeaWorld.xz - uOrigin) / uTexSize + 0.5);
                 float seaS = seaTex.r * 255.0 - 32.0, seaDepth = seaTex.g * 17.0;
-                if (seaS < -3.0) discard;`)
+                if (seaS < -3.0) discard;
+                for (int ci = 0; ci < ${CUTS}; ci++) { // the water stands aside (WaterPart.js): the corridor is not drawn
+                    vec4 cA = uCutA[ci], cB = uCutB[ci];
+                    if (cB.w > 0.5) {
+                        vec2 cd = vSeaWorld.xz - cA.xy;
+                        float cs = dot(cd, cA.zw), ct = -cd.x * cA.w + cd.y * cA.z;
+                        if (cs > -cB.z && cs < cB.y && abs(ct) < cB.x) discard;
+                    }
+                }`)
                 .replace('#include <color_fragment>', `#include <color_fragment>
                 float seaK = clamp((seaDepth - 1.0) / 10.0, 0.0, 1.0);
                 diffuseColor.rgb = mix(uShallow, uDeep, seaK);
@@ -390,6 +403,15 @@ float seaN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
             this.uniforms.uOrigin.value.set(j.ox, j.oz);
             this._job = null;
             this.ready = true;
+        }
+    }
+
+    /** «Aquadivide»: the corridors where the sheet is not drawn (WaterPart.js): [{px, pz, ax, az, w, ahead, behind}], at most CUTS. */
+    setCuts(list) {
+        const A = this.uniforms.uCutA.value, B = this.uniforms.uCutB.value;
+        for (let i = 0; i < CUTS; i++) {
+            const c = list[i];
+            if (c) { A[i].set(c.px, c.pz, c.ax, c.az); B[i].set(c.w / 2, c.ahead, c.behind, 1); } else B[i].w = 0;
         }
     }
 

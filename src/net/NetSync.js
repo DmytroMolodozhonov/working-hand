@@ -155,6 +155,7 @@ export class NetSync {
     _onLeave(id, fromPresence = false) {
         if (!fromPresence) this.presence.leave(id, performance.now());
         this.looks?.delete(id);
+        this.game.waterPart?.stopBy(id);
         const r = this.game.remotes.get(id);
         if (r) {
             this.game.bleeding?.clearCuts(r.character);
@@ -619,6 +620,11 @@ export class NetSync {
     /** «Стоп»: the flames / ice beams / storm I hold end everywhere. */
     stopSpells() {
         this.net.send({ t: 'stop', by: this.me }, true);
+    }
+
+    /** «Aquadivide»: the corridor's axis now (WaterPart.js). */
+    waterPartAxis(a) {
+        this.net.send({ t: 'wpat', by: this.me, a }, true);
     }
 
     /** «Drawdown»: where my wand points on the ground now (Drawdown.js — the pit follows it). */
@@ -1144,9 +1150,10 @@ export class NetSync {
             case 'stop':
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)
-                g.spells.stopBy(m.by); g.darkFog?.stopBy(m.by); // (a player's «стоп»: his dark fogs thin away on every computer — DarkFog.js)
+                g.spells.stopBy(m.by); g.darkFog?.stopBy(m.by); g.waterPart?.stopBy(m.by); // (a player's «стоп»: his dark fogs thin away on every computer — DarkFog.js)
                 break;
             case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
+            case 'wpat': if (m.by !== this.me && Array.isArray(m.a)) g.waterPart?.onNet(m.by, m.a); break; // («Aquadivide»: where the wand points now — WaterPart.js)
             case 'ddat': if (m.by !== this.me && Array.isArray(m.p)) g.drawdown?.onNet(m.by, vec(m.p)); break;
             case 'csnd': if (m.by !== this.me && typeof m.n === 'string' && Array.isArray(m.p)) { g.sound?.spellCast?.(m.n, vec(m.p)); g.shieldAlert?.noteCast(m.by, m.p); } break;
             case 'say': if (m.by !== this.me && typeof m.name === 'string') { const now = performance.now(), ago = +m.ago; g.voiceGate?.noteRemote(m.name, now, { by: m.by, began: Number.isFinite(ago) && ago >= 0 && ago < 10000 ? now - ago : null }); } break;

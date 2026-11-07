@@ -248,6 +248,7 @@ import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { WaterWalk } from './WaterWalk.js';
+import { WaterPart } from './WaterPart.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
 import { PentagramResist } from './PentagramResist.js';
@@ -647,6 +648,7 @@ export class Game {
             stitching: (o, d, casterId) => this.stitching?.sew(o, d, casterId),
             slash: (o, d, casterId, side) => this.slash?.fire(o, d, casterId, side),
             caligo: (o, d, casterId, side) => this.darkFog?.fire(o, d, casterId, side),
+            waterPart: (o, d, casterId, side) => this.waterPart?.fire(o, d, casterId, side),
             bridge: (o, d, casterId) => this.bridge?.grow(o, d, casterId),
             groundprud: (o, d, casterId) => this.groundprud?.grow(o, d, casterId),
             collision: this.collision,
@@ -730,6 +732,7 @@ export class Game {
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
+        this.waterPart = new WaterPart(this); // «Aquadivide»: the water stands aside round the hero (WaterPart.js)
         this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
@@ -2308,6 +2311,7 @@ export class Game {
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
+        if (name === 'WaterPart') return this.waterPart.cast(isFinal); // (the water stands aside: 300 mana, then 3 a second — WaterPart.js)
         if (name === 'WaterWalk') return this.waterWalk.cast(isFinal); // (walking on the water: 50 mana, then 1 a second — WaterWalk.js)
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
         if (name === 'Pentagranium') return this.pentagranium.cast(isFinal, text); // («Pentagranium <Name>»: the pentagram named in the phrase, laid where the wand points — Pentagranium.js)
@@ -2504,6 +2508,7 @@ export class Game {
         if (this.whirl?.stopMine()) done.push('вихрь дуэли');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.waterWalk?.stop('stop')) done.push('Aquambula');
+        if (this.waterPart?.stop('stop')) done.push('Aquadivide');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.sunContest?.stop('stop')) done.push('To the Sun');
         if (this.fireworks?.stop('stop')) done.push('салют');
@@ -4475,6 +4480,7 @@ export class Game {
         this.ghostCastle?.update(dt);
         this.groundVortex?.update(dt);
         this.waterWalk?.update(dt);
+        this.waterPart?.update(dt);
         this.visibleGodi?.update(dt);
         this.pentagranium?.update(dt);
         this.steam?.update(dt);
@@ -5554,6 +5560,7 @@ export class Game {
         this.books?.dispose();
         this.scrolls?.dispose();
         this.swim?.dispose();
+        this.waterPart?.dispose();
         this.seaSurface?.dispose();
         this.steam?.dispose();
         this.groundVortex?.dispose();

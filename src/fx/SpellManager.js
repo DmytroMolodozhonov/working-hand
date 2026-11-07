@@ -224,6 +224,7 @@ export function matchSpell(text) {
     if (has('drawdown', 'draw down', 'drowdown', 'drow down', 'дравдаун', 'драв даун', 'дродаун', 'дро даун', 'драудаун', 'драу даун', 'дровдаун', 'дров даун', 'драфдаун', 'дравдан', 'дродан', 'дравдаон', 'просядь')) return mx() ? 'DrawdownMaxima' : 'Drawdown';
     if (has('ликвидейш', 'ликвидэйш', 'ликвидеш', 'ликвидайш', 'ликвидац', 'ликвидир', 'ликвидей', 'liquidat', 'liquidation', 'ликвидейтион')) return mx() ? 'LiquidationMaxima' : 'Liquidation';
     if (has('spiralis', 'спиралис', 'спиралес', 'спирализ', 'spiralus', 'спираллис')) return 'Spiralis'; // (the beams of a clash whirled: Whirl.js)
+    if (has('aquadivide', 'akvadivide', 'aquadivida', 'aquadivaid', 'аквадивиде', 'аквадивайд', 'аквадивида', 'акводивиде')) return 'WaterPart'; // (the water stands aside: WaterPart.js)
     if (has('aquambula', 'akvambula', 'aquambule', 'akwambula', 'аквамбула', 'аквамбулу', 'аквамбуле', 'аквамбулла', 'аквамбулы')) return 'WaterWalk'; // (walking on the water: WaterWalk.js)
     if (has('caligo', 'kaligo', 'калиго', 'калигу', 'каллиго', 'каліго', 'caligu')) return 'Caligo'; // (the dark fog: DarkFog.js)
     if (has('sectura', 'sektura', 'сектура', 'сэктура', 'сектюра', 'сектура', 'sectur')) return 'Sectura'; // (the cutting curse: Slash.js — «сектора» is the everyday word, not taken)
@@ -587,6 +588,7 @@ export class SpellManager {
             case 'Drawdown': case 'DrawdownMaxima': this.hooks.drawdown?.(name, o, casterId); break; // (Drawdown.js)
             case 'Liquidation': case 'LiquidationMaxima': this.hooks.liquidation?.(name, o, d, casterId); break; // (Liquidation.js)
             case 'Stitching': this.hooks.stitching?.(o, d, casterId); break; // (Stitching.js)
+            case 'WaterPart': this.hooks.waterPart?.(o, direction.clone(), casterId, handSide); break; // (the water stands aside: o = the caster's feet, direction = the corridor's axis — WaterPart.js)
             case 'Caligo': this.hooks.caligo?.(o, direction.clone(), casterId, handSide); break; // (the dark fog: o = its middle, the direction = the way back to the wand — DarkFog.js)
             case 'Sectura': this.hooks.slash?.(o, direction.clone(), casterId, handSide); break; // (the cutting curse: the direction's LENGTH carries the swing's roll — Slash.js)
             case 'Groundprud': this.hooks.groundprud?.(o, direction.clone(), casterId); break; // (Groundprud.js: o = the spot, direction = away from the caster)

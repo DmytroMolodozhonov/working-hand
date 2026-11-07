@@ -183,6 +183,17 @@ function melody(rows, beat, t0, play) { for (const [b, n, l = 1] of rows) play(h
 
 // ------------------------------------------------------------------ the tunes
 const TUNES = {
+    /** «Aquadivide»'s tune: the sea draws back in D major — a rolling pad, then a slow rising and falling bell song over the still depths. */
+    thWaterPart(sr) {
+        const o = buf(sr, 9), r = rng(139);
+        pad(o, sr, ['D3', 'A3', 'D4', 'F#4'], 0, 3.2, 0.45, { att: 1.0, vib: 0.004, harm: 2 });
+        pad(o, sr, ['B2', 'F#3', 'B3', 'D4'], 3, 3.4, 0.45, { att: 0.8, vib: 0.004, harm: 2 });
+        pad(o, sr, ['G2', 'D3', 'G3', 'B3', 'D4'], 6, 3, 0.5, { att: 0.6, rel: 1.6, vib: 0.004, harm: 2 });
+        melody([[0, 'D5'], [1, 'F#5'], [2, 'A5', 2], [4, 'B5'], [5, 'A5'], [6, 'F#5', 2], [8, 'G5'], [9, 'B5'], [10, 'D6', 3]], 0.7, 0.4, (f, t) => bell(o, sr, f, t, 0.17, 2.4));
+        noise(o, sr, 0, 3, 0.08, (u) => 0.4 - 0.3 * u, swell(0.2, 0.8), r); // (the water falling away)
+        noise(o, sr, 0, 9, 0.012, () => 0.5, swell(0.5, 0.4), r);
+        return finish(o, sr, { rms: 0.07 });
+    },
     /** «To the Sun»: a warm bright choir rising in D major, bells climbing into the light. */
     thSun(sr) {
         const o = buf(sr, 8), r = rng(11);
@@ -942,6 +953,31 @@ const LOOPS = {
     loopEarth(sr) { const o = buf(sr, 3.6), r = rng(151); pad(o, sr, [65.4, 98], 0, 3.6, 0.25, { att: 0.01, rel: 0, harm: 3, vib: 0.003 }); noise(o, sr, 0, 3.5, 0.06, (u) => 0.08 + 0.05 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.4, 50, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.34 }); },
     /** «Visible Godi» held: a quiet veiled hum (A and E) breathing slowly, one far bell now and then. */
     /** «Пентаграниум» held: a low uneasy hum (E and B-flat), a whisper of embers, a far drum. */
+    /** «Aquadivide»: a deep swell draws back — a falling roar of water, a low gathering chord, then a long bright bell tune over still depths. */
+    fxWaterPart(sr) {
+        const o = buf(sr, 1.9), r = rng(131);
+        noise(o, sr, 0, 1.2, 0.22, (u) => 0.35 - 0.28 * u, swell(0.1, 0.9), r); // (the sea drawing back)
+        glide(o, sr, 0, 1.1, 0.18, (u) => 520 - 380 * u, swell(0.2, 0.6), 2);
+        pad(o, sr, ['D2', 'A2', 'D3', 'F#3'], 0.2, 1.9, 0.3, { att: 0.4, rel: 0.8, harm: 3, vib: 0.005 });
+        melody([[0, 'D5'], [1, 'F#5'], [2, 'A5'], [3, 'D6', 2]], 0.22, 0.6, (f, t) => bell(o, sr, f, t, 0.16, 1.0, 0.3));
+        return finish(o, sr, { peak: 0.62 });
+    },
+    /** «Aquadivide» held: tall walls of water humming — a deep open fifth, a slow far surf, a drop echoing in the corridor. */
+    loopWaterPart(sr) {
+        const o = buf(sr, 3.6), r = rng(733);
+        pad(o, sr, [73.4, 110, 146.8], 0, 3.6, 0.22, { att: 0.01, rel: 0, harm: 3, vib: 0.004 });
+        noise(o, sr, 0, 3.5, 0.06, (u) => 0.12 + 0.1 * Math.sin(u * 6.28 * 1.5), swell(0.5, 0.5), r);
+        bell(o, sr, hz('A6'), 0.9, 0.03, 1.1, 0.1); bell(o, sr, hz('D6'), 2.4, 0.025, 1.2, 0.1);
+        return finish(loopSeam(o, sr), sr, { peak: 0.32 });
+    },
+    /** The water comes back: a heavy crash and a rolling boom, then foam hissing away. */
+    fxWaterSlam(sr) {
+        const o = buf(sr, 1.8), r = rng(907);
+        noise(o, sr, 0, 0.5, 0.5, (u) => 0.5 - 0.3 * u, swell(0.01, 0.6), r);
+        drum(o, sr, 0, 0.9, 52, 0.6, r);
+        noise(o, sr, 0.15, 1.5, 0.12, (u) => 0.7 - 0.5 * u, swell(0.1, 0.8), r);
+        return finish(o, sr, { peak: 0.7 });
+    },
     loopDark(sr) { const o = buf(sr, 3.4), r = rng(321); pad(o, sr, [82.4, 116.5, 164.8], 0, 3.4, 0.26, { att: 0.01, rel: 0, harm: 3, vib: 0.004 }); noise(o, sr, 0, 3.3, 0.05, (u) => 0.1 + 0.06 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.35, 48, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.33 }); },
     /** «Aquambula» held: the soft hum of still water — a low fifth with a slow wave, a faint trickle, one clear drop now and then. */
     loopWaterWalk(sr) {
@@ -1086,7 +1122,7 @@ export const SPELL_SOUND = {
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
-    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, Rescue: { cast: 'fxHeal' },
+    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, WaterPart: { cast: 'fxWaterPart', theme: 'thWaterPart' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
     Breakthrough: { cast: 'fxStone' }, BreakthroughMaxima: { cast: 'fxStone', rate: 0.85 },
     Flight: { own: ['cast'] }, Pause: { cast: 'fxPause' },
@@ -1110,6 +1146,7 @@ export const HELD_SOUND = {
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
     SunClouds: { loop: 'loopSunFight', end: 'fxStop' }, // («To the Sun» on the gargoyles' black clouds held: SunContest.js)
+    WaterPart: { loop: 'loopWaterPart', end: 'fxWaterSlam' }, // («Aquadivide» held: walls of water; the end — the slam)
     WaterWalk: { loop: 'loopWaterWalk', end: 'fxStop' }, // («Aquambula» held: the hum of still water)
     VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
