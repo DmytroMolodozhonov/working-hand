@@ -34,6 +34,7 @@ export const TUT = {
     ZOMBIE_HP_FLOOR: 4, // the hero below this in the fight — the stage again
     WIZ_SITE: 'tutorial-wizard',
     MARKET: { id: 'tutorial-market', at: { x: 20, z: 0 }, coins: 150 }, // (the stall right of the hero: its buyer's place ~(20, 3.5))
+    VOLUME: 0.7, // the narrator's loudness (the author: 30 % quieter)
     VOICE_WAIT: 25, // s a piece waits for the voices to load (the first start) — then it is only written
     SAY_MAX: 110, // chars: a longer line is told in pieces (the voice gets lost in long ones — the author)
 };
@@ -159,10 +160,10 @@ export class Tutorial {
         const P = { show: 'pocket', point: 'pocket' }; // (the pockets lit, the arrow at the pocket)
         return [
             { title: STAGE_TITLES[0], steps: [
-                { ...say('Добро пожаловать! Это обучение. Здесь вы научитесь всему, что нужно в игре. Слушайте и делайте, что я говорю. Не торопитесь.'), ...wait(8) },
-                ask('Встаньте перед камерой так, чтобы она видела вас хотя бы по пояс. Камера должна стоять на уровне груди, прямо перед вами.', () => T._seenFor('body', 2.5), { hint: 'Камера вас пока не видит. Отойдите на шаг-два назад и встаньте прямо перед ней. Проверьте, что камера включена.' }),
+                // (the author: «не торопитесь, встаньте напротив камеры» — and on at once if he already stands there: after the words)
+                ask('Добро пожаловать! Это обучение. Здесь вы научитесь всему, что нужно в игре. Слушайте и делайте, что я говорю. Не торопитесь. Встаньте напротив камеры, чтобы она видела вас хотя бы по пояс.', () => T._seenFor('body', 1.2) && !T.talking, { hint: 'Камера пока не видит вас до пояса. Отойдите на шаг-два назад, чтобы в кадре были плечи и пояс. Камера — на уровне груди, прямо перед вами. Проверьте, что она включена.' }),
                 ask('Теперь поднимите обе руки перед собой, ладонями к камере, и подержите их так.', () => T._handsFor(3), { hint: 'Я плохо вижу ваши руки. Чаще всего мешает свет. Включите яркий свет: пусть он падает на вас спереди, а не из окна за спиной.', check: () => T._lightCheck() }),
-                ask('Хорошо видно! Теперь проверим микрофон. Скажите вслух: «Меня хорошо слышно».', () => T.heard.length > 0, { hint: 'Я вас не слышу. Проверьте, что микрофон включён и выбран в настройках. Скажите чуть громче.' }),
+                ask('Хорошо видно! Теперь проверим микрофон. Скажите вслух: «Меня хорошо слышно».', () => T.heard.some((h) => /слыш|слых/i.test(h)) || T.heard.length >= 2, { hint: 'Я вас не слышу. Проверьте, что микрофон включён и выбран в настройках. Скажите чуть громче.' }),
                 { ...say('Отлично: и видно, и слышно. Играйте при хорошем свете — тогда игра лучше понимает ваши руки.'), ...wait(6) },
             ] },
             { title: STAGE_TITLES[1], steps: [
@@ -255,8 +256,15 @@ export class Tutorial {
     // ------------------------------------------------------------------ checks
     _pose() { return this.game.currentPose || null; }
     _results() { return this.game.poseService?.lastResults || null; }
+    /** The camera sees the player at least to the waist: both shoulders and both hips in the picture, clearly (the author: «хотя бы до пояса, не просто так видеть»). */
+    _toWaist() {
+        const lm = this._results()?.poseLandmarks;
+        if (!lm || lm.length < 25) return false;
+        const vis = (p) => !!p && (p.visibility == null || p.visibility >= 0.6) && p.x > 0.02 && p.x < 0.98 && p.y > 0.02 && p.y < 0.98;
+        return [11, 12, 23, 24].every((i) => vis(lm[i]));
+    }
     _seenFor(what, s) {
-        const r = this._results(), ok = !!(r?.poseLandmarks?.length || this._pose());
+        const ok = what === 'body' ? this._toWaist() : !!(this._results()?.poseLandmarks?.length || this._pose());
         this.ctx.seen = ok ? (this.ctx.seen || 0) + this._dt : 0;
         return this.ctx.seen >= s;
     }
@@ -434,6 +442,8 @@ export class Tutorial {
     /** A phrase heard (final): true if it was the tutorial's own (not a spell). */
     hear(text) {
         if (this.done) return false;
+        // (the microphone hears the narrator himself — «меня хорошо слышно» said by him passed the check: his time and a moment after are not the player's)
+        if (this.talking || this._clockNow() - (this._quietAt ?? -9) < 0.8) return false;
         this.heard.push(text);
         const st = this._cur();
         if (st?.hear) return !!st.hear(text);
@@ -566,9 +576,9 @@ export class Tutorial {
         let ok = false;
         try {
             ok = sp.say(piece, {
-                voiceKey: TUT.VOICE_KEY, role: 'narrator', female: true, volume: 1, reply: true,
+                voiceKey: TUT.VOICE_KEY, role: 'narrator', female: true, volume: TUT.VOLUME, reply: true,
                 onStart: () => { if (tok === this._tok && !this._shown) { this._shown = true; this._subText(piece); } },
-                onEnd: () => { if (tok !== this._tok) return; this._talking = false; if (!this._shown) { this._shown = true; this._subText(piece); } this._pump(); },
+                onEnd: () => { if (tok !== this._tok) return; this._talking = false; this._quietAt = this._clockNow(); if (!this._shown) { this._shown = true; this._subText(piece); } this._pump(); },
             });
         } catch { ok = false; }
         if (!ok && this._talking && tok === this._tok) { this._talking = false; this._q.unshift(piece); this._waitFrom = now - TUT.VOICE_WAIT; this._pump(); } // (no voice for it: only written)

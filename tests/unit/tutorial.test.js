@@ -7,6 +7,17 @@ import { TUTORIAL, tutorialHeight, generateTutorialChunk, onMeadow } from '../..
 import { Tutorial, STAGE_TITLES, heardHand, splitSay } from '../../src/game/Tutorial.js';
 import { BLOCK } from '../../src/world/Terrain.js';
 
+test('«стоит напротив камеры» — only seen to the waist: shoulders and hips', () => {
+    const { g } = fake();
+    const T = new Tutorial(g);
+    const lm = g.poseService.lastResults.poseLandmarks;
+    assert.equal(T._toWaist(), true);
+    lm[23] = { x: 0.4, y: 1.2, visibility: 0.9 }; // (the hips under the picture: only the head and shoulders seen)
+    assert.equal(T._toWaist(), false);
+    lm[23] = { x: 0.4, y: 0.8, visibility: 0.2 };
+    assert.equal(T._toWaist(), false);
+});
+
 test('the land: a flat meadow, the hill before the hero, cliffs all round — no way out', () => {
     assert.equal(tutorialHeight(TUTORIAL.SPAWN.x, TUTORIAL.SPAWN.z), TUTORIAL.G);
     assert.ok(tutorialHeight(TUTORIAL.HILL.x, TUTORIAL.HILL.z) >= TUTORIAL.G + TUTORIAL.HILL.h - 1, 'the hill');
@@ -43,7 +54,7 @@ function fake() {
     const held = { left: null, right: null };
     const g = {
         localId: 'me', dom: 'right', off: 'left', settings: {}, smoothHead: { yaw: 0, pitch: 0 }, currentPose: { bodyRotation: 0 },
-        poseService: { lastResults: { poseLandmarks: [1], leftHandLandmarks: [1], rightHandLandmarks: [1] } },
+        poseService: { lastResults: { poseLandmarks: Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.9 })), leftHandLandmarks: [1], rightHandLandmarks: [1] } },
         character: { group: new THREE.Group(), velocity: { x: 0, z: 0 }, isRunning: false },
         terrain: { data: { get: (x, L, z) => blocks.get(`${x},${L},${z}`) ?? (L <= tutorialHeight(x, z) ? BLOCK.STONE : 0) } },
         items: {
@@ -157,7 +168,8 @@ test('the narrator: the first line waits for the voices to load (it was lost), t
     assert.match(said[0], /^Добро пожаловать/, 'the very first line is said, not skipped');
     sp.cur.onStart(); sp.cur.onEnd();
     assert.equal(said.length, 2, 'the next piece only after the first ended');
-    sp.cur.onStart(); sp.cur.onEnd();
+    for (let n = 0; n < 6 && T.talking; n++) { sp.cur.onStart(); sp.cur.onEnd(); }
+    g.poseService.lastResults.poseLandmarks = []; // (not seen yet: the step waits for him — its time runs)
     T.update(0.1);
     assert.ok(T.t > 0 && !T.talking, 'the step\'s time runs once the words are said');
 });

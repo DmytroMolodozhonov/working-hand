@@ -205,8 +205,9 @@ export const ACTS = {
         face: (k, t) => ({ lid: 0.08 + 0.5 * (1 - env(k, 0.25, 0.8)), brow: 0.6 * env(k), browL: 0.75 * env(k), ear: -0.8 * env(k), nostril: 0.4 + 0.5 * env(k, 0.5, 0.7), snarl: 0.15 }),
         body: (k, t) => {
             const up = env(k, 0.28, 0.82);
-            return { head: { pitch: -0.36 * up, yaw: 0.26 * up + 0.08 * Math.sin(t * 2.6) * env(k, 0.4, 0.8), roll: 0.14 * up }, // (the head shakes a little into the palm) inhale: 0.5 * env(k, 0.5, 0.65), lean: 0.15 * up,
-                armR: { rot: { sx: 1.48 * up, ab: -0.29 * up, tw: 0.68 * up, el: 1.6 * up, ha: 0.68 * up } } }; // (the palm on the brow — measured on the model: more and it goes past the head)
+            // (the head bows into the palm, shaking a little)
+            return { head: { pitch: -0.5 * up, yaw: 0.25 * up + 0.06 * Math.sin(t * 2.6) * env(k, 0.4, 0.8), roll: 0.2 * up }, inhale: 0.5 * env(k, 0.5, 0.65), lean: 0.15 * up,
+                armR: { rot: { sx: 2.9 * up, ab: -0.6 * up, tw: 2.2 * up, el: 1.4 * up, ha: 0.9 * up } } }; // (the forearm across, the palm over the eyes — found on the model: a bent elbow only reaches the temple)
         },
         snd: [{ t: 0.45, k: 'sigh' }], fx: [{ t: 0.6, k: 'nostrilSmoke' }],
     },
