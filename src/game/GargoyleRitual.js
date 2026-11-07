@@ -350,7 +350,7 @@ export class RitualFx {
             m.visible = true;
             m.position.set(best.c.x, best.c.y + GARGOYLE.SKY_H + i * 15, best.c.z);
             const u = m.material.uniforms;
-            u.uTime.value = best.t * (1 + i * 0.5); u.uStr.value = skyNow(best) * (i ? 0.8 : 1); u.uFlash.value = this.flash;
+            u.uTime.value = best.t * (1 + i * 0.5); u.uStr.value = this._sky * (i ? 0.8 : 1); u.uFlash.value = this.flash; // (this._sky: how thick × how near, eased — the cloud thickens as one comes close, not all at once)
             // the beam of «To the Sun» through this deck: where the ray crosses it (kept alive by the caster's messages, a fraction of a second old)
             u.uAct.value += ((live ? 1 : 0) - u.uAct.value) * Math.min(1, dt * (live ? 6 : 2.5));
             if (live) {

@@ -29,7 +29,7 @@ import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { stormDeck } from './GargoyleRitual.js';
 
 const ACTIVE_R = 240, GONE_R = 320; // m: the castle's life is made / put away
-const CLOUD = { R: VAMP.DARK_R + 80, H: 95, SEE: 900, SEE_FADE: 300, FADE_T: 8 }; // his cloud (the author 06.11: «тёмная туча, как у горгулий, только больше»): radius, m over the floor, seen from (the author 07.11: «слишком издалека вижу тучи» — no more than 900 m, thinning out over the last 300 m, not 2,2 km), s to melt away
+const CLOUD = { R: VAMP.DARK_R + 80, H: 95, SEE: 1200, SEE_FADE: 800, FADE_T: 8 }; // his cloud (the author 06.11: «тёмная туча, как у горгулий, только больше»): radius, m over the floor, seen from (the author 07.11: «слишком издалека вижу тучи» — no more than 1,2 km, thickening gradually from there (fully thick within 400 m), not all at once from 2,2 km), s to melt away
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const r2 = (x) => Math.round(x * 100) / 100;
@@ -253,7 +253,7 @@ export class VampireLife {
         this._flashT -= dt;
         if (this._flashT <= 0) { this._flashT = 5 + Math.random() * 12; this._flash = 1; if (d < 600) g.sound?.playTitan?.(_v.set(P.x + (Math.random() - 0.5) * 300, P.floor + CLOUD.H, P.z + (Math.random() - 0.5) * 300), 'thunder', 0.5); }
         this._flash = Math.max(0, this._flash - dt * 2.5);
-        const far = Math.min(1, Math.max(0, (CLOUD.SEE - d) / CLOUD.SEE_FADE)); // (it comes out of the haze: fully thick only within SEE − SEE_FADE)
+        const f0 = Math.min(1, Math.max(0, (CLOUD.SEE - d) / CLOUD.SEE_FADE)), far = f0 * f0 * (3 - 2 * f0); // (it comes out of the haze: fully thick only within SEE − SEE_FADE)
         this._decks.forEach((m, i) => {
             m.visible = far > 0.003;
             m.position.set(P.x, P.floor + CLOUD.H + i * 18, P.z);

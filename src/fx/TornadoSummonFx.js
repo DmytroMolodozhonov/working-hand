@@ -118,6 +118,10 @@ void main() {
 const _p = new THREE.Vector3(), _v = new THREE.Vector3(), _c = new THREE.Vector3();
 const _tip = new THREE.Vector3(), _dir = new THREE.Vector3(), _sky = new THREE.Vector3(), _mid = new THREE.Vector3();
 
+/** The cloud comes out of the haze with the distance, not all at once (the author 07.11): fully there within FULL m, gone at GONE m. */
+const SEE = { FULL: 600, GONE: 1500 };
+const seen = (d) => { const t = Math.min(1, Math.max(0, (SEE.GONE - d) / (SEE.GONE - SEE.FULL))); return t * t * (3 - 2 * t); };
+
 export class TornadoSummonFx {
     /** game: the Game (its fx sparks, light flash, the storm, the sound, the spells' bolts). */
     constructor(game) {
@@ -218,7 +222,9 @@ export class TornadoSummonFx {
             // (slowly: a glowing tear where the beam strikes, widening — «потихоньку небеса разверзнутся»)
             const op = Math.min(1, Math.max(0, (t - TORNADO_FX.OPEN_AT) / TORNADO_FX.OPEN_T));
             cu.uOpen.value = op * op * (3 - 2 * op) * 0.94 + 0.06 * Math.min(1, Math.max(0, (t - TORNADO_FX.OPEN_AT) * 2));
-            cu.uFade.value = Math.max(0, Math.min(1, (TORNADO_FX.LIFE - t) / 4));
+            const cam = g.camera?.position, vis = cam ? seen(Math.hypot(cam.x - S.at.x, cam.z - S.at.z)) : 1; // (how much of it is seen from here)
+            cu.uFade.value = Math.max(0, Math.min(1, (TORNADO_FX.LIFE - t) / 4)) * vis;
+            S.cloud.visible = vis > 0.003;
             cu.uFlash.value = Math.max(0, cu.uFlash.value - dt * 5);
             // the beam: re-struck many times a second while it goes, then dies in a last great crack
             if (t < TORNADO_FX.BEAM) {
@@ -246,7 +252,7 @@ export class TornadoSummonFx {
             }
             // the sea answers: the foam disc spins up, the spray ring closes in
             fu.uT.value = t; fu.uSpin.value = S.spin; fu.uLight.value = light;
-            fu.uK.value = Math.max(0, Math.min(1, (t - 3) / 2.5)) * Math.max(0, Math.min(1, (TORNADO_FX.LIFE - t) / 3));
+            fu.uK.value = Math.max(0, Math.min(1, (t - 3) / 2.5)) * Math.max(0, Math.min(1, (TORNADO_FX.LIFE - t) / 3)) * vis;
             S.foam.scale.setScalar(30 - Math.min(14, Math.max(0, t - 3) * 3));
             if (fx?.spark) {
                 // the call: wind spiralling up from the wand (the first 2 s)
