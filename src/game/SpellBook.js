@@ -33,6 +33,13 @@ export const START_SPELLS = new Set([
     'RodFrozen', 'RodIce', 'Hammer',
 ]);
 
+/**
+ * «Школа Акселдорф» (docs/rules/school.md): a new pupil knows only the everyday spells from the start; the fighting and guarding ones are
+ * TAUGHT at the lessons (SchoolLessons.js gives them as `bonus.spells`) — not known until then.
+ */
+export const SCHOOL_UNKNOWN = new Set(['Sands', 'Sapira', 'Stupefy', 'Expelliarmus', 'Disarmor', 'Ice', 'Frozen', 'Jolt', 'Maxima',
+    'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Wind', 'WindMaxima', 'Attack', 'GiveMyPower']);
+
 /** A spell taught by another spell's scroll / book (the rest: by the key of their own name). */
 export const TAUGHT_BY = {
     WindImpulseMaxima: 'WindImpulse', AliveMaxima: 'Alive', TotalDestructionMaxima: 'TotalDestruction',
@@ -64,7 +71,7 @@ export function knows(name, who = {}) {
     if (!name) return false;
     if (who.mode === 'creative' && who.hero) { // (Творческий: «все заклинания есть» или «только сильного мага» — HeroSetup.js; не известное — доучить свитком можно)
         if (knownInCreative(who.hero, name) || START_SPELLS.has(name)) return true;
-    } else if (free(who.mode) || START_SPELLS.has(name)) return true;
+    } else if (free(who.mode) || (START_SPELLS.has(name) && !(who.school && SCHOOL_UNKNOWN.has(name)))) return true;
     if (name === 'Flight') return who.mode !== 'freeworld' || !!who.flight || !!who.learned?.has?.('Flight');
     const k = teachKey(name);
     return !!who.spells?.[k] || !!who.learned?.has?.(k);

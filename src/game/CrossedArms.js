@@ -337,7 +337,8 @@ export class CrossedShield {
         return !!(g.paused || c.dead || g.isDeadLocal || c.frozen || c.stunned || g.monster?.active || g.imperius?.busy || g.imperius?.puppet
             || g.beds?.lying || g.spiders?.held || g.books?.readingSide || g.scrolls?.readingSide || g.gear?.nock
             || g.inventory?.pocketCycling?.('left') || g.inventory?.pocketCycling?.('right')
-            || g.flight?.busy || g.levitation?.lifted);
+            || g.flight?.busy || g.levitation?.lifted
+            || (g.config?.school && g.knowsSpell && !g.knowsSpell('Protection'))); // («Школа»: the shield is learned at the first lesson — SpellBook.SCHOOL_UNKNOWN)
     }
 
     /**

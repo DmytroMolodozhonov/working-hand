@@ -76,7 +76,7 @@ function stoolParts() {
     out.push(P(new THREE.TorusGeometry(0.44, 0.03, 6, 20), C.wood, [0, 0.5, 0], [Math.PI / 2, 0, 0]));
     return out;
 }
-function candleParts(at = [0, 0, 0], top = 1.78) {
+export function candleParts(at = [0, 0, 0], top = 1.78) {
     const [x0, y0, z0] = at, out = [];
     out.push(P(cyl(0.11, 0.24, 0.05, 14), C.brass2, [x0, y0 + top, z0])); // (the drip pan)
     out.push(P(cyl(0.085, 0.085, 0.5, 12), C.wax, [x0, y0 + top + 0.27, z0], null, null, 0.02, 7));
@@ -99,7 +99,7 @@ function candleStandParts() {
     ];
 }
 const CANDELABRA_CUPS = [[-0.95, 2.48], [-0.5, 2.6], [0, 2.78], [0.5, 2.6], [0.95, 2.48]];
-function candelabraParts() {
+export function candelabraParts() {
     const out = [];
     for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3; out.push(P(box(0.12, 0.08, 0.62), C.brass2, [Math.sin(a) * 0.26, 0.05, Math.cos(a) * 0.26], [0.12, a, 0])); }
     out.push(P(cyl(0.12, 0.2, 0.3, 12), C.brass, [0, 0.22, 0]));
@@ -156,7 +156,7 @@ export function propMaterial() {
     if (!_mat) { _mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: grainTexture(), roughness: 0.74, metalness: 0.18 }); _mat.name = 'ghostProps'; }
     return _mat;
 }
-function flameGeometry() {
+export function flameGeometry() {
     if (_flameGeo) return _flameGeo;
     const a = new THREE.PlaneGeometry(0.42, 0.62); a.translate(0, 0.26, 0);
     const b = a.clone(); b.rotateY(Math.PI / 2);

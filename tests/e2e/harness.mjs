@@ -1,3 +1,4 @@
+import http from 'node:http';
 /**
  * Shared helpers for browser tests: game server, Chromium with a fake webcam,
  * error collection and small wait utilities.
@@ -39,8 +40,12 @@ export async function startServer(port, { python = 'python3', env = {} } = {}) {
         // «assert(!this.paused)», uncatchable; a fetch only once the port answers)
         if (!(await portOpen(port))) { await new Promise((r) => setTimeout(r, 100)); continue; }
         try {
-            const r = await fetch(url);
-            if (r.ok) return { proc, url, log: () => log, stop: () => proc.kill() };
+            // (node:http, not fetch: undici's «assert(!this.paused)» still crashed the whole process now and then on this server's answer)
+            const ok = await new Promise((res) => {
+                const q = http.get(url, (r) => { r.resume(); res(r.statusCode >= 200 && r.statusCode < 400); });
+                q.on('error', () => res(false)); q.setTimeout(3000, () => { q.destroy(); res(false); });
+            });
+            if (ok) return { proc, url, log: () => log, stop: () => proc.kill() };
         } catch (e) { /* not up yet */ }
         await new Promise((r) => setTimeout(r, 100));
     }

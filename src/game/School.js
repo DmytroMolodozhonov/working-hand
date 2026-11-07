@@ -18,6 +18,9 @@
  */
 import * as THREE from 'three';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
+import { SchoolDecor } from '../fx/SchoolDecor.js';
+import { SchoolLesson } from './SchoolLesson.js';
+import { lessonsOfMonth } from './SchoolLessons.js';
 
 export const SCHOOL_SITE = 'akseldorf';
 
@@ -58,6 +61,7 @@ export class School {
         this._quiet();
         if (!this.plan) return;
         this._site();
+        this.decor = new SchoolDecor(game, this.plan); // (the Great Hall's floating candles and candelabras — SchoolDecor.js)
         this._placeHero(this.plan.arrive);
     }
 
@@ -143,12 +147,14 @@ export class School {
         if (!this.plan || !(dt > 0)) return;
         dt = Math.min(dt, 0.1);
         this.t += dt;
+        this.decor?.update(dt, this.t);
         const g = this.game, P = this.plan;
         switch (this.phase) {
             case 'ride': return this._ride(dt);
             case 'gate': return this._gate(dt);
             case 'walk': return this._walk(dt);
             case 'speech': return this._speech(dt);
+            case 'free': return this._free(dt);
             default: void g; void P;
         }
     }
@@ -257,6 +263,36 @@ export class School {
         if (this._line >= SPEECH.length && this.t > 2 + SPEECH.length * 6.5 + 3) this.phase = 'free'; // (part 2: the dormitory, the schedule)
     }
 
+    /**
+     * Free time and the lessons. Part 2 (days, sleep, the schedule) will say WHEN; for now the month's lessons follow one another
+     * a little after the speech / the last lesson (the engine is one for all — SchoolLesson.js).
+     */
+    _free(dt) {
+        if (this.lesson && !this.lesson.done) return this.lesson.update(dt);
+        if (this.lesson?.done) { (this.record.attended ||= []); if (this.lesson.attended) this.record.attended.push(this.lesson.L.id); this.lesson = null; this.t = 0; }
+        const next = lessonsOfMonth(this.month).find((l) => !this.record.seen.includes(l.id));
+        if (next && this.t > 8) { this.record.seen.push(next.id); this.lesson = new SchoolLesson(this, next.id); }
+    }
+    get month() { return this.record.month; }
+    get record() { return this._rec || (this._rec = { month: 1, seen: [], attended: [] }); }
+
+    /** The pupils of the school (made ones). */
+    pupilsOf() { return SCHOOL_PEOPLE.filter((p) => p.role === 'student').map((p) => this.people.get(p.idx)).filter((v) => v && !v.dead); }
+
+    /** (a lesson) The teacher `v` sends `spell` at the hero — turned to him first; the charge (Duel's bolt) or null. */
+    castAtHero(v, spell) {
+        const g = this.game, life = g.castleLife, fp = life?._playerPos?.(g.localId), F = life?.wizards?.fight;
+        if (!fp || !F || !v || v.dead || v.noWand) return null;
+        v.yaw = Math.atan2(-(fp.x - v.x), -(fp.z - v.z));
+        const before = new Set(g.duel?.bolts?.keys?.() || []);
+        try { if (!F._cast(v, spell, g.localId, fp)) return null; } catch (e) { console.warn('school cast', e); return null; }
+        for (const [k, b] of g.duel.bolts) if (!before.has(k) && b.by === v.id) return b;
+        return null;
+    }
+
+    /** The hero cast a spell (Game). */
+    onCast(name) { this.lesson?.onCast?.(name); }
+
     /** The glowing circle where the hero should come (null: none) — the same as the tutorial's. */
     _goal(at) {
         const g = this.game;
@@ -275,6 +311,7 @@ export class School {
     }
 
     dispose() {
+        this.decor?.dispose(); this.decor = null; this.lesson = null;
         if (this._goalObj) { this.game.scene?.remove(this._goalObj); this._goalObj.traverse((m) => { m.geometry?.dispose?.(); m.material?.dispose?.(); }); this._goalObj = null; }
         if (this.cart) { try { this.game.carriages?.remove(this.cart); } catch { /* gone */ } this.cart = null; }
     }

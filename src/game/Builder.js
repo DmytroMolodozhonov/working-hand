@@ -66,7 +66,7 @@ export class Builder {
     /** May this spell be used now? (SpellBook.js — the one answer: Creative all; else from the start, a book or a scroll) */
     knows(spell) {
         const g = this.game;
-        return knows(spell, { mode: g.config.mode, spells: g.bonus?.spells, learned: g.books?.learned, flight: g.bonus?.flight });
+        return knows(spell, { mode: g.config.mode, spells: g.bonus?.spells, learned: g.books?.learned, flight: g.bonus?.flight, school: !!g.config.school });
     }
 
     // =================================================================== aim

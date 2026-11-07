@@ -1898,7 +1898,7 @@ export class Game {
         this._manaLater = false;
         this.lastCastWhy = null; // (why it did not work — the spell journal: set where a spell is refused)
         const name = this._castWithHints(text, isFinal);
-        if (name) { this._castAt = performance.now(); this._castName = name; this.tutorial?.onCast?.(name); this.tutorialNudge?.onCast?.(); } // (the wand never leaves the hand while a spell is going: spellBusy; a thrown Lumos waits after another spell's gesture: WandMagic)
+        if (name) { this._castAt = performance.now(); this._castName = name; this.tutorial?.onCast?.(name); this.school?.onCast?.(name); this.tutorialNudge?.onCast?.(); } // (the wand never leaves the hand while a spell is going: spellBusy; a thrown Lumos waits after another spell's gesture: WandMagic)
         // its sound (SpellMusic.SPELL_SOUND: a tune for the great ones, a short effect for the others) — the others hear it too
         if (name && this.sound?.spellHasCastSound?.(name)) {
             const at = _castSnd.copy(this.character.group.position);
@@ -5073,7 +5073,7 @@ export class Game {
     /** Does the hero know this spell? One answer for everything (SpellBook.js: what is known from the start, the rest from scrolls and books). */
     knowsSpell(name) {
         if (name === 'Pentagranium') return this.pentagranium.known().length > 0; // (no spell of its own: each pentagram is learnt by burning ITS scroll; Creative knows all)
-        return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, hero: this.config.mode === 'creative' ? this.hero : null, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight });
+        return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, hero: this.config.mode === 'creative' ? this.hero : null, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight, school: !!this.config.school });
     }
 
     /** Can the hero say this spell now (the pause menu's spell book outside Creative)? The same checks the cast makes. */
