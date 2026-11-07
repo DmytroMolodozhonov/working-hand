@@ -2,6 +2,7 @@
 // on the hero's shield (raised by script: there is no camera here), the lesson counted. Also the Great Hall's candles (SchoolDecor.js).
 //   node tools/shot.mjs school-lesson --mode school
 export default async function (h) {
+    h.fast = true; // (the teacher's words skipped: the task is what is checked)
     const g = h.g, S = g.school, P = S?.plan;
     if (!P) { h.log('no plan'); return; }
     // the arrival skipped: the people made where the speech leaves them
@@ -25,6 +26,12 @@ export default async function (h) {
         if (ph === 'gather') { const R = L.room; g.character.group.position.set((R.x0 + R.x1) / 2, P.F + 3, R.z0 + 12); }
         if (ph === 'intro' && !shots.i) { shots.i = 1; await h.frames(120); await h.page('1-room'); }
         if (ph === 'demo' && !shots.d) { shots.d = 1; await h.frames(60); const tea = L.teacher; if (tea) { h.cam([tea.x + 5, P.F + 4.5, tea.z + 9], [tea.x, P.F + 3, tea.z]); await h.shot('2-demo', { settle: 5 }); window.__shotCam = null; } }
+        if (h.fast && ph === 'intro' && shots.i) { L.line = L.L.intro.length; L.t = 1e3; }
+        if (h.fast && ph === 'demo' && shots.d && L.t < 6) L.t = 6.4;
+        if (ph === 'task' && (h._dbg = (h._dbg || 0) + 1) % 30 === 1) {
+            const v = L.teacher, me = g.character.group.position;
+            h.log('teacher', v && JSON.stringify({ wiz: v.wizard, W: !!v.W, mana: v.mana, noWand: v.noWand, dead: v.dead, x: Math.round(v.x), z: Math.round(v.z), yaw: +v.yaw.toFixed(2), me: [Math.round(me.x), Math.round(me.z)], fight: !!g.castleLife?.wizards?.fight, bolt: !!L._bolt, next: L._next, t: +L.t.toFixed(1), stun: v.stunT, mode: v.mode }));
+        }
         if (ph === 'task') {
             // the hero raises the shield when a charge is in the air (by script: Combat's shield — no camera here)
             const flying = L._bolt && L._bolt.state === 'flying';
