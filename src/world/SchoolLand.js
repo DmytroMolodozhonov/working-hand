@@ -369,11 +369,13 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     let arrive = { x: OX, y: F + 0.5, z: OZ + HV };
     let coachFrom = { x: OX, y: F + 0.5, z: OZ + S.HEAD.v1 + S.ROAD.len - 10 };
     if (groundAt) {
+        const r0 = parts.length;
         for (let v = S.HEAD.v1; v < S.HEAD.v1 + S.ROAD.len; v++) {
             const L = groundAt(OX, OZ + v);
             box(-S.ROAD.w, S.ROAD.w, v, v, L, L, (v & 7) === 0 ? DARK : B.PATH);
             if (v % 14 === 0) for (const sd of [-1, 1]) { const Lp = groundAt(OX + sd * (S.ROAD.w + 1), OZ + v); box(sd * (S.ROAD.w + 1), sd * (S.ROAD.w + 1), v, v, Lp + 1, Lp + 3, B.CS_DARK); box(sd * (S.ROAD.w + 1), sd * (S.ROAD.w + 1), v, v, Lp + 4, Lp + 4, B.LANTERN); }
         }
+        { const sp = roofShapes(parts.slice(r0), [B.PATH, DARK]); if (sp) parts.push(sp); } // (the road's flagstones as ramps, never a stair)
         const v = S.HEAD.v1 + S.ROAD.len - 10;
         coachFrom = { x: OX, y: groundAt(OX, OZ + v) + 0.5, z: OZ + v };
     }
@@ -390,7 +392,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
             library: { x0: -W.u + 1, x1: -W.u + 21, z0: SZ0 + 1, z1: SZ1 - 1, door: at(-W.u + 24, (SZ0 + SZ1) / 2) },
             dormitory: { x0: W.u - 21, x1: W.u - 1, z0: SZ0 + 1, z1: SZ1 - 1, door: at(W.u - 24, (SZ0 + SZ1) / 2) },
         },
-        arrive, coachFrom, bridge: { v0: OZ + BR.v0, v1: OZ + BR.v1, x: OX }, centre: { x: OX, z: OZ }, F, M: P.M ?? F - S.RISE, tableCandles, floatCandles,
+        arrive, coachFrom, road: { z0: OZ + S.HEAD.v1, len: S.ROAD.len }, gateZ: OZ + GZ, bridge: { v0: OZ + BR.v0, v1: OZ + BR.v1, x: OX }, centre: { x: OX, z: OZ }, F, M: P.M ?? F - S.RISE, tableCandles, floatCandles,
     };
     // (the rooms' and the hall's bounds and the tables: laid out round (0, 0) — to the world's place too)
     for (const r of [out.hall, ...Object.values(out.rooms)]) { r.x0 += OX; r.x1 += OX; r.z0 += OZ; r.z1 += OZ; }

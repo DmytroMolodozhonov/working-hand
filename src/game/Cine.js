@@ -28,7 +28,7 @@ const CSS = `
 #cine .fade{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .9s}
 #cine .fade.on{opacity:1}
 #cine .skip{position:absolute;right:2.2vw;bottom:3.4vh;font:13px sans-serif;color:#9a9283;letter-spacing:.05em}
-body.cine-on #hud, body.cine-on #mana-num, body.cine-on #minimap-container, body.cine-on #voice-debug, body.cine-on .hotbar{visibility:hidden!important}
+body.cine-on #hud, body.cine-on #mana-num, body.cine-on #fatigue-container, body.cine-on #hotbar, body.cine-on #webcam-preview, body.cine-on #minimap-container, body.cine-on #voice-debug, body.cine-on .hotbar, body.cine-on .toast, body.cine-on #toast{visibility:hidden!important}
 `;
 
 export class Cine {

@@ -274,8 +274,8 @@ export class CastleTalk {
         if (v.dead || v.stunT > 0) return; // (the dead and the knocked out say nothing)
         const me = this.game.character.group.position;
         const d = Math.hypot(v.x - me.x, v.z - me.z);
-        const range = shout ? SHOUT_RANGE : VOICE;
-        if (d > range) return;
+        const range = shout ? SHOUT_RANGE : VOICE, scene = !!(v.cs?.def?.school && this.game.school?.loudScene);
+        if (d > range && !scene) return; // (the school's scenes: the teacher's and the Director's words are heard as in a film — School.loudScene)
         // a shout carries far and stays loud; a word is quiet beyond a few metres
         const volume = this._loud(v, shout).volume;
         if (volume < 0.03) return;
@@ -450,6 +450,7 @@ export class CastleTalk {
         const g = this.game, me = g.character.group.position;
         const dx = v.x - me.x, dz = v.z - me.z;
         const d = Math.hypot(dx, dz, ((v.y ?? me.y) - me.y) * 0.5);
+        if (v.cs?.def?.school && g.school?.loudScene) return { volume: 1, muffled: false, pan: 0, echo: g.school.phase === 'speech' ? 0.18 : 0 }; // (a scene of the school: clear, as in a film; the hall echoes)
         if (v.potionMaster && g.potionLair?.inLair) { // (the Potion-maker's lair is one great stone hall: his voice is heard clearly all over it — a little quieter with distance, never dull — and with a faint echo off the dome (Speech: `echo`); the author: «тихо и приглушённо — разные вещи… в помещении должно быть ещё лучше слышно»)
             const yaw0 = g.character.group.rotation.y;
             return { volume: Math.max(0.55, 1 - d / 80), muffled: false, pan: d > 1 ? (dx * Math.cos(yaw0) - dz * Math.sin(yaw0)) / d * 0.8 : 0, echo: 0.2 };
@@ -641,6 +642,7 @@ export class CastleTalk {
         if (neural && !sp.neural.ready) return false;
         // (the computer's voices: only if one of this villager's gender exists — else the words must show)
         if (!neural && !sp.pickVoice?.(v.id, !!v.entry?.female)) return false;
+        if (v.cs?.def?.school && this.game.school?.loudScene) return true;
         const me = this.game.character.group.position;
         return Math.hypot(v.x - me.x, v.z - me.z) <= (shout ? SHOUT_RANGE : VOICE);
     }

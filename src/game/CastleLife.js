@@ -3965,7 +3965,7 @@ export class CastleLife {
         // (a voice that would cut the answer I am hearing is not said — false: then its words show)
         const mute = !!this.game.duelOnly; // (the duel-only start: no villager voices — the words show over the head, nothing is spoken)
         const voiced = !mute && this.talk.voiceCarries?.(v, shout) && this.talk.voice(v, text, shout) !== false;
-        if (voiced) v.bubble.hide?.();
+        if (voiced || (v.cs?.def?.school && this.game.cine?.active)) v.bubble.hide?.(); // (a cut-scene: its words are at the bottom — Cine.js)
         else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.wizard ? '#5b2d8e' : v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
         if (!mute && !this.talk.voiceCarries?.(v, shout)) this.talk.voice(v, text, shout);
         if (broadcast) this.game.sync?.villagerSay?.(v.id, text); // (everybody near sees the bubble)
