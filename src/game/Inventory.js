@@ -1197,6 +1197,15 @@ export class Inventory {
             bar.appendChild(c);
             this.cells.push(c);
         }
+        // the coin pouch's cell (the author 07.11): only while a deal can be made — a merchant near — it appears at the end of the pockets
+        // and goes when the player walks away (CoinDeal._refresh asks _renderPouch when that changes)
+        const pc = document.createElement('div');
+        pc.className = 'hotbar-slot pouch';
+        pc.innerHTML = '<div class="hb-icon"></div><div class="hb-count"></div><div class="hb-key">💰</div>';
+        pc.onclick = () => this.pouchClick();
+        pc.style.display = 'none';
+        bar.appendChild(pc);
+        this.pouchCell = pc;
         this._pouchKey = null;
         this.bar = bar;
         this._render();
@@ -1209,13 +1218,15 @@ export class Inventory {
         if (!c) return;
         const o = this.pouchInfo(), sel = !!this._cyc?.pouch;
         const shut = !!(this.game.coinDeal && o.have && !this.game.coinDeal.mayTake());
-        const key = o.have + '|' + o.coins + '|' + sel + '|' + shut;
+        const open = !!this.game.coinDeal?._open && o.have; // (seen only while a deal can be made: a merchant near)
+        const key = o.have + '|' + o.coins + '|' + sel + '|' + shut + '|' + open;
         if (key === this._pouchKey) return;
         this._pouchKey = key;
+        if ((c.style.display !== 'none') !== open) { c.style.display = open ? '' : 'none'; if (typeof document !== 'undefined') document.dispatchEvent(new Event('zns-hotbar-built')); } // (the panel's width changed)
         c.classList.toggle('sel', sel);
         c.classList.toggle('empty', !o.have);
         c.querySelector('.hb-icon').innerHTML = pouchIcon();
-        c.querySelector('.hb-count').textContent = '';
+        c.querySelector('.hb-count').textContent = o.coins > 0 ? String(o.coins) : '';
         c.classList.toggle('locked', shut); // (dimmed: it opens only when buying or selling)
         c.title = 'Бездонный мешочек, монет: ' + o.coins + (shut ? '\nМонеты достаются только когда вы покупаете или продаёте' : o.have && this.game.coinDeal ? '\nМожно достать: идёт торговля' : '');
     }

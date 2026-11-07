@@ -245,8 +245,8 @@ export class Tutorial {
                 { ...say('Отлично! Если кто-то идёт на вас, а вы стоите к нему лицом и шагаете, герой будет отходить назад, не поворачиваясь спиной.'), ...wait(8), unfreeze: true, setup: () => T._goal(null) },
             ], onStart: () => T._placeHero() },
             { title: STAGE_TITLES[8], steps: [
-                ask('Теперь — покупка. Справа от вас стоит прилавок торговца. Подойдите к нему.', () => T._atStall(), { unfreeze: true, setup: () => { T._market(); T._giveCoins(); }, hint: 'Повернитесь направо и шагайте к прилавку с полосатым навесом. Встаньте прямо перед ним.' }),
-                ask('Достаньте мешочек с монетами. Он висит на поясе там же, где карман. Посмотрите вниз, дотянитесь туда дочерней рукой и сожмите кулак.', () => !!T._pouchHeld() || T._pouchOnCounter(), { unfreeze: true, ...P, hint: 'Монеты достаются только рядом с торговцем. Смотрите вниз, дочерняя рука — к карману, и сожмите кулак, а не раскрытую ладонь.' }),
+                ask('Теперь — покупка. Неподалёку появился торговец: прилавок под полосатым навесом. Подойдите к нему — к светящемуся кругу перед прилавком.', () => T._atStall(), { unfreeze: true, setup: () => { T._market(); T._giveCoins(); const f = T._mdef?.stalls?.[0]?.front; if (f) T._goal(f); }, hint: 'Оглянитесь: где-то рядом полосатый навес и светящийся круг перед прилавком. Идите туда.' }),
+                ask('Видите: внизу, в конце карманов, появилась ячейка с монетами. Она есть, только пока рядом торговец. Достаньте мешочек: он висит на поясе там же, где карман. Посмотрите вниз, дотянитесь туда дочерней рукой и сожмите кулак.', () => !!T._pouchHeld() || T._pouchOnCounter(), { unfreeze: true, ...P, setup: () => T._goal(null), show: 'pouch', hint: 'Монеты достаются только рядом с торговцем. Смотрите вниз, дочерняя рука — к карману, и сожмите кулак, а не раскрытую ладонь.' }),
                 ask('Положите мешочек на прилавок: вытяните над ним руку и разожмите кисть.', () => T._pouchOnCounter() || T._bought(), { unfreeze: true, hint: 'Рука с мешочком — над прилавком, и раскройте ладонь.' }),
                 ask('Теперь скажите вслух, что хотите купить. Например: «хлеб» или «яблоко». Цена написана на карточке у товара.', () => T._bought(), { unfreeze: true, hint: 'Назовите товар, который лежит на прилавке. Торговец возьмёт плату и положит сдачу.' }),
                 ask('Покупка ваша! Возьмите её с прилавка рукой. Сдачу тоже заберите.', () => T._boughtTaken(), { unfreeze: true, hint: 'Протяните руку к купленной вещи на краю прилавка и сожмите кисть.' }),
@@ -808,6 +808,7 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
         const inv = this.game.inventory;
         if (name === 'wand') { const i = inv?.slots?.findIndex?.((x) => x?.kind === 'wand') ?? -1; const c = i >= 0 ? inv.cells?.[i] : null; return c ? [c] : [document.getElementById('hotbar')].filter(Boolean); }
         if (name === 'pocket') return [document.getElementById('hotbar')].filter(Boolean);
+        if (name === 'pouch') return [this.game.inventory?.pouchCell].filter((e) => e && e.style.display !== 'none');
         return [document.getElementById(name)].filter(Boolean);
     }
     /** Lights the shown elements and puts a red arrow at each (again now and then: they move, the wand's cell changes). */
