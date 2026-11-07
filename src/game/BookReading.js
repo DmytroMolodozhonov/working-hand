@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { BUILD_SPELLS } from './Builder.js';
 import { WARD_SPELLS, WARD_NAMES, isWardSpell } from './HouseWards.js';
 import { BOOK, setBookAngle, pageHinge, makePageSheet, setPageSheet, disposePageSheet } from './BookModel.js';
-import { frameFromHands, frameFromOneHand, viewRight, pageLimits, PageSheet, sheetLag, edgeInBook, halfQuat, bookFromHinge, frameOnPalm } from './BookPhysics.js';
+import { frameFromHands, frameFromOneHand, frameFromSpine, viewRight, pageLimits, PageSheet, sheetLag, edgeInBook, halfQuat, bookFromHinge, frameOnPalm } from './BookPhysics.js';
 import { BOOK_POINTS, Steady } from '../entities/SimplifiedHand.js';
 import { ITEM_SCALE } from './ItemTypes.js';
 import { loreOf } from './LoreBooks.js';
@@ -41,7 +41,8 @@ export const HOLD = {
     PUSH_MAX: 0.15, // m: the most a hand is held back out of the pages in a frame
     SLIP: 1.0, // m: hands this much further apart than the open book reaches (arms spread wide) — the cover slips out of the second hand…
     SLIP_T: 0.3, // …after this long (s) (a little wider it just lies flat between them: nothing lets go by accident)
-    OPEN_T: 0.3, // s with the arm raised: the book in the hand opens by itself (the author 06.11: «по умолчанию она открыта»)
+    OPEN_BLEND: 0.12, // s: the book turns from the fist's way into the reading pose (it is open at once)
+    FWD: 0.1, // m: the spine stands off the palm toward the reader (the book is close to the eyes)
     SQUEEZE0: 0.62, // the hand's closing up to this: the book stays fully open…
     SQUEEZE1: 0.95, // …and from this on it is shut (between — as much as the fist is squeezed)
     OPEN_RATE: 3, // 1/s: how fast it opens (a loosened hand / just taken)
@@ -290,6 +291,17 @@ export class BookReading {
         return c;
     }
 
+    /** The lower part of the spine as one box: the fingers close on it only (never slide over the pages). */
+    _spineBoxes(m) {
+        const { H, T, B } = BOOK;
+        const c = this._sb || (this._sb = [{ inv: new THREE.Matrix4(), min: new THREE.Vector3(), max: new THREE.Vector3(), scale: 1 }]);
+        c[0].inv.copy(m.matrixWorld).invert();
+        c[0].min.set(-(T + B) * 0.8, -H / 2, -B);
+        c[0].max.set((T + B) * 0.8, -H / 2 + H * 0.38, T);
+        c[0].scale = m.scale.x;
+        return c;
+    }
+
     /** The two halves (their pages and boards) as boxes. */
     _openBoxes(m) {
         const { W, H, T, B } = BOOK;
@@ -366,30 +378,19 @@ export class BookReading {
     }
 
     /**
-     * The book in one hand, the arm raised: it opens at once and stays open (the author 06.11: «по умолчанию она будет открыта»). The arm lowered — it is
-     * carried closed in the fist (Items asks `holdClosed`) and opens again when the arm comes up. The other hand turns the pages (`_swipe`), the holding
-     * fist squeezes it shut (`_one`).
+     * The book in one hand: it is OPEN at once and stays open (the author 06.11: «изначально должна быть открытой»); it hangs from the hand by the lower part of its spine and
+     * nothing slides (`_one`). The other hand turns the pages (`_swipe`), the holding fist squeezes it shut and loosening opens it again.
      */
     _fist(hb, dt) {
-        const h = this._hand(hb.side);
-        this._openT = h.up ? (this._openT || 0) + dt : 0;
-        if (this._openT < HOLD.OPEN_T) return;
-        this._openT = 0;
         const m = hb.model;
         m.updateMatrixWorld(true);
-        // the half on the palm is the one the hand holds (the other lifts away from it as the book opens): the cover that is nearer to the palm
-        const F = h.f ? _v5.copy(h.f.Z).negate() : null;
-        const X = _v6.set(1, 0, 0).applyQuaternion(m.quaternion);
-        const half = F ? (X.dot(F) > 0 ? 'left' : 'right') : hb.side;
-        const eye = this._eye(_v1);
         this.s = {
             mode: 'one', model: m, item: hb.item, owner: hb.side,
-            hold: { left: null, right: null, [half]: hb.side },
-            half, phi: 0.05, pos: m.position.clone(), quat: m.quaternion.clone(), gy: 0,
-            from: { pos: m.position.clone(), quat: m.quaternion.clone(), t: 0 },
+            hold: { left: null, right: null, [hb.side]: hb.side }, // (the hand that holds the spine; which half is not asked any more)
+            half: hb.side, phi: HOLD.ONE_HAND_PHI, pos: m.position.clone(), quat: m.quaternion.clone(), gy: 0,
+            from: { pos: m.position.clone(), quat: m.quaternion.clone(), t: 0, T: HOLD.OPEN_BLEND },
             pL: null, pR: null, spread: 0, sheet: null, readT: 0, lowT: 0, support: false, slipT: 0,
         };
-        void eye;
         this._initPages(this.s);
     }
 
@@ -502,11 +503,12 @@ export class BookReading {
         if (s.support && F) {
             frameOnPalm(P, h.f.Y, F, 0.07 + BOOK.B * (ITEM_SCALE.book || 1.6) + 0.01, f1);
         } else {
-            // (the hand's tremble smoothed: a real move is followed at once)
-            frameFromOneHand(this._steady(s, 'gripP', h.G, dt), s.half, s.phi, this._eye(_v1), this.w, f1);
+            // hangs from the hand by the lower part of the spine, the pages to the eyes (the hand's tremble smoothed: a real move is followed at once)
+            const sc = ITEM_SCALE.book || 1.6;
+            frameFromSpine(this._steady(s, 'gripP', h.G, dt), this._eye(_v1), HOLD.GRIP_Y * sc, HOLD.FWD, f1);
         }
         this._place(s, f1.pos, f1.quat, dt);
-        this._fitHand(H, this._openBoxes(s.model));
+        this._fitHand(H, this._spineBoxes(s.model));
         // the holding hand opens: on an open palm turned up the book lies on it; a stretched
         // arm that opens drops it (the only way it falls); otherwise the fingers keep it
         const open = this._dwell(this._let, H, h.curl < HOLD.OPEN_CURL, dt) >= HOLD.LET_GO_T;
@@ -526,9 +528,6 @@ export class BookReading {
             // the fingers close on it again: it is held where it lies
             if (this._dwell(this._grab, H, h.curl > HOLD.GRAB_CURL, dt) >= HOLD.GRAB_T) { this._grab[H] = 0; s.support = false; s.steady = null; }
         }
-        // the holding arm lowered: it is carried closed in that hand
-        s.lowT = !h.up ? s.lowT + dt : 0;
-        if (s.lowT >= HOLD.LOWERED_T) { this._end(false); return; }
         // the free hand: turns the pages with a swipe of the finger
         const Fr = other(H);
         if (!this._free(Fr)) { s.swp = null; return; }
@@ -842,7 +841,7 @@ export class BookReading {
         const eye = ch.head.getWorldPosition(_v1);
         const f = this._fr || (this._fr = {});
         if (hl && hr) frameFromHands(this._gripOf(ch, hl, _v2).clone(), this._gripOf(ch, hr, _v3), eye, this.w, f, { gy: HOLD.GRIP_Y, t: this.t });
-        else if (hl || hr) frameFromOneHand(this._gripOf(ch, hl || hr, _v2), hl ? 'left' : 'right', phi0, eye, this.w, f);
+        else if (hl || hr) frameFromSpine(this._gripOf(ch, hl || hr, _v2), eye, HOLD.GRIP_Y * (ITEM_SCALE.book || 1.6), HOLD.FWD, f);
         else return false;
         model.position.copy(f.pos);
         model.quaternion.copy(f.quat);

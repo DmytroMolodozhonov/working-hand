@@ -66,24 +66,25 @@ function bookInRightHand() {
 
 const CALM = 0.55; // a hand holding the book (not squeezing it)
 
-test('a book in a raised hand opens by itself and stays open; the arm lowered — it is carried closed; raised again — open again', () => {
+test('a book in the hand is open AT ONCE and stays open; it hangs from the hand by the lower part of its spine and the hand does not slide on it', () => {
     const t = bookInRightHand();
     t.H.right.curl = t.H.right.grip = CALM;
+    t.run(0.2);
+    assert.equal(t.R.s?.mode, 'one', 'open in the hand at once');
+    assert.ok(t.R.s.phi > 2.5, 'open from the first moment: ' + t.R.s.phi);
     t.H.right.up = false;
-    t.run(1);
-    assert.equal(t.R.s, null, 'carried with the arm down: closed in the fist');
-    t.H.right.up = true;
-    t.run(0.15);
-    assert.equal(t.R.s, null, 'not at once: the arm must stay up a moment');
-    t.run(1.8);
-    assert.equal(t.R.s?.mode, 'one', 'open in the one hand by itself');
-    assert.ok(t.R.s.phi > 2.3, 'open: ' + t.R.s.phi);
-    t.H.right.up = false;
-    t.run(1);
-    assert.equal(t.R.s, null, 'the arm lowered: closed in the fist');
-    t.H.right.up = true;
     t.run(2);
-    assert.ok(t.R.s && t.R.s.phi > 2.3, 'raised again: open again');
+    assert.ok(t.R.s && t.R.s.phi > 2.5, 'the arm lowered: still open (it is closed only by the fist)');
+    // the book is attached at the spine, a little above the hand and toward the reader: the spine barely moves with the hand's own tremble
+    const spine = () => t.m.localToWorld(V(0, -0.1, 0));
+    t.H.right.up = true;
+    t.run(0.5);
+    const p0 = spine(), g0 = t.H.right.G.clone();
+    t.run(1);
+    assert.ok(spine().distanceTo(p0) < 0.02, 'still hand, still book');
+    t.H.right.G.add(V(0.3, 0.2, -0.1));
+    t.run(1);
+    assert.ok(Math.abs(spine().distanceTo(t.H.right.G) - p0.distanceTo(g0)) < 0.08, 'the book follows the hand as one piece: the spine keeps its place in the hand');
 });
 
 test('squeezing the fist shuts the book as much as it is squeezed, all the way if hard; loosened — it opens by itself', () => {

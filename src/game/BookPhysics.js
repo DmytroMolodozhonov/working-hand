@@ -149,6 +149,24 @@ export function frameFromOneHand(grip, half, phi, eye, w, out = {}) {
     return out;
 }
 
+/**
+ * The book held by one hand at the LOWER PART OF ITS SPINE (the author 06.11: «прикреплена швом в нижнем» — it hangs from the hand by the seam, nothing slides): the spine
+ * stands up from the hand, the covers open evenly to both sides, the pages face the eyes; squeezing the fist shuts it round the spine, loosening opens it.
+ * @param {THREE.Vector3} grip  where the hand holds the spine
+ * @param {number} gy  how far up the spine the hand holds it (world units, negative: the hand is below the middle of the spine — `HOLD.GRIP_Y × scale`)
+ * @param {number} fwd  how far the spine stands off the palm toward the reader (world units)
+ */
+export function frameFromSpine(grip, eye, gy, fwd, out = {}) {
+    const X = viewRight(eye, grip, _a);
+    const n = _c.subVectors(eye, grip);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    const Z = n.addScaledVector(X, -n.dot(X)).normalize();
+    const Y = (out.Y || (out.Y = new THREE.Vector3())).crossVectors(Z, X);
+    out.pos = (out.pos || new THREE.Vector3()).copy(grip).addScaledVector(Y, -gy).addScaledVector(Z, fwd);
+    out.quat = (out.quat || new THREE.Quaternion()).setFromRotationMatrix(_m.makeBasis(X, Y, Z));
+    return out;
+}
+
 /** The limits of a page's angle for a book open at φ. */
 export function pageLimits(phi) {
     return { bR: Math.PI / 2 - phi / 2, bL: Math.PI / 2 + phi / 2 };
