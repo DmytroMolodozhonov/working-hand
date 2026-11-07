@@ -378,7 +378,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
         box(x0, x0, z0 + 4, z1 - 4, F + 2, F + 6, B.CARPET_GREEN); box(x0, x0, z0 + 6, z0 + 10, F + 3, F + 5, B.CARPET_BLUE); box(x0, x0, zm, zm + 6, F + 2, F + 4, B.CARPET_BLUE); box(x0, x0, z0 + 3, z1 - 3, F + 7, F + 7, B.GOLD); // (the map: seas, lands, a gilt frame)
         box(x0 + 3, x0 + 3, zm - 1, zm + 1, F + 1, F + 1, B.PLANKS_DARK); box(x0 + 3, x0 + 3, zm, zm, F + 2, F + 2, B.BOOKS); // (the teacher's lectern)
         pillar(x0 + 3, zm + 5, 2, B.ARCANE_LAMP); // (the crystal globe on its pedestal)
-        for (let x = x0 + 8; x <= x1 - 4; x += 5) for (const z of [zm - 7, zm - 3, zm + 3, zm + 7]) { table(x, x + 1, z, z + 1); box(x, x, z, z, F + 3, F + 3, B.BOOKS); } // (rows of two desks — the way from the door (zm−1…zm+1) stays free)
+        for (let x = x0 + 8; x <= x1 - 5; x += 5) for (const z of [zm - 7, zm - 3, zm + 3, zm + 7]) { table(x, x + 2, z, z); if ((x + z) % 3 === 0) box(x + 1, x + 1, z, z, F + 3, F + 3, B.BOOKS); box(x + 1, x + 1, z + 1, z + 1, F + 1, F + 1, B.PLANKS); } // (rows of two desks — the way from the door (zm−1…zm+1) stays free)
         for (let x = x0 + 5; x <= x1 - 4; x += 5) { shelf(x, x + 2, z0, z0, 5, x); shelf(x, x + 2, z1, z1, 5, x + 2); }
         for (const z of [z0 + 6, z1 - 6]) box(x0 + 16, x0 + 16, z, z, F + 7, F + 7, B.ARCANE_LAMP);
     }
