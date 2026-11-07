@@ -121,6 +121,19 @@ const BANDS = {
 
 const ringMask = (w, h, d) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='${NS}' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'><path d='${d}' fill='none' stroke='#000' stroke-width='3.2' stroke-linejoin='round'/></svg>`)}")`;
 
+/** `node`'s place inside `root` by the layout's offsets (no transforms): {left, top}, or null when it is not inside it. */
+function offsetIn(node, root) {
+    let left = 0, top = 0, n = node;
+    while (n && n !== root) {
+        left += n.offsetLeft - (n !== node ? n.scrollLeft : 0); top += n.offsetTop - (n !== node ? n.scrollTop : 0);
+        const p = n.offsetParent;
+        if (!p) return null;
+        if (p !== root && !root.contains(p)) { const q = offsetIn(root, p); return q ? { left: left - q.left, top: top - q.top } : null; }
+        n = p;
+    }
+    return { left, top };
+}
+
 export class ArcaneShapes {
     constructor() {
         this.items = new Map();
@@ -131,7 +144,7 @@ export class ArcaneShapes {
     apply() {
         if (!this.ro) return;
         for (const el of document.querySelectorAll('#main-menu > .menu-container, #pause-menu .pause-box')) {
-            if (this.items.has(el)) continue;
+            if (this.items.has(el)) { requestAnimationFrame(() => { this._redraw(el); this._bleedSoon(el); }); continue; } // (shown again: its cuts made anew — never stale from the whirl)
             const frame = makeSvg('ar-frame', 'frame');
             el.insertBefore(frame, el.firstChild);
             el.classList.add('ar-shaped');
@@ -232,11 +245,13 @@ export class ArcaneShapes {
         band.style.height = Math.max(200, Math.floor(vis)) + 'px'; // (the panel's visible height: the band never runs past its bottom)
         // the band's left edge is the arc — the band is cut as a whole (it stays put while the section scrolls), so the cut always meets the
         // seam however many slices it holds (cutting each slice once went stale when a part switched and the slices moved — the author saw it)
-        const er = el.getBoundingClientRect(), r = band.getBoundingClientRect();
-        if (r.height) {
+        // (measured by offsets, never by the screen's rectangles: while the menu melts into the loading's whirl it is scaled and turned —
+        //  a cut made then was crooked, in steps, and stayed so when the menu came back; the author saw it)
+        const o = offsetIn(band, el), bw = band.offsetWidth, bh = band.offsetHeight;
+        if (o && bh) {
             const pts = [];
-            for (let k = 0; k <= 32; k++) { const y = r.top - er.top + r.height * k / 32; pts.push(`${(it.arcX(y) + 3 - (r.left - er.left)).toFixed(1)}px ${(r.height * k / 32).toFixed(1)}px`); }
-            band.style.clipPath = `polygon(${pts.join(',')}, ${r.width}px ${r.height}px, ${r.width}px 0px)`;
+            for (let k = 0; k <= 32; k++) { const y = o.top + bh * k / 32; pts.push(`${(it.arcX(y) + 3 - o.left).toFixed(1)}px ${(bh * k / 32).toFixed(1)}px`); }
+            band.style.clipPath = `polygon(${pts.join(',')}, ${bw}px ${bh}px, ${bw}px 0px)`;
         }
         for (const b of band.querySelectorAll('button')) b.style.clipPath = '';
     }
