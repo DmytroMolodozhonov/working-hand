@@ -2028,5 +2028,5 @@ body.passage-on #minimap-container, body.passage-on #webcam-preview, body.passag
 .tut-chip.on { background: linear-gradient(180deg, #f3d98a, #c9a64a); color: #1a1434; border-color: #fff1c0; }
 
 /* a mode still being made («Школа Акселдорф»): a small badge under its name on the card */
-.map-card .mode-wip { display: block; margin-top: 3px; font-size: 0.68rem; font-weight: bold; letter-spacing: 0.04em; color: #ffd27a; background: rgba(255, 170, 60, 0.16); border: 1px solid rgba(255, 190, 90, 0.45); border-radius: 999px; padding: 1px 8px; }
+.map-card .mode-wip { display: inline-block; flex: none; align-self: center; white-space: nowrap; margin-left: 10px; font-size: 0.62rem; line-height: 1.5; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #ffd27a; background: rgba(255, 170, 60, 0.14); border: 1px solid rgba(255, 190, 90, 0.4); border-radius: 6px; padding: 0 6px; }
 .world-mode.m-school { background: linear-gradient(180deg, rgba(160, 110, 255, 0.25), rgba(160, 110, 255, 0.08)); border-color: rgba(170, 130, 255, 0.5); }
