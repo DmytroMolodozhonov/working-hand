@@ -727,6 +727,9 @@ export class ItemSystem {
         const lk = _a.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion ? ch.getHeadQuaternion(_hq) : ch.group.quaternion);
         const v = launchVelocity(d, m, d.act === 'throw' ? lk : null, this._lv || (this._lv = { x: 0, y: 0, z: 0 }));
         const vel = _e.set(v.x, v.y, v.z);
+        // (the coin pouch is never flung — it is PUT (on a counter, a table, the ground): it leaves the hand softly, where the hand is —
+        // the author 07.11: «мешочек вылетел у меня из руки… вообще не должен выкидываться»)
+        if (kind === 'coins') { vel.multiplyScalar(Math.min(1, 0.8 / Math.max(0.001, vel.length()))); vel.y = Math.min(vel.y, 0.3); }
         // aboard a ship: the speed over her deck (she carries the thing in flight — Ships.attach)
         const sh = g.ships?.me?.ship;
         if (sh) { const pv = g.ships.pointVel(sh, ch.group.position.x, ch.group.position.z, _f); vel.x -= pv.x; vel.z -= pv.z; }
