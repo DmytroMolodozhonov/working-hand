@@ -36,6 +36,7 @@ export const TUT = {
     MARKET: { id: 'tutorial-market', at: { x: 20, z: 0 }, coins: 150 }, // (the stall right of the hero: its buyer's place ~(20, 3.5))
     VOLUME: 0.7, // the narrator's loudness (the author: 30 % quieter)
     VOICE_WAIT: 25, // s a piece waits for the voices to load (the first start) — then it is only written
+    ECHO_S: 2.5, // s after the narrator's words when a phrase is still his own coming back (recognition is late)
     SAY_MAX: 110, // chars: a longer line is told in pieces (the voice gets lost in long ones — the author)
 };
 
@@ -45,8 +46,10 @@ export const STAGE_TITLES = ['Камера, микрофон и свет', 'Ка
 /** Words the narrator understands as «правша» / «левша». */
 export function heardHand(text) {
     const t = String(text || '').toLowerCase();
-    if (/левш|левая|левой|левую/.test(t)) return 'left';
-    if (/правш|правая|правой|правую/.test(t)) return 'right';
+    const L = /левш|левая|левой|левую/.test(t), R = /правш|правая|правой|правую/.test(t);
+    if (L && R) return null; // (both — the question itself, heard from the narrator, or no answer at all)
+    if (L) return 'left';
+    if (R) return 'right';
     return null;
 }
 
@@ -448,13 +451,21 @@ export class Tutorial {
         const st = this._cur();
         if (st?.say && !this._earlyRepeat) { this._earlyRepeat = true; this._narrate('Подождите, я ещё не договорила. ' + st.say); }
     }
+    /** Is this phrase the narrator's own last words (most of its words are in them)? */
+    _echo(text) {
+        const w = String(text || '').toLowerCase().match(/[а-яё]{3,}/g);
+        if (!w || w.length < 3) return false;
+        const said = String(this._said || '').toLowerCase();
+        return w.filter((x) => said.includes(x)).length / w.length >= 0.7;
+    }
     /** A spell was cast. */
     onCast(name) { this.events.push(name); }
     /** A phrase heard (final): true if it was the tutorial's own (not a spell). */
     hear(text) {
         if (this.done) return false;
         // (the microphone hears the narrator himself — «меня хорошо слышно» said by him passed the check: his time and a moment after are not the player's)
-        if (this.talking || this._clockNow() - (this._quietAt ?? -9) < 0.8) return false;
+        if (this.talking || this._clockNow() - (this._quietAt ?? -9) < TUT.ECHO_S) return false;
+        if (this._clockNow() - (this._quietAt ?? -9) < 6 && this._echo(text)) return false; // (the narrator's own words come back late through the microphone — a while after he stopped; later the same words are the player's: «меня хорошо слышно»)
         this.heard.push(text);
         const st = this._cur();
         if (st?.hear) return !!st.hear(text);
@@ -562,6 +573,8 @@ export class Tutorial {
      * ends); a hint or a remark is added after. No voice (off, none): the words are shown for as long as it takes to read them.
      */
     _narrate(text, replace = true) {
+        // (the same line again while it is being said or waits: once — the author heard «правша или левша» twice in a row)
+        if (text === this._said && this.talking) return;
         this._said = text;
         if (replace) this._q = [];
         (this._q || (this._q = [])).push(...splitSay(text));

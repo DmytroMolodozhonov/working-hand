@@ -43,6 +43,7 @@ test('a long narrator\'s line is told in pieces of whole sentences', () => {
 });
 
 test('«я правша / я левша»', () => {
+    assert.equal(heardHand('вы правша или левша'), null, 'the question itself is no answer');
     assert.equal(heardHand('я левша'), 'left');
     assert.equal(heardHand('Я правша'), 'right');
     assert.equal(heardHand('привет'), null);
@@ -95,8 +96,8 @@ test('a player walked through every stage, step by step, to the end', () => {
         if (process.env.TUT_DEBUG) console.log(before, T._failT, (st.say || '').slice(0, 40), T._said.slice(0, 50));
         const txt = st.say || '';
         // the deeds, by what the step asks
-        if (/«Меня хорошо слышно»/.test(txt)) T.hear('меня хорошо слышно');
-        if (/правша или левша/.test(txt)) T.hear('я правша');
+        if (/«Меня хорошо слышно»/.test(txt)) { assert.equal(T.hear('меня хорошо слышно'), false); run(40); T.hear('меня хорошо слышно'); } // (while the narrator speaks: his own voice — not counted)
+        if (/правша или левша/.test(txt)) { run(40); T.hear('я правша'); }
         if (/влево, а потом вправо/.test(txt)) { g.smoothHead.yaw = 0.6; run(0.2); g.smoothHead.yaw = -0.6; }
         if (/вверх, а потом вниз/.test(txt)) { g.smoothHead.pitch = 0.5; run(0.2); g.smoothHead.pitch = -0.4; }
         if (/Достаньте палочку/.test(txt)) { const i = g.inventory.slots.findIndex((s) => s?.kind === 'wand'); held.right = { item: g.inventory.slots[i] }; g.inventory.slots[i] = null; }

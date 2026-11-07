@@ -56,6 +56,7 @@ import { CourtLife } from './CourtLife.js';
 import { JusticeLife } from './JusticeLife.js';
 import { levelOf, withRank, commandsGuard, isForgiven, isRespected, RANK_TITLES, GREET_RANKED, fill as fillRank } from './Ranks.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
+import { outfitLook } from '../entities/VillagerOutfits.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 /** A chest's look by its room: the king's and the Master's own — rich; the port's — a sea chest (Chest.js). */
@@ -450,6 +451,8 @@ export class CastleLife {
         if (cs.active.has(idx) || this.state(def.id).killed.has(idx) || this.justice?.isJailed(cs, idx)) return null; // (and the ones in the king's jail are not out and about)
         const e = this._roster(def, idx);
         let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
+        if (e.outfit) { outfitLook(look, e.outfit, (arr) => arr[(e.seed >>> 4) % arr.length]); look.wizard = true; } // (a costume of its own: the school's teachers — School.js)
+        if (e.look) Object.assign(look, e.look); // (a face, a beard, a hat of its own: the Director, the remarkable pupils)
         if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
         if (e.trade) applyTradeLook(look, e.trade); // (a smith, a baker, a priest…: the clothes of the trade — Trades.js)
         if (e.role === 'advisor') Object.assign(look, { advisor: true, magicChest: true, magicLegs: true, hat: 'chancellor', hatColor: 0x6a1233, plume: false, shirt: 0x6a1233, pants: 0x3d0a1f, boots: 0x2b1a14, dress: false }); // (the king's super-helper: no helm, magic breastplate and greaves, the cap of office)
@@ -1521,6 +1524,7 @@ export class CastleLife {
             v.mode = v.flyFlail ? 'flail' : 'idle'; v.speed = 0; // (thrown by «Левиоса»: arms and legs going as it flies)
             return;
         }
+        if (v.scripted && !v.foe && !(v.fleeT > 0) && this.game.school?.drive(v, dt)) return; // («Школа Акселдорф»: the scene leads the school's people — School.drive; a fight or a fright is their own)
         if (v.climb) { this._climbStep(v, dt); return; }
         // a road fighter's own reaction time passed (WandererMind): now he acts; a commoner's decision runs out (the fear is gone)
         if (v.wLag && (v.wLag.t -= dt) <= 0) { const f = v.wLag.fn; v.wLag = null; if (!v.dead) f(); }

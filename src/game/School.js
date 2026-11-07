@@ -29,6 +29,9 @@ export class School {
         g.character.verticalVelocity = 0;
     }
 
+    /** The school's people led by the scene (CastleLife._think: v.scripted). False — their own mind. */
+    drive(v, dt) { void v; void dt; return false; }
+    get frozen() { return false; }
     update(dt) { void dt; }
     dispose() {}
 }

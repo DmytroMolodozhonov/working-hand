@@ -25,7 +25,7 @@ export const SCHOOL = {
     LAKE: { x: 125, z: 70, r: 48 }, // the lake beyond the walls (south-east)
     EDGE: 260, // m: the valley's woods and hills begin; beyond — the hills close it in
     ROAD: { w: 3, z1: 250 }, // the road from the gate (z 50) south to the valley's edge
-    ARRIVE: { x: 0, z: 225 }, // where the carriage starts
+    ARRIVE: { x: 0, z: 150 }, // where the carriage starts (100 m before the gates: the castle plainly seen through the valley's haze)
     GATE: { x: 0, z: 50 },
 };
 
@@ -45,7 +45,6 @@ export function schoolHeight(x, z) {
     const flat = Math.max(0, Math.min(1, (r - 110) / 60)); // (the castle's plateau, then the land rolls)
     let h = S.G + roll * flat;
     // the road: level with the valley, a little worn into it
-    if (Math.abs(x) <= S.ROAD.w + 1 && z > S.WALL.v1 && z < S.ROAD.z1) h = S.G + roll * flat * 0.3;
     // the lake's bowl
     const dl = Math.hypot(x - S.LAKE.x, z - S.LAKE.z) / S.LAKE.r;
     if (dl < 1.25) { const k = Math.max(0, 1 - dl); h = Math.min(h, S.G - 1 - Math.round(7 * Math.sqrt(k)) + (dl > 1 ? (dl - 1) * 4 : 0)); }
@@ -217,16 +216,16 @@ export function schoolCastlePlan() {
     const WS = 8;
     // west: the potions classroom (north) and the history classroom (south)
     const wxo = -W.u, wxi = -HX - 6;
-    wing(wxo, wxi, HZ0, HZ0 + 24, WS, B.ROOF_SLATE, false);
-    wing(wxo, wxi, HZ0 + 26, HZ0 + 50, WS, B.ROOF_SLATE, false);
+    wing(wxo, wxi, HZ0, HZ0 + 24, WS, B.ROOF_SLATE, true); // (the ridge along the long side: a roof of 12 steps, not a pyramid)
+    wing(wxo, wxi, HZ0 + 26, HZ0 + 50, WS, B.ROOF_SLATE, true);
     // east: defence against the dark arts (north, the big one) and pentagrams (south)
     const exi = HX + 6, exo = W.u;
-    wing(exi, exo, HZ0, HZ0 + 24, WS, B.ROOF_SLATE, false);
-    wing(exi, exo, HZ0 + 26, HZ0 + 50, WS, B.ROOF_SLATE, false);
+    wing(exi, exo, HZ0, HZ0 + 24, WS, B.ROOF_SLATE, true);
+    wing(exi, exo, HZ0 + 26, HZ0 + 50, WS, B.ROOF_SLATE, true);
     // south-west: the library; south-east: the dormitory (along the courtyard's sides, toward the gate)
     const SZ0 = HZ1 + 10, SZ1 = W.v1 - 10;
-    wing(-W.u, -W.u + 22, SZ0, SZ1, WS, B.ROOF_BLUE, true);
-    wing(W.u - 22, W.u, SZ0, SZ1, WS, B.ROOF_BLUE, true);
+    wing(-W.u, -W.u + 22, SZ0, SZ1, WS, B.ROOF_BLUE, false);
+    wing(W.u - 22, W.u, SZ0, SZ1, WS, B.ROOF_BLUE, false);
     // their doors (3 × 6) to the courtyard and windows
     for (const [x0, x1, z0, z1] of [[wxi - 1, wxi, HZ0 + 11, HZ0 + 13], [wxi - 1, wxi, HZ0 + 37, HZ0 + 39], [exi, exi + 1, HZ0 + 11, HZ0 + 13], [exi, exi + 1, HZ0 + 37, HZ0 + 39],
         [-W.u + 21, -W.u + 22, (SZ0 + SZ1) / 2 - 1 | 0, ((SZ0 + SZ1) / 2 | 0) + 1], [W.u - 22, W.u - 21, (SZ0 + SZ1) / 2 - 1 | 0, ((SZ0 + SZ1) / 2 | 0) + 1]]) door(x0, x1, z0, z1);

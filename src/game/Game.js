@@ -4654,12 +4654,13 @@ export class Game {
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
             ch.setCrouching(flying || down ? false : pose.isCrouching);
             ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || (this.boards?.mounted || this.boats?.riding) ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
-            ch.setRunning(flying || down || this.tutorial?.frozen ? false : pose.isRunning, pose.runIntensity); // («Обучение»: the hero stands until the walking stage — Tutorial.frozen)
+            const frozenHero = !!(this.tutorial?.frozen || this.school?.frozen); // («Обучение»: until the walking stage; «Школа»: riding in the carriage, the Director's speech)
+            ch.setRunning(flying || down || frozenHero ? false : pose.isRunning, pose.runIntensity); // («Обучение»: the hero stands until the walking stage — Tutorial.frozen)
             const back = this.config.walkBack && !flying && !down ? leanBack(this._lean || (this._lean = {}), pose.torso, dt, !!pose.isRunning) : 0;
             // (the author's F8 records of 05.11: stepping while leaning back, the shoulders bob 3–10 times weaker than stepping forward —
             // the steps went unseen, the hero stood. Leaning back (against its own upright) with a weak but lasting bob — steps back.)
             const weak = this._weakSteps(pose, dt);
-            if (back && !ch.isRunning && weak && !flying && !down) ch.setRunning(true, 0);
+            if (back && !ch.isRunning && weak && !flying && !down && !frozenHero) ch.setRunning(true, 0);
             // («Отход назад от нападающих»: a foe coming at me and in front — the steps go backwards, facing it; turned away — forward)
             const threat = this.config.walkBackThreat && !flying && !down && !this.animals?.riding ? this._threatBack(dt) : false;
             ch.backward = !!((back || threat) && ch.isRunning);
