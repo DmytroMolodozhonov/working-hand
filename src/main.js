@@ -1250,6 +1250,40 @@ function startTutorial(cont = true) {
     startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, tutorialFrom: from, map: null, worldName: 'Обучение' }); // (a small bounded map, never saved — Tutorial.js)
 }
 
+/** «Ва-ва-ва-ваааа»: a sad trombone — four falling notes, the last one long and wobbling (synthesised: a buzzing reed through a closing «wah»). */
+function sadTrombone() {
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ctx = sadTrombone.ctx || (sadTrombone.ctx = new AC());
+        ctx.resume?.();
+        const out = ctx.createGain(); out.gain.value = 0.32; out.connect(ctx.destination);
+        const notes = [[293.7, 0.42], [277.2, 0.42], [261.6, 0.42], [246.9, 1.5]]; // (D4 → C#4 → C4 → B3, the last held)
+        let t = ctx.currentTime + 0.05;
+        notes.forEach(([f, d], i) => {
+            const last = i === notes.length - 1;
+            const o = ctx.createOscillator(), o2 = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+            o.type = 'sawtooth'; o2.type = 'square'; o.frequency.value = f; o2.frequency.value = f * 0.5;
+            const g2 = ctx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(lp);
+            o.connect(lp); lp.connect(g); g.connect(out);
+            lp.type = 'lowpass'; lp.Q.value = 6;
+            // the «wah»: the mute opens and closes on each note
+            lp.frequency.setValueAtTime(350, t); lp.frequency.linearRampToValueAtTime(1500, t + 0.12); lp.frequency.linearRampToValueAtTime(500, t + d * 0.9);
+            g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9, t + 0.05); g.gain.setValueAtTime(0.9, t + d * 0.7); g.gain.linearRampToValueAtTime(0, t + d);
+            o.frequency.setValueAtTime(f * 1.03, t); o.frequency.linearRampToValueAtTime(f, t + 0.08); // (a little scoop up into it)
+            if (last) { // (the long one wobbles and sags)
+                const lfo = ctx.createOscillator(), lg = ctx.createGain();
+                lfo.frequency.setValueAtTime(5, t); lfo.frequency.linearRampToValueAtTime(7, t + d);
+                lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * 0.035, t + 0.4);
+                lfo.connect(lg); lg.connect(o.frequency);
+                o.frequency.linearRampToValueAtTime(f * 0.94, t + d);
+                lfo.start(t); lfo.stop(t + d + 0.05);
+            }
+            o.start(t); o2.start(t); o.stop(t + d + 0.05); o2.stop(t + d + 0.05);
+            t += d + 0.04;
+        });
+    } catch { /* no sound: the devil is enough */ }
+}
+
 /**
  * The first time ever a game is started or a server joined (the author 07.11): a window asks «Вы уже прошли обучение?» —
  * a big «Пройти обучение», a red warning, and a small «Пропустить обучение» under it. Shown ONCE (never again, whatever is chosen).
@@ -1273,7 +1307,10 @@ function tutorialGate() {
 #tut-ask .note{margin:0 0 18px;color:rgba(243,236,255,.75);font-size:15px}
 #tut-ask .go{display:block;width:100%;padding:16px 18px;border:0;border-radius:14px;background:linear-gradient(180deg,#f3d98a,#c9a64a);color:#1a1434;font:900 21px system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 20px rgba(201,166,74,.4)}
 #tut-ask .go:hover{filter:brightness(1.08)}
-#tut-ask .skip{margin-top:12px;background:none;border:0;color:rgba(243,236,255,.5);font-size:13px;text-decoration:underline;cursor:pointer}`;
+#tut-ask img.devil{width:240px;height:240px;border-radius:16px;object-fit:cover;border:1px solid rgba(201,166,74,.5);box-shadow:0 8px 30px rgba(255,60,20,.35);filter:none}
+#tut-ask h2.sad{color:#ff9a7a}
+#tut-ask{transition:opacity .35s}#tut-ask.out{opacity:0}
+#tut-ask .skip{margin-top:8px;padding:10px 18px;background:none;border:0;color:rgba(243,236,255,.55);font-size:13px;text-decoration:underline;cursor:pointer}`;
             document.head.appendChild(st);
         }
         const w = document.createElement('div');
@@ -1286,16 +1323,34 @@ function tutorialGate() {
 <button type="button" class="skip">Пропустить обучение</button></div>`;
         document.body.appendChild(w);
         w.querySelector('.go').onclick = () => { w.remove(); resolve(false); startTutorial(true); };
-        w.querySelector('.skip').onclick = () => { try { localStorage.setItem('zns-tutorial-skipped', '1'); } catch { /* private mode */ } w.remove(); resolve(true); }; // (skipped: TutorialNudge watches the first minutes)
+        // (the devil's facepalm frames, loaded while the window is read: tools/devil-facepalm.mjs → assets/ui/)
+        const frames = Array.from({ length: 8 }, (_, i) => Object.assign(new Image(), { src: `assets/ui/devil-facepalm-${i}.webp` }));
+        let skipping = false;
+        w.querySelector('.skip').onclick = () => {
+            if (skipping) return;
+            skipping = true;
+            try { localStorage.setItem('zns-tutorial-skipped', '1'); } catch { /* private mode */ } // (skipped: TutorialNudge watches the first minutes)
+            // the author 07.11: «звук полного разочарования» and Diabolos doing a facepalm — a joke, then the game goes on
+            const box = w.querySelector('.box');
+            box.innerHTML = '<img class="devil" alt=""><h2 class="sad">Ну что ж…</h2><p class="note">Обучение ждёт вас в «Одиночной игре».</p>';
+            const img = box.querySelector('.devil');
+            let f = 0;
+            img.src = frames[0].src;
+            const tick = setInterval(() => { f = Math.min(frames.length - 1, f + 1); img.src = frames[f].src; if (f === frames.length - 1) clearInterval(tick); }, 110);
+            sadTrombone();
+            setTimeout(() => { clearInterval(tick); w.classList.add('out'); setTimeout(() => { w.remove(); resolve(true); }, 350); }, 3300);
+        };
     });
 }
 
 async function startGame(config, welcome = null) {
+    if (starting) return; // a second click / duplicate invitation while loading
+    // (the first game ever: «Вы уже прошли обучение?» — before the full screen: going full screen under the window moved it, and the
+    // first click on «Пропустить» was lost — the author)
+    if (!config.tutorial && !welcome && !(await tutorialGate())) return;
     // the menu is a window; the game itself is played full screen
     if (!window.__ZNS_NO_FULLSCREEN__) enterGameFullscreen();
     window.__charEditor?.hide(); // (its preview must not keep drawing under the game)
-    if (starting) return; // a second click / duplicate invitation while loading
-    if (!config.tutorial && !welcome && !(await tutorialGate())) return; // (the first game ever: «Вы уже прошли обучение?»)
     starting = true;
     try {
         await startGameInner(config, welcome);

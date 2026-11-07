@@ -300,6 +300,9 @@ export class Graph {
 }
 
 // --------------------------------------------------------------- the system
+/** No places of the land (a map of its own — «Обучение»): CastleLife still runs the game's own ones (`extra`). */
+const NO_SITES = { near: () => [], landAt: () => null, byId: () => null, cellOf: () => null };
+
 export class CastleLife {
     constructor(game) {
         this.game = game;
@@ -348,7 +351,7 @@ export class CastleLife {
     }
 
     get auth() { return this.game.authority; }
-    get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || null; } // (castles and wizards' towers)
+    get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || (this.game.config?.tutorial ? NO_SITES : null); } // (castles and wizards' towers; «Обучение» has none — only the game's own places, `extra`: the stall, the wizard)
 
     /** Who is person number `idx` of a site (a castle's villager or a wizard). */
     _rosterRaw(def, idx) { const own = def.people?.find((p) => p.idx === idx); if (own) return own; return def.kind === 'hamlet' ? hamletRoster(def, idx) : isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
@@ -532,8 +535,8 @@ export class CastleLife {
 
     // ------------------------------------------------------- wake / sleep
     _scan() {
-        const idx = this.index;
-        if (!idx) return;
+        const idx = this.index; // (none on a map of its own — «Обучение»: only the game's own places, `extra`, wake there)
+        if (!idx && !this.extra.size) return;
         const players = this._players();
         this.game.imperius?.eyes?.(players); // («Империус»: the places round a creature with a mind in it wake and stay awake — up to 1800 m from the body)
         const seen = new Set();
@@ -551,7 +554,7 @@ export class CastleLife {
                 seen.add(def.id);
                 wake(this._runtime(def));
             }
-            for (const def of idx.near(pl.p.x, pl.p.z, WAKE)) {
+            for (const def of idx ? idx.near(pl.p.x, pl.p.z, WAKE) : []) {
                 seen.add(def.id);
                 wake(this._runtime(def));
             }

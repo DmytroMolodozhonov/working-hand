@@ -206,6 +206,7 @@ export class Tutorial {
                 { ...say('Главное в игре — ячейки маны. Это вторая цифра: сколько маны у вас всего. Чем больше ячеек, тем сильнее заклинания вам доступны.'), ...wait(10), show: 'mana-max' },
                 { ...say('За каждое новое заклинание, которое вы произнесёте впервые, дают ячейки маны. Поэтому пробуйте все заклинания, которые знаете.'), ...wait(9), show: 'mana-max' },
                 { ...say('Красная полоса — здоровье. Еда возвращает его.'), ...wait(5), show: 'hp-container' },
+                { ...say('Слева внизу — карта местности. Она показывает, где вы и что вокруг. Здесь, в обучении, мы её спрячем, чтобы она не мешала.'), ...wait(6), show: 'minimap-container', map: true },
                 { ...say('Справа вверху — ваши монеты. Их находят в пещерах и сундуках. На них покупают вещи и свитки у торговцев.'), ...wait(8), show: 'coin-counter' },
                 ask('Ещё одно полезное заклинание. Перед вами свиток. Направьте на него палочку и скажите: «Раскрой свои секреты». Вы узнаете, что это за вещь.', () => T.events.includes('Reveal'), { allow: ['Reveal'], setup: () => { if (!T._held('wand')) T._wandToPocket(); T.ctx.scroll = T._give({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Fireworks' }, T._frontOfView(7))?.item?.uid; }, hint: 'Палочка смотрит на свиток. Скажите: «Раскрой свои секреты».' }),
                 { ...say('Так можно узнать, что за вещь перед вами, прежде чем её взять. Остальное о мире можно прочитать в главном меню, во вкладке «Механика игры».'), ...wait(9) },
@@ -371,7 +372,8 @@ export class Tutorial {
         const G = TUTORIAL.G + 0.5, at = { x: -14, z: -10 }; // (beside the hill, ~26 m before the hero)
         const spot = { x: at.x, y: G, z: at.z, yaw: Math.PI };
         return {
-            id: TUT.WIZ_SITE, kind: 'guest', name: 'Обучение', x: at.x, z: at.z, F: G, zone: 12, gx: 0, gz: 0,
+            id: TUT.WIZ_SITE, kind: 'wander', name: 'Обучение', // (a wizards' place that keeps no day and night: the wizard's own fighting mind runs — WizardLife.crowd)
+            x: at.x, z: at.z, F: G, zone: 12, gx: 0, gz: 0,
             knights: 0, king: '', population: 1, color: 0x3a3a7a, spot,
             people: [{ idx: 1, role: 'student', female: false, name: 'Ученик Тим', home: -1, stall: -1, seed: 20261107, rank: 'novice', brave: 1, mana: 60 }],
             houses: [], stalls: [], fields: [], posts: [], beds: [], chests: [], pens: [], graves: [], graveyards: [], rooms: [],
@@ -466,7 +468,9 @@ export class Tutorial {
         this.t = 0; for (const k of ['seen', 'handsT', 'min', 'max', 'body0', 'toldBody', 'runT', 'lightT', 'toldDark']) delete this.ctx[k]; this.heard.length = 0; this.events.length = 0; this.hinted = false; // (the stage's things — the apple, the wand — stay known through its steps)
         this.allowed = new Set(st.allow || []);
         this.frozen = !st.unfreeze;
-        this.point = st.point || null; // (the red arrow in the camera's window: 'wand' / 'pocket' — PocketHintsDraw.pointArrow)
+        this.point = st.point || null;
+        // (the red arrow in the camera's window: 'wand' / 'pocket' — PocketHintsDraw.pointArrow)
+        if (typeof document !== 'undefined') document.body.classList.toggle('tut-map', !!st.map); // (the map is hidden in the tutorial — but for the step that shows it)
         try { st.setup?.(); } catch (e) { console.warn('tutorial setup', e); }
         if (st.say) this._narrate(st.say);
         this._show(st.show || null);
@@ -542,10 +546,13 @@ export class Tutorial {
         const piece = this._q[0], now = this._clockNow(), sp = this._speech();
         const silent = () => { this._q.shift(); this._talking = true; this._subText(piece); this._talkEnd = now + 0.6 + piece.length * 0.065; };
         if (!sp) { silent(); return; }
-        if (sp.neuralUsable && !sp.neural?.ready) { // (the voices still loading: the piece waits — at most VOICE_WAIT, then it is only written)
+        if (sp.neuralUsable && !sp.neural?.ready) { // (the voices still loading: the piece waits — at most VOICE_WAIT once, then the words are only written until they come)
             sp.preload?.();
-            this._waitFrom ??= now;
-            if (now - this._waitFrom < TUT.VOICE_WAIT) { this._waiting = true; return; }
+            if (!this._voiceGaveUp) {
+                this._waitFrom ??= now;
+                if (now - this._waitFrom < TUT.VOICE_WAIT) { this._waiting = true; return; }
+                this._voiceGaveUp = true; // (never again a wait: a voice that did not come in time is not waited for at every line)
+            }
             silent(); return;
         }
         this._waiting = false; this._waitFrom = null;
@@ -619,8 +626,10 @@ export class Tutorial {
 #tut-finish h2{margin:0 0 12px;color:#f3d98a}#tut-finish button{margin-top:8px;padding:10px 20px;border-radius:10px;border:0;background:#c9a64a;color:#1a1434;font-weight:700;font-size:15px;cursor:pointer}
 @media (max-width:900px){#tut-panel{top:70px;width:46vw;font-size:13px}#tut-panel li::before{flex-basis:22px;height:22px;font-size:12px}}
 @media (max-width:640px){#tut-sub{font-size:16px}}
+body.tutorial-on #minimap-container{display:none!important}
+body.tutorial-on.tut-map #minimap-container{display:block!important}
 body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
-.tut-arrow{position:fixed;z-index:63;width:34px;height:46px;pointer-events:none;filter:drop-shadow(0 0 6px rgba(255,40,40,.85)) drop-shadow(0 2px 2px #000);animation:tutBob .7s ease-in-out infinite alternate}
+.tut-arrow{position:fixed;z-index:10040;width:34px;height:46px;pointer-events:none;filter:drop-shadow(0 0 6px rgba(255,40,40,.85)) drop-shadow(0 2px 2px #000);animation:tutBob .7s ease-in-out infinite alternate}
 .tut-arrow svg{width:100%;height:100%}.tut-arrow.up{transform:rotate(180deg)}
 @keyframes tutBob{from{translate:0 -6px}to{translate:0 4px}}`;
             document.head.appendChild(s);
@@ -697,7 +706,7 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
         if (typeof document === 'undefined') return;
         for (const id of ['tut-panel', 'tut-sub', 'tut-bosses', 'tut-finish']) document.getElementById(id)?.remove();
         document.querySelectorAll('.tut-arrow').forEach((e) => e.remove());
-        document.body.classList.remove('tutorial-on');
+        document.body.classList.remove('tutorial-on', 'tut-map');
         document.querySelectorAll('.tut-glow').forEach((e) => e.classList.remove('tut-glow'));
         this._clearZombies?.();
     }

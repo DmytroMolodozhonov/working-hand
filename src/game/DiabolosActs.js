@@ -199,10 +199,21 @@ export const ACTS = {
         body: (k) => ({ lean: env(k, 0.3, 0.7), head: { pitch: -0.45 * env(k, 0.3, 0.7) } }),
         snd: [{ t: 0.35, k: 'sniff' }, { t: 0.55, k: 'sniff' }, { t: 0.75, k: 'chuckle' }],
     },
+    facepalm: {
+        ru: 'закрывает морду ладонью: «ну что за жалкое зрелище»', dur: 3.6, when: ['hitWeak'], w: 1,
+        // (автор 07.11: его фейспалм — и в окне «Пропустить обучение»; в игре — на совсем слабое заклинание)
+        face: (k, t) => ({ lid: 0.08 + 0.5 * (1 - env(k, 0.25, 0.8)), brow: 0.6 * env(k), browL: 0.75 * env(k), ear: -0.8 * env(k), nostril: 0.4 + 0.5 * env(k, 0.5, 0.7), snarl: 0.15 }),
+        body: (k, t) => {
+            const up = env(k, 0.28, 0.82);
+            return { head: { pitch: -0.36 * up, yaw: 0.26 * up + 0.08 * Math.sin(t * 2.6) * env(k, 0.4, 0.8), roll: 0.14 * up }, // (the head shakes a little into the palm) inhale: 0.5 * env(k, 0.5, 0.65), lean: 0.15 * up,
+                armR: { rot: { sx: 1.48 * up, ab: -0.29 * up, tw: 0.68 * up, el: 1.6 * up, ha: 0.68 * up } } }; // (the palm on the brow — measured on the model: more and it goes past the head)
+        },
+        snd: [{ t: 0.45, k: 'sigh' }], fx: [{ t: 0.6, k: 'nostrilSmoke' }],
+    },
 };
 /** Порядок для сети (только дописывать в конец). */
 export const ACT_IDS = ['snoreDeep', 'earFlick', 'sleepScratch', 'sleepMumble', 'wakeOneEye', 'yawn', 'stretch', 'sniffAir', 'lookAround', 'pickTeeth', 'scratchHorn',
-    'smokePuff', 'knuckleCrack', 'laugh', 'scoff', 'bask', 'headShake', 'tongueTaunt', 'lickLips', 'beckon', 'chainPull', 'chestBeat', 'triumph', 'surprise', 'sighSit', 'sniffClose'];
+    'smokePuff', 'knuckleCrack', 'laugh', 'scoff', 'bask', 'headShake', 'tongueTaunt', 'lickLips', 'beckon', 'chainPull', 'chestBeat', 'triumph', 'surprise', 'sighSit', 'sniffClose', 'facepalm'];
 
 /** Звуки поступков (DiabolosSounds: эти виды должны быть синтезированы). */
 export const ACT_SOUNDS = [...new Set(Object.values(ACTS).flatMap((a) => (a.snd || []).map((s) => s.k)))];

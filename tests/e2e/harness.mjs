@@ -4,6 +4,7 @@
  */
 import { chromium } from 'playwright';
 import { spawn, execFileSync } from 'node:child_process';
+import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,7 +12,19 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+/** Does something listen on localhost:port (a socket opened and closed — nothing read)? */
+function portOpen(port) {
+    return new Promise((res) => {
+        const s = net.connect({ port, host: '127.0.0.1' });
+        const done = (ok) => { s.destroy(); res(ok); };
+        s.once('connect', () => done(true));
+        s.once('error', () => done(false));
+        s.setTimeout(500, () => done(false));
+    });
+}
+
 export async function startServer(port, { python = 'python3', env = {} } = {}) {
+    for (let k = 0; k < 50 && (await portOpen(port)); k++) port++; // (the port taken by something else: its answer crashed the start-up's fetch — the next free one)
     const proc = spawn(python, ['server.py', '--no-browser'], {
         cwd: ROOT,
         env: { ...process.env, ZNS_PORT: String(port), ZNS_NO_BROWSER: '1', ZNS_NO_PIP: '1', ZNS_LOG_UPLOAD: '0', ...env },
@@ -22,6 +35,9 @@ export async function startServer(port, { python = 'python3', env = {} } = {}) {
     proc.stderr.on('data', (d) => { log += d; });
     const url = `http://localhost:${port}/`;
     for (let i = 0; i < 100; i++) {
+        // (the port asked by a plain socket first: a fetch to a server still starting up crashed Node's own http client — undici
+        // «assert(!this.paused)», uncatchable; a fetch only once the port answers)
+        if (!(await portOpen(port))) { await new Promise((r) => setTimeout(r, 100)); continue; }
         try {
             const r = await fetch(url);
             if (r.ok) return { proc, url, log: () => log, stop: () => proc.kill() };
