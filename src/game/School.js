@@ -326,7 +326,7 @@ export class School {
             this._coachV += (want - this._coachV) * Math.min(1, dt * 1.2);
             this._coachZ = Math.max(this._coachStop, this._coachZ - this._coachV * dt);
             C.set(P.centre.x, this._roadY(this._coachZ), this._coachZ, 0, this._coachV, dt);
-            if (this.phase === 'intro' && !this._out) this._hideHero(true, { x: P.centre.x, y, z: this._coachZ });
+            if (this.phase === 'intro' && !this._out) this._hideHero(true, { x: P.centre.x, y: this._roadY(this._coachZ), z: this._coachZ });
         }
         this._sky(0.703 + Math.min(1, this.t / 50) * 0.022);
     }
