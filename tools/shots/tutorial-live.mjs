@@ -19,7 +19,9 @@ export default async function (h) {
     while (performance.now() - t0 < 90000) {
         await h.frames(10);
         const v = T.ctx.wiz;
-        if (v) seen = { hp: v.hp, foe: v.foe, W: !!v.W, job: v.job, x: Math.round(v.x), z: Math.round(v.z), step: T.step };
+        if (v) seen = { hp: v.hp, foe: v.foe, W: !!v.W, job: v.job, x: Math.round(v.x), z: Math.round(v.z), step: T.step, eng: v.engage && { role: v.engage.role, t: +(v.engage.t || 0).toFixed(1), level: v.engage.level }, mode: v.mode, flee: v.fleeT, cd: +(v.castCd || 0).toFixed(1), mana: Math.round(v.mana || 0), fear: v.fear, hostile: [...v.cs.hostile.entries()].map(([k, t]) => [k, Math.round((t - Date.now()) / 1000)]), me: g.localId };
+        if (v && !h._n) h._n = 0;
+        if (v && (h._n++ % 30) === 0) h.log('w', JSON.stringify(seen));
         if (T.step >= 2 && v && !h._shot) { h._shot = 1; await h.page('live-duel', 30); }
     }
     h.log('wizard', JSON.stringify(seen), 'hero hp', hp0, '→', g.combat.hp, 'duel', !!g.duel?.active, 'events', JSON.stringify(T.events));
