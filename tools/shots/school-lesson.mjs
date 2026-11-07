@@ -34,9 +34,9 @@ export default async function (h) {
         }
         if (ph === 'task') {
             // the hero raises the shield when a charge is in the air (by script: Combat's shield — no camera here)
+            // (the scene looks only every few frames — too slow to answer a charge: the shield is kept up the whole task, as a quick pupil's would be)
             const flying = L._bolt && L._bolt.state === 'flying';
-            if (flying && !g.combat.shield) g.combat.castProtection?.(false);
-            if (!flying && g.combat.shield && L.t - (L._boltAt || 0) > 1) g.combat.dropShield?.();
+            if (!g.combat.shield) g.combat.castProtection?.(false);
             if (flying && !shots.b) { shots.b = 1; await h.page('3-block'); }
         }
         if (ph === 'outro' && !shots.o) { shots.o = 1; await h.page('4-outro'); }
