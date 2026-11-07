@@ -23,5 +23,14 @@ test('at the school the fighting spells are learned at the lessons, the everyday
         assert.equal(knows(s, { mode: 'freeworld' }), true, s + ' in Survival');
     }
     for (const s of ['Lumos', 'Accio', 'Stop', 'Fire']) assert.equal(knows(s, { mode: 'freeworld', school: true }), true, s);
-    for (const l of LESSONS) if (l.spell && SCHOOL_UNKNOWN.has(l.spell)) assert.equal(knows(l.spell, { mode: 'freeworld', school: true }), false);
+    for (const l of LESSONS) for (const sp of l.spells || [l.spell]) if (sp && SCHOOL_UNKNOWN.has(sp)) assert.equal(knows(sp, { mode: 'freeworld', school: true }), false, sp);
+});
+
+test('the defence of the year: a lesson a month; what the pupil casts is a spell the words can call', async () => {
+    const { matchSpell } = await import('../../src/fx/SpellManager.js');
+    const def = LESSONS.filter((l) => l.subject === 'defence');
+    assert.ok(def.length >= 11);
+    const said = new Set(['Protection', 'Jolt', 'Sands', 'Expelliarmus', 'Ice', 'Frozen', 'Stupefy', 'Groundprud', 'Sapira', 'ProtectionMaxima', 'Nihilis', 'Electrum', 'Caligo']);
+    for (const l of def) for (const sp of l.task.spells || [l.task.kind === 'block' ? 'Protection' : l.task.spell]) assert.ok(said.has(sp), l.id + ' ' + sp);
+    for (const w of ['джолт', 'даст', 'экспеллиармус', 'фрозен', 'остолбеней', 'граундпруд', 'сапира', 'протекшн максима', 'нихилис атра', 'электром', 'калиго']) assert.ok(said.has(matchSpell(w)), w);
 });

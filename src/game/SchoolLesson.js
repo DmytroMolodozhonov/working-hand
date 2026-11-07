@@ -86,6 +86,7 @@ export class SchoolLesson {
         };
         put(sc._person(this.S.teacher, sp.teacher, sp.teacher.yaw), sp.teacher);
         sc.pupilsOf().forEach((v, k) => put(v, { ...sp.pupils[k % sp.pupils.length], yaw: Math.PI * 0 }));
+        if (this.S.room === 'defence') sc.dummy(); // (the training dummy stands in its room)
         sc._goal(this.room.door);
         this.phase = 'gather'; this.t = 0;
     }
@@ -118,10 +119,10 @@ export class SchoolLesson {
             this._shown = true;
             if (D.say) this._say(D.say, 6);
             if (D.kind === 'shield' && tea) { tea.shieldT = Math.max(tea.shieldT || 0, 5); tea.fx = (tea.fx || 0) | 1; } // (FX.SHIELD: the shield on his arm — WizardFight)
-            if (D.kind === 'cast' && tea) this.school.castAt?.(tea, D.spell, D.at);
+            if (D.kind === 'cast' && tea) this.school.castAtDummy(tea, D.spell);
         }
         if (this.t > 6.5) {
-            if (this.L.spell) this._give(this.L.spell);
+            for (const sp of this.L.spells || (this.L.spell ? [this.L.spell] : [])) this._give(sp);
             this._say(this.L.teach || this.L.task.say, 6);
             this._hint(this.L.task.hint);
             this.phase = 'task'; this.t = 0;
@@ -139,7 +140,11 @@ export class SchoolLesson {
         const T = this.L.task, g = this.game;
         if (this.t > TASK_GIVE_UP) { this._say('Ничего, потренируйтесь сами — у вас получится.', 5); return this._outro(); }
         if (T.kind === 'listen') return this._outro();
-        if (T.kind === 'cast') { if (this.ok >= T.times) this._outro(); return; } // (counted by onCast)
+        if (T.kind === 'cast') { // (counted by onCast; the hint again now and then)
+            if (this.ok >= T.times) { if (!this._outroAt) this._outroAt = this.t + 2.5; if (this.t > this._outroAt) this._outro(); return; }
+            if (this.t > (this._hintAt ?? 25)) { this._hintAt = this.t + 30; this._hint(T.hint); }
+            return;
+        }
         if (T.kind === 'block') {
             if (this.t < 6) return; // (his words first: «Я пошлю в вас слабый заряд…»)
             if (this._bolt) { // (a charge in the air: where did it end?)
@@ -166,7 +171,8 @@ export class SchoolLesson {
     /** The hero cast a spell (Game → School.onCast). */
     onCast(name) {
         if (this.phase !== 'task' || this.L.task.kind !== 'cast') return;
-        if (name === this.L.task.spell) { this.ok++; const T = this.L.task; this._say(T.good?.[(this.ok - 1) % (T.good?.length || 1)] || 'Хорошо!', 2.5); }
+        const T = this.L.task;
+        if (T.spells ? T.spells.includes(name) : name === T.spell) { this.ok++; this._say(T.good?.[(this.ok - 1) % (T.good?.length || 1)] || 'Хорошо!', 2.5); }
     }
 
     _outro() { if (this.phase === 'outro') return; this._say(this.L.outro, 6); this.phase = 'outro'; this.t = 0; }

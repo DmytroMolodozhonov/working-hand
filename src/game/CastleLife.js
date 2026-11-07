@@ -2874,6 +2874,7 @@ export class CastleLife {
     /** Someone hit a villager (weapons, fists, spells). */
     hit(v, dmg, dir, by, opts = {}) {
         if (!v || v.dead) return;
+        if (v.entry?.dummy) { this._flash(v); return; } // (the school's training dummy: a magic construct — no harm, never dies, nobody minds a spell at it — School.js)
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
         this._achHit(v, by);
@@ -3274,6 +3275,7 @@ export class CastleLife {
     }
 
     _die(v, by) {
+        if (v.entry?.dummy) { v.hp = v.maxHp || v.hp || 10; return; } // (the training dummy never dies: School.js)
         // (did the wizard know who was against him — fought him, held a grudge, saw him? An ambush he never noticed is no duel: no mastery for it)
         const aware = !!v.wizard && by != null && this._isPlayer(by) && (v.foe === by || v.grudge?.id === by || this.knowsFrom(v, by, null, null, v.cs?.castSeen));
         this.rel?.onHit(v, by, true); // (a killing: the town's opinion of the hero — Relations.js)

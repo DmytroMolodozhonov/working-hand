@@ -38,6 +38,10 @@ export const SCHOOL_PEOPLE = [
         ['Тим', false], ['Ника', true], ['Лев', false], ['Мира', true], ['Сева', false], ['Ада', true],
         ['Вилмер', false, { hairColor: 0xb03ad8, hat: 'wizardTall' }], ['Ульяна', true, { hairColor: 0xf2f2ff }], ['Гордей', false, { beard: 'none', hairColor: 0xff5a1f }],
     ].map(([name, female, look], k) => ({ idx: 30 + k, role: 'student', rank: 'novice', female, name, seed: 70130 + k * 7, ...(look ? { look, remarkable: true } : {}) })),
+    // the training dummy of the defence room (the author: «магическая конструкция в виде человека, не робот»): pale enchanted stone,
+    // no hair, a wand; never dies, never starts a fight, a little slow; picks its wand up after «Экспеллиармус» (School.drive)
+    { idx: 40, role: 'student', rank: 'novice', female: false, name: 'Учебный манекен', title: 'Магическая конструкция', seed: 70140, dummy: true,
+        look: { skin: 0xa9b3c4, hair: 'bald', beard: 'none', hat: null, hairColor: 0xa9b3c4, shirt: 0x6d7686, pants: 0x5b6474, boots: 0x4a515e, accent: 0x7fd8ff, mouth: 'calm' } },
 ];
 /** Teachers' mana cells: 300…700, by each one's seed (the author: «от 300 до 700 рандомно»); the Director's — 2000. */
 for (const p of SCHOOL_PEOPLE) if (p.role === 'teacher' && !p.mana) p.mana = 300 + ((p.seed * 2654435761) >>> 0) % 401;
@@ -121,6 +125,7 @@ export class School {
             return true;
         }
         v.seated = false;
+        if (v.entry?.dummy && this._dummyWand(v, dt)) { life._ground?.(v); return true; }
         const goal = v.goal;
         if (goal) {
             const there = life._goSpot(v, goal.x, goal.z, goal.run ? 4.2 : 2.6, dt, 0.7, goal.y);
@@ -134,6 +139,39 @@ export class School {
         }
         life._ground?.(v);
         return true;
+    }
+
+    /** The dummy's wand was knocked out: a moment of standing still, then it walks to it and picks it up (as the arena's wizards). */
+    _dummyWand(v, dt) {
+        if (!v.noWand) return false;
+        const g = this.game, it = v.lostWand && g.items?.loose?.get(v.lostWand.uid);
+        if (!it) { if ((v._wandT = (v._wandT || 0) + dt) > 6) { v.noWand = false; v.lostWand = null; v._wandT = 0; v.model?.setHeldTool?.('wand'); } v.speed = 0; v.mode = 'idle'; return true; } // (taken by somebody: a new one «grows» in its hand after a while)
+        if ((v.lostWand.t = (v.lostWand.t || 0) + dt) < 2.5) { v.speed = 0; v.mode = 'stagger'; return true; }
+        const p = it.model.position, life = g.castleLife;
+        if (life._goSpot(v, p.x, p.z, 1.6, dt, 0.8) || Math.hypot(p.x - v.x, p.z - v.z) < 1.1) {
+            g.items.pickUp(v.lostWand.uid, '#' + v.id, 'right');
+            v.noWand = false; v.lostWand = null;
+            v.model?.setHeldTool?.('wand');
+            if (v.post) v.goal = { ...v.post }; // (back to its place)
+        } else v.mode = 'walk';
+        return true;
+    }
+
+    /** The dummy of the defence room (made once, standing at its place). */
+    dummy() {
+        const R = this.plan.rooms.defence, F = this.plan.F + 0.5;
+        const at = { x: (R.x0 + R.x1) / 2 + 5, y: F, z: R.z0 + 5, yaw: Math.PI };
+        const v = this.people.get(40) || this._person(40, at, at.yaw);
+        if (v && !v.post) v.post = at;
+        return v;
+    }
+
+    /** (a lesson) `v` casts `spell` at the dummy; true when the charge flew. */
+    castAtDummy(v, spell) {
+        const d = this.dummy(), F = this.game.castleLife?.wizards?.fight;
+        if (!d || !F || !v || v.dead || v.noWand) return false;
+        v.yaw = Math.atan2(-(d.x - v.x), -(d.z - v.z));
+        try { return !!F._cast(v, spell, null, { x: d.x, y: d.y + 2.6, z: d.z }, null, { k: 'v', id: d.id }); } catch (e) { console.warn('school cast', e); return false; }
     }
 
     /** A line said by a person (its voice, its bubble). */
