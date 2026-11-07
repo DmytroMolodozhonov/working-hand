@@ -23,6 +23,7 @@ export const MODES = {
 export const MAPS_ENTRY = { label: 'Карты', icon: '🗺️', hint: 'Пройдите карту до финиша' };
 
 /** «Обучение» (Tutorial.js): a small bounded map where the hero learns the game step by step (internally a 'freeworld' game with `tutorial`). */
+export const SCHOOL_ENTRY = { label: 'Школа Акселдорф', icon: '🏰', hint: 'Год в школе волшебства: уроки защиты, зельеварения, пентаграмм и истории мира вместе с другими учениками. Выпускник уходит в мир Выживания со всем, чему научился' };
 export const TUTORIAL_ENTRY = { label: 'Обучение', icon: '🎓', hint: 'Пошаговое обучение: камера и микрофон, взгляд, руки и палочка, заклинания, вещи, ходьба и первый бой. Начните с него, если играете впервые' };
 
 /** A world/server mode from an older version: the removed «Хардкор» ('survival', no map) is now 'freeworld'. */

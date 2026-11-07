@@ -353,7 +353,7 @@ export class CastleLife {
     }
 
     get auth() { return this.game.authority; }
-    get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || (this.game.config?.tutorial ? NO_SITES : null); } // (castles and wizards' towers; «Обучение» has none — only the game's own places, `extra`: the stall, the wizard)
+    get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || (this.game.config?.tutorial || this.game.config?.school ? NO_SITES : null); } // (castles and wizards' towers; «Обучение» has none — only the game's own places, `extra`: the stall, the wizard)
 
     /** Who is person number `idx` of a site (a castle's villager or a wizard). */
     _rosterRaw(def, idx) { const own = def.people?.find((p) => p.idx === idx); if (own) return own; return def.kind === 'hamlet' ? hamletRoster(def, idx) : isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }

@@ -45,6 +45,7 @@ import { IceCastleMapSite, inQueenMap, queenChunk } from './QueenMap.js';
 import { hellPlan, hellChunk, inHell, hellFloor } from './HellMap.js';
 import { generateHellChunk } from './HellLand.js';
 import { generateTutorialChunk, tutorialHeight } from './TutorialLand.js';
+import { generateSchoolChunk, schoolHeight, schoolWater, schoolPartsForChunk, schoolTree } from './SchoolLand.js';
 import { SHAPE, canShape, shapeTop, shapeBottom, shapeHas, isCeilShape, cornerHeights, shapeDiag, FULL_FACES, sideCovered, SHAPE_COUNT } from './BlockShapes.js';
 
 export const BLOCK = {
@@ -707,9 +708,10 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false } = {}) {
         this.seed = seed;
         this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
+        this.school = !!school; // («Школа Акселдорф»: the valley and the school castle — SchoolLand.js; nothing else in it)
         this.hell = !!hell; // (hell: a far map of this world — HellMap.js; in every world, the Earth's land is not touched)
         this._hellPlan = null;
         this.mountains = mountains;
@@ -879,6 +881,11 @@ export class TerrainData {
             fn.land = inner.land;
             this.heightAt = fn;
         }
+        if (this.school) { // («Школа Акселдорф»: the valley, the lake, the school castle — SchoolLand.js)
+            const fn = (ix, iz) => { const h = schoolHeight(ix, iz), w = schoolWater(ix, iz); fn.water = w != null && w > h ? w - h : 0; return h; };
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.mesa = fn.emer = fn.moon = fn.fant = 0; fn.iceRock = false; fn.vampRock = false; fn.pyrSand = false;
+            this.heightAt = fn;
+        }
         if (this.tutorial) { // («Обучение»: its own land only — the meadow, the hill, the cliffs)
             const fn = (ix, iz) => tutorialHeight(ix, iz);
             fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.mesa = fn.emer = fn.moon = fn.fant = 0; fn.iceRock = false; fn.vampRock = false; fn.pyrSand = false;
@@ -961,6 +968,7 @@ export class TerrainData {
 
     _generateChunk(cx, cz) {
         if (this.tutorial) return generateTutorialChunk(cx, cz);
+        if (this.school) return this._schoolChunk(cx, cz);
         if (this.hell && cx >= ZONE_CX && hellChunk(cx, cz, CHUNK)) return generateHellChunk(cx, cz, this.hellPlan, this.bedrockTop ?? OLD_BEDROCK);
         const planet = this.planetOfChunk(cx, cz);
         if (planet) return generatePlanetChunk(cx, cz, planet, this.bedrockTop ?? OLD_BEDROCK);
@@ -1421,9 +1429,23 @@ export class TerrainData {
         if (bot) { c.isleBot = bot; c.isle = true; }
     }
 
+    /** «Школа Акселдорф»: the valley's chunk, the school castle's blocks in it, its woods (SchoolLand.js). */
+    _schoolChunk(cx, cz) {
+        const c = generateSchoolChunk(cx, cz);
+        this._buildCastles(c);
+        if (this.meshTrees) {
+            const g0x = Math.floor((cx * CHUNK - 9) / 9), g1x = Math.floor((cx * CHUNK + CHUNK) / 9), g0z = Math.floor((cz * CHUNK - 9) / 9), g1z = Math.floor((cz * CHUNK + CHUNK) / 9);
+            for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {
+                const t = schoolTree(gx, gz);
+                if (t) this._meshTree(c, t.x, t.z, schoolHeight(t.x, t.z), t.kind, 7e9 + (gx + 32768) * 65536 + (gz + 32768));
+            }
+        }
+        return c;
+    }
+
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
-        let lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
+        let lists = this.school ? schoolPartsForChunk(c.cx, c.cz, CHUNK) : this.sites.partsForChunk(c.cx, c.cz, CHUNK);
         if (this.pyr) { const p = this.pyr.partsForChunk(c.cx, c.cz, CHUNK); if (p.length) lists = lists.length ? lists.concat(p) : p; } // (the three pyramids: Pyramids.js)
         if (this.vamp) { const v = this.vamp.partsForChunk(c.cx, c.cz, CHUNK); if (v.length) lists = lists.length ? lists.concat(v) : v; } // (Count Sracula's castle: VampireCastle.js)
         if (this.ghost?.on) { const g = this.ghost.partsForChunk(c.cx, c.cz, CHUNK); if (g.length) lists = lists.length ? lists.concat(g) : g; } // (the Castle of Ghosts: only in a seer's land — GhostCastle.js)

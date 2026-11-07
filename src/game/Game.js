@@ -140,6 +140,7 @@ import { Titans } from './Titans.js';
 import { Godhood } from './Godhood.js';
 import { Tutorial } from './Tutorial.js';
 import { TutorialNudge } from './TutorialNudge.js';
+import { School } from './School.js';
 import { PharaohLife } from './PharaohLife.js';
 import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
@@ -502,8 +503,9 @@ export class Game {
         const isTest = config.mode === 'test';
         this.world = new VoxelWorld(this.scene, {
             seed: this.seed,
-            mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map && !config.tutorial, // («Обучение»: its own small map — TutorialLand.js)
+            mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map && !config.tutorial && !config.school, // («Обучение», «Школа»: their own maps — TutorialLand.js, SchoolLand.js)
             tutorial: !!config.tutorial,
+            school: !!config.school,
             map: config.map || null,
             seas: this.gen >= 2, // (generation 2: seas, sea castles, deeper bedrock)
             testGround: this.gen >= 3 && config.mode === 'creative' && !config.map, // (a river by the pedestals, a castle close by)
@@ -535,7 +537,7 @@ export class Game {
         this.world.viewDistance = viewDistanceScale(config.viewDistance); // «Прорисовка мира» (this computer only)
         // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
         // Everyone in a game shares the host's clock (sent in the welcome message).
-        this.dayCycle = !config.map && !isTest && !config.tutorial && (config.mode === 'creative' || config.mode === 'freeworld');
+        this.dayCycle = !config.map && !isTest && !config.tutorial && !config.school && (config.mode === 'creative' || config.mode === 'freeworld');
         // a fresh world starts in the morning; Creative — in the full day (the author: «просто обычный день»)
         this.dayStart = Date.now() - DAY_CYCLE_MS * (config.mode === 'creative' ? 0.3 : 0.04);
         if (this.dayCycle) this.world.setDayPhase(this.dayPhase());
@@ -916,7 +918,7 @@ export class Game {
         this.hud.setMultiplayer(null);
 
         // The world is saved by itself on the host's (or single player's) computer
-        if (!isTest && !config.map && !config.tutorial && this.authority) { // («Обучение» is never saved)
+        if (!isTest && !config.map && !config.tutorial && !config.school && this.authority) { // («Обучение» is never saved; «Школа» keeps its own record — School.js)
             const sv = config.saved;
             this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players, gen: sv.gen ?? 1, createdVersion: sv.createdVersion, fav: sv.fav } : { name: config.worldName });
             if (sv) {
@@ -930,7 +932,7 @@ export class Game {
     _populate(config) {
         this.lastSpawnTime = performance.now();
         const testRun = config.mode === 'test' || (typeof navigator !== 'undefined' && navigator.webdriver);
-        this.tutorialNudge = !config.tutorial && !testRun ? new TutorialNudge(this) : null; // (only a player who skipped the tutorial: TutorialNudge.js)
+        this.tutorialNudge = !config.tutorial && !config.school && !testRun ? new TutorialNudge(this) : null; // (only a player who skipped the tutorial: TutorialNudge.js)
         if (config.map) {
             const r = this.world.mapResult;
             if (r.playerSpawn) this.character.group.position.copy(r.playerSpawn);
@@ -950,6 +952,8 @@ export class Game {
                 chest.boxId = this.collision.addBox(chest.getCollisionBox());
                 this.chests.push(chest);
             });
+        } else if (config.school) {
+            this.school = new School(this); // («Школа Акселдорф»: the year at the school — School.js)
         } else if (config.tutorial) {
             this.tutorial = new Tutorial(this, { from: config.tutorialFrom | 0 }); // («Обучение»: the steps, the narrator, the frozen hero — Tutorial.js)
         } else if (config.mode === 'freeworld') {
@@ -4415,6 +4419,7 @@ export class Game {
         this.godhood?.update(dt);
         this.tutorial?.update(dt); // (on the planets — it knows itself where the hero is)
         this.tutorialNudge?.update(dt); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
+        this.school?.update(dt); // («Школа Акселдорф»: School.js)
         this.temple?.update(dt); // (the Gods' temple: on Venus)
         if (earth && !duelOnly) this.phoenixes.update(dt);
         if (earth && !duelOnly) this.owls.update(dt);
@@ -5565,6 +5570,7 @@ export class Game {
         this.titans?.dispose();
         this.godhood?.dispose();
         this.tutorial?.dispose();
+        this.school?.dispose?.();
         this.temple?.dispose();
         this.fleet?.dispose();
         this.blackbeard?.dispose();

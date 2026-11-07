@@ -45,7 +45,7 @@ import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
 import { WORLD_GEN } from './world/Terrain.js';
-import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
+import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, SCHOOL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
 import { hookAllLog, allLog } from './core/AllLog.js';
@@ -459,8 +459,8 @@ async function updateGameMapList(forceRefresh = false) {
     const modeRow = document.createElement('div');
     modeRow.className = 'mode-row';
     mapListDiv.appendChild(modeRow);
-    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps', tutorial: 'mode-card tutorial' };
-    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY], ['tutorial', TUTORIAL_ENTRY]]; // («Обучение» — the author 07.11: beside Творческий, Выживание, Карты)
+    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps', tutorial: 'mode-card tutorial', school: 'mode-card tutorial school' };
+    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY], ['tutorial', TUTORIAL_ENTRY], ['school', SCHOOL_ENTRY]]; // («Школа Акселдорф» — the author 07.11: a year at the school of magic) // («Обучение» — the author 07.11: beside Творческий, Выживание, Карты)
     for (const [id, m] of choices) {
         const card = document.createElement('div');
         const on = id === 'maps' ? pickingMap : !pickingMap && selectedMode === id;
@@ -476,7 +476,7 @@ async function updateGameMapList(forceRefresh = false) {
             if (pickingMap) { // (the map chosen last time is chosen again)
                 const nm = createMem.load('maps')?.map;
                 if (nm && maps[nm]) selectedMap = { ...maps[nm], name: nm };
-            } else if (id !== 'tutorial') { createMem.setLastMode(id); restoreCreateMemory(id); }
+            } else if (id !== 'tutorial' && id !== 'school') { createMem.setLastMode(id); restoreCreateMemory(id); }
             applyFps();
             updateGameMapList();
         };
@@ -485,7 +485,7 @@ async function updateGameMapList(forceRefresh = false) {
     }
     const hint = document.createElement('div');
     hint.className = 'mode-hint';
-    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
+    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : selectedMode === 'school' ? SCHOOL_ENTRY.hint : MODES[selectedMode]?.hint || '';
     mapListDiv.appendChild(hint);
     // «Обучение»: go on from the stage left off (the author 07.11: a tick, on by default; off — from the start)
     if (selectedMode === 'tutorial' && !pickingMap) {
@@ -552,7 +552,7 @@ async function updateGameMapList(forceRefresh = false) {
     if (creativeSettings) creativeSettings.style.display = selectedMode === 'creative' && !pickingMap ? 'block' : 'none';
     const start = $('start-btn');
     start.disabled = pickingMap && !selectedMap;
-    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : '✨ Создать и играть';
+    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : selectedMode === 'school' ? '🏰 В школу' : '✨ Создать и играть';
 }
 // «Карты» → «🛠️ Создать карту»: the map editor opens right here (it was a tab of its own)
 function openMapEditor(on) {
@@ -1360,7 +1360,7 @@ async function startGame(config, welcome = null) {
     if (starting) return; // a second click / duplicate invitation while loading
     // (the first game ever: «Вы уже прошли обучение?» — before the full screen: going full screen under the window moved it, and the
     // first click on «Пропустить» was lost — the author)
-    if (!config.tutorial && !welcome && !(await tutorialGate())) return;
+    if (!config.tutorial && !config.school && !welcome && !(await tutorialGate())) return;
     // the menu is a window; the game itself is played full screen
     if (!window.__ZNS_NO_FULLSCREEN__) enterGameFullscreen();
     window.__charEditor?.hide(); // (its preview must not keep drawing under the game)
@@ -1513,7 +1513,8 @@ $('start-btn').addEventListener('click', () => {
         return;
     }
     const cfg = readConfig();
-    if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; } // (the stage left off — if the tick is on)
+    if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
+    if (cfg.mode === 'school') { startGame({ ...cfg, mode: 'freeworld', school: true, map: null, worldName: 'Школа Акселдорф' }); return; } // (a valley of its own — SchoolLand.js; the year — School.js) // (the stage left off — if the tick is on)
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
