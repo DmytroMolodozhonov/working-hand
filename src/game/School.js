@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { SchoolDecor } from '../fx/SchoolDecor.js';
+import { makeRobe } from './ArmorTypes.js';
 import { SchoolLesson } from './SchoolLesson.js';
 import { lessonOfDay, yearLength, newRecord, loadRecord, saveRecord, YEAR } from './SchoolYear.js';
 
@@ -65,12 +66,12 @@ export class School {
         this.people = new Map(); // idx → villager
         this._quiet();
         if (!this.plan) return;
-        this._site();
-        this.decor = new SchoolDecor(game, this.plan); // (the Great Hall's floating candles and candelabras — SchoolDecor.js)
         // the year: from the record kept («Продолжить учёбу») or a new one — then the arrival first
         const kept = game.config?.schoolContinue ? loadRecord(this._store()) : null;
         this._rec = kept && kept.arrived ? kept : newRecord();
         if (this._rec.eve) this._rec.eve = false; // (left on the arrival's evening: the morning of day 1)
+        this._site();
+        this.decor = new SchoolDecor(game, this.plan); // (the Great Hall's floating candles and candelabras — SchoolDecor.js)
         this._beds();
         if (this._rec.arrived) { this.phase = 'free'; this.t = 0; this._morning(true); }
         else this._placeHero(this.plan.arrive);
@@ -78,6 +79,21 @@ export class School {
 
     _store() { try { return globalThis.localStorage || null; } catch { return null; } }
     _save() { saveRecord(this._store(), this.record); }
+
+    /**
+     * The gift of the school (the author: «подарок магических мантий»): every pupil wears a magic robe — «Фрозен» and the simplest magic
+     * do nothing on it (Duel: ROBE_BLOCKS), so nobody is hurt by the lessons; the hero's lies by his bed — he puts it on himself.
+     */
+    _robes() {
+        const g = this.game, r = this.record;
+        r.robes = true; this._save();
+        for (const p of SCHOOL_PEOPLE) if (p.role === 'student' && !p.dummy) { const v = this.people.get(p.idx); if (v) v.robe = true; }
+        if (this.def) for (const e of this.def.people) if (e.role === 'student' && !e.dummy) e.robe = true;
+        const b = this.myBed && g.beds?.list?.get(this.myBed);
+        if (b && g.items?.spawnLoose) g.items.spawnLoose(makeRobe(true), new THREE.Vector3(b.x, b.y + 2.2, b.z), { hover: true, broadcast: false });
+        g.hud?.toast?.('🎁 Подарок школы — волшебные мантии!', 4000);
+        setTimeout(() => g.hud?.setVoice?.('🎁 Школа дарит всем ученикам волшебные мантии: они отбивают «Фрозен» и простые заклинания. Ваша мантия парит над кроватью — возьмите её и наденьте.', true), 3500);
+    }
 
     /** The pupil's mana and spells from the record: 5 cells at the start (the author) + what the school grew; the lessons' spells. */
     _applyRecord() {
@@ -111,6 +127,7 @@ export class School {
         else if (b) { const sp = g.beds._standSpot?.(b); if (sp) this._placeHero({ x: sp.x, y: sp.y, z: sp.z }, sp.ry); }
         this._applyRecord();
         const L = lessonOfDay(r.day);
+        if (L && L.month >= 5 && !r.robes) this._robes(); // (the author: before «Фрозен» — the gift of magic robes that turn it away)
         this.dayT = 0; this._dayLesson = L ? L.id : null; this._freeSaid = false; this._sleepT = 0;
         g.hud?.setVoice?.(L ? `☀️ День ${r.day}. Сегодня урок: ${SUBJECTS_NAME[L.subject] || ''}. Вас позовут.` : '🎓 Учебный год окончен!', true);
         if (first) g.hud?.toast?.(`Школа Акселдорф — день ${r.day}`, 3000);
@@ -138,7 +155,7 @@ export class School {
         const def = {
             id: SCHOOL_SITE, kind: 'wander', name: 'Акселдорф', x: P.centre.x, z: P.centre.z, F: P.F + 0.5, zone: 150, gx: 0, gz: 0,
             knights: 0, king: '', population: SCHOOL_PEOPLE.length, color: 0x4a3a8a,
-            people: SCHOOL_PEOPLE.map((p) => ({ ...p, home: -1, stall: -1, brave: 0.4 })),
+            people: SCHOOL_PEOPLE.map((p) => ({ ...p, home: -1, stall: -1, brave: 0.4, ...(this._rec?.robes && p.role === 'student' && !p.dummy ? { robe: true } : {}) })),
             houses: [], stalls: [], fields: [], posts: [], beds: [], chests: [], pens: [], graves: [], graveyards: [], rooms: [],
             nodes: [{ id: 0, x: P.gate.x, y: P.F + 0.5, z: P.gate.z, tag: 'gate' }], edges: [],
         };
