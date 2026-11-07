@@ -255,6 +255,19 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     box(-HX + 2, HX - 2, HZ0 + 2, HZ1 - 2, F + 1, F + HH, B.AIR);
     box(-HX, HX, HZ0, HZ1, F + 1, F + 2, MOSS); box(-HX + 2, HX - 2, HZ0 + 2, HZ1 - 2, F + 1, F + 2, B.AIR);
     box(-HX, HX, HZ0, HZ1, F + 10, F + 10, TRIM); box(-HX + 2, HX - 2, HZ0 + 2, HZ1 - 2, F + 10, F + 10, B.AIR);
+    // round ROSE WINDOWS in the north wall over the dais (the author: «окна там, где учителя стоят, хотя бы круглые»): a great one over the
+    // Director's chair and two smaller beside it — a white stone ring, gilt tracery (eight spokes and an inner ring), petals of glowing
+    // violet and moon-blue glass between them, open to the sky in the middle
+    const rose = (cx, cy, r) => {
+        for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+            const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy);
+            if (d > r + 0.35) continue;
+            const a = Math.atan2(dy, dx), spoke = Math.abs(Math.sin(a * 4)) < 0.22 && d > 0.8;
+            const t = d > r - 0.7 ? TRIM : Math.abs(d - r * 0.45) < 0.45 || spoke ? B.GOLD : d < 0.8 ? B.AIR : ((Math.round(a * 4 / Math.PI) + 8) % 2 ? B.ARCANE_LAMP_VIOLET : B.ARCANE_LAMP);
+            box(x, x, HZ0, HZ0 + 1, y, y, t);
+        }
+    };
+    rose(0, F + 15, 4.4); rose(-10, F + 13, 2.6); rose(10, F + 13, 2.6);
     // buttresses with pinnacles along its long sides
     for (let z = HZ0 + 4; z <= HZ1 - 4; z += 7) for (const s of [-1, 1]) {
         box(s * (HX + 1), s * (HX + 2), z, z + 1, F + 1, F + 16, STONE);

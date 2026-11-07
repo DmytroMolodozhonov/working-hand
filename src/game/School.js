@@ -110,10 +110,11 @@ export class School {
         if (this._scheduled || !me || !g.items?.spawnLoose) return;
         this._scheduled = true;
         const yaw = g.character.group.rotation.y, at = new THREE.Vector3(me.x - Math.sin(yaw) * 1.6, me.y + 0.6, me.z - Math.cos(yaw) * 1.6);
-        g.items.spawnLoose({ kind: 'scroll', uid: newUid(), stat: 'schedule' }, at, { hover: true, broadcast: false });
+        const it = { kind: 'scroll', uid: newUid(), stat: 'schedule' };
+        if (!g.inventory?.storeItem?.(it)) g.items.spawnLoose(it, at, { hover: true, broadcast: false }); // (in the pocket — the author; no room: it floats before him)
         g.hud?.setVoice?.(teach
-            ? '📜 Вот ваше расписание уроков. Возьмите свиток одной рукой, другой рукой возьмитесь за второй конец и разведите руки — он раскроется. Там написано, какой урок сегодня и что дальше.'
-            : '📜 Ваше расписание уроков парит перед вами: возьмите его и раскройте двумя руками.', true);
+            ? '📜 Расписание уроков — у вас в вещах. Достаньте свиток одной рукой, другой рукой возьмитесь за второй конец и разведите руки — он раскроется. Там написано, какой урок сегодня и что дальше.'
+            : '📜 Расписание уроков — у вас в вещах: достаньте свиток и раскройте его двумя руками.', true);
     }
 
     /** The pupil's mana and spells from the record: 5 cells at the start (the author) + what the school grew; the lessons' spells. */
@@ -160,6 +161,15 @@ export class School {
             for (const f of g.campfires?.list?.values?.() || []) if (Math.hypot(f.x - c.x, f.z - c.z) < 1.2) fire = f;
             if (!fire) { const f = g.campfires?.kindle?.(c.x, y, c.z); if (f) f.left = 1e6; } // (the school's fires do not go out by themselves)
         });
+        // the Great Hall's tables laid for the evening (the author: «на столах — разнообразная еда»): bread, cheese, pies, apples red and green,
+        // pears, berries, roast meat — every half-metre a little different
+        const food = ['bread', 'cheese', 'pie', 'apple', 'redApple', 'steak', 'baksadi_pear', 'azure_berry', 'bread', 'pie', 'cheese', 'apple'];
+        let fi = 0;
+        for (const t of P.hall.tables || []) for (let z = t.z0 + 1.5; z <= t.z1 - 1.5; z += 2.2) {
+            const x = t.x + (fi % 2 ? 0.35 : -0.35), y = this._floor(x, z, P.F + 2.5) ?? P.F + 2.5;
+            const L = g.items?.spawnLoose?.({ kind: food[fi++ % food.length], uid: newUid(), count: 1, school: 1 }, new THREE.Vector3(x, y + 0.1, z), { broadcast: false });
+            if (L) { L.rest = true; L.vel?.set?.(0, 0, 0); L.spin?.set?.(0, 0, 0); }
+        }
         const kinds = ['sun_herb', 'azure_berry', 'glowcap_mushroom', 'crystal', 'owlFeather', 'fern_frond', 'magicPebble', 'frost_shard'];
         (P.tableSpots || []).forEach((t, i) => {
             const y = (this._floor(t.x, t.z, t.y) ?? t.y) + 0.1;
@@ -434,8 +444,8 @@ export class School {
         const tea = this._person(22, { x: P.centre.x - 3, y: F, z: b0 }, Math.PI);
         if (tea) { tea.lookAt = { x: P.centre.x, z: P.arrive.z + 30 }; this._lit = tea; }
         const D = P.hall.dais;
-        const dir = this._person(20, { x: D.x, y: P.F + 2.5, z: D.z - 1 }, 0); if (dir) dir.lookAt = { x: D.x, z: D.z + 40 };
-        [21, 23, 24].forEach((i, k) => { const v = this._person(i, { x: D.x + (k - 1) * 4 + (k >= 1 ? 4 : 0), y: P.F + 2.5, z: D.z + 1 }, 0); if (v) v.lookAt = { x: D.x, z: D.z + 40 }; });
+        const dir = this._person(20, { x: D.x, y: P.F + 2.5, z: D.z }, Math.PI); if (dir) dir.lookAt = { x: D.x, z: D.z + 40 };
+        [[21, -7], [23, 3.5], [24, 7]].forEach(([i, dx]) => { const v = this._person(i, { x: D.x + dx, y: P.F + 2.5, z: D.z }, Math.PI); if (v) { v.yaw = Math.PI; v.lookAt = { x: D.x, z: D.z + 40 }; } }); // (behind their table on the dais — never on it)
     }
 
     /** The cut-scene's shots (Cine.js). */
@@ -530,10 +540,9 @@ export class School {
         const room = (r, text, dur = 8) => {
             const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, dz = r.door.z, sx = Math.sign(cx - r.door.x) || 1;
             const ent = r.door.x + sx * 3.5, mid = cx;
-            const a = { dur: dur * 0.55, from: { pos: [ent, F + 4.6, dz], look: [mid, F + 2.2, dz] }, to: { pos: ent + (mid - ent) * 0.45, look: [mid + sx * 6, F + 2, dz] }, ...N(text) };
+            const a = { dur, from: { pos: [ent, F + 4.6, dz], look: [mid, F + 2.2, dz] }, to: { pos: ent + (mid - ent) * 0.45, look: [mid + sx * 6, F + 2, dz] }, ...N(text) };
             a.to.pos = [ent + (mid - ent) * 0.45, F + 4.2, dz];
-            const b = { dur: dur * 0.45, from: { pos: [mid, F + 5, dz + 0.5], look: [mid - sx * 8, F + 2, dz + 6] }, to: { pos: [ent + (mid - ent) * 0.6, F + 5, dz - 0.5], look: [mid + sx * 2, F + 2, dz - 8] }, hold: this._talking };
-            return [a, b];
+            return [a]; // (one smooth pass — a second one from the middle twisted the camera: the author)
         };
         return [
             { dur: 8, from: { pos: [X - 22, F + 16, P.fountain.z + 24], look: [X, F + 2, P.fountain.z] }, to: { pos: [X + 18, F + 13, P.fountain.z + 18], look: [X, F + 2, P.fountain.z - 4] }, ...N('Это внутренний двор. Фонтан в его середине помнит всех, кто учился здесь до вас.') },

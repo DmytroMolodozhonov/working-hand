@@ -180,6 +180,11 @@ function percBar(add, kind, bt, bpb, I, bar, secBars, r) {
     } else if (kind === 'war') {
         hit(0, 'taiko', 0.9); hit(1.5, 'taiko', 0.55); hit(2, 'taiko', 0.75); if (bar % 2) hit(3, 'taiko', 0.6); else hit(3.5, 'taiko', 0.5);
         if (bar === 0) hit(0, 'cymbal', 0.4);
+    } else if (kind === 'epic') {
+        // (grand, never fast — the school's opening: heavy drums on the strong beats, a roll that swells into each new section, a crash at its start)
+        hit(0, 'taiko', 0.95); hit(2, 'taiko', 0.62, -0.2); if (bar % 2) hit(3.5, 'taiko', 0.42, 0.25);
+        if (bar === secBars - 1) for (let i = 0; i < 8; i++) hit(2 + i / 4, 'taiko', 0.28 + i * 0.08, (i % 2 ? 0.3 : -0.3));
+        if (bar === 0) hit(0, 'cymbal', 0.72);
     } else if (kind === 'soft') {
         hit(0, 'frame', 0.32); hit(2, 'frame', 0.25);
     }

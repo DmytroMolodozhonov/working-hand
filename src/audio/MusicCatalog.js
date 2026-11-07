@@ -67,9 +67,9 @@ export const TUNES = [
     // a harp's open arpeggios, the bells of the second part; the tonic's lydian fourth gives it the wonder; long form, plays once through the opening
     // the OPENING's theme (the author: «крутую эпичную музыку в самом начале»): grand and wide, never fast — brass over a choir and low strings,
     // a drone under, the hall's long reverb; the coach's flight, the castle and the title
-    { cat: 'schoolEpic', id: 'school1', ru: 'Крылья над Акселдорфом', feel: 'calm', pad: 'choir', padVel: 1, bass: 'bass', bassStyle: 'long', drone: 'drone', seed: 7001, key: 50, mode: 'major', tempo: 70,
-        melody: 'brass', counter: 'strings', arp: 'harp', arpPattern: [0, 2, 4, 2, 0, 2, 4, 2], form: 'IAABAO', reverb: 0.5, hall: 1.5, level: 0.66,
-        sections: { I: [[0, 4]], A: [[0, 2], [4, 2], [5, 2], [3, 2]], B: [[3, 2], [4, 2], [5, 2], [4, 2]] } },
+    { cat: 'schoolEpic', id: 'school1', ru: 'Крылья над Акселдорфом', feel: 'calm', pad: 'strings', padVel: 1.15, bass: 'bass', bassStyle: 'long', drone: 'drone', perc: 'epic', seed: 7001, key: 50, mode: 'minor', tempo: 72,
+        melody: 'brass', counter: 'choir', arp: null, form: 'BBAABAO', // (the author: «сразу с эпичной части» — no quiet intro: it opens with the lifted section B) reverb: 0.45, hall: 1.6, level: 0.74,
+        sections: { I: [[0, 2], [5, 2]], A: [[0, 2], [5, 2], [2, 2], [6, 2]], B: [[3, 2], [0, 2], [6, 2], [4, 2]] } }, // (i – VI – III – VII: the old heroic turn; B lifts to iv and the dominant)
     // the tour and the speech (calm, full of wonder): a celesta's theme over a choir, a harp, the lydian fourth
     { cat: 'school', id: 'school2', ru: 'Акселдорф', feel: 'calm', pad: 'choir', padVel: 0.85, bass: 'bass', bassStyle: 'long', drone: 'drone', seventh: true, seed: 7002, key: 62, mode: 'lydian', tempo: 64,
         melody: 'celesta', counter: 'strings', arp: 'harp', arpPattern: [0, 2, 4, 2, 1, 3, 4, 3], form: 'IAABABO', reverb: 0.55, hall: 1.45, level: 0.56,
