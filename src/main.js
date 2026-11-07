@@ -818,6 +818,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     }
     if (game && game.active) {
         if (isFinal && game.tutorial?.hear(command)) { journal(command, isFinal, meta, null, false, 'обучение'); return; } // («Обучение»: «я правша / левша», the microphone's check)
+        if (isFinal) game.tutorialNudge?.heard(); // (a phrase heard: no spell out of it — TutorialNudge counts)
         game.walkRec?.heard(command); // (F8 recording: «иду вперёд / назад / стою» — the label)
         game._voiceMeta = meta; // (when the words were said: the journal counts how late the spell came — Game.castLocalSpell)
         // the words being caught: a big short line, only in Creative (partly a developer mode)
@@ -1285,7 +1286,7 @@ function tutorialGate() {
 <button type="button" class="skip">Пропустить обучение</button></div>`;
         document.body.appendChild(w);
         w.querySelector('.go').onclick = () => { w.remove(); resolve(false); startTutorial(true); };
-        w.querySelector('.skip').onclick = () => { w.remove(); resolve(true); };
+        w.querySelector('.skip').onclick = () => { try { localStorage.setItem('zns-tutorial-skipped', '1'); } catch { /* private mode */ } w.remove(); resolve(true); }; // (skipped: TutorialNudge watches the first minutes)
     });
 }
 

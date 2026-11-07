@@ -139,6 +139,7 @@ import { VampireLife } from './VampireLife.js';
 import { Titans } from './Titans.js';
 import { Godhood } from './Godhood.js';
 import { Tutorial } from './Tutorial.js';
+import { TutorialNudge } from './TutorialNudge.js';
 import { PharaohLife } from './PharaohLife.js';
 import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
@@ -924,6 +925,8 @@ export class Game {
 
     _populate(config) {
         this.lastSpawnTime = performance.now();
+        const testRun = config.mode === 'test' || (typeof navigator !== 'undefined' && navigator.webdriver);
+        this.tutorialNudge = !config.tutorial && !testRun ? new TutorialNudge(this) : null; // (only a player who skipped the tutorial: TutorialNudge.js)
         if (config.map) {
             const r = this.world.mapResult;
             if (r.playerSpawn) this.character.group.position.copy(r.playerSpawn);
@@ -1887,7 +1890,7 @@ export class Game {
         this._manaLater = false;
         this.lastCastWhy = null; // (why it did not work — the spell journal: set where a spell is refused)
         const name = this._castWithHints(text, isFinal);
-        if (name) { this._castAt = performance.now(); this._castName = name; this.tutorial?.onCast?.(name); } // (the wand never leaves the hand while a spell is going: spellBusy; a thrown Lumos waits after another spell's gesture: WandMagic)
+        if (name) { this._castAt = performance.now(); this._castName = name; this.tutorial?.onCast?.(name); this.tutorialNudge?.onCast?.(); } // (the wand never leaves the hand while a spell is going: spellBusy; a thrown Lumos waits after another spell's gesture: WandMagic)
         // its sound (SpellMusic.SPELL_SOUND: a tune for the great ones, a short effect for the others) — the others hear it too
         if (name && this.sound?.spellHasCastSound?.(name)) {
             const at = _castSnd.copy(this.character.group.position);
@@ -4403,6 +4406,7 @@ export class Game {
         if (!duelOnly) this.titans?.update(dt);
         this.godhood?.update(dt);
         this.tutorial?.update(dt); // (on the planets — it knows itself where the hero is)
+        this.tutorialNudge?.update(dt); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
         this.temple?.update(dt); // (the Gods' temple: on Venus)
         if (earth && !duelOnly) this.phoenixes.update(dt);
         if (earth && !duelOnly) this.owls.update(dt);
