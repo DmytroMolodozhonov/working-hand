@@ -84,6 +84,7 @@ export class Tutorial {
         this.spawned = []; // uids of things given this stage
         this._said = '';
         this._quiet();
+        { const sp = game.castleLife?.talk?.speech; if (sp) sp.gate = (o) => this.done || o?.voiceKey === TUT.VOICE_KEY; } // (only the narrator's voice: the merchant, the wizard say nothing over him)
         this.stages = this._makeStages();
         this._ui();
         this._placeHero(); // (always at the start's place, facing the hill: the things are given round it — also when going on from a later stage)
@@ -839,6 +840,7 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
         for (const id of ['tut-panel', 'tut-sub', 'tut-bosses', 'tut-finish']) document.getElementById(id)?.remove();
         document.querySelectorAll('.tut-arrow').forEach((e) => e.remove());
         document.body.classList.remove('tutorial-on', 'tut-map');
+        { const sp = this.game.castleLife?.talk?.speech; if (sp) sp.gate = null; }
         document.querySelectorAll('.tut-glow').forEach((e) => e.classList.remove('tut-glow'));
         this._clearZombies?.();
         if (this._goalObj) { this.game.scene?.remove(this._goalObj); this._goalObj.traverse((m) => { m.geometry?.dispose?.(); m.material?.dispose?.(); }); this._goalObj = null; }

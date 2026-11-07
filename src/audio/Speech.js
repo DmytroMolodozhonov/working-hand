@@ -218,6 +218,7 @@ export class Speech {
      */
     say(text, opts = {}) {
         if (!this.supported || !this.enabled) return false;
+        if (this.gate && !this.gate(opts)) return false; // («Обучение»: only the narrator speaks — Tutorial sets the gate)
         const clean = speakable(text);
         if (!clean) return false;
         let master = 1;

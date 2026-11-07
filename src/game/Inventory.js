@@ -898,10 +898,25 @@ export class Inventory {
     takeNext(side = 'right') {
         if (this.monsterShut()) return false;
         const n = this.slots.length + 1; // (the last of the circle — the pouch from the belt)
-        const start = this._next ?? -1;
+        // (a deal can be made — a merchant near: the pouch is in the circle, and FIRST — the author 07.11: «монетки не смог достать»;
+        // the fist at the hip alone was too hard. No deal: it is not in the circle at all — CoinDeal.js)
+        const deal = !!(this.game.coinDeal?.mayTake?.() && this.game.config?.mode !== 'creative' && this.purse?.magic && this.purse.count > 0);
+        const start = deal && this._next !== this.slots.length ? this.slots.length - 1 : (this._next ?? -1);
         for (let k = 1; k <= n; k++) {
             const i = (start + k) % n;
-            if (i === this.slots.length) continue; // (the coin pouch is NOT in the pocket circle: it comes off the belt only in a deal — by its cell or the hand at the hip; CoinDeal.js)
+            if (i === this.slots.length) {
+                if (!deal) continue;
+                const g = this.game;
+                if (g.items?.held[side] || g.weapons?.hands?.[side]?.held) continue;
+                this.purse._take(side);
+                const h = g.items?.held[side];
+                if (!h || h.item.kind !== 'coins') continue;
+                this._next = i;
+                this._cyc = { side, pouch: true, item: h.item };
+                this.game.sound?.playPocket?.('take');
+                this._render();
+                return true;
+            }
             const it = this.slots[i];
             if (!it) continue; // (everything in the circle, in order: wands, weapons, shields too — the author: the wand never came)
             this._next = i;
@@ -1201,7 +1216,7 @@ export class Inventory {
         // and goes when the player walks away (CoinDeal._refresh asks _renderPouch when that changes)
         const pc = document.createElement('div');
         pc.className = 'hotbar-slot pouch';
-        pc.innerHTML = '<div class="hb-icon"></div><div class="hb-count"></div><div class="hb-key">💰</div>';
+        pc.innerHTML = '<div class="hb-icon"></div><div class="hb-count"></div>'; // (the pouch is drawn — no emoji over it: the author)
         pc.onclick = () => this.pouchClick();
         pc.style.display = 'none';
         bar.appendChild(pc);
