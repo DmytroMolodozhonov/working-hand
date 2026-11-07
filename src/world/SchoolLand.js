@@ -135,7 +135,7 @@ const TAU = Math.PI * 2;
 /** The castle's plan: its parts (boxes k 0, discs/rings k 1, roof ramps k 3) and where things are. Fixed at (0, 0): gates to the south (+z). */
 export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     const B = BLOCK; // (read here, not at the module's top: Terrain.js imports this file — its BLOCK is not ready then)
-    const S = SCHOOL, F = P.F, OX = P.x, OZ = P.z, parts = [];
+    const S = SCHOOL, F = P.F, OX = P.x, OZ = P.z, parts = [], tableCandles = [], floatCandles = [];
     // (laid out round (0, 0) — the castle's centre — and moved to its place in the world here)
     const box = (x0, x1, z0, z1, L0, L1, t) => parts.push({ k: 0, x0: Math.min(x0, x1) + OX, x1: Math.max(x0, x1) + OX, z0: Math.min(z0, z1) + OZ, z1: Math.max(z0, z1) + OZ, L0, L1, t });
     const cyl = (cx, cz, r, hr, L0, L1, t) => { const q = Math.ceil(r); cx += OX; cz += OZ; parts.push({ k: 1, cx, cz, r, hr, x0: Math.floor(cx - q), x1: Math.ceil(cx + q), z0: Math.floor(cz - q), z1: Math.ceil(cz + q), L0, L1, t }); };
@@ -250,7 +250,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
         box(tx, tx + 1, TZ0, TZ1, F + 2, F + 2, B.PLANKS_DARK);
         for (let z = TZ0; z <= TZ1; z += 6) box(tx, tx + 1, z, z, F + 1, F + 1, B.PLANKS_DARK); // (the legs)
         box(tx - 1, tx - 1, TZ0, TZ1, F + 1, F + 1, B.PLANKS); box(tx + 2, tx + 2, TZ0, TZ1, F + 1, F + 1, B.PLANKS); // (benches)
-        for (let z = TZ0 + 2; z <= TZ1 - 2; z += 5) box(tx, tx + 1, z, z, F + 3, F + 3, B.LANTERN); // (candles on the tables)
+        for (let z = TZ0 + 2; z <= TZ1 - 2; z += 5) tableCandles.push({ x: tx + 1 + OX, y: F + 3, z: z + 0.5 + OZ }); // (candlesticks on the tables — models: SchoolDecor.js)
     }
     box(-1, 0, TZ0 - 4, HZ1 - 2, F, F, B.CARPET_RED);
     // the teachers' dais at the north end: two steps, the long table across, the Director's high chair in the middle
@@ -265,8 +265,8 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     box(-1, 1, DZ, DZ, F + 3, F + 9, B.PLANKS_DARK); box(0, 0, DZ, DZ, F + 10, F + 11, B.GOLD); // (its high back, a gilt crest)
     box(-1, 1, DZ + 1, DZ + 1, F + 4, F + 8, B.CARPET_PURPLE);
     for (const s of [-1, 1]) box(s * 12, s * 12, DZ + 3, DZ + 3, F + 3, F + 6, B.GOLD), box(s * 12, s * 12, DZ + 3, DZ + 3, F + 7, F + 7, B.LANTERN); // (candelabra)
-    // the floating candles: arcane lamps in rows under the roof
-    for (let z = HZ0 + 6; z <= HZ1 - 4; z += 5) for (let x = -12; x <= 12; x += 6) box(x + ((z / 5) & 1) * 3, x + ((z / 5) & 1) * 3, z, z, F + 14 + ((x + z) & 1), F + 14 + ((x + z) & 1), B.ARCANE_LAMP);
+    // the floating candles under the roof (models, not blocks — SchoolDecor.js): rows, each a little off its row, at 13…16 m
+    for (let z = HZ0 + 6; z <= HZ1 - 4; z += 4) for (let x = -13; x <= 13; x += 3.25) floatCandles.push({ x: x + OX + ((z * 7 + x * 3) % 5) * 0.2, y: F + 13 + ((x * 11 + z * 5) % 7) * 0.45, z: z + OZ + ((x * 5) % 3) * 0.3 });
 
     // ---- the WINGS round the courtyard (one storey, 8 high)
     const WS = 8;
@@ -328,7 +328,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
             library: { x0: -W.u + 1, x1: -W.u + 21, z0: SZ0 + 1, z1: SZ1 - 1, door: at(-W.u + 24, (SZ0 + SZ1) / 2) },
             dormitory: { x0: W.u - 21, x1: W.u - 1, z0: SZ0 + 1, z1: SZ1 - 1, door: at(W.u - 24, (SZ0 + SZ1) / 2) },
         },
-        arrive, centre: { x: OX, z: OZ }, F,
+        arrive, centre: { x: OX, z: OZ }, F, tableCandles, floatCandles,
     };
     // (the rooms' and the hall's bounds and the tables: laid out round (0, 0) — to the world's place too)
     for (const r of [out.hall, ...Object.values(out.rooms)]) { r.x0 += OX; r.x1 += OX; r.z0 += OZ; r.z1 += OZ; }
