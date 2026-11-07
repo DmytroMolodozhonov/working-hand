@@ -185,11 +185,15 @@ export class PortalLoader {
         this._lore(true);
         this._runes();
         this.menu = menu;
-        if (menu) { // (the menu is drawn into the whirl: it shrinks, turns and melts)
+        if (menu) { // (the menu is drawn into the whirl: it shrinks, turns and melts — quickly, and started at once: the author saw the menu
+            // hang over the loading — the loading's heavy work held back the frame that was to start its melting)
             menu.classList.remove('hidden');
-            menu.style.transition = 'transform 1.4s cubic-bezier(.6,0,.9,.6), filter 1.4s, opacity 1.4s';
-            requestAnimationFrame(() => { menu.style.transform = `scale(0.12) rotate(${this.dir * 75}deg)`; menu.style.filter = 'blur(8px) saturate(1.6)'; menu.style.opacity = '0'; });
+            menu.style.transition = 'transform .7s cubic-bezier(.6,0,.9,.6), filter .7s, opacity .6s';
+            void menu.getBoundingClientRect(); // (the transition starts from here, now — not on a later frame)
+            menu.style.transform = `scale(0.12) rotate(${this.dir * 75}deg)`; menu.style.filter = 'blur(8px) saturate(1.6)'; menu.style.opacity = '0';
+            const m = menu; setTimeout(() => { if (this.menu === m) { m.classList.add('hidden'); m.style.transform = ''; m.style.filter = ''; m.style.opacity = ''; m.style.transition = ''; this.menu = null; } }, 750);
         }
+        document.body.classList.add('passage-on'); // (no game's HUD under the passage: the minimap, the camera's box — style.css)
         this.on = true;
         this.tt = 0; this._lastT = 0;
         this.worker?.postMessage({ type: 'start', pal: this.pal, dir: this.dir, arms: this.arms, seed: this.seed });
@@ -233,7 +237,7 @@ export class PortalLoader {
         const dts = Math.min(0.1, (now - (this._lastT || now)) / 1000); this._lastT = now;
         this.tt = (this.tt || 0) + dts * passageSpeed(t, this.shown, this.out);
         passageTick(this.shown);
-        this.open = Math.min(1, (now - this.tOpen) / 1400);
+        this.open = Math.min(1, (now - this.tOpen) / 750);
         if (this.open >= 1 && this.menu) { this.menu.classList.add('hidden'); this.menu.style.transform = ''; this.menu.style.filter = ''; this.menu.style.opacity = ''; this.menu.style.transition = ''; this.menu = null; }
         this.shown += (this.prog - this.shown) * 0.06;
         if (this.phase === 'arrive') {
@@ -271,6 +275,7 @@ export class PortalLoader {
 
     _stop() {
         this.on = false;
+        document.body.classList.remove('passage-on');
         this.phase = 'off';
         this.el.style.display = 'none';
         this.el.classList.add('done');

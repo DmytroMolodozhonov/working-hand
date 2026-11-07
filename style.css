@@ -1522,6 +1522,8 @@ body {
 /* In the menu: no minimap / empty camera box over the menu */
 body:has(#main-menu:not(.hidden)) #minimap-container,
 body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
+/* Under the passage into the world (PortalLoader): nothing of the game's HUD peeks through (the author: «на миг появляется миникарта») */
+body.passage-on #minimap-container, body.passage-on #webcam-preview, body.passage-on #hud, body.passage-on #hotbar, body.passage-on #fatigue-container, body.passage-on #mana-num { display: none !important; }
 .world-row { display: grid; grid-template-columns: auto 1.4fr 1.2fr auto auto; gap: 8px; align-items: center; padding: 6px 4px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
 .world-fav { background: none; border: none; cursor: pointer; font-size: 1.3rem; line-height: 1; color: #6c7a89; padding: 0 4px; }
 .world-fav:hover { color: #ff7675; }
