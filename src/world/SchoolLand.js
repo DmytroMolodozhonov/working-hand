@@ -389,7 +389,18 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
         for (const [x, z] of [[x0 + 1, z0 + 1], [x1 - 1, z0 + 1], [x0 + 1, z1 - 1], [x1 - 1, z1 - 1]]) pillar(x, z, 5, B.ARCANE_LAMP);
         for (const z of [z0 + 6, z0 + 11, z0 + 16]) box(x1, x1, z, z + 1, F + 2, F + 3, B.ARCANE_WARD);
         box(x0 + 8, x0 + 14, z0, z0, F + 1, F + 1, B.PLANKS_DARK); for (let x = x0 + 8; x <= x0 + 14; x += 2) box(x, x, z0, z0, F + 2, F + 3, B.FENCE); // (the wand rack)
+        rug(x0 + 2, x0 + 9, z1 - 6, z1 - 1, B.CARPET_RED, B.GOLD); // (the teacher's corner)
         table(x0 + 4, x0 + 6, z1 - 3, z1 - 2); box(x0 + 5, x0 + 5, z1 - 3, z1 - 3, F + 3, F + 3, B.ENCHANTED); // (the teacher's table, a warded box on it)
+        // the DUELLING PISTE across the room, flush with the floor (nothing to trip on): dark stone, rune borders, a rune circle at each end
+        const zm = HZ0 + 12;
+        box(x0 + 8, x1 - 6, zm - 2, zm + 2, F, F, DARK); box(x0 + 8, x1 - 6, zm - 2, zm - 2, F, F, B.RUNE); box(x0 + 8, x1 - 6, zm + 2, zm + 2, F, F, B.RUNE);
+        for (const cx of [x0 + 9, x1 - 7]) cyl(cx, zm, 3, 2, F, F, B.RUNE);
+        // the targets on the far wall: warding shields in gilt frames, crystal lights over them
+        for (const z of [z0 + 5, z0 + 11, z0 + 17]) { box(x1, x1, z - 1, z + 1, F + 2, F + 4, TRIM); box(x1, x1, z, z, F + 3, F + 3, B.ARCANE_WARD); box(x1, x1, z - 1, z + 1, F + 5, F + 5, B.GOLD); box(x1, x1, z, z, F + 6, F + 6, B.ARCANE_LAMP); }
+        // lamps hanging on chains from the beams (5.5 m over the floor: over every hat)
+        for (let x = x0 + 8; x <= x1 - 8; x += 8) for (const z of [z0 + 5, z1 - 5]) { box(x, x, z, z, F + 7, F + 7, B.FENCE); box(x, x, z, z, F + 6, F + 6, B.ARCANE_LAMP); }
+        // the pupils' benches along the south wall (sitting height), a rack of practice shields behind them
+        for (let x = x0 + 14; x <= x1 - 10; x += 7) { box(x, x + 4, z1 - 1, z1 - 1, F + 1, F + 1, B.PLANKS); box(x, x + 4, z1, z1, F + 3, F + 3, B.ARCANE_WARD); }
     }
     // PENTAGRAMS (east wing, south): the great rune circle with eight crystal pillars round it, star charts on the walls, grimoires, a dark
     // board with a white figure drawn on it
