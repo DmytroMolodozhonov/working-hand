@@ -167,7 +167,7 @@ test('«Ад»: в списке мест; герой спускается чер
     const { HellGate } = await import('../../src/game/HellGate.js');
     const THREE = await import('three');
     const spot = SPAWN_SPOTS.find((s) => s.id === 'hellmap');
-    assert.ok(spot && spot.label === 'Ад', 'в списке пишется просто «Ад»');
+    assert.ok(spot && spot.label === 'Встреча с дьяволом (ад)', 'в списке: «Встреча с дьяволом (ад)» (автор 07.11)');
     for (const seed of [1, 2026]) {
         const t = new TerrainData();
         t.generate({ seed, mountains: true, seas: true, lush: true, deepCaves: true, test: true, slopes: true, furnish: true, apart: true, hell: true });
@@ -190,4 +190,13 @@ test('«Ад»: в списке мест; герой спускается чер
     assert.deepEqual(g.hellGate._where({ id: 'hell:back' }), { x: 3, z: 3 }, 'назад — к начальной площадке');
     const back = new HellGate(g); back.restore(g.hellGate.snapshot());
     assert.equal(back.from.start, 1, 'сохранение помнит, что вход был с начала мира');
+});
+
+test('«Где появиться»: главные пункты — старт, арена, зельевар; остальное — во вложенных списках (автор 07.11)', async () => {
+    const { SPAWN_SPOTS, SPAWN_GROUPS } = await import('../../src/game/SpawnSpots.js');
+    assert.deepEqual(SPAWN_SPOTS.filter((x) => !x.group).map((x) => x.id), ['start', 'arena', 'potionlair']);
+    const ids = new Set(SPAWN_GROUPS.map((g) => g.id));
+    for (const x of SPAWN_SPOTS) if (x.group) assert.ok(ids.has(x.group), x.id);
+    for (const t of ['titan_mercury', 'titan_neptune', 'hellmap', 'almostgod']) assert.equal(SPAWN_SPOTS.find((x) => x.id === t).group, 'divine', t);
+    for (const t of ['dragon', 'queen', 'spider', 'pyramids', 'vampire', 'blackship']) assert.equal(SPAWN_SPOTS.find((x) => x.id === t).group, 'earth', t);
 });

@@ -7,7 +7,7 @@
 
 import { DEFAULT_HERO, HERO, normalizeHero } from '../game/HeroSetup.js';
 import { rankDuelPower, rankDuelRange, WIZ_RANK_RU } from '../game/WizardAI.js';
-import { SPAWN_SPOTS, DUEL_FOES } from '../game/SpawnSpots.js';
+import { SPAWN_SPOTS, SPAWN_GROUPS, groupOfSpot, DUEL_FOES } from '../game/SpawnSpots.js';
 import { RECIPES } from '../game/Potions.js';
 
 const T = {
@@ -57,7 +57,7 @@ const SHIP_STARTS = ['port', 'blackship'];
 const html = (p) => `
 <div class="hero-settings" data-hero-panel>
   <h4 class="hero-h">🧙 Настройки героя</h4>
-  <div class="hero-row" title="${T.spawn}"><label for="${p}-spawn">📍 Где появиться:</label> <select id="${p}-spawn">${SPAWN_SPOTS.map((x) => `<option value="${x.id}" title="${x.hint}">${x.label}</option>`).join('')}</select></div>
+  <div class="hero-row" title="${T.spawn}"><label for="${p}-spawn-main">📍 Где появиться:</label> <select id="${p}-spawn-main">${SPAWN_SPOTS.filter((x) => !x.group).map((x) => `<option value="${x.id}" title="${x.hint}">${x.label}</option>`).join('')}${SPAWN_GROUPS.map((g) => `<option value="grp:${g.id}">${g.label} ▸</option>`).join('')}</select> <select id="${p}-spawn-sub" hidden aria-label="Выберите место"></select><select id="${p}-spawn" hidden>${SPAWN_SPOTS.map((x) => `<option value="${x.id}" title="${x.hint}">${x.label}</option>`).join('')}</select></div>
   <div class="hero-row" id="${p}-wand-row" hidden title="${T.wand}"><label for="${p}-wand">🪄 Сила палочки: +</label> <input type="number" id="${p}-wand" min="0" max="${HERO.WAND_MAX}" step="5" value="0"> % <span class="mp-hint">к силе ваших дуэльных заклинаний (0 — без добавки)</span></div>
   <div class="hero-row" id="${p}-foe-row" hidden title="${T.foe}"><label for="${p}-foe">⚔️ Соперник на арене:</label> <select id="${p}-foe">${DUEL_FOES.map(foeOption).join('')}</select></div>
   <label class="world-opt" id="${p}-same-row" hidden title="${T.same}"><input type="checkbox" id="${p}-same" checked> 🤝 Дать другу такую же силу <span class="mp-hint">— соперником станет друг, который зайдёт на сервер; остальные — зрители</span></label>
@@ -101,7 +101,26 @@ export function mountHeroPanel(root, prefix = 'hero') {
     const $ = (s) => root.querySelector(`#${prefix}-${s}`);
     const radio = (n) => root.querySelector(`input[name="${prefix}-${n}"]:checked`)?.value;
     const pots = () => [...root.querySelectorAll('input[data-pot]:checked')].map((i) => i.dataset.pot);
+    // (the visible lists: main items + a nested list of the group; the hidden #spawn is what everything else reads)
+    const showSpawn = () => {
+        const cur = $('spawn').value, grp = groupOfSpot(cur), main = $('spawn-main'), sub = $('spawn-sub');
+        main.value = grp ? `grp:${grp}` : cur;
+        sub.hidden = !grp;
+        if (grp) {
+            if (sub.dataset.grp !== grp) { sub.innerHTML = SPAWN_SPOTS.filter((x) => x.group === grp).map((x) => `<option value="${x.id}" title="${x.hint}">${x.label}</option>`).join(''); sub.dataset.grp = grp; }
+            sub.value = cur;
+        }
+    };
+    const pickSpawn = (id) => { $('spawn').value = id; $('spawn').dispatchEvent(new Event('change', { bubbles: true })); };
+    $('spawn-main').addEventListener('change', (e) => {
+        e.stopPropagation();
+        const v = $('spawn-main').value;
+        pickSpawn(v.startsWith('grp:') ? SPAWN_SPOTS.find((x) => x.group === v.slice(4)).id : v);
+    });
+    for (const el of [$('spawn-main'), $('spawn-sub')]) el.addEventListener('input', (e) => e.stopPropagation()); // (not the hero's own settings changing: the start's memory is saved on its change)
+    $('spawn-sub').addEventListener('change', (e) => { e.stopPropagation(); pickSpawn($('spawn-sub').value); });
     const sync = () => {
+        showSpawn();
         $('cells-row').hidden = $('inf').checked;
         $('foe-row').hidden = $('spawn').value !== 'arena' || prefix === 'hero-mp'; // (a server: the opponent is the friend who joins, no wizard)
         $('same-row').hidden = $('spawn').value !== 'arena' || prefix !== 'hero-mp';
