@@ -2623,7 +2623,7 @@ export class TerrainData {
             let top = k.top[(wz & MASK) * CHUNK + (wx & MASK)];
             // (houses and castles — and the houses made by magic, HouseMagic.js: their rooms as they are, whether
             // the chunk has caves or only its neighbour has: a house beside a cave is no cave)
-            if ((k.caved || k.hollow) && (this.sites?.landAt(wx, wz) || this.litLand?.(wx, wz))) top = MIN_LAYER - 1;
+            if ((k.caved || k.hollow) && (this.sites?.landAt(wx, wz) || this.litLand?.(wx, wz) || this.school?.litAt(wx, wz))) top = MIN_LAYER - 1;
             else if (k.isleBot && k.isleBot[(wz & MASK) * CHUNK + (wx & MASK)] < 32767) top = this._underIsle(k, wx & MASK, wz & MASK); // (under a floating island: the open sky)
             else if (top > MIN_LAYER && isTree(k.blocks[((top - MIN_LAYER) * CHUNK + (wz & MASK)) * CHUNK + (wx & MASK)])) {
                 // (a tree's crown is no cave's roof: the daylight comes through the leaves to the ground)

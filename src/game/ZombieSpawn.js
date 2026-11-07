@@ -103,6 +103,7 @@ export class ZombieSpawn {
     get enabled() {
         const g = this.game, c = g.config || {};
         if (!g.authority || c.map || c.mode === 'test') return false;
+        if (c.school) return false; // («Школа»: no monsters in the castle — the author, docs/rules/school.md)
         if (c.mode === 'freeworld') return true;
         if (c.mode === 'creative') return (c.zombieCount || 0) > 0;
         return false;

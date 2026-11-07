@@ -17,7 +17,7 @@ export default async function (h) {
     S.phase = 'free'; S.t = 9;
     const t0 = performance.now();
     let last = '', shots = {};
-    while (performance.now() - t0 < 300000) {
+    while (performance.now() - t0 < 1200000) {
         await h.frames(10);
         const L = S.lesson;
         const ph = L ? L.phase : 'none';

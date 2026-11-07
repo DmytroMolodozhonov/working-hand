@@ -118,6 +118,13 @@ export class SchoolSite {
         if (Math.abs(dx) <= F0.u + 14 && dz >= F0.v0 - 14 && dz <= F0.v1 + 14) return true;
         return dz > F0.v1 && dz < F0.v1 + SCHOOL.ROAD.len && Math.abs(dx) <= SCHOOL.ROAD.w + 5;
     }
+    /** A column of the school's roofed rooms (the hall, the wings, the library, the dormitory): lit as rooms — never dark as a cave (Terrain's light). */
+    litAt(ix, iz) {
+        const S = this.spot, F0 = SCHOOL.FOOT, dx = ix - S.x, dz = iz - S.z;
+        if (Math.abs(dx) > F0.u + 2 || dz < F0.v0 - 2 || dz > F0.v1 + 2) return false;
+        for (const r of this.plan.lit) if (ix >= r[0] && ix <= r[2] && iz >= r[1] && iz <= r[3]) return true;
+        return false;
+    }
     near(x, z, r) { const S = this.spot; return Math.hypot(x - S.x, z - S.z) < r + 160 + SCHOOL.ROAD.len; }
     partsForChunk(cx, cz, C = CHUNK) {
         const k = this.plan, x0 = cx * C, z0 = cz * C, x1 = x0 + C - 1, z1 = z0 + C - 1;
