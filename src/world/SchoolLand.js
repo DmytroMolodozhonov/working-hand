@@ -337,6 +337,12 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     // inside: the potions room's hearths (cauldrons go on them — the school's life), the library's shelves, the dormitory's beds' places
     // the pentagram room's floor: a great circle of runes; the defence room: a duelling strip
     cyl(39, HZ0 + 38, 8, 7, F, F, B.RUNE); box(30, 50, HZ0 + 12, HZ0 + 12, F, F, B.CARPET_BLUE);
+    { // the pentagram itself inside the circle: a five-pointed star drawn in runes (lines from point to every second point), a small inner ring
+        const cx = 39, cz = HZ0 + 38, R = 6.6, pts = [0, 1, 2, 3, 4].map((k) => [cx + Math.sin(k * 2 * Math.PI / 5) * R, cz - Math.cos(k * 2 * Math.PI / 5) * R]);
+        for (let k = 0; k < 5; k++) { const [ax, az] = pts[k], [bx, bz] = pts[(k + 2) % 5], n = Math.ceil(Math.hypot(bx - ax, bz - az) * 1.5);
+            for (let i = 0; i <= n; i++) { const x = Math.round(ax + (bx - ax) * i / n), z = Math.round(az + (bz - az) * i / n); box(x, x, z, z, F, F, B.RUNE); } }
+        cyl(cx, cz, 2, 1, F, F, B.RUNE);
+    }
     // the defence room: red banners with gilt tops on the outer wall, bookcases (books of the protective arts) along the end walls,
     // a target ring on the floor where the dummy stands
     for (const bz of [HZ0 + 4, HZ0 + 9, HZ0 + 15, HZ0 + 20]) { box(exo - 1, exo - 1, bz, bz + 1, F + 2, F + 6, B.CARPET_RED); box(exo - 1, exo - 1, bz, bz + 1, F + 7, F + 7, B.GOLD); }
