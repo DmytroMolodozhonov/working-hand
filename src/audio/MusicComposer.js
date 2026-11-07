@@ -282,6 +282,22 @@ function voice(e, L, Rch, sr, spb, tune) {
             }
             break;
         }
+        case 'piano': {
+            // a warm «yellow» upright: hammered strings — eight partials a little stretched (the string's stiffness), each dying faster the higher it
+            // is, three strings a hair apart (the chorus of an old piano), a soft felt knock at the start, damped when the key is let go
+            const n = Math.floor((durS + 0.35) * sr), Bk = 0.00035, rel = durS;
+            const parts = [];
+            for (let k = 1; k <= 8; k++) parts.push({ fr: f * k * Math.sqrt(1 + Bk * k * k), a: 1 / Math.pow(k, 1.25) * (k === 2 ? 1.15 : 1), d: 2.6 / (1 + k * 0.55) });
+            for (let i = 0; i < n; i++) {
+                const t = i / sr;
+                let x = 0;
+                for (const p of parts) x += p.a * Math.exp(-t / p.d) * (sinc(p.fr * t) + 0.6 * sinc(p.fr * 1.0012 * t) + 0.6 * sinc(p.fr * 0.9989 * t));
+                const att = Math.min(1, t / 0.004), damp = t > rel ? Math.exp(-(t - rel) / 0.09) : 1;
+                const knock = Math.exp(-t / 0.012) * Math.sin(t * 900) * 0.25;
+                out(i, (x * 0.12 + knock) * att * damp * v * 0.55);
+            }
+            break;
+        }
         case 'bell': case 'celesta': {
             // FM: a carrier with an inharmonic modulator, a bright strike dying away
             const n = Math.floor(Math.min(durS + (e.inst === 'bell' ? 4 : 2.2), 5) * sr), ratio = e.inst === 'bell' ? 3.5 : 2.0, idx0 = e.inst === 'bell' ? 3 : 1.5, dec = e.inst === 'bell' ? 1.6 : 0.9;
