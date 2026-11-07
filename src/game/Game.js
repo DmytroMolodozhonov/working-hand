@@ -266,7 +266,7 @@ import { Nihilis } from './Nihilis.js';
 import { EnchantCircles } from './EnchantCircles.js';
 import { glowSamples } from '../fx/EnchantGlow.js';
 import { LedgeClimb } from './LedgeClimb.js';
-import { JUMP_ASSIST, ledgePush } from './Jump.js';
+import { JUMP_ASSIST, ledgePush, riseForLedge } from './Jump.js';
 import { Concentration } from './Concentration.js';
 import { bareGate, BARE_HINT } from './BareHand.js';
 import { CrossedShield } from './CrossedArms.js';
@@ -5438,9 +5438,14 @@ export class Game {
     _jumpOnto() {
         const ch = this.character, T = this.collision?.terrain, p = ch.group.position;
         if ((ch.size || 1) > 1.01) { if (this.monster?.active) this.monster.assistJump(); return; } // (a monster's real jump takes the ledge ahead: MonsterClimb.js)
-        if (!T?.topLayer || Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2) return; // (a run carries it on already)
+        if (!T?.topLayer) return;
         const push = ledgePush(T, p.x, p.z, p.y - PLAYER_GROUND_OFFSET, ch.group.rotation.y, PLAYER_RADIUS);
-        if (push) { ch.jumpVel.x = push.x; ch.jumpVel.z = push.z; }
+        if (!push) return;
+        // (the legs push as high as the ledge asks, up to the strongest jump — also when the run carries the body on: a weak jump at a wall is no trap)
+        const rise = riseForLedge(push.h, ch._jumpS ?? 0.3, ch.gravityK);
+        if (rise) ch.jumpAtLeast(rise);
+        if (Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2) return; // (a run carries it on already)
+        ch.jumpVel.x = push.x; ch.jumpVel.z = push.z;
     }
 
     _snowSteps(ch) {

@@ -239,6 +239,15 @@ export class VoxelCharacter {
         return true;
     }
 
+    /** A jump in front of a ledge: the legs push as high as the wall asks (`rise` units, at least what they already give) — only at the take-off, going up. */
+    jumpAtLeast(rise) {
+        if (!this.jumpAir || this.verticalVelocity <= 0 || this._jumpT > 0.2 || !(rise > 0)) return false;
+        const v = Math.sqrt(2 * G * Math.max(0.05, this.gravityK || 1) * rise) - G * (this.gravityK || 1) * this._jumpT;
+        if (v <= this.verticalVelocity) return false;
+        this.verticalVelocity = v;
+        return true;
+    }
+
     /** The jump turned out stronger while the body still went up (it went up higher): a little more push. */
     jumpBoost(strength) {
         if (!this.jumpAir || this.verticalVelocity <= 0 || this._jumpT > 0.25 || strength <= (this._jumpS || 0)) return;

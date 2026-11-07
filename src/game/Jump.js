@@ -45,6 +45,20 @@ export function heavySink(gravityK = 1) {
     return gravityK > 1 ? Math.min(0.35, (gravityK - 1) * 0.2) : 0;
 }
 
+/** The highest ledge (units over the feet) the jump is helped onto: the strongest jump (1.6) + the step (1.05) + the air's assist (0.3) = 2.95, minus a margin. */
+export const LEDGE_MAX = 2.8;
+
+/**
+ * How high (units) the body must rise to land on a ledge `h` over the feet (author 07.11: «прыжок должен сразу же перепрыгивать — прямо впритык, два блока чуть выше —
+ * я постоянно застреваю»): the step (1.05) and the air's assist (JUMP_ASSIST) take the rest; a margin of 0.12 so that the edge is cleared, not touched.
+ * null: the jump already goes high enough. A person jumps as high as the wall asks (up to their strongest) — so does the hero.
+ */
+export function riseForLedge(h, strength, gravityK = 1) {
+    const need = h - 1.05 - JUMP_ASSIST + 0.12;
+    if (!(need > 0) || need <= jumpHeight(strength, gravityK)) return null;
+    return Math.min(need, jumpHeight(1, gravityK));
+}
+
 const FAN = [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4]; // (rays round where the body faces, radians: up to 80° to either side)
 
 /**
@@ -60,10 +74,10 @@ export function ledgePush(T, x, z, feet, yaw, radius = 0.48) {
             if (ix === Math.round(x) && iz === Math.round(z)) continue;
             const L = T.floorBelow ? T.floorBelow(ix, iz, Math.floor(feet + 3.5)) : T.topLayer(ix, iz);
             const h = L - 0.5 - feet;
-            if (h < 0.3 || h > 2.4) continue; // (the strongest jump still falls short of three blocks)
+            if (h < 0.3 || h > LEDGE_MAX) continue; // (the strongest jump still falls short of three blocks)
             if (T.solidIn && T.solidIn(ix, iz, L + 1, L + 4)) break; // (a wall, no room on its top: the next ray)
             const dx = ix - x, dz = iz - z, dl = Math.hypot(dx, dz) || 1;
-            return { x: dx / dl * 3, z: dz / dl * 3 };
+            return { x: dx / dl * 3, z: dz / dl * 3, h };
         }
     }
     return null;

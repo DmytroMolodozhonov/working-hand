@@ -144,3 +144,32 @@ test('the weakest jump the camera reads (strength 0.1…) flush to a 2-block led
     const max3 = standJump({ top: (ix, iz) => (iz <= -2 ? 3 : 0), strength: 1, yaw: Math.PI / 4 });
     assert.ok(max3.feet < floorTop + 0.05, JSON.stringify(max3));
 });
+
+test('the legs push as high as the ledge asks (up to the strongest jump): riseForLedge, Character.jumpAtLeast', async () => {
+    const { riseForLedge, LEDGE_MAX } = await import('../../src/game/Jump.js');
+    assert.equal(riseForLedge(2.0, 0.36), null, 'a 2-block ledge: a plain jump is enough');
+    assert.equal(riseForLedge(1.0, 0), null);
+    // (a ledge of 2.7 — a smooth slope on top of two blocks: the weakest jump is not enough, the legs give more)
+    const need = riseForLedge(2.7, 0.1);
+    assert.ok(need > jumpHeight(0.1) && need <= jumpHeight(1) + 1e-9, String(need));
+    assert.ok(riseForLedge(LEDGE_MAX, 0.1) <= jumpHeight(1) + 1e-9, 'the highest ledge is within the strongest jump');
+    // the real body: at the take-off the push goes up to `need`, later it does not
+    const ch = new VoxelCharacter(new THREE.Scene());
+    ch.setIdlePose();
+    for (let i = 0; i < 30; i++) ch.update(DT, new CollisionWorld(), true);
+    assert.ok(ch.jump(0.1));
+    const v0 = ch.verticalVelocity;
+    assert.ok(ch.jumpAtLeast(need));
+    assert.ok(ch.verticalVelocity > v0);
+    assert.ok(Math.abs((ch.verticalVelocity ** 2) / (2 * 20) - need) < 0.02, 'the apex is where it was asked');
+    const v1 = ch.verticalVelocity;
+    assert.equal(ch.jumpAtLeast(0.1), false, 'never weaker than it already is');
+    assert.equal(ch.verticalVelocity, v1);
+});
+
+test('a ledge that is a bit higher than two blocks (a slanted top): ledgePush says its height; the push goes with the jump', () => {
+    // (the column in front is 2 blocks, the next one 2.5 — a slope: the ray finds the first cell whose floor is within reach)
+    const T = terrain((ix, iz) => (iz <= -2 ? 2 : 0));
+    const p = ledgePush(T, 0, -1.5 + R, floorTop, 0, R);
+    assert.ok(p && Math.abs(p.h - 2) < 1e-9 && p.z < 0, JSON.stringify(p));
+});
