@@ -116,6 +116,8 @@ test('a player walked through every stage, step by step, to the end', () => {
         if (/«Люмос»/.test(txt)) g.wandMagic.light = {};
         if (/«Нокс»/.test(txt)) g.wandMagic.light = null;
         if (/«Раскрой свои секреты»/.test(txt)) T.onCast('Reveal');
+        if (/Притяните его в дочернюю руку/.test(txt)) { const L = loose.get(T.ctx.scroll); loose.delete(T.ctx.scroll); held.left = L; }
+        if (/скажите: «Инферно»/.test(txt)) { run(40); T.onCast('Inferno'); held.left = null; g.knowsSpell = (n) => n === 'Waterball'; }
         if (/Скрестите руки/.test(txt)) { assert.ok(T.allowed.has('Protection'), 'the crossed arms\' shield is let through'); g.combat.shield = { type: 1 }; }
         if (/Снимите щит/.test(txt)) g.combat.shield = null;
         if (/светящегося круга/.test(txt)) { assert.equal(T.frozen, false, 'free to walk'); g.character.group.position.set(T.ctx.goal.x, 11, T.ctx.goal.z); }

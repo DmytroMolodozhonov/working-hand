@@ -224,7 +224,12 @@ export class Tutorial {
                 { ...say('Слева вверху — красная полоса: это ваша жизнь, здоровье. Если она кончится, вы погибнете. Еда и зелья возвращают здоровье.'), ...wait(8), show: 'hp-container' },
                 { ...say('Слева внизу — карта местности. Она показывает, где вы и что вокруг. Здесь, в обучении, мы её спрячем, чтобы она не мешала.'), ...wait(6), show: 'minimap-container', map: true },
                 { ...say('Справа вверху — ваши монеты. Их находят в пещерах и сундуках. На них покупают вещи и свитки у торговцев.'), ...wait(8), show: 'coin-counter' },
-                ask('Ещё одно полезное заклинание. Перед вами свиток. Направьте на него палочку и скажите: «Раскрой свои секреты». Вы узнаете, что это за вещь.', () => T.events.includes('Reveal'), { allow: ['Reveal'], setup: () => { if (!T._held('wand')) T._wandToPocket(); T.ctx.scroll = T._give({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Fireworks' }, T._frontOfView(5))?.item?.uid; }, hint: 'Палочка смотрит на свиток. Скажите: «Раскрой свои секреты».' }),
+                ask('Ещё одно полезное заклинание. Перед вами свиток. Направьте на него палочку и скажите: «Раскрой свои секреты». Вы узнаете, что это за вещь.', () => T.events.includes('Reveal'), { allow: ['Reveal'], setup: () => { if (!T._held('wand')) T._wandToPocket(); T.ctx.scroll = T._give({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Waterball' }, T._frontOfView(5))?.item?.uid; }, beacon: 'scroll', hint: 'Палочка смотрит на свиток. Скажите: «Раскрой свои секреты».' }),
+                // (the author: a scroll is learned by burning it — «Инферно» at it, and its spell is yours)
+                ask('Это свиток с заклинанием. Притяните его в дочернюю руку: «Акцио».', () => T._heldUid(T.ctx.scroll), { allow: ['Accio'], beacon: 'scroll', hint: 'Рука с палочкой — на свиток, дочерняя ладонь раскрыта. «Акцио».', fail: () => T._lost(T.ctx.scroll) }),
+                { ...say('Чтобы выучить заклинание со свитка, свиток нужно сжечь. Его огонь отдаёт силу вам — и заклинание остаётся с вами навсегда.'), ...wait(2) },
+                ask('Держите свиток в дочерней руке, направьте на него палочку и скажите: «Инферно».', () => T._scrollLearned(), { allow: ['Inferno'], tick: () => { if (T._heldUid(T.ctx.scroll)) T.ctx.scrollWasHeld = true; }, hint: 'Свиток в руке, кончик палочки — на него. Скажите: «Ин-фер-но».', fail: () => (!T._heldUid(T.ctx.scroll) && T._isLoose(T.ctx.scroll) ? 'Свиток выпал из руки' : null), redo: 1 }),
+                { ...say('Свиток сгорел — теперь вы знаете «Водяной шар». Так учатся все новые заклинания: найти свиток, сжечь его «Инферно».'), ...wait(2) },
                 { ...say('Так можно узнать, что за вещь перед вами, прежде чем её взять. Остальное о мире можно прочитать в главном меню, во вкладке «Механика игры».'), ...wait(9) },
             ], onFail: () => T._clearGiven() },
             { title: STAGE_TITLES[6], steps: [
@@ -388,6 +393,12 @@ export class Tutorial {
         for (const L of it?.loose?.values?.() || []) if (paid(L.item)) { this.ctx.bought = L.item.uid; return true; }
         for (const side of ['left', 'right']) if (paid(it?.held?.[side]?.item)) { this.ctx.bought = it.held[side].item.uid; return true; }
         return false;
+    }
+    /** The scroll burnt and its spell known (Items.burnHeldScroll → applyScroll). */
+    _scrollLearned() {
+        const g = this.game, u = this.ctx.scroll;
+        if (g.knowsSpell?.('Waterball')) return true;
+        return !!u && this.ctx.scrollWasHeld && !this._heldUid(u) && !this._isLoose(u) && !this._inPocket(u) && this.events.includes('Inferno');
     }
     _boughtTaken() { const u = this.ctx.bought; return !!u && (this._heldUid(u) || this._inPocket(u) || !this._isLoose(u)); }
 
