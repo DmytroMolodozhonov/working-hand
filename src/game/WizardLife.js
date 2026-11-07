@@ -576,7 +576,7 @@ export class WizardLife {
                 if (v.practice) f |= v.practice.bits;
                 if (v.job === 'brew' && v.mode === 'work') f |= FX.BREW;
                 if (v.job === 'teach' && v.sparkT > 0) { v.sparkT -= dt; f |= FX.SPARK; }
-                if (v.prep) f |= FX.CAST; // (saying a spell: the wand glows — seen by all, before the charge flies)
+                if (v.prep || v.care?.wand) f |= FX.CAST; // (saying a spell: the wand glows — seen by all, before the charge flies)
                 if (v.noWand) f = FX.NOWAND; // (no wand in the hand: no Lumos, no magic of the hand — seen by all)
                 f |= this._smoke(v, dt);
                 v.fx = (v.fx & (FX.SHIELD | FX.DOME | FX.BLINK)) | f;

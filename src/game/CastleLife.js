@@ -49,6 +49,7 @@ import { RelationsLife } from './RelationsLife.js';
 import { RebellionLife } from './RebellionLife.js';
 import { AudacityLife } from './AudacityLife.js';
 import { HomeDefence } from './HomeDefenceLife.js';
+import { WoundCare } from './WoundCare.js';
 import { MOB as MOB_RULES } from './Audacity.js';
 import { SocialLife } from './SocialLife.js';
 import { CourtLife } from './CourtLife.js';
@@ -329,6 +330,7 @@ export class CastleLife {
         this.alog = new ActionLog(this, gameJournal); // the full journal of what the people in dealings do and why (ActionLog.js)
         this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
         this.mfear = new MonsterFearLife(game); // the hero in the monster form: who runs, who fights, who scatters the darkness (MonsterFear.js)
+        this.wound = new WoundCare(this); // a bleeding person holds the wound; the middle wizards «Rescue»; the folk help the defenceless (WoundCare.js)
         this.home = new HomeDefence(this); // afraid → own house → barred in → armed, on guard by the door, fights whoever comes in (HomeDefenceLife.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
@@ -1535,6 +1537,7 @@ export class CastleLife {
         }
         // in deep water: swims (never walks the bottom) — to the bank, and out
         if (this._swim(v, dt)) return;
+        if (v.care && this.wound.step(v, dt)) return; // (a helper of the wounded, or a wizard stopping his own blood: WoundCare.js)
         // a knight on duty: a creature with a «Империус» mind walks about his castle — told to go, shooed, beaten (ImperiusGuards.js)
         if (v.impDuty && g.imperius?.guards?.guardStep(v, dt)) return;
         // riding on a cart: on its seat (the cart's people get down when trouble comes — Travelers.js)
@@ -3996,6 +3999,7 @@ export class CastleLife {
             this.hamlets.update(dt);
             this.fright.update(dt);
             this.home.update(dt);
+            this.wound.update(dt);
             this.mfear.update(dt);
             this.rebuild.update(dt);
             this.night?.update(dt);
@@ -4092,7 +4096,7 @@ export class CastleLife {
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
                     const choreMoving = v.mode === 'chore' && v.speed > 0.4; // (a villager at a chore that is on the move — pushed, drawn off: he walks, his things are not shown: no bench stuck to the feet)
-                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { lost: v.bewilderT > 0, mode: choreMoving ? 'walk' : (v.bewilderT > 0 ? 'idle' : v.mode), speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: v.bewilderT > 0 ? 'confused' : gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
+                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { lost: v.bewilderT > 0, mode: choreMoving ? 'walk' : (v.bewilderT > 0 ? 'idle' : v.mode), speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: v.bewilderT > 0 ? 'confused' : gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, wound: v.woundHold ? v.woundSide || 'r' : null, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);
@@ -4175,7 +4179,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0) | (v.steward && v.arena?.kind === 'steward' ? 8 : 0), choreCode(shownChore(v), v.choreSide)]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0) | (v.steward && v.arena?.kind === 'steward' ? 8 : 0) | (v.woundHold ? (v.woundSide === 'l' ? 48 : 16) : 0), choreCode(shownChore(v), v.choreSide)]);
         g.sync.villagers?.(list);
     }
 
@@ -4216,6 +4220,7 @@ export class CastleLife {
             if ((disarmed & 1) && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
             if ((disarmed & 2) && !v.shieldGone) { v.shieldGone = true; v.model?.dropShield?.(); }
             if ((disarmed & 4) && !v.toolGone) { v.toolGone = true; v.model?.setHeldTool?.('none'); }
+            v.woundHold = !!(disarmed & 16); v.woundSide = (disarmed & 32) ? 'l' : 'r'; // (a hand at the wound — WoundCare.js)
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead' && !v.dead) { v.dead = true; this.game.creatureImpact?.ragDeath?.(v); } // (a guest: the body falls as a rag doll here too)
         }

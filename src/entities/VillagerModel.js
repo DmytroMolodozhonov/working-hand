@@ -1597,6 +1597,18 @@ export class VillagerModel {
         }
     }
 
+    /** A hand at the wound («Sectura» and the rest: WoundCare.js): the free hand at the belly, a stoop, the head bowed; the sword hand and the shield arm stay as they are. */
+    _clutch(T, side, t) {
+        const sword = this.toolKind && this.toolKind !== 'none' && !this._sheath;
+        let s = side === 'l' ? 'l' : 'r';
+        if (sword && s === 'r') s = 'l';
+        if (this.shield && s === 'l') s = 'r';
+        const pulse = Math.sin(t * 3.1) * 0.04; // (a breath, a wince)
+        if (s === 'r') { T.aRX = 1.0 + pulse; T.aRZ = -0.62; } else { T.aLX = 1.0 + pulse; T.aLZ = 0.62; }
+        T.wrist = -1.5;
+        T.hx += 0.17; T.headX += 0.24;
+    }
+
     /** A gesture begins — with a free hand: the sword hand and the shield arm do not wave. */
     _startGest(g) {
         const sword = this.toolKind && this.toolKind !== 'none' && !this._sheath;
@@ -1972,6 +1984,7 @@ export class VillagerModel {
         // ---- what he feels shows in the bearing, and in the hands when he talks (Emotions.js, Gestures.js)
         this._brow = 0; this._blink = 0; this._mouthAcc = 0; // (set again by _feel: walking, fighting or working leaves the face as it was)
         if (!own && !loco && (mode === 'idle' || mode === 'talk')) this._feel(dt, state, mode, T);
+        if (state.wound && !own && mode !== 'dead' && mode !== 'flail') this._clutch(T, state.wound, t); // (a bleeding wound: the hand holds it)
         this._faceStep(dt, state, mode, t);
         if (this.chore && mode !== 'chore') carryBody(this, this.chore, T); // (a bucket, a sack carried home)
         if (this._lookYaw != null && mode !== 'bow' && mode !== 'flail' && mode !== 'chore') T.headY = this._lookYaw;

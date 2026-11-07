@@ -233,6 +233,7 @@ import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
 import { Slash } from './Slash.js';
+import { Scars } from '../fx/Scars.js';
 import { DarkFog } from './DarkFog.js';
 import { Vigor } from './Vigor.js';
 import { Dread } from './Dread.js';
@@ -709,6 +710,7 @@ export class Game {
         this.skin = new Skin(this); // «Зелье крепкой кожи»: простое лезвие больше не ранит — навсегда, один раз (Skin.js)
         this.dread = new Dread(this); // «Зелье страха»: слабые чаще бегут, чем нападают — навсегда, один раз (Dread.js)
         this.vigor = new Vigor(this); // «Зелье крепкого здоровья»: +10 к максимуму здоровья навсегда, один раз (Vigor.js)
+        this.scars = new Scars(this); // the blade's marks on creatures, drops from them (Scars.js)
         this.slash = new Slash(this); // «Sectura»: the cutting curse of black magic — the wand arms, a swing lets the blade go (Slash.js)
         this.groundprud = new Groundprud(this); // «Groundprud»: the ground rises into a wall (Groundprud.js)
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
@@ -3973,6 +3975,7 @@ export class Game {
         for (const m of this.buildingFx?.sampleModels?.() || []) zoo.add(m); // (a mill's sails, a church bell)
         this.whirl?.sampleMeshes();
         if (this.darkFog) for (const m of this.darkFog.sampleMeshes()) zoo.add(m); // («Caligo»: the dome's and the smoke's shaders)
+        if (this.scars) zoo.add(this.scars.sampleMesh()); // (the scar's lit ribbon material)
         if (this.slash) zoo.add(this.slash.sampleMesh()); // («Sectura»: the flying crescent's material)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         for (const c of HORSE_COLORS) zoo.add(animalModel('horse', c)); // (every horse coat's hair picture made now)
@@ -4371,6 +4374,7 @@ export class Game {
         this.gear.update(dt);
         this.bleeding.update(dt);
         this.slash?.update(dt);
+        this.scars?.update(dt);
         this.darkFog?.update(dt);
         this.whirl?.update(dt);
         const duelOnly = this.duelOnly; // (the duel-only start: no animals, no roads' people, no zombies, no bosses — only the arena)

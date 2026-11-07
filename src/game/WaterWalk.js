@@ -67,7 +67,8 @@ export class WaterWalk {
         const g = this.game, ch = g.character;
         const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
         if (this.on) return hint('🌊 «Aquambula» уже держит вас на воде. «Стоп» — отпустить');
-        if (!castingHand(g)) return hint('🌊 Поднимите палочку (руку) и скажите «Aquambula»');
+        const aim = castingHand(g);
+        if (!aim || !ch.isArmRaised(aim.side)) return hint('🌊 Поднимите руку с палочкой вверх и скажите «Aquambula»'); // (the author: the arm must be up — a wand in a hanging hand is not enough)
         if (g.flight?.active || ch.flying) return hint('🌊 Вы летите — по воде идти незачем');
         if (g.boards?.mounted) return hint('🌊 Вы на доске — сойдите с неё, чтобы идти по воде');
         if (g.imperius?.active || g.dragonForm?.active || g.monster?.active) return hint('🌊 В этом теле по воде не пойти');

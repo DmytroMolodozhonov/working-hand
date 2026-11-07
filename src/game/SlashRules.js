@@ -4,7 +4,7 @@
  *
  * How it plays: say the word with the wand (the hand) raised and the hero's wand ARMS (a crimson edge of light along it, 4 s); the next real SWING of the wand (the wand's hand moving
  * fast SIDEWAYS — a thrust forward is no slash) lets go an invisible blade: a sheet of air in the plane of the wand's pointing and the swing's direction, 5 m wide, flying out
- * along the pointing up to RANGE (10 m; stopped by the first wall or a house's dome). The slash is as turned as the swing: a level swing cuts a person across at the height of the
+ * along the pointing up to RANGE (15 m; stopped by the first wall or a house's dome). The slash is as turned as the swing: a level swing cuts a person across at the height of the
  * wand, a swing from the top down cuts along. Whoever the sheet crosses is cut like by a sword (Dismember.js — the same bones, the same rule «the edge crosses the bone»): a limb or
  * the head comes off; where it hits no bone (the body, a shielded place) — a deep cut: 10–15 HP (armour takes its share) and a bleeding wound (−1 HP/s for 12 s; «Rescue»
  * stops it). Steel on the limb (a player's plate, a knight's armour) stops the severing — it is a wound then.
@@ -15,14 +15,14 @@ import { Vector3 } from 'three';
 
 export const SLASH = {
     COST: 50,
-    RANGE: 10, // m, the author
+    RANGE: 15, // m (the author 07.11: «на 5 метров дальше можно быть от существа»: 10 → 15)
     DMG_MIN: 10, DMG_MAX: 15,
     ARM_WINDOW: 4, // s the wand stays armed
     GRACE: 0.18, // s after the word before a swing counts (the raising of the arm is no swing)
     SWING_SPEED: 9, // m/s — the wand hand's speed (the hero is ~3.5 m: a brisk swing of the arm)
     SIDE_SHARE: 0.55, // the share of the swing that must be sideways of the pointing (else it is a thrust)
     HALF_W: 2.6, // m: the sheet reaches this far each way of the swing
-    THICK: 0.45, // m: its thickness (a body within this of the plane is cut)
+    THICK: 1.0, // m: its thickness (the author 07.11: the wand may point a little high — «главное пройтись по существу»; the bones are still cut only where the blade really passes)
     STEP: 2, // m of the flight per cut test (Dismember.sweepCut takes ≤ 8 sub-steps of 0.25)
     VIRT_SPEED: 40, // m/s: the virtual blade's speed (over the cut speed of any limb: the spell is sharp — «Sectura» cuts what a sword would)
     BLEED_RATE: 1, // HP/s of the wound's bleeding

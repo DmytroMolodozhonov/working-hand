@@ -141,12 +141,12 @@ export class Slash {
         // who is crossed (nearest first)
         const duel = g.duel;
         if (!duel) return;
-        const bodies = duel._bodies(mine ? duel.me : by, 14, true);
+        const bodies = duel._bodies(mine ? duel.me : by, SLASH.RANGE + 8, true);
         const hits = [];
         for (const b of bodies) {
             let tf = -1;
             for (let k = 0; k <= 4 && tf < 0; k++) { _p.lerpVectors(b.a, b.b, k / 4); tf = sheetHit(o, f, s, range, _p, b.r); }
-            if (tf >= 0) hits.push({ kind: b.kind, id: b.id, tf, r: b.r, at: _q.lerpVectors(b.a, b.b, 0.5).clone() });
+            if (tf >= 0) hits.push({ kind: b.kind, id: b.id, tf, r: b.r, at: _q.lerpVectors(b.a, b.b, 0.5).clone(), a: b.a.clone(), b: b.b.clone() });
         }
         hits.sort((x, y) => x.tf - y.tf);
         const sweeps = bladeSweeps(o, f, s, range);
@@ -157,10 +157,22 @@ export class Slash {
             const T = SLASH_TARGETS[h.kind];
             if (!T || T.does === 'none') { if (T && mine) this._none(h.kind, T); continue; }
             g.fx.blood?.(h.at, 8);
+            this._scar(h, o, f, s); // (the mark of the blade along its line — every computer draws the same)
             if (h.kind === 'p') { if (h.id === g.localId) this._hitMe(by, caster, f, sweeps, h); continue; } // (a player: his own computer)
             if (!(g.authority || !g.sync)) continue; // (a creature: the host decides)
             this._hitCreature(h, T, by, sweeps, mine);
         }
+    }
+
+    /** The scar the blade leaves where it crossed one creature (Scars.js): along the cut line, on the real skin. */
+    _scar(h, o, f, s) {
+        const g = this.game;
+        if (!g.scars || h.kind === 'p') return;
+        const cam = g.camera?.position;
+        if (cam && cam.distanceToSquared(h.at) > 90 * 90) return;
+        const t = this._creatureOf(h.kind, h.id);
+        if (!t || t.dead || t.isDead) return;
+        g.scars.mark(t, { o, f, s }, { a: h.a, b: h.b, r: h.r });
     }
 
     /** «Does not act» — told to the caster once per kind. */

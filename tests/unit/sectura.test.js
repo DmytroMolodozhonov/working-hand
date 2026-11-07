@@ -17,7 +17,7 @@ const FWD = V(0, 0, 1);
 
 test('the author\'s numbers: 50 mana, 10 m, 10…15 HP (both ends reached, nothing outside), black magic', () => {
     assert.equal(SPELL_COST.Sectura, 50);
-    assert.equal(SLASH.RANGE, 10);
+    assert.equal(SLASH.RANGE, 15); // (07.11: +5 m)
     const seen = new Set();
     for (let i = 0; i < 4000; i++) { const d = rollDamage(); assert.ok(Number.isInteger(d) && d >= 10 && d <= 15, String(d)); seen.add(d); }
     assert.deepEqual([...seen].sort((a, b) => a - b), [10, 11, 12, 13, 14, 15]);
@@ -51,15 +51,17 @@ test('the swing: only a brisk SIDEWAYS sweep of the wand counts — a thrust for
     }
 });
 
-test('the sheet: 10 m of reach, 5 m wide along the swing, thin across it', () => {
+test('the sheet: 15 m of reach (07.11), 5 m wide along the swing, thin across it (with a little slack: the wand may point a bit high)', () => {
     const o = V(0, 3, 0), s = V(1, 0, 0);
-    assert.ok(sheetHit(o, FWD, s, 10, V(0, 3, 5), 0.5) >= 0, 'in front');
-    assert.ok(sheetHit(o, FWD, s, 10, V(2, 3, 9), 0.5) >= 0, 'to the side, in the width');
-    assert.equal(sheetHit(o, FWD, s, 10, V(0, 3, 11.5), 0.5), -1, 'beyond 10 m');
-    assert.equal(sheetHit(o, FWD, s, 10, V(4, 3, 5), 0.5), -1, 'beyond the width');
-    assert.equal(sheetHit(o, FWD, s, 10, V(0, 4.5, 5), 0.5), -1, 'off the plane (a level swing misses a head 1.5 m higher)');
-    assert.ok(sheetHit(o, FWD, s, 10, V(0, 3.4, 5), 0.5) >= 0, 'near the plane');
-    assert.equal(sheetHit(o, FWD, s, 10, V(0, 3, -4), 0.5), -1, 'behind');
+    assert.ok(sheetHit(o, FWD, s, 15, V(0, 3, 5), 0.5) >= 0, 'in front');
+    assert.ok(sheetHit(o, FWD, s, 15, V(2, 3, 9), 0.5) >= 0, 'to the side, in the width');
+    assert.ok(sheetHit(o, FWD, s, 15, V(0, 3, 14), 0.5) >= 0, 'at 14 m: the author 07.11 — five metres farther');
+    assert.equal(sheetHit(o, FWD, s, 15, V(0, 3, 16.5), 0.5), -1, 'beyond 15 m');
+    assert.equal(sheetHit(o, FWD, s, 15, V(4, 3, 5), 0.5), -1, 'beyond the width');
+    assert.ok(sheetHit(o, FWD, s, 15, V(0, 4.2, 5), 0.5) >= 0, 'a body 1.2 m above the plane is still taken (the wand may point a bit high)');
+    assert.equal(sheetHit(o, FWD, s, 15, V(0, 5.2, 5), 0.5), -1, 'off the plane (a level swing misses a head 2.2 m higher)');
+    assert.ok(sheetHit(o, FWD, s, 15, V(0, 3.4, 5), 0.5) >= 0, 'near the plane');
+    assert.equal(sheetHit(o, FWD, s, 15, V(0, 3, -4), 0.5), -1, 'behind');
 });
 
 test('every kind of body the spells look for has a decision with its reason', () => {
