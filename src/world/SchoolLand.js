@@ -262,12 +262,13 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
         for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
             const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy);
             if (d > r + 0.35) continue;
-            const a = Math.atan2(dy, dx), spoke = Math.abs(Math.sin(a * 4)) < 0.22 && d > 0.8;
-            const t = d > r - 0.7 ? TRIM : Math.abs(d - r * 0.45) < 0.45 || spoke ? B.GOLD : d < 0.8 ? B.AIR : ((Math.round(a * 4 / Math.PI) + 8) % 2 ? B.ARCANE_LAMP_VIOLET : B.ARCANE_LAMP);
+            const a = Math.atan2(dy, dx), spoke = Math.abs(Math.sin(a * 4)) < 0.1 + 0.35 / Math.max(1, d) && d > r * 0.4; // (thin gilt spokes from the inner ring out)
+            const petal = (Math.floor((a + Math.PI) / (Math.PI / 4)) + 8) % 2;
+            const t = d > r - 0.8 ? TRIM : Math.abs(d - r * 0.4) < 0.4 || spoke ? B.GOLD : d < r * 0.4 - 0.4 ? (d < 0.9 ? B.ARCANE_LAMP : B.ARCANE_LAMP_VIOLET) : petal ? B.ARCANE_LAMP_VIOLET : B.CARPET_BLUE; // (the heart white light, a violet ring; petals violet and deep blue glass)
             box(x, x, HZ0, HZ0 + 1, y, y, t);
         }
     };
-    rose(0, F + 15, 4.4); rose(-10, F + 13, 2.6); rose(10, F + 13, 2.6);
+    rose(0, F + 13.5, 6.2); rose(-11, F + 12, 3.6); rose(11, F + 12, 3.6);
     // buttresses with pinnacles along its long sides
     for (let z = HZ0 + 4; z <= HZ1 - 4; z += 7) for (const s of [-1, 1]) {
         box(s * (HX + 1), s * (HX + 2), z, z + 1, F + 1, F + 16, STONE);
