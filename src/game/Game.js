@@ -4163,6 +4163,12 @@ export class Game {
         B.begin('· звуки (дождаться)');
         try { await this.sound?.warmAll?.(progress); } catch (e) { console.warn('[Game] sounds warm-up', e); }
         B.end('· звуки (дождаться)');
+        if (this.school) { // («Школа»: its music made before the opening — the grand theme plays from the very first shot; at most 40 s)
+            B.begin('· музыка школы');
+            const md = this.sound?.musicDirector;
+            if (md?._make) await Promise.race([Promise.all(['school1', 'school2'].map((id) => new Promise((r) => md._make(id, r)))), new Promise((r) => setTimeout(r, 40000))]);
+            B.end('· музыка школы');
+        }
         B.begin('· иконки вещей');
         // the slots' pictures of the things met most (and of what the hero carries now): made on the loading screen
         try { await this.itemIcons?.warmAsync(this._iconSamples()); } catch (e) { console.warn('[Game] icons warm-up', e); }
