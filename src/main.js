@@ -412,6 +412,7 @@ function readConfig() {
 }
 
 // ------------------------------------------------------------------ maps
+let tutContinue = true; // («Обучение»: go on from where the player stopped — the tick under the cards, on by default)
 async function updateGameMapList(forceRefresh = false) {
     const gameTab = $('tab-game');
     let mapListDiv = $('game-map-list');
@@ -473,6 +474,18 @@ async function updateGameMapList(forceRefresh = false) {
     hint.className = 'mode-hint';
     hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
     mapListDiv.appendChild(hint);
+    // «Обучение»: go on from the stage left off (the author 07.11: a tick, on by default; off — from the start)
+    if (selectedMode === 'tutorial' && !pickingMap) {
+        let left = null;
+        try { left = JSON.parse(localStorage.getItem('zns-tutorial-at') || 'null'); } catch { left = null; }
+        if (left && left.stage > 0) {
+            const lab = document.createElement('label');
+            lab.className = 'world-opt tut-continue';
+            lab.innerHTML = `<input type="checkbox" id="tut-continue"${tutContinue ? ' checked' : ''}> Продолжить с того места, где остановились <span class="mp-hint">— этап ${left.stage + 1}: «${String(left.title || '').replace(/[<>&"]/g, '')}». Без галочки — сначала</span>`;
+            lab.querySelector('input').onchange = (e) => { tutContinue = e.target.checked; };
+            mapListDiv.appendChild(lab);
+        }
+    }
 
     // the maps themselves: only when «Карты» is chosen
     if (pickingMap) {
@@ -1383,7 +1396,11 @@ $('start-btn').addEventListener('click', () => {
         return;
     }
     const cfg = readConfig();
-    if (cfg.mode === 'tutorial') { startGame({ ...cfg, mode: 'freeworld', tutorial: true, map: null, worldName: 'Обучение' }); return; } // (a small bounded map, never saved — Tutorial.js)
+    if (cfg.mode === 'tutorial') { // (a small bounded map, never saved — Tutorial.js; the stage left off — if the tick is on)
+        let from = 0;
+        try { const at = JSON.parse(localStorage.getItem('zns-tutorial-at') || 'null'); if (tutContinue && at?.stage > 0) from = at.stage | 0; } catch { from = 0; }
+        startGame({ ...cfg, mode: 'freeworld', tutorial: true, tutorialFrom: from, map: null, worldName: 'Обучение' }); return;
+    } // (a small bounded map, never saved — Tutorial.js)
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;

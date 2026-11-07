@@ -64,7 +64,7 @@ export function splitSay(text, max = TUT.SAY_MAX) {
 }
 
 export class Tutorial {
-    constructor(game) {
+    constructor(game, { from = 0 } = {}) {
         this.game = game;
         this.stage = 0; this.step = 0;
         this.t = 0; // s in this step
@@ -79,7 +79,7 @@ export class Tutorial {
         this._quiet();
         this.stages = this._makeStages();
         this._ui();
-        this._start(0);
+        this._start(Math.max(0, Math.min(this.stages.length - 1, from | 0))); // (from: the stage left off — the menu's tick «Продолжить»)
     }
 
     /** Nothing but the lesson on the meadow: no herds, wild plants, birds, book-birds or bosses wander in (the author: «максимально убираем всё лишнее»). */
@@ -443,6 +443,7 @@ export class Tutorial {
     _cur() { return this.stages[this.stage]?.steps[this.step] || null; }
     _start(stage) {
         this.stage = stage; this.step = -1;
+        try { localStorage.setItem('zns-tutorial-at', JSON.stringify({ stage, title: this.stages[stage]?.title || '' })); } catch { /* private mode */ } // (where to go on next time)
         this.ctx = { hand: this.ctx?.hand };
         this.spawned.length = 0;
         this.stages[stage]?.onStart?.();
@@ -481,7 +482,7 @@ export class Tutorial {
     }
     _finish() {
         this.done = true; this.frozen = false; this.allowed = new Set(); this.point = null;
-        try { localStorage.setItem('zns-tutorial-done', '1'); } catch { /* private mode */ }
+        try { localStorage.setItem('zns-tutorial-done', '1'); localStorage.removeItem('zns-tutorial-at'); } catch { /* private mode */ } // (done: next time from the start)
         this._render();
     }
 
