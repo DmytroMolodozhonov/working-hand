@@ -181,5 +181,23 @@ export function drawPocketHints(ctx, W, H, hints, d, s = 1) {
             }
         }
     }
+    if (d.point && I[d.point] && I[d.point].a * fade > 0.02) pointArrow(ctx, X(I[d.point]), Y(I[d.point]), Tp, s, fade); // («Обучение»: «вот сюда» — Tutorial.point)
+    ctx.restore();
+}
+
+/** A red arrow, bobbing, pointing down at (x, y) from above — «вот сюда» (the tutorial shows where the wand / the pocket is). */
+export function pointArrow(ctx, x, y, Tp, s = 1, a = 1) {
+    const t = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+    const L = Math.max(26 * s, Tp * 0.42), hw = Math.max(9 * s, Tp * 0.11), sw = hw * 0.42;
+    const gap = Math.max(10 * s, Tp * 0.13) + Math.sin(t * 6) * Math.max(4 * s, Tp * 0.04);
+    const tipY = y - gap, headY = tipY - hw * 1.3, topY = tipY - L;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.beginPath();
+    ctx.moveTo(x, tipY); ctx.lineTo(x - hw, headY); ctx.lineTo(x - sw, headY); ctx.lineTo(x - sw, topY);
+    ctx.lineTo(x + sw, topY); ctx.lineTo(x + sw, headY); ctx.lineTo(x + hw, headY); ctx.closePath();
+    ctx.fillStyle = '#ff2a2a'; ctx.strokeStyle = 'rgba(30,0,0,0.9)'; ctx.lineWidth = Math.max(2 * s, Tp * 0.016);
+    ctx.shadowColor = 'rgba(255,40,40,0.8)'; ctx.shadowBlur = 8 * s;
+    ctx.fill(); ctx.shadowBlur = 0; ctx.stroke();
     ctx.restore();
 }

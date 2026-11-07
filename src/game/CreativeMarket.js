@@ -16,19 +16,20 @@ export const MARKET_SITE_ID = 'cvmarket';
 // the counter and the merchant's place, 7 × 5, at 7 m (the author: the stall was small and squeezed — a 1 m
 // counter at the knee, the canopy under the hero's eyes).
 const AT = { x: 0, z: 13.5 }; // (south of the start, away from the pedestals in the north)
-const C = { x0: -2, x1: 2, z0: 13, z1: 14 }; // (5 long, 2 deep, like a city counter)
-const W = C.x1 - C.x0 + 1, D = C.z1 - C.z0 + 1, H = 2.0; // the counter: length, depth, height
+const H = 2.0; // the counter's height (5 long, 2 deep, like a city counter: marketDef)
 const POST_H = 7, POST_W = 0.4, ROOF_D = 5; // the posts' height and thickness, the canopy's depth (from the counter's front back)
 
 /** The site's def (CastleLife) for a stall whose counter stands at ground level `F`. */
-export function marketDef(F) {
+export function marketDef(F, { at = AT, id = MARKET_SITE_ID } = {}) {
+    // (another place — «Обучение» puts the same stall on its meadow: the counter moved with `at`, the same sizes)
+    const C = { x0: at.x - 2, x1: at.x + 2, z0: at.z - 0.5, z1: at.z + 0.5 };
     const stall = {
-        front: { x: AT.x, y: F, z: C.z1 + 3 }, back: { x: AT.x, y: F, z: C.z0 - 1.5 },
+        front: { x: at.x, y: F, z: C.z1 + 3 }, back: { x: at.x, y: F, z: C.z0 - 1.5 },
         counter: { ...C, top: F + H },
         yaw: Math.PI, // (the merchant behind the counter looks to +z, at the buyer: yaw 0 looks to -z)
     };
     return {
-        id: MARKET_SITE_ID, kind: 'stall', name: 'Рынок', x: AT.x, z: AT.z, F, zone: 12, gx: 0, gz: 0,
+        id, kind: 'stall', name: 'Рынок', x: at.x, z: at.z, F, zone: 12, gx: 0, gz: 0,
         knights: 0, king: '', population: 1, color: 0xb03a2e,
         houses: [], stalls: [stall], fields: [], posts: [], beds: [], chests: [], pens: [], graves: [], graveyards: [], rooms: [],
         nodes: [{ id: 0, x: stall.back.x, y: F, z: stall.back.z, tag: 'stall' }], edges: [],
@@ -41,6 +42,7 @@ export const isStallSite = (def) => !!def && def.kind === 'stall';
 /** The stall's wood: a counter, four posts and a striped canopy; solid for bodies and hands. */
 export function buildMarketStall(game, def) {
     const s = def.stalls[0], c = s.counter, F = def.F;
+    const AT = { x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2 }, W = c.x1 - c.x0 + 1, D = c.z1 - c.z0 + 1;
     const X0 = c.x0 - 0.5, X1 = c.x1 + 0.5, Z0 = c.z0 - 0.5, Z1 = c.z1 + 0.5;
     // the canopy: from a block beyond the counter's ends, from its front back over the merchant (as the city's)
     const RX0 = X0 - 1, RX1 = X1 + 1, RZ1 = Z1, RZ0 = Z1 - ROOF_D;

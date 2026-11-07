@@ -363,7 +363,7 @@ updateSmoothness(camSmoothInput.value);
 updateSensitivity(camSensInput.value);
 
 // «Подсказки карманов в окне камеры» (PocketHints.js) и кисти рук — всегда включены (решение автора, 05.11: настройки убраны)
-poseService.hintSource = () => (game?.active && game.inventory ? game.inventory.pocketHintInfo(true) : null);
+poseService.hintSource = () => { if (!(game?.active && game.inventory)) return null; const i = game.inventory.pocketHintInfo(true); if (i) i.point = game.tutorial?.point || null; return i; }; // («Обучение»: a red arrow at the wand / the pocket — Tutorial.point)
 
 // The minimap's size (settings → «Размер мини-карты»)
 const minimapSize = $('minimap-size');

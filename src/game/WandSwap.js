@@ -11,7 +11,7 @@
 
 import * as THREE from 'three';
 
-export const SWAP_TIME = 3;
+export const SWAP_TIME = 1.5; // (the author 07.11: «с 3 секунд сократить до 1,5»)
 /** The wands count as touching this close (m, between their axes). The camera's hands shake and two hands never quite
  * meet in the game (the author: held together 3 s — nothing): a loose touch is enough. */
 export const TOUCH_DIST = 0.14;
@@ -84,7 +84,7 @@ export class WandSwap {
         const done = this.timer.update(dt, touching);
         const p = this.timer.progress;
         // (the player is told it has begun: hold them together)
-        if (touching && p > 0.05 && !this._told) { this._told = true; g.hud?.toast?.('🪄 Палочки касаются — держите их вместе 3 секунды', 1600); }
+        if (touching && p > 0.05 && !this._told) { this._told = true; g.hud?.toast?.('🪄 Палочки касаются — держите их вместе полторы секунды', 1600); }
         if (this.timer.t === 0) this._told = false;
         if (touching && p > 0) {
             // a glow growing at the touch (sparks more and more, the light is the spark's own: no new light in the scene)
