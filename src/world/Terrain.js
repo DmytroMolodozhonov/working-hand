@@ -808,7 +808,8 @@ export class TerrainData {
                 if (vamp) { const m = vamp.shapeAt(ix, iz, h); if (vamp.lifted) { h = m; wet = 0; sea = false; beach = false; fn.vampRock = true; } } // (Count Sracula's crag and ridge: dark bare rock)
                 fn.pyrSand = false;
                 if (pyr) { const m = pyr.shapeAt(ix, iz, h); if (pyr.lifted) { h = m; wet = 0; sea = false; beach = false; fn.pyrSand = true; } } // (the pyramids' desert: levelled sand)
-                if (school) { const m = school.shapeAt(ix, iz, h); if (school.lifted) { h = m; wet = 0; sea = false; beach = false; } } // (the school's terrace and road)
+                fn.schoolG = 0; fn.schoolRock = false;
+                if (school) { const m = school.shapeAt(ix, iz, h); fn.schoolG = school.green; if (school.lifted) { h = m; wet = school.wet; sea = false; beach = false; fn.schoolRock = school.rock; } } // (the school's hill, gorge (its river), headland and road; green meadows round it)
                 const land = idx.landAt(ix, iz);
                 fn.sea = sea; fn.beach = beach; fn.kind = kind; fn.bank = bank && !land;
                 fn.mesa = mesa; fn.emer = emer; fn.moon = moon; fn.fant = fant;
@@ -858,6 +859,7 @@ export class TerrainData {
                 fn.water = earthH.water; fn.sea = earthH.sea; fn.beach = earthH.beach; fn.bank = earthH.bank; fn.kind = earthH.kind;
                 fn.mesa = earthH.mesa; fn.emer = earthH.emer; fn.moon = earthH.moon; fn.fant = earthH.fant;
                 fn.pyrSand = !!earthH.pyrSand; // (the pyramids' desert: the sand under them)
+                fn.schoolG = earthH.schoolG || 0; fn.schoolRock = !!earthH.schoolRock; // (the school's meadows and cliffs)
                 return h;
             };
             fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
@@ -879,7 +881,7 @@ export class TerrainData {
                 }
                 const h = inner(ix, iz);
                 fn.water = inner.water; fn.sea = inner.sea; fn.beach = inner.beach; fn.bank = inner.bank; fn.kind = inner.kind;
-                fn.mesa = inner.mesa; fn.emer = inner.emer; fn.moon = inner.moon; fn.fant = inner.fant; fn.iceRock = inner.iceRock; fn.pyrSand = !!inner.pyrSand;
+                fn.mesa = inner.mesa; fn.emer = inner.emer; fn.moon = inner.moon; fn.fant = inner.fant; fn.iceRock = inner.iceRock; fn.pyrSand = !!inner.pyrSand; fn.schoolG = inner.schoolG || 0; fn.schoolRock = !!inner.schoolRock;
                 return h;
             };
             fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
@@ -1041,6 +1043,7 @@ export class TerrainData {
         const fx = _lush.fx, clim = _lush.clim, w = _lush.w, col3 = _lush.col3;
         const water = _lush.water || (_lush.water = new Int16Array(cols));
         const iceR = _lush.iceR || (_lush.iceR = new Uint8Array(cols)); // (the Ice Castle's mountain: bare rock)
+        const schoolG = this.school ? (_lush.schoolG || (_lush.schoolG = new Uint8Array(cols))) : null; // (the school's meadows: green, 0…255)
         let seaMask = null;
         for (let pz = 0; pz < P; pz++) {
             for (let px = 0; px < P; px++) {
@@ -1051,7 +1054,8 @@ export class TerrainData {
                 if (px === 0 || pz === 0 || px === P - 1 || pz === P - 1) continue;
                 const col = (pz - 1) * CHUNK + (px - 1);
                 water[col] = H.water;
-                iceR[col] = H.iceRock ? 1 : H.vampRock ? 2 : H.pyrSand ? 3 : 0;
+                iceR[col] = H.iceRock ? 1 : H.vampRock ? 2 : H.pyrSand ? 3 : H.schoolRock ? 4 : 0;
+                if (schoolG) schoolG[col] = Math.round((H.schoolG || 0) * 255);
                 flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0) | (H.bank ? 8 : 0);
                 kinds[col] = H.kind || 0;
                 fx.mesa = H.mesa || 0; fx.emer = H.emer || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
@@ -1059,6 +1063,11 @@ export class TerrainData {
                 const spawn = 1 - smoothstep(60, 260, Math.sqrt(x * x + z * z));
                 bio[col] = land.biomes(clim, w, spawn, fx);
                 land.colours(x, z, h, w, clim, col3);
+                if (schoolG && schoolG[col]) { // (the school's meadows: a fresh green, a little different from tuft to tuft — the author: «зелёные лужайки»)
+                    const k = schoolG[col] / 255, j = hashLand(x, z, this.seed + 211) * 0.16 - 0.08, mix = (a, b) => Math.round(a + (b - a) * k);
+                    const r0 = (col3.grass >> 16) & 255, g0 = (col3.grass >> 8) & 255, b0 = col3.grass & 255;
+                    col3.grass = (mix(r0, 74 * (1 + j)) << 16) | (mix(g0, 158 * (1 + j * 0.6)) << 8) | mix(b0, 52 * (1 + j));
+                }
                 grass[col] = col3.grass; leaf[col] = col3.leaf; leafK[col] = Math.round(col3.leafK * 255); mesa[col] = Math.round(col3.mesa * 255);
                 _lush.T[col] = clim.T;
             }
@@ -1077,7 +1086,13 @@ export class TerrainData {
                 const snow = land.snowLine(x, z, _lush.T[col]);
                 snowL[col] = Math.round(snow);
                 const m = mesa[col] / 255;
-                if (iceR[col] === 3) {
+                if (iceR[col] === 4) {
+                    // the school's hill and gorge: grey rock with moss and scree (the cliffs over the river)
+                    const patch = hashLand(x >> 1, z >> 1, this.seed + 113);
+                    surf = patch > 0.8 ? BLOCK.CS_MOSSY : patch > 0.65 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; deep = 0;
+                } else if (schoolG && schoolG[col] > 128 && slope < 3 && !wet) {
+                    surf = BLOCK.GRASS; soil = BLOCK.DIRT; deep = 3; // (the meadows: grass, whatever the world has here — sand, scree)
+                } else if (iceR[col] === 3) {
                     // the pyramids' desert: sand all the way down, a little pale stone under it; never grass
                     surf = BLOCK.SAND; soil = BLOCK.SAND; deep = 0;
                 } else if (iceR[col] === 2 || (!iceR[col] && this.vamp?.rocky(x, z))) {

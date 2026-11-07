@@ -24,8 +24,15 @@ import { createRng } from '../core/math.js';
 export const SCHOOL = {
     WALL: { u: 60, v0: -78, v1: 50 }, // the curtain wall's line round the castle's centre (inner half-width, north and south)
     FOOT: { u: 74, v0: -94, v1: 62 }, // the levelled terrace (the castle and a margin)
-    BLEND: 55, // m over which the terrace melts into the land round it
-    ROAD: { w: 3, len: 150 }, // the road from the gate down the slope (its half-width, its length)
+    BLEND: 55, // m over which the land round the hill melts into the world's
+    // the author 07.11 (second look): «величественный замок на горе, зелёные лужайки, обрыв и мост, по которому мы идём»
+    RISE: 28,  // m: the castle's hill over the meadows round it
+    CLIFF: 18, // m: the hill's rocky slope (steep, from the plateau's edge down to the meadow)
+    GORGE: { v0: 64, v1: 106, u: 96, deep: 16, water: 3 }, // the gorge before the gate (south): from v0 to v1, ±u wide, `deep` m under the meadow, a river in it
+    HEAD: { u: 30, v1: 146 }, // the headland on the far side of the gorge (the bridge's other end, where the coach stops)
+    BRIDGE: { w: 3, v0: 60, v1: 110, piers: [74, 86, 98] }, // the stone bridge over the gorge: half-width of the deck, its ends, its piers
+    ROAD: { w: 3, len: 160 }, // the road from the headland down to the meadows (its half-width, its length)
+    GREEN: 360, // m round the castle: green meadows whatever the world's land is there (blended at the edge)
     RING: [170, 700], // m from the start where the school is looked for
 };
 
@@ -54,22 +61,21 @@ export function schoolSpot(seed, raw, busy) {
                 if (wet(x + u, z + v)) { dry = false; break; }
                 const h = H(x + u, z + v); lo = Math.min(lo, h); hi = Math.max(hi, h);
             }
-            if (!dry || hi - lo > 34 || lo < 3) continue;
-            // water within sight (a lake, a river) and the mountains round it
-            let water = 0, peak = -Infinity;
+            if (!dry || hi - lo > 26 || lo < 3) continue;
+            // meadows round it (the author: green lawns — low, gentle land; no high mountains right at the hill), water near
+            let water = 0, rough = 0, n = 0, sum = 0;
             for (let k = 0; k < 20; k++) {
                 const b = (k / 20) * Math.PI * 2;
-                for (const r of [140, 210, 280]) if (wet(x + Math.cos(b) * r, z + Math.sin(b) * r)) water++;
-                for (const r of [330, 480, 640]) peak = Math.max(peak, H(x + Math.cos(b) * r, z + Math.sin(b) * r));
+                for (const r of [140, 210, 280]) { if (wet(x + Math.cos(b) * r, z + Math.sin(b) * r)) water++; const h = H(x + Math.cos(b) * r, z + Math.sin(b) * r); sum += h; n++; rough += Math.abs(h - lo); }
             }
-            const mid = (lo + hi) / 2;
-            const score = (hi - lo) * 1.2 + (water ? 0 : 30) - Math.min(70, peak - mid) * 0.5 + d * 0.01;
-            if (!best || score < best.score) best = { x, z, F: Math.round(mid) + 1, score };
+            const mid = (lo + hi) / 2, around = sum / n;
+            const score = (hi - lo) * 1.2 + (water ? 0 : 20) + (rough / n) * 0.8 + Math.max(0, around - 30) * 0.6 + d * 0.01;
+            if (!best || score < best.score) best = { x, z, M: Math.round(mid), score };
         }
     }
-    if (best) return { x: best.x, z: best.z, F: best.F };
-    const h = H(260, 0); // (no fitting land at all: a terrace is made where it is)
-    return { x: 260, z: 0, F: Math.max(6, h + 1) };
+    if (best) return { x: best.x, z: best.z, M: best.M, F: best.M + SCHOOL.RISE };
+    const h = Math.max(6, H(260, 0)); // (no fitting land at all: the hill is made where it is)
+    return { x: 260, z: 0, M: h, F: h + SCHOOL.RISE };
 }
 
 /** The school as the terrain sees it: its spot (lazily), its plan, its terrace and road in the land, its parts in a chunk. */
@@ -88,25 +94,44 @@ export class SchoolSite {
         }
         return this._plan;
     }
-    /** The land at a column with the terrace and the road (`h` the world's land there). Sets this.lifted. */
+    /**
+     * The land at a column (`h` the world's land there). Sets this.lifted, this.wet (the gorge's river: water depth), this.green (the
+     * meadows' weight 0…1 — Terrain paints grass), this.rock (the hill's / the gorge's cliffs: bare stone).
+     *   the HILL: the castle's plateau at F, a steep rocky slope (CLIFF) down to the meadows, then the meadows melt into the world's land;
+     *   the GORGE before the gate: vertical walls, a river at its bottom; the HEADLAND beyond it at F (the bridge's far end);
+     *   the ROAD from the headland down to the meadows.
+     */
     shapeAt(ix, iz, h) {
-        const S = this.spot, F0 = SCHOOL.FOOT, B = SCHOOL.BLEND;
-        this.lifted = false;
-        const dx = ix - S.x, dz = iz - S.z;
-        if (dx < -F0.u - B - 10 || dx > F0.u + B + 10 || dz < F0.v0 - B - 10 || dz > F0.v1 + SCHOOL.ROAD.len + 10) return h;
-        const ox = Math.max(0, Math.abs(dx) - F0.u), oz = Math.max(0, F0.v0 - dz, dz - F0.v1);
-        const d = Math.hypot(ox, oz);
-        let out = h, w = 0;
-        if (d < B) { w = smooth(1 - d / B); out = S.F + (h - S.F) * (1 - w); }
-        // the road down from the gate: a ramp that eases from the terrace to the land along its length
-        const along = dz - F0.v1;
-        if (along > 0 && along < SCHOOL.ROAD.len) {
-            const side = Math.max(0, Math.abs(dx) - SCHOOL.ROAD.w - 1), k = smooth(1 - side / 6);
-            if (k > 0) {
-                const g = smooth(along / SCHOOL.ROAD.len), ramp = S.F + (h - S.F) * g;
-                out = out * (1 - k) + ramp * k;
-                w = Math.max(w, k);
-            }
+        const S = this.spot, F0 = SCHOOL.FOOT, G = SCHOOL.GORGE, HD = SCHOOL.HEAD, R = SCHOOL.ROAD, B = SCHOOL.BLEND, C = SCHOOL.CLIFF;
+        this.lifted = false; this.wet = 0; this.rock = false;
+        const dx = ix - S.x, dz = iz - S.z, dd = Math.hypot(dx, dz - 30);
+        this.green = dd < SCHOOL.GREEN ? 1 : dd < SCHOOL.GREEN + 60 ? 1 - smooth((dd - SCHOOL.GREEN) / 60) : 0;
+        if (dx < -F0.u - C - B - 10 || dx > F0.u + C + B + 10 || dz < F0.v0 - C - B - 10 || dz > HD.v1 + R.len + 10) return h;
+        const M = S.M, F = S.F;
+        // the meadows round the hill: the world's land eased toward the meadow level near it
+        const ox = Math.max(0, Math.abs(dx) - F0.u), oz = Math.max(0, F0.v0 - dz, dz - F0.v1), d = Math.hypot(ox, oz);
+        const meadowK = 1 - smooth((Math.min(d, Math.hypot(Math.max(0, Math.abs(dx) - HD.u), Math.max(0, G.v1 - dz, dz - HD.v1))) - C) / (B + 30));
+        let out = h + (M - h) * meadowK * 0.85, w = meadowK;
+        // a raised block (the plateau at F, a rocky slope of C m, then the meadow)
+        const wob = (Math.sin(dx * 0.071 + 1.3) + Math.cos(dz * 0.053 - 0.4) + Math.sin((dx + dz) * 0.031)) * 2.2; // (the cliffs' line: never a ruler's)
+        const raised = (dist) => (dist <= 1 ? F : dist - wob < C ? F - (F - M) * Math.pow(smooth((Math.max(1, dist - wob) - 1) / (C - 1)), 0.75) : -1e9);
+        const hill = raised(d);
+        if (hill > out) { out = hill; w = 1; if (d > 2) this.rock = true; }
+        const hd = Math.hypot(Math.max(0, Math.abs(dx) - HD.u), Math.max(0, G.v1 - dz, dz - HD.v1)), head = raised(hd);
+        if (head > out) { out = head; w = 1; if (hd > 2) this.rock = true; }
+        // the road from the headland down to the meadows: a ramp, eased into the land at its sides
+        const along = dz - HD.v1;
+        if (along > -2 && along < R.len) {
+            const side = Math.max(0, Math.abs(dx) - R.w - 1), k = smooth(1 - side / 7);
+            if (k > 0) { const ramp = F + (M - F) * smooth(Math.max(0, along) / R.len); const r = out * (1 - k) + ramp * k; if (k > 0.5 || r > out) out = r; w = Math.max(w, k); if (k > 0.5) this.rock = false; }
+        }
+        // the gorge: straight walls, a river at its bottom; its ends rise back to the meadows
+        const gv0 = G.v0 + Math.round(2.5 * Math.sin(dx * 0.09) + 1.5 * Math.sin(dx * 0.23)), gv1 = G.v1 + Math.round(2.5 * Math.cos(dx * 0.07 + 1) + 1.5 * Math.sin(dx * 0.19 + 2)); // (the gorge's walls: wavy)
+        if (dz >= gv0 && dz <= gv1 && Math.abs(dx) <= G.u + 30) {
+            const e = Math.min(dz - gv0, gv1 - dz), ends = smooth((Math.abs(dx) - G.u) / 30); // (e: m from its nearer wall)
+            const floor = M - G.deep, wall = e < 1 ? out : e < 3 ? floor + (out - floor) * (1 - (e - 1) / 2) * 0.5 : floor;
+            const cut = wall + (out - wall) * ends;
+            if (cut < out) { out = cut; w = 1; this.rock = e < 4 && ends < 0.5; if (e >= 4 && ends < 0.2) this.wet = G.water; }
         }
         if (w <= 0) return h;
         this.lifted = true;
@@ -115,8 +140,9 @@ export class SchoolSite {
     /** No trees here (the terrace, the road). */
     clear(ix, iz) {
         const S = this.spot, F0 = SCHOOL.FOOT, dx = ix - S.x, dz = iz - S.z;
-        if (Math.abs(dx) <= F0.u + 14 && dz >= F0.v0 - 14 && dz <= F0.v1 + 14) return true;
-        return dz > F0.v1 && dz < F0.v1 + SCHOOL.ROAD.len && Math.abs(dx) <= SCHOOL.ROAD.w + 5;
+        if (Math.abs(dx) <= F0.u + SCHOOL.CLIFF + 4 && dz >= F0.v0 - SCHOOL.CLIFF - 4 && dz <= F0.v1 + 14) return true;
+        if (dz >= SCHOOL.GORGE.v0 - 2 && dz <= SCHOOL.HEAD.v1 + 6 && Math.abs(dx) <= SCHOOL.HEAD.u + SCHOOL.CLIFF + 4) return true; // (the gorge, the headland)
+        return dz > SCHOOL.HEAD.v1 && dz < SCHOOL.HEAD.v1 + SCHOOL.ROAD.len && Math.abs(dx) <= SCHOOL.ROAD.w + 5;
     }
     /** A column of the school's roofed rooms (the hall, the wings, the library, the dormitory): lit as rooms — never dark as a cave (Terrain's light). */
     litAt(ix, iz) {
@@ -125,7 +151,7 @@ export class SchoolSite {
         for (const r of this.plan.lit) if (ix >= r[0] && ix <= r[2] && iz >= r[1] && iz <= r[3]) return true;
         return false;
     }
-    near(x, z, r) { const S = this.spot; return Math.hypot(x - S.x, z - S.z) < r + 160 + SCHOOL.ROAD.len; }
+    near(x, z, r) { const S = this.spot; return Math.hypot(x - S.x, z - S.z) < r + 160 + SCHOOL.HEAD.v1 + SCHOOL.ROAD.len; }
     partsForChunk(cx, cz, C = CHUNK) {
         const k = this.plan, x0 = cx * C, z0 = cz * C, x1 = x0 + C - 1, z1 = z0 + C - 1;
         if (k.x1 < x0 || k.x0 > x1 || k.z1 < z0 || k.z0 > z1) return [];
@@ -316,16 +342,40 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     // ---- the astronomy tower, the highest, over the hall's north-east
     tower(HX + 3, HZ0 + 3, 5, 52, 16, B.ROOF_BLUE);
 
-    // the road down from the gate: flagstones laid on the ramp (SchoolSite.shapeAt), lantern posts along it
-    let arrive = { x: OX, y: F + 0.5, z: OZ + S.FOOT.v1 + S.ROAD.len - 15 };
+    // ---- the BRIDGE over the gorge (the author: «обрыв и мост, по которому мы идём»): a deck of dark flagstones at the plateau's level,
+    // parapets with lanterns on posts every 6 m, three tall piers from the river up, stepped arches between them; a paved forecourt at the
+    // gate, a little square on the headland where the coach stops, the road down from it to the meadows
+    const BR = S.BRIDGE, bw = BR.w, Mf = (P.M ?? F - S.RISE) - S.GORGE.deep;
+    box(-6, 6, GZ + 3, BR.v0, F, F, B.PATH);
+    box(-bw, bw, BR.v0, BR.v1, F, F, DARK); box(-bw, bw, BR.v0, BR.v1, F - 1, F - 1, STONE);
+    for (let v = BR.v0; v <= BR.v1; v += 4) box(-bw + 1, bw - 1, v, v, F, F, B.PATH); // (a lighter course every 4 m)
+    for (const sd of [-1, 1]) {
+        box(sd * (bw + 1), sd * (bw + 1), BR.v0, BR.v1, F - 1, F + 1, STONE); box(sd * (bw + 1), sd * (bw + 1), BR.v0, BR.v1, F + 2, F + 2, TRIM);
+        for (let v = BR.v0 + 2; v <= BR.v1; v += 6) { box(sd * (bw + 1), sd * (bw + 1), v, v, F + 3, F + 4, DARK); box(sd * (bw + 1), sd * (bw + 1), v, v, F + 5, F + 5, B.LANTERN); }
+    }
+    const ends = [BR.v0, ...BR.piers, BR.v1];
+    for (const pv of BR.piers) { box(-bw - 2, bw + 2, pv - 2, pv + 2, Mf - 2, F - 2, STONE); box(-bw - 3, bw + 3, pv - 3, pv + 3, Mf - 2, Mf + 3, MOSS); box(-bw - 2, bw + 2, pv - 2, pv + 2, F - 6, F - 6, TRIM); }
+    for (let k = 0; k + 1 < ends.length; k++) { // (the arches: deep at the piers, a thin crown in the middle)
+        const a = ends[k] + (k ? 3 : 0), b = ends[k + 1] - (k + 2 < ends.length ? 3 : 0), mid = (a + b) / 2, half = Math.max(1, (b - a) / 2);
+        for (let v = a; v <= b; v++) { const q = (v - mid) / half, yb = F - 2 - Math.round(7 * q * q); box(-bw, bw, v, v, yb, F - 2, STONE); }
+    }
+    // the headland's square: flagstones, four lamp posts, a bench of stone on each side
+    const HV = S.HEAD.v1 - 34;
+    box(-9, 9, S.GORGE.v1 + 1, S.HEAD.v1, F, F, B.PATH);
+    for (let v = S.GORGE.v1 + 5; v <= S.HEAD.v1; v += 9) box(-9, 9, v, v, F, F, DARK);
+    for (const [x, v] of [[-10, S.GORGE.v1 + 3], [10, S.GORGE.v1 + 3], [-10, HV + 14], [10, HV + 14]]) { box(x, x, v, v, F + 1, F + 4, DARK); box(x, x, v, v, F + 5, F + 5, B.LANTERN); }
+    for (const sd of [-1, 1]) box(sd * 8, sd * 8, HV - 3, HV + 3, F + 1, F + 1, TRIM);
+    // the road down from the headland to the meadows: flagstones on the ramp (SchoolSite.shapeAt), lanterns along it
+    let arrive = { x: OX, y: F + 0.5, z: OZ + HV };
+    let coachFrom = { x: OX, y: F + 0.5, z: OZ + S.HEAD.v1 + S.ROAD.len - 10 };
     if (groundAt) {
-        for (let v = GZ + 4; v < S.FOOT.v1 + S.ROAD.len - 5; v++) {
+        for (let v = S.HEAD.v1; v < S.HEAD.v1 + S.ROAD.len; v++) {
             const L = groundAt(OX, OZ + v);
             box(-S.ROAD.w, S.ROAD.w, v, v, L, L, (v & 7) === 0 ? DARK : B.PATH);
             if (v % 14 === 0) for (const sd of [-1, 1]) { const Lp = groundAt(OX + sd * (S.ROAD.w + 1), OZ + v); box(sd * (S.ROAD.w + 1), sd * (S.ROAD.w + 1), v, v, Lp + 1, Lp + 3, B.CS_DARK); box(sd * (S.ROAD.w + 1), sd * (S.ROAD.w + 1), v, v, Lp + 4, Lp + 4, B.LANTERN); }
         }
-        const v = S.FOOT.v1 + S.ROAD.len - 15;
-        arrive = { x: OX, y: groundAt(OX, OZ + v) + 0.5, z: OZ + v };
+        const v = S.HEAD.v1 + S.ROAD.len - 10;
+        coachFrom = { x: OX, y: groundAt(OX, OZ + v) + 0.5, z: OZ + v };
     }
     const at = (x, z, L = F + 0.5) => ({ x: x + OX, y: L, z: z + OZ });
     const out = {
@@ -340,7 +390,7 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
             library: { x0: -W.u + 1, x1: -W.u + 21, z0: SZ0 + 1, z1: SZ1 - 1, door: at(-W.u + 24, (SZ0 + SZ1) / 2) },
             dormitory: { x0: W.u - 21, x1: W.u - 1, z0: SZ0 + 1, z1: SZ1 - 1, door: at(W.u - 24, (SZ0 + SZ1) / 2) },
         },
-        arrive, centre: { x: OX, z: OZ }, F, tableCandles, floatCandles,
+        arrive, coachFrom, bridge: { v0: OZ + BR.v0, v1: OZ + BR.v1, x: OX }, centre: { x: OX, z: OZ }, F, M: P.M ?? F - S.RISE, tableCandles, floatCandles,
     };
     // (the rooms' and the hall's bounds and the tables: laid out round (0, 0) — to the world's place too)
     for (const r of [out.hall, ...Object.values(out.rooms)]) { r.x0 += OX; r.x1 += OX; r.z0 += OZ; r.z1 += OZ; }
