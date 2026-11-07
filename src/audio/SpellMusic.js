@@ -723,6 +723,16 @@ const FX = {
         noise(o, sr, 0.5, 0.5, 0.05, () => 0.9, swell(0.2, 0.6), r); // (a shimmer of dust)
         return finish(o, sr, { peak: 0.6 });
     },
+    /** «Aquambula»: the water goes still and glassy — a soft rising ripple, glass-clear bells falling like drops, a low watery pad that settles. */
+    fxWaterWalk(sr) {
+        const o = buf(sr, 1.9), r = rng(88);
+        noise(o, sr, 0, 0.9, 0.16, (u) => 0.06 + 0.3 * u, swell(0.3, 0.5), r); // (a breath of spray, brightening)
+        glide(o, sr, 0.05, 0.8, 0.1, (u) => 300 + 560 * u * u + 8 * Math.sin(u * 70), swell(0.3, 0.5), 2); // (the rising ripple)
+        ['E5', 'G#5', 'B5', 'E6', 'B5'].forEach((n, k) => bell(o, sr, hz(n), 0.4 + k * 0.15, 0.15, 1.2, 0.3)); // (drops on glass)
+        pad(o, sr, ['E3', 'B3', 'G#4'], 0.7, 1.9, 0.16, { att: 0.25, rel: 0.8, harm: 2, vib: 0.005 }); // (the still water)
+        noise(o, sr, 0.9, 0.9, 0.04, () => 0.6, swell(0.3, 0.6), r);
+        return finish(o, sr, { peak: 0.6 });
+    },
     /** «Rescue»: a warm healing chime — three notes rising over a soft chord. */
     fxHeal(sr) { const o = buf(sr, 1.6); pad(o, sr, ['C4', 'E4', 'G4'], 0, 0.8, 0.3, { att: 0.2, rel: 0.7, harm: 1 }); ['C5', 'E5', 'G5', 'C6'].forEach((n, k) => bell(o, sr, hz(n), k * 0.13, 0.16, 1.2, 0.15)); return finish(o, sr, { peak: 0.6 }); },
     /** «Air Bubble»: bubbles — little chirps rising. */
@@ -933,6 +943,14 @@ const LOOPS = {
     /** «Visible Godi» held: a quiet veiled hum (A and E) breathing slowly, one far bell now and then. */
     /** «Пентаграниум» held: a low uneasy hum (E and B-flat), a whisper of embers, a far drum. */
     loopDark(sr) { const o = buf(sr, 3.4), r = rng(321); pad(o, sr, [82.4, 116.5, 164.8], 0, 3.4, 0.26, { att: 0.01, rel: 0, harm: 3, vib: 0.004 }); noise(o, sr, 0, 3.3, 0.05, (u) => 0.1 + 0.06 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.35, 48, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.33 }); },
+    /** «Aquambula» held: the soft hum of still water — a low fifth with a slow wave, a faint trickle, one clear drop now and then. */
+    loopWaterWalk(sr) {
+        const o = buf(sr, 3.3), r = rng(417);
+        pad(o, sr, [82.4, 123.5], 0, 3.3, 0.2, { att: 0.01, rel: 0, harm: 2, vib: 0.005 });
+        noise(o, sr, 0, 3.2, 0.04, (u) => 0.1 + 0.07 * Math.sin(u * 6.28 * 2), swell(0.5, 0.5), r);
+        bell(o, sr, hz('B6'), 1.1, 0.03, 0.9, 0.1); bell(o, sr, hz('G#6'), 2.5, 0.025, 0.9, 0.1);
+        return finish(loopSeam(o, sr), sr, { peak: 0.3 });
+    },
     loopSeeing(sr) { const o = buf(sr, 3.3), r = rng(131); pad(o, sr, [110, 164.8], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); noise(o, sr, 0, 3.2, 0.04, (u) => 0.12 + 0.08 * Math.sin(u * 6.28), swell(0.5, 0.5), r); bell(o, sr, hz('E6'), 1.4, 0.035, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.32 }); },
     /** «To the Sun» on the black clouds held: a bright golden chord straining against a low rumble of the storm, a bell ringing through it now and then. */
     /** «To the Sun» held on the black clouds: the hum of a column of light (a low fifth with a slow tremolo, a bright shimmer above), the crackle of the air along it, a deep pulse like a heart under strain, a few bells climbing — and a rough moan of the clouds beneath. */
@@ -1068,7 +1086,7 @@ export const SPELL_SOUND = {
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
-    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, Rescue: { cast: 'fxHeal' },
+    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
     Breakthrough: { cast: 'fxStone' }, BreakthroughMaxima: { cast: 'fxStone', rate: 0.85 },
     Flight: { own: ['cast'] }, Pause: { cast: 'fxPause' },
@@ -1092,6 +1110,7 @@ export const HELD_SOUND = {
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
     SunClouds: { loop: 'loopSunFight', end: 'fxStop' }, // («To the Sun» on the gargoyles' black clouds held: SunContest.js)
+    WaterWalk: { loop: 'loopWaterWalk', end: 'fxStop' }, // («Aquambula» held: the hum of still water)
     VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)

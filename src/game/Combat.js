@@ -171,6 +171,7 @@ export const SPELL_COST = {
     Invisibility: 250, // nobody sees me; then 2 a second (only from a scroll — Invisibility.js)
     GroundVortex: 20, // «Ground Vortex»: the earth rises and circles; then 1 a second while held (a scroll — GroundVortex.js)
     Nihilis: 40, // «Nihilis Atra»: a cone of light scatters black magic; instant (only from a scroll — Nihilis.js)
+    WaterWalk: 50, // «Aquambula»: walking on the water — 50 at once, then 1 a second (a scroll only — WaterWalk.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
     FireSerpent: 60, // «Serpent» out of my Hellfire: one must have 350 mana; then the Hellfire's drain ×2 while it lives (FireSerpent.js)
     Hellfire: 250, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)

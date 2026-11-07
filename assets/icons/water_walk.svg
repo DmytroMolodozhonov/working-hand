@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="ww-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c4d86"/><stop offset=".55" stop-color="#5fa4d6"/><stop offset="1" stop-color="#cfeefc"/></linearGradient>
+    <linearGradient id="ww-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fb6e6"/><stop offset=".5" stop-color="#1f86c4"/><stop offset="1" stop-color="#0f4f8c"/></linearGradient>
+    <radialGradient id="ww-glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset=".5" stop-color="#bff0ff" stop-opacity=".45"/><stop offset="1" stop-color="#8fdcff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="ww-boot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a5a34"/><stop offset=".6" stop-color="#5e3a20"/><stop offset="1" stop-color="#3a2212"/></linearGradient>
+    <clipPath id="ww-clip"><rect x="4" y="4" width="120" height="120" rx="14"/></clipPath>
+  </defs>
+  <g clip-path="url(#ww-clip)">
+    <rect x="4" y="4" width="120" height="120" fill="url(#ww-sky)"/>
+    <!-- a low sun and its soft halo -->
+    <circle cx="96" cy="44" r="22" fill="url(#ww-glow)"/>
+    <circle cx="96" cy="44" r="8" fill="#fff6cf"/>
+    <!-- the water: three bands of swell with bright crests -->
+    <rect x="4" y="62" width="120" height="62" fill="url(#ww-water)"/>
+    <g fill="none" stroke-linecap="round">
+      <path d="M4 70 Q20 63 36 70 T68 70 T100 70 T132 70" stroke="#c9f1ff" stroke-width="2.2" opacity=".85"/>
+      <path d="M4 84 Q22 77 40 84 T76 84 T112 84 T148 84" stroke="#8fd6f5" stroke-width="2" opacity=".6"/>
+      <path d="M4 100 Q24 93 44 100 T84 100 T124 100" stroke="#5fb8e6" stroke-width="2" opacity=".45"/>
+    </g>
+    <!-- the sun's path on the water -->
+    <g fill="#fff3c4" opacity=".7"><ellipse cx="96" cy="68" rx="14" ry="2"/><ellipse cx="94" cy="76" rx="10" ry="1.6"/><ellipse cx="97" cy="85" rx="7" ry="1.3"/></g>
+    <!-- the rings spreading from the step -->
+    <g fill="none" stroke="#e8fbff">
+      <ellipse cx="50" cy="88" rx="34" ry="9" stroke-width="1.4" opacity=".35"/>
+      <ellipse cx="50" cy="88" rx="25" ry="6.5" stroke-width="1.8" opacity=".55"/>
+      <ellipse cx="50" cy="88" rx="16" ry="4.2" stroke-width="2.2" opacity=".8"/>
+    </g>
+    <!-- the boot standing on the water: sole just above the surface, laces, a cuff -->
+    <ellipse cx="50" cy="90" rx="22" ry="3.6" fill="#0b3a66" opacity=".45"/>
+    <path d="M34 50 L58 50 L60 74 Q74 76 78 86 L78 90 Q78 92 76 92 L30 92 Q26 92 26 88 L28 74 Q32 72 34 66 Z" fill="url(#ww-boot)" stroke="#2a180c" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M26 88 H78" stroke="#2a180c" stroke-width="3.4" stroke-linecap="round"/>
+    <rect x="32" y="44" width="28" height="9" rx="3" fill="#a46c3e" stroke="#2a180c" stroke-width="2"/>
+    <g stroke="#f1dcae" stroke-width="2" stroke-linecap="round"><path d="M38 58 L52 62"/><path d="M38 66 L53 70"/><path d="M38 74 L54 78"/></g>
+    <path d="M36 52 Q34 70 30 84" stroke="#d6a36a" stroke-width="1.6" fill="none" opacity=".5"/>
+    <!-- drops thrown up by the step -->
+    <g fill="#e8fbff"><circle cx="22" cy="80" r="2.6"/><circle cx="82" cy="78" r="2.2"/><circle cx="16" cy="70" r="1.6"/><circle cx="88" cy="66" r="1.6"/><circle cx="29" cy="64" r="1.2"/></g>
+  </g>
+  <rect x="4" y="4" width="120" height="120" rx="14" fill="none" stroke="#14375f" stroke-width="3"/>
+</svg>

@@ -242,6 +242,7 @@ import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
+import { WaterWalk } from './WaterWalk.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
 import { PentagramResist } from './PentagramResist.js';
@@ -720,6 +721,7 @@ export class Game {
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
+        this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
         this.offerings = new Offerings(this); // what must lie on the pentagram of the gargoyles / the monster before the ritual (Offerings.js)
@@ -2293,6 +2295,7 @@ export class Game {
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
+        if (name === 'WaterWalk') return this.waterWalk.cast(isFinal); // (walking on the water: 50 mana, then 1 a second — WaterWalk.js)
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
         if (name === 'Pentagranium') return this.pentagranium.cast(isFinal, text); // («Pentagranium <Name>»: the pentagram named in the phrase, laid where the wand points — Pentagranium.js)
         if (name === 'Fireworks') return this.fireworks.cast(isFinal);
@@ -2487,6 +2490,7 @@ export class Game {
         if (this.darkFog?.stopMine()) done.push('тёмный туман');
         if (this.whirl?.stopMine()) done.push('вихрь дуэли');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
+        if (this.waterWalk?.stop('stop')) done.push('Aquambula');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.sunContest?.stop('stop')) done.push('To the Sun');
         if (this.fireworks?.stop('stop')) done.push('салют');
@@ -4445,6 +4449,7 @@ export class Game {
         this.firm?.update(dt);
         this.ghostCastle?.update(dt);
         this.groundVortex?.update(dt);
+        this.waterWalk?.update(dt);
         this.visibleGodi?.update(dt);
         this.pentagranium?.update(dt);
         this.steam?.update(dt);

@@ -177,6 +177,7 @@ export const SPELL_PHYSICS = {
     // («Drawdown»: the ground sinks — bodies stand on it and go down with it, nobody is pushed;
     //  «Stitching»: stones laid where nobody stands; «Invisibility»: nobody sees — Drawdown.js / Stitching.js / Invisibility.js)
     Spiralis: null, // («Спиралис»: it takes the beams of a clash; the double charge pushes as the two spells themselves do — Whirl.js)
+    WaterWalk: null, // («Aquambula»: it moves nobody — WaterWalk.js)
     Caligo: null, // («Caligo»: a fog, nobody is pushed — DarkFog.js)
     Sectura: null, // («Sectura»: a cut, not a push — an invisible blade: Slash.js; the body is cut or wounded, nothing is shoved)
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, Groundprud: null, /* (the ground rises where nobody stands — Groundprud.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)

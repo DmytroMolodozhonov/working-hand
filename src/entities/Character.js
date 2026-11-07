@@ -929,7 +929,8 @@ export class VoxelCharacter {
             // (going up a step the body eases up after the feet: they reach from the floor they stand on)
             const reach = (this.onGround && this.swimY == null ? Math.max(feetNow, Math.min(this.groundY, feetNow + 1.1 * S)) : feetNow) + (1.1 + (this.jumpAir ? JUMP_ASSIST : 0)) * S;
             const px = this.group.position.x, pz = this.group.position.z;
-            const ground = collision ? (this.stepBoxes && collision.standAt ? collision.standAt(px, pz, reach) : collision.groundAt ? collision.groundAt(px, pz, reach) : collision.groundY(px, pz)) : -0.5;
+            let ground = collision ? (this.stepBoxes && collision.standAt ? collision.standAt(px, pz, reach) : collision.groundAt ? collision.groundAt(px, pz, reach) : collision.groundY(px, pz)) : -0.5;
+            if (this.waterFloor) { const wf = this.waterFloor(px, pz, reach); if (wf != null && wf > ground) ground = wf; } // («Aquambula»: the water's top is a floor — WaterWalk.js)
             this.groundY = ground;
             const crouchDrop = this.knockedDown ? 1.45 * (1 - (this.liftUp || 0)) : this.bodyDrop();
             const targetY = ground + (PLAYER_GROUND_OFFSET - crouchDrop) * S;

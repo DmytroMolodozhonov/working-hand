@@ -35,7 +35,7 @@ export const SCHOOLS = {
 /** A spell → its school (the ones without a row fall back by their name, then to «Магия»). */
 const SCHOOL_OF = {
     Hellfire: 'fire', ToTheSun: 'fire', Boom: 'fire', BombardoMaxima: 'fire', Bombardo: 'fire', Fire: 'fire', FireMaxima: 'fire', CircleAttack: 'fire', Fireworks: 'fire',
-    FirefightingMaxima: 'water', LetItRain: 'water', Tornado: 'water', CreateBoat: 'water', CreateCauldron: 'fire', CreateFlask: 'water', Navigare: 'water', Waterball: 'water', AirBubble: 'water', WaveAttack: 'water', WaterVortex: 'water', WaterVortexSuperMaxima: 'water', CreateBoard: 'water',
+    FirefightingMaxima: 'water', LetItRain: 'water', Tornado: 'water', CreateBoat: 'water', CreateCauldron: 'fire', CreateFlask: 'water', Navigare: 'water', Waterball: 'water', WaterWalk: 'water', AirBubble: 'water', WaveAttack: 'water', WaterVortex: 'water', WaterVortexSuperMaxima: 'water', CreateBoard: 'water',
     IceMaxima: 'ice', IceCastle: 'ice', IceBridge: 'ice', Snowman: 'ice', Pilbidrio: 'ice', Frozen: 'ice',
     LightningStrike: 'lightning', Thunderwave: 'lightning', Electrum: 'lightning', JoltMaxima: 'lightning', Jolt: 'lightning',
     GroundVortex: 'earth', Groundprud: 'earth', Drawdown: 'earth', EarthquakeMaxima: 'earth', Earthquake: 'earth', LiquidationMaxima: 'earth', Breakthrough: 'earth', Unfurl: 'earth',

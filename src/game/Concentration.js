@@ -60,6 +60,7 @@ export const HELD = {
     DragonTame: { ru: 'Дракон (Брейнрот Максима)', icon: '🐉', own: ['BrainrotMaxima', 'Attack'] }, // (the calmed dragon: 0,5 mana a second — DragonRide.js; «Атак» sends it at one it is already angry at)
     GroundVortex: { ru: 'Вихрь земли', icon: '🌪️', own: ['GroundVortex', 'GroundShield', 'Attack'] }, // (blocks circling the hero: 0,5 mana a second — GroundVortex.js)
     SunClouds: { ru: 'To the Sun (тучи горгулий)', icon: '☀️', own: [] }, // (the beam on the black clouds of the gargoyle ritual: 20 mana a second after 5 s — SunContest.js; «стоп» ends it)
+    WaterWalk: { ru: 'Aquambula', icon: '🌊', own: [] }, // (walking on the water: 1 mana a second — WaterWalk.js; «стоп» lets the water go)
     VisibleGodi: { ru: 'Visible Godi', icon: '👁️', own: [] }, // (the cloud on the screen: 1 mana a second — VisibleGodi.js; «стоп» closes it)
     Fireworks: { ru: 'Салют', icon: '🎆', own: [] }, // (10 s of salvos over the wand: Fireworks.js — «стоп» ends it)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
@@ -76,7 +77,7 @@ export const HELD = {
 export const CONC_SPELLS = new Set(['Waterball', 'WaterVortex', 'WaterVortexSuperMaxima', 'Levitation', 'LevitationMaxima', 'LevitationSuperMaxima',
     'Alive', 'AliveMaxima', 'Hellfire', 'FireSerpent', 'Inferno', 'Drawdown', 'DrawdownMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle',
     'IceCastle', 'IceBridge', 'ProtectionHouse', 'ProtectionInvisible', 'WardGrow', 'StrengthenHouse', 'WaveAttack', 'WaveAttackMaxima',
-    'LightningStrike', 'Ice', 'ProtectionGods', 'ProtectionGodsMaxima', 'BrainrotMaxima', 'GroundVortex', 'VisibleGodi', 'Fireworks', 'Electrum',
+    'LightningStrike', 'Ice', 'ProtectionGods', 'ProtectionGodsMaxima', 'BrainrotMaxima', 'GroundVortex', 'VisibleGodi', 'WaterWalk', 'Fireworks', 'Electrum',
     'Imperius', 'ImperiusMaxima']);
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
@@ -130,6 +131,7 @@ export class Concentration {
         if (g.imperius?.puppet) return 'Puppet';
         if (g.imperius?.active) return 'Imperius';
         if (g.groundVortex?.busy) return 'GroundVortex';
+        if (g.waterWalk?.on) return 'WaterWalk';
         if (g.visibleGodi?.on) return 'VisibleGodi';
         if (g.sunContest?.active) return 'SunClouds';
         if (g.dragonRide?.active) return 'DragonTame';
@@ -191,6 +193,7 @@ export class Concentration {
         if (g.strong?.stopElectrum?.('focus')) done.push('Электром');
         if (g.fireworks?.stop?.('focus')) done.push('салют');
         if (g.groundVortex?.stop?.('down')) done.push('Ground Vortex');
+        if (g.waterWalk?.stop?.('focus')) done.push('Aquambula');
         if (g.visibleGodi?.stop?.('focus')) done.push('Visible Godi');
         if (g.sunContest?.stop?.('focus')) done.push('To the Sun');
         if (g.dragonRide?.stop?.(why === 'dead' ? 'dead' : 'thrown')) done.push('дракон');

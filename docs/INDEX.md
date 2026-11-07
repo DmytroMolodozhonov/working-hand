@@ -184,6 +184,7 @@
 - `BookModel.js` — the book of spells as a real thing: two covers on a spine, a block of pages under each, and two page faces that show the spread.
 - `BookPhysics.js` — the book in the hands as a real thing (pure maths, no scene).
 - `BookReading.js` — the spell book in the hand (06.11): open by itself in one raised hand, the other hand's finger drawn across it turns a page, squeezing the fist shuts it and loosening opens it again (tests/unit/book-hands.test.js, e2e book-open).
+- `WaterWalk.js` — «Aquambula»: walking on the water (held, 50 mana + 1/s; the water's top is a floor: Character.waterFloor; tests/unit/water-walk.test.js)
 - `Boom.js` — «Бум» («Boom»): a mountain (a castle, a tower, a rock) torn apart from inside.
 - `BossRetry.js` — «повторить бой с боссом» (Творческий, старт у босса): по аналогии с дуэльным режимом.
 - `BowDraw.js` — the drawing hand on a bow's string (pure logic: the game feeds what the camera sees each frame; tests feed it noisy poses).
