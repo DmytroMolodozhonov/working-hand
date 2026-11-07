@@ -3950,7 +3950,7 @@ export class CastleLife {
 
     // ------------------------------------------------------------ speech
     _say(v, text, seconds = 4, broadcast = true, force = false) {
-        if (this.game.tutorial && !this.game.tutorial.done) return; // («Обучение»: the people say nothing — the narrator's words are not to be talked over (the author))
+        { const T = this.game.tutorial; if (T && !T.done && !(force && T.letTalk && !T.talking)) return; } // («Обучение»: the people say nothing — the narrator is not talked over (the author); only an answer to the player in the purchase, when he is done)
         if (!text || v.dead || v.stunT > 0 || v.sayT > 0 && !broadcast && !force) return;
         if (this.game.revealed === false) return; // (nobody speaks while the world is still loading: the player is not there yet — and a line from the speakers would come back as his words)
         v.sayT = 1.5;

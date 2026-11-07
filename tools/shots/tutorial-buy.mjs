@@ -46,4 +46,8 @@ export default async function (h) {
     log('payByName', ok, 'paid', !!want.item.shop?.paid, 'bought', T.ctx.bought, 'step', T.step, 'coins belt', g.inventory.coins(), 'counter coins', talk._counterCoins(L.castles.get('tutorial-market').def, 0).map((x) => x.item.count).join(','), 'labels', talk._labelText?.size);
     await h.page('buy-paid', 10);
     log('said', T._said.slice(0, 80));
+    // take the good (a hand reaching it): it leaves the counter
+    if (T.ctx.bought) { const Lg = g.items.loose.get(T.ctx.bought); if (Lg) g.items.pickUp(T.ctx.bought, g.localId, g.off || 'left'); }
+    for (let i = 0; i < 30; i++) await h.frames(10);
+    log('taken → step', T.step, 'stage', T.stage, T._said.slice(0, 60), 'held', g.items.held[g.off || 'left']?.item.kind);
 }

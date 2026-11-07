@@ -84,7 +84,7 @@ export class Tutorial {
         this.spawned = []; // uids of things given this stage
         this._said = '';
         this._quiet();
-        { const sp = game.castleLife?.talk?.speech; if (sp) sp.gate = (o) => this.done || o?.voiceKey === TUT.VOICE_KEY; } // (only the narrator's voice: the merchant, the wizard say nothing over him)
+        { const sp = game.castleLife?.talk?.speech; if (sp) sp.gate = (o) => this.done || o?.voiceKey === TUT.VOICE_KEY || (this.letTalk && !this.talking); } // (the merchant answers the player's words in the purchase — after the narrator) // (only the narrator's voice: the merchant, the wizard say nothing over him)
         this.stages = this._makeStages();
         this._ui();
         this._placeHero(); // (always at the start's place, facing the hill: the things are given round it — also when going on from a later stage)
@@ -248,9 +248,9 @@ export class Tutorial {
             { title: STAGE_TITLES[8], steps: [
                 ask('Теперь — покупка. Неподалёку появился торговец: прилавок под полосатым навесом. Подойдите к нему — к светящемуся кругу перед прилавком.', () => T._atStall(), { unfreeze: true, allow: ['Accio'], setup: () => { T._market(); T._giveCoins(); const f = T._mdef?.stalls?.[0]?.front; if (f) T._goal(f); }, hint: 'Оглянитесь: где-то рядом полосатый навес и светящийся круг перед прилавком. Идите туда.' }),
                 ask('Видите: внизу, в конце карманов, появилась ячейка с монетами. Она есть, только пока рядом торговец. Достаньте мешочек: он висит на поясе там же, где карман. Посмотрите вниз, дотянитесь туда дочерней рукой и сожмите кулак.', () => !!T._pouchHeld() || T._pouchOnCounter(), { unfreeze: true, allow: ['Accio'], ...P, setup: () => T._goal(null), show: 'pouch', hint: 'Монеты достаются только рядом с торговцем. Смотрите вниз, дочерняя рука — к карману, и сожмите кулак, а не раскрытую ладонь.' }),
-                ask('Положите мешочек на прилавок: вытяните над ним руку и разожмите кисть.', () => T._pouchOnCounter() || T._bought(), { unfreeze: true, allow: ['Accio'], hint: 'Рука с мешочком — над прилавком, и раскройте ладонь.' }),
-                ask('Теперь скажите вслух, что хотите купить. Например: «хлеб» или «яблоко». Цена написана на карточке у товара.', () => T._bought(), { unfreeze: true, allow: ['Accio'], hint: 'Назовите товар, который лежит на прилавке. Торговец возьмёт плату и положит сдачу.' }),
-                ask('Покупка ваша! Возьмите её с прилавка рукой. Сдачу тоже заберите.', () => T._boughtTaken(), { unfreeze: true, allow: ['Accio'], hint: 'Протяните руку к купленной вещи на краю прилавка и сожмите кисть.' }),
+                ask('Положите мешочек на прилавок: вытяните над ним руку и разожмите кисть.', () => T._pouchOnCounter() || T._bought(), { unfreeze: true, talk: true, allow: ['Accio'], hint: 'Рука с мешочком — над прилавком, и раскройте ладонь.' }),
+                ask('Теперь скажите вслух, что хотите купить. Например: «сыр» или «пирог». Цена написана на карточке у товара.', () => T._bought(), { unfreeze: true, talk: true, allow: ['Accio'], hint: 'Назовите товар, который лежит на прилавке. Торговец возьмёт плату и положит сдачу.' }),
+                ask('Покупка ваша! Возьмите её с прилавка рукой. Сдачу тоже заберите.', () => T._boughtTaken(), { unfreeze: true, talk: true, allow: ['Accio'], hint: 'Протяните руку к купленной вещи на краю прилавка и сожмите кисть.' }),
                 { ...say('Так покупают всё: еду, зелья, свитки, оружие. А ненужные вещи можно продать торговцу.'), ...wait(6), unfreeze: true },
             ] },
             { title: STAGE_TITLES[9], steps: [
@@ -383,6 +383,7 @@ export class Tutorial {
         if (this._mdef || !g.castleLife) return;
         const F = g.collision?.groundY ? g.collision.groundY(M.at.x, M.at.z) : TUTORIAL.G + 0.5;
         this._mdef = marketDef(F, { at: M.at, id: M.id });
+        this._mdef.stalls[0].shop = 'tavern'; // (three DIFFERENT goods — meat, cheese, a pie: «сыр» names one, never «which one?» (three cheeses — the deal stuck))
         try { buildMarketStall(g, this._mdef); } catch (e) { console.warn('tutorial market', e); }
         g.castleLife.addSite(this._mdef);
     }
@@ -540,6 +541,7 @@ export class Tutorial {
         this.frozen = !st.unfreeze;
         this.point = st.point || null;
         this._earlyRepeat = false;
+        this.letTalk = !!st.talk; // (a step where the people may answer the player — the purchase)
         this.showBack = !!st.back;
         this.showArmor = !!st.armor; // (the armour's cells shown, empty too — Armor._render)
         try { this.game.armor?._render?.(); } catch { /* the test's game */ } // (the back's cells shown, empty too, while they are told of — Inventory._renderBack)
