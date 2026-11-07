@@ -1283,10 +1283,16 @@ export class Inventory {
         }
         // (the author 05.11: the back's cells are not seen until something is put there — as the armour's appear only when worn)
         const force = !!this.game.tutorial?.showBack; // («Обучение» shows the two cells, empty too, while it tells of them)
-        el.style.display = (this.back.some(Boolean) || force) && this._shown !== false ? 'flex' : 'none';
-        const key = this.back.map((b) => (b ? b.kind + (b.type || '') + (b.uid || b.id || '') : '')).join('|') + (force ? '|f' : '');
+        // (the backpack worn is on the back too: a cell of its own beside the sword's and the shield's — the author: «он не может не показываться»)
+        const pack = this.game.items?.worn?.backpack?.item || null;
+        let pc = el.querySelector('[data-i="pack"]');
+        if (!pc) { pc = document.createElement('div'); pc.className = 'back-cell pack'; pc.dataset.i = 'pack'; pc.innerHTML = '<div class="bc-icon"></div>'; el.appendChild(pc); }
+        el.style.display = (this.back.some(Boolean) || force || pack) && this._shown !== false ? 'flex' : 'none';
+        const key = this.back.map((b) => (b ? b.kind + (b.type || '') + (b.uid || b.id || '') : '')).join('|') + (force ? '|f' : '') + '|p' + (pack?.uid || '');
         if (key === this._backCellKey) return;
         this._backCellKey = key;
+        pc.style.display = pack ? '' : 'none';
+        if (pack) { const ic = pc.querySelector('.bc-icon'); ic.textContent = ''; pc.classList.add('on'); this._pic(ic, pack, Inventory.emojiOf(pack)); pc.title = (pack.magic ? 'Магический рюкзак' : 'Рюкзак') + ' — за спиной; снять: пустая рука за спину и подержать'; }
         this.back.forEach((b, i) => {
             const cell = el.querySelector(`[data-i="${i}"]`);
             cell.style.display = b || force ? '' : 'none'; // (an empty one: not shown — but in the tutorial's telling)

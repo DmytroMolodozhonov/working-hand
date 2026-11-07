@@ -693,7 +693,8 @@ export class ArmorSystem {
         for (const s of SLOTS) { const it = this.worn[s]; if (it?.kind === 'armor') { const m = pieceMax(it); max += m; cur += Math.min(m, it.hp ?? m); } }
         this.game.hud?.setArmor?.(cur, max);
         let el = document.getElementById('armor-cells');
-        if (!this.anyWorn()) { if (el) el.style.display = 'none'; return; }
+        const force = !!this.game.tutorial?.showArmor; // («Обучение» shows the armour's cells, empty too, while it tells of them)
+        if (!this.anyWorn() && !force) { if (el) el.style.display = 'none'; return; }
         if (!el) {
             el = document.createElement('div');
             el.id = 'armor-cells';

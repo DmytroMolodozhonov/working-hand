@@ -116,10 +116,10 @@ test('a player walked through every stage, step by step, to the end', () => {
         if (/«Люмос»/.test(txt)) g.wandMagic.light = {};
         if (/«Нокс»/.test(txt)) g.wandMagic.light = null;
         if (/«Раскрой свои секреты»/.test(txt)) T.onCast('Reveal');
-        if (/Скрестите руки/.test(txt)) { assert.ok(T.allows('Protection'), 'the crossed arms\' shield is let through'); g.combat.shield = { type: 1 }; }
+        if (/Скрестите руки/.test(txt)) { assert.ok(T.allowed.has('Protection'), 'the crossed arms\' shield is let through'); g.combat.shield = { type: 1 }; }
         if (/Снимите щит/.test(txt)) g.combat.shield = null;
-        if (/Шагайте на месте/.test(txt)) { assert.equal(T.frozen, false, 'free to walk'); g.character.group.position.z -= 15; }
-        if (/бегите/.test(txt)) { g.character.isRunning = true; g.character.velocity = { x: 0, z: -8 }; }
+        if (/светящегося круга/.test(txt)) { assert.equal(T.frozen, false, 'free to walk'); g.character.group.position.set(T.ctx.goal.x, 11, T.ctx.goal.z); }
+        if (/бегите к новому кругу/.test(txt)) { g.character.velocity = { x: 0, z: -8 }; run(1); g.character.group.position.set(T.ctx.goal.x, 11, T.ctx.goal.z); }
         if (/Подойдите к нему/.test(txt)) { assert.equal(T.frozen, false); assert.equal(g.inventory.purse.count, 150, 'coins for the purchase'); g.character.group.position.set(20, 11, 3.5); }
         if (/Достаньте мешочек/.test(txt)) held.left = { item: { kind: 'coins', uid: 'pouch', count: 150 } };
         if (/Положите мешочек/.test(txt)) { held.left = null; g.castleLife.talk.counter = [{ item: { uid: 'pouch' } }]; }

@@ -34,6 +34,8 @@ export const TUT = {
     ZOMBIE_HP_FLOOR: 4, // the hero below this in the fight — the stage again
     WIZ_SITE: 'tutorial-wizard',
     MARKET: { id: 'tutorial-market', at: { x: 20, z: 0 }, coins: 150 }, // (the stall right of the hero: its buyer's place ~(20, 3.5))
+    PAUSE: 1.2, // s after a said line before the next (its words were heard to the end)
+    GOAL_R: 2.6, // m: in the glowing circle — there
     VOLUME: 0.7, // the narrator's loudness (the author: 30 % quieter)
     VOICE_WAIT: 25, // s a piece waits for the voices to load (the first start) — then it is only written
     ECHO_S: 2.5, // s after the narrator's words when a phrase is still his own coming back (recognition is late)
@@ -162,7 +164,7 @@ export class Tutorial {
     _makeStages() {
         const g = this.game, T = this;
         const say = (text, extra = {}) => ({ say: text, ...extra });
-        const wait = (s) => ({ done: () => T.t > s });
+        const wait = (s) => ({ done: () => T.t > Math.min(s, TUT.PAUSE) }); // (the step's time runs after the narrator's words: only a short pause more — the author: «долго ждал»)
         const ask = (text, done, extra = {}) => ({ say: text, done, act: true, ...extra }); // (act: the player's turn — «✋ Ваш ход» once the narrator is done)
         const W = { show: 'wand', point: 'wand' }; // (the wand's cell lit, the red arrow at the belt in the camera's window)
         const P = { show: 'pocket', point: 'pocket' }; // (the pockets lit, the arrow at the pocket)
@@ -215,6 +217,7 @@ export class Tutorial {
             { title: STAGE_TITLES[5], steps: [
                 { ...say('Внизу экрана — ваши карманы: в них лежат вещи.'), ...wait(6), show: 'hotbar' },
                 { ...say('Справа — ячейки за спиной, для больших вещей. Обычно их видно, только когда там что-то лежит.'), ...wait(6), show: 'back-cells', back: true },
+                { ...say('Рядом — ваши доспехи: шлем, нагрудник, поножи и мантия. Надетое видно в этих ячейках, и полоска под каждой показывает, сколько доспех ещё выдержит.'), ...wait(6), show: 'armor-cells', armor: true },
                 { ...say('Синяя полоса — мана. Каждое заклинание тратит ману. Потом она понемногу восстанавливается сама.'), ...wait(8), show: ['fatigue-container', 'mana-cur'] },
                 { ...say('Главное в игре — ячейки маны. Это вторая цифра: сколько маны у вас всего. Чем больше ячеек, тем сильнее заклинания вам доступны.'), ...wait(10), show: 'mana-max' },
                 { ...say('За каждое новое заклинание, которое вы произнесёте впервые, дают ячейки маны. Поэтому пробуйте все заклинания, которые знаете.'), ...wait(9), show: 'mana-max' },
@@ -231,9 +234,10 @@ export class Tutorial {
                 ask('Снимите щит: опустите руки или скажите «стоп».', () => !T.game.combat?.shield, { allow: ['Protection'], hint: 'Разведите руки в стороны и опустите их. Или скажите: «Стоп».' }),
             ] },
             { title: STAGE_TITLES[7], steps: [
-                ask('Теперь вы можете ходить. Шагайте на месте, поднимая колени, — герой пойдёт туда, куда вы смотрите. Пройдите немного вперёд.', () => T._walked(12), { unfreeze: true, setup: () => { T.ctx.from = T.game.character.group.position.clone(); }, hint: 'Шагайте на месте, как будто идёте: колени поднимаются, руки двигаются.' }),
-                ask('А теперь бегите: шагайте быстрее и активно машите руками.', () => T.ctx.runT > 1.5, { unfreeze: true, tick: (dt) => { const ch = T.game.character; T.ctx.runT = ch?.isRunning && (T._speed() > 6) ? (T.ctx.runT || 0) + dt : Math.max(0, (T.ctx.runT || 0) - dt); }, hint: 'Чаще шаги и широкие махи руками — герой побежит.' }),
-                { ...say('Отлично! Если кто-то идёт на вас, а вы стоите к нему лицом и шагаете, герой будет отходить назад, не поворачиваясь спиной.'), ...wait(8), unfreeze: true },
+                // (the author: a glowing circle where to come — the check that it is done)
+                ask('Теперь вы можете ходить. Делайте всё то же, что при обычной ходьбе: двигайте руками и ногами, как будто идёте, только оставайтесь на месте. Герой пойдёт туда, куда вы смотрите. Дойдите до светящегося круга впереди.', () => T._atGoal(), { unfreeze: true, setup: () => T._goal(T._frontOfView(14)), hint: 'Двигайтесь как при ходьбе, на месте, и смотрите на светящийся круг — герой пойдёт к нему.' }),
+                ask('А теперь бегите к новому кругу — он слева. Двигайте руками и ногами быстрее и шире, как при беге, — тоже на месте.', () => T._atGoal() && T.ctx.ran > 0.6, { unfreeze: true, setup: () => { T.ctx.ran = 0; T._goal(T._frontOfView(0, -26)); }, tick: (dt) => { if (T._speed() > 6) T.ctx.ran += dt; if (T._atGoal() && !(T.ctx.ran > 0.6) && !T.ctx.toldRun) { T.ctx.toldRun = true; T._narrate('Вы дошли шагом. Теперь бегом — к новому кругу!'); T._goal(T._frontOfView(0, 26)); } }, hint: 'Повернитесь к кругу слева. Двигайте руками и ногами быстро, как при беге, — герой побежит.' }),
+                { ...say('Отлично! Если кто-то идёт на вас, а вы стоите к нему лицом и шагаете, герой будет отходить назад, не поворачиваясь спиной.'), ...wait(8), unfreeze: true, setup: () => T._goal(null) },
             ], onStart: () => T._placeHero() },
             { title: STAGE_TITLES[8], steps: [
                 ask('Теперь — покупка. Справа от вас стоит прилавок торговца. Подойдите к нему.', () => T._atStall(), { unfreeze: true, setup: () => { T._market(); T._giveCoins(); }, hint: 'Повернитесь направо и шагайте к прилавку с полосатым навесом. Встаньте прямо перед ним.' }),
@@ -510,7 +514,9 @@ export class Tutorial {
         this.frozen = !st.unfreeze;
         this.point = st.point || null;
         this._earlyRepeat = false;
-        this.showBack = !!st.back; // (the back's cells shown, empty too, while they are told of — Inventory._renderBack)
+        this.showBack = !!st.back;
+        this.showArmor = !!st.armor; // (the armour's cells shown, empty too — Armor._render)
+        try { this.game.armor?._render?.(); } catch { /* the test's game */ } // (the back's cells shown, empty too, while they are told of — Inventory._renderBack)
         try { this.game.inventory?._render?.(); } catch { /* the test's game */ }
         // (the red arrow in the camera's window: 'wand' / 'pocket' — PocketHintsDraw.pointArrow)
         if (typeof document !== 'undefined') document.body.classList.toggle('tut-map', !!st.map); // (the map is hidden in the tutorial — but for the step that shows it)
@@ -548,6 +554,7 @@ export class Tutorial {
         if (this._placeT <= 0) { this._placeT = 0.3; this._place(); }
         this._modeT = (this._modeT || 0) - dt;
         if (this._modeT <= 0) { this._modeT = 0.15; this._mode(); }
+        this._goalStep(dt);
         if (st.beacon) this._beacon(this.ctx[st.beacon], dt); // (the thing to take: golden sparks round it — seen at once)
         try { st.tick?.(dt); st.check?.(); } catch (e) { console.warn('tutorial tick', e); }
         // (done first: a helmet put on is no longer «in a hand, on the ground or in a pocket» — it is not lost)
@@ -559,6 +566,43 @@ export class Tutorial {
         if (why) { this._fail(why); return; }
         if (st.hint && !this.hinted && this.t > TUT.HINT_AFTER) { this.hinted = true; this._narrate(st.hint, false); }
         if (st.hint && this.hinted && this.t > TUT.HINT_AFTER * 2.5) { this.t = TUT.HINT_AFTER; this._narrate(st.hint, false); } // (again, now and then)
+    }
+
+    /** The glowing circle on the ground where to come (null: none). One group, reused: a ring, a soft disc, a beam of light, sparks. */
+    _goal(at) {
+        this.ctx.goal = at ? { x: at.x, z: at.z } : null;
+        const g = this.game;
+        if (!g.scene) return;
+        if (!this._goalObj) {
+            const grp = new THREE.Group();
+            const mat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+            const ring = new THREE.Mesh(new THREE.RingGeometry(TUT.GOAL_R - 0.35, TUT.GOAL_R, 48), mat(0xffd76a, 0.95)); ring.rotation.x = -Math.PI / 2;
+            const ring2 = new THREE.Mesh(new THREE.RingGeometry(TUT.GOAL_R * 0.55, TUT.GOAL_R * 0.62, 40), mat(0xfff2c0, 0.7)); ring2.rotation.x = -Math.PI / 2;
+            const disc = new THREE.Mesh(new THREE.CircleGeometry(TUT.GOAL_R - 0.35, 40), mat(0xffc94a, 0.22)); disc.rotation.x = -Math.PI / 2;
+            const beam = new THREE.Mesh(new THREE.CylinderGeometry(TUT.GOAL_R * 0.9, TUT.GOAL_R, 9, 32, 1, true), mat(0xffe39a, 0.13)); beam.position.y = 4.5;
+            grp.add(ring, ring2, disc, beam);
+            grp.userData.parts = { ring, ring2, disc, beam };
+            g.scene.add(grp);
+            this._goalObj = grp;
+        }
+        const o = this._goalObj;
+        o.visible = !!at;
+        if (at) o.position.set(at.x, TUTORIAL.G + 0.56, at.z);
+    }
+    _atGoal() { const q = this.ctx.goal, p = this.game.character?.group?.position; return !!(q && p) && Math.hypot(p.x - q.x, p.z - q.z) < TUT.GOAL_R; }
+    /** (each frame) the circle breathes, sparks rise in it. */
+    _goalStep(dt) {
+        const o = this._goalObj;
+        if (!o?.visible) return;
+        this._goalT = (this._goalT || 0) + dt;
+        const k = 0.5 + 0.5 * Math.sin(this._goalT * 3), P = o.userData.parts;
+        P.ring.scale.setScalar(1 + 0.05 * k); P.ring2.rotation.z += dt * 0.8; P.disc.material.opacity = 0.15 + 0.15 * k; P.beam.material.opacity = 0.08 + 0.08 * k;
+        if ((this._goalSp = (this._goalSp || 0) - dt) <= 0) {
+            this._goalSp = 0.08;
+            const a = Math.random() * Math.PI * 2, r = Math.random() * TUT.GOAL_R;
+            _v.set(o.position.x + Math.cos(a) * r, o.position.y + 0.1, o.position.z + Math.sin(a) * r);
+            this.game.fx?.spark?.(_v, 0xffd76a, 0.1, new THREE.Vector3(0, 1.5 + Math.random() * 1.5, 0), 1.2);
+        }
     }
 
     /** Golden sparks rising round a thing lying loose (its uid), a few a second. */
@@ -770,5 +814,6 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
         document.body.classList.remove('tutorial-on', 'tut-map');
         document.querySelectorAll('.tut-glow').forEach((e) => e.classList.remove('tut-glow'));
         this._clearZombies?.();
+        if (this._goalObj) { this.game.scene?.remove(this._goalObj); this._goalObj.traverse((m) => { m.geometry?.dispose?.(); m.material?.dispose?.(); }); this._goalObj = null; }
     }
 }

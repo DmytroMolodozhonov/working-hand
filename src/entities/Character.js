@@ -909,7 +909,7 @@ export class VoxelCharacter {
                 this.group.position.x += this.jumpVel.x * dt;
                 this.group.position.z += this.jumpVel.z * dt;
             } else if (this.isRunning) {
-                const walkSpeed = 2.5, runSpeed = 9.75; // (the run: 30% faster than the first 7.5, as the author asked)
+                const walkSpeed = 2.5, runSpeed = 12.7; // (the run: 30% faster than 9.75 again — the author 07.11: «бег большой — плюс 30 %»; the first was 7.5)
                 // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book; armPump: the arms working)
                 const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (1 + this.armPump.bonus) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1) * (this.steadyK ?? 1) * (this.sizeRun || 1) * walkK(this.gravityK); // (a heavy planet: slower; the monster form: longer strides)
                 // (the settings' «Ходьба назад»: leaning back — the hero steps backwards, slower: a walk, never a run)
