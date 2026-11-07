@@ -68,7 +68,7 @@ export const TUNES = [
     // the OPENING's theme (the author: «крутую эпичную музыку в самом начале»): grand and wide, never fast — brass over a choir and low strings,
     // a drone under, the hall's long reverb; the coach's flight, the castle and the title
     { cat: 'schoolEpic', id: 'school1', ru: 'Крылья над Акселдорфом', feel: 'calm', pad: 'strings', padVel: 1.15, bass: 'bass', bassStyle: 'long', drone: 'drone', perc: 'epic', seed: 7001, key: 50, mode: 'minor', tempo: 72,
-        melody: 'brass', counter: 'choir', arp: null, form: 'BBAABAO', // (the author: «сразу с эпичной части» — no quiet intro: it opens with the lifted section B) reverb: 0.45, hall: 1.6, level: 0.74,
+        melody: 'celesta', counter: 'choir', arp: null, form: 'BBAABAO', // (the melody on the celesta — the author's choice of three) // (the author: «сразу с эпичной части» — no quiet intro: it opens with the lifted section B) reverb: 0.45, hall: 1.6, level: 0.74,
         sections: { I: [[0, 2], [5, 2]], A: [[0, 2], [5, 2], [2, 2], [6, 2]], B: [[3, 2], [0, 2], [6, 2], [4, 2]] } }, // (i – VI – III – VII: the old heroic turn; B lifts to iv and the dominant)
     // the tour and the speech (calm, full of wonder): a celesta's theme over a choir, a harp, the lydian fourth
     { cat: 'school', id: 'school2', ru: 'Акселдорф', feel: 'calm', pad: 'choir', padVel: 0.85, bass: 'bass', bassStyle: 'long', drone: 'drone', seventh: true, seed: 7002, key: 62, mode: 'lydian', tempo: 64,
