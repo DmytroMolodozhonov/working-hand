@@ -240,6 +240,8 @@ import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
 import { Slash } from './Slash.js';
 import { Scars } from '../fx/Scars.js';
+import { LandTornado } from './LandTornado.js';
+import { Whirlpool } from './Whirlpool.js';
 import { DarkFog } from './DarkFog.js';
 import { Vigor } from './Vigor.js';
 import { Dread } from './Dread.js';
@@ -581,7 +583,8 @@ export class Game {
             quakeShake: (front, power, casterId) => { this.quake.shake(front, power); this.crystals?.hitAt(front, power > 1 ? 5 : 3.5, casterId, 'Earthquake', 30); /* (the rock shakes: crystals in a cave under the wave crack) */ if (this.authority && (this._quakeAlarmT || 0) < performance.now() - 500) { this._quakeAlarmT = performance.now(); this.castleLife?.alarm(front, 'quake', null, power > 1 ? 9 : 6); } }, // (…and shakes under whoever is near the wave; the people near take fright)
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin, by, side) => this.sun?.cast(origin, by, side),
-            tornado: (from, at, casterId, side) => this.oceanStorm?.call(from, at, casterId, side), // («Tornado»: the sky turns, then the spout comes down there — OceanStorm.call)
+            tornado: (from, at, casterId, side) => (at.y > 0.5 ? this.landTornado?.call(from, at, casterId, side) : this.oceanStorm?.call(from, at, casterId, side)), // (y = 1: the land tornado — LandTornado.js)
+            whirlpool: (from, at, casterId, side) => this.whirlpool?.call(from, at, casterId, side), // («Maelstrom»: Whirlpool.js)
             rain: (o, casterId, side) => { this.rainFx?.cast(o, casterId === 'local' ? this.localId : casterId, side, inHell(o.x, o.z)); this.storm?.startRain(); }, // («Let it rain»: the whole world, everybody sees it)
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.titans?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.pharaoh?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
@@ -751,6 +754,8 @@ export class Game {
         this.sunken = new SunkenWorld(this); // the wrecks and the sunken temple on the sea's bottom, their chests (SunkenWorld.js)
         this.underwaterLight = new UnderwaterLight(this); // the light under the water: its colour by the depth, the sun's shafts, the marine snow, the caustics (UnderwaterLight.js)
         this.seaFloor = new SeaFloor(this); // the sea's bottom: kelp, seagrass, corals, glowing anemones and lilies, the fish schools (SeaFloor.js)
+        this.landTornado = new LandTornado(this); // the tornado on the land: tears the ground and the buildings, cannot enter water (LandTornado.js)
+        this.whirlpool = new Whirlpool(this); // the whirlpool on the sea: draws the ships in («Maelstrom», Whirlpool.js)
         this.oceanStorm = new OceanStorm(this); // the storms over the sea: rain, lightning, waterspouts (OceanStorm.js — the wind's, SeaWind.js)
         this.rainFx = new RainSummon(this); // «Let it rain»: the beam, the gathering clouds, the curtains of rain (RainSummon.js)
         this.rainDouse = new RainDouse(this); // the rain puts fires out — all of them (not in hell: its rain is blood — RainDouse.js)
@@ -2300,6 +2305,7 @@ export class Game {
         if (name === 'GiveMyPower') return this._castGiveMyPower(isFinal);
         if (name === 'LetItRain') return this._castRain(isFinal);
         if (name === 'Tornado') return this._castTornado(isFinal);
+        if (name === 'Whirlpool') return this._castWhirlpool(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // «Вингардиум Левиоса Максима»: a group, a tree, a house, a ship (LevitationMaxima.js)
@@ -3164,18 +3170,43 @@ export class Game {
             if (aimedAtSky(d, SKY_TILT)) { side = s; break; }
         }
         if (!side) { if (isFinal) this.hud.setVoice('🌪️ Направьте палочку <b>в небо</b> (можно наискось) и скажите «Tornado»', true); return null; }
-        const at = this.oceanStorm?.placeFor(ch.group.position, ch.group.rotation.y);
-        if (!at) { if (isFinal) this.hud.setVoice(at === null && this.oceanStorm?.seaHere(ch.group.position) ? '🌪️ Здесь слишком мелко — смерчу нужна глубокая вода впереди' : '🌪️ Смерч можно вызвать только в море — не на озере и не на суше', true); return null; }
+        let at = this.oceanStorm?.placeFor(ch.group.position, ch.group.rotation.y), land = false;
+        if (!at && !this.oceanStorm?.seaHere(ch.group.position)) { at = this.landTornado?.placeFor(ch.group.position, ch.group.rotation.y); land = !!at; } // (away from the sea: a tornado of the land — dry ground ahead, no water about)
+        if (!at) { if (isFinal) this.hud.setVoice(at === null && this.oceanStorm?.seaHere(ch.group.position) ? '🌪️ Здесь слишком мелко — смерчу нужна глубокая вода впереди' : '🌪️ Смерчу нужна открытая сухая земля впереди (без воды рядом) или глубокое море', true); return null; }
         const tired = this.combat.check('Tornado');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('Tornado');
         const o = this.castOrigin(side);
-        _v1.set(at.x, 0, at.z); // (the spout's place goes in the direction: every computer puts it there)
+        _v1.set(at.x, land ? 1 : 0, at.z); // (the spout's place goes in the direction: every computer puts it there; y = 1: a land tornado)
         this.spells.cast('Tornado', o, _v1, side, this.localId);
         if (this.sync) this.sync.spell('Tornado', o, _v1, side);
         this.castleLife?.alarm?.(new THREE.Vector3(at.x, 0, at.z), 'blast', this.localId, 60); // (a waterspout called by the shore: the people fear it)
-        this.hud.setVoice('🌪️ <span style="color:#bcd8ff">Tornado!</span> Из туч над морем спускается смерч', true);
+        this.hud.setVoice(land ? '🌪️ <span style="color:#d8c9a8">Tornado!</span> Из туч спускается пыльный смерч' : '🌪️ <span style="color:#bcd8ff">Tornado!</span> Из туч над морем спускается смерч', true);
         return 'Tornado';
+    }
+
+    /**
+     * «Maelstrom» (the whirlpool; the author 07.11): 400 mana; the wand (or the hand) raised, pointing out over the water; only at sea (on it, on a deck, swimming, flying over it); the
+     * whirlpool opens ~60 m ahead where the water is deep (Whirlpool.placeFor) and draws the ships in for a few minutes (Whirlpool.js).
+     */
+    _castWhirlpool(isFinal) {
+        const ch = this.character;
+        const w = this.items?.heldOf('wand');
+        let side = null;
+        for (const s of w ? [w.side, w.side === 'left' ? 'right' : 'left'] : ['right', 'left']) if (ch.isArmRaised(s)) { side = s; break; }
+        if (!side) { if (isFinal) this.hud.setVoice('🌀 Поднимите палочку (руку) над водой и скажите «Maelstrom»', true); return null; }
+        const at = this.whirlpool?.placeFor(ch.group.position, ch.group.rotation.y);
+        if (!at) { if (isFinal) this.hud.setVoice(this.oceanStorm?.seaHere(ch.group.position) ? '🌀 Здесь слишком мелко — водовороту нужна глубокая вода впереди' : '🌀 Водоворот можно вызвать только в море', true); return null; }
+        const tired = this.combat.check('Whirlpool');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('Whirlpool');
+        const o = this.castOrigin(side);
+        _v1.set(at.x, 0, at.z);
+        this.spells.cast('Whirlpool', o, _v1, side, this.localId);
+        if (this.sync) this.sync.spell('Whirlpool', o, _v1, side);
+        this.castleLife?.alarm?.(new THREE.Vector3(at.x, 0, at.z), 'blast', this.localId, 60);
+        this.hud.setVoice('🌀 <span style="color:#9fd8ff">Maelstrom!</span> Море раскручивается воронкой', true);
+        return 'Whirlpool';
     }
 
     _castRain(isFinal) {
@@ -3978,6 +4009,8 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m);
+        for (const m of this.landTornado?.samples?.() || []) zoo.add(m); // (the land tornado's dusty funnel)
+        for (const m of this.whirlpool?.samples?.() || []) zoo.add(m); // (the whirlpool's disc)
         for (const m of this.boats?.samples?.() || []) zoo.add(m); // (a boat — BoatModel.js)
         for (const m of this.sunken?.samples?.() || []) zoo.add(m); // (the sunken temple — SeaTempleModel.js)
         for (const m of this.seaFloor?.samples?.() || []) zoo.add(m);
@@ -4498,6 +4531,8 @@ export class Game {
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
         this._updateWind();
         this.oceanStorm?.update(dt);
+        this.landTornado?.update(dt);
+        this.whirlpool?.update(dt);
         this.sunken?.update(dt);
         this.seaFloor?.update(dt);
         this.storm.update(dt);

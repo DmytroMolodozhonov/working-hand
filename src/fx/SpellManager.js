@@ -234,6 +234,7 @@ export function matchSpell(text) {
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
     if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';
     // «Tornado» (a waterspout called out of the sky over the sea — OceanStorm.summon; the author 05.11)
+    if (has('maelstrom', 'maelstrem', 'meilstrom', 'мальстрем', 'мальстрём', 'мельстром', 'мэйлстром', 'мейлстром', 'маэльстром', 'мальстром')) return 'Whirlpool'; // (the whirlpool: Whirlpool.js)
     if (has('tornado', 'торнадо', 'торнада', 'торнаду', 'тарнадо', 'торнэйдо', 'торнейдо', 'торнейду', 'торнадa')) return 'Tornado';
     // «Let it rain» («Лет ит рейн», heard as «летит рейн», «лед ит рэйн»…): before everything with short tokens
     if ((has('rain', 'reign', 'рейн', 'рэйн', 'рейм', 'рэин', 'реин', 'рейна') && has('let', 'лет', 'лэт', 'лед', 'лит ит', 'лидит')) ||
@@ -567,6 +568,7 @@ export class SpellManager {
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o, casterId, handSide); break; // (the beam goes with that player's wand)
             case 'LetItRain': this.castLetItRain(o, casterId, handSide); break;
+            case 'Whirlpool': this.hooks.whirlpool?.(o, direction.clone(), casterId, handSide); break; // (the direction is the whirlpool's PLACE {x, 0, z}, as the Tornado's)
             case 'Tornado': this.castTornado(o, direction.clone(), casterId, handSide); break; // (the direction is the spout's PLACE {x, 0, z} — never normalised: it came down by the world's middle, far from anyone — the author: «не появился»)
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;

@@ -1072,6 +1072,7 @@ export const SPELL_SOUND = {
     ToTheSun: { own: ['magic'], theme: 'thSun' },
     LetItRain: { own: ['cast', 'rain'], theme: 'thRain' },
     Tornado: { own: ['sea_spout', 'sea_gale'], theme: 'thRain', rate: 0.78 },
+    Whirlpool: { own: ['sea_tail', 'sea_gale', 'rumble'], theme: 'thRain', rate: 0.66 }, // («Maelstrom»: the sea's tail swell, the gale, a low rumble; the storm's tune lower still)
     CreateBoat: { cast: 'fxCreate' }, CreateCauldron: { cast: 'fxCreate' }, CreateFlask: { cast: 'fxCreate' }, // (the metal melting, the cauldron cast; the clang at the end — CauldronForge.js)
     Navigare: { own: ['sea_chime', 'sea_tail'] }, // (a boat out of the wood; the boat sent on — Boats.js) // (the waterspout's roar and the gale — SeaSounds.js; the storm's tune lower)
     Alive: { theme: 'thAlive' }, AliveMaxima: { theme: 'thAlive', rate: 0.85 },

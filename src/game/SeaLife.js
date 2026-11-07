@@ -150,7 +150,7 @@ export class SeaLife {
         const [lo, hi] = band(a.type, w);
         let speed = SEA_LIFE.SPEED[a.type][0], tx = a.target.x, ty = a.target.y, tz = a.target.z;
         // a waterspout near: away from it and down
-        const sp = g.oceanStorm?.nearSpout?.(p.x, p.z, 25);
+        const sp = g.oceanStorm?.nearSpout?.(p.x, p.z, 25) || g.whirlpool?.nearWhirl?.(p.x, p.z, 10);
         if (sp) { const dx = p.x - sp.x, dz = p.z - sp.z, l = Math.hypot(dx, dz) || 1; tx = p.x + dx / l * 30; tz = p.z + dz / l * 30; ty = lo; speed = SEA_LIFE.SPEED[a.type][1]; }
         else if (a.state === 'flee') {
             a.stateT -= dt;

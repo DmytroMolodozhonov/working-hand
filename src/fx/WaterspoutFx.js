@@ -66,7 +66,7 @@ float spF(vec2 p) { return spN(p) * 0.55 + spN(p * 2.1 + 7.3) * 0.3 + spN(p * 4.
 function funnelMaterial(shell = 0) {
     return new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide,
-        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uBend: { value: new THREE.Vector2() }, uSpin: { value: 1 }, uSeed: { value: 0 }, uLight: { value: 1 }, uShell: { value: shell } },
+        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uBend: { value: new THREE.Vector2() }, uSpin: { value: 1 }, uSeed: { value: 0 }, uLight: { value: 1 }, uShell: { value: shell }, uTint: { value: new THREE.Vector3(1, 1, 1) } },
         vertexShader: /* glsl */ `
 uniform float uTime, uK, uSpin, uSeed, uShell;
 uniform vec2 uBend;
@@ -110,6 +110,7 @@ void main() {
 }`,
         fragmentShader: /* glsl */ `
 uniform float uTime, uK, uSpin, uLight, uShell;
+uniform vec3 uTint;
 varying vec2 vUv;
 varying float vRim;
 varying vec3 vW;
@@ -124,7 +125,7 @@ void main() {
         float torn = smoothstep(0.42, 0.75, rag);
         float body = 0.55 + 0.45 * (1.0 - smoothstep(0.0, 0.3, u)) + 0.35 * smoothstep(0.7, 1.0, u);
         float a = torn * body * mix(0.12, 0.5, pow(vRim, 1.5)) * smoothstep(0.0, 0.03, u) * (1.0 - smoothstep(0.9, 1.0, u)) * uK;
-        vec3 col = mix(vec3(0.84, 0.88, 0.92), vec3(0.42, 0.46, 0.5), smoothstep(0.2, 0.95, u)) * (0.8 + 0.3 * rag) * uLight;
+        vec3 col = mix(vec3(0.84, 0.88, 0.92), vec3(0.42, 0.46, 0.5), smoothstep(0.2, 0.95, u)) * (0.8 + 0.3 * rag) * uLight * uTint;
         gl_FragColor = vec4(col, clamp(a, 0.0, 0.6));
         return;
     }
@@ -139,7 +140,7 @@ void main() {
     a *= smoothstep(0.0, 0.05, u) * (1.0 - smoothstep(0.86, 1.0, u)); // (the foot torn into spray; the top melts into the cloud)
     a *= uK;
     vec3 low = vec3(0.78, 0.82, 0.86), high = vec3(0.32, 0.35, 0.39);
-    vec3 col = mix(low, high, smoothstep(0.1, 0.9, u)) * (0.68 + 0.42 * bands) * uLight;
+    vec3 col = mix(low, high, smoothstep(0.1, 0.9, u)) * (0.68 + 0.42 * bands) * uLight * uTint;
     col = mix(col * 0.72, col, pow(vRim, 0.6)); // (the core darker where we see through the tube)
     gl_FragColor = vec4(col, clamp(a, 0.0, 0.92));
 }`,
@@ -149,12 +150,13 @@ void main() {
 function cloudMaterial() {
     return new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide,
-        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uLight: { value: 1 } },
+        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uLight: { value: 1 }, uTint: { value: new THREE.Vector3(1, 1, 1) } },
         vertexShader: /* glsl */ `
 varying vec2 vP;
 void main() { vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: /* glsl */ `
 uniform float uTime, uK, uLight;
+uniform vec3 uTint;
 varying vec2 vP;
 ${NOISE}
 void main() {
@@ -165,7 +167,7 @@ void main() {
     float n = spF(q * 1.3) * 0.7 + spF(vP * 5.0 + uTime * 0.03) * 0.3;
     float edge = 1.0 - smoothstep(0.55 + 0.25 * n, 1.0, r);
     float a = edge * (0.55 + 0.4 * n) * uK;
-    vec3 col = mix(vec3(0.13, 0.15, 0.18), vec3(0.3, 0.33, 0.37), n) * uLight;
+    vec3 col = mix(vec3(0.13, 0.15, 0.18), vec3(0.3, 0.33, 0.37), n) * uLight * uTint;
     col *= 0.8 + 0.4 * smoothstep(0.0, 0.5, r); // (darkest in the middle, over the funnel)
     gl_FragColor = vec4(col, clamp(a, 0.0, 0.95));
 }`,
@@ -184,7 +186,7 @@ function sheathGeometry() {
 function sheathMaterial() {
     return new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, side: THREE.DoubleSide,
-        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uSpin: { value: 1 }, uLight: { value: 1 } },
+        uniforms: { uTime: { value: 0 }, uK: { value: 1 }, uSpin: { value: 1 }, uLight: { value: 1 }, uTint: { value: new THREE.Vector3(1, 1, 1) } },
         vertexShader: /* glsl */ `
 uniform float uTime, uSpin;
 varying vec2 vUv; varying float vRim;
@@ -201,6 +203,7 @@ void main() {
 }`,
         fragmentShader: /* glsl */ `
 uniform float uTime, uK, uSpin, uLight;
+uniform vec3 uTint;
 varying vec2 vUv; varying float vRim;
 ${NOISE}
 void main() {
@@ -210,7 +213,7 @@ void main() {
     float fine = spF(vec2(vUv.x * 40.0 - uTime * 4.0 * uSpin, u * 14.0 - uTime * 3.0));
     float a = (0.25 + 0.75 * smoothstep(0.35, 0.8, puff * 0.7 + fine * 0.3)) * mix(0.35, 0.95, vRim);
     a *= smoothstep(0.0, 0.08, u) * (1.0 - smoothstep(0.45 + 0.4 * puff, 1.0, u)) * uK;
-    vec3 col = vec3(0.86, 0.92, 0.96) * (0.82 + 0.25 * fine) * uLight;
+    vec3 col = vec3(0.86, 0.92, 0.96) * (0.82 + 0.25 * fine) * uLight * uTint;
     gl_FragColor = vec4(col, clamp(a, 0.0, 0.85));
 }`,
     });
@@ -242,8 +245,10 @@ let _foamDisc = null;
 const foamDisc = () => _foamDisc || (_foamDisc = (() => { const g = new THREE.CircleGeometry(1, 64); g.rotateX(-Math.PI / 2); return g; })());
 
 export class WaterspoutFx {
-    constructor(scene, spray = null) {
+    /** `opts.tint` [r, g, b]: a land tornado's dusty brown (the funnel, the wall cloud, the sheath are multiplied by it); `opts.land`: no foam on the ground. */
+    constructor(scene, spray = null, opts = {}) {
         this.scene = scene;
+        this.land = !!opts.land;
         this.spray = spray; // WaterSpray (shared with the water spells) — the spray at the foot
         this.slots = [];
         for (let i = 0; i < SPOUT_FX.MAX; i++) {
@@ -260,6 +265,7 @@ export class WaterspoutFx {
             sheath.visible = foam.visible = false; sheath.frustumCulled = foam.frustumCulled = false;
             sheath.renderOrder = 4; foam.renderOrder = 1;
             scene.add(funnel); scene.add(cloud); scene.add(sheath); scene.add(foam);
+            if (opts.tint) for (const m of [funnel, shell, cloud, sheath]) m.material.uniforms.uTint.value.set(opts.tint[0], opts.tint[1], opts.tint[2]);
             this.slots.push({ funnel, shell, cloud, sheath, foam, id: null, sprayT: 0 });
         }
     }
@@ -268,14 +274,15 @@ export class WaterspoutFx {
      * Draw `spouts` ([{id, x, z, k, spin}] — OceanWeather.spoutsOf, nearest first), the sea at y = `seaY`; the wind `wind` {x, z};
      * `light` 0…1 (the night darker).
      */
-    update(dt, t, spouts, seaY, wind, light = 1) {
+    update(dt, t, spouts, seaY0, wind, light = 1) {
         const n = Math.min(SPOUT_FX.MAX, spouts.length);
         const wl = Math.hypot(wind?.x || 0, wind?.z || 0) || 1;
         for (let i = 0; i < SPOUT_FX.MAX; i++) {
             const S = this.slots[i], sp = i < n ? spouts[i] : null;
             if (!sp || sp.k <= 0.01) { S.funnel.visible = S.shell.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = false; S.id = null; continue; }
             S.id = sp.id;
-            S.funnel.visible = S.shell.visible = S.cloud.visible = S.sheath.visible = S.foam.visible = true;
+            const seaY = sp.y ?? seaY0; // (a land tornado stands on the ground under it)
+            S.funnel.visible = S.shell.visible = S.cloud.visible = S.sheath.visible = true; S.foam.visible = !this.land;
             // the spray sheath boiling at the foot, the foam spiralling on the sea under it (they follow the funnel's bent foot)
             const bx = sp.x - (wind?.x || 0) / wl * 0.6 * 30 * 0.92, bz = sp.z - (wind?.z || 0) / wl * 0.6 * 30 * 0.92;
             S.sheath.position.set(bx, seaY - 0.5, bz);

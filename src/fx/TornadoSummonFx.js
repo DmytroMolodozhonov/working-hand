@@ -153,11 +153,11 @@ export class TornadoSummonFx {
     /** A calling starts: from the caster at `from` (the wand), the spout's place `at` {x, z}; `by` the caster's id, `side` the hand. */
     start(from, at, spin = 1, by = null, side = null) {
         const S = this.slots.find((s) => !s.on) || this.slots[0];
-        Object.assign(S, { on: true, t: 0, ended: false, from: from.clone(), at: { x: at.x, z: at.z }, spin, bolts: 0, sparkT: 0, by, side, strikeT: 0, zapT: 0.15, thunderAt: 0.6 + Math.random() * 0.5, rumbled: false });
-        S.cloud.visible = S.foam.visible = true;
-        S.cloud.position.set(at.x, WATER_LEVEL_Y + TORNADO_FX.HEIGHT, at.z);
+        Object.assign(S, { Y: at.y > 0.5 && at.ground != null ? at.ground : WATER_LEVEL_Y, land: at.y > 0.5, on: true, t: 0, ended: false, from: from.clone(), at: { x: at.x, z: at.z }, spin, bolts: 0, sparkT: 0, by, side, strikeT: 0, zapT: 0.15, thunderAt: 0.6 + Math.random() * 0.5, rumbled: false });
+        S.cloud.visible = true; S.foam.visible = !S.land; // (the ground has no foam: dust instead)
+        S.cloud.position.set(at.x, S.Y + TORNADO_FX.HEIGHT, at.z);
         S.cloud.scale.setScalar(TORNADO_FX.RADIUS);
-        S.foam.position.set(at.x, WATER_LEVEL_Y + 0.35, at.z);
+        S.foam.position.set(at.x, S.Y + 0.35, at.z);
         S.foam.scale.setScalar(30);
         const g = this.game;
         g.storm?.start?.(new THREE.Vector3(at.x, 0, at.z), 30); // (the sky darkens, it rains — near: Storm.start)
@@ -187,7 +187,7 @@ export class TornadoSummonFx {
         const g = this.game, sm = g.spells, fx = g.fx;
         if (!sm?._jagged || !fx) return;
         const tip = this._tip(S, _tip, _dir);
-        const sky = _sky.set(S.at.x + (tip.x - S.at.x) * 0.25, WATER_LEVEL_Y + TORNADO_FX.HEIGHT - 6, S.at.z + (tip.z - S.at.z) * 0.25);
+        const sky = _sky.set(S.at.x + (tip.x - S.at.x) * 0.25, S.Y + TORNADO_FX.HEIGHT - 6, S.at.z + (tip.z - S.at.z) * 0.25);
         // the first leg along the wand (14 m), then up to the clouds
         const mid = _mid.copy(tip).addScaledVector(_dir, 14);
         sm._jagged(tip.clone(), mid.clone(), 7, 0.55, TORNADO_FX.RESTRIKE * 1.6);
@@ -239,7 +239,7 @@ export class TornadoSummonFx {
                 S.ended = true; // (the last crack: the whole beam at once, a flash, the thunder rolls — the sky is open)
                 for (let i = 0; i < 2; i++) this._beam(S, 1);
                 cu.uFlash.value = 1.6;
-                _p.set(S.at.x, WATER_LEVEL_Y + TORNADO_FX.HEIGHT - 8, S.at.z);
+                _p.set(S.at.x, S.Y + TORNADO_FX.HEIGHT - 8, S.at.z);
                 fx?.lightFlash?.(_p, 0xdde8ff, 12, 0.5, 320);
                 g.sound?.playThunder?.(0.9);
             }
@@ -277,9 +277,9 @@ export class TornadoSummonFx {
                     // the spray racing round the place and closing in (from 2 s on)
                     if (t > 3 && t < TORNADO_FX.LIFE - 1) {
                         const b = Math.random() * 6.28, r = Math.max(6, 26 - (t - 3) * 4) * (0.85 + Math.random() * 0.3);
-                        _p.set(S.at.x + Math.cos(b) * r, WATER_LEVEL_Y + 0.4, S.at.z + Math.sin(b) * r);
+                        _p.set(S.at.x + Math.cos(b) * r, S.Y + 0.4, S.at.z + Math.sin(b) * r);
                         _v.set(-Math.sin(b) * 16 * S.spin - Math.cos(b) * 3, 2 + Math.random() * 6, Math.cos(b) * 16 * S.spin - Math.sin(b) * 3);
-                        fx.spark(_p, Math.random() < 0.5 ? 0xffffff : 0xdff2ff, 0.16 + Math.random() * 0.1, _v, 1.4);
+                        fx.spark(_p, S.land ? (Math.random() < 0.5 ? 0xb89d78 : 0xd8c9a8) : (Math.random() < 0.5 ? 0xffffff : 0xdff2ff), 0.16 + Math.random() * 0.1, _v, 1.4);
                     }
                 }
             }
@@ -287,7 +287,7 @@ export class TornadoSummonFx {
             if (t > TORNADO_FX.BEAM + 0.4 && S.bolts < 5 && Math.random() < dt * 1.4) {
                 S.bolts++;
                 const b = Math.random() * 6.28, r = 20 + Math.random() * 50;
-                _p.set(S.at.x + Math.cos(b) * r, WATER_LEVEL_Y, S.at.z + Math.sin(b) * r);
+                _p.set(S.at.x + Math.cos(b) * r, S.Y, S.at.z + Math.sin(b) * r);
                 const sky = _v.copy(_p).add({ x: (Math.random() - 0.5) * 20, y: TORNADO_FX.HEIGHT - 10, z: (Math.random() - 0.5) * 20 });
                 const sm = g.spells;
                 if (sm?._jagged) for (let k = 0; k < 3; k++) sm._jagged(sky.clone(), _p.clone(), 16, 2.6 - k * 0.7, 0.4);

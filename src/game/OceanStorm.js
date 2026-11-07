@@ -165,6 +165,7 @@ export class OceanStorm {
             this._fx().update(dt, t, this.spouts, seaY, g.wind, light);
         }
         for (const sp of this.spouts) spoutSound = Math.max(spoutSound, sp.k * Math.max(0, 1 - sp.d / 260));
+        spoutSound = Math.max(spoutSound, g.landTornado?.sound || 0, (g.whirlpool?.sound || 0) * 0.6); // (the land tornado's roar and the whirlpool's rumble ride the same loop)
         this._pushMe(dt, me, seaY);
         if (g.authority) this._pushShips(dt);
         const under = g.swim?.underwater ? 1 : 0;
