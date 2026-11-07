@@ -45,6 +45,7 @@ import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
 import { WORLD_GEN } from './world/Terrain.js';
+import { STAGE_TITLES as TUT_STAGES } from './game/Tutorial.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, SCHOOL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
@@ -426,6 +427,7 @@ function readConfig() {
 
 // ------------------------------------------------------------------ maps
 let tutContinue = true; // («Обучение»: go on from where the player stopped — the tick under the cards, on by default)
+const tutPick = new Set(); // («Обучение» passed: the stages chosen to repeat)
 async function updateGameMapList(forceRefresh = false) {
     const gameTab = $('tab-game');
     let mapListDiv = $('game-map-list');
@@ -489,6 +491,17 @@ async function updateGameMapList(forceRefresh = false) {
     mapListDiv.appendChild(hint);
     // «Обучение»: go on from the stage left off (the author 07.11: a tick, on by default; off — from the start)
     if (selectedMode === 'tutorial' && !pickingMap) {
+        // passed once: any stages can be chosen to repeat (the author 07.11) — none chosen: the whole tutorial (or from where it was left)
+        let passed = false;
+        try { passed = !!localStorage.getItem('zns-tutorial-done'); } catch { passed = false; }
+        if (passed) {
+            const box = document.createElement('div');
+            box.className = 'tut-pick';
+            box.innerHTML = '<div class="tut-pick-h">Повторить этапы <span class="mp-hint">— отметьте нужные; ничего не отмечено — всё обучение</span></div>'
+                + TUT_STAGES.map((t, i) => `<button type="button" class="tut-chip${tutPick.has(i) ? ' on' : ''}" data-i="${i}">${i + 1}. ${t}</button>`).join('');
+            box.querySelectorAll('.tut-chip').forEach((b) => { b.onclick = () => { const i = +b.dataset.i; if (tutPick.has(i)) tutPick.delete(i); else tutPick.add(i); b.classList.toggle('on', tutPick.has(i)); }; });
+            mapListDiv.appendChild(box);
+        }
         let left = null;
         try { left = JSON.parse(localStorage.getItem('zns-tutorial-at') || 'null'); } catch { left = null; }
         if (left && left.stage > 0) {
@@ -1260,7 +1273,8 @@ let starting = false;
 function startTutorial(cont = true) {
     let from = 0;
     try { const at = JSON.parse(localStorage.getItem('zns-tutorial-at') || 'null'); if (cont && at?.stage > 0) from = at.stage | 0; } catch { from = 0; }
-    startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, tutorialFrom: from, map: null, worldName: 'Обучение' }); // (a small bounded map, never saved — Tutorial.js)
+    const only = tutPick.size ? [...tutPick] : null; // (stages chosen to repeat — the whole tutorial when none)
+    startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, tutorialFrom: only ? 0 : from, tutorialOnly: only, map: null, worldName: 'Обучение' }); // (a small bounded map, never saved — Tutorial.js)
 }
 
 /** «Ва-ва-ва-ваааа»: a sad trombone — four falling notes, the last one long and wobbling (synthesised: a buzzing reed through a closing «wah»). */

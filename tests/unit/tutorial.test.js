@@ -100,7 +100,7 @@ test('a player walked through every stage, step by step, to the end', () => {
         if (/правша или левша/.test(txt)) { run(40); T.hear('я правша'); }
         if (/влево, а потом вправо/.test(txt)) { g.smoothHead.yaw = 0.6; run(0.2); g.smoothHead.yaw = -0.6; }
         if (/вверх, а потом вниз/.test(txt)) { g.smoothHead.pitch = 0.5; run(0.2); g.smoothHead.pitch = -0.4; }
-        if (/Достаньте палочку/.test(txt)) { const i = g.inventory.slots.findIndex((s) => s?.kind === 'wand'); held.right = { item: g.inventory.slots[i] }; g.inventory.slots[i] = null; }
+        if (/Достаньте палочку/.test(txt)) { const i = g.inventory.slots.findIndex((s) => s?.kind === 'wand'); if (i >= 0) { held.right = { item: g.inventory.slots[i] }; g.inventory.slots[i] = null; } }
         if (/«Бомбардо»/.test(txt)) { assert.ok(T.allowed.has('Bombardo') && !T.allows('Inferno'), 'only the step\'s spell'); assert.equal(T.talking && T.allows('Bombardo'), false, 'not while the narrator speaks'); for (let x = -6; x <= 6; x++) for (let z = -18; z <= -6; z++) for (let L = 11; L <= 17; L++) blocks.set(`${x},${L},${z}`, 0); }
         if (/уберите палочку\./.test(txt)) { g.inventory.slots[0] = held.right.item; held.right = null; }
         if (/Повернитесь кругом/.test(txt)) g.camera.dir.set(0, 0, 1);
@@ -127,7 +127,9 @@ test('a player walked through every stage, step by step, to the end', () => {
         if (/Положите мешочек/.test(txt)) { held.left = null; g.castleLife.talk.counter = [{ item: { uid: 'pouch' } }]; }
         if (/что хотите купить/.test(txt)) loose.set('good', { item: { uid: 'good', kind: 'bread', shop: { stall: 'tutorial-market:s0', price: 10, paid: true } } });
         if (/Возьмите её с прилавка/.test(txt)) { loose.delete('good'); held.left = { item: { uid: 'good', kind: 'bread' } }; }
-        if (/«Экспеллиармус»/.test(txt)) T.ctx.wizDown = true;
+        if (/Теперь ваша очередь/.test(txt)) T.ctx.wiz = { noWand: true };
+        if (/Палочка вылетела у него/.test(txt)) T.ctx.wiz.noWand = false;
+        if (/настоящая дуэль/.test(txt)) { T.ctx.clashSeen = true; run(2); T.ctx.wiz.noWand = true; }
         if (/«Фрозен»/.test(txt)) for (const z of T.zombies) z.isFrozen = true;
         run(st.done && /wait/.test('') ? 0 : 1);
         if (at() === before) run(45); // (the narrator speaks, then the step's pause)
@@ -186,4 +188,14 @@ test('the narrator: the first line waits for the voices to load (it was lost), t
     g.poseService.lastResults.poseLandmarks = []; // (not seen yet: the step waits for him — its time runs)
     T.update(0.1);
     assert.ok(T.t > 0 && !T.talking, 'the step\'s time runs once the words are said');
+});
+
+test('passed once: only the chosen stages are walked, in order, then the end', () => {
+    const { g } = fake();
+    const T = new Tutorial(g, { only: [11, 4] });
+    assert.equal(T.stage, 4);
+    T.step = T.stages[4].steps.length - 1; T._next();
+    assert.equal(T.stage, 11, 'from the 5th straight to the 12th');
+    T.step = T.stages[11].steps.length - 1; T._next();
+    assert.ok(T.done);
 });

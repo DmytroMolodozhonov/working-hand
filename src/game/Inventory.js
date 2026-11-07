@@ -900,6 +900,7 @@ export class Inventory {
         const n = this.slots.length + 1; // (the last of the circle — the pouch from the belt)
         // (a deal can be made — a merchant near: the pouch is in the circle, and FIRST — the author 07.11: «монетки не смог достать»;
         // the fist at the hip alone was too hard. No deal: it is not in the circle at all — CoinDeal.js)
+        try { this.game.coinDeal?._refresh?.(); } catch { /* the test's game */ } // (looked at NOW: just come up to the counter, the last look may be older)
         const deal = !!(this.game.coinDeal?.mayTake?.() && this.game.config?.mode !== 'creative' && this.purse?.magic && this.purse.count > 0);
         const start = deal && this._next !== this.slots.length ? this.slots.length - 1 : (this._next ?? -1);
         for (let k = 1; k <= n; k++) {

@@ -71,7 +71,7 @@ export function splitSay(text, max = TUT.SAY_MAX) {
 }
 
 export class Tutorial {
-    constructor(game, { from = 0 } = {}) {
+    constructor(game, { from = 0, only = null } = {}) {
         this.game = game;
         this.stage = 0; this.step = 0;
         this.t = 0; // s in this step
@@ -88,7 +88,9 @@ export class Tutorial {
         this.stages = this._makeStages();
         this._ui();
         this._placeHero(); // (always at the start's place, facing the hill: the things are given round it — also when going on from a later stage)
-        this._start(Math.max(0, Math.min(this.stages.length - 1, from | 0))); // (from: the stage left off — the menu's tick «Продолжить»)
+        // only: the stages chosen to repeat (the menu, after the tutorial was passed — the author 07.11), in their order
+        this.only = Array.isArray(only) && only.length ? [...new Set(only.map((x) => x | 0))].filter((x) => x >= 0 && x < this.stages.length).sort((a, b) => a - b) : null;
+        this._start(this.only ? this.only[0] : Math.max(0, Math.min(this.stages.length - 1, from | 0))); // (from: the stage left off — the menu's tick «Продолжить»)
     }
 
     /** Nothing but the lesson on the meadow: no herds, wild plants, birds, book-birds or bosses wander in (the author: «максимально убираем всё лишнее»). */
@@ -249,15 +251,21 @@ export class Tutorial {
                 ask('Теперь — покупка. Неподалёку появился торговец: прилавок под полосатым навесом. Подойдите к нему — к светящемуся кругу перед прилавком.', () => T._atStall(), { unfreeze: true, allow: ['Accio'], setup: () => { T._market(); T._giveCoins(); const f = T._mdef?.stalls?.[0]?.front; if (f) T._goal(f); }, hint: 'Оглянитесь: где-то рядом полосатый навес и светящийся круг перед прилавком. Идите туда.' }),
                 ask('Видите: внизу, в конце карманов, появилась ячейка с монетами. Она есть, только пока рядом торговец. Достаньте мешочек: он висит на поясе там же, где карман. Посмотрите вниз, дотянитесь туда дочерней рукой и сожмите кулак.', () => !!T._pouchHeld() || T._pouchOnCounter(), { unfreeze: true, allow: ['Accio'], ...P, setup: () => T._goal(null), show: 'pouch', hint: 'Монеты достаются только рядом с торговцем. Смотрите вниз, дочерняя рука — к карману, и сожмите кулак, а не раскрытую ладонь.' }),
                 ask('Положите мешочек на прилавок: вытяните над ним руку и разожмите кисть.', () => T._pouchOnCounter() || T._bought(), { unfreeze: true, talk: true, allow: ['Accio'], hint: 'Рука с мешочком — над прилавком, и раскройте ладонь.' }),
-                ask('Теперь скажите вслух, что хотите купить. Например: «сыр» или «пирог». Цена написана на карточке у товара.', () => T._bought(), { unfreeze: true, talk: true, allow: ['Accio'], hint: 'Назовите товар, который лежит на прилавке. Торговец возьмёт плату и положит сдачу.' }),
+                ask('Теперь скажите вслух, что хотите купить. Например: «сыр» или «пирог». Цена написана на карточке у товара.', () => T._bought(), { unfreeze: true, talk: true, allow: ['Accio'], hear: (t) => T._buyByWord(t), hint: 'Назовите товар, который лежит на прилавке. Торговец возьмёт плату и положит сдачу.' }),
                 ask('Покупка ваша! Возьмите её с прилавка рукой. Сдачу тоже заберите.', () => T._boughtTaken(), { unfreeze: true, talk: true, allow: ['Accio'], hint: 'Протяните руку к купленной вещи на краю прилавка и сожмите кисть.' }),
                 { ...say('Так покупают всё: еду, зелья, свитки, оружие. А ненужные вещи можно продать торговцу.'), ...wait(6), unfreeze: true },
             ] },
             { title: STAGE_TITLES[9], steps: [
-                { ...say('Теперь — дуэль. Перед вами появится волшебник-ученик. Он не опасен, но будет бросать в вас заклинания.'), ...wait(6), setup: () => T._placeHero() },
-                { ...say('Выучим главное дуэльное заклинание — «Экспеллиармус». Оно выбивает палочку из рук врага.'), ...wait(5), setup: () => { if (!T._held('wand')) T._wandToPocket(); T._spawnWizard(); }, tick: () => T._wizardKeep() },
-                ask('Поднимите руку с палочкой на волшебника и скажите: «Экспеллиармус». Когда ваш луч столкнётся с его лучом, держите руку на нём и давите, пока не победите.', () => T._wizardBeaten(), { allow: ['Expelliarmus', 'Stupefy', 'Ice', 'Frozen', 'Protection', 'Stand'], setup: () => { if (!T._held('wand')) T._wandToPocket(); T._spawnWizard(); }, tick: () => T._wizardKeep(), hint: 'Рука с палочкой смотрит на волшебника. «Экс-пел-ли-ар-мус». В столкновении лучей держите руку ровно на нём.', fail: () => (T._hp() <= TUT.ZOMBIE_HP_FLOOR ? 'Волшебник оказался сильнее' : null) }),
-                { ...say('Победа! Волшебник побеждён. В настоящих дуэлях противники сильнее — тренируйтесь.'), ...wait(6), setup: () => T._wizardGone() },
+                // (the author 07.11: first he shows «Экспеллиармус» on the hero, then he stands and the hero disarms him, then a real duel —
+                // both cast at once, the beams meet, «Максима» in the clash)
+                { ...say('Теперь — дуэль. Перед вами волшебник-ученик. Он не опасен: это урок.'), ...wait(2), setup: () => { T._placeHero(); T._spawnWizard(); }, tick: () => T._wizardKeep('calm') },
+                ask('Достаньте палочку.', () => T._wandInHand(), { ...W, setup: () => { if (!T._held('wand')) T._wandToPocket(); }, tick: () => T._wizardKeep('calm'), hint: 'Посмотрите вниз и возьмите палочку с пояса основной рукой.' }),
+                ask('Смотрите: волшебник покажет на вас «Экспеллиармус». Это заклинание выбивает палочку из рук.', () => T.ctx.demoDone, { talk: 'all', tick: (dt) => { T._wizardKeep('calm'); T._demoExpel(dt); } }),
+                ask('Палочка вылетела из руки! Верните её: скажите «Акцио» — она прилетит обратно.', () => T._wandInHand() || !!T._held('wand'), { allow: ['Accio'], tick: () => T._wizardKeep('calm'), hint: 'Поднимите руку и скажите: «Акцио». Палочка вернётся.' }),
+                ask('Теперь ваша очередь. Волшебник стоит и не защищается. Направьте на него палочку и скажите: «Экспеллиармус».', () => T._wizDisarmed(), { allow: ['Expelliarmus'], setup: () => { if (!T._held('wand')) T._wandToPocket(); }, tick: () => T._wizardKeep('calm'), hint: 'Рука с палочкой смотрит прямо на волшебника. «Экс-пел-ли-ар-мус».' }),
+                { ...say('Палочка вылетела у него из рук! Так выигрывают дуэль, никого не раня. Сейчас он её подберёт.'), ...wait(5), talk: 'all', tick: () => T._wizardKeep('calm'), done: () => T.t > 3 && !T._wizDisarmed() },
+                ask('А теперь — настоящая дуэль. Скажите «Экспеллиармус» — он ответит тем же, и лучи столкнутся. Держите руку на волшебнике и давите. В столкновении крикните «Максима» — ваш луч станет сильнее.', () => T.ctx.clashSeen && T._wizDisarmed(), { allow: ['Expelliarmus', 'Maxima', 'Accio', 'Protection', 'Stand'], talk: 'all', setup: () => { T.ctx.clashSeen = false; T.ctx.maxima = false; T.ctx.answerAt = 0; if (!T._held('wand')) T._wandToPocket(); }, tick: (dt) => T._duelStep(dt), hint: 'Рука на волшебнике, скажите «Экспеллиармус». Когда лучи столкнутся — держите руку ровно и крикните «Максима».', fail: () => (T._hp() <= TUT.ZOMBIE_HP_FLOOR ? 'Волшебник оказался сильнее' : null) }),
+                { ...say('Победа! Вы выиграли дуэль. В настоящих дуэлях противники сильнее — тренируйтесь и не забывайте про «Максиму».'), ...wait(3), setup: () => T._wizardGone() },
             ], onFail: () => { T._wizardGone(); T._heal(); } },
             { title: STAGE_TITLES[10], steps: [
                 { ...say('Последнее испытание — зомби. Они медленные, но опасны вблизи.'), ...wait(5), setup: () => { T._placeHero(); T._heal(); } },
@@ -265,12 +273,16 @@ export class Tutorial {
                 { ...say('Все зомби заморожены. Вы справились!'), ...wait(4) },
             ], onFail: () => { T._clearZombies(); T._heal(); } },
             { title: STAGE_TITLES[11], steps: [
-                { ...say('Обучение почти закончено. Цель игры — победить боссов.'), ...wait(4), show: 'bosses' },
-                { ...say('Есть боссы земного уровня: король, глава башни волшебников, гигантская паучиха, дракон, Ледяная Королева, капитан Чёрные Усы и другие.'), ...wait(9), show: 'bosses' },
-                { ...say('А есть боссы божественного уровня — титаны на других планетах.'), ...wait(5), show: 'bosses' },
-                { ...say('Главный совет: не бросайтесь в бой сломя голову. Сначала учите заклинания. Свитки с ними находят в пещерах и в сундуках, а ещё покупают на рынке за монеты.'), ...wait(11), show: 'bosses' },
-                { ...say('Перед каждым боем и каждой встречей продумайте план.'), ...wait(4), show: 'bosses' },
-                { ...say('Обучение пройдено. Удачи, волшебник!'), ...wait(4), show: 'finish' },
+                // (the author 07.11: not pictures piled on each other — the way of a wizard, step by step, with arrows, beautifully)
+                { ...say('Обучение почти закончено. Посмотрите, какой путь вас ждёт.'), ...wait(1), show: 'journey:0' },
+                { ...say('Первое — пещеры. Там сундуки, свитки, монеты и кристаллы маны. Возьмите с собой свет — «Люмос».'), ...wait(1), show: 'journey:1' },
+                { ...say('Находите города и деревни. Говорите с жителями и волшебниками: они подскажут, научат и продадут нужное.'), ...wait(1), show: 'journey:2' },
+                { ...say('В лавках и на рынках за монеты покупают свитки. Каждый новый свиток — новое заклинание и новые ячейки маны.'), ...wait(1), show: 'journey:3' },
+                { ...say('Варите зелья: они лечат, защищают и дают особую силу.'), ...wait(1), show: 'journey:4' },
+                { ...say('Когда станете сильнее — боссы земного уровня: король, глава башни волшебников, гигантская паучиха, дракон, Ледяная Королева, капитан Чёрные Усы и другие.'), ...wait(1), show: 'journey:5' },
+                { ...say('А сильнее всех — титаны на других планетах. Это боссы божественного уровня.'), ...wait(1), show: 'journey:6' },
+                { ...say('Главный совет: не бросайтесь в бой сломя голову. Учите заклинания и продумывайте план перед каждой встречей.'), ...wait(2), show: 'journey:7' },
+                { ...say('Обучение пройдено. Удачи, волшебник!'), ...wait(2), show: 'finish' },
             ] },
         ];
     }
@@ -410,6 +422,14 @@ export class Tutorial {
         for (const side of ['left', 'right']) if (paid(it?.held?.[side]?.item)) { this.ctx.bought = it.held[side].item.uid; return true; }
         return false;
     }
+    /** The player named a good (the author: «сыр» was not understood — the phrase went nowhere): straight to the merchant's own deal. */
+    _buyByWord(text) {
+        const life = this.game.castleLife, talk = life?.talk;
+        const v = [...(life?.byId?.values?.() || [])].find((x) => x.cs?.def?.id === TUT.MARKET.id && !x.dead);
+        if (!v || !talk?._payByName) return false;
+        try { if (talk._payByName(v, String(text || '').toLowerCase())) { v.talking = 4; return true; } } catch (e) { console.warn('tutorial buy', e); }
+        return false;
+    }
     /** The scroll burnt and its spell known (Items.burnHeldScroll → applyScroll). */
     _scrollLearned() {
         const g = this.game, u = this.ctx.scroll;
@@ -437,22 +457,62 @@ export class Tutorial {
         if (!life.extra?.has(TUT.WIZ_SITE)) life.addSite(this._wizDef());
         this.ctx.wizWait = 0;
     }
-    /** (each frame) the wizard seated and set on the hero; the fight's end read. */
-    _wizardKeep() {
+    /** (each frame) the wizard made and kept: 'calm' — he stands and never fights (a lesson); 'fight' — the hero is his foe. */
+    _wizardKeep(mode = 'fight') {
         const g = this.game, life = g.castleLife, cs = life?.castles?.get(TUT.WIZ_SITE);
-        if (!cs?.awake) return;
+        if (!cs?.awake) return null;
         let v = cs.active.get(1);
         if (!v && !this.ctx.wizMade) {
             this.ctx.wizMade = true;
             life.state?.(TUT.WIZ_SITE)?.killed?.delete?.(1);
             v = life._activate(cs, 1, cs.def.spot, 'stall', { post: cs.def.spot, hp: 14 });
         }
-        if (!v) return;
+        if (!v) return null;
         this.ctx.wiz = v;
-        if (v.dead || v.hp <= 0 || v.disarmed || (v.W && v.wandLost)) this.ctx.wizDown = true;
-        if (!v.dead && !this.ctx.wizDown) { cs.hostile.set(g.localId, Date.now() + 60000); v.foe = g.localId; }
+        if (v.dead) return v;
+        if (mode === 'calm') { cs.hostile.clear?.(); v.foe = null; v.fleeT = 0; v.threatAt = null; v.hunt = null; }
+        else { cs.hostile.set(g.localId, Date.now() + 60000); v.foe = g.localId; }
+        return v;
     }
-    _wizardBeaten() { const v = this.ctx.wiz; return !!this.ctx.wizDown || !!(v && (v.dead || v.hp <= 0 || !v.model?.heldTool)); }
+    /** The wizard's wand knocked out of his hand (lying, fetched, or gone). */
+    _wizDisarmed() { const v = this.ctx.wiz; return !!(v && (v.noWand || v.lostWand || v.dead)); }
+    /** He casts `spell` at the hero now (turned to him first: «лицом к цели»). */
+    _wizCast(spell) {
+        const g = this.game, life = g.castleLife, v = this.ctx.wiz;
+        if (!v || v.dead || v.noWand) return false;
+        const fp = life._playerPos?.(g.localId);
+        if (!fp) return false;
+        v.yaw = Math.atan2(-(fp.x - v.x), -(fp.z - v.z));
+        try { return !!life.wizards?.fight?._cast(v, spell, g.localId, fp); } catch (e) { console.warn('tutorial wizard cast', e); return false; }
+    }
+    /** (the demo) after the words: «Экспеллиармус!» at the hero; done when the wand flew (or a while after a miss). */
+    _demoExpel(dt) {
+        const c = this.ctx;
+        if (this.talking) return;
+        c.demoT = (c.demoT || 0) + dt;
+        if (!c.demoCast && c.demoT > 0.6) {
+            if (this._wizCast('Expelliarmus')) { c.demoCast = true; const v = c.wiz; if (v) this.game.castleLife?._say?.(v, 'Экспеллиармус!', 2, true, true); }
+            else if (c.demoT > 6) c.demoDone = true; // (he could not: the lesson goes on)
+        }
+        if (c.demoCast) { c.demoAfter = (c.demoAfter || 0) + dt; if (!this._wandInHand() || c.demoAfter > 8) c.demoDone = true; }
+    }
+    /** (the real duel) he fights; the hero's «Экспеллиармус» is answered at once — the beams meet; the clash and «Максима» seen. */
+    _duelStep(dt) {
+        const g = this.game, c = this.ctx;
+        const v = this._wizardKeep(this._wizDisarmed() ? 'calm' : 'fight');
+        if (!v) return;
+        const duel = g.duel, me = duel?.me ?? g.localId;
+        const clash = !!duel?.clashes?.some?.((x) => x.a?.by === me || x.b?.by === me);
+        if (clash) c.clashSeen = true;
+        if (clash && this.events.includes('Maxima')) c.maxima = true;
+        // the hero cast: he answers with the same at once (the beams meet), not more often than every 2 s
+        const n = this.events.filter((e) => e === 'Expelliarmus').length;
+        c.answerAt -= dt;
+        if (n > (c.seenCasts || 0) && c.answerAt <= 0 && !clash) { c.seenCasts = n; c.answerAt = 2; this._wizCast('Expelliarmus'); }
+        // the hero lost his wand in the duel: told once how to get it back
+        if (!this._held('wand') && !c.toldLost) { c.toldLost = true; this._narrate('Он выбил у вас палочку! Верните её: «Акцио» — и попробуйте снова.', false); }
+        if (this._held('wand')) c.toldLost = false;
+    }
     _wizardGone() {
         const life = this.game.castleLife, cs = life?.castles?.get(TUT.WIZ_SITE);
         if (cs) { cs.hostile.clear?.(); const v = cs.active.get(1); if (v) { v.foe = null; try { life._deactivate(v); } catch { /* gone */ } } }
@@ -517,7 +577,7 @@ export class Tutorial {
     _cur() { return this.stages[this.stage]?.steps[this.step] || null; }
     _start(stage) {
         this.stage = stage; this.step = -1;
-        try { localStorage.setItem('zns-tutorial-at', JSON.stringify({ stage, title: this.stages[stage]?.title || '' })); } catch { /* private mode */ } // (where to go on next time)
+        if (!this.only) try { localStorage.setItem('zns-tutorial-at', JSON.stringify({ stage, title: this.stages[stage]?.title || '' })); } catch { /* private mode */ } // (where to go on next time)
         this.ctx = { hand: this.ctx?.hand };
         this.spawned.length = 0;
         this.stages[stage]?.onStart?.();
@@ -528,8 +588,9 @@ export class Tutorial {
         const S = this.stages[this.stage];
         if (!S) return;
         if (this.step >= S.steps.length) {
-            if (this.stage + 1 >= this.stages.length) { this._finish(); return; }
-            this._start(this.stage + 1);
+            const nx = this.only ? this.only.find((x) => x > this.stage) : this.stage + 1;
+            if (nx == null || nx >= this.stages.length) { this._finish(); return; }
+            this._start(nx);
             return;
         }
         this._enter();
@@ -777,7 +838,7 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
     }
     _render() {
         if (!this._panel) return;
-        this._panel.querySelectorAll('li').forEach((li, i) => { li.className = i < this.stage || this.done ? 'done' : i === this.stage ? 'cur' : ''; });
+        this._panel.querySelectorAll('li').forEach((li, i) => { li.className = i === this.stage && !this.done ? 'cur' : i < this.stage || this.done ? 'done' : ''; if (this.only && !this.only.includes(i)) li.style.opacity = '0.35'; });
     }
     /** Lights an element of the screen (the pockets, the mana…) with a red arrow at it, the bosses' pictures, the end's window. */
     _show(what) {
@@ -785,8 +846,11 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
         document.querySelectorAll('.tut-glow').forEach((e) => e.classList.remove('tut-glow'));
         document.querySelectorAll('.tut-arrow').forEach((e) => e.remove());
         document.getElementById('tut-bosses')?.remove();
+        if (!(typeof what === 'string' && (what.startsWith('journey') || what === 'finish'))) document.getElementById('tut-journey')?.remove();
         this._shown = [];
         if (!what) return;
+        if (typeof what === 'string' && what.startsWith('journey:')) { this._journey(+what.slice(8)); return; }
+        if (what === 'finish' && document.getElementById('tut-journey')) { this._journey(7); this._finishWindow(); return; }
         if (what === 'bosses' || what === 'finish') {
             const earth = ['king', 'master', 'spider', 'dragon', 'ice-queen', 'blackbeard'], gods = ['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'];
             const b = document.createElement('div');
@@ -837,9 +901,70 @@ body.tutorial-on #voice-debug.hint{top:calc(max(118px,14vh) + 120px)!important}
         for (; k < arrows.length; k++) arrows[k].remove();
     }
 
+    /** «Путь волшебника»: the cards of the way, one more lit at each step (n), animated arrows between; 0 — the title only. */
+    _journey(n) {
+        if (typeof document === 'undefined') return;
+        let J = document.getElementById('tut-journey');
+        if (!J) {
+            if (!document.getElementById('tut-journey-style')) {
+                const st = document.createElement('style');
+                st.id = 'tut-journey-style';
+                st.textContent = `
+#tut-journey{position:fixed;inset:0;z-index:58;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;pointer-events:none;
+ background:radial-gradient(ellipse at 50% 40%,rgba(40,28,90,.92),rgba(6,4,18,.96));animation:tjIn .8s ease-out}
+@keyframes tjIn{from{opacity:0}to{opacity:1}}
+#tut-journey .stars{position:absolute;inset:0;background-image:radial-gradient(1.5px 1.5px at 12% 22%,#fff8,transparent),radial-gradient(1px 1px at 72% 12%,#fff9,transparent),radial-gradient(1.5px 1.5px at 38% 78%,#ffe9a6aa,transparent),radial-gradient(1px 1px at 88% 66%,#fff7,transparent),radial-gradient(1.2px 1.2px at 55% 44%,#cfe1ff99,transparent),radial-gradient(1px 1px at 22% 58%,#fff6,transparent);animation:tjTw 4s ease-in-out infinite alternate}
+@keyframes tjTw{from{opacity:.5}to{opacity:1}}
+#tut-journey h2{position:relative;margin:0;font:800 34px/1.2 Georgia,'Times New Roman',serif;color:#ffe08a;letter-spacing:.06em;text-shadow:0 0 18px rgba(255,200,90,.55)}
+#tut-journey .way{position:relative;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 0;max-width:96vw}
+#tut-journey .card{position:relative;width:min(190px,15.5vw);border-radius:14px;overflow:hidden;background:#140f2c;border:1px solid rgba(201,166,74,.45);box-shadow:0 8px 26px rgba(0,0,0,.55);
+ opacity:0;transform:translateY(24px) scale(.92);transition:opacity .7s,transform .7s,box-shadow .5s,filter .5s;filter:saturate(.6) brightness(.75)}
+#tut-journey .card.in{opacity:1;transform:none}
+#tut-journey .card.cur{filter:none;box-shadow:0 0 0 2px #ffd76a,0 0 34px rgba(255,200,90,.65);transform:scale(1.07)}
+#tut-journey .card img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover}
+#tut-journey .card .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;aspect-ratio:16/10;background:#000}
+#tut-journey .card .grid img{width:100%;height:100%;aspect-ratio:auto}
+#tut-journey .card b{position:absolute;left:8px;top:8px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#ffd76a;color:#1a1434;font:800 14px system-ui}
+#tut-journey .card span{display:block;padding:8px 10px 10px;color:#f3ecff;font:700 14px/1.25 system-ui,sans-serif;text-align:center}
+#tut-journey .arrow{width:min(46px,3.4vw);height:24px;opacity:0;transition:opacity .6s}
+#tut-journey .arrow.in{opacity:1}
+#tut-journey .arrow path{stroke:#ffd76a;stroke-width:3;fill:none;stroke-linecap:round;stroke-dasharray:6 6;animation:tjFlow .8s linear infinite;filter:drop-shadow(0 0 4px #ffb84a)}
+@keyframes tjFlow{to{stroke-dashoffset:-12}}
+#tut-journey .advice{position:relative;max-width:min(760px,90vw);text-align:center;color:#ffe9b0;font:700 20px/1.4 system-ui,sans-serif;opacity:0;transition:opacity .8s}
+#tut-journey .advice.in{opacity:1}`;
+                document.head.appendChild(st);
+            }
+            const CARDS = [
+                ['caves', 'Пещеры: свитки, монеты, мана'], ['people', 'Города и жители'], ['scrolls', 'Свитки и лавки'], ['potions', 'Зелья'],
+                ['bosses', 'Боссы земного уровня'], ['titans', 'Титаны — божественный уровень'],
+            ];
+            const earth = ['king', 'master', 'spider', 'dragon', 'ice-queen', 'blackbeard'];
+            const arrow = '<svg class="arrow" viewBox="0 0 46 24"><path d="M4 12 H38 M30 4 L40 12 L30 20"/></svg>';
+            J = document.createElement('div');
+            J.id = 'tut-journey';
+            J.innerHTML = '<div class="stars"></div><h2>Путь волшебника</h2><div class="way">' + CARDS.map(([k, t], i) => (i ? arrow : '') + `<div class="card" data-i="${i + 1}"><b>${i + 1}</b>` +
+                (k === 'bosses' ? `<div class="grid">${earth.map((e) => `<img src="assets/bosses/${e}.webp" alt="" onerror="this.style.visibility='hidden'">`).join('')}</div>` : `<img src="assets/ui/journey/${k}.webp" alt="">`) +
+                `<span>${t}</span></div>`).join('') + '</div><div class="advice">Не спешите. Учите заклинания. Продумывайте план.</div>';
+            document.body.appendChild(J);
+        }
+        const cards = [...J.querySelectorAll('.card')], arrows = [...J.querySelectorAll('.arrow')];
+        cards.forEach((c, i) => { c.classList.toggle('in', i < n); c.classList.toggle('cur', i === n - 1 && n <= cards.length); });
+        arrows.forEach((a, i) => a.classList.toggle('in', i < n - 1));
+        J.querySelector('.advice').classList.toggle('in', n >= 7);
+        if (n >= 7) cards.forEach((c) => { c.classList.add('in'); c.classList.remove('cur'); c.style.filter = 'none'; });
+    }
+    _finishWindow() {
+        if (document.getElementById('tut-finish')) return;
+        const f = document.createElement('div');
+        f.id = 'tut-finish';
+        f.innerHTML = '<h2>🎓 Обучение пройдено!</h2><div>Теперь вы готовы к настоящей игре.</div><button type="button">В главное меню</button>';
+        f.querySelector('button').onclick = () => { this.dispose(); window.__zns?.exitToMenu?.(); };
+        document.body.appendChild(f);
+    }
+
     dispose() {
         if (typeof document === 'undefined') return;
-        for (const id of ['tut-panel', 'tut-sub', 'tut-bosses', 'tut-finish']) document.getElementById(id)?.remove();
+        for (const id of ['tut-panel', 'tut-sub', 'tut-bosses', 'tut-finish', 'tut-journey']) document.getElementById(id)?.remove();
         document.querySelectorAll('.tut-arrow').forEach((e) => e.remove());
         document.body.classList.remove('tutorial-on', 'tut-map');
         { const sp = this.game.castleLife?.talk?.speech; if (sp) sp.gate = null; }

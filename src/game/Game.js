@@ -955,7 +955,7 @@ export class Game {
         } else if (config.school) {
             this.school = new School(this); // («Школа Акселдорф»: the year at the school — School.js)
         } else if (config.tutorial) {
-            this.tutorial = new Tutorial(this, { from: config.tutorialFrom | 0 }); // («Обучение»: the steps, the narrator, the frozen hero — Tutorial.js)
+            this.tutorial = new Tutorial(this, { from: config.tutorialFrom | 0, only: config.tutorialOnly || null }); // («Обучение»: the steps, the narrator, the frozen hero — Tutorial.js)
         } else if (config.mode === 'freeworld') {
             // Free world: no tables; players appear around spawn, not on top of each other
             const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 14;

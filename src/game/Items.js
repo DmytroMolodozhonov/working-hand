@@ -743,6 +743,7 @@ export class ItemSystem {
         const sp = vel.length();
         handLog(`${d.act === 'throw' ? 'бросок' : 'отпускание'} (${this._handName(side)}): ${ITEM_INFO[kind]?.name || kind} ${m} кг — ${why}; рука ${d.speed.toFixed(1)} м/с → вылет ${sp.toFixed(1)} м/с (${vel.x.toFixed(1)}, ${vel.y.toFixed(1)}, ${vel.z.toFixed(1)}), вращение ${Math.hypot(spin.x, spin.y, spin.z).toFixed(1)} рад/с, решено через ${Math.round(d.lag)} мс после разжатия${d.blur ? ', кисть терялась камерой' : ''}`);
         this._throw(side, vel, { spin: _f.set(spin.x, spin.y, spin.z), why, from });
+        if (kind === 'coins') { const Lp = this.loose.get(h.item.uid); if (Lp) Lp.noPick = performance.now() + 4000; } // (the pouch put on a counter: not grabbed back by the same fingers for a few seconds — the author 07.11)
         if (d.act === 'throw' && sp > 4) g.sound?.playThrow?.(sp, physOf(kind).shape, from);
     }
 
