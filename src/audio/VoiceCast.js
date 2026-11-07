@@ -42,7 +42,8 @@ const ROLES = {
     wizard: { male: ['M5', 'M2', 'M3', 'M1'], female: ['F3', 'F5', 'F1', 'F4'], pitch: 0.98, speed: 0.92 },
     sailor: { male: ['M3', 'M1', 'M4', 'M2'], pitch: 0.99, speed: 1.04 },
     villager: { pitch: 1, speed: 1.02 },
-    devil: { male: ['M5'], pitch: 0.74, speed: 0.8, deep: true }, // (Дьяволос: самый низкий голос, ещё на четверть ниже — бас ~64 Гц, медленно и тяжело)
+    devil: { male: ['M5'], pitch: 0.74, speed: 0.8, deep: true },
+    chronicler: { male: ['M5', 'M2'], pitch: 0.86, speed: 0.86, deep: true }, // (the narrator of the school's opening — the author: «басистый голос диктора-рассказчика»: ~75 Гц, неспешно) // (Дьяволос: самый низкий голос, ещё на четверть ниже — бас ~64 Гц, медленно и тяжело)
 };
 
 export function hash(str) {

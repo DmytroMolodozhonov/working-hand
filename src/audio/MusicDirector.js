@@ -33,12 +33,13 @@ export function musicPlace(g) {
     const p = g?.character?.group?.position;
     if (!p) return null;
     if (g.space?.realm && g.space.realm !== 'earth') return null; // (space is quiet)
+    if (g.school && g.school.phase !== 'free') return { cat: 'school' }; // («Акселдорф»: its own theme through the opening — MusicCatalog 'school')
     if (g.inFight?.()) return { cat: 'battle', intensity: fightIntensity(g) };
     if (g.hellGate?.inHell) return { cat: 'hell' };
     if (g._inCave) return { cat: 'cave' };
     const t = g.terrain?.data, x = Math.round(p.x), z = Math.round(p.z);
     if (t) {
-        if (t.towers?.landAt?.(x, z) || t.villages?.landAt?.(x, z)) return { cat: 'magic' };
+        if (t.towers?.landAt?.(x, z) || t.villages?.landAt?.(x, z) || g.school) return { cat: 'magic' }; // (the school's days: the wizards' calm tunes)
         if (t.castles?.landAt?.(x, z) || t.hamlets?.landAt?.(x, z)) return { cat: 'town' };
     }
     return { cat: 'adventure' };

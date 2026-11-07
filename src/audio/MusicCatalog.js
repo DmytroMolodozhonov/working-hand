@@ -62,9 +62,15 @@ export const TUNES = [
     M({ id: 'magic3', ru: 'Звёздный двор', seed: 6303, key: 58, mode: 'lydian', tempo: 90, feel: 'lively', melody: 'bell', arp: 'harp', counter: 'flute', sections: { I: [[0, 2]], A: [[0, 2], [1, 2], [4, 2], [0, 2]], B: [[5, 2], [1, 2], [3, 2], [4, 2]] } }),
     M({ id: 'magic4', ru: 'Тихая библиотека', seed: 6404, key: 62, mode: 'dorian', tempo: 76, melody: 'harp', arp: 'celesta', pad: 'strings', sections: { I: [[0, 2]], A: [[0, 2], [3, 2], [6, 2], [0, 2]], B: [[3, 2], [4, 2], [1, 2], [4, 2]] } }),
     M({ id: 'magic5', ru: 'Танец огоньков', seed: 6505, key: 65, mode: 'lydian', tempo: 96, feel: 'lively', melody: 'celesta', arp: 'harp', arpPattern: [0, 2, 1, 3, 0, 2, 1, 3], counter: 'choir', sections: { I: [[0, 2]], A: [[0, 2], [1, 2], [5, 2], [4, 2]], B: [[3, 2], [1, 2], [0, 2], [4, 2]] } }),
+    // ------------------------------------------------------------------ the school «Акселдорф»: its presentation (the author 07.11: «музыка чисто для
+    // представления этой школы — величественная, но не динамичная: мы рассказываем») — slow, wide, a choir and low strings under a celesta's theme,
+    // a harp's open arpeggios, the bells of the second part; the tonic's lydian fourth gives it the wonder; long form, plays once through the opening
+    { cat: 'school', id: 'school1', ru: 'Акселдорф', feel: 'calm', pad: 'choir', padVel: 0.85, bass: 'bass', bassStyle: 'long', drone: 'drone', seventh: true, seed: 7001, key: 62, mode: 'lydian', tempo: 64,
+        melody: 'celesta', counter: 'strings', arp: 'harp', arpPattern: [0, 2, 4, 2, 1, 3, 4, 3], form: 'IAABABO', reverb: 0.55, hall: 1.45, level: 0.56,
+        sections: { I: [[0, 4]], A: [[0, 2], [4, 2], [5, 2], [3, 2]], B: [[3, 2], [1, 2], [4, 2], [0, 2]] } },
 ];
 
-export const MUSIC_CATS = ['adventure', 'battle', 'cave', 'hell', 'town', 'magic'];
+export const MUSIC_CATS = ['adventure', 'battle', 'cave', 'hell', 'town', 'magic', 'school'];
 export const tunesOf = (cat) => TUNES.filter((t) => t.cat === cat);
 export const tuneById = (id) => TUNES.find((t) => t.id === id) || null;
 /** The battle tune for a fight of this intensity (0…1): the nearest, sorted from a skirmish to a boss. */

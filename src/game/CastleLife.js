@@ -3982,7 +3982,7 @@ export class CastleLife {
 
     _chatter(dt) {
         this._chatT -= dt;
-        if (this._chatT > 0 || !this.auth || this.game.duelOnly) return; // (the duel-only start: nobody chatters)
+        if (this._chatT > 0 || !this.auth || this.game.duelOnly || this.game.config?.school) return; // (the duel-only start: nobody chatters; «Школа»: no village chatter anywhere — the author)
         this._chatT = 5 + Math.random() * 6;
         if (this.talk.inTalk?.()) return; // (nobody chatters over my talk with someone)
         const me = this.game.character.group.position;

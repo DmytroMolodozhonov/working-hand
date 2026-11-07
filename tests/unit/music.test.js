@@ -8,13 +8,14 @@ import { TUNES, tunesOf, battleTune, tuneById } from '../../src/audio/MusicCatal
 import { compose, renderTune, degreeNote, MODES } from '../../src/audio/MusicComposer.js';
 import { MusicDirector, musicPlace, MUSIC } from '../../src/audio/MusicDirector.js';
 
-test('forty tunes: 10 road, 10 battle, 5 caves, 5 hell, 5 towns, 5 magic — each its own', () => {
+// (41: the author 07.11 asked the school «Акселдорф» for a theme of its own — its presentation, slow and majestic: cat 'school')
+test('forty-one tunes: 10 road, 10 battle, 5 caves, 5 hell, 5 towns, 5 magic, the school\'s theme — each its own', () => {
     const n = (c) => tunesOf(c).length;
-    assert.deepEqual([n('adventure'), n('battle'), n('cave'), n('hell'), n('town'), n('magic')], [10, 10, 5, 5, 5, 5]);
-    assert.equal(TUNES.length, 40);
-    assert.equal(new Set(TUNES.map((t) => t.id)).size, 40);
-    assert.equal(new Set(TUNES.map((t) => t.seed)).size, 40);
-    assert.equal(new Set(TUNES.map((t) => t.ru)).size, 40, 'each its own name');
+    assert.deepEqual([n('adventure'), n('battle'), n('cave'), n('hell'), n('town'), n('magic'), n('school')], [10, 10, 5, 5, 5, 5, 1]);
+    assert.equal(TUNES.length, 41);
+    assert.equal(new Set(TUNES.map((t) => t.id)).size, 41);
+    assert.equal(new Set(TUNES.map((t) => t.seed)).size, 41);
+    assert.equal(new Set(TUNES.map((t) => t.ru)).size, 41, 'each its own name');
     for (const t of TUNES) assert.ok(MODES[t.mode], t.id);
     // the battle ones: from a skirmish to a boss, looping
     const b = tunesOf('battle');

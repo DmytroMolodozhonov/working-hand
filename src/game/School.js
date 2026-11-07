@@ -28,6 +28,8 @@ import { lessonOfDay, yearLength, newRecord, loadRecord, saveRecord, YEAR, SCHED
 import { newUid } from './ItemTypes.js';
 
 export const SCHOOL_SITE = 'akseldorf';
+const FLIGHT = { T: 36 }; // s: the winged coach's flight in (and out)
+const _fp = { x: 0, y: 0, z: 0 }, _fq = { x: 0, y: 0, z: 0 };
 const SUBJECTS_NAME = { defence: 'защита от тёмных искусств', potions: 'зельеварение', pentagrams: 'пентаграммы', history: 'основы мира' };
 
 /** The people of the school (idx → who): the teachers, the Director, the new pupils (ordinary and remarkable). */
@@ -315,26 +317,50 @@ export class School {
             if (!ready && this.t < 40) return; // (the land under the road first — the hero waits in the dark coach)
             this.phase = 'intro'; this.t = 0;
             this.coach = new SchoolCoach(g.scene);
-            this._coachZ = P.coachFrom.z; this._coachStop = P.arrive.z + 9; this._coachV = 0;
+            this._coachStop = P.arrive.z + 9; this._landY = this._floor(P.centre.x, this._coachStop, P.F + 0.5) ?? P.F + 0.5; this._landed = false;
             this._people();
             this._shots();
         }
-        // the coach on its road (it slows to a stop at the headland's square)
+        // the coach FLIES in on its great wings (the author: «добавь ей большие крылья — она прилетает в школу»): a long gliding curve from
+        // over the meadows, past the gorge, down onto the headland's square; the wings fold when it is down
         const C = this.coach;
-        if (C) {
-            const left = this._coachZ - this._coachStop, want = left > 30 ? 7 : left > 0.2 ? Math.max(1, left * 0.25) : 0;
-            this._coachV += (want - this._coachV) * Math.min(1, dt * 1.2);
-            this._coachZ = Math.max(this._coachStop, this._coachZ - this._coachV * dt);
-            C.set(P.centre.x, this._roadY(this._coachZ), this._coachZ, 0, this._coachV, dt);
-            if (this.phase === 'intro' && !this._out) this._hideHero(true, { x: P.centre.x, y: this._roadY(this._coachZ), z: this._coachZ });
-        }
+        if (C && !this._landed) {
+            const k = Math.min(1, this.t / FLIGHT.T), e = k < 0.85 ? k / 0.85 : 1;
+            const p = this._flightAt(e, _fp), q = this._flightAt(Math.min(1, e + 0.01), _fq);
+            const vx = q.x - p.x, vy = q.y - p.y, vz = q.z - p.z, h = Math.hypot(vx, vz);
+            const yaw = h > 1e-4 ? Math.atan2(-vx, -vz) : this._yaw ?? 0; this._yaw = yaw;
+            const near = p.y - this._landY < 2.5;
+            const lift = C.wingsTo(1, near ? 0.25 : 1, dt);
+            const tilt = Math.max(-0.25, Math.min(0.25, Math.atan2(vy, Math.max(0.01, h)) * 0.6));
+            C.set(p.x, p.y + lift * 0.35 * (near ? 0.2 : 1), p.z, yaw, near ? 1.5 : 0, dt, tilt, Math.sin(this.t * 0.7) * 0.05 * (1 - k));
+            if (k >= 1) { this._landed = true; this._yaw = 0; }
+            if (!this._out) this._hideHero(true, { x: p.x, y: p.y, z: p.z });
+        } else if (C) { C.wingsTo(0.12, 0, dt); C.set(P.centre.x, this._landY, this._coachStop, 0, 0, dt); }
         this._sky(0.703 + Math.min(1, this.t / 50) * 0.022);
+    }
+
+    /** The coach's flight at 0…1: from the meadows' sky, round past the gorge, down to the square (a smooth cubic curve, eased at the end). */
+    _flightAt(k, out) {
+        const P = this.plan, X = P.centre.x, F = P.F, z = this._coachStop, L = this._landY;
+        const a = { x: X + 90, y: F + 75, z: z + 330 }, b = { x: X - 120, y: F + 55, z: z + 160 }, c = { x: X + 40, y: F + 22, z: z + 40 }, d = { x: X, y: L, z };
+        const t = 1 - Math.pow(1 - Math.max(0, Math.min(1, k)), 1.7), u = 1 - t; // (fast over the meadows, slowing as it comes down)
+        out.x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
+        out.y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
+        out.z = u * u * u * a.z + 3 * u * u * t * b.z + 3 * u * t * t * c.z + t * t * t * d.z;
+        return out;
     }
 
     /** The road's height under the coach — the ramp's own smooth line (SchoolSite.shapeAt), not the blocks' steps. */
     _roadY(z) {
         const P = this.plan, R = P.road, a = Math.max(0, Math.min(1, (z - R.z0) / R.len)), k = a * a * (3 - 2 * a);
         return P.F + (P.M - P.F) * k + 0.5;
+    }
+
+    /** The narrator's words (the author: «басистый голос диктора-рассказчика»): a deep, slow male voice (VoiceCast 'chronicler'), heard as in a film. */
+    _narrate(text) {
+        const sp = this.game.castleLife?.talk?.speech;
+        if (!text || !sp?.say) return;
+        try { sp.say(text, { voiceKey: 'school-narrator', role: 'chronicler', female: false, volume: 0.95, reply: true }); } catch (e) { console.warn('school narrator', e); }
     }
 
     /** The hero rides inside (not seen, held still) or stands out. */
@@ -361,12 +387,13 @@ export class School {
         const rel = (dx, dy, dz) => () => { const c = coach(); return [c[0] + dx, c[1] + dy, c[2] + dz]; };
         const tea = () => { const v = this.people.get(22); return v ? [v.x, v.y + 2.6, v.z] : [X, F + 3, P.bridge.v1]; };
         const by = 'Профессор Ирма Вельтон';
+        const N = (text) => ({ sub: text, start: () => this._narrate(text) }); // (the narrator says what is written)
         g.cine.play([
-            { dur: 1.2, black: true, pos: [X - 130, F + 22, Z + 170], look: [X, F + 22, Z] },
+            { dur: 1.5, black: true, pos: [X - 130, F + 22, Z + 170], look: [X, F + 22, Z] },
             { dur: 9, fadeIn: true, from: { pos: [X - 130, F + 22, Z + 170], look: [X, F + 22, Z] }, to: { pos: [X - 85, F + 30, Z + 150], look: [X, F + 26, Z - 10] }, title: 'Акселдорф<small>школа волшебства</small>' },
-            { dur: 8, from: { pos: rel(9, 4, 6), look: rel(0, 2.5, 0) }, to: { pos: rel(7, 3, -8), look: rel(0, 2.5, -6) }, sub: 'Волшебная карета везла новых учеников всё выше — туда, где над ущельем стоит Акселдорф.' },
-            { dur: 7, from: { pos: [X + 70, M - 8, Z + 84], look: [X, F, Z + 84] }, to: { pos: [X + 55, M - 4, Z + 92], look: [X, F + 18, Z + 40] }, sub: 'Говорят, мост через ущелье построили сами основатели школы — и с тех пор из него не выпал ни один камень.' },
-            { dur: 7, from: { pos: [X - 14, F + 6, P.arrive.z - 14], look: rel(0, 2, 0) }, to: { pos: [X - 12, F + 5, P.arrive.z - 10], look: rel(0, 2, 0) } },
+            { dur: 8.5, from: { pos: rel(-14, 5, 10), look: rel(0, 3, 0) }, to: { pos: rel(-10, 2, -6), look: rel(0, 3, -4) }, ...N('Каждую осень крылатая карета привозит в Акселдорф новых учеников — тех, в ком проснулась магия.') },
+            { dur: 8, from: { pos: [X + 70, M - 8, Z + 84], look: [X, F, Z + 84] }, to: { pos: [X + 55, M - 4, Z + 92], look: [X, F + 18, Z + 40] }, ...N('Замок стоит над ущельем уже много веков. Говорят, мост построили сами основатели школы — и с тех пор из него не выпал ни один камень.') },
+            { dur: 7.5, from: { pos: [X - 16, F + 7, this._coachStop - 18], look: rel(0, 3, 0) }, to: { pos: [X - 12, F + 5, this._coachStop - 12], look: rel(0, 2, 0) }, ...N('Год учёбы. Четыре предмета. И целый мир, который ждёт за этими стенами.') },
             { dur: 7, from: { pos: () => { const t = tea(); return [t[0] + 2.5, t[1] + 0.4, t[2] + 5]; }, look: tea }, who: by, sub: 'Добро пожаловать в Акселдорф! Выходите — не бойтесь, здесь вас никто не обидит.',
                 start: () => { const v = this.people.get(22); if (v) v.lookAt = { x: X, z: this._coachStop }; this._say(v, 'Добро пожаловать в Акселдорф! Выходите — не бойтесь, здесь вас никто не обидит.', 6); } },
             { dur: 5, from: { pos: rel(9, 3, 3), look: rel(1.6, 2, -0.6) }, to: { pos: rel(8, 2.8, 1), look: rel(2, 2, -0.6) }, start: () => this._getOut() },
@@ -411,12 +438,13 @@ export class School {
             pupils.forEach((v, k) => { const dx = (k % 2 ? -1.2 : 1.2); v.lookAt = null; v.goal = { x: X + dx, y: F, z: P.bridge.v1 + 3 + k * 1.6, next: [{ x: X + dx, y: F, z: P.bridge.v0 + 2 + k * 1.6 }, { x: X + dx * 3, y: F, z: P.gate.z + 5 + k }] }; });
             this._goal(P.gate);
         }
-        // the coach drives away down the road, its lantern going off into the dusk
+        // the coach spreads its wings and flies away into the dusk, back the way it came
         const C = this.coach;
-        if (C && this.t > 6) {
-            this._coachZ += Math.min(7, (this.t - 6) * 2) * dt;
-            C.openDoor(false); C.set(X, this._roadY(this._coachZ), this._coachZ, Math.PI, Math.min(7, (this.t - 6) * 2), dt);
-            if (this._coachZ > P.coachFrom.z) { C.dispose(); this.coach = null; }
+        if (C && this.t > 5) {
+            const k = Math.min(1, (this.t - 5) / FLIGHT.T), p = this._flightAt(1 - k, _fp), q = this._flightAt(Math.max(0, 1 - k - 0.01), _fq);
+            const yaw = Math.atan2(-(q.x - p.x), -(q.z - p.z));
+            C.openDoor(false); C.set(p.x, p.y + C.wingsTo(1, 1, dt) * 0.3, p.z, yaw, 0, dt, -0.12, 0);
+            if (k >= 1) { C.dispose(); this.coach = null; }
         }
         this._sky(0.725 + Math.min(1, this.t / 60) * 0.025); // (twilight deepening while they cross)
         // at the gate (the author: «долго шёл»): a short cut-scene — the gates open by themselves, the courtyard and the hall beyond —
@@ -427,9 +455,31 @@ export class School {
             g.cine.play([
                 { dur: 4.5, from: { pos: [X + 7, F0 + 4, gz + 16], look: [X, F0 + 6, gz] }, to: { pos: [X + 3, F0 + 4, gz + 11], look: [X, F0 + 6, gz - 6] }, who: 'Профессор Ирма Вельтон', sub: 'Акселдорф открывает ворота только своим. Теперь и вам.',
                     start: () => { this._say(tea, 'Акселдорф открывает ворота только своим. Теперь и вам.', 5); this.openGates(); } },
-                { dur: 4, from: { pos: [X, F0 + 9, gz - 2], look: [X, F0 + 10, P.hall.z1] }, to: { pos: [X, F0 + 8, gz - 26], look: [X, F0 + 10, P.hall.z1] }, fadeOut: true },
+                ...this._tour(),
             ], { onEnd: () => { this._goal(null); this._startSpeech(); } });
         }
+    }
+
+    /**
+     * The tour (the author: «сначала ученикам всё показывают: где они будут спать, где главный зал, другие основные локации — всё объясняется»):
+     * the narrator over a shot of each place — the courtyard, the Great Hall, the dormitory, the four classrooms, the library, the tower.
+     */
+    _tour() {
+        const P = this.plan, X = P.centre.x, F = P.F, R = P.rooms, H = P.hall;
+        const N = (text) => ({ sub: text, start: () => this._narrate(text) });
+        const room = (r, text, dur = 8) => { const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2, w = r.x1 - r.x0, d = r.z1 - r.z0;
+            return { dur, from: { pos: [r.x0 + 2, F + 6.5, r.z1 - 2], look: [cx, F + 2, cz] }, to: { pos: [r.x0 + 2 + w * 0.25, F + 6, r.z1 - 2 - d * 0.2], look: [cx, F + 1.5, cz - d * 0.1] }, ...N(text) }; };
+        return [
+            { dur: 8, from: { pos: [X - 22, F + 16, P.fountain.z + 24], look: [X, F + 2, P.fountain.z] }, to: { pos: [X + 18, F + 13, P.fountain.z + 18], look: [X, F + 2, P.fountain.z - 4] }, ...N('Это внутренний двор. Фонтан в его середине помнит всех, кто учился здесь до вас.') },
+            { dur: 8.5, from: { pos: [X + 8, F + 9, H.z1 - 4], look: [X, F + 13, (H.z0 + H.z1) / 2] }, to: { pos: [X - 6, F + 12, (H.z0 + H.z1) / 2], look: [X, F + 14, H.z0 + 6] }, ...N('Большой зал — сердце школы. Здесь вы будете ужинать, а в первый день каждого месяца директор собирает здесь всех учеников.') },
+            room(R.dormitory, 'Спальня учеников — в южном крыле, справа от ворот. Ложитесь на кровать — и наступит новый день.'),
+            room(R.defence, 'Кабинет защиты от тёмных искусств, восточное крыло. Здесь вас научат защищать себя и других.'),
+            room(R.potions, 'Зельеварение — в западном крыле: котлы, огонь и полки с ингредиентами.'),
+            room(R.pentagrams, 'Кабинет пентаграмм. Знаки, которые чертят на земле, бывают сильнее любых заклинаний.'),
+            room(R.history, 'Здесь рассказывают об основах мира — о том, как он устроен и что было до нас.'),
+            room(R.library, 'Библиотека. Книги здесь отвечают тем, кто умеет спрашивать.'),
+            { dur: 8, from: { pos: [X + 60, F + 30, H.z0 + 30], look: [X + 35, F + 40, H.z0 + 3] }, to: { pos: [X + 52, F + 50, H.z0 + 20], look: [X + 35, F + 52, H.z0 + 3] }, ...N('А с самой высокой башни видно звёзды. Но туда — только с разрешения учителей.'), fadeOut: true },
+        ];
     }
 
     /** The Director's speech — a cut-scene in the hall: the candles, the dais, the Director; his words line by line. */

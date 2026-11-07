@@ -8,6 +8,7 @@
  */
 import * as THREE from 'three';
 import { mergeParts } from '../core/MergeGeometry.js';
+import { pegasusWingGeo, pegasusWingMat } from '../game/PegasusWing.js';
 
 const C = { lacquer: 0x14204a, lacquer2: 0x0e1736, gold: 0xc9a14a, gold2: 0x9c7a32, wood: 0x2a1a10, iron: 0x24262b, trunk: 0x4a2e1a, seat: 0x5a1626 };
 const _c = new THREE.Color();
@@ -138,6 +139,14 @@ export class SchoolCoach {
         // the lantern floating over the driver's bench, the coach lamps' glow
         this.lantern = new THREE.Sprite(M.glow); this.lantern.scale.set(1.4, 1.4, 1); this.lantern.position.set(0, 4.3, -CAB.l / 2 - 0.8); this.group.add(this.lantern);
         for (const sx of [-1, 1]) { const s = new THREE.Sprite(M.glow); s.scale.set(1.1, 1.1, 1); s.position.set(sx * (CAB.w / 2 + 0.1), CAB.y0 + CAB.h - 0.1, -CAB.l / 2 - 0.2); this.group.add(s); }
+        // the wings: white feathers with a faint gold glow, rooted on the roof's sides
+        this.wings = [];
+        for (const sd of [1, -1]) {
+            const w = new THREE.Group(); w.position.set(sd * (CAB.w / 2 - 0.1), CAB.y0 + CAB.h + 0.25, 0.2); w.scale.set(5.2 * sd, 5.2, 5.2);
+            const m = new THREE.Mesh(pegasusWingGeo(), pegasusWingMat(0xf4efe4, 0xffd27a));
+            w.add(m); w.userData = { side: sd, mesh: m }; this.group.add(w); this.wings.push(w);
+        }
+        this.open = 0; this.openWant = 0; this.flapT = 0;
         this.group.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
         scene.add(this.group);
         this.scene = scene;
@@ -145,10 +154,10 @@ export class SchoolCoach {
     }
 
     /** Where it stands (x, y the ground, z) facing `yaw` (forward −z); `speed` m/s turns the wheels and lights the runes. */
-    set(x, y, z, yaw, speed, dt) {
+    set(x, y, z, yaw, speed, dt, pitch = 0, roll = 0) {
         this.t += dt;
         const bob = Math.sin(this.t * 7) * 0.025 * Math.min(1, speed / 3); // (a soft sway on its springs)
-        this.group.position.set(x, y + bob, z); this.group.rotation.y = yaw;
+        this.group.position.set(x, y + bob, z); this.group.rotation.set(pitch, yaw, roll, 'YXZ');
         this.spin += speed * dt;
         for (const w of this.wheels) w.g.rotation.x = -this.spin / w.R;
         mats().rune.opacity = 0.45 + Math.min(0.5, speed * 0.12) + Math.sin(this.t * 3) * 0.05;
@@ -156,6 +165,23 @@ export class SchoolCoach {
         this.doorK += (this.doorWant - this.doorK) * Math.min(1, dt * 3);
         this.door.rotation.y = -this.doorK * 1.6;
     }
+    /**
+     * The wings: `open` 0 folded … 1 spread; `beat` 0 still … 1 full slow strokes (a flight). The yaw/pitch of the body is the caller's.
+     */
+    wingsTo(open, beat, dt) {
+        this.open += (open - this.open) * Math.min(1, dt * 1.6);
+        this.beat = (this.beat || 0) + (beat - (this.beat || 0)) * Math.min(1, dt * 1.5);
+        this.flapT += dt * (1.6 + this.beat * 0.6);
+        const flap = Math.sin(this.flapT) * 0.55 * this.beat + 0.12 * this.open; // (a wide, slow stroke; a glide's lift when the beat is low)
+        for (const w of this.wings) {
+            const m = w.userData.mesh;
+            if (m.morphTargetInfluences) { m.morphTargetInfluences[0] = this.open; m.morphTargetInfluences[1] = Math.max(0, -Math.sin(this.flapT)) * 0.5 * this.beat * this.open; }
+            w.rotation.z = flap * this.open * w.userData.side;
+            w.rotation.y = -0.12 * Math.sin(this.flapT * 2) * this.open * this.beat * w.userData.side;
+        }
+        return Math.cos(this.flapT) * this.beat; // (the body rises a little on each downstroke)
+    }
+
     openDoor(on = true) { this.doorWant = on ? 1 : 0; }
     /** The step by the door (where one gets out), world coordinates. */
     exitAt(out = new THREE.Vector3()) { return out.set(CAB.w / 2 + 1.6, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y).add(this.group.position); }
