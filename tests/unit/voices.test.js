@@ -244,6 +244,8 @@ test('Speech: neural voice by gender, pitch by playback rate, volume × the game
     s.say('Стой!', { voiceKey: 'k1', role: 'knight', female: false });
     s.say('Я король.', { voiceKey: 'king', role: 'king' });
     await tick();
+    played[1].onended(); // (the king waits until the knight has said his — the author: no line cut)
+    await tick();
     assert.equal(nv.calls[1].voice[0], 'M');
     assert.equal(nv.calls[2].voice[0], 'M');
     // the sound volume at zero: nobody is heard
@@ -323,8 +325,16 @@ test('Speech: the same villager queues, another villager interrupts', async () =
     played[0].onended();
     await tick();
     assert.deepEqual(nv.calls.map((c) => c.text), ['Раз', 'Три']);
+    // (the author 07.11: «речь не должна наслаиваться и обрываться» — another speaker now WAITS its turn: «Три» is not cut)
     s.say('Другой', { voiceKey: 'b' });
-    assert.deepEqual(ends.slice(-1), [['три', false]]);
+    assert.ok(!ends.some(([w, ok]) => w === 'три' && !ok), '«Три» is not cut');
+    played[1].onended();
+    await tick();
+    assert.deepEqual(nv.calls.map((c) => c.text), ['Раз', 'Три', 'Другой'], 'the other one after it');
+    // an answer to the player's words (reply) still cuts at once
+    s.say('Ответ!', { voiceKey: 'c', reply: true });
+    await tick();
+    assert.equal(nv.calls.at(-1).text, 'Ответ!');
 });
 
 test('Speech: a long line plays sentence after sentence as they are synthesized, and ends after the last', async () => {

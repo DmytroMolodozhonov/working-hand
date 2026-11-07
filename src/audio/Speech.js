@@ -255,7 +255,9 @@ export class Speech {
             }
             // (a line that must not be cut — the school's narrator, the scenes' words (opts.keep) — goes on; the new one waits its turn after it;
             //  the author: «учительница перебивает диктора»)
-            if (this._current.opts?.keep || opts.keep) {
+            // (the author 07.11, for the whole game: «речь не должна наслаиваться» — another speaker's line never cuts the one being said: it waits its
+            //  turn; only an answer in a talk cuts on purpose — CastleTalk calls cancel() itself — or a line marked `cut`)
+            if (this._current.opts?.keep || opts.keep || !(opts.cut || opts.reply)) { // (an answer to the player's own words cuts — unless a `keep` line is on)
                 (this._after || (this._after = [])).push({ text: clean, opts: o });
                 if (this._after.length > 6) this._after.shift();
                 return true;
