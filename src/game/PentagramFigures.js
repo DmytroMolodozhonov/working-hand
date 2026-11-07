@@ -163,3 +163,16 @@ export const FIREWARD_LINES = (() => {
     const sparks = [[pt(-0.3, 0.84), pt(-0.3, 0.97)], [pt(0, 0.9), pt(0, 1.0)], [pt(0.3, 0.84), pt(0.3, 0.97)]];
     return [shield, flame, core, ...sparks];
 })();
+
+/**
+ * «Пентаграмма водяной силы» (Pentagranium Aquaris, белая): КАПЛЯ — острым концом вверх, внутри неё три волны одна под другой, а по бокам от кольца к капле тянутся
+ * две стремящиеся вверх струйки-нити, как влага из воздуха. Ни щит, ни цветок, ни звезда, ни врата: свой рисунок.
+ */
+export const HYDRO_LINES = (() => {
+    const bowl = arc(0, -0.2, 0.46, Math.PI * 1.0, Math.PI * 2.0, 14); // the round bottom of the drop (left → right under the centre)
+    const left = [pt(-0.46, -0.2), pt(-0.4, 0.08), pt(-0.26, 0.38), pt(-0.12, 0.64), pt(0, 0.86)];
+    const right = [pt(0.46, -0.2), pt(0.4, 0.08), pt(0.26, 0.38), pt(0.12, 0.64), pt(0, 0.86)];
+    const wave = (y) => Array.from({ length: 9 }, (_, k) => pt(-0.34 + (k * 0.68) / 8, y + (k % 2 ? 0.045 : -0.045))); // a zig-zag wavelet
+    const thread = (k) => curve([ringPt(k > 0 ? 5 : 11), pt(0.74 * k, 0.12), pt(0.66 * k, 0.4), pt(0.52 * k, 0.66)]); // moisture rising from the ring to the drop
+    return [...curve(bowl), ...curve(left), ...curve(right), ...curve(wave(-0.32)), ...curve(wave(-0.1)), ...curve(wave(0.12)), ...thread(1), ...thread(-1)];
+})();

@@ -151,7 +151,7 @@ export class WaterMagic {
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
             const spot = hand.clone().addScaledVector(dir, WATER.HOLD + 0.8);
-            const src = t.findWaterSurface(spot.x, spot.z, WATER.REACH, spot.y);
+            const src = t.findWaterSurface(spot.x, spot.z, WATER.REACH, spot.y) || this.game.hydro?.spring(spot.x, spot.z, spot.y); // (the water power: the air's moisture when no water is near — PentagramHydro.js)
             if (!src) continue;
             const above = spot.y - src.y;
             if (above > WATER.ABOVE_MAX || above < -2) continue;
@@ -165,6 +165,7 @@ export class WaterMagic {
         }
         if (!best) return '💧 Вытяните руку <b>в сторону реки или озера</b> (вода не дальше ~6 м) и скажите «Waterbollow»';
         const src = new THREE.Vector3(best.src.x, best.src.y, best.src.z);
+        if (best.src.humid) this.game.hydro?.mist(src); // (water out of the air: the mist gathers)
         this.state = {
             side: best.side,
             phase: 'rising',
@@ -194,7 +195,7 @@ export class WaterMagic {
         if (s.frozen) return 'Лёд уже не растёт';
         if (s.volume >= WATER.MAX_VOLUME) return '💧 Шар уже максимальный';
         s.volume = Math.min(WATER.MAX_VOLUME, s.volume + WATER.MAXIMA_ADD);
-        const src = this.terrain?.findWaterSurface(s.pos.x, s.pos.z, WATER.FEED_SOURCE, s.pos.y);
+        const src = this.terrain?.findWaterSurface(s.pos.x, s.pos.z, WATER.FEED_SOURCE, s.pos.y) || this.game.hydro?.spring(s.pos.x, s.pos.z, s.pos.y);
         s.streamFrom = src ? new THREE.Vector3(src.x, src.y, src.z) : null;
         s.streamT = 0.9;
         if (this.game.sound) this.game.sound.playWaterRise?.();
@@ -363,7 +364,7 @@ export class WaterMagic {
                 const open = ch.getGripCurl(other) < 0.4;
                 if (open && oh.distanceTo(s.pos) < WATER.FEED_REACH + r) {
                     if (!s.feedSource || s.feedCheck <= 0) {
-                        const src = t?.findWaterSurface(s.pos.x, s.pos.z, WATER.FEED_SOURCE, s.pos.y);
+                        const src = t?.findWaterSurface(s.pos.x, s.pos.z, WATER.FEED_SOURCE, s.pos.y) || this.game.hydro?.spring(s.pos.x, s.pos.z, s.pos.y);
                         s.feedSource = src ? new THREE.Vector3(src.x, src.y, src.z) : null;
                         s.feedCheck = 1.0;
                     }

@@ -99,6 +99,7 @@ const USE_TEXT = {
     infernum: 'Встаньте в круг и постойте немного — врата в ад открыты',
     darkward: 'Бросьте в круг три цветка — солнечницу, светлошляпку и лазурницу, — встаньте в него (150 маны): тёмные заклинания против вас станут вдвое слабее (пока уровень тёмного мага не выше 10)',
     fireward: 'Бросьте в круг сердцевину Ярколета, встаньте в него (150 маны): обычный огонь вас больше не берёт; адский всё ещё жжёт, но не поджигает',
+    hydro: 'Держите шар воды «Waterbollow» (не лёд), встаньте в круг (50 маны): водяные заклинания больше не просят реки — влага берётся из воздуха (кроме пустынь)',
     firm: 'Положите на круг волшебный камушек, встаньте в него (300 маны) — вас больше не повалит ничто, до самой смерти',
 };
 
@@ -506,6 +507,10 @@ export class Pentagranium {
             if (s.cd > 0) return;
             const done = g.sight?.useCircle(m.pent, { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
             if (done) s.cd = 30; // (a gift given once: standing on in the circle gives no more)
+        } else if (m.pent === 'hydro') {
+            if (s.cd > 0) return;
+            const done = g.hydro?.useCircle({ m, pays, hint, mana, fx: () => this._useFx('hydro', m, true) });
+            if (done) s.cd = 30; // (a gift given once)
         } else if (m.pent === 'darkward' || m.pent === 'fireward') {
             if (s.cd > 0) return;
             const done = g.resist?.useCircle(m.pent === 'darkward' ? 'dark' : 'fire', { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
@@ -549,7 +554,7 @@ export class Pentagranium {
 
     /** The glow of a use: a pillar of sparks, a ring spreading, a flash (the shared flash light) and a sound; shown to everybody (`pgm` fx). */
     _useFx(kind, m, send = false) {
-        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8], darkward: [0xf4f0ff, 0xfff4d0], fireward: [0xff9a3a, 0xffe0a0] }[kind] || [0xffffff, 0xffe9a8];
+        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8], darkward: [0xf4f0ff, 0xfff4d0], fireward: [0xff9a3a, 0xffe0a0], hydro: [0x6fc4ff, 0xe8f6ff] }[kind] || [0xffffff, 0xffe9a8];
         if (fx) {
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 2;
@@ -558,7 +563,7 @@ export class Pentagranium {
             for (let i = 0; i < 40; i++) fx.spark(_o.set(m.x + (Math.random() - 0.5) * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * 1.6), col[i % 2], 0.2, _d.set((Math.random() - 0.5) * 0.6, 4 + Math.random() * 6, (Math.random() - 0.5) * 0.6), 1.6);
             fx.lightFlash?.(_o.set(m.x, m.y + 1.5, m.z), col[1], 3, 0.5, m.r * 4 + 10);
         }
-        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : kind === 'firm' || kind === 'fireward' ? 'fxFirm' : kind === 'darkward' ? 'fxLife' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
+        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : kind === 'firm' || kind === 'fireward' ? 'fxFirm' : kind === 'darkward' ? 'fxLife' : kind === 'hydro' ? 'fxLife' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
         if (send) g.sync?.pentagram?.({ k: 'fx', kind, x: m.x, y: m.y, z: m.z, r: m.r });
     }
 

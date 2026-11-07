@@ -13,7 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
-import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES } from './PentagramFigures.js';
+import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES } from './PentagramFigures.js';
 import { INFERNUM } from './HellRules.js';
 
 export const PENT = {
@@ -124,6 +124,12 @@ registerPentagram({
 registerPentagram({
     id: 'fireward', title: 'Пентаграмма защиты от огня', dark: false, glow: 0xff9a3a, cost: 150, permanent: true, scroll: 'PentagramFireward', lines: FIREWARD_LINES,
     effect: 'Бросьте в круг сердцевину Ярколета, встаньте в него и заплатите 150 маны — обычный огонь вас больше не берёт и не поджигает. Адский огонь всё ещё жжёт (но не поджигает), а огненный змей — вдвое слабее.',
+});
+
+// The WHITE pentagram of water power (HydroRules.js, PentagramHydro.js): hold a liquid water spell («Waterbollow») at the stand, 50 mana — the water spells take their water from the air (not in a desert).
+registerPentagram({
+    id: 'hydro', title: 'Пентаграмма водяной силы', dark: false, glow: 0x6fc4ff, cost: 50, permanent: true, scroll: 'PentagramHydro', lines: HYDRO_LINES,
+    effect: 'Поднимите шар воды «Waterbollow» (жидкую воду, не лёд), встаньте в круг, не отпуская её, и заплатите 50 маны — водяным заклинаниям больше не нужна река: воду они возьмут из влажности воздуха. В пустынях воздух слишком сух.',
 });
 
 // «Пентаграмма ада» (HellRules.js, HellGate.js): чёрная; 150 маны и +10 к тьме при слове, жертва — одно тело любого убитого существа, шаг в открытый круг — в ад.

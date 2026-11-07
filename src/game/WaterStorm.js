@@ -215,7 +215,8 @@ export class WaterStorm {
         const src = g.vortex?._pointedWater?.(side);
         if (!src) return this._hint('🌊 Встаньте у реки, озера или моря и покажите палочкой прямо <b>на воду</b> — тогда скажите «Water Vortex Super Maxima»', isFinal);
         const data = g.terrain?.data;
-        const w = data ? waterInReach(data, src) : { list: [], count: 0 };
+        let w = data ? waterInReach(data, src) : { list: [], count: 0 };
+        if (!enoughWater(w.count) && g.hydro) w = g.hydro.stormWater(STORM.MAX_VOLUME) || w; // (the water power: the air's moisture is the water — nothing is taken from the world)
         if (!enoughWater(w.count)) return this._hint(`🌊 Здесь мало воды (${w.count} м³) — нужно не меньше ${STORM.MIN_WATER}: большая река, озеро или море`, isFinal);
         const c = g.combat;
         const why = stormBlock({ enabled: !!c?.enabled, max: g.breakward?.cellMax(STORM.NAME, STORM.MIN_MAX_MANA, c?.maxFatigue || 30) ?? (c?.maxFatigue || 30), mana: c?.fatigue ?? 0 });
@@ -347,7 +348,9 @@ export class WaterStorm {
         n = Math.min(n, f.list.length);
         let k = 0;
         while (f.drawn < n && k++ < STORM.TAKE_PER_FRAME) {
-            const [x, L, z] = f.list[f.drawn++];
+            const e = f.list[f.drawn++];
+            if (!e) continue; // (the air's moisture: no block to take)
+            const [x, L, z] = e;
             if (data.get(x, L, z) === BLOCK.WATER) data.set(x, L, z, BLOCK.AIR);
             else f.list[f.drawn - 1] = null; // (not water any more: nothing to give back)
         }

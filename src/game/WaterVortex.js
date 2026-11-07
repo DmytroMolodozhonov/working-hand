@@ -422,7 +422,7 @@ export class WaterVortex {
                 if (s && y - s.y < 3.5 && y - s.y > -1) return new THREE.Vector3(s.x, s.y, s.z);
             }
         }
-        return null;
+        return g.hydro?.point(o, d) || null; // (the water power: no water near — the air's moisture where the hand points; PentagramHydro.js)
     }
 
     /** «Water Vortex»: the words. */
