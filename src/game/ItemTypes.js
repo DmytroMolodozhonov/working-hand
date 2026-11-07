@@ -24,6 +24,7 @@
  *   hammer  — Thor's hammer: catches lightning in a storm (3 strikes).
  */
 
+import { SCHEDULE, scheduleLines } from './SchoolYear.js';
 import { newAppleModel } from './AppleModel.js';
 import { JEWEL_INFO, JEWEL_VALUE, JEWEL_SMALL, JEWEL_BIG, isJewel, jewelModelScaled, jewelText } from './PyramidItems.js';
 import { scrollKindLabel } from './DarkMagic.js';
@@ -922,6 +923,7 @@ function describeItemBase(it) {
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
             if (it.stat === 'pentagram') return { title: `📜 ${figureOf(it.pent)?.ru || 'Пентаграмма'}`, color: figureOf(it.pent)?.ink ?? 0xc01830, lines: [kindLine(it), `Сожгите свиток («Инферно») — и вы выучите эту пентаграмму навсегда. Чтобы её создать, направьте палочку на землю и скажите <b>«${pentagramSpell(it.pent) || 'Pentagranium'}»</b>: рисунок нарисуется сам. Пока свиток не сожжён, пентаграмма не получится`, ...(it.pent === 'devil' ? ['Чем полезна: позволяет получить ещё 25% силы убитого вами волшебника — тело должно лежать внутри круга'] : [])] };
+            if (it.stat === 'schedule') return { title: '📜 Расписание уроков — Акселдорф', color: 0xd9b45a, lines: scheduleLines(SCHEDULE.day, (k) => SPELL_LABEL[k] || k) }; // (the school's schedule: SchoolYear.js)
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b>'] };
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [kindLine(it), `Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b>`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Нужны 3 шерсти и 10 песка (достаточно держать в ячейках) и 3 дерева неподалёку; палочку на землю и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы в ячейках (или рядом с домом), палочку на дом и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : [])] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: ['Сожгите его («Инферно»), чтобы узнать, что в нём'] };

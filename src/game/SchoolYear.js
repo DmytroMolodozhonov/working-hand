@@ -35,3 +35,20 @@ export function loadRecord(store) {
 }
 export function saveRecord(store, r) { try { store?.setItem?.(SCHOOL_SAVE_KEY, JSON.stringify(r)); } catch { /* (private window: nothing kept) */ } }
 export function forgetRecord(store) { try { store?.removeItem?.(SCHOOL_SAVE_KEY); } catch { /* */ } }
+
+/** The schedule scroll's day (School sets it every morning): what the scroll shows when read (ItemTypes.describeItem → scheduleLines). */
+export const SCHEDULE = { day: 1 };
+/**
+ * The lines of the schedule scroll (the author: «свиток расписания — настоящий предмет»): today, the next days, where things are.
+ * `label(spell)` — the spell's name for people.
+ */
+export function scheduleLines(day = SCHEDULE.day, label = (s) => s) {
+    const days = yearDays(), out = [];
+    const what = (L) => `${SUBJECTS[L.subject]?.name || ''}${(L.spells || (L.spell ? [L.spell] : [])).length ? ' — «' + (L.spells || [L.spell]).map(label).join('», «') + '»' : ''}`;
+    const L = days[day - 1];
+    out.push(L ? `<b>Сегодня, день ${day} (месяц ${L.month}):</b> ${what(L)}` : '<b>Учебный год окончен</b>');
+    for (let d = day + 1; d <= Math.min(days.length, day + 3); d++) out.push(`День ${d} (месяц ${days[d - 1].month}): ${what(days[d - 1])}`);
+    out.push('В первый день месяца — сбор в большом зале. Позовут — идите на светящийся круг.');
+    out.push('Спальня — южное крыло, справа от ворот: легли на кровать — наступит следующий день.');
+    return out;
+}

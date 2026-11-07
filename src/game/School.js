@@ -22,7 +22,8 @@ import { SchoolDecor } from '../fx/SchoolDecor.js';
 import { makeRobe } from './ArmorTypes.js';
 import { SchoolLesson } from './SchoolLesson.js';
 import { lessonById } from './SchoolLessons.js';
-import { lessonOfDay, yearLength, newRecord, loadRecord, saveRecord, YEAR } from './SchoolYear.js';
+import { lessonOfDay, yearLength, newRecord, loadRecord, saveRecord, YEAR, SCHEDULE } from './SchoolYear.js';
+import { newUid } from './ItemTypes.js';
 
 export const SCHOOL_SITE = 'akseldorf';
 const SUBJECTS_NAME = { defence: 'защита от тёмных искусств', potions: 'зельеварение', pentagrams: 'пентаграммы', history: 'основы мира' };
@@ -96,6 +97,21 @@ export class School {
         setTimeout(() => g.hud?.setVoice?.('🎁 Школа дарит всем ученикам волшебные мантии: они отбивают «Фрозен» и простые заклинания. Ваша мантия парит над кроватью — возьмите её и наденьте.', true), 3500);
     }
 
+    /**
+     * The schedule scroll (the author: a real thing, and the pupil is helped to read it): it hangs before the hero; how to open it is said.
+     * Its lines are today's (SchoolYear.scheduleLines — read when it is opened).
+     */
+    _giveSchedule(teach = false) {
+        const g = this.game, me = g.character?.group?.position;
+        if (this._scheduled || !me || !g.items?.spawnLoose) return;
+        this._scheduled = true;
+        const yaw = g.character.group.rotation.y, at = new THREE.Vector3(me.x - Math.sin(yaw) * 1.6, me.y + 0.6, me.z - Math.cos(yaw) * 1.6);
+        g.items.spawnLoose({ kind: 'scroll', uid: newUid(), stat: 'schedule' }, at, { hover: true, broadcast: false });
+        g.hud?.setVoice?.(teach
+            ? '📜 Вот ваше расписание уроков. Возьмите свиток одной рукой, другой рукой возьмитесь за второй конец и разведите руки — он раскроется. Там написано, какой урок сегодня и что дальше.'
+            : '📜 Ваше расписание уроков парит перед вами: возьмите его и раскройте двумя руками.', true);
+    }
+
     /** The pupil's mana and spells from the record: 5 cells at the start (the author) + what the school grew; the lessons' spells. */
     _applyRecord() {
         const g = this.game, c = g.combat, r = this.record;
@@ -128,6 +144,8 @@ export class School {
         else if (b) { const sp = g.beds._standSpot?.(b); if (sp) this._placeHero({ x: sp.x, y: sp.y, z: sp.z }, sp.ry); }
         this._applyRecord();
         const L = lessonOfDay(r.day);
+        SCHEDULE.day = r.day; // (the schedule scroll reads today from here)
+        if (first) setTimeout(() => this._giveSchedule(), 2500); // (a game going on: the scroll again — things are not kept between games)
         if (L && L.month >= 5 && !r.robes) this._robes(); // (the author: before «Фрозен» — the gift of magic robes that turn it away)
         this.dayT = 0; this._dayLesson = L ? L.id : null; this._freeSaid = false; this._sleepT = 0;
         g.hud?.setVoice?.(L ? `☀️ День ${r.day}. Сегодня урок: ${SUBJECTS_NAME[L.subject] || ''}. Вас позовут.` : '🎓 Учебный год окончен!', true);
@@ -374,6 +392,7 @@ export class School {
         const r = this.record, g = this.game;
         if (!r.arrived) { // (after the Director's speech: the evening of the arrival — the first lesson is tomorrow, «Завтра начинается учёба»)
             r.arrived = true; r.eve = true; this._applyRecord(); this._dayLesson = null; this.dayT = 0; this._save();
+            SCHEDULE.day = r.day; setTimeout(() => this._giveSchedule(true), 9000);
             g.hud?.setVoice?.('🌙 Вечер первого дня. Ваша спальня — в южном крыле, справа от ворот: выберите кровать и ложитесь спать — утром первый урок.', true);
             this._freeSaid = true;
         }

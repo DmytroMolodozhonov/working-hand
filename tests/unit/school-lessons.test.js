@@ -59,3 +59,14 @@ test('the Director gathers the school in the Great Hall at each month from the s
     for (let m = 2; m <= 12; m++) { const h = lessonById('hall' + m); assert.ok(h && lessonOk(h) && h.task.kind === 'listen', 'month ' + m); }
     assert.equal(HALL_TALKS.length, 11);
 });
+
+test('the schedule scroll reads today and the next days from the year', async () => {
+    const { describeItem } = await import('../../src/game/ItemTypes.js');
+    const Y = await import('../../src/game/SchoolYear.js');
+    Y.SCHEDULE.day = 2;
+    const d = describeItem({ kind: 'scroll', stat: 'schedule' });
+    assert.match(d.title, /Расписание/);
+    assert.match(d.lines[0], /день 2/);
+    assert.ok(d.lines.some((l) => /Спальня/.test(l)));
+    Y.SCHEDULE.day = 1;
+});
