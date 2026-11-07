@@ -39,6 +39,8 @@ test('land tornado: tears a hut, spares the rock, dies in water', { timeout: 900
         // the stone under: a deep rock cell must stay
         out.rock0 = data.get(cx, gy - 6, cz);
         out.place = g.landTornado.placeFor(p, 0) ? 'land' : 'none';
+        const { TORNADO } = await import('/src/world/TornadoWeather.js');
+        TORNADO.SUMMON_ROAM[0] = 0; TORNADO.SUMMON_ROAM[1] = 0; // (it stands on the hut: the test wants the tearing, not the wandering)
         g.landTornado.summon({ x: cx, z: cz }, 'test', 0);
         for (let i = 0; i < 160; i++) { await sleep(250); g.landTornado._tearT = 0; }
         out.listed = g.landTornado.list.length;
