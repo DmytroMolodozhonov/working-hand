@@ -313,8 +313,8 @@ export class School {
         if (this.phase === 'ride') {
             this._sky(0.703); // (dusk: the sun on the horizon, a warm glow)
             const d = g.world?.terrain?.data;
-            const ready = !d?.landMade || (d.landMade(P.coachFrom.x, P.coachFrom.z) && d.landMade(P.arrive.x, P.arrive.z) && d.landMade(P.centre.x, P.centre.z));
-            this._hideHero(true, P.coachFrom);
+            const ready = !d?.landMade || (d.landMade(P.arrive.x, P.arrive.z) && d.landMade(P.centre.x, P.centre.z) && d.landMade(P.centre.x, P.hall.z0));
+            this._hideHero(true, P.arrive); // (the hero — unseen — stays at the bridge's head: the land loads round him, the castle with it)
             if (!ready && this.t < 40) return; // (the land under the road first — the hero waits in the dark coach)
             this.phase = 'intro'; this.t = 0;
             { const md = g.sound?.musicDirector; if (md) { md.start(); md.settled = { cat: 'schoolEpic' }; md._play('school1', 2.5); } } // (the grand theme from the first shot — made during the loading)
@@ -336,7 +336,7 @@ export class School {
             const tilt = Math.max(-0.25, Math.min(0.25, Math.atan2(vy, Math.max(0.01, h)) * 0.6));
             C.set(p.x, p.y + lift * 0.35 * (near ? 0.2 : 1), p.z, yaw, near ? 1.5 : 0, dt, tilt, Math.sin(this.t * 0.7) * 0.05 * (1 - k));
             if (k >= 1) { this._landed = true; this._yaw = 0; }
-            if (!this._out) this._hideHero(true, { x: p.x, y: p.y, z: p.z });
+            if (!this._out) this._hideHero(true, P.arrive); // (not in the flying coach: the world loads round the hero — the castle must be there for the shots)
         } else if (C) { C.wingsTo(0.12, 0, dt); C.set(P.centre.x, this._landY, this._coachStop, 0, 0, dt); }
         this._sky(0.703 + Math.min(1, this.t / 50) * 0.022);
     }
@@ -344,7 +344,7 @@ export class School {
     /** The coach's flight at 0…1: from the meadows' sky, round past the gorge, down to the square (a smooth cubic curve, eased at the end). */
     _flightAt(k, out) {
         const P = this.plan, X = P.centre.x, F = P.F, z = this._coachStop, L = this._landY;
-        const a = { x: X + 90, y: F + 75, z: z + 330 }, b = { x: X - 120, y: F + 55, z: z + 160 }, c = { x: X + 40, y: F + 22, z: z + 40 }, d = { x: X, y: L, z };
+        const a = { x: X + 70, y: F + 70, z: z + 230 }, b = { x: X - 110, y: F + 50, z: z + 130 }, c = { x: X + 40, y: F + 22, z: z + 40 }, d = { x: X, y: L, z };
         const t = 1 - Math.pow(1 - Math.max(0, Math.min(1, k)), 1.7), u = 1 - t; // (fast over the meadows, slowing as it comes down)
         out.x = u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x;
         out.y = u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y;
