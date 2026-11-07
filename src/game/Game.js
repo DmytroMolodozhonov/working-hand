@@ -921,9 +921,9 @@ export class Game {
         this.hud.setMultiplayer(null);
 
         // The world is saved by itself on the host's (or single player's) computer
-        if (!isTest && !config.map && !config.tutorial && !config.school && this.authority) { // («Обучение» is never saved; «Школа» keeps its own record — School.js)
+        if (!isTest && !config.map && !config.tutorial && this.authority) { // («Обучение» is never saved; «Школа Акселдорф» is a world like the others — its year kept with it: School.js)
             const sv = config.saved;
-            this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players, gen: sv.gen ?? 1, createdVersion: sv.createdVersion, fav: sv.fav } : { name: config.worldName });
+            this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players, gen: sv.gen ?? 1, createdVersion: sv.createdVersion, fav: sv.fav } : { name: config.worldName, mode: config.worldMode || undefined });
             if (sv) {
                 restoreWorld(this, sv, THREE);
                 applyPlayerSnapshot(this, this.keeper.playerFor(this.net?.pid, this.keeper.myName, { self: true }));

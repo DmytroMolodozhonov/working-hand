@@ -12,7 +12,9 @@ const read = (p) => fs.readFileSync(new URL('../../' + p, import.meta.url), 'utf
 
 test('branding: the name and the mode labels; internal mode values unchanged', () => {
     assert.equal(GAME_NAME, 'Волшебство только начинается');
-    assert.deepEqual(MODE_ORDER, ['creative', 'freeworld']);
+    // (the author 07.11: «Школа Акселдорф» is a new world's mode beside Творческий and Выживание — not a separate entry like «Обучение»)
+    assert.deepEqual(MODE_ORDER, ['creative', 'freeworld', 'school']);
+    assert.equal(modeLabel('school'), 'Школа Акселдорф');
     assert.equal(modeLabel('creative'), 'Творческий');
     assert.equal(modeLabel('survival'), 'Выживание', 'an old Хардкор world opens as Выживание');
     assert.equal(legacyMode('survival'), 'freeworld');

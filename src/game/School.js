@@ -73,7 +73,7 @@ export class School {
         if (!this.plan) return;
         { const md = game.sound?.musicDirector; md?._make?.('school1'); md?._make?.('school2'); } // (the school's music made while the world loads — MusicCatalog)
         // the year: from the record kept («Продолжить учёбу») or a new one — then the arrival first
-        const kept = game.config?.schoolContinue ? loadRecord(this._store()) : null;
+        const kept = loadRecord(this._store(), this._key()); // (this world's year: kept with the world — its id; a new world — a new year)
         this._rec = kept && kept.arrived ? kept : newRecord();
         if (this._rec.eve) this._rec.eve = false; // (left on the arrival's evening: the morning of day 1)
         this._site();
@@ -84,7 +84,8 @@ export class School {
     }
 
     _store() { try { return globalThis.localStorage || null; } catch { return null; } }
-    _save() { saveRecord(this._store(), this.record); }
+    _key() { return 'zns-school:' + (this.game.keeper?.id || this.game.config?.saved?.id || 'none'); }
+    _save() { saveRecord(this._store(), this.record, this._key()); }
 
     /**
      * The gift of the school (the author: «подарок магических мантий»): every pupil wears a magic robe — «Фрозен» and the simplest magic
@@ -108,6 +109,8 @@ export class School {
     _giveSchedule(teach = false) {
         const g = this.game, me = g.character?.group?.position;
         if (this._scheduled || !me || !g.items?.spawnLoose) return;
+        const has = (it) => it && it.kind === 'scroll' && it.stat === 'schedule';
+        if ((g.inventory?.slots || []).some(has) || has(g.items?.held?.left?.item) || has(g.items?.held?.right?.item)) { this._scheduled = true; return; } // (a world continued: it is in his things already)
         this._scheduled = true;
         const yaw = g.character.group.rotation.y, at = new THREE.Vector3(me.x - Math.sin(yaw) * 1.6, me.y + 0.6, me.z - Math.cos(yaw) * 1.6);
         const it = { kind: 'scroll', uid: newUid(), stat: 'schedule' };
@@ -153,6 +156,7 @@ export class School {
         if (!c0 || !g.cauldrons?.spawn) { this._propsMade = true; return; }
         if (this._floor(c0.x, c0.z, c0.y) == null) return;
         this._propsMade = true;
+        for (const [uid, L] of [...(g.items?.loose || [])]) if (L.item?.school) g.items.removeLoose?.(uid); // (a world continued: its saved food and ingredients go — laid again, no copies)
         P.cauldrons.forEach((c, i) => {
             const id = 'school_cauldron_' + i, y = this._floor(c.x, c.z, c.y) ?? c.y;
             if (!g.cauldrons.list.has(id)) g.cauldrons.spawn({ id, x: c.x, y, z: c.z, yaw: 0, st: { ...newBrew(), phase: 'water', water: CAULDRON.FULL, heat: 1 } });

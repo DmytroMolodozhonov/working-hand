@@ -3,7 +3,7 @@
  *   - A day has ONE lesson: the lessons of the table (SchoolLessons.js) in the order of the months and the subjects; a new row in the
  *     table becomes a day by itself. After the lesson — free time; lying down in the dormitory's bed — the next day.
  *   - The record: the day, the lessons seen and attended, the spells the lessons gave, the mana grown at the school. Kept in the
- *     browser (localStorage `zns-school`) after every day and every lesson; «Продолжить учёбу» in the menu starts from it.
+ *     browser (localStorage `zns-school:<world id>`) after every day and every lesson; the world «Школа Акселдорф» in the menu's list goes on from it.
  */
 import { LESSONS, SUBJECTS } from './SchoolLessons.js';
 
@@ -26,15 +26,15 @@ export const yearLength = () => yearDays().length;
 export function newRecord() { return { v: 1, day: 1, arrived: false, seen: [], attended: [], spells: [], cells: 0, done: false }; }
 
 /** The record kept (or null): `store` — localStorage or a stand-in. A broken / foreign one is forgotten. */
-export function loadRecord(store) {
+export function loadRecord(store, key = SCHOOL_SAVE_KEY) {
     try {
-        const r = JSON.parse(store?.getItem?.(SCHOOL_SAVE_KEY) || 'null');
+        const r = JSON.parse(store?.getItem?.(key) || 'null');
         if (!r || r.v !== 1 || !(r.day >= 1)) return null;
         return { ...newRecord(), ...r, seen: [...(r.seen || [])], attended: [...(r.attended || [])], spells: [...(r.spells || [])] };
     } catch { return null; }
 }
-export function saveRecord(store, r) { try { store?.setItem?.(SCHOOL_SAVE_KEY, JSON.stringify(r)); } catch { /* (private window: nothing kept) */ } }
-export function forgetRecord(store) { try { store?.removeItem?.(SCHOOL_SAVE_KEY); } catch { /* */ } }
+export function saveRecord(store, r, key = SCHOOL_SAVE_KEY) { try { store?.setItem?.(key, JSON.stringify(r)); } catch { /* (private window: nothing kept) */ } }
+export function forgetRecord(store, key = SCHOOL_SAVE_KEY) { try { store?.removeItem?.(key); } catch { /* */ } }
 
 /** The schedule scroll's day (School sets it every morning): what the scroll shows when read (ItemTypes.describeItem → scheduleLines). */
 export const SCHEDULE = { day: 1 };

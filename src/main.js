@@ -46,7 +46,7 @@ import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
 import { WORLD_GEN } from './world/Terrain.js';
 import { STAGE_TITLES as TUT_STAGES } from './game/Tutorial.js';
-import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, SCHOOL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
+import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { sadTrombone } from './audio/MagicSound.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
@@ -428,7 +428,6 @@ function readConfig() {
 
 // ------------------------------------------------------------------ maps
 let tutContinue = true; // («Обучение»: go on from where the player stopped — the tick under the cards, on by default)
-let schoolContinue = true; // («Школа»: go on with the year kept — the menu's tick)
 const tutPick = new Set(); // («Обучение» passed: the stages chosen to repeat)
 async function updateGameMapList(forceRefresh = false) {
     const gameTab = $('tab-game');
@@ -464,7 +463,7 @@ async function updateGameMapList(forceRefresh = false) {
     modeRow.className = 'mode-row';
     mapListDiv.appendChild(modeRow);
     const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps', tutorial: 'mode-card tutorial', school: 'mode-card tutorial school' };
-    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY], ['tutorial', TUTORIAL_ENTRY], ['school', SCHOOL_ENTRY]]; // («Школа Акселдорф» — the author 07.11: a year at the school of magic) // («Обучение» — the author 07.11: beside Творческий, Выживание, Карты)
+    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY], ['tutorial', TUTORIAL_ENTRY]]; // («Школа Акселдорф» — the author 07.11: a year at the school of magic) // («Обучение» — the author 07.11: beside Творческий, Выживание, Карты)
     for (const [id, m] of choices) {
         const card = document.createElement('div');
         const on = id === 'maps' ? pickingMap : !pickingMap && selectedMode === id;
@@ -472,7 +471,7 @@ async function updateGameMapList(forceRefresh = false) {
         card.dataset.mode = id;
         card.setAttribute('role', 'button');
         card.tabIndex = 0;
-        card.innerHTML = `<span class="mode-icon">${m.icon}</span><span class="map-name">${m.label}</span>`;
+        card.innerHTML = `<span class="mode-icon">${m.icon}</span><span class="map-name">${m.label}</span>${m.wip ? '<span class="mode-wip">в разработке</span>' : ''}`;
         card.onclick = () => {
             pickingMap = id === 'maps';
             selectedMap = null;
@@ -480,7 +479,7 @@ async function updateGameMapList(forceRefresh = false) {
             if (pickingMap) { // (the map chosen last time is chosen again)
                 const nm = createMem.load('maps')?.map;
                 if (nm && maps[nm]) selectedMap = { ...maps[nm], name: nm };
-            } else if (id !== 'tutorial' && id !== 'school') { createMem.setLastMode(id); restoreCreateMemory(id); }
+            } else if (id !== 'tutorial' && id !== 'school') { createMem.setLastMode(id); restoreCreateMemory(id); } // (the school's world has no settings of its own to remember)
             applyFps();
             updateGameMapList();
         };
@@ -489,7 +488,7 @@ async function updateGameMapList(forceRefresh = false) {
     }
     const hint = document.createElement('div');
     hint.className = 'mode-hint';
-    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : selectedMode === 'school' ? SCHOOL_ENTRY.hint : MODES[selectedMode]?.hint || '';
+    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
     mapListDiv.appendChild(hint);
     // «Обучение»: go on from the stage left off (the author 07.11: a tick, on by default; off — from the start)
     if (selectedMode === 'tutorial' && !pickingMap) {
@@ -511,19 +510,6 @@ async function updateGameMapList(forceRefresh = false) {
             lab.className = 'world-opt tut-continue';
             lab.innerHTML = `<input type="checkbox" id="tut-continue"${tutContinue ? ' checked' : ''}> Продолжить с того места, где остановились <span class="mp-hint">— этап ${left.stage + 1}: «${String(left.title || '').replace(/[<>&"]/g, '')}». Без галочки — сначала</span>`;
             lab.querySelector('input').onchange = (e) => { tutContinue = e.target.checked; };
-            mapListDiv.appendChild(lab);
-        }
-    }
-
-    // «Школа»: go on with the year kept (SchoolYear.js) — a tick, on by default; off — the year from the start (the arrival)
-    if (selectedMode === 'school' && !pickingMap) {
-        let kept = null;
-        try { kept = JSON.parse(localStorage.getItem('zns-school') || 'null'); } catch { kept = null; }
-        if (kept && kept.arrived) {
-            const lab = document.createElement('label');
-            lab.className = 'world-opt tut-continue';
-            lab.innerHTML = `<input type="checkbox" id="school-continue"${schoolContinue ? ' checked' : ''}> Продолжить учёбу <span class="mp-hint">— день ${kept.day | 0}${kept.done ? ', год окончен' : ''}. Без галочки — новый год с приезда (прежний забудется)</span>`;
-            lab.querySelector('input').onchange = (e) => { schoolContinue = e.target.checked; };
             mapListDiv.appendChild(lab);
         }
     }
@@ -580,7 +566,7 @@ async function updateGameMapList(forceRefresh = false) {
     if (creativeSettings) creativeSettings.style.display = selectedMode === 'creative' && !pickingMap ? 'block' : 'none';
     const start = $('start-btn');
     start.disabled = pickingMap && !selectedMap;
-    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : selectedMode === 'school' ? '🏰 В школу' : '✨ Создать и играть';
+    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : selectedMode === 'school' ? '🏰 Создать и в школу' : '✨ Создать и играть';
 }
 // «Карты» → «🛠️ Создать карту»: the map editor opens right here (it was a tab of its own)
 function openMapEditor(on) {
@@ -1354,6 +1340,7 @@ function tutorialGate() {
 
 async function startGame(config, welcome = null) {
     if (starting) return; // a second click / duplicate invitation while loading
+    if (config?.mode === 'school') config = { ...config, mode: 'freeworld', school: true, worldMode: 'school', map: null }; // («Школа Акселдорф»: its own kind of world — School.js; its year kept with the world)
     // (the first game ever: «Вы уже прошли обучение?» — before the full screen: going full screen under the window moved it, and the
     // first click on «Пропустить» was lost — the author)
     if (!config.tutorial && !config.school && !welcome && !(await tutorialGate())) return;
@@ -1510,7 +1497,6 @@ $('start-btn').addEventListener('click', () => {
     }
     const cfg = readConfig();
     if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
-    if (cfg.mode === 'school') { if (!schoolContinue) { try { localStorage.removeItem('zns-school'); } catch { /* */ } } startGame({ ...cfg, mode: 'freeworld', school: true, schoolContinue, map: null, worldName: 'Школа Акселдорф' }); return; } // (a valley of its own — SchoolLand.js; the year — School.js) // (the stage left off — if the tick is on)
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;

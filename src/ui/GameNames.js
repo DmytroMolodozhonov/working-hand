@@ -12,11 +12,13 @@
 export const GAME_NAME = 'Волшебство только начинается';
 
 /** The order of the first choice in the menu. */
-export const MODE_ORDER = ['creative', 'freeworld'];
+export const MODE_ORDER = ['creative', 'freeworld', 'school']; // («Школа Акселдорф» — a world of its own kind, the author 07.11)
 
 export const MODES = {
     creative: { label: 'Творческий', icon: '🏗️', hint: 'Всё открыто: стройте, пробуйте заклинания, зомби — по желанию' },
     freeworld: { label: 'Выживание', icon: '🌍', hint: 'Бесконечный мир: здоровье, мана, сундуки, свитки и дуэли с друзьями' },
+    // («Школа Акселдорф»: a new world like the others, saved and continued from the list — internally a 'freeworld' game with `school`)
+    school: { label: 'Школа Акселдорф', icon: '🏰', wip: true, hint: 'Год в школе волшебства: уроки защиты, зельеварения, пентаграмм и истории мира вместе с другими учениками. ⚠️ Режим ещё в разработке — многое будет дополняться' },
 };
 
 /** «Карты»: hand-made maps from the map editor (internally a 'survival' game with a map — that internal value stays for maps only). */
