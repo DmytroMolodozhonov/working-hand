@@ -17,10 +17,14 @@ test('50 mana; a jet of 10 s; a huge dome that grows, stays and thins away; blac
     assert.ok(radiusAt(5) > 0 && radiusAt(5) < FOG.R);
     assert.equal(radiusAt(FOG.RELEASE), FOG.R);
     assert.equal(radiusAt(FOG.RELEASE + 60), FOG.R);
-    assert.ok(radiusAt(FOG.RELEASE + FOG.HOLD + 15) < FOG.R);
-    assert.ok(aliveAt(100) && !aliveAt(FOG.RELEASE + FOG.HOLD + FOG.FADE + 1));
+    // the author 06.11: the fog NEVER thins by itself — only «стоп» takes it down (e: seconds since «стоп»)
+    for (const t of [20, 200, 5000, 1e6]) assert.equal(radiusAt(t), FOG.R, 'no thinning by time: ' + t);
+    for (const t of [20, 5000, 1e6]) { assert.ok(aliveAt(t)); assert.equal(densityAt(t), 1); }
+    assert.ok(radiusAt(100, FOG.FADE / 2) < FOG.R && radiusAt(100, FOG.FADE / 2) > 0, 'after «стоп» it thins from the rim');
+    assert.equal(radiusAt(100, FOG.FADE), 0);
+    assert.ok(aliveAt(100, FOG.FADE - 0.1) && !aliveAt(100, FOG.FADE + 0.1), 'gone FADE s after «стоп»');
+    assert.ok(densityAt(100, FOG.FADE - 0.2) < 0.1);
     assert.equal(densityAt(FOG.RELEASE + 10), 1);
-    assert.ok(densityAt(FOG.RELEASE + FOG.HOLD + 29) < 0.1);
     assert.ok(DARK_SPELLS.has('Caligo'));
     for (const w of ['caligo', 'Калиго', 'калиго']) assert.equal(matchSpell(w), 'Caligo', w);
 });
@@ -33,7 +37,8 @@ test('the volume: a dome — high in the middle, low at the rim; nothing outside
     assert.ok(insideFog(f, 50, 3, 0) && !insideFog(f, 50, 25, 0), 'near the rim only low');
     assert.ok(!insideFog(f, 70, 3, 0), 'outside');
     assert.ok(!insideFog({ ...f, t: 0.5 }, 30, 3, 0), 'just begun: only a little cloud at the wand\'s target');
-    assert.ok(!insideFog({ ...f, t: FOG.RELEASE + FOG.HOLD + FOG.FADE - 1 }, 0, 3, 0), 'nearly gone');
+    assert.ok(!insideFog({ ...f, e: FOG.FADE - 0.3 }, 0, 3, 0), 'nearly gone after «стоп»');
+    assert.ok(insideFog({ ...f, t: 99999 }, 0, 3, 0), 'hours later it is still there');
 });
 
 test('the minds: a player in the fog is only where he was last seen — for a few seconds, then nowhere (disoriented); outside — as he is', () => {
@@ -90,7 +95,8 @@ test('«стоп» takes down my fog fast; every kind of creature has a decision
     fog.fogs.push({ id: 'a', by: 'A', x: 0, y: 0, z: 0, t: 30, mesh: new THREE.Object3D(), mat: { dispose() {} } });
     fog.fogs.push({ id: 'b', by: 'B', x: 0, y: 0, z: 0, t: 30, mesh: new THREE.Object3D(), mat: { dispose() {} } });
     assert.ok(fog.stopMine());
-    assert.ok(fog.fogs[0].t > FOG.RELEASE + FOG.HOLD && fog.fogs[1].t === 30, 'only mine');
-    assert.ok(!fog.stopMine() || true);
+    assert.ok(fog.fogs[0].e === 0 && fog.fogs[1].e === undefined, 'only mine');
+    assert.ok(!fog.stopMine(), 'already thinning: nothing more to stop');
+    assert.ok(fog.stopBy('B') && fog.fogs[1].e === 0, 'another player\'s «стоп» from the net');
     for (const [k, T] of Object.entries(FOG_TARGETS)) assert.ok(['blind', 'sees', 'none'].includes(T.does) && T.why.length > 8, k);
 });

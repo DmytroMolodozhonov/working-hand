@@ -15,8 +15,8 @@
 export const FOG = {
     COST: 50,
     RELEASE: 10, // s the jet lasts (the dome grows)
-    HOLD: 150, // s the full fog stays
-    FADE: 30, // s it thins away
+    HOLD: Infinity, // s the full fog stays: FOR EVER, until «стоп» (the author 06.11: «туман не должен рассеиваться, пока не сказано «Стоп»»)
+    FADE: 6, // s it thins away once «стоп» is said (`e`: seconds since)
     R: 60, // m: the radius at the end of the release («огромный»: ~11 000 m²)
     H: 38, // m: the height of the dome
     WARD_PAD: 22, // m: more than a house's dome of protection (the fog wraps the house)
@@ -31,27 +31,26 @@ export const FOG = {
 };
 
 /** The radius at `t` s since the cast (an ease-out while it is let out, full, then thinning: the radius shrinks from the rim). */
-export function radiusAt(t) {
+export function radiusAt(t, e = -1) {
     if (t < 0) return 0;
+    if (e >= 0) { const u = e / FOG.FADE; return u >= 1 ? 0 : FOG.R * (1 - u * u * 0.5); } // («стоп»: it thins away from the rim)
     if (t < FOG.RELEASE) { const k = t / FOG.RELEASE; return FOG.R * (1 - (1 - k) * (1 - k)); }
-    if (t < FOG.RELEASE + FOG.HOLD) return FOG.R;
-    const u = (t - FOG.RELEASE - FOG.HOLD) / FOG.FADE;
-    return u >= 1 ? 0 : FOG.R * (1 - u * u * 0.5);
+    return FOG.R; // (never thins by itself)
 }
 /** How dense the fog is at `t` (1 full … 0 gone): the dome's opacity fades in the last seconds, the jet's front is thin. */
-export function densityAt(t) {
+export function densityAt(t, e = -1) {
     if (t < 0) return 0;
+    if (e >= 0) return Math.max(0, 1 - e / FOG.FADE);
     if (t < FOG.RELEASE) return Math.min(1, 0.25 + t / 3);
-    const end = FOG.RELEASE + FOG.HOLD;
-    if (t < end) return 1;
-    return Math.max(0, 1 - (t - end) / FOG.FADE);
+    return 1;
 }
-export const aliveAt = (t) => t < FOG.RELEASE + FOG.HOLD + FOG.FADE;
+/** Alive: until «стоп» was said and `FADE` s have passed. */
+export const aliveAt = (t, e = -1) => e < 0 || e < FOG.FADE;
 
 /** Is the point inside the fog `f` ({x, y, z, t (age s), R?}) — its volume, the rim a little inside (the edge is soft)? */
 export function insideFog(f, x, y, z) {
-    const R = radiusAt(f.t) * 0.94, dx = x - f.x, dz = z - f.z;
-    if (R <= 1 || densityAt(f.t) < 0.35) return false;
+    const R = radiusAt(f.t, f.e ?? -1) * 0.94, dx = x - f.x, dz = z - f.z;
+    if (R <= 1 || densityAt(f.t, f.e ?? -1) < 0.35) return false;
     if (dx * dx + dz * dz > R * R) return false;
     // the dome: height falls toward the rim (an ellipsoid)
     const k = Math.sqrt(dx * dx + dz * dz) / R;

@@ -1144,7 +1144,7 @@ export class NetSync {
             case 'stop':
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)
-                g.spells.stopBy(m.by);
+                g.spells.stopBy(m.by); g.darkFog?.stopBy(m.by); // (a player's «стоп»: his dark fogs thin away on every computer — DarkFog.js)
                 break;
             case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
             case 'ddat': if (m.by !== this.me && Array.isArray(m.p)) g.drawdown?.onNet(m.by, vec(m.p)); break;

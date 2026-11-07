@@ -2,7 +2,7 @@
  * DarkFog.js — «Caligo» («Калиго»): the dark mage's fog (the rules and the author's words: DarkFogRules.js).
  *
  *   word  → 50 mana; the wand lets out a great jet of black smoke for 10 s toward the spot it points at (the ground within 70 m; a house's dome of protection near the spot is
- *           taken as the middle, so the fog wraps the house) — the dome of fog grows out of it to R 60 × H 38, stays 150 s, thins away in 30 s.
+ *           taken as the middle, so the fog wraps the house) — the dome of fog grows out of it to R 60 × H 38, STAYS UNTIL «стоп» (the author 06.11: it never thins by itself), then thins away in 6 s.
  *   every computer draws the same fog (the cast goes over the net as `spell Caligo`: o = the middle, d = the way back to the wand).
  *   the picture inside — Game's render calls `begin()` / `end()` round the frame: the world's fog is swapped for a near black one (restored after, so the day cycle never notices);
  *                         a hero with the night gift (Pentagranium Noctis: `g.sight.night`) sees through it — and so does the one who cast it (his own fog only: `f.by`).
@@ -10,7 +10,7 @@
  *   «стоп» takes down my own fogs (a hero must be able to leave one).
  *
  * «А если»: no fog around (a hero in a cave / under a roof) — the dome is just drawn there, the mind check works the same; two fogs — up to 4, the oldest thins away at once;
- * the caster leaves / dies — the fog stays (it is the world's now); an old world / a late joiner — no fog (it is not saved: it thins away within 3 minutes anyway);
+ * the caster dies / leaves the game — the fog has nobody to say «стоп»: it thins away; an old world / a late joiner — no fog (it is not saved: it is gone with the session; the picture inside: its skin is not drawn round a hero who is in it (the author saw «a dome»)); (was: …3 minutes anyway);
  * the hero inside is dead / in space / in hell — the picture's swap is skipped (hell and space have their own skies); FPS: ONE shared dome geometry, a shader program for
  * all (the material cloned only for its uniforms), ONE point cloud for the smoke jets, nothing allocated in the frame.
  */
@@ -189,11 +189,13 @@ export class DarkFog {
         return 'Caligo';
     }
 
-    /** «Стоп»: my fogs thin away at once. */
-    stopMine() {
-        const g = this.game;
+    /** «Стоп»: my fogs thin away (the only thing that ever takes a fog down). */
+    stopMine() { return this.stopBy(this.game.localId); }
+
+    /** The fogs of player `id` start to thin away (their «стоп» — also from the net; the caster's death / leaving). True if any was standing. */
+    stopBy(id) {
         let any = false;
-        for (const f of this.fogs) if (f.by === g.localId && f.t < FOG.RELEASE + FOG.HOLD) { f.t = FOG.RELEASE + FOG.HOLD + FOG.FADE * 0.8; any = true; } // (a short fade: ~6 s)
+        for (const f of this.fogs) if (f.by === id && !(f.e >= 0)) { f.e = 0; any = true; }
         return any;
     }
 
@@ -209,7 +211,7 @@ export class DarkFog {
         mesh.position.set(o.x, o.y - 1, o.z);
         mesh.scale.set(0.01, 0.01, 0.01);
         g.scene.add(mesh);
-        this.fogs.push({ id: by + ':' + (++this._n), by, x: o.x, y: o.y - 1, z: o.z, t: 0, mesh, mat, side: side || 'right', wand: o.clone().add(toWand), emit: 0 });
+        this.fogs.push({ id: by + ':' + (++this._n), by, x: o.x, y: o.y - 1, z: o.z, t: 0, e: -1, mesh, mat, side: side || 'right', wand: o.clone().add(toWand), emit: 0 });
         this._ensurePoints();
         g.sound?.spellCast?.('Caligo', o.clone().add(toWand));
     }
@@ -236,13 +238,19 @@ export class DarkFog {
         for (let i = this.fogs.length - 1; i >= 0; i--) {
             const f = this.fogs[i];
             f.t += dt;
-            if (!aliveAt(f.t)) { this._drop(i); continue; }
-            const R = radiusAt(f.t);
+            if (f.e >= 0) f.e += dt;
+            // (it stays until «стоп»; the caster dead or gone from the game — it is no one's to stop: it thins away)
+            if (f.e < 0 && (f.by === g.localId ? (g.combat?.dead || g.isDeadLocal) : (g.remotes && !g.remotes.has(f.by)))) f.e = 0;
+            if (!aliveAt(f.t, f.e)) { this._drop(i); continue; }
+            const R = radiusAt(f.t, f.e);
             f.mesh.scale.set(Math.max(0.01, R), Math.max(0.01, FOG.H * Math.min(1, 0.15 + R / FOG.R)), Math.max(0.01, R));
             f.mat.uniforms.uTime.value = tt;
-            f.mat.uniforms.uAlpha.value = 0.85 * densityAt(f.t);
+            // (inside the dome its skin is not drawn at all — the author saw «a dome» round him; near the rim it fades in as he nears it from inside)
+            const cam = g.camera.position, dd = Math.hypot(cam.x - f.x, cam.z - f.z), inner = R * 0.94 - dd, cy = cam.y - f.y;
+            const skin = (cy > -6 && cy < FOG.H * 1.1) ? 1 - Math.min(1, Math.max(0, inner / 10)) : 1;
+            f.mat.uniforms.uAlpha.value = 0.85 * densityAt(f.t, f.e) * skin;
             f.mat.uniforms.uSeer.value = (night || f.by === g.localId) ? 1 : 0; // (the caster sees through his own fog — the author 06.11)
-            f.mesh.visible = R > 0.5 && f.mesh.position.distanceToSquared(g.camera.position) < (FOG.R * 6) ** 2;
+            f.mesh.visible = R > 0.5 && skin > 0.01 && f.mesh.position.distanceToSquared(g.camera.position) < (FOG.R * 6) ** 2;
             // the jet: smoke from the wand toward the middle while it is let out
             if (f.t < FOG.RELEASE) {
                 f.emit += dt * 48;
@@ -263,7 +271,7 @@ export class DarkFog {
         this._ralpha.fill(0);
         for (let k = 0; k < this.fogs.length; k++) {
             const f = this.fogs[k];
-            const R = radiusAt(f.t), dens = densityAt(f.t);
+            const R = radiusAt(f.t, f.e), dens = densityAt(f.t, f.e);
             if (R < 3 || dens < 0.02 || !f.mesh.visible) continue;
             if (f.by === this.game.localId || this.game.sight?.night) { /* (the caster / a seer sees through it: fewer, fainter) */ }
             const seer = (f.by === this.game.localId || this.game.sight?.night) ? 0.3 : 1;
