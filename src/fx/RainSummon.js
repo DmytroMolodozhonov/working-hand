@@ -79,7 +79,7 @@ void main() {
     float n = fbm(pp * 1.4 + uTime * 0.05) * 0.75 + fbm(pp * 3.1 - uTime * 0.12) * 0.35;
     float dens = smoothstep(0.18, 0.78, n + (1.0 - r) * 0.5);
     float edge = 1.0 - smoothstep(0.62, 1.0, r + (n - 0.5) * 0.3);        // (ragged, soft rim)
-    float eye = smoothstep(0.0, 0.2, r);                                   // (a little hollow at the very centre: the beam goes through)
+    float eye = 0.5 + 0.5 * smoothstep(0.0, 0.2, r);                      // (the centre is a little thinner: the beam goes through)
     vec3 col = mix(uCloud * 0.55, uCloud * 1.35, n);
     col += uRim * pow(smoothstep(0.35, 0.95, r), 2.0) * (0.25 + 0.5 * vn(vec2(a * 4.0, uTime * 0.6)));
     col += uRim * uFlash * (0.5 + 0.5 * vn(vec2(a * 3.0 + uTime * 6.0, r * 5.0))) * (1.0 - r);   // (flashes inside the cloud)
