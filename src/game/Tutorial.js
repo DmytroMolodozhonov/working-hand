@@ -241,7 +241,7 @@ export class Tutorial {
             { title: STAGE_TITLES[7], steps: [
                 // (the author: a glowing circle where to come — the check that it is done)
                 ask('Теперь вы можете ходить. Делайте всё то же, что при обычной ходьбе: двигайте руками и ногами, как будто идёте, только оставайтесь на месте. Герой пойдёт туда, куда вы смотрите. Дойдите до светящегося круга впереди.', () => T._atGoal(), { unfreeze: true, setup: () => T._goal(T._frontOfView(14)), hint: 'Двигайтесь как при ходьбе, на месте, и смотрите на светящийся круг — герой пойдёт к нему.' }),
-                ask('А теперь бегите к новому кругу — он слева. Двигайте руками и ногами быстрее и шире, как при беге, — тоже на месте.', () => T._atGoal() && T.ctx.ran > 0.6, { unfreeze: true, setup: () => { T.ctx.ran = 0; T._goal(T._frontOfView(0, -26)); }, tick: (dt) => { if (T._speed() > 6) T.ctx.ran += dt; if (T._atGoal() && !(T.ctx.ran > 0.6) && !T.ctx.toldRun) { T.ctx.toldRun = true; T._narrate('Вы дошли шагом. Теперь бегом — к новому кругу!'); T._goal(T._frontOfView(0, 26)); } }, hint: 'Повернитесь к кругу слева. Двигайте руками и ногами быстро, как при беге, — герой побежит.' }),
+                ask('А теперь бегите к новому кругу — он слева. Двигайте руками и ногами быстрее и шире, как при беге, — тоже на месте.', () => T._atGoal() && T.ctx.ran > 0.6, { unfreeze: true, setup: () => { T.ctx.ran = 0; T._goal(T._frontOfView(0, -26)); }, tick: (dt) => { if (T._running()) T.ctx.ran += dt; if (T._atGoal() && !(T.ctx.ran > 0.6) && !T.ctx.toldRun) { T.ctx.toldRun = true; T._narrate('Вы дошли шагом. Теперь бегом — к новому кругу!'); T._goal(T._frontOfView(0, 26)); } }, hint: 'Повернитесь к кругу слева. Двигайте руками и ногами быстро, как при беге, — герой побежит.' }),
                 { ...say('Отлично! Если кто-то идёт на вас, а вы стоите к нему лицом и шагаете, герой будет отходить назад, не поворачиваясь спиной.'), ...wait(8), unfreeze: true, setup: () => T._goal(null) },
             ], onStart: () => T._placeHero() },
             { title: STAGE_TITLES[8], steps: [
@@ -358,7 +358,21 @@ export class Tutorial {
     _hp() { const c = this.game.combat; return c?.enabled ? c.hp : this.game.playerHP; }
     _hurtABit() { const c = this.game.combat; if (c?.enabled) { c.hp = Math.max(1, (c.maxHp || 20) - 6); c._hudKey = ''; this.game.playerHP = c.hp; } else this.game.playerHP = Math.max(1, (this.game.maxHP || 20) - 6); }
     _heal() { const c = this.game.combat; if (c) { c.hp = c.maxHp || c.hp; c.dead = false; c._hudKey = ''; c.fatigue = c.maxFatigue; } this.game.playerHP = this.game.maxHP; }
-    _speed() { const v = this.game.character?.velocity; return v ? Math.hypot(v.x || 0, v.z || 0) : 0; }
+    /** The hero's speed over the ground, m/s — from how far he really moved (the character keeps no velocity of the walk). */
+    _speed() {
+        const v = this.game.character?.velocity;
+        const sv = v ? Math.hypot(v.x || 0, v.z || 0) : 0;
+        return Math.max(sv, this._moveSpeed || 0);
+    }
+    /** (each frame) the speed measured by the position, smoothed. */
+    _measureSpeed(dt) {
+        const p = this.game.character?.group?.position;
+        if (!p) return;
+        if (this._lastPos) { const d = Math.hypot(p.x - this._lastPos.x, p.z - this._lastPos.z) / dt; this._moveSpeed = (this._moveSpeed || 0) + ((d < 40 ? d : 0) - (this._moveSpeed || 0)) * Math.min(1, dt * 4); }
+        this._lastPos = { x: p.x, z: p.z };
+    }
+    /** Running now: the arms pumping (ArmPump — the game's own sign of a real run) or plainly fast over the ground. */
+    _running() { const ch = this.game.character; return !!(ch?.armPump?.pumping && this._speed() > 3) || this._speed() > 5.5; }
     _walked(m) { const f = this.ctx.from, p = this.game.character.group.position; return !!f && Math.hypot(p.x - f.x, p.z - f.z) >= m; }
 
     // ------------------------------------------------------------------ the market (CreativeMarket's stall, the city merchant's own deal)
@@ -565,6 +579,7 @@ export class Tutorial {
         if (this._placeT <= 0) { this._placeT = 0.3; this._place(); }
         this._modeT = (this._modeT || 0) - dt;
         if (this._modeT <= 0) { this._modeT = 0.15; this._mode(); }
+        this._measureSpeed(dt);
         this._goalStep(dt);
         if (st.beacon) this._beacon(this.ctx[st.beacon], dt); // (the thing to take: golden sparks round it — seen at once)
         try { st.tick?.(dt); st.check?.(); } catch (e) { console.warn('tutorial tick', e); }

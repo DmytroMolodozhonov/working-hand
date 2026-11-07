@@ -911,7 +911,7 @@ export class VoxelCharacter {
             } else if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 9.75; // (the run: 30% faster than the first 7.5, as the author asked)
                 // (the author 07.11: only a REAL run — arms swinging, a full run — is 30 % faster still; walking and jogging stay as they were)
-                const sprint = 1 + 0.3 * Math.max(0, Math.min(1, (this.runIntensity - 0.75) / 0.2));
+                const sprint = 1 + 0.3 * Math.max(0, Math.min(1, (this.armPump?.bonus || 0) / 0.2)); // (a REAL run is the arms pumping in turn — ArmPump; a walk, even a brisk one, never: runIntensity was high on a plain walk too)
                 // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book; armPump: the arms working)
                 const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.canRun === false ? 1 : sprint) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (1 + this.armPump.bonus) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1) * (this.steadyK ?? 1) * (this.sizeRun || 1) * walkK(this.gravityK); // (a heavy planet: slower; the monster form: longer strides)
                 // (the settings' «Ходьба назад»: leaning back — the hero steps backwards, slower: a walk, never a run)
