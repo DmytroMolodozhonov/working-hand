@@ -39,7 +39,7 @@ export const OCEAN_STORM = {
     // «Tornado» (the spell, 05.11): a spout called down out of the sky over the sea
     SUMMON_LIFE: 12 * 60, // s: 12 game hours at most (a game hour is a real minute) — no spout stands for ever (the author)
     SUMMON_AHEAD: 45, // m ahead of the caster it comes down
-    SUMMON_MIN_S: 25, // m off the shore at least (deep water)
+    SUMMON_MIN_S: 45, // m off the shore at least (deep water; the author 07.11: a spout called too near the land «began and then evaporated» — it died in the shallows while it wandered; now it is called further out and its wandering is cut so that it never comes within ~30 m of the shore)
     SHORE_REACH: 25, // m: on the land this near the sea it may be called too (the author: «в 20 метрах от моря на суше — тоже можно»)
     SUMMON_ROAM: [55, 40], // m: it wanders round where it was called (a slow loop, not off across the sea)
     MAX_SUMMONED: 4, // at once in the world (the oldest goes first)
@@ -93,7 +93,8 @@ export class OceanStorm {
         const t = (this.game.weatherClock ?? Date.now() / 1000) + delay;
         const id = 'tornado:' + (by ?? '?') + ':' + Math.round(t * 10);
         if (this.summoned.some((s) => s.id === id)) return;
-        this.summoned.push({ id, x0: at.x, z0: at.z, born: t, life: OCEAN_STORM.SUMMON_LIFE, spin, by, ph: Math.random() * 6.28 });
+        const sd0 = this.game.sea?.index?.signedDist ? this.game.sea.index.signedDist(at.x, at.z) : 99;
+        this.summoned.push({ id, x0: at.x, z0: at.z, ra: Math.max(0.12, Math.min(1, (sd0 - 32) / 55)), born: t, life: OCEAN_STORM.SUMMON_LIFE, spin, by, ph: Math.random() * 6.28 });
         while (this.summoned.length > OCEAN_STORM.MAX_SUMMONED) this.summoned.shift();
     }
 
@@ -103,7 +104,7 @@ export class OceanStorm {
         for (let i = this.summoned.length - 1; i >= 0; i--) {
             const s = this.summoned[i], age = t - s.born;
             if (age > s.life || age < -5) { this.summoned.splice(i, 1); continue; }
-            const [rx, rz] = OCEAN_STORM.SUMMON_ROAM;
+            const [rx0, rz0] = OCEAN_STORM.SUMMON_ROAM, ra = s.ra ?? 1, rx = rx0 * ra, rz = rz0 * ra; // (the nearer the shore it was called, the smaller its loop)
             const x = s.x0 + Math.sin(age / 41 + s.ph) * rx * Math.min(1, age / 60), z = s.z0 + Math.sin(age / 29 + s.ph * 1.7) * rz * Math.min(1, age / 60);
             const sd = idx ? idx.signedDist(x, z) : 99;
             const shore = Math.max(0, Math.min(1, (sd - (OCEAN.DIE_S - 8)) / 10));

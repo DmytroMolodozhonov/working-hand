@@ -12,8 +12,8 @@ import { SPELL_RU } from '../../src/game/ItemTypes.js';
 const src = (f) => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8');
 
 test('слово «Aquadivide» узнаётся, обычная речь и Aquambula — нет', () => {
-    for (const w of ['Aquadivide', 'аквадивиде', 'аквадивайд', 'акводивиде']) assert.equal(matchSpell(w), 'WaterPart', w);
-    for (const w of ['вода', 'аква', 'divide', 'разделить воду', 'Aquambula']) assert.notEqual(matchSpell(w), 'WaterPart', w);
+    for (const w of ['Aquadivide', 'аквадивиде', 'аквадивайд', 'акводивиде', 'аква вайд', 'аквавайд', 'aqua wide', 'аква дивайд', 'аква вайде']) assert.equal(matchSpell(w), 'WaterPart', w);
+    for (const w of ['вода', 'аква', 'divide', 'разделить воду', 'Aquambula', 'аквариум', 'аквапарк', 'видео']) assert.notEqual(matchSpell(w), 'WaterPart', w);
     assert.equal(matchSpell('Aquambula'), 'WaterWalk');
 });
 

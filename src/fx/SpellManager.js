@@ -224,7 +224,8 @@ export function matchSpell(text) {
     if (has('drawdown', 'draw down', 'drowdown', 'drow down', 'дравдаун', 'драв даун', 'дродаун', 'дро даун', 'драудаун', 'драу даун', 'дровдаун', 'дров даун', 'драфдаун', 'дравдан', 'дродан', 'дравдаон', 'просядь')) return mx() ? 'DrawdownMaxima' : 'Drawdown';
     if (has('ликвидейш', 'ликвидэйш', 'ликвидеш', 'ликвидайш', 'ликвидац', 'ликвидир', 'ликвидей', 'liquidat', 'liquidation', 'ликвидейтион')) return mx() ? 'LiquidationMaxima' : 'Liquidation';
     if (has('spiralis', 'спиралис', 'спиралес', 'спирализ', 'spiralus', 'спираллис')) return 'Spiralis'; // (the beams of a clash whirled: Whirl.js)
-    if (has('aquadivide', 'akvadivide', 'aquadivida', 'aquadivaid', 'аквадивиде', 'аквадивайд', 'аквадивида', 'акводивиде')) return 'WaterPart'; // (the water stands aside: WaterPart.js)
+    if (has('aquadivide', 'akvadivide', 'aquadivida', 'aquadivaid', 'аквадивиде', 'аквадивайд', 'аквадивида', 'акводивиде', 'аквадивид', 'аквадевайд', 'аквавайд', 'акваявайд', 'акваввайд', 'акуавайд', 'аквавид', 'аквавиде', 'aquavide', 'aquawide', 'aquavaid', 'aquawaid') ||
+        (/(aqua|akva|аква|акуа|акво|аквэ|аква|аква)/.test(s) && /(divid|divaid|devaid|divide|дивид|дивайд|девайд|дэвайд|вайд|вайт|вайде|wide|wid\b|vide|vaid|виде|видэ|вид\b|вит\b)/.test(s) && !/(ambul|амбул|мбул|ris\b|рис\b)/.test(s))) return 'WaterPart'; // (the water stands aside: WaterPart.js)
     if (has('aquambula', 'akvambula', 'aquambule', 'akwambula', 'аквамбула', 'аквамбулу', 'аквамбуле', 'аквамбулла', 'аквамбулы')) return 'WaterWalk'; // (walking on the water: WaterWalk.js)
     if (has('caligo', 'kaligo', 'калиго', 'калигу', 'каллиго', 'каліго', 'caligu')) return 'Caligo'; // (the dark fog: DarkFog.js)
     if (has('sectura', 'sektura', 'сектура', 'сэктура', 'сектюра', 'сектура', 'sectur')) return 'Sectura'; // (the cutting curse: Slash.js — «сектора» is the everyday word, not taken)

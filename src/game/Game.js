@@ -3181,7 +3181,7 @@ export class Game {
         for (const s of w ? [w.side, w.side === 'left' ? 'right' : 'left'] : ['right', 'left']) {
             if (!ch.isArmRaised(s)) continue;
             const d = w && w.side === s ? (this.wandMagic.tip(_v2, _v1), _v1) : ch.getHandDirection(s, _v1);
-            if (aimedAtSky(d)) { side = s; break; }
+            if (aimedAtSky(d, 0.5)) { side = s; break; }
         }
         if (!side) { if (isFinal) this.hud.setVoice('🌧️ Направьте руку (или палочку) <b>вверх, к небу</b> и скажите «Let it rain»', true); return null; }
         const tired = this.combat.check('LetItRain');
