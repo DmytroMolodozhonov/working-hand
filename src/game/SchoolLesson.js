@@ -23,7 +23,7 @@ export class SchoolLesson {
         this.game = school.game;
         this.L = lessonById(id);
         this.S = SUBJECTS[this.L?.subject] || null;
-        this.room = this.S && school.plan.rooms[this.S.room];
+        this.room = this.S && (school.plan.rooms[this.S.room] || (this.S.room === 'hall' ? school.plan.hall : null));
         this.phase = this.L && this.room ? 'call' : 'done';
         this.t = 0;
         this.attended = false; this.left = false; this.done = this.phase === 'done';
@@ -41,6 +41,14 @@ export class SchoolLesson {
     /** The places in the room: the teacher before the far wall, the hero's circle in the middle, the pupils in two rows behind. */
     _spots() {
         const R = this.room, F = this.school.plan.F + 0.5, cx = (R.x0 + R.x1) / 2;
+        if (this.S.room === 'hall') { // (the Director on the dais, the pupils along the tables, the hero in the middle)
+            const d = R.director || R.dais, T = R.tables || [], mz = (R.z0 + R.z1) / 2;
+            return {
+                teacher: { x: d.x, y: d.y, z: d.z, yaw: Math.PI },
+                hero: { x: cx, y: F, z: mz },
+                pupils: T.flatMap((t) => [{ x: t.x + 1.5, y: F, z: mz - 4 }, { x: t.x - 1.5, y: F, z: mz + 2 }]),
+            };
+        }
         const front = R.z0 + 4, mid = R.z0 + 12;
         return {
             teacher: { x: cx, y: F, z: front, yaw: Math.PI }, // (facing the class: +z)
@@ -50,7 +58,7 @@ export class SchoolLesson {
     }
 
     _hint(text) { if (text) this.game.hud?.setVoice?.(text, true); }
-    _say(text, s = LINE_S) { this.school._say(this.teacher, text, s); }
+    _say(text, s = LINE_S) { if (text) this.school._say(this.teacher, text, s); }
 
     update(dt) {
         if (this.done) return;
@@ -75,7 +83,7 @@ export class SchoolLesson {
 
     _call() {
         const sp = this._spots(), sc = this.school;
-        this._hint(`Начинается урок: ${this.S.name}. Идите в кабинет — светящийся круг покажет дорогу.`);
+        this._hint(this.S.room === 'hall' ? 'Сбор в большом зале! Директор ждёт всех учеников — светящийся круг покажет дорогу.' : `Начинается урок: ${this.S.name}. Идите в кабинет — светящийся круг покажет дорогу.`);
         // (the teacher and the pupils are IN the room when the hero comes: the way through the castle's halls is not walked —
         // a walk across the wings stuck at walls; they are put there out of the hero's sight, or walk the last metres if he is near)
         const me = this.game.character.group.position;
@@ -116,6 +124,7 @@ export class SchoolLesson {
     _demo() {
         const D = this.L.demo, tea = this.teacher;
         if (this.t < 0.5) return;
+        if (D.kind === 'talk' && !D.say && !this.L.spells && !this.L.spell) { this.phase = 'task'; this.t = 0; return; } // (words only — the gathering: nothing to show)
         if (!this._shown) {
             this._shown = true;
             if (D.say) this._say(D.say, 6);
@@ -125,7 +134,7 @@ export class SchoolLesson {
         if (this.t > 6.5) {
             for (const sp of this.L.spells || (this.L.spell ? [this.L.spell] : [])) this._give(sp);
             this._say(this.L.teach || this.L.task.say, 6);
-            this._hint(this.L.task.hint);
+            if (this.L.task.hint) this._hint(this.L.task.hint);
             this.phase = 'task'; this.t = 0;
         }
     }
@@ -183,6 +192,6 @@ export class SchoolLesson {
         this.done = true; this.phase = 'done';
         this.school._goal(null);
         const tea = this.teacher; if (tea) tea.lookAt = null;
-        if (this.attended) this._hint(`Урок засчитан: ${this.S.name}.`);
+        if (this.attended && this.S.room !== 'hall') this._hint(`Урок засчитан: ${this.S.name}.`);
     }
 }

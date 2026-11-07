@@ -21,6 +21,7 @@ import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { SchoolDecor } from '../fx/SchoolDecor.js';
 import { makeRobe } from './ArmorTypes.js';
 import { SchoolLesson } from './SchoolLesson.js';
+import { lessonById } from './SchoolLessons.js';
 import { lessonOfDay, yearLength, newRecord, loadRecord, saveRecord, YEAR } from './SchoolYear.js';
 
 export const SCHOOL_SITE = 'akseldorf';
@@ -383,6 +384,12 @@ export class School {
             if (this.lesson.passed) { r.cells = (r.cells || 0) + YEAR.LESSON_CELLS; g.mana?.grow?.(YEAR.LESSON_CELLS, 'lesson', this.lesson.L.id); g.hud?.toast?.(`🔷 Урок пройден: +${YEAR.LESSON_CELLS} ячейки маны`, 3500); }
             for (const sp of this.lesson.given) if (!r.spells.includes(sp)) r.spells.push(sp);
             this.lesson = null; this._save();
+        }
+        // the first day of a month: the Director's gathering in the Great Hall first (SchoolLessons.HALL_TALKS)
+        const m = lessonOfDay(r.day)?.month, hall = m && m > 1 && !r.eve ? 'hall' + m : null;
+        if (hall && this._dayLesson && !r.seen.includes(this._dayLesson) && !r.seen.includes(hall) && lessonById(hall)) {
+            if (this.dayT > 6) { r.seen.push(hall); this._save(); this.lesson = new SchoolLesson(this, hall); this.dayT = 0; }
+            return;
         }
         // the day's lesson: called a little after the morning
         const id = this._dayLesson;

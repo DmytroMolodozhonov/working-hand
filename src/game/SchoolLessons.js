@@ -15,6 +15,7 @@ export const SUBJECTS = {
     potions: { name: 'Зельеварение', room: 'potions', teacher: 22 },
     pentagrams: { name: 'Пентаграммы', room: 'pentagrams', teacher: 23 },
     history: { name: 'Основы мира', room: 'history', teacher: 24 },
+    hall: { name: 'Сбор в большом зале', room: 'hall', teacher: 20 }, // (the Director's word at each month's start — HALL_TALKS)
 };
 
 /** The rows. `month` 1…12; `spell` — what the lesson gives (the hero knows it after the «teach» step). */
@@ -82,7 +83,29 @@ function dummyLesson(id, month, spells, duelSpell, word, intro, hint, outro, tim
     };
 }
 
-export const lessonById = (id) => LESSONS.find((l) => l.id === id) || null;
+/**
+ * The monthly gathering in the Great Hall (the author: «каждый месяц сбор в большом зале, директор подводит итоги»): on the first day of
+ * a month, before its lesson. The same engine: called → came → the Director's words → done (nothing to do: `listen`). Not a day of its own.
+ */
+const HALL_WORDS = {
+    2: ['Прошёл первый месяц. Вы научились закрываться щитом — это главное, с чего начинается волшебник.', 'Впереди — заклинания, которые отталкивают и замедляют. Учитесь прилежно.'],
+    3: ['Два месяца позади. Многие из вас уже уверенно держат щит и умеют отбросить противника.', 'Помните: сила без ума опасна. Защищайте, а не нападайте.'],
+    4: ['Третий месяц окончен. В этом месяце — заклинание, которое выбивает палочку из руки. Благородное заклинание.'],
+    5: ['Сегодня особенный день. Школа дарит каждому ученику волшебную мантию: она отбивает «Фрозен» и простые заклинания.', 'Носите её — и ни одно учебное заклинание вам не навредит.'],
+    6: ['Половина года позади! Я горжусь вами. Отдыхайте в свободное время, но не забывайте тренироваться.'],
+    7: ['Седьмой месяц. Вы учитесь не только нападать, но и прятаться — стена из земли спасла не одного волшебника.'],
+    8: ['Осталось пять месяцев. Те, кто старается, уже заметно сильнее. Те, кто ленится, — тоже заметны.'],
+    9: ['Девятый месяц. В этом месяце — защита, которая держит даже взрыв. Будьте внимательны на уроке.'],
+    10: ['Десятый месяц: вы уже настоящие волшебники. Скоро — учебные дуэли. Уважайте соперника.'],
+    11: ['Одиннадцатый месяц. Мы поговорим о свете, который рассеивает чёрную магию. Помните: тьма боится тех, кто не боится её.'],
+    12: ['Последний месяц года. Скоро вы покинете эти стены — и мир встретит вас таким, какие вы есть.', 'Учитесь до самого конца. Я верю в каждого из вас.'],
+};
+export const HALL_TALKS = Object.entries(HALL_WORDS).map(([m, words]) => ({
+    id: 'hall' + m, subject: 'hall', month: +m, intro: words, demo: { kind: 'talk' }, task: { kind: 'listen' },
+    outro: 'А теперь — по кабинетам. Удачи!',
+}));
+
+export const lessonById = (id) => LESSONS.find((l) => l.id === id) || HALL_TALKS.find((l) => l.id === id) || null;
 /** The lessons of a month, in the order of the days (defence, potions, pentagrams, history — the order of SUBJECTS). */
 export function lessonsOfMonth(m) {
     const order = Object.keys(SUBJECTS);

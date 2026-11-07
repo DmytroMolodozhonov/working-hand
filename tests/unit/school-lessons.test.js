@@ -53,3 +53,9 @@ test('the year: a lesson a day in the order of the months; the record kept and r
     // the mana the lessons grow is enough for the year's hardest spell («Электром» 50) by its lesson
     assert.ok(Y.YEAR.START_CELLS + (days.length - 1) * Y.YEAR.LESSON_CELLS >= 35);
 });
+
+test('the Director gathers the school in the Great Hall at each month from the second: words only, nothing to do', async () => {
+    const { HALL_TALKS, lessonById } = await import('../../src/game/SchoolLessons.js');
+    for (let m = 2; m <= 12; m++) { const h = lessonById('hall' + m); assert.ok(h && lessonOk(h) && h.task.kind === 'listen', 'month ' + m); }
+    assert.equal(HALL_TALKS.length, 11);
+});
