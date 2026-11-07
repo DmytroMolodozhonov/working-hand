@@ -15,6 +15,7 @@ export default async function (h) {
     const v = mer();
     log('merchant', !!v, 'goods', talk._goodsOf(v).map((x) => x.item.kind + ':' + x.item.shop?.price).join(','), 'coins', g.inventory.coins(), 'step', T.step, T._said.slice(0, 40));
     await h.until(() => T.step >= 1, 30000);
+    { const me = g.character.group.position; log('why deal', JSON.stringify({ role: v.role, trader: talk._trader(v), foe: v.foe, sleep: v.sleep, flee: v.fleeT, d: Math.hypot(v.x - me.x, v.z - me.z).toFixed(1), vx: v.x.toFixed(1), vz: v.z.toFixed(1), me: [me.x.toFixed(1), me.z.toFixed(1)], closed: L.night?.closed?.(), isNight: g.isNight, mode: g.config.mode, look: g.coinDeal._look, near: g.coinDeal._near })); }
     log('at stall → step', T.step, 'deal open', g.coinDeal._open, 'mayTake', g.coinDeal.mayTake(), 'pouch cell shown', g.inventory.pouchCell?.style.display !== 'none');
     // the pocket touch with the empty off hand
     const off = g.off || 'left';

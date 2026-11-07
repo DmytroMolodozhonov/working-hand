@@ -503,7 +503,7 @@ export class Game {
         const isTest = config.mode === 'test';
         this.world = new VoxelWorld(this.scene, {
             seed: this.seed,
-            mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map && !config.tutorial && !config.school, // («Обучение», «Школа»: their own maps — TutorialLand.js, SchoolLand.js)
+            mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map && !config.tutorial, // («Обучение»: its own small map — TutorialLand.js; «Школа» — the world's own land with the school on it: SchoolLand.js)
             tutorial: !!config.tutorial,
             school: !!config.school,
             map: config.map || null,
