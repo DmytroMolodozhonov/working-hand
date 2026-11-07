@@ -299,6 +299,11 @@ export function schoolCastlePlan(P = { x: 0, z: 0, F: 20 }, groundAt = null) {
     for (let z = SZ0 + 3; z <= SZ1 - 3; z += 4) { box(-W.u + 2, -W.u + 2, z, z + 2, F + 1, F + 6, B.BOOKS); box(-W.u + 8, -W.u + 12, z, z, F + 1, F + 5, B.BOOKS); }
     // the pentagram room's floor: a great circle of runes; the defence room: a duelling strip
     cyl(39, HZ0 + 38, 8, 7, F, F, B.RUNE); box(30, 50, HZ0 + 12, HZ0 + 12, F, F, B.CARPET_BLUE);
+    // the defence room: red banners with gilt tops on the outer wall, bookcases (books of the protective arts) along the end walls,
+    // a target ring on the floor where the dummy stands
+    for (const bz of [HZ0 + 4, HZ0 + 9, HZ0 + 15, HZ0 + 20]) { box(exo - 1, exo - 1, bz, bz + 1, F + 2, F + 6, B.CARPET_RED); box(exo - 1, exo - 1, bz, bz + 1, F + 7, F + 7, B.GOLD); }
+    for (const bz of [HZ0 + 1, HZ0 + 23]) { box(exi + 2, exi + 6, bz, bz, F + 1, F + 4, B.BOOKS); box(exo - 6, exo - 2, bz, bz, F + 1, F + 4, B.BOOKS); }
+    cyl(Math.round((exi + exo) / 2) + 5, HZ0 + 6, 2, 1, F, F, B.CARPET_RED);
     // lamps in the wings
     for (const [x, z] of [[-40, HZ0 + 12], [-40, HZ0 + 38], [40, HZ0 + 12], [40, HZ0 + 38], [-W.u + 11, (SZ0 + SZ1) / 2 | 0], [W.u - 11, (SZ0 + SZ1) / 2 | 0]]) box(x, x, z, z, F + 7, F + 7, B.ARCANE_LAMP);
 
