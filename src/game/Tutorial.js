@@ -84,6 +84,7 @@ export class Tutorial {
         this._quiet();
         this.stages = this._makeStages();
         this._ui();
+        this._placeHero(); // (always at the start's place, facing the hill: the things are given round it — also when going on from a later stage)
         this._start(Math.max(0, Math.min(this.stages.length - 1, from | 0))); // (from: the stage left off — the menu's tick «Продолжить»)
     }
 
@@ -116,11 +117,15 @@ export class Tutorial {
         return new THREE.Vector3(x, TUTORIAL.G + 2.6, z); // (at the eyes' height, 5 m: plainly seen — the author: «слишком далеко, не видно»)
     }
     /** A point `d` m behind the hero's place (he faces north there: south of him). */
-    _behind(d) { const S = this.spawn; return new THREE.Vector3(S.x, TUTORIAL.G + 2.6, S.z + d); } // (at the eyes' height: seen at once)
+    /** A point `d` m behind the hero, where he stands now (the author: the apple was far — the hero was not at the start's place), at the eyes' height. */
+    _behind(d) {
+        const p = this.game.character?.group?.position, f = this._viewDir();
+        return new THREE.Vector3((p?.x ?? this.spawn.x) - f.x * d, TUTORIAL.G + 2.6, (p?.z ?? this.spawn.z) - f.z * d);
+    }
     /** Has the hero turned to the apple behind him (it straight before his eyes)? */
     _facingBack() {
         const L = this.game.items?.loose?.get?.(this.ctx.apple), p = this.game.character?.group?.position;
-        const at = L?.model?.position || this._behind(8), f = this._viewDir();
+        const at = L?.model?.position || this.ctx.appleAt || this._behind(4), f = this._viewDir();
         const dx = at.x - (p?.x ?? 0), dz = at.z - (p?.z ?? 0), n = Math.hypot(dx, dz) || 1;
         return (f.x * dx + f.z * dz) / n > 0.85;
     }
@@ -188,7 +193,7 @@ export class Tutorial {
             ], onFail: () => T._wandToPocket() },
             { title: STAGE_TITLES[3], steps: [
                 ask('Достаньте палочку, как раньше: посмотрите вниз и возьмите её основной рукой с пояса.', () => T._wandInHand(), { setup: () => T._wandToPocket(), ...W, hint: 'Основная рука — через живот к другой стороне пояса, и сожмите пальцы.' }),
-                ask('Повернитесь кругом: за вашей спиной лежит яблоко. Поворачивайте голову и смотрите в ту сторону, пока не увидите его прямо перед собой.', () => T._facingBack(), { setup: () => { T.ctx.apple = T._give({ kind: 'redApple', uid: newUid(), count: 1 }, T._behind(5))?.item?.uid; }, beacon: 'apple', hint: 'Посмотрите через плечо и подержите голову повёрнутой — мир сам повернётся. Яблоко сзади.', fail: () => T._lost(T.ctx.apple) }),
+                ask('Повернитесь кругом: за вашей спиной лежит яблоко. Поворачивайте голову и смотрите в ту сторону, пока не увидите его прямо перед собой.', () => T._facingBack(), { setup: () => { T.ctx.appleAt = T._behind(4); T.ctx.apple = T._give({ kind: 'redApple', uid: newUid(), count: 1 }, T.ctx.appleAt)?.item?.uid; }, beacon: 'apple', hint: 'Посмотрите через плечо и подержите голову повёрнутой — мир сам повернётся. Яблоко сзади.', fail: () => T._lost(T.ctx.apple) }),
                 ask('Вот яблоко — оно светится. Поднимите основную руку с палочкой — из неё летит заклинание. Дочернюю руку тоже поднимите и раскройте ладонь — в неё прилетит вещь. Скажите: «Акцио».', () => !!T._heldUid(T.ctx.apple), { allow: ['Accio'], beacon: 'apple', hint: 'Обе руки подняты, ладонь дочерней руки раскрыта. Скажите: «Акцио».', fail: () => T._lost(T.ctx.apple), redo: 1 }),
                 ask('Яблоко у вас. Зажмите кисть, чтобы его держать, и поднесите ко рту. Подержите у рта — вы его съедите.', () => T.ctx.ate, { setup: () => { T._hurtABit(); T.ctx.hp0 = T._hp(); }, tick: () => { if (!T._heldUid(T.ctx.apple) && !T._isLoose(T.ctx.apple) && T._hp() > T.ctx.hp0) T.ctx.ate = true; }, hint: 'Кулак с яблоком — к самому рту, и подождите секунду.', fail: () => (T._isLoose(T.ctx.apple) ? 'Яблоко упало' : null), redo: 2 }),
                 ask('Теперь притяните хлеб: «Акцио».', () => T._heldUid(T.ctx.bread) || T._inPocket(T.ctx.bread), { allow: ['Accio'], setup: () => { T.ctx.bread = T._give({ kind: 'bread', uid: newUid(), count: 1 }, T._frontOfView(5, -1.5))?.item?.uid; }, hint: 'Рука с палочкой — на хлеб, дочерняя ладонь раскрыта. «Акцио».', fail: () => T._lost(T.ctx.bread) }),
