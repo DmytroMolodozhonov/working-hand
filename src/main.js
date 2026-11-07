@@ -1242,11 +1242,59 @@ function preloadSoundInMenu() {
 setTimeout(() => { (window.requestIdleCallback || ((f) => setTimeout(f, 0)))(preloadSoundInMenu, { timeout: 2000 }); }, 600);
 
 let starting = false;
+/** «Обучение» from the menu (or from the first-time window): the stage left off when `cont`. */
+function startTutorial(cont = true) {
+    let from = 0;
+    try { const at = JSON.parse(localStorage.getItem('zns-tutorial-at') || 'null'); if (cont && at?.stage > 0) from = at.stage | 0; } catch { from = 0; }
+    startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, tutorialFrom: from, map: null, worldName: 'Обучение' }); // (a small bounded map, never saved — Tutorial.js)
+}
+
+/**
+ * The first time ever a game is started or a server joined (the author 07.11): a window asks «Вы уже прошли обучение?» —
+ * a big «Пройти обучение», a red warning, and a small «Пропустить обучение» under it. Shown ONCE (never again, whatever is chosen).
+ * → true: go on with what was asked; false: the tutorial was started instead.
+ */
+function tutorialGate() {
+    let seen = true;
+    try { seen = !!(localStorage.getItem('zns-tutorial-asked') || localStorage.getItem('zns-tutorial-done')); } catch { seen = true; }
+    if (seen || window.__ZNS_NO_TUTORIAL_ASK__ || navigator.webdriver || document.getElementById('tut-ask')) return Promise.resolve(true);
+    try { localStorage.setItem('zns-tutorial-asked', '1'); } catch { /* private mode */ }
+    return new Promise((resolve) => {
+        if (!document.getElementById('tut-ask-style')) {
+            const st = document.createElement('style');
+            st.id = 'tut-ask-style';
+            st.textContent = `
+#tut-ask{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;background:rgba(6,4,16,.78);backdrop-filter:blur(3px)}
+#tut-ask .box{width:min(560px,92vw);padding:26px 28px 18px;border-radius:20px;text-align:center;color:#f3ecff;background:linear-gradient(165deg,#2b2058,#140f2c);border:1px solid #c9a64a;box-shadow:0 18px 60px rgba(0,0,0,.6);font:17px/1.45 system-ui,sans-serif}
+#tut-ask img{width:132px;height:132px;object-fit:contain;filter:drop-shadow(0 6px 18px rgba(201,166,74,.45))}
+#tut-ask h2{margin:10px 0 10px;font:900 30px/1.2 system-ui,sans-serif;color:#ffe08a}
+#tut-ask .warn{margin:0 0 10px;color:#ff5b5b;font-weight:700}
+#tut-ask .note{margin:0 0 18px;color:rgba(243,236,255,.75);font-size:15px}
+#tut-ask .go{display:block;width:100%;padding:16px 18px;border:0;border-radius:14px;background:linear-gradient(180deg,#f3d98a,#c9a64a);color:#1a1434;font:900 21px system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 20px rgba(201,166,74,.4)}
+#tut-ask .go:hover{filter:brightness(1.08)}
+#tut-ask .skip{margin-top:12px;background:none;border:0;color:rgba(243,236,255,.5);font-size:13px;text-decoration:underline;cursor:pointer}`;
+            document.head.appendChild(st);
+        }
+        const w = document.createElement('div');
+        w.id = 'tut-ask';
+        w.innerHTML = `<div class="box"><img src="assets/logo/logo-256.png" alt="">
+<h2>Вы уже прошли обучение?</h2>
+<p class="warn">Это игра нового типа: вы колдуете руками и голосом перед камерой. Без обучения вы не поймёте, как во всём этом разобраться.</p>
+<p class="note">Пройти обучение можно в любой момент: «Одиночная игра» → «Обучение».</p>
+<button type="button" class="go">🎓 Пройти обучение</button>
+<button type="button" class="skip">Пропустить обучение</button></div>`;
+        document.body.appendChild(w);
+        w.querySelector('.go').onclick = () => { w.remove(); resolve(false); startTutorial(true); };
+        w.querySelector('.skip').onclick = () => { w.remove(); resolve(true); };
+    });
+}
+
 async function startGame(config, welcome = null) {
     // the menu is a window; the game itself is played full screen
     if (!window.__ZNS_NO_FULLSCREEN__) enterGameFullscreen();
     window.__charEditor?.hide(); // (its preview must not keep drawing under the game)
     if (starting) return; // a second click / duplicate invitation while loading
+    if (!config.tutorial && !welcome && !(await tutorialGate())) return; // (the first game ever: «Вы уже прошли обучение?»)
     starting = true;
     try {
         await startGameInner(config, welcome);
@@ -1396,11 +1444,7 @@ $('start-btn').addEventListener('click', () => {
         return;
     }
     const cfg = readConfig();
-    if (cfg.mode === 'tutorial') { // (a small bounded map, never saved — Tutorial.js; the stage left off — if the tick is on)
-        let from = 0;
-        try { const at = JSON.parse(localStorage.getItem('zns-tutorial-at') || 'null'); if (tutContinue && at?.stage > 0) from = at.stage | 0; } catch { from = 0; }
-        startGame({ ...cfg, mode: 'freeworld', tutorial: true, tutorialFrom: from, map: null, worldName: 'Обучение' }); return;
-    } // (a small bounded map, never saved — Tutorial.js)
+    if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; } // (the stage left off — if the tick is on)
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
@@ -1818,6 +1862,7 @@ $('mp-create-open').addEventListener('click', () => $('mp-create').classList.tog
 
 async function joinRoom(code, byCode = false) {
     if (mpUnavailable()) return;
+    if (!(await tutorialGate())) return; // (the first server ever: «Вы уже прошли обучение?»)
     mpBusy = true;
     updateMpButtons();
     renderServers();
@@ -1847,6 +1892,7 @@ const heroMp = mountHeroPanel($('hero-settings-mp'), 'hero-mp');
 // Create a server: it takes a free place in the list and the game starts at once
 $('mp-host-btn').addEventListener('click', async () => {
     if (mpUnavailable()) return;
+    if (!(await tutorialGate())) return; // (the first game ever: «Вы уже прошли обучение?» — before the server is made)
     mpBusy = true;
     updateMpButtons();
     net.stopProbe();
@@ -1876,6 +1922,7 @@ $('mp-host-btn').addEventListener('click', async () => {
 // A game by code: works even when the server list can't be seen (a bad line, a VPN)
 $('mp-private-btn').addEventListener('click', async () => {
     if (mpUnavailable()) return;
+    if (!(await tutorialGate())) return; // (the first game ever: «Вы уже прошли обучение?» — before the server is made)
     mpBusy = true;
     updateMpButtons();
     net.stopProbe();
