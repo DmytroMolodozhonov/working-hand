@@ -74,9 +74,17 @@ export class SchoolLesson {
     _call() {
         const sp = this._spots(), sc = this.school;
         this._hint(`Начинается урок: ${this.S.name}. Идите в кабинет — светящийся круг покажет дорогу.`);
-        const tea = sc._person(this.S.teacher, sp.teacher, sp.teacher.yaw);
-        if (tea) { tea.lookAt = null; tea.goal = { ...sp.teacher }; }
-        sc.pupilsOf().forEach((v, k) => { const p = sp.pupils[k % sp.pupils.length]; v.lookAt = null; v.goal = { ...p, yaw: 0 }; });
+        // (the teacher and the pupils are IN the room when the hero comes: the way through the castle's halls is not walked —
+        // a walk across the wings stuck at walls; they are put there out of the hero's sight, or walk the last metres if he is near)
+        const me = this.game.character.group.position;
+        const put = (v, p) => {
+            if (!v) return;
+            v.lookAt = null;
+            if (Math.hypot(v.x - p.x, v.z - p.z) > 10 && Math.hypot(me.x - v.x, me.z - v.z) > 14 && !this._inRoom(me)) { v.x = p.x; v.y = p.y; v.z = p.z; v.yaw = p.yaw ?? 0; v.goal = null; v.post = { ...p }; }
+            else v.goal = { ...p };
+        };
+        put(sc._person(this.S.teacher, sp.teacher, sp.teacher.yaw), sp.teacher);
+        sc.pupilsOf().forEach((v, k) => put(v, { ...sp.pupils[k % sp.pupils.length], yaw: Math.PI * 0 }));
         sc._goal(this.room.door);
         this.phase = 'gather'; this.t = 0;
     }
