@@ -1783,6 +1783,7 @@ export class CastleTalk {
             // (one who just noticed me stands facing me — that is no talk yet: he may greet me)
             const noticed = now - (v.noticedAt || -1e9) < 400;
             if (v.potionMaster) continue; // (his one welcome is PotionMasterLife.update; no more «привет» after it)
+            if (v.cs?.def?.school) continue; // (the school's people: their words are the school's — School.js; no villager's «привет»)
             if (v.dead || v.foe || (v.talking > 0 && !noticed) || now - (v.talkedAt || -1e9) < 600000 || this.inTalk()) continue; // (no new «привет» from one I talked with lately, nor in the middle of a talk)
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             // (near — or he noticed me looking at him and coming: a greeting from across the street, not at the door — Attention.js)

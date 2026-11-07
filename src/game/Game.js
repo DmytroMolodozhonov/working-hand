@@ -138,6 +138,8 @@ import { IceCastleLife } from './IceQueen.js';
 import { VampireLife } from './VampireLife.js';
 import { Titans } from './Titans.js';
 import { Godhood } from './Godhood.js';
+import { Cine } from './Cine.js';
+import { coachSamples } from '../fx/SchoolCoach.js';
 import { Tutorial } from './Tutorial.js';
 import { TutorialNudge } from './TutorialNudge.js';
 import { School } from './School.js';
@@ -953,6 +955,7 @@ export class Game {
                 this.chests.push(chest);
             });
         } else if (config.school) {
+            this.cine = new Cine(this); // (cut-scenes: the school's opening — Cine.js)
             this.school = new School(this); // («Школа Акселдорф»: the year at the school — School.js)
         } else if (config.tutorial) {
             this.tutorial = new Tutorial(this, { from: config.tutorialFrom | 0, only: config.tutorialOnly || null }); // («Обучение»: the steps, the narrator, the frozen hero — Tutorial.js)
@@ -4016,7 +4019,8 @@ export class Game {
         for (const m of this.customPlants?.sampleModels?.() || []) zoo.add(m); // (a plant of one's own: its lit body, its glow)
         for (const m of this.customCreatures?.sampleModels?.() || []) zoo.add(m); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)
         for (const m of this.spencers?.sampleModels?.() || []) zoo.add(m); // (the rose bird, its halo and the see-through material — only a seer ever has them in play, but the shader is compiled now)
-        for (const m of this.ghosts?.sampleModels?.() || []) zoo.add(m); // (the sheet-ghost's outside and inside, the castle's chairs and candles, the flame — GhostFx.js, GhostProps.js)
+        for (const m of this.ghosts?.sampleModels?.() || []) zoo.add(m);
+        if (this.config.school) for (const m of coachSamples()) zoo.add(m); // (the school's magic coach — SchoolCoach.js) // (the sheet-ghost's outside and inside, the castle's chairs and candles, the flame — GhostFx.js, GhostProps.js)
         for (const m of this.beslan?.sampleModels?.() || []) zoo.add(m); // (Beslan's grass: its shader)
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
         zoo.add(this.plants.sampleModels()); // (the Brightflower: stems, petals that open in the shader, flame, heart — BrightFlowerFx)
@@ -5383,6 +5387,7 @@ export class Game {
         this.hud?.setDizzy?.(dz, this.renderer?.domElement);
         if (this.config.mode !== 'test' && !this.imperius?.viewing) this._cameraOutOfRock(ch);
         this.imperius?.camera(this.camera, dt); // («Империус»: the creature's eyes — or the way there along the light)
+        if (this.cine?.active) this.cine.apply(this.camera, dt); // (a cut-scene: its own camera — Cine.js)
         this.camera.updateMatrixWorld(true);
     }
 
@@ -5576,7 +5581,7 @@ export class Game {
         this.titans?.dispose();
         this.godhood?.dispose();
         this.tutorial?.dispose();
-        this.school?.dispose?.();
+        this.school?.dispose?.(); this.cine?.dispose?.();
         this.temple?.dispose();
         this.fleet?.dispose();
         this.blackbeard?.dispose();

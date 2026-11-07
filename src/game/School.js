@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { SchoolDecor } from '../fx/SchoolDecor.js';
+import { SchoolCoach } from '../fx/SchoolCoach.js';
 import { makeRobe } from './ArmorTypes.js';
 import { SchoolLesson } from './SchoolLesson.js';
 import { lessonById } from './SchoolLessons.js';
@@ -28,10 +29,8 @@ import { newUid } from './ItemTypes.js';
 export const SCHOOL_SITE = 'akseldorf';
 const SUBJECTS_NAME = { defence: 'защита от тёмных искусств', potions: 'зельеварение', pentagrams: 'пентаграммы', history: 'основы мира' };
 
-/** The people of the school (idx → who): the parents, the teachers, the Director, the new pupils (ordinary and remarkable). */
+/** The people of the school (idx → who): the teachers, the Director, the new pupils (ordinary and remarkable). */
 export const SCHOOL_PEOPLE = [
-    { idx: 1, role: 'farmer', female: false, name: 'Отец', seed: 70101 },
-    { idx: 2, role: 'farmer', female: true, name: 'Мама', seed: 70102 },
     { idx: 20, role: 'teacher', rank: 'master', female: false, name: 'Дардолус Пантифус Мудрый', title: 'Директор', seed: 70120, mana: 2000, outfit: 'astrologer', look: { beard: 'long', hairColor: 0xeeeeee, hair: 'long', female: false } },
     { idx: 21, role: 'teacher', female: false, name: 'Профессор Корвин Страйд', title: 'Защита от тёмных искусств', seed: 70121, outfit: 'fire' },
     { idx: 22, role: 'teacher', female: true, name: 'Профессор Ирма Вельтон', title: 'Зельеварение', seed: 70122, outfit: 'druid' },
@@ -143,6 +142,7 @@ export class School {
         if (g.beds?.lying) g.beds.standUp();
         else if (b) { const sp = g.beds._standSpot?.(b); if (sp) this._placeHero({ x: sp.x, y: sp.y, z: sp.z }, sp.ry); }
         this._applyRecord();
+        this._sky(0.14); // (the morning: daylight)
         const L = lessonOfDay(r.day);
         SCHEDULE.day = r.day; // (the schedule scroll reads today from here)
         if (first) setTimeout(() => this._giveSchedule(), 2500); // (a game going on: the scroll again — things are not kept between games)
@@ -260,8 +260,10 @@ export class School {
     /** A line said by a person (its voice, its bubble). */
     _say(v, text, s = 5) { if (v && !v.dead) this.game.castleLife?._say?.(v, text, s, true, true); }
 
-    /** Is the hero held still (riding, listening to the Director)? */
-    get frozen() { return this.phase === 'ride' || this.phase === 'speech'; }
+    /** Is the hero held still (in the coach, in a cut-scene, listening to the Director)? */
+    get frozen() { return this.phase === 'intro' || this.phase === 'speech' || !!this.game.cine?.active; }
+    /** The school's people never answer a bump or a blow during the scenes (the author: «меня ударил фермер») — CastleLife.hit. */
+    get calm() { return this.phase !== 'free'; }
 
     // ------------------------------------------------------------------ the scene
     update(dt) {
@@ -269,119 +271,191 @@ export class School {
         dt = Math.min(dt, 0.1);
         this.t += dt;
         this.decor?.update(dt, this.t);
-        const g = this.game, P = this.plan;
+        this._wandLight(dt);
         switch (this.phase) {
-            case 'ride': return this._ride(dt);
-            case 'gate': return this._gate(dt);
-            case 'walk': return this._walk(dt);
+            case 'ride': case 'intro': return this._intro(dt);
+            case 'bridge': return this._bridge(dt);
             case 'speech': return this._speech(dt);
             case 'free': return this._free(dt);
-            default: void g; void P;
         }
     }
 
-    /** The carriage up the road; the hero on its front bench, the parents beside. */
-    _ride(dt) {
-        const g = this.game, P = this.plan, C = g.carriages;
-        if (!C) { this._toGate(); return; }
-        if (!this.cart) {
-            if (this.t < 0.5) return; // (the land under the road first)
-            const a = P.arrive;
-            this.cart = C.spawn(false, a.x, a.z + 4, 0, { id: 'school-cart' });
-            this.cart.chest?.mesh && (this.cart.chest.mesh.visible = false); // (no treasure chest: a family's cart)
-            this.t = 0;
+    /** The hour of the day (World.setDayPhase): the arrival at dusk, darkening to night; the school's days by day. */
+    _sky(phase) { this._phase = phase; this.game.world?.setDayPhase?.(phase); }
+
+    /**
+     * THE OPENING (the author 07.11: «кат-сцены — самое главное»; «начинается немножко в темноте, приглушённо, фонари»): dusk; the magic coach
+     * drives itself up the road through the meadows, over the headland to the bridge's head; cut-scene shots — the castle on its hill with
+     * the title, the coach on the road, the bridge over the gorge, the coach arriving, the teacher waiting with a lit wand; the door opens,
+     * the pupils get out — then the hero walks.
+     */
+    _intro(dt) {
+        const g = this.game, P = this.plan;
+        if (this.phase === 'ride') {
+            this._sky(0.492);
+            const d = g.world?.terrain?.data;
+            const ready = !d?.landMade || (d.landMade(P.coachFrom.x, P.coachFrom.z) && d.landMade(P.arrive.x, P.arrive.z) && d.landMade(P.centre.x, P.centre.z));
+            this._hideHero(true, P.coachFrom);
+            if (!ready && this.t < 40) return; // (the land under the road first — the hero waits in the dark coach)
+            this.phase = 'intro'; this.t = 0;
+            this.coach = new SchoolCoach(g.scene);
+            this._coachZ = P.coachFrom.z; this._coachStop = P.arrive.z + 9; this._coachV = 0;
+            this._people();
+            this._shots();
         }
-        const c = this.cart;
-        // the parents on their seats (when the place has woken and they are made)
-        const dad = this.people.get(1) || this._person(1, P.arrive), mum = this.people.get(2) || this._person(2, P.arrive);
-        if (dad && !dad.rode) { dad.rode = true; dad.seatedOn = 1; } // (the driver's place)
-        if (mum && !mum.rode) { mum.rode = true; mum.seatedOn = 4; } // (a side bench)
-        // the hero on the front bench (kept there: he rides)
-        const sp = C.seatPos(c, 1, this._hs || (this._hs = {}));
-        const me = g.character.group.position;
-        me.set(sp.x, sp.y + PLAYER_GROUND_OFFSET - 0.55, sp.z);
-        g.character.verticalVelocity = 0;
-        if (!this._saidStart && this.t > 2 && mum) { this._saidStart = true; this._say(mum, 'Смотри, вот он — Акселдорф! Ты будешь здесь учиться целый год.', 6); }
-        if (!this._saidMid && this.t > 12 && dad) { this._saidMid = true; this._say(dad, 'Слушайся учителей и не бойся. Мы тобой гордимся.', 6); }
-        const gx = P.gate.x, gz = P.gate.z + 9;
-        const left = C.drive(c, gx, gz, c.wreck ? 0 : 4.5, dt);
-        if (left < 2.5 || c.wreck || this.t > 90) this._toGate();
-    }
-
-    /** At the gates: the hero gets down, the parents say goodbye; the teacher and the pupils wait there. */
-    _toGate() {
-        const g = this.game, P = this.plan, C = g.carriages, c = this.cart;
-        this.phase = 'gate'; this.t = 0;
-        const ex = c ? C.exitPos(c, 1, {}) : { x: P.gate.x + 2, y: P.F, z: P.gate.z + 6 };
-        this._placeHero({ x: ex.x, y: (ex.y ?? P.F) + 0.5, z: ex.z }, 0);
-        const G = P.gate, F = P.F + 0.5;
-        // the teacher of potions meets them; the new pupils stand in a loose half-ring inside the gates
-        const tea = this._person(22, { x: G.x, y: F, z: G.z - 6 }, Math.PI);
-        if (tea) tea.lookAt = 'hero';
-        const pupils = SCHOOL_PEOPLE.filter((p) => p.role === 'student');
-        pupils.forEach((p, k) => {
-            const a = -1.1 + (k / (pupils.length - 1)) * 2.2;
-            const v = this._person(p.idx, { x: G.x + Math.sin(a) * 9, y: F, z: G.z - 10 - Math.cos(a) * 3 }, Math.PI);
-            if (v) v.lookAt = tea || 'hero';
-        });
-        for (const i of [1, 2]) { const v = this.people.get(i); if (v) { v.seatedOn = 0; v.lookAt = 'hero'; } }
-    }
-
-    _gate(dt) {
-        const g = this.game, P = this.plan, C = g.carriages, c = this.cart;
-        const dad = this.people.get(1), mum = this.people.get(2), tea = this.people.get(22);
-        if (this.t > 1 && !this._bye) { this._bye = true; this._say(mum, 'Ну вот, приехали. Учись хорошо и пиши нам!', 5); }
-        if (this.t > 6 && !this._bye2) { this._bye2 = true; this._say(dad, 'До встречи, волшебник! Мы приедем за тобой через год.', 5); }
-        // the parents back on the carriage and away down the road
-        if (this.t > 10 && c && !this._away) { this._away = true; if (dad) dad.seatedOn = 1; if (mum) mum.seatedOn = 4; }
-        if (this._away && c) {
-            const back = P.arrive;
-            const left = C.drive(c, back.x, back.z + 160, 4.5, dt, {});
-            if (left < 10 || this.t > 70) { for (const v of [dad, mum]) if (v) { v.scripted = false; try { g.castleLife._deactivate(v); } catch { /* gone */ } } C.remove(c); this.cart = null; }
+        // the coach on its road (it slows to a stop at the headland's square)
+        const C = this.coach;
+        if (C) {
+            const left = this._coachZ - this._coachStop, want = left > 30 ? 7 : left > 0.2 ? Math.max(1, left * 0.25) : 0;
+            this._coachV += (want - this._coachV) * Math.min(1, dt * 1.2);
+            this._coachZ = Math.max(this._coachStop, this._coachZ - this._coachV * dt);
+            const y = g.collision?.groundY?.(P.centre.x, this._coachZ) ?? P.F;
+            C.set(P.centre.x, y, this._coachZ, 0, this._coachV, dt);
+            if (this.phase === 'intro' && !this._out) this._hideHero(true, { x: P.centre.x, y, z: this._coachZ });
         }
-        if (this.t > 11 && !this._welcome && tea) { this._welcome = true; this._say(tea, 'Добро пожаловать в Акселдорф! Я — профессор Ирма Вельтон. Теперь ты наш ученик. Идём, все в большой зал!', 8); }
-        if (this.t > 18 && this._welcome) this._startWalk();
+        this._sky(0.492 + Math.min(1, this.t / 60) * 0.02);
     }
 
-    /** The teacher leads the pupils round the fountain into the hall; a glowing circle at its door for the hero. */
-    _startWalk() {
-        const P = this.plan, F = P.F + 0.5;
-        this.phase = 'walk'; this.t = 0;
-        const door = P.hall.door, fx = P.fountain.x, fz = P.fountain.z;
-        const way = (dx) => [{ x: fx + dx, y: F, z: fz + 4 }, { x: fx + dx * 0.6, y: F, z: door.z + 1 }, { x: door.x, y: F, z: door.z - 4 }];
-        const tea = this.people.get(22);
-        if (tea) { tea.lookAt = null; const w = way(-9); tea.goal = { ...w[0], next: [...w.slice(1), { x: P.hall.dais.x - 5, y: P.F + 2.5, z: P.hall.dais.z + 1, yaw: 0 }] }; }
-        // the pupils: to their places along the tables
-        const pupils = SCHOOL_PEOPLE.filter((p) => p.role === 'student'), T = P.hall.tables;
-        pupils.forEach((p, k) => {
-            const v = this.people.get(p.idx);
-            if (!v) return;
-            v.lookAt = null;
-            const tb = T[k % T.length], z = tb.z0 + 4 + Math.floor(k / T.length) * 5, side = (k % 2 ? -1.5 : 1.5);
-            const w = way(k % 2 ? -9 : 9);
-            v.goal = { ...w[0], next: [...w.slice(1), { x: tb.x + side, y: F, z, yaw: 0 }] };
-        });
-        this._goal(door);
-        // the teachers and the Director on the dais (they are there already: in the hall all the time)
+    /** The hero rides inside (not seen, held still) or stands out. */
+    _hideHero(inside, at) {
+        const g = this.game, ch = g.character;
+        ch.group.visible = !inside;
+        if (inside && at) { ch.group.position.set(at.x, (at.y ?? this.plan.F) + PLAYER_GROUND_OFFSET + 1.8, at.z); ch.verticalVelocity = 0; }
+    }
+
+    /** The people of the opening: the teacher at the bridge's head with her lit wand; the teachers and the Director in the hall. */
+    _people() {
+        const P = this.plan, F = P.F + 0.5, b0 = P.bridge.v1 + 3;
+        const tea = this._person(22, { x: P.centre.x - 3, y: F, z: b0 }, Math.PI);
+        if (tea) { tea.lookAt = { x: P.centre.x, z: P.arrive.z + 30 }; this._lit = tea; }
         const D = P.hall.dais;
         const dir = this._person(20, { x: D.x, y: P.F + 2.5, z: D.z - 1 }, 0); if (dir) dir.lookAt = { x: D.x, z: D.z + 40 };
         [21, 23, 24].forEach((i, k) => { const v = this._person(i, { x: D.x + (k - 1) * 4 + (k >= 1 ? 4 : 0), y: P.F + 2.5, z: D.z + 1 }, 0); if (v) v.lookAt = { x: D.x, z: D.z + 40 }; });
     }
 
-    _walk() {
-        const P = this.plan, me = this.game.character.group.position;
-        const H = P.hall;
-        const inHall = me.x > H.x0 && me.x < H.x1 && me.z > H.z0 && me.z < H.z1;
-        if (inHall && this.t > 3) { this._goal(null); this.phase = 'speech'; this.t = 0; this._line = 0; }
+    /** The cut-scene's shots (Cine.js). */
+    _shots() {
+        const g = this.game, P = this.plan, X = P.centre.x, Z = P.centre.z, F = P.F, M = P.M;
+        const coach = () => { const c = this.coach?.group.position; return c ? [c.x, c.y, c.z] : [X, F, P.arrive.z]; };
+        const rel = (dx, dy, dz) => () => { const c = coach(); return [c[0] + dx, c[1] + dy, c[2] + dz]; };
+        const tea = () => { const v = this.people.get(22); return v ? [v.x, v.y + 2.6, v.z] : [X, F + 3, P.bridge.v1]; };
+        const by = 'Профессор Ирма Вельтон';
+        g.cine.play([
+            { dur: 1.2, black: true, pos: [X - 230, M + 22, Z + 300], look: [X, F + 26, Z] },
+            { dur: 9, fadeIn: true, from: { pos: [X - 230, M + 22, Z + 300], look: [X, F + 26, Z] }, to: { pos: [X - 150, M + 30, Z + 250], look: [X, F + 30, Z - 10] }, title: 'Акселдорф<small>школа волшебства</small>' },
+            { dur: 8, from: { pos: rel(9, 4, 6), look: rel(0, 2.5, 0) }, to: { pos: rel(7, 3, -8), look: rel(0, 2.5, -6) }, sub: 'Волшебная карета везла новых учеников всё выше — туда, где над ущельем стоит Акселдорф.' },
+            { dur: 7, from: { pos: [X + 70, M - 8, Z + 84], look: [X, F, Z + 84] }, to: { pos: [X + 55, M - 4, Z + 92], look: [X, F + 18, Z + 40] }, sub: 'Говорят, мост через ущелье построили сами основатели школы — и с тех пор из него не выпал ни один камень.' },
+            { dur: 7, from: { pos: [X - 14, F + 6, P.arrive.z - 14], look: rel(0, 2, 0) }, to: { pos: [X - 12, F + 5, P.arrive.z - 10], look: rel(0, 2, 0) } },
+            { dur: 7, from: { pos: () => { const t = tea(); return [t[0] + 2.5, t[1] + 0.4, t[2] + 5]; }, look: tea }, who: by, sub: 'Добро пожаловать в Акселдорф! Выходите — не бойтесь, здесь вас никто не обидит.',
+                start: () => { const v = this.people.get(22); if (v) v.lookAt = { x: X, z: this._coachStop }; this._say(v, 'Добро пожаловать в Акселдорф! Выходите — не бойтесь, здесь вас никто не обидит.', 6); } },
+            { dur: 5, from: { pos: rel(9, 3, 3), look: rel(1.6, 2, -0.6) }, to: { pos: rel(8, 2.8, 1), look: rel(2, 2, -0.6) }, start: () => this._getOut() },
+        ], { onEnd: () => this._startBridge() });
     }
 
-    /** The Director's speech: line by line; the pupils listen facing the dais. */
-    _speech() {
-        const dir = this.people.get(20);
-        if (this.t < 2) return;
-        const k = Math.floor((this.t - 2) / 6.5);
-        if (k > this._line - 1 && this._line < SPEECH.length && k >= this._line) { this._say(dir, SPEECH[this._line], 6); this._line++; }
-        if (this._line >= SPEECH.length && this.t > 2 + SPEECH.length * 6.5 + 3) this.phase = 'free'; // (part 2: the dormitory, the schedule)
+    /** The coach's door opens, the new pupils get out and stand about on the square. */
+    _getOut() {
+        if (this._outDone) return; this._outDone = true;
+        const P = this.plan, F = P.F + 0.5, C = this.coach;
+        C?.openDoor(true);
+        const ex = C ? C.exitAt() : new THREE.Vector3(P.centre.x + 3, F, this._coachStop);
+        const pupils = SCHOOL_PEOPLE.filter((p) => p.role === 'student' && !p.dummy);
+        pupils.forEach((p, k) => {
+            const v = this._person(p.idx, { x: ex.x + 0.5, y: F, z: ex.z }, 0);
+            if (!v) return;
+            const a = -0.9 + (k / Math.max(1, pupils.length - 1)) * 1.8;
+            v.x = ex.x; v.z = ex.z; v.goal = { x: P.centre.x + Math.sin(a) * 6, y: F, z: P.bridge.v1 + 9 + Math.cos(a) * 3, yaw: 0 };
+            v.lookAt = this.people.get(22) || null;
+        });
+    }
+
+    /** The hero out: he walks behind the teacher over the bridge to the gate (a circle shows where). */
+    _startBridge() {
+        const g = this.game, P = this.plan, F = P.F + 0.5;
+        this._getOut();
+        this._out = true;
+        const C = this.coach, ex = C ? C.exitAt() : new THREE.Vector3(P.centre.x + 3, F, this._coachStop);
+        this._hideHero(false);
+        this._placeHero({ x: ex.x, y: F, z: ex.z }, 0);
+        this.phase = 'bridge'; this.t = 0; this._step = 0;
+        g.hud?.setVoice?.('Идите за профессором через мост — к воротам замка.', true);
+    }
+
+    _bridge(dt) {
+        const g = this.game, P = this.plan, F = P.F + 0.5, X = P.centre.x, me = g.character.group.position;
+        const tea = this.people.get(22), pupils = this.pupilsOf();
+        if (this._step === 0 && this.t > 1.5) {
+            this._step = 1; this._say(tea, 'Держитесь вместе! За мной — через мост. Он старый, но крепче любой скалы.', 6);
+            const way = [{ x: X, y: F, z: P.bridge.v1 }, { x: X, y: F, z: P.bridge.v0 }, { x: X, y: F, z: P.gate.z + 2 }];
+            if (tea) { tea.lookAt = null; tea.goal = { ...way[0], next: way.slice(1) }; }
+            pupils.forEach((v, k) => { const dx = (k % 2 ? -1.2 : 1.2); v.lookAt = null; v.goal = { x: X + dx, y: F, z: P.bridge.v1 + 3 + k * 1.6, next: [{ x: X + dx, y: F, z: P.bridge.v0 + 2 + k * 1.6 }, { x: X + dx * 3, y: F, z: P.gate.z + 5 + k }] }; });
+            this._goal(P.gate);
+        }
+        // the coach drives away down the road, its lantern going off into the dusk
+        const C = this.coach;
+        if (C && this.t > 6) {
+            this._coachZ += Math.min(7, (this.t - 6) * 2) * dt;
+            const y = g.collision?.groundY?.(X, this._coachZ) ?? P.F;
+            C.openDoor(false); C.set(X, y, this._coachZ, Math.PI, Math.min(7, (this.t - 6) * 2), dt);
+            if (this._coachZ > P.coachFrom.z) { C.dispose(); this.coach = null; }
+        }
+        this._sky(0.512 + Math.min(1, this.t / 90) * 0.02);
+        // at the gate: the teacher leads on through the courtyard into the hall
+        if (this._step === 1 && Math.hypot(me.x - P.gate.x, me.z - P.gate.z) < 9) {
+            this._step = 2; this._say(tea, 'А вот и он — Акселдорф. Большой зал прямо впереди: директор ждёт.', 6);
+            const door = P.hall.door, fx = P.fountain.x, fz = P.fountain.z;
+            const way = (dx) => [{ x: fx + dx, y: F, z: fz + 4 }, { x: fx + dx * 0.6, y: F, z: door.z + 1 }, { x: door.x, y: F, z: door.z - 4 }];
+            if (tea) { const w = way(-9); tea.goal = { ...w[0], next: [...w.slice(1), { x: P.hall.dais.x - 5, y: P.F + 2.5, z: P.hall.dais.z + 1, yaw: 0 }] }; }
+            const T = P.hall.tables;
+            pupils.forEach((v, k) => { const tb = T[k % T.length], w = way(k % 2 ? -9 : 9); v.goal = { ...w[0], next: [...w.slice(1), { x: tb.x + (k % 2 ? -1.5 : 1.5), y: F, z: tb.z0 + 4 + Math.floor(k / T.length) * 5, yaw: 0 }] }; });
+            this._goal(door);
+        }
+        const H = P.hall;
+        if (this._step === 2 && me.x > H.x0 && me.x < H.x1 && me.z > H.z0 && me.z < H.z1) { this._goal(null); this._startSpeech(); }
+    }
+
+    /** The Director's speech — a cut-scene in the hall: the candles, the dais, the Director; his words line by line. */
+    _startSpeech() {
+        const g = this.game, P = this.plan, H = P.hall, X = P.centre.x, F = P.F;
+        this.phase = 'speech'; this.t = 0;
+        // the pupils who have not got there yet are put at their places (no waiting on a slow walker)
+        const T = H.tables;
+        this.pupilsOf().forEach((v, k) => { const tb = T[k % T.length], at = { x: tb.x + (k % 2 ? -1.5 : 1.5), y: F + 0.5, z: tb.z0 + 4 + Math.floor(k / T.length) * 5, yaw: 0 }; v.x = at.x; v.y = at.y; v.z = at.z; v.yaw = 0; v.goal = null; v.post = at; v.lookAt = { x: X, z: H.z0 }; });
+        const tea = this.people.get(22); if (tea) { tea.x = H.dais.x - 5; tea.y = F + 2.5; tea.z = H.dais.z + 1; tea.goal = null; tea.yaw = 0; tea.lookAt = { x: X, z: H.z1 }; }
+        const dir = () => { const v = this.people.get(20); return v ? [v.x, v.y + 3.2, v.z] : [X, F + 6, H.z0 + 6]; };
+        const mz = (H.z0 + H.z1) / 2, who = 'Директор Дардолус Пантифус Мудрый';
+        const line = (i, extra = {}) => ({ dur: 6.5, who, sub: SPEECH[i], start: () => this._say(this.people.get(20), SPEECH[i], 6), ...extra });
+        g.cine.play([
+            { dur: 7, from: { pos: [X + 10, F + 6, H.z1 - 4], look: [X, F + 14, mz] }, to: { pos: [X + 4, F + 9, mz + 6], look: [X, F + 15, H.z0 + 6] } },
+            line(0, { from: { pos: () => { const d = dir(); return [d[0] + 3, d[1] + 0.5, d[2] + 9]; }, look: dir } }),
+            line(1, { from: { pos: () => { const d = dir(); return [d[0] - 4, d[1] + 0.3, d[2] + 8]; }, look: dir } }),
+            line(2, { from: { pos: [X - 12, F + 5, mz + 4], look: [X, F + 4, H.z0 + 6] }, to: { pos: [X - 10, F + 5, mz - 2], look: [X, F + 4, H.z0 + 6] } }),
+            line(3, { from: { pos: () => { const d = dir(); return [d[0] + 5, d[1] + 1, d[2] + 11]; }, look: dir } }),
+            line(4, { from: { pos: [X, F + 18, mz + 10], look: [X, F + 13, H.z0 + 4] }, to: { pos: [X, F + 16, mz], look: [X, F + 12, H.z0 + 4] } }),
+            line(5, { from: { pos: () => { const d = dir(); return [d[0] + 2, d[1] + 0.2, d[2] + 7]; }, look: dir }, fadeOut: true }),
+        ], { onEnd: () => { this.phase = 'free'; this.t = 0; this._sky(0.6); } });
+    }
+
+    _speech() { /* (the cut-scene plays it — _startSpeech) */ }
+
+    /** The teacher's lit wand (a warm light at its tip) while she leads them in the dusk. */
+    _wandLight() {
+        const v = this._lit, g = this.game;
+        if (!v || v.dead || this.phase === 'free') { if (this._glow) this._glow.visible = false; return; }
+        if (!this._glow) {
+            const c = document.createElement('canvas'); c.width = c.height = 64;
+            const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,236,190,0.7)'); gr.addColorStop(1, 'rgba(255,220,150,0)');
+            x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+            const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+            this._glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+            this._glow.scale.set(1.3, 1.3, 1);
+            g.scene.add(this._glow);
+        }
+        this._glow.visible = true;
+        const tip = this._tip || (this._tip = new THREE.Vector3());
+        if (v.group?.visible && v.model?.getWandTip) v.model.getWandTip(tip); else tip.set(v.x, v.y + 3, v.z);
+        this._glow.position.copy(tip);
+        const k = 1.2 + Math.sin(this.t * 6) * 0.08; this._glow.scale.set(k, k, 1);
     }
 
     /**
@@ -473,6 +547,7 @@ export class School {
     dispose() {
         this.decor?.dispose(); this.decor = null; this.lesson = null;
         if (this._goalObj) { this.game.scene?.remove(this._goalObj); this._goalObj.traverse((m) => { m.geometry?.dispose?.(); m.material?.dispose?.(); }); this._goalObj = null; }
-        if (this.cart) { try { this.game.carriages?.remove(this.cart); } catch { /* gone */ } this.cart = null; }
+        this.coach?.dispose(); this.coach = null;
+        if (this._glow) { this.game.scene?.remove(this._glow); this._glow.material.map?.dispose(); this._glow.material.dispose(); this._glow = null; }
     }
 }
