@@ -140,7 +140,7 @@ test('a player walked through every stage, step by step, to the end', () => {
 test('a dropped wand takes the step back, the wand given again; the hero never dies in the tutorial', () => {
     const { g, loose, held } = fake();
     const T = new Tutorial(g);
-    T._start(2); T.step = 4; T._enter(); // (the «Бомбардо» step)
+    T._start(2); T.step = T.stages[2].steps.findIndex((st) => /«Бомбардо»/.test(st.say || '')); T._enter(); // (the «Бомбардо» step)
     T.ctx.hand = 'right';
     // the wand fell on the ground
     for (let i = 0; i < 5; i++) g.inventory.slots[i] = null;
@@ -157,7 +157,7 @@ test('a dropped wand takes the step back, the wand given again; the hero never d
 test('a spell before the narrator is done: «подождите» and the words again; after them — it works', () => {
     const { g } = fake();
     const T = new Tutorial(g);
-    T._start(2); T.step = 3; T._next(); // (the «Бомбардо» step: its words being said)
+    T._start(2); T.step = T.stages[2].steps.findIndex((st) => /«Бомбардо»/.test(st.say || '')) - 1; T._next(); // (the «Бомбардо» step: its words being said)
     assert.ok(T.talking);
     assert.equal(T.allows('Bombardo'), false);
     assert.match(T._said, /^Подождите, я ещё не договорила/);
