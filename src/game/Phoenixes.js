@@ -545,6 +545,9 @@ export function posePhoenix(model, a, dt) {
 const _flameCol = new THREE.Color(0xff7a14);
 
 // ======================================================================= manager
+/** m: a phoenix farther than this from me is not drawn nor posed (Phoenixes.update). */
+const PHOENIX_DRAW = 260;
+
 export class Phoenixes {
     constructor(game) {
         this.game = game;
@@ -1311,12 +1314,18 @@ export class Phoenixes {
         const me = g.character?.group.position;
         for (const f of this.list) {
             if (f.dead) continue;
+            // (far off: not drawn, not posed — the author 08.11, a guest's FPS: the birds round the OTHER player were drawn and posed
+            //  every frame, ~175 parts each, however far; in the sky it is seen far, so the line is wide)
+            const fd = me ? f.model.position.distanceTo(me) : 0;
+            const far = fd > PHOENIX_DRAW;
+            if (f.model.visible === far) f.model.visible = !far;
+            if (far) continue;
             f.a.night = night;
             f.a.flame = f.flame;
             posePhoenix(f.model, f.a, dt);
             this._embers(f, dt);
             if (f.flame > 0.3 && !this.auth) this._flames(f);
-            if (me) { const d = f.model.position.distanceTo(me); if (!nearest || d < nearest.d) nearest = { f, d }; }
+            if (me && (!nearest || fd < nearest.d)) nearest = { f, d: fd };
         }
         // the one warm light on the nearest phoenix
         if (this.light) {
