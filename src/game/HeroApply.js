@@ -11,6 +11,8 @@
 import { creativeFiniteMana, creativeMortal } from './HeroSetup.js';
 import { makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { clampDark } from './DarkMagic.js';
+import { startItem, pocketsNeeded } from './HeroItems.js';
+import { SLOT_COUNT } from './Inventory.js';
 
 /** A steady colour for a starting potion (a brewed one gets a random colour; a kit's — from its name, the same every time). */
 export function potionKitColor(rec) {
@@ -316,9 +318,23 @@ export class HeroApply {
         // («С крыльями»: grown at once. The author 05.11: no potion of wings in the bag for it — «у меня и так крылья есть, зачем мне зелье?»)
         if (h.wings) g.wings?.grant();
         // the potions chosen in the list «Зелья в сумке» (HeroSettingsUi): one flask of each
-        for (const rec of h.potions || []) {
-            if (!g.inventory?.storeItem || g.inventory.hasAnywhere?.((it) => it?.kind === 'potion' && it.rec === rec)) continue;
-            g.inventory.storeItem({ kind: 'potion', uid: 'kit' + rec + Date.now().toString(36), rec, color: potionKitColor(rec) });
+        // …and the things chosen in «Предметы в интерфейсе» (HeroItems): the cells grow when the kit does not fit (the author: «ячейки будут увеличены»)
+        const inv = g.inventory;
+        const wantPotions = (h.potions || []).filter((rec) => !inv?.hasAnywhere?.((it) => it?.kind === 'potion' && it.rec === rec));
+        const wantItems = (h.items || []).filter((id) => !inv?.hasAnywhere?.((it) => it?.kit === id));
+        if (inv?.setExtraSlots) {
+            const freeBack = inv.back ? inv.back.filter((x) => !x).length : 0;
+            const need = pocketsNeeded(wantItems, wantPotions.length, freeBack) - inv.slots.filter((x) => !x).length;
+            if (need > 0) inv.setExtraSlots(inv.slots.length - SLOT_COUNT + need);
+        }
+        for (const rec of wantPotions) {
+            if (!inv?.storeItem) break;
+            inv.storeItem({ kind: 'potion', uid: 'kit' + rec + Date.now().toString(36), rec, color: potionKitColor(rec) });
+        }
+        for (const id of wantItems) {
+            const def = startItem(id);
+            if (!def || !inv?.storeItem) continue;
+            inv.storeItem({ ...def.make('kit' + id + Date.now().toString(36)), kit: id });
         }
         if (h.dark > 0 && g.dark) {
             const n = clampDark(h.dark);

@@ -119,6 +119,23 @@ export async function startFromMenu(page, mode = 'creative', { zombies = 0, smoo
     await page.click('#start-btn');
     // (a container without a real graphics card compiles the shaders for minutes: ZNS_START_TIMEOUT=ms)
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: Number(process.env.ZNS_START_TIMEOUT) || 90000 });
+    if (mode === 'creative') await giveTestStands(page);
+}
+
+/**
+ * The Creative start has no stands with things any more (the author 02.11) — the old tests were written against the sword 'tS' and the
+ * bow 'cb0' that stood there. Put just those two back, where they stood, so that the tests of taking, throwing and carrying keep their ground.
+ */
+export async function giveTestStands(page) {
+    await page.evaluate(() => {
+        const g = window.__zns.game, T = window.__zns.THREE;
+        if (!g?.world?.createPedestal || g.weapons.byId.has('tS')) return;
+        const s = g.world.createPedestal(7, -5);
+        g.weapons.spawnHovering('sword', new T.Vector3(7, s + 0.9, -5), 'tS', { byHandle: true });
+        g.fixedWeapons = [...(g.fixedWeapons || []), 'tS'];
+        const b = g.world.createPedestal(-12.5, -12);
+        g.items.spawnLoose({ kind: 'bow', uid: 'cb0', type: 0, magic: false, bonus: 0, arrows: 25 }, new T.Vector3(-12.5, b + 0.9, -12), { hover: true, broadcast: false });
+    });
 }
 
 export async function waitHudVisible(page, timeout = 60000) {

@@ -24,6 +24,7 @@ import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
 import { retireScrollsIn } from './ItemTypes.js';
+import { OLD_STAND_IDS } from './HeroItems.js';
 import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, BUILDINGS_FROM_GEN, GHOST_CASTLE_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
@@ -457,7 +458,8 @@ export function restoreWorld(game, save, THREE) {
     if (save.ice && save.ice.length) g.applyIce(save.ice);
     if (save.liquidated) g.liquidation?.restore(save.liquidated); // (before the things themselves: what crumbled is not made again)
     for (const id of save.chests || []) { (g._openedChests = g._openedChests || new Set()).add(id); const c = g.chests?.find((x) => x.id === id); if (c) c.setOpenInstant(); }
-    for (const e of save.items || []) if (!(e.item?.shop && !e.item.shop.paid)) g.items?.spawnLoose( // (an older save's goods for sale: left out — see the snapshot)
+    const creative = g.config?.mode === 'creative'; // (the pedestals of the Creative start are gone: what stood on them is not put back — HeroItems.OLD_STAND_IDS)
+    for (const e of save.items || []) if (!(e.item?.shop && !e.item.shop.paid) && !(creative && e.h && OLD_STAND_IDS.has(e.item?.uid))) g.items?.spawnLoose( // (an older save's goods for sale: left out — see the snapshot)
         e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (save.animals) g.animals?.restore(save.animals);
     if (save.animalSites) g.animals?.sitesRestore(save.animalSites);
@@ -506,7 +508,7 @@ export function restoreWorld(game, save, THREE) {
         const known = new Set(save.fixedWeapons || ['tA', 'tS']), fresh = (id) => (g.fixedWeapons || []).includes(id) && !known.has(id);
         for (const w of [...g.weapons.weapons]) if ((!keep.has(w.id) && !fresh(w.id)) || inSlots.has(w.id)) g.weapons.remove(w);
         for (const s of save.weapons) {
-            if (inSlots.has(s[0])) continue;
+            if (inSlots.has(s[0]) || (g.config?.mode === 'creative' && OLD_STAND_IDS.has(s[0]))) continue;
             let w = g.weapons.byId.get(s[0]);
             const pos = new THREE.Vector3(s[2], s[3], s[4]);
             const q = new THREE.Quaternion(s[5], s[6], s[7], s[8]);

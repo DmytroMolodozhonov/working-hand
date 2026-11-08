@@ -20,6 +20,7 @@ import { GOD_SPELLS } from './Mana.js';
 import { isDivine } from './ProtectionGods.js';
 import { normalizeSpawn, normalizeFoe } from './SpawnSpots.js';
 import { RECIPES } from './Potions.js';
+import { heroItems, KIT_MAX } from './HeroItems.js';
 
 export const HERO = {
     CELLS_MIN: 30, CELLS_MAX: 100000, CELLS_DEFAULT: 500,
@@ -43,6 +44,7 @@ export const DEFAULT_HERO = Object.freeze({
     foe: 'mid', // who stands opposite on the arena of «Перед дуэлью» (SpawnSpots.DUEL_FOES)
     friendSame: true, // multiplayer «Перед дуэлью»: the friend who joins gets the same strength as the host (off — he chooses his own when he enters)
     wings: false, // the hero starts with grown wings (HeroWings.js: flying by the arms' strokes) — the author: «галочка с крыльями или без, по умолчанию без»
+    items: [], // the things (HeroItems.START_ITEMS ids) the hero starts with in the interface — the author 02.11: «как зелья, но для предметов»; with the potions at most KIT_MAX
     potions: [], // the potions (RECIPES ids) the hero starts with in the bag, one flask each — the author 05.11: «выпадающий список, где можно выбрать любое зелье… несколько или ни одного»
     noCrew: false, // ships without sailors (and the black ship without Black Moustache and his skeletons) — Sailors.setCrewless
 });
@@ -62,11 +64,11 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         cells: clamp(Math.round(num(r.cells, b.cells)), HERO.CELLS_MIN, HERO.CELLS_MAX),
         armor: r.armor == null ? !!b.armor : !!r.armor,
         robe: r.robe == null ? !!b.robe : !!r.robe,
-        spells: r.spells === 'mage' ? 'mage' : r.spells === 'all' ? 'all' : b.spells === 'mage' ? 'mage' : 'all',
+        spells: 'all', // (the author 02.11: «всегда по умолчанию все заклинания есть» — the setting is gone; an old world with «сильного мага» knows all now)
         duelMastery: clamp(Math.round(num(r.duelMastery, b.duelMastery ?? 0)), 0, HERO.MASTERY_MAX), // (старые `duelPower`/`duel` — прежняя «сила» вместо маны — больше не читаются: 0)
         dark: clamp(Math.round(num(r.dark, b.dark)), 0, HERO.DARK_MAX),
         breakward: r.breakward == null ? !!b.breakward : !!r.breakward,
-        steady: clamp(Math.round(num(r.steady, b.steady)), HERO.STEADY_MIN, HERO.STEADY_MAX),
+        steady: HERO.STEADY_MAX, // (the author 02.11: «в творческом всегда устойчивость 100» — the setting is gone)
         health: r.health === 'normal' ? 'normal' : r.health === 'immortal' ? 'immortal' : b.health === 'normal' ? 'normal' : 'immortal',
         maxHp: clamp(Math.round(num(r.maxHp, b.maxHp)), HERO.HP_MIN, HERO.HP_MAX),
         spawn: normalizeSpawn(r.spawn ?? b.spawn),
@@ -74,9 +76,16 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         wandBonus: clamp(Math.round(num(r.wandBonus, b.wandBonus ?? 0)), 0, HERO.WAND_MAX),
         noCrew: r.noCrew == null ? !!b.noCrew : !!r.noCrew,
         wings: r.wings == null ? !!b.wings : !!r.wings,
-        potions: heroPotions(r.potions ?? b.potions),
+        ...kit(r, b),
         friendSame: r.friendSame == null ? b.friendSame !== false : !!r.friendSame,
     };
+}
+
+/** The starting kit: the potions and the things together are at most KIT_MAX (what does not fit is dropped from the end: things first). */
+function kit(r, b) {
+    const potions = heroPotions(r.potions ?? b.potions).slice(0, KIT_MAX);
+    const items = heroItems(r.items ?? b.items).slice(0, KIT_MAX - potions.length);
+    return { potions, items };
 }
 
 /** The starting potions: known recipes only, each once, in the recipes' order. */
@@ -116,5 +125,5 @@ export function knownInCreative(hero, spell) {
 /** Короткое описание для журнала/отчёта. */
 export function heroSummary(h) {
     return [h.infiniteMana ? 'мана ∞' : `ячеек ${h.cells}`, h.armor ? 'броня' : 'без брони', h.robe ? 'мантия' : 'без мантии',
-        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `мастерство ${h.duelMastery}`, h.wandBonus ? `палочка +${h.wandBonus}%` : '', `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', h.health === 'normal' ? `HP ${h.maxHp}` : 'бессмертен', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
+        `мастерство ${h.duelMastery}`, h.wandBonus ? `палочка +${h.wandBonus}%` : '', `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', h.health === 'normal' ? `HP ${h.maxHp}` : 'бессмертен', (h.items?.length || h.potions?.length) ? `в сумке ${(h.items?.length || 0) + (h.potions?.length || 0)} из ${KIT_MAX}` : ''].filter(Boolean).join(', ');
 }

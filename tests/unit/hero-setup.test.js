@@ -7,6 +7,7 @@ import { GOD_SPELLS } from '../../src/game/Mana.js';
 import { isDivine } from '../../src/game/ProtectionGods.js';
 import { Combat, SPELL_COST } from '../../src/game/Combat.js';
 import { HeroApply } from '../../src/game/HeroApply.js';
+import { RECIPES } from '../../src/game/Potions.js';
 import { Steadiness } from '../../src/game/Steadiness.js';
 
 const fakeGame = (hero, mode = 'creative') => {
@@ -19,13 +20,13 @@ const fakeGame = (hero, mode = 'creative') => {
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
     // (почему `wings`: автор 05.11 — галочка «С крыльями» в Творческом, по умолчанию без крыльев)
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false, wings: false, potions: [], friendSame: true }); // (potions: the author 05.11 — a list of starting potions, none by default)
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false, wings: false, items: [], potions: [], friendSame: true }); // (potions: the author 05.11 — a list of starting potions, none by default; items: 02.11 — the same for things)
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
 test('границы: ячейки 30…100000, сила 0,4…4,6, тьма 0…100, устойчивость 1…100, мусор → по умолчанию', () => {
     const h = normalizeHero({ cells: 5, duelMastery: -5, dark: 500, steady: -3, spells: 'x' });
-    assert.equal(h.cells, HERO.CELLS_MIN); assert.equal(h.duelMastery, 0); assert.equal(h.dark, 100); assert.equal(h.steady, 1); assert.equal(h.spells, 'all');
+    assert.equal(h.cells, HERO.CELLS_MIN); assert.equal(h.duelMastery, 0); assert.equal(h.dark, 100); assert.equal(h.steady, 100, 'устойчивость в Творческом всегда 100 (автор 02.11)'); assert.equal(h.spells, 'all');
     assert.equal(normalizeHero({ cells: 1e9 }).cells, HERO.CELLS_MAX);
     assert.equal(normalizeHero({ cells: 'abc', duelMastery: null }).cells, 500);
     assert.equal(normalizeHero(null).armor, true);
@@ -42,7 +43,7 @@ test('старый мир без записи: как было — бескон�
 });
 
 test('сохранение и загрузка: запись переживает JSON и сеть', () => {
-    const cfg = { mode: 'creative', hero: normalizeHero({ infiniteMana: false, cells: 1234, armor: false, robe: true, spells: 'mage', duelMastery: 150, dark: 7, breakward: true, steady: 55 }) };
+    const cfg = { mode: 'creative', hero: normalizeHero({ infiniteMana: false, cells: 1234, armor: false, robe: true, spells: 'mage', duelMastery: 150, dark: 7, breakward: true, steady: 55, items: ['sword', 'wand'], potions: ['heal'] }) };
     const back = JSON.parse(JSON.stringify(heroForSave(cfg)));
     assert.deepEqual(heroOf({ mode: 'creative', hero: back }), cfg.hero);
 });
@@ -253,4 +254,28 @@ test('зелья в сумке (автор 05.11): любые из рецепт�
     const fs = await import('node:fs');
     const src = fs.readFileSync(new URL('../../src/game/HeroApply.js', import.meta.url), 'utf8');
     assert.ok(!/rec: 'wings'/.test(src), 'the wings checkbox puts no potion of wings in the bag');
+});
+
+test('настройки «Заклинания» и «Устойчивость» убраны: всегда все заклинания и устойчивость 100 (автор 02.11), и в старых мирах тоже', () => {
+    const old = normalizeHero({ spells: 'mage', steady: 30 });
+    assert.equal(old.spells, 'all'); assert.equal(old.steady, 100);
+    assert.equal(heroOf({ mode: 'creative', hero: { spells: 'mage', steady: 5 } }).spells, 'all');
+});
+
+test('предметы и зелья в интерфейсе: только известные, по одному, вместе не больше 10', async () => {
+    const { START_ITEMS, KIT_MAX, pocketsNeeded } = await import('../../src/game/HeroItems.js');
+    assert.equal(KIT_MAX, 10);
+    assert.deepEqual(normalizeHero({ items: ['axe', 'sword', 'sword', 'нет такого'] }).items, ['sword', 'axe'], 'порядок списка, без повторов и выдумок');
+    const all = START_ITEMS.map((x) => x.id);
+    const potions = RECIPES.map((r) => r.id);
+    const h = normalizeHero({ items: all, potions });
+    assert.ok(h.potions.length + h.items.length <= KIT_MAX, 'вместе не больше 10');
+    const h2 = normalizeHero({ items: all.slice(0, 4), potions: potions.slice(0, 8) });
+    assert.equal(h2.potions.length, 8); assert.equal(h2.items.length, 2, 'зелья остаются, лишние вещи отрезаны с конца');
+    assert.deepEqual(normalizeHero({}).items, []);
+    // ячейки: меч/топор/лук/щит идут за спину (2 ячейки), остальное — в карманы
+    assert.equal(pocketsNeeded(['sword', 'axe', 'bow0'], 0, 2), 1);
+    assert.equal(pocketsNeeded(['wand', 'crystal', 'apple'], 2, 2), 5);
+    // каждая вещь делает настоящую запись ячейки
+    for (const x of START_ITEMS) { const it = x.make('u1'); assert.ok(it.kind, x.id); assert.ok(x.name && x.hint, x.id); }
 });

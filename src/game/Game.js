@@ -994,70 +994,28 @@ export class Game {
                 const n = config.mode === 'creative' ? 0 : 1; // (Творческий: its zombies come out of the dark — _spawnWaves)
                 for (let i = 0; i < n; i++) this.spawnZombieWave();
             }
-            // An axe and a sword floating by magic over two pedestals (same places as the old tables)
+            // An axe and a sword floating by magic over two pedestals (same places as the old tables). Not in Creative: its start has no
+            // stands with things any more (the author 02.11: «стенды с предметами убрать» — the things are chosen in «Настройки героя»)
             const pz = -5.0;
-            // (their handles float at the shoulder of a hero standing at the pedestal's foot: where the hand reaches)
-            const s1 = this.world.createPedestal(-7, pz);
-            this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 0.9, pz), 'tA', { byHandle: true });
-            const s2 = this.world.createPedestal(7, pz);
-            this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 0.9, pz), 'tS', { byHandle: true });
-            this.fixedWeapons = ['tA', 'tS'];
-            // Creative: one more sword just like it, on its own pedestal (the end of the bows' row)
-            if (config.mode === 'creative') {
-                const s3 = this.world.createPedestal(17.5, -12);
-                this.weapons.spawnHovering('sword', new THREE.Vector3(17.5, s3 + 0.9, -12), 'tS2', { byHandle: true });
-                this.fixedWeapons.push('tS2');
+            this.fixedWeapons = [];
+            if (config.mode !== 'creative') {
+                // (their handles float at the shoulder of a hero standing at the pedestal's foot: where the hand reaches)
+                const s1 = this.world.createPedestal(-7, pz);
+                this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 0.9, pz), 'tA', { byHandle: true });
+                const s2 = this.world.createPedestal(7, pz);
+                this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 0.9, pz), 'tS', { byHandle: true });
+                this.fixedWeapons = ['tA', 'tS'];
             }
             // Creative: a surfboard to try, standing in the ground by the pedestals (the same id on every computer)
             if (config.mode === 'creative') this.boards.spawn({ id: 'cboard0', wood: 0, st: 'stand', p: [-12, this.collision.groundY(-12, -9) + 4.4 * 0.38, -9], yaw: 0 });
-            // Creative: bows and shields of every kind on pedestals too
+            // Creative: ONE stand is left — with a book (the author 02.11: «оставь один стенд с книгой»); it is a gift of the gods (indestructible).
+            // The rest is chosen by hand in «Настройки героя → Предметы / Зелья в интерфейсе» (HeroItems.js). The cauldron stays by the lake.
             if (config.mode === 'creative') {
-                const gear = [
-                    { kind: 'bow', uid: 'cb0', type: 0, magic: false, bonus: 0, arrows: 25 },
-                    { kind: 'bow', uid: 'cb1', type: 1, magic: false, bonus: 0, arrows: 25 },
-                    { kind: 'bow', uid: 'cb2', type: 2, magic: true, bonus: 35, arrows: 25 },
-                    { kind: 'shield', uid: 'cs0', type: 0, magic: false, max: 0 },
-                    { kind: 'shield', uid: 'cs1', type: 1, magic: false, max: 0 },
-                    { kind: 'shield', uid: 'cs2', type: 2, magic: true, max: 40 },
-                ];
-                gear.forEach((it, i) => {
-                    const x = -12.5 + i * 5, z = -12;
-                    const top = this.world.createPedestal(x, z);
-                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false }); // (at the shoulder of one standing at its foot)
-                });
-                // …and a wand, scrolls (the spell scrolls, health), the swift book of «Флайн» and a book of building spells
-                const magic = [
-                    { kind: 'wand', uid: 'cw0', color: 0x8e5bd8, model: 4, fav: 'Inferno', power: 30, dir: 'destroy' },
-                    { kind: 'scroll', uid: 'cr1', stat: 'spell', spell: 'LightningStrike' },
-                    { kind: 'scroll', uid: 'cr2', stat: 'spell', spell: 'Thunderwave' },
-                    { kind: 'scroll', uid: 'cr3', stat: 'spell', spell: 'ToTheSun' },
-                    { kind: 'crystal', uid: 'cmc0', count: 1 }, // a mana crystal (take it in the hand and squeeze: +1 cell of mana)
-                ];
-                magic.forEach((it, i) => {
-                    const x = -12.5 + i * 5, z = -18;
-                    const top = this.world.createPedestal(x, z);
-                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false }); // (at the shoulder of one standing at its foot)
-                });
-                const bx = -12.5 + magic.length * 5, bz = -18;
+                const bx = -5, bz = -7;
                 const btop = this.world.createPedestal(bx, bz);
                 this.books?.placeBook(new THREE.Vector3(bx, btop + 1.0, bz), 777001);
-                const sx = bx + 5, stop = this.world.createPedestal(sx, bz);
-                this.books?.placeBook(new THREE.Vector3(sx, stop + 1.0, bz), SWIFT_PEDESTAL_ID); // (the swift book: «Флайн»)
-                const wx = sx + 5, wtop = this.world.createPedestal(wx, bz);
-                this.books?.placeBook(new THREE.Vector3(wx, wtop + 1.0, bz), WARD_PEDESTAL_ID); // (the book of protection: «Защита дома»)
-                // potions: a cauldron to try (water from the lake with «Waterbollow»), flasks and the
-                // healing potion's ingredients (a golden apple, a mana crystal) on pedestals beside it
+                // a cauldron to try (water from the lake with «Waterbollow»)
                 this.cauldrons?.spawn({ id: 'ccaul0', x: 20, y: this.collision.groundY(20, -3), z: -3, yaw: 0 });
-                const potionKit = [
-                    { kind: 'flask', uid: 'cfl0', count: 3 },
-                    { kind: 'apple', uid: 'cap0', count: 1 },
-                    { kind: 'crystal', uid: 'cmc1', count: 1 },
-                ];
-                potionKit.forEach((it, i) => {
-                    const x = 24.5, z = -9 + i * 5;
-                    const top = this.world.createPedestal(x, z);
-                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false });
-                });
                 // a chest to try things with: it opens as you come, and fills up again once you walk away
                 const cx = 12, cz = -6;
                 const chest = new Chest(this.scene, new THREE.Vector3(cx, this.collision.groundY(cx, cz), cz), 'loot', -Math.PI / 2, 'creative-test');
