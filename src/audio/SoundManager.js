@@ -11,6 +11,7 @@
  *   - a missing or broken file no longer disables all sound.
  */
 
+import './SafeAudio.js'; // (a bad number in a ramp never stops the game)
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { MusicDirector } from './MusicDirector.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
@@ -269,7 +270,7 @@ export class SoundManager {
     }
 
     setMusicVolume(val) {
-        const gain = val / 100;
+        const n = Number(val), gain = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) / 100 : (Number.isFinite(this.music.volume) ? this.music.volume : 0.2);
         this.music.volume = gain;
         if (this.music.current) this.music.current.setVolume(gain);
         if (this._musicBus && !this._spaceQuiet) this._musicBus.gain.setTargetAtTime(gain, this.context.currentTime, 0.05);

@@ -9,6 +9,7 @@
  *  - ui(kind): 'hover' (a faint glass tick), 'click' (a soft bell with a shimmer), 'open' (a rising swirl of bells), 'close' (falling),
  *    'tab' (two quick bells), 'toggle' (a pluck), 'back' (a low soft bell). Throttled: never a rattle.
  */
+import './SafeAudio.js';
 
 let ctx = null, master = null, last = {};
 const SCALES = [[0, 3, 7, 10, 14], [0, 4, 7, 11, 14], [0, 2, 7, 9, 14], [0, 5, 7, 12, 15]];
