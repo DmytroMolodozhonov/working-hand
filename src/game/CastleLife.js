@@ -44,6 +44,7 @@ import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
+import { npcWorn, npcSoak, npcKind, npcRegen } from './NpcArmor.js';
 import { VillagerCommands } from './VillagerCommands.js';
 import { RelationsLife } from './RelationsLife.js';
 import { RebellionLife } from './RebellionLife.js';
@@ -484,6 +485,7 @@ export class CastleLife {
         if (look.unarmored || look.robeOff) v.stripped = true;
         if (look.unarmored || (e.role === 'advisor' && !look.magicChest)) { v.armor = 0; v.maxArmor = 0; v.magicPieces = null; v.magicSet = false; v.stripped = true; } // (a wizard's ward is no steel: it stays)
         if (WIZ[e.role]) this.wizards.init(v);
+        npcWorn(v); // (real pieces by his role — the player's armour; bars = their points)
         v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
         v.group.rotation.y = v.yaw;
         cs.active.set(idx, v);
@@ -1591,7 +1593,7 @@ export class CastleLife {
                 }
             }
         }
-        if (v.magicPieces && !v.stripped && v.armor < v.maxArmor && v.hp > 0) v.armor = Math.min(v.maxArmor, v.armor + ARMOR.REGEN * (v.maxArmor / 40) * dt); // (magic pieces mend by themselves)
+        if (v.worn && !v.stripped && v.hp > 0) npcRegen(v, dt); // (magic pieces mend by themselves — the player's rule, NpcArmor.js)
         if (v.foe != null && isLord(v, v.foe, this.lordOf(cs, v.foe))) { v.foe = null; v.grudge = null; v.lesson = null; } // (whatever happened — a shove, a blast, a spell: never at the king)
         if (v.gOwner != null && this.guard.step(v, dt)) return; // (a bodyguard: the king's enemy first, the formation round him)
         if (v.potionMaster && this.game.potionMaster?.step(v, dt)) return; // (the master of potions at his work: fire, water, ingredients by «Левиоса» — PotionMasterLife)
@@ -2902,20 +2904,15 @@ export class CastleLife {
         }
         // (two wizards of the duel arena: a friendly duel — the blow never kills: ArenaDuels.soften)
         if (v.arena && this.game.arenaDuels) dmg = this.game.arenaDuels.soften(v, by, dmg);
-        // armour takes most of the blow: the hearts go down many times slower
-        if (v.magicSet && opts.fire) dmg *= 0.5; // (the whole magic set: fire does half)
-        if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
-        else if (v.armor > 0 && opts.kind === 'Thunderwave' && !v.magicPieces?.length) v.hp -= dmg; // (plain steel does not hold a blow from above; a magic piece does)
-        else if (v.armor > 0 && opts.fire) {
-            // fire heats the armour through: it takes half, and burns less — but the hearts still go down
-            const a = Math.min(v.armor, dmg * 0.5);
-            v.armor -= a;
-            v.hp -= a * 0.5 + (dmg - a);
-        } else if (v.armor > 0) {
-            const a = Math.min(v.armor, dmg);
-            v.armor -= a;
-            v.hp -= a * 0.2 + (dmg - a);
-        } else v.hp -= dmg;
+        // armour: THE PLAYER'S rules (NpcArmor.js → ArmorTypes.soakBlow): pieces, cover, magic ×2, fire, Thunderwave, Avada cut by the reserve (the author 07.11)
+        if (opts.pierce) v.hp = 0; // («Авада Кедавра» on a person still kills outright — listed in NpcArmor.js as «not yet the same»)
+        else {
+            dmg = npcSoak(v, dmg, npcKind(opts)); // (a wizard: only his robe's effects here; his ward pool follows)
+            if (v.wizard && v.armor > 0) { // (a wizard's ward is magic, not steel: its own pool, as before)
+                if (opts.fire) { const a = Math.min(v.armor, dmg * 0.5); v.armor -= a; v.hp -= a * 0.5 + (dmg - a); }
+                else { const a = Math.min(v.armor, dmg); v.armor -= a; v.hp -= a * 0.2 + (dmg - a); }
+            } else v.hp -= dmg;
+        }
         v.hp = Math.max(0, Math.round(v.hp * 10) / 10);
         v.barT = 8;
         this._flash(v);

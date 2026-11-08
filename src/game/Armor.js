@@ -38,7 +38,7 @@ const _v2 = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const SLOTS = ['helmet', 'chest', 'legs', 'robe'];
 const BEAMS = new Set(['chill', 'Inferno', 'Fire', 'cold', 'Ice']); // (kept on me while they burn: paid by time)
-const COST_OF = { chill: 'Ice', cold: 'Ice', Sapira: 'Sapira', Sands: 'Sands', Disarmor: 'Disarmor', Levitation: 'Levitation', Stupefy: 'Stupefy' };
+export const COST_OF = { chill: 'Ice', cold: 'Ice', Sapira: 'Sapira', Sands: 'Sands', Disarmor: 'Disarmor', Levitation: 'Levitation', Stupefy: 'Stupefy' };
 const slotOf = (it) => (it?.kind === 'robe' ? 'robe' : it?.kind === 'armor' ? it.piece : null);
 const score = (it) => (!it ? 0 : it.archmage ? 9 : (it.named ? 4 : it.magic ? 3 : 2) + (it.kind === 'armor' ? 0.5 * (it.hp ?? 0) / Math.max(1, pieceMax(it)) : 0));
 
@@ -579,6 +579,8 @@ export class ArmorSystem {
 
     /** A knight's / the king's plates as things (as beaten as his armour was). */
     _villagerSteel(v) {
+        const worn = ['helmet', 'chest', 'legs'].map((p) => v.worn?.[p]).filter(Boolean);
+        if (worn.length) return worn; // (the very pieces he wore, as beaten as they were — NpcArmor.js)
         const k = v.maxArmor > 0 ? Math.max(0.1, (v.armor || 0) / v.maxArmor) : 1;
         const magic = v.magicPieces; // (the king's full magic set, the advisor's magic breastplate and greaves)
         return (magic || ['helmet', 'chest', 'legs']).map((p) => { const it = makePiece(p, { magic: !!magic }); it.hp = Math.max(1, Math.round(it.hp * k)); return it; });

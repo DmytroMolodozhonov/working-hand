@@ -40,7 +40,7 @@ import { isSpectator } from './ArenaDome.js';
 import { ragRootOf } from './RagdollPose.js';
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
-import { PVP } from './Combat.js';
+import { PVP, shieldHitCost } from './Combat.js';
 import { DAMAGE } from './Damage.js';
 import { SLOW } from './Slow.js';
 import { sharpJerk } from './Jerk.js';
@@ -67,6 +67,8 @@ import { kindOf } from './CreatureImpact.js';
 import { duelStrength, duelPower, strengthGap, wizardMastery } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
+import { npcGuard } from './NpcArmor.js';
+import { COST_OF } from './Armor.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
 import { WHIRL } from './WhirlRules.js';
 import { manaRules, creativeFiniteMana } from './HeroSetup.js';
@@ -1301,10 +1303,12 @@ export class Duel {
         if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
         if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
         // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
-        if (!opts?.clash && c.isVillager && ((c.robe && ROBE_BLOCKS.has(spell)) || (c.magicSet && !c.stripped && MAGIC_SET_BLOCKS.has(spell)))) {
+        // (the player's rule: NpcArmor.npcGuard → ArmorTypes.spellGuard; the robe / the set pay their reserve, a spent reserve turns nothing)
+        const guard = !opts?.clash && c.isVillager ? npcGuard(c, spell, Math.max(1, shieldHitCost(COST_OF[spell] || spell) * 2)) : null;
+        if (guard?.block) {
             this._burst(p, 0xc39bff, 20);
             // («Disarmor»: the robe stays on, but the bolt still throws him back as a «Джолт» does)
-            if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._disarmorMiss(byId, c.robe ? 'robe' : 'set'); this._joltCreature(c, 'Jolt', src, byId); }
+            if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._disarmorMiss(byId, guard.why === 'robe' ? 'robe' : 'set'); this._joltCreature(c, 'Jolt', src, byId); }
             return;
         }
         // «Liquidation» (duel): −3 as the splash, and what a humanoid holds in his hand crumbles (HeldBreak.js) — before the

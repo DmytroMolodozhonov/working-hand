@@ -18,6 +18,7 @@
  * Multiplayer: the host runs the crews ('screw'); guests draw them and send hits.
  */
 
+import { npcWorn, npcSoak, npcKind } from './NpcArmor.js';
 import { crewOrder } from '../ai/TalkFlow.js';
 import { confusedMiss } from './StrongSpells.js';
 import { EXPELLIARMUS, flightVelocity } from './Expelliarmus.js';
@@ -355,6 +356,7 @@ export class Sailors {
                 overboard: null, x: 0, y: 0, z: 0, net: null, deadT: 0, tool0: model.toolKind,
                 entry: { female: false, seed: e.seed }, talking: 0, chatT: 8 + Math.random() * 20,
             };
+            npcWorn(v); // (a captain's helmet and breastplate, a boatswain's helmet: real pieces — NpcArmor.js)
             list.push(v);
             this.byId.set(v.id, v);
         }
@@ -511,11 +513,7 @@ export class Sailors {
         }
         v.hellT = opts.hell || opts.kind === HELL.NAME ? Date.now() : 0; // (the last blow was the Hellfire's: HellKills.js)
         if (opts.pierce) v.hp = 0;
-        else if (v.armor > 0 && opts.kind !== 'Thunderwave') { // (plain steel does not hold Thunderwave: it comes from above)
-            const a = Math.min(v.armor, dmg);
-            v.armor -= a;
-            v.hp -= a * 0.2 + (dmg - a);
-        } else v.hp -= dmg;
+        else v.hp -= npcSoak(v, dmg, npcKind(opts)); // (the player's armour rules — NpcArmor.js: pieces, cover, fire, Thunderwave)
         v.hp = Math.max(0, Math.round(v.hp * 10) / 10);
         if (by) v.hitBy = { id: by === 'local' ? g.localId : by, t: performance.now() };
         if (by) { if (isBlackbeard(v)) g.achievements?.hit('blackbeard', v.id, by); else g.achievements?.fought(by); } // (the achievement: Achievements.js)
