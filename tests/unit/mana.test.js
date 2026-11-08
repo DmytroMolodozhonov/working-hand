@@ -242,3 +242,36 @@ test('mana: a wizard killed without a duel — 25%, once per opponent, never twi
     const cre = fakeGame('creative').g;
     assert.equal(cre.mana.killWon(530, 'k3'), 0);
 });
+
+test('NPC kill: noticing is not combat; host and guest receive cells only after a spell at the killer', async () => {
+    const { CastleLife } = await import('../../src/game/CastleLife.js');
+    const { NetSync } = await import('../../src/net/NetSync.js');
+    const { applyCredit } = await import('../../src/game/Mana.js');
+    for (const guest of [false, true]) for (const target of [null, 'other', 'killer']) {
+        const { g } = fakeGame();
+        g.localId = 'killer';
+        const duel = Object.create(Duel.prototype);
+        duel.game = g; g.duel = duel;
+        const packets = [];
+        const host = guest ? { localId: 'host', remotes: new Map([['killer', {}]]), sync: { manaCredit(to, m) {
+            NetSync.prototype.manaCredit.call({ net: { isHost: true, sendTo: (id, packet) => packets.push([id, packet]) } }, to, m);
+        } } } : g;
+        const L = Object.create(CastleLife.prototype);
+        L.game = host;
+        L.state = () => ({ killed: new Set() });
+        for (const k of ['_wanderWitness', '_achDied', '_sendState', '_comradeDown', '_news']) L[k] = () => {};
+        const v = { id: 'wizard', idx: 1, wizard: true, maxMana: 530, x: 0, y: 0, z: 0,
+            foe: 'killer', grudge: { id: 'killer' }, castAtPlayers: target ? new Set([target]) : undefined,
+            cs: { def: { id: 'tower' } }, role: 'teacher' };
+        L._die(v, 'killer');
+        if (guest) {
+            assert.equal(packets.length, 1);
+            assert.equal(packets[0][0], 'killer');
+            applyCredit(g, packets[0][1]);
+        }
+        const fought = target === 'killer';
+        assert.equal(g.mana.max, fought ? 155 : 30, `${guest ? 'guest' : 'host'}: shot at ${target}`);
+        assert.equal(g.mana.mastery > 0, fought);
+        if (!fought) assert.equal(g.mana.log.length, 0, 'no cells, flow or success notification for an unearned kill');
+    }
+});

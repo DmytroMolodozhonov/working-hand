@@ -19,7 +19,7 @@
 import { HELL, inHell } from '../world/HellMap.js';
 
 export const INFERNUM = {
-    COST: 150, // маны при слове
+    COST: 50, // маны за создание круга; отдельной платы за жертву нет
     DARK: 10, // сразу к уровню тьмы (потолок 100 — DarkMagic.addDark)
     OPEN_S: HELL.OPEN_S, // с: круг открыт после жертвы (войти могут несколько)
     STEP_S: HELL.STEP_S, // с: постоять в открытом круге — переход
@@ -66,7 +66,7 @@ export function anyBody(b) {
 
 /** Что лежит на круге для обряда (Offerings): вход — одно тело; возврат — голова горгульи. */
 export const HELL_OFFERINGS = {
-    infernum: { id: 'infernum', bodies: 1, any: true, things: [], mana: 0, what: 'тело' }, // (мана — при слове: 150)
+    infernum: { id: 'infernum', bodies: 1, any: true, things: [], mana: 0, what: 'тело' }, // (создание круга: 50; жертва без дополнительной платы)
     hellBack: { id: 'hellBack', bodies: 0, things: [{ kind: HEAD.KIND, name: 'голова горгульи' }], mana: 0, what: 'голова горгульи' },
 };
 

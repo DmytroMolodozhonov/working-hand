@@ -1,7 +1,7 @@
 /**
  * UnitedPower.js — the game part of «Пентаграмма объединённой силы» (`Pentagranium Unitas`; rules and numbers: UnitedRules.js).
  *
- * The pentagram is made by the word (Pentagranium.cast: 120 mana, +30 to the dark level, black magic). Then the hero lays in its circle (a thing LYING
+ * The pentagram is made by the word (Pentagranium.cast: 50 mana, +30 to the dark level, black magic). Then the hero lays in its circle (a thing LYING
  * STILL: thrown, dropped, laid by the hand, lowered by Levitation): the body of a killed man-like creature (not bones), a carnivorous plant's head and
  * TWO things of one kind. When all are there (the order does not matter) the rite begins by itself — no second word. Not all: a hint tells what is
  * missing (once per set). More than two things: «кладите ровно два». The host leads (the things are the host's); the others see it ('pgm' k 'uni').

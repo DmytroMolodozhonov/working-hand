@@ -17,11 +17,11 @@
  * dark level above 10 in an old save — taken off at the first look.
  */
 import * as THREE from 'three';
-import { RESIST, RESIST_HINT, findFlowers, findFireHeart, findArmorLeaf, canGetDarkWard, keepsDarkWard, darkFactor, fireFactor, blastFactor } from './ResistRules.js';
+import { RESIST, RESIST_HINT, findFlowers, findFireHeart, findArmorLeaf, findGripHead, canGetDarkWard, keepsDarkWard, darkFactor, fireFactor, blastFactor } from './ResistRules.js';
 import { darkLevel } from './DarkMagic.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3();
-const COLS = { dark: [0xffffff, 0xfff4d0, 0xcfe8ff, 0xffe9a8], fire: [0xff7a1a, 0xffc15a, 0xfff0b0, 0xff4a10], blast: [0xc8d6e4, 0xf2c24a, 0xffffff, 0x8ea6bf] };
+const COLS = { grip: [0x7be7c5, 0xe0fff4, 0x2ea78b, 0xfff0bc], dark: [0xffffff, 0xfff4d0, 0xcfe8ff, 0xffe9a8], fire: [0xff7a1a, 0xffc15a, 0xfff0b0, 0xff4a10], blast: [0xc8d6e4, 0xf2c24a, 0xffffff, 0x8ea6bf] };
 
 export class PentagramResist {
     constructor(game) {
@@ -29,15 +29,16 @@ export class PentagramResist {
         this.dark = false;
         this.fire = false;
         this.blast = false;
+        this.strongHands = false;
         this.anim = null; // the picture {kind, t, m}
         this._chk = 0;
     }
 
     // ------------------------------------------------------------ saving
-    snapshot() { return this.dark || this.fire || this.blast ? { d: this.dark ? 1 : 0, f: this.fire ? 1 : 0, b: this.blast ? 1 : 0 } : null; }
-    restore(o) { this.dark = !!o?.d; this.fire = !!o?.f; this.blast = !!o?.b; this._chk = 0; }
+    snapshot() { return this.dark || this.fire || this.blast || this.strongHands ? { d: this.dark ? 1 : 0, f: this.fire ? 1 : 0, b: this.blast ? 1 : 0, ...(this.strongHands ? { h: 1 } : null) } : null; }
+    restore(o) { this.dark = !!o?.d; this.fire = !!o?.f; this.blast = !!o?.b; this.strongHands = !!o?.h; this._chk = 0; }
     /** Death: both gifts go (they lie in the body with the rest of the power: Legacy.js). */
-    onDeath() { const had = this.dark || this.fire || this.blast; this.restore(null); this.anim = null; if (had) this.game.perf?.note?.('🛡️ защита от тёмной магии / огня: дары забрала смерть'); }
+    onDeath() { const had = this.dark || this.fire || this.blast || this.strongHands; this.restore(null); this.anim = null; if (had) this.game.perf?.note?.('🛡️ защита от тёмной магии / огня: дары забрала смерть'); }
 
     // ------------------------------------------------------------ what it does
     /** Combat.damage: a blow of `amount` of `kind` against me — how much of it gets through. */
@@ -58,8 +59,8 @@ export class PentagramResist {
     useCircle(kind, ctx) {
         const g = this.game, pays = ctx.pays;
         if (g.isDeadLocal || g.combat?.dead) return false;
-        const dark = kind === 'dark', blast = kind === 'blast';
-        if (dark ? this.dark : blast ? this.blast : this.fire) { ctx.hint('🛡️ ' + (dark ? RESIST_HINT.darkHave : blast ? RESIST_HINT.blastHave : RESIST_HINT.fireHave)); return false; }
+        const dark = kind === 'dark', blast = kind === 'blast', grip = kind === 'grip';
+        if (grip ? this.strongHands : dark ? this.dark : blast ? this.blast : this.fire) { ctx.hint('🛡️ ' + (grip ? RESIST_HINT.gripHave : dark ? RESIST_HINT.darkHave : blast ? RESIST_HINT.blastHave : RESIST_HINT.fireHave)); return false; }
         let used = [];
         if (dark) {
             const can = canGetDarkWard({ level: darkLevel(g.dark), broken: !!g.breakward?.marked, has: this.dark });
@@ -68,6 +69,12 @@ export class PentagramResist {
                 const f = findFlowers(this._looseIn(ctx.m));
                 if (!f.ok) { ctx.hint('🤍 ' + RESIST_HINT.noFlowers(f.missing)); return false; }
                 used = f.used;
+            }
+        } else if (grip) {
+            if (pays) {
+                const h = findGripHead(this._looseIn(ctx.m));
+                if (!h) { ctx.hint('🙌 ' + RESIST_HINT.noHead); return false; }
+                used = [h];
             }
         } else if (blast) {
             if (pays) {
@@ -83,11 +90,11 @@ export class PentagramResist {
         if (pays && ctx.mana < RESIST.COST) { ctx.hint((dark ? '🤍 ' : '🛡️ ') + RESIST_HINT.noMana(RESIST.COST)); return false; }
         if (pays) { g.combat.fatigue -= RESIST.COST; g.combat._hudKey = ''; }
         for (const L of used) this._take(L);
-        if (dark) this.dark = true; else if (blast) this.blast = true; else { this.fire = true; g.burning?._outMe?.('ward'); } // (given at once: the picture below is only the picture; a burning one is put out)
+        if (grip) this.strongHands = true; else if (dark) this.dark = true; else if (blast) this.blast = true; else { this.fire = true; g.burning?._outMe?.('ward'); } // (given at once: the picture below is only the picture; a burning one is put out)
         this.anim = { kind, t: 0, m: ctx.m };
         ctx.fx?.();
-        g.hud?.setVoice?.(dark ? RESIST_HINT.darkDone : blast ? RESIST_HINT.blastDone : RESIST_HINT.fireDone, true);
-        g.perf?.note?.(dark ? '🤍 Пентаграмма защиты от тёмной магии: дар получен' : blast ? '🛡️ Пентаграмма защиты от взрывов: дар получен' : '🛡️ Пентаграмма защиты от огня: дар получен');
+        g.hud?.setVoice?.(grip ? RESIST_HINT.gripDone : dark ? RESIST_HINT.darkDone : blast ? RESIST_HINT.blastDone : RESIST_HINT.fireDone, true);
+        g.perf?.note?.(grip ? '🙌 Пентаграмма сильных рук: дар получен' : dark ? '🤍 Пентаграмма защиты от тёмной магии: дар получен' : blast ? '🛡️ Пентаграмма защиты от взрывов: дар получен' : '🛡️ Пентаграмма защиты от огня: дар получен');
         return true;
     }
 
@@ -134,6 +141,17 @@ export class PentagramResist {
         A.t += dt;
         const T = RESIST.ANIM_T, k = Math.min(1, A.t / T), cols = COLS[A.kind];
         if (fx) {
+            // Strong hands: green-gold coils bind each actual wrist, then flare along the fingers.
+            if (A.kind === 'grip' && g.character?.getHandWorldPosition) {
+                for (const side of ['left', 'right']) {
+                    const hand = g.character.getHandWorldPosition(side, _v);
+                    if (!hand) continue;
+                    const a = A.t * 12 + (side === 'left' ? 0 : Math.PI), r = 0.35 * (1 - k * 0.5);
+                    _d.set(Math.cos(a) * r, Math.sin(a) * r, 0);
+                    _v.copy(hand).add(_d);
+                    fx.spark(_v, cols[side === 'left' ? 0 : 3], 0.12, _d.set(0, 0.25, 0), 0.7);
+                }
+            }
             for (let i = 0; i < 3; i++) {
                 const a = A.t * 6 + i * 2.1, h = -1.9 + k * 4.4;
                 fx.spark(_v.set(me.x + Math.cos(a) * 1.3, me.y + h, me.z + Math.sin(a) * 1.3), cols[i % 4], 0.11, _d.set(-Math.sin(a) * 1.2, 0.6, Math.cos(a) * 1.2), 0.9);

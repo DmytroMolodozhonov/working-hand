@@ -1488,9 +1488,9 @@ export class Duel {
         } else if (spell === 'Expelliarmus') {
             g.hud.flashColor?.('rgba(200, 16, 46, 0.45)');
             // the wand (else the sword) flies out of my hand: a real throw, it lands somewhere about
-            const out = knockOutOfMyHand(g);
+            const out = knockOutOfMyHand(g, Math.random, !!opts?.clash);
             this._note({ ev: 'disarmed', out });
-            g.hud.setVoice(out === 'wand' ? '🪄 Экспеллиармус! Ваша палочка отлетела — подберите её'
+            g.hud.setVoice(out === 'protected' ? '🙌 Сильные руки удержали вашу палочку!' : out === 'wand' ? '🪄 Экспеллиармус! Ваша палочка отлетела — подберите её'
                 : out === 'weapon' ? '🪄 Экспеллиармус! Оружие вылетело из руки — подберите его'
                     : '🪄 Экспеллиармус! В руке ничего не было — вас только толкнуло', true);
             g.impact?.apply({ v: push(3), from, by: byId, spell: 'Expelliarmus', jolt: 2, noShield: true });
@@ -2083,10 +2083,10 @@ export class Duel {
      * Someone I killed died (a player, or an NPC wizard — the host tells me): a clash I just won
      * against them = a real duel won (mana: 45% of their maximum above 30, at least +1; without a clash: 25%).
      */
-    opponentDied(id, oppMax = 30, pos = null, aware = true) {
+    opponentDied(id, oppMax = 30, pos = null, fought = true) {
         const w = this._won;
         if (!w || w.id !== id || performance.now() - w.at > 8000) {
-            this.game.mana?.killWon(oppMax, id, pos, this._mastery(id), aware); // (killed some other way: 25% of his mana as cells, and 5 + 15% of his mastery)
+            this.game.mana?.killWon(oppMax, id, pos, this._mastery(id), fought); // (NPC: only after he cast at the killer; the beam-clash reward below is unchanged)
             return false;
         }
         this._won = null;

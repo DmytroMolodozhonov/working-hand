@@ -102,7 +102,7 @@ test('Survival: the gargoyles and the monster make only the picture at the word 
         assert.equal(t.p.cast(true, `пентаграниум ${PENT_NAMES[id].say[0]}`, aim()), 'Pentagranium', id);
         const m = [...t.p.marks.values()][0];
         assert.equal(m?.pent, id); assert.equal(m.offer, id, 'it waits for the offering');
-        assert.equal(t.g.combat.fatigue, 500, 'no mana at the word'); assert.equal(t.calls.ritual, 0, 'no ritual yet');
+        assert.equal(t.g.combat.fatigue, 450, 'author 08.11: drawing costs 50; the rite pays separately'); assert.equal(t.calls.ritual, 0, 'no ritual yet');
         assert.ok(m.life > 100, 'the picture does not burn out in 6 s while it waits');
         assert.match(t.said.at(-1), id === 'gargoyles' ? /три тела/ : id === 'monster' ? /рог Минотавра/ : /одно тело/);
     }
@@ -120,5 +120,5 @@ test('Survival: the gargoyles refuse at the word only for a reason of the PLACE 
     assert.equal(busy.p.cast(true, 'пентаграниум гаргульес', aim()), 'Pentagranium', 'another ritual near is checked when the things are laid');
     const poor = stub({ mode: 'survival', fatigue: 0 });
     poor.p.learnFigure('gargoyles');
-    assert.equal(poor.p.cast(true, 'пентаграниум гаргульес', aim()), 'Pentagranium', 'no mana is needed to draw it');
+    assert.equal(poor.p.cast(true, 'пентаграниум гаргульес', aim()), null, 'author 08.11: drawing needs 50 mana');
 });

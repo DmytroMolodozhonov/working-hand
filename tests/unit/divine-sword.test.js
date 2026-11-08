@@ -208,8 +208,8 @@ test('makeDivineSword: a floating divine sword of the weapon system (for Creativ
     assert.equal(makeDivineSword({}, 0, 0, 0), null, 'no weapon system: nothing');
 });
 
-test('UNITED unchanged: 120 mana, +30 dark (the secret rite costs the same)', () => {
-    assert.equal(UNITED.COST, 120);
+test('UNITED: creation costs 50, darkness stays +30 (author 08.11: every pentagram costs 50 to create)', () => {
+    assert.equal(UNITED.COST, 50);
     assert.equal(UNITED.DARK, 30);
 });
 

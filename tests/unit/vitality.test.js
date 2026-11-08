@@ -20,8 +20,8 @@ test('the pentagram: its own name, black, 250 mana, its own drawing, a scroll th
     assert.equal(pentagramWords('пентаграниум вита'), 'life', 'Vita is another pentagram');
     assert.equal(matchSpell('пентаграниум сангвинис'), 'Pentagranium');
     assert.equal(PENTAGRAMS.vitality.dark, true);
-    assert.equal(CAST_COST.vitality, 250);
-    assert.equal(VITAL.COST, 250);
+    assert.equal(CAST_COST.vitality, 50, 'author 08.11: every creation costs 50');
+    assert.equal(VITAL.COST, 50);
     assert.ok(figureOf('vitality') && figureIds().includes('vitality'));
 });
 

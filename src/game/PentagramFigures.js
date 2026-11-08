@@ -190,3 +190,13 @@ export const MURUS_LINES = (() => {
     const seam1 = [pt(-0.2, -0.78), pt(-0.2, -0.5)], seam2 = [pt(0.25, -0.5), pt(0.25, -0.28)], seam3 = [pt(-0.4, -0.5), pt(-0.4, -0.28)];
     return [wall, burst, brick1, brick2, seam1, seam2, seam3];
 })();
+
+/** «Сильные руки»: two closed fists lock round a central wand; paired knuckles and cuffs. */
+export const GRIP_LINES = (() => {
+    const fist = (k) => [pt(k * 0.12, -0.12), pt(k * 0.18, 0.34), pt(k * 0.34, 0.48), pt(k * 0.52, 0.4), pt(k * 0.69, 0.2), pt(k * 0.63, -0.12), pt(k * 0.4, -0.3)];
+    const cuffs = (k) => [pt(k * 0.33, -0.3), pt(k * 0.65, -0.12), pt(k * 0.83, -0.48), pt(k * 0.49, -0.67)];
+    return [fist(1), fist(-1), cuffs(1), cuffs(-1),
+        [pt(-0.045, -0.87), pt(-0.045, 0.83), pt(0.045, 0.83), pt(0.045, -0.87)],
+        ...[-1, 1].flatMap((k) => [0.25, 0.42, 0.56].map((x) => [pt(k * x, 0.27), pt(k * (x + 0.07), 0.1)])),
+        ...chain(0, 1), ...chain(0, 15)];
+})();

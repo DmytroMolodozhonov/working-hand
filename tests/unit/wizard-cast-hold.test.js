@@ -103,9 +103,12 @@ test('before every spell a wizard says it — about a second, standing, facing t
     const v = { id: 3, x: 0, y: 0, z: 0, yaw: 0, speed: 2, mana: 50, W: { cast: 2 }, castCd: 0 };
     assert.ok(f._begin(v, 'Stupefy', 'p1', foe, { cost: 12, cd: 2 }));
     assert.ok(!f._begin(v, 'Stupefy', 'p1', foe), 'one at a time');
+    assert.equal(v.castAtPlayers, undefined, 'starting the words is not combat yet');
     for (let i = 0; i < 120; i++) { t += 1 / 60; f._prepTick(v, 1 / 60); assert.equal(v.speed, 0); assert.equal(v.mode === 'cast' || firedAt != null, true); }
     assert.ok(firedAt >= CAST_PREP.T - 1e-6 && firedAt <= CAST_PREP.T + CAST_PREP.JITTER + 0.05, `flew at ${firedAt}`);
     assert.equal(v.mana, 38);
+    assert.deepEqual([...v.castAtPlayers], ['p1'], 'the released spell counts only against its target');
+    assert.ok(!v.castAtPlayers.has('p2'), 'another player earns nothing for this shot');
     assert.ok(v.castCd >= 2 - 1e-6 && !v.prep);
     // his back to the foe: he can't begin saying it (first he turns)
     const w = { id: 4, x: 0, y: 0, z: 0, yaw: Math.PI, mana: 50, W: { cast: 2 } };
@@ -114,4 +117,12 @@ test('before every spell a wizard says it — about a second, standing, facing t
     const u = { id: 5, x: 0, y: 0, z: 0, yaw: 0, mana: 50, W: { cast: 2 } };
     f._begin(u, 'Stupefy', 'p1', foe); u.stunT = 3;
     assert.ok(!f._prepTick(u, 0.1) && !u.prep);
+    assert.equal(u.castAtPlayers, undefined, 'an interrupted spell does not count');
+    f._begin(v, 'Stupefy', 'p2', foe);
+    f._cast = () => false;
+    f._prepTick(v, 2);
+    assert.ok(!v.castAtPlayers.has('p2'), 'blocked or failed release does not count');
+    f._cast = () => true;
+    f._prepTick(v, 0.1);
+    assert.ok(v.castAtPlayers.has('p2'), 'one successful release is enough, no hit or clash needed');
 });

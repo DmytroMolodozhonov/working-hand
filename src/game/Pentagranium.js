@@ -87,6 +87,7 @@ const OFFER_TEXT = {
 };
 
 const USE_TEXT = {
+    grip: 'Положите на круг голову плотоядного растения, встаньте в круг и заплатите 150 маны — вы получите сильные руки',
     devil: 'Положите на неё тело убитого волшебника с помощью «Вингардиум Левиосы»: вы получите ещё часть его силы (нужно 50 маны)',
     teleport: 'Создайте вторую такую же где угодно, потом встаньте на любую из них и простойте 3 секунды (50 маны) — вы окажетесь на другой',
     life: 'Встаньте на неё (50 маны) — здоровье восстановится целиком',
@@ -195,7 +196,7 @@ export class Pentagranium {
         const origin = _o.set(p.x, this._height(p.x, p.z), p.z);
         if (g.wards?.forbids?.(origin, origin)) return hint('🛡️ Здесь чужая защита дома — пентаграмма не держится');
         const offer = !this.creative && OFFERINGS[id] ? id : null; // (survival: the ritual of the gargoyles / the monster needs things on the circle — Offerings.js)
-        const cost = offer && OFFERINGS[id].mana ? 0 : CAST_COST[id] || 0, c = g.combat; // (the hell's pentagram: its 150 at the word, the body after) // (…and its mana is paid when they have been laid, not at the word)
+        const cost = CAST_COST[id], c = g.combat; // The same 50 for every drawing; use / offering pays its own price.
         if (cost && manaRules(g) && (c?.fatigue || 0) < cost) return hint(`🩸 Нужно ${cost} маны — у вас ${Math.floor(c?.fatigue || 0)}`);
         const def = TABLE[id], center = { x: p.x, y: origin.y, z: p.z };
         const r = offer ? (id === 'gargoyles' ? this._canGargoyles(center) : undefined) : this._use1(def, center); // (an offering: the ritual waits for the things)
@@ -205,7 +206,8 @@ export class Pentagranium {
         const mark = this._place(`${g.localId}:${Date.now().toString(36)}${this._n++}`, g.localId, id, p.x, center.y, p.z, PENT.R, rot, true);
         if (!mark) return null;
         this._castId = id; this._castAt = now;
-        mark.mine = true; mark.prepaid = cost > 0; mark.offer = offer;
+        mark.mine = true; mark.prepaid = false; // Creation pays for the drawing only; the rite pays separately.
+        mark.offer = offer;
         this._permanent(mark);
         this._others(mark);
         g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: p.x, y: center.y, z: p.z, r: PENT.R, rot, perm: mark.perm ? 1 : 0, pair: mark.pair || null });
@@ -512,9 +514,9 @@ export class Pentagranium {
             if (s.cd > 0) return;
             const done = g.hydro?.useCircle({ m, pays, hint, mana, fx: () => this._useFx('hydro', m, true) });
             if (done) s.cd = 30; // (a gift given once)
-        } else if (m.pent === 'darkward' || m.pent === 'fireward' || m.pent === 'blastward') {
+        } else if (m.pent === 'grip' || m.pent === 'darkward' || m.pent === 'fireward' || m.pent === 'blastward') {
             if (s.cd > 0) return;
-            const done = g.resist?.useCircle(m.pent === 'darkward' ? 'dark' : m.pent === 'blastward' ? 'blast' : 'fire', { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
+            const done = g.resist?.useCircle(m.pent === 'grip' ? 'grip' : m.pent === 'darkward' ? 'dark' : m.pent === 'blastward' ? 'blast' : 'fire', { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
             if (done) s.cd = 30; // (a gift given once)
         } else if (m.pent === 'firm') {
             if (s.cd > 0) return;
@@ -555,7 +557,7 @@ export class Pentagranium {
 
     /** The glow of a use: a pillar of sparks, a ring spreading, a flash (the shared flash light) and a sound; shown to everybody (`pgm` fx). */
     _useFx(kind, m, send = false) {
-        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8], darkward: [0xf4f0ff, 0xfff4d0], fireward: [0xff9a3a, 0xffe0a0], blastward: [0xc8d6e4, 0xf2c24a], hydro: [0x6fc4ff, 0xe8f6ff] }[kind] || [0xffffff, 0xffe9a8];
+        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8], darkward: [0xf4f0ff, 0xfff4d0], fireward: [0xff9a3a, 0xffe0a0], grip: [0x7be7c5, 0xe0fff4], blastward: [0xc8d6e4, 0xf2c24a], hydro: [0x6fc4ff, 0xe8f6ff] }[kind] || [0xffffff, 0xffe9a8];
         if (fx) {
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 2;
@@ -564,7 +566,7 @@ export class Pentagranium {
             for (let i = 0; i < 40; i++) fx.spark(_o.set(m.x + (Math.random() - 0.5) * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * 1.6), col[i % 2], 0.2, _d.set((Math.random() - 0.5) * 0.6, 4 + Math.random() * 6, (Math.random() - 0.5) * 0.6), 1.6);
             fx.lightFlash?.(_o.set(m.x, m.y + 1.5, m.z), col[1], 3, 0.5, m.r * 4 + 10);
         }
-        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : kind === 'firm' || kind === 'fireward' || kind === 'blastward' ? 'fxFirm' : kind === 'darkward' ? 'fxLife' : kind === 'hydro' ? 'fxLife' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
+        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : kind === 'grip' || kind === 'firm' || kind === 'fireward' || kind === 'blastward' ? 'fxFirm' : kind === 'darkward' ? 'fxLife' : kind === 'hydro' ? 'fxLife' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
         if (send) g.sync?.pentagram?.({ k: 'fx', kind, x: m.x, y: m.y, z: m.z, r: m.r });
     }
 
@@ -645,11 +647,11 @@ export class Pentagranium {
         if (m.mine && typeof stand === 'function' && m.fade > 0.9) {
             const me = g.character.group.position, S = g.character.size || 1;
             const inCircle = Math.hypot(me.x - m.x, me.z - m.z) <= m.r * USE.INSIDE_K && Math.abs(me.y - PLAYER_GROUND_OFFSET * S - m.y) < 3 && !!g.character.onGround;
-            if (g.monster) g.monster.prepaid = !!m.prepaid; // (its 200 mana were taken at the word)
+            if (g.monster) g.monster.prepaid = !!m.prepaid; // (its ritual mana were paid by the offering)
             if (stand(g, m, dt, inCircle)) { this._remove(m.id, 'old'); return; }
         }
         if (m.mine && m.pent === 'breakward' && g.breakward && (!m.offer || m.prepaid) && Math.hypot(g.character.group.position.x - m.x, g.character.group.position.z - m.z) < m.r) {
-            g.breakward.prepaid = !!m.prepaid; // (its 50 mana were taken at the word)
+            g.breakward.prepaid = !!m.prepaid; // (its ritual mana were paid by the offering)
             const why = g.breakward.activate(); // (stepped on: the mark is put on once, the drawing goes out; no mana — a hint — leaves it)
             if (why === null || why === 'защита уже сломана') { this._remove(m.id, 'old'); return; }
         }

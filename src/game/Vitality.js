@@ -1,7 +1,7 @@
 /**
  * Vitality.js — the game part of «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`; rules and numbers: VitalityRules.js).
  *
- * The pentagram is made by the word (Pentagranium.cast: 250 mana, black magic). Then the body of a humanoid killed by BLACK magic (not bones) lies in its
+ * The pentagram is made by the word (Pentagranium.cast: 50 mana, black magic). Then the body of a humanoid killed by BLACK magic (not bones) lies in its
  * circle (laid by the hand, thrown, lowered by Levitation) and the hero stands in the circle alone: the rite begins by itself.
  *
  * The rite (RITUAL_S = 7 s, the author's «кровь»): 0–1.4 s the hero rises over the ground and hangs there; the body melts into blood — red mist and drops

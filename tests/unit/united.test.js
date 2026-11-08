@@ -91,7 +91,7 @@ test('refusals with a clear hint: plain wand, bread, bones, a hero\'s body, an a
 test('«Pentagranium Unitas»: its own word and picture, a black pentagram, 120 mana, +30 dark at the word (100 at most); no scroll of its own besides the pentagram\'s', () => {
     assert.equal(pentagramWords('пентаграниум унитас'), 'unity');
     assert.equal(pentagramSpell('unity'), 'Pentagranium Unitas');
-    assert.ok(PENTAGRAMS.unity.dark && PENTAGRAMS.unity.darkBonus === UNITED.DARK && CAST_COST.unity === UNITED.COST && figureOf('unity'));
+    assert.ok(PENTAGRAMS.unity.dark && PENTAGRAMS.unity.darkBonus === UNITED.DARK && CAST_COST.unity === 50 && figureOf('unity'));
     const said = [];
     const g = {
         config: { mode: 'freeworld' }, hud: { setVoice: (t) => said.push(t) },
@@ -104,12 +104,12 @@ test('«Pentagranium Unitas»: its own word and picture, a black pentagram, 120 
     p.fx = { trailBegin() {}, trailEnd() {}, trailAdd() {}, trailPulse() {}, trailLine() {}, trailBreak() {}, add() {}, set() {}, remove() {}, ambient() {}, sampleModels: () => [] };
     p.learnFigure('unity');
     const aim = () => ({ origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() });
-    g.combat.fatigue = 100;
+    g.combat.fatigue = 49; // author 08.11: the drawing costs 50, not the separate ritual's 120
     assert.equal(p.cast(true, 'пентаграниум унитас', aim()), null, 'not enough mana');
     assert.equal(g.dark.level, 0);
     g.combat.fatigue = 200;
     assert.equal(p.cast(true, 'пентаграниум унитас', aim()), 'Pentagranium');
-    assert.equal(g.combat.fatigue, 80);
+    assert.equal(g.combat.fatigue, 150);
     assert.equal(g.dark.level, 30, '+30 at once');
     g.dark.level = 90; p._castId = null; g.combat.fatigue = 200;
     p.cast(true, 'пентаграниум унитас', aim());

@@ -11,7 +11,7 @@
  */
 
 export const VITAL = {
-    COST: 250, // маны при слове (Pentagranium.CAST_COST)
+    COST: 50, // маны при слове (Pentagranium.CAST_COST)
     DARK: 10, // уровней тёмной магии за обряд
     RITUAL_S: 7, // сколько идёт обряд
     ABSORB_T: 4.6, // когда кровь впиталась (точка невозврата): здоровье прибавляется здесь

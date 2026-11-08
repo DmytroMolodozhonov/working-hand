@@ -25,6 +25,7 @@
  * The host owns loose things and the castle people; everybody sees the same flying wand.
  */
 
+import { holdsWand } from './ResistRules.js';
 import * as THREE from 'three';
 import { starterWand, rollWand, newUid } from './ItemTypes.js';
 import { DROP_TOOLS } from '../entities/VillagerModel.js';
@@ -108,10 +109,11 @@ const _p = new THREE.Vector3();
  * My wand (else my sword) is knocked out of my hand: it flies off and lands as a loose thing.
  * → 'wand' | 'weapon' | null (nothing in my hands to knock out).
  */
-export function knockOutOfMyHand(game, rng = Math.random) {
+export function knockOutOfMyHand(game, rng = Math.random, lostClash = false) {
     const g = game, items = g.items;
     const w = items?.heldOf?.('wand');
     if (w) {
+        if (holdsWand(g.resist?.strongHands, lostClash)) return 'protected';
         const pos = w.model.position.clone(), quat = w.model.quaternion.clone();
         const f = pickFlight(g, pos, rng);
         if (g.wandMagic?.light) g.wandMagic._nox?.(false); // (Lumos goes out with the wand)

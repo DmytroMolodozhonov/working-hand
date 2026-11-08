@@ -1532,6 +1532,7 @@ export class CastleLife {
         tickSlow(v, dt); // («Даст»: slowed for a while)
         if (v.wizard && v.fx) this.wizards?.fight?.lostFocus(v); // (stunned / lifted / dead: his concentration is gone)
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; this._deadFall(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
+        if (v.savior != null) g.savior?.manaStep(v, dt); // (including stun / flight: exactly one mana update)
         if (v.sleep && this.night?.step(v, dt)) return; // (going to bed, asleep, getting up — NightLife.js)
         // held up by «Вингардиум Левиоса»: Levitation carries the body
         if (v.carriedBy) { v.mode = 'flail'; v.speed = 0; return; } // (in a gargoyle's claws: hanging, kicking — Gargoyles._carry holds the place)
@@ -3298,8 +3299,8 @@ export class CastleLife {
 
     _die(v, by) {
         if (v.entry?.dummy) { v.hp = v.maxHp || v.hp || 10; return; } // (the training dummy never dies: School.js)
-        // (did the wizard know who was against him — fought him, held a grudge, saw him? An ambush he never noticed is no duel: no mastery for it)
-        const aware = !!v.wizard && by != null && this._isPlayer(by) && (v.foe === by || v.grudge?.id === by || this.knowsFrom(v, by, null, null, v.cs?.castSeen));
+        // The NPC must have released a spell at the killer; noticing, anger and aiming alone do not count.
+        const fought = !!v.castAtPlayers?.has(by);
         this.rel?.onHit(v, by, true); // (a killing: the town's opinion of the hero — Relations.js)
         v.dead = true;
         if (by != null && this._isPlayer(by)) this._wanderWitness(v, by); // (the travellers who saw it: 50 / 50 — WandererMind)
@@ -3325,7 +3326,7 @@ export class CastleLife {
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
         }
         if (v.wizard && this.auth) { if (v.savior != null) this.game.savior?.onDeath(v, by); else if (!quiet) this.game.savior?.noteKill(by, v); } // (the white Saviour: ten killed in a row bring him — Savior.js)
-        if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z], aw: aware ? 1 : 0 }); // (mana: a wizard beaten in a duel)
+        if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z], aw: fought ? 1 : 0 }); // (aw now means a spell released at this player; the host decides for guests too)
         if (v.role === 'king') this._capture(v.cs, by);
         else if (v.entry?.elder && !st.kingDead) { // (a settlement's Elder: the hall's chests open; the wizards are not «captured» — WizVillages.js)
             st.kingDead = true;

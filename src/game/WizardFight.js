@@ -37,7 +37,7 @@ import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './Knight
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
 import { DUEL, DUEL_SPELLS } from './Duel.js';
-import { PVP, shieldHitCost, pressCost } from './Combat.js';
+import { PVP, SPELL_COST, shieldHitCost, pressCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
 import { lessonSpell } from './BumpRules.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
@@ -285,13 +285,15 @@ export class WizardFight {
             L._ground(v);
             return true;
         }
-        v.shieldT = (v.shieldT || 0) - dt; v.domeT = (v.domeT || 0) - dt; v.castT = (v.castT || 0) - dt; v.blinkFx = (v.blinkFx || 0) - dt;
-        if (v.shieldT <= 0) v.fx &= ~FX.SHIELD;
-        if (v.domeT <= 0) v.fx &= ~FX.DOME; // (quiet a while: he lets it go — his «стоп»)
-        // a held shield / dome takes mana every second (as a player's); none left — it falls apart
-        const hold = ((v.fx & FX.SHIELD) ? PVP.SHIELD_DRAIN : 0) + ((v.fx & FX.DOME) ? PVP.DOME_DRAIN : 0);
-        if (hold) { v.mana -= hold * dt; if (v.mana <= 0) { v.mana = 0; this._shatter(v, FX.SHIELD | FX.DOME); } }
-        if (v.blinkFx <= 0) v.fx &= ~FX.BLINK;
+        if (v.savior == null) {
+            v.shieldT = (v.shieldT || 0) - dt; v.domeT = (v.domeT || 0) - dt; v.castT = (v.castT || 0) - dt; v.blinkFx = (v.blinkFx || 0) - dt;
+            if (v.shieldT <= 0) v.fx &= ~FX.SHIELD;
+            if (v.domeT <= 0) v.fx &= ~FX.DOME; // (quiet a while: he lets it go — his «стоп»)
+            // a held shield / dome takes mana every second (as a player's); none left — it falls apart
+            const hold = ((v.fx & FX.SHIELD) ? PVP.SHIELD_DRAIN : 0) + ((v.fx & FX.DOME) ? PVP.DOME_DRAIN : 0);
+            if (hold) { v.mana -= hold * dt; if (v.mana <= 0) { v.mana = 0; this._shatter(v, FX.SHIELD | FX.DOME); } }
+            if (v.blinkFx <= 0) v.fx &= ~FX.BLINK;
+        }
         // the wand knocked out of the hand («Экспеллиармус»): no magic — away from him
         if (v.noWand) {
             L._steer(v, v.x + (v.x - fp.x), v.z + (v.z - fp.z), RUN, dt);
@@ -337,7 +339,7 @@ export class WizardFight {
             if (!there) this._stuck(v, spot, dt); else v.stk = null;
         }
         if (!moving) { v.speed = 0; this._turnTo(v, fp, dt); }
-        if (wt?.role === 'retreat' && !moving) { v.mana = Math.min(v.maxMana, v.mana + W.regen * 2 * dt); v.hp = Math.min(v.maxHp, v.hp + 0.3 * dt); }
+        if (v.savior == null && wt?.role === 'retreat' && !moving) { v.mana = Math.min(v.maxMana, v.mana + W.regen * 2 * dt); v.hp = Math.min(v.maxHp, v.hp + 0.3 * dt); }
         if (shot) this._tryCast(v, fp, d, sq);
         v.mode = v.castT > 0 ? 'cast' : (v.fx & FX.SHIELD) ? 'shield' : moving ? (v.speed > WALK * 1.4 ? 'run' : 'walk') : 'idle';
         if (v.mode === 'shield') v.aimPitch = 0;
@@ -542,9 +544,11 @@ export class WizardFight {
     _begin(v, spell, foeId, fp, o = {}) {
         if (v.prep || v.noWand) return false;
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
+        const cost = v.savior != null ? (SPELL_COST[spell] ?? o.cost ?? NPC_COST[spell] ?? 10) : (o.cost ?? NPC_COST[spell] ?? 10);
+        if (v.mana < cost) return false;
         const t = v.savior != null ? 0.4 : prepTime(); // (the Saviour says it at once: no seconds of standing silent)
         if (v.lesson) v.lesson.casts++;
-        v.prep = { spell, foe: foeId, at: o.at || null, vs: o.vs || null, cost: o.cost ?? (NPC_COST[spell] ?? 10), cd: o.cd ?? v.W.cast, sq: o.sq || null, t, age: 0 };
+        v.prep = { spell, foe: foeId, at: o.at || null, vs: o.vs || null, cost, cd: o.cd ?? v.W.cast, sq: o.sq || null, t, age: 0 };
         v.castCd = Math.max(v.castCd ?? 0, t + 0.1); // (nothing else begun meanwhile)
         return true;
     }
@@ -577,6 +581,8 @@ export class WizardFight {
         if (!this.clearShot(v, fp, target) && !(v.savior != null && P.age > 1.2)) return true; // (the Saviour waits for a clear line no longer than a second)
         // (a moment more: the line may clear; the target himself is never «in the way»)
         if (!this._cast(v, P.spell, P.foe, fp, P.vs, P.at)) return true; // (not facing it fully yet: still turning)
+        // A noticed foe is not a fight: only a spell actually released at this player counts.
+        if (!P.at && P.foe != null) (v.castAtPlayers || (v.castAtPlayers = new Set())).add(P.foe);
         v.prep = null;
         v.mana -= P.cost;
         v.castCd = Math.max(v.castCd ?? 0, P.cd);
@@ -770,7 +776,7 @@ export class WizardFight {
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
         if (!g.spells?.cast) return false;
-        try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return true; } // (a mistake in the spell is not a crash of the game)
+        try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return false; } // (a failed spell is not entry into combat)
         g.sync?.spell?.(spell, _o, _d, 'right');
         const me = g.character.group.position;
         if (Math.hypot(me.x - v.x, me.z - v.z) < 60) g.sound?.spellCast?.(spell, _o);
@@ -989,10 +995,14 @@ export class WizardFight {
     /** The Master is gone in a puff of smoke — and stands a dozen metres off. */
     _blink(v, fp) {
         const L = this.life;
+        // A short magical flight: the Saviour pays the player's take-off price, only on success.
+        const cost = v.savior != null ? SPELL_COST.Flight : 0;
+        if (v.mana < cost) return;
         const a0 = Math.atan2(v.z - fp.z, v.x - fp.x);
         for (const da of [0, 0.7, -0.7, 1.4, -1.4]) {
             const p = L._groundSpot(v, fp, a0 + da, 12);
             if (Math.abs(p.y - v.y) > 3 || !L._walkable(p.x, p.z, p.y)) continue;
+            v.mana -= cost;
             this.wl.fx.smoke(v);
             v.x = p.x; v.z = p.z; v.y = p.y; v.path = null;
             this.wl.fx.smoke(v);

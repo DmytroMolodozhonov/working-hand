@@ -18,6 +18,8 @@
  * Who / what (CLAUDE.md): `SAVIOR_TARGETS`.
  */
 
+import { SPELL_COST } from './Combat.js';
+
 export const SAVIOR = {
     WINDOW_S: 120, // s: the kills are counted within this time …
     KILLS: 10, // … this many wizards killed by one player
@@ -129,12 +131,12 @@ export const SAVIOR_SPECIAL = new Set(['WindMaxima', 'BombardoMaxima', 'Bombardo
 export function pickSpecial({ seen = {}, cd = {}, dist = 20, mana = 100, crowd = 1, rng = Math.random }) {
     const ok = (n, cost) => (cd[n] ?? 0) <= 0 && mana >= cost;
     const lately = (n) => seen[n] != null && seen[n] <= SAVIOR.SEEN_S;
-    if (lately('BombardoMaxima') && ok('BombardoMaxima', 25)) return 'BombardoMaxima';
-    if ((lately('Bombardo') || lately('BombardoMaxima')) && ok('Bombardo', 10)) return 'Bombardo';
-    if (crowd >= 2 && ok('Bombardo', 10)) return 'Bombardo'; // (a crowd of enemies — the blasts roll over all of them, seen or not)
-    if (crowd >= 2 && dist < 30 && ok('WindMaxima', 18)) return 'WindMaxima';
-    if (dist < SAVIOR.WIND_NEAR && ok('WindMaxima', 18)) return 'WindMaxima';
-    if (dist < 24 && ok('WindMaxima', 18) && rng() < 0.01) return 'WindMaxima';
+    if (lately('BombardoMaxima') && ok('BombardoMaxima', SPELL_COST.BombardoMaxima)) return 'BombardoMaxima';
+    if ((lately('Bombardo') || lately('BombardoMaxima')) && ok('Bombardo', SPELL_COST.Bombardo)) return 'Bombardo';
+    if (crowd >= 2 && ok('Bombardo', SPELL_COST.Bombardo)) return 'Bombardo'; // (a crowd of enemies — the blasts roll over all of them, seen or not)
+    if (crowd >= 2 && dist < 30 && ok('WindMaxima', SPELL_COST.WindMaxima)) return 'WindMaxima';
+    if (dist < SAVIOR.WIND_NEAR && ok('WindMaxima', SPELL_COST.WindMaxima)) return 'WindMaxima';
+    if (dist < 24 && ok('WindMaxima', SPELL_COST.WindMaxima) && rng() < 0.01) return 'WindMaxima';
     return null;
 }
 

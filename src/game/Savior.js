@@ -16,7 +16,8 @@
 import * as THREE from 'three';
 import { SAVIOR, STAGES, stageOf, GX0, KillWatch, saviorComes, saviorLine, pickSpecial, dangerNow } from './SaviorRules.js';
 import { turnToward, yawTo, FACE } from './FaceTarget.js';
-import { NPC_COST } from './WizardAI.js';
+import { PVP, SPELL_COST } from './Combat.js';
+import { FLIGHT } from './Flight.js';
 import { FX } from './WizardLife.js';
 
 const DAY_S = 24 * 60; // s of game a game day (Bounty.js: Game.DAY_CYCLE_MS)
@@ -116,7 +117,7 @@ export class Savior {
         v.savior = st.n; v.fly = true; v.removable = false;
         v.maxHp = st.hp; v.hp = st.hp; v.maxArmor = st.ward; v.armor = st.ward;
         v.W = { ...v.W, hp: st.hp, ward: st.ward, mana: st.mana, dome: st.dome, stunK: SAVIOR.STUN_K, spells: SAVIOR.SPELLS };
-        v.mana = v.maxMana = st.mana; v.castCd = 2; v.domeCd = 0;
+        v.maxMana = st.mana; v.mana = st.mana - SPELL_COST.Flight; v.castCd = 2; v.domeCd = 0;
         v.foe = by; v.grudge = { id: by, until: Date.now() + 3600e3 };
         this.announce(v.name || 'Волшебник-спаситель', v.entry?.female);
         this.game.sync?.saviorCome?.(v.name || 'Волшебник-спаситель', !!v.entry?.female); // (the guests are told too)
@@ -179,7 +180,36 @@ export class Savior {
         const fp = { x: pp.x, y: pp.y - 0.4, z: pp.z }; // (the chest: the hero's group is higher than his feet)
         if (!this.life.wizards?.fight?.clearShot?.(v, fp)) return;
         const F = this.life.wizards.fight;
-        if (F._begin(v, spell, this.foe, fp, { cost: NPC_COST[spell], cd: 1.2 })) this.cd[spell] = SAVIOR.SPECIAL_CD[spell];
+        if (F._begin(v, spell, this.foe, fp, { cost: SPELL_COST[spell], cd: 1.2 })) this.cd[spell] = SAVIOR.SPECIAL_CD[spell];
+    }
+
+    /** One host-owned budget, on every living frame, even when the flight skips WizardFight. */
+    manaStep(v, dt) {
+        if (!this.auth || v !== this.v || v.dead) return;
+        v.shieldT = Math.max(0, (v.shieldT || 0) - dt);
+        v.domeT = Math.max(0, (v.domeT || 0) - dt);
+        v.castT = Math.max(0, (v.castT || 0) - dt);
+        v.blinkFx = Math.max(0, (v.blinkFx || 0) - dt);
+        if (!v.shieldT) v.fx &= ~FX.SHIELD;
+        if (!v.domeT) v.fx &= ~FX.DOME;
+        if (!v.blinkFx) v.fx &= ~FX.BLINK;
+        const shield = ((v.fx & FX.SHIELD) ? PVP.SHIELD_DRAIN : 0) + ((v.fx & FX.DOME) ? PVP.DOME_DRAIN : 0);
+        const flight = v.fly ? (this.air || this.rocket || v.speed > 0.3 ? FLIGHT.COST : FLIGHT.HOVER_COST) : 0;
+        // Like the player: no regeneration while holding a shield; flight exceeds base regeneration.
+        v.mana = Math.max(0, Math.min(v.maxMana, v.mana + (shield ? 0 : PVP.FATIGUE_REGEN * dt)) - (shield + flight) * dt);
+        if (v.mana <= 0) {
+            this.life.wizards?.fight?._shatter(v, FX.SHIELD | FX.DOME);
+            v.fx &= ~(FX.SHIELD | FX.DOME);
+            v.shieldT = v.domeT = 0;
+            v.prep = null;
+            if (v.fly) { v.fly = false; v.vy = -0.01; this.air = null; this.rocket = false; this.opener = false; }
+        }
+    }
+
+    /** Aerial healing is magic too: one mana per health point, limited by the remaining store. */
+    _heal(v, amount) {
+        const n = Math.min(amount, Math.max(0, v.maxHp - v.hp), v.mana);
+        v.hp += n; v.mana -= n;
     }
 
     // ------------------------------------------------------------ the flight (CastleLife._think calls it before the wizard's own fight)
@@ -190,9 +220,13 @@ export class Savior {
     _drive(v, dt) {
         if (v !== this.v || !this.auth || v.dead) return false;
         if (v.stunT > 0 || v.vy || v.lev || v.carriedBy) return false; // (thrown / stunned: the ordinary code — never a hovering stunned man)
-        const L = this.life, g = this.game, F = L.wizards?.fight, W = v.W || {};
+        const L = this.life, g = this.game, F = L.wizards?.fight;
         const pp = L._playerPos(this.foe);
         if (!pp) return false;
+        if (!v.fly) {
+            if (v.mana < SPELL_COST.Flight + FLIGHT.COST) return false;
+            v.mana -= SPELL_COST.Flight; v.fly = true;
+        }
         const now = performance.now() / 1000;
         // the ground: a danger? (the damage of the last seconds, health, mana)
         if (!this.air) {
@@ -237,10 +271,7 @@ export class Savior {
         const A = this.air;
         A.t += dt;
         // the common upkeep (the wizard's own think() is skipped while he flies)
-        if (W.regen) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
         v.castCd -= dt; v.domeCd -= dt; v.windCd -= dt; v.blinkCd -= dt;
-        v.shieldT = (v.shieldT || 0) - dt; v.domeT = (v.domeT || 0) - dt; v.castT = (v.castT || 0) - dt;
-        if (v.shieldT <= 0) v.fx &= ~FX.SHIELD;
         const c = g.collision, gy = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY(v.x, v.z);
         const dx = pp.x - v.x, dz = pp.z - v.z, d = Math.hypot(dx, dz) || 1;
         let targetY = gy + SAVIOR.SKY_H, moveX = 0, moveZ = 0, speed = 0;
@@ -251,7 +282,7 @@ export class Savior {
         } else if (A.st === 'away') {
             moveX = -dx / d; moveZ = -dz / d; speed = SAVIOR.AIR_SPEED;
             v.yaw = yawTo(v.x, v.z, v.x + moveX, v.z + moveZ);
-            v.hp = Math.min(v.maxHp, v.hp + SAVIOR.AIR_REGEN * dt);
+            this._heal(v, SAVIOR.AIR_REGEN * dt);
             if (d >= SAVIOR.AWAY[0] || A.t >= SAVIOR.AWAY[1]) { A.st = 'strafe'; A.t = 0; A.bomb = 1.2; }
         } else if (A.st === 'strafe') {
             // round the foe at STRAFE_R, high up: the bombs from above
@@ -260,13 +291,13 @@ export class Savior {
             const ex = wx - v.x, ez = wz - v.z, ed = Math.hypot(ex, ez);
             if (ed > 0.6) { moveX = ex / ed; moveZ = ez / ed; speed = Math.min(SAVIOR.AIR_SPEED, ed * 2.5); }
             face(pp.x, pp.z);
-            v.hp = Math.min(v.maxHp, v.hp + SAVIOR.AIR_REGEN * 0.5 * dt);
+            this._heal(v, SAVIOR.AIR_REGEN * 0.5 * dt);
             A.bomb -= dt;
             if (F._prepTick(v, dt)) { /* (saying a bomb: it flies when it is said) */ }
-            else if (A.bomb <= 0 && !v.prep && v.mana >= 25) {
-                const spell = v.mana >= 60 && Math.random() < 0.4 ? 'BombardoMaxima' : 'Bombardo';
+            else if (A.bomb <= 0 && !v.prep && v.mana >= SPELL_COST.Bombardo) {
+                const spell = v.mana >= SPELL_COST.BombardoMaxima && Math.random() < 0.4 ? 'BombardoMaxima' : 'Bombardo';
                 const fp = { x: pp.x, y: pp.y - 0.4, z: pp.z };
-                if (F._begin(v, spell, this.foe, fp, { cost: NPC_COST[spell], cd: 1 })) A.bomb = SAVIOR.BOMB_EVERY;
+                if (F._begin(v, spell, this.foe, fp, { cost: SPELL_COST[spell], cd: 1 })) A.bomb = SAVIOR.BOMB_EVERY;
             }
             if (A.t >= SAVIOR.STRAFE_T) { A.st = 'land'; A.t = 0; }
         } else if (A.st === 'land') {

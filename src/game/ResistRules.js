@@ -26,6 +26,7 @@ export const RESIST = {
     CHECK_S: 1, // s: how often the dark level is looked at
     FLOWERS: ['sun_herb', 'glowcap_mushroom', 'azure_berry'], // the three flowers of the white circle (the wild flowers of the world that can be picked)
     FIRE_ITEM: 'brightCore', // the heart of the Brightflower — the fire flower
+    GRIP_ITEM: 'carnivoreHead', // the head of a carnivorous plant, lying on the circle
     BLAST_ITEM: 'armor_leaf', // the leaf of the Armourleaf (Бронелист) — the flower that looks like armour (MagicFlora.js)
     BLAST_K: 0.5, // the other blasts (Boom, Inspirius, a cannonball): × this
 };
@@ -88,8 +89,16 @@ export const findFireHeart = (loose = []) => loose.find((x) => x?.item?.kind ===
 /** The leaf of the Armourleaf lying on the circle → {uid, item} | null. Pure. */
 export const findArmorLeaf = (loose = []) => loose.find((x) => x?.item?.kind === RESIST.BLAST_ITEM && (x.item.count ?? 1) >= 1) || null;
 
+export const findGripHead = (loose = []) => loose.find((x) => x?.item?.kind === RESIST.GRIP_ITEM && (x.item.count ?? 1) >= 1) || null;
+
+/** Strong hands protects the wand against an ordinary hit, never a lost two-beam clash. */
+export const holdsWand = (hasGift, lostClash = false) => !!hasGift && !lostClash;
+
 /** Texts for the person. */
 export const RESIST_HINT = {
+    gripHave: 'У вас уже сильные руки — второй раз обряд не нужен',
+    noHead: 'Положите на круг голову плотоядного растения, затем встаньте в круг',
+    gripDone: '🙌 Ваш хват стал крепче: «Экспеллиармус» выбьет палочку только при проигрыше в столкновении двух лучей',
     darkHave: 'У вас уже есть защита от тёмной магии — второй раз не нужно',
     blastHave: 'У вас уже есть защита от взрывов — второй раз не нужно',
     fireHave: 'У вас уже есть защита от огня — второй раз не нужно',
@@ -109,7 +118,7 @@ export const RESIST_HINT = {
 
 /** ON WHOM / ON WHAT (CLAUDE.md): who the gifts act on (only the hero who stands in the circle) and what the circles do to the rest. */
 export const RESIST_TARGETS = {
-    me: { does: 'gift', why: 'герой в белом круге платит 150 маны и получает дар навсегда (до смерти); тёмные заклинания по нему вдвое слабее / обычный огонь его не берёт' },
+    me: { does: 'gift', why: 'герой в белом круге платит 150 маны и получает дар навсегда (до смерти); тёмные заклинания по нему вдвое слабее / обычный огонь его не берёт / сильные руки удерживают палочку от Экспеллиармуса, кроме проигрыша в столкновении лучей' },
     players: { does: 'gift', why: 'в сети каждый платит и получает дар на своём компьютере; удар по нему режется там же, где он принят (Combat.damage), хосту знать не нужно' },
     zombies: { does: 'none', why: 'на существ круг не действует' },
     castlePeople: { does: 'none', why: 'жителей не пугает: белая магия' },

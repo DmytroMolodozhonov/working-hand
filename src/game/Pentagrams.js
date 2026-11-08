@@ -38,10 +38,11 @@ export const PENTAGRAMS = {
     // «Пентаграмма объединённой силы»: два предмета одного вида — в один, бафы складываются (UnitedRules.js, UnitedPower.js); чёрная магия, +30 к тьме при слове
     unity: {
         id: 'unity',
+        lootStrong: true, // preserve its rare-scroll tier independently of the universal drawing price
         title: 'Пентаграмма объединённой силы',
         dark: true,
         glow: 0x8a2be2, // багрово-фиолетовое
-        cost: 120, // маны при слове
+        cost: 0, // отдельной платы за обряд нет; создание — 50
         once: false,
         scroll: 'PentagramUnity',
         darkBonus: 30, // сразу +30 уровней тёмной магии (в сумме не больше 100)
@@ -51,10 +52,11 @@ export const PENTAGRAMS = {
     // «Пентаграмма чудовищной живучести»: тело убитого чёрной магией человекоподобного растворяется кровью — максимум ХП жертвы прибавляется герою (VitalityRules.js, Vitality.js); чёрная магия
     vitality: {
         id: 'vitality',
+        lootStrong: true,
         title: 'Чудовищная живучесть',
         dark: true,
         glow: 0xb0102a, // кровавый
-        cost: 250, // маны при слове
+        cost: 0, // отдельной платы за обряд нет; создание — 50
         once: false,
         scroll: 'PentagramVitality',
         lines: VITALITY_LINES,

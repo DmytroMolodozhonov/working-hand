@@ -48,7 +48,7 @@ test('the rite gives once more 25 % of the killed one\'s power (maximum − 30),
 });
 
 test('the cost and the sizes are the author\'s', () => {
-    assert.equal(PENT.COST, 20); assert.equal(PENT.DRAIN, 1);
+    assert.equal(PENT.COST, 50); assert.equal(PENT.DRAIN, 1);
     assert.equal(PENT.R_MIN, 3); assert.equal(PENT.R_MAX, 8); // (the author: a circle of 3…8 m radius; a hero is 3.5 m)
 });
 

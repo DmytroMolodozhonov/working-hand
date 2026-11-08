@@ -38,7 +38,7 @@ test('the name, the figure, the price: «Pentagranium Infernum», a black pentag
     assert.equal(matchSpell('пентаграниум инфернум'), 'Pentagranium', 'the pentagram, never «Инферно»');
     assert.equal(pentagramWords('инфернум'), null, 'the name alone is no spell');
     const def = PENTAGRAMS.infernum;
-    assert.ok(def.dark && figureOf('infernum')); assert.equal(def.darkBonus, 10); assert.equal(CAST_COST.infernum, 150); assert.equal(INFERNUM.COST, 150);
+    assert.ok(def.dark && figureOf('infernum')); assert.equal(def.darkBonus, 10); assert.equal(CAST_COST.infernum, 50); assert.equal(INFERNUM.COST, 50);
     assert.ok(strongPentagrams().dark.includes('infernum'), 'one of the strongest black ones (the Castle of Ghosts\' chests)');
 });
 
@@ -46,12 +46,12 @@ test('the word (outside Creative): 150 mana and +10 to the darkness at once; the
     const t = stub();
     t.p.learnFigure('infernum');
     assert.equal(t.p.cast(true, 'пентаграниум инфернум', aim()), 'Pentagranium');
-    assert.equal(t.g.combat.fatigue, 350);
+    assert.equal(t.g.combat.fatigue, 450, 'author 08.11: every creation costs 50');
     assert.equal(t.g.dark.level, 10);
     const m = [...t.p.marks.values()][0];
     assert.equal(m.pent, 'infernum'); assert.equal(m.offer, 'infernum'); assert.ok(m.dark);
     assert.match(t.said.at(-1), /тело любого убитого существа/);
-    const poor = stub({ fatigue: 100 });
+    const poor = stub({ fatigue: 49 });
     poor.p.learnFigure('infernum');
     assert.equal(poor.p.cast(true, 'пентаграниум инфернум', aim()), null);
     assert.equal(poor.p.marks.size, 0); assert.equal(poor.g.dark.level, 0, 'no darkness without the pentagram');
@@ -63,7 +63,7 @@ test('the word (outside Creative): 150 mana and +10 to the darkness at once; the
 
 test('the offering: ONE body of ANY killed creature (a villager, a player, a zombie, an animal\'s carcass) — never bones, never a hero\'s power', () => {
     const b = (o) => ({ id: 'b' + Math.random(), k: 'v', x: 0, y: 0, z: 0, ...o });
-    assert.equal(OFFERINGS.infernum.bodies, 1); assert.ok(OFFERINGS.infernum.any); assert.equal(OFFERINGS.infernum.mana, 0, 'the mana was paid at the word');
+    assert.equal(OFFERINGS.infernum.bodies, 1); assert.ok(OFFERINGS.infernum.any); assert.equal(OFFERINGS.infernum.mana, 0, 'the creation fee was paid at the word');
     for (const k of ['v', 'p', 'z', 'a', 'x']) assert.ok(assess('infernum', { bodies: [b({ k })] }).ok, 'any creature: ' + k);
     assert.equal(assess('infernum', { bodies: [b({ bones: {} })] }).ok, false);
     assert.equal(assess('infernum', { bodies: [b({ lg: 1 })] }).ok, false);

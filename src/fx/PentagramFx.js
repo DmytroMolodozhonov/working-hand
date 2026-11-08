@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { PENT, figureLines } from '../game/PentagramRules.js';
+import { PENT, figureLines, figureOf } from '../game/PentagramRules.js';
 
 const RIBBON_VERT = `
 attribute float aAlong;
@@ -168,14 +168,15 @@ export function figureGeometry(cx, cz, R, pent, rot, h) {
     rb.polyline(h, outer, 0.14, true);
     // the figure's lines (the star): each cut into short pieces so it follows the ground; the same way round as the recognition found it
     const lines = figureLines(pent, rot).map((poly) => poly.map(([x, z]) => [cx + x * R, cz + z * R]));
-    const corners = [];
+    const sigils = figureOf(pent)?.def.sigils; // complex drawings may choose a few clear anchors instead of a sigil at every knuckle
+    const corners = sigils ? sigils.map(([x, z]) => [cx + x * R, cz + z * R]) : [];
     lines.forEach((poly, li) => {
         for (let k = 0; k < poly.length; k++) {
             const a = poly[k], b = poly[(k + 1) % poly.length], pcs = Math.max(4, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.6));
             const pts = [];
             for (let i = 0; i <= pcs; i++) pts.push([a[0] + (b[0] - a[0]) * i / pcs, a[1] + (b[1] - a[1]) * i / pcs]);
             rb.polyline(h, pts, Math.max(0.28, R * 0.08), false, (li * 5 + k) * 3.1);
-            if (!corners.some((c) => Math.hypot(c[0] - a[0], c[1] - a[1]) < 0.01)) corners.push(a);
+            if (!sigils && !corners.some((c) => Math.hypot(c[0] - a[0], c[1] - a[1]) < 0.01)) corners.push(a);
         }
     });
     // ticks between the rings (a calendar of small strokes) and a sigil (a small ring with a dot and a cross) at each corner of the figure

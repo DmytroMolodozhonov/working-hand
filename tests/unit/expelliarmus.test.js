@@ -179,3 +179,18 @@ test('disarming a wizard (or a knight) is an attack: the castle takes it as one 
     d.applyToCreature('Expelliarmus', wiz, 'me', new THREE.Vector3(0, 3, 0));
     assert.equal(hits.length, 1);
 });
+
+// Author 08.11: strong hands protects only the wand; a lost beam clash is the one exception.
+test('strong hands: player and guest keep the wand on a normal hit, lose it in a lost beam clash', () => {
+    for (const guest of [false, true]) {
+        const { g, ev } = fakeGame(); g.resist = { strongHands: true };
+        const sent = [];
+        if (guest) { g.items.auth = false; g.sync = { itemThrow: (item) => sent.push(item) }; }
+        const d = duelOf(g);
+        d.applyToMe('Expelliarmus', 'enemy');
+        assert.ok(g.items.held.right); assert.equal(ev.released.length, 0); assert.equal(ev.spawned.length + sent.length, 0);
+        assert.ok(ev.voice.some((t) => /Сильные руки/.test(t)));
+        d.applyToMe('Expelliarmus', 'enemy', 'right', { clash: true });
+        assert.equal(g.items.held.right, null); assert.equal(ev.released.length, 1); assert.equal(ev.spawned.length + sent.length, 1);
+    }
+});

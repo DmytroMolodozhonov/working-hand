@@ -8,7 +8,7 @@
  *       form is its own spell («Вайнд» +1, «Вайнд Максима» +3). Casting it again: nothing.
  *     • a duel won AND the opponent wizard killed by it (a player, a tower's wizard, a wanderer):
  *       45% of (his maximum − 30), at least +1 (duelGain); killed some other way (a bomb, a sword, an ambush): 25% (killGain), the
- *       same flow-of-power animation; won but he lives (lifted with Leviosa,
+ *       same flow-of-power animation (NPC: only after a spell released at the killer); won but he lives (lifted with Leviosa,
  *       stunned…): +1…+3 at random. Each opponent counts once (a win once, a kill once).
  *     • the first kill of each MAGICAL creature kind, to whoever struck the last blow
  *       (MAGIC_KILL: the winged pig +3 … the giant spider, a dragon +20). Ordinary creatures —
@@ -273,10 +273,11 @@ export class Mana {
     }
 
     /** The opponent `id` killed by me without a clash won (a bomb, a sword, an ambush): 25%, once per opponent. */
-    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0, aware = true) {
+    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0, fought = true) {
+        if (!fought) return 0; // (author: no cells or mastery until the NPC actually casts at the killer)
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (already paid — a duel or a kill)
         if (id != null) this.duelsWon.set(String(id), 'kill');
-        if (aware) this.masteryWon(id, true, oppMax, oppMastery, false); // (a kill without a beam clash: 5 and 15% of his mastery — in every mode; an ambush he never noticed does not count)
+        this.masteryWon(id, true, oppMax, oppMastery, false); // (a kill after entering combat, without a beam clash: 5 and 15% of his mastery)
         if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
         const n = killGain(oppMax);
         this.grow(n, 'killWiz');

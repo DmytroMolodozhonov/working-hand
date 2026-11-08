@@ -7,12 +7,14 @@ import { GHOST_CHESTS } from '../../src/game/GhostRules.js';
 import { PENTAGRAMS } from '../../src/game/Pentagrams.js';
 import { createRng } from '../../src/core/math.js';
 
-test('the strong pentagrams: both colours, only the ones that cost 100 mana or more (or by a formula) and the devil\'s', () => {
+test('the strong pentagrams: both colours, rare scroll tiers survive the universal creation price', () => {
     const { dark, white } = strongPentagrams();
     assert.ok(dark.length >= 3 && white.length >= 2, 'both colours');
     for (const id of dark) assert.ok(PENTAGRAMS[id].dark, id);
     for (const id of white) assert.ok(!PENTAGRAMS[id].dark, id);
-    for (const id of dark.concat(white)) { const c = PENTAGRAMS[id].cost; assert.ok(typeof c !== 'number' || c >= 100 || id === 'devil', id + ' is weak'); }
+    // Author 08.11: drawing costs 50 for all; former expensive drawings retain their rare-scroll tier.
+    for (const oldStrong of ['unity', 'vitality', 'infernum']) assert.ok(dark.includes(oldStrong), oldStrong + ' stays rare');
+    for (const id of dark.concat(white)) { const f = PENTAGRAMS[id], c = f.cost; assert.ok(f.lootStrong || typeof c !== 'number' || c >= 100 || id === 'devil', id + ' is weak'); }
     for (const weak of ['teleport', 'life', 'bare', 'night', 'breakward']) assert.ok(![...dark, ...white].includes(weak), weak + ' is not for the ghosts');
 });
 

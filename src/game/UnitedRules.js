@@ -13,7 +13,7 @@ import { divineSwordItem } from './DivineSword.js';
 const VILLAGERS = new Set(['v']);
 
 export const UNITED = {
-    COST: 120, // мана при слове
+    COST: 50, // мана при слове
     DARK: 30, // уровней тёмной магии сразу (в сумме не больше 100 — DarkMagic.addDark)
     RITUAL_S: 5.4, // сколько идёт обряд
     HOVER_Y: 3.4, // на какой высоте над кругом парят предметы (герой ~3,5 м)

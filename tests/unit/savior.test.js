@@ -108,3 +108,61 @@ test('a crowd of enemies: he blasts and winds without having seen a Bombardo', (
     assert.equal(pickSpecial({ seen: {}, cd: { Bombardo: 5 }, dist: 20, mana: 200, crowd: 3, rng: () => 0.9 }), 'WindMaxima');
     assert.equal(pickSpecial({ seen: {}, cd: {}, dist: 20, mana: 200, crowd: 1, rng: () => 0.9 }), null);
 });
+
+test('Saviour: hovering, rocket and every aerial phase spend mana; exhaustion grounds him and cancels magic', async () => {
+    const { FLIGHT } = await import('../../src/game/Flight.js');
+    const { FX } = await import('../../src/fx/WizardFx.js');
+    for (const phase of ['hover', 'rocket', 'up', 'away', 'strafe', 'land']) {
+        const S = new Savior({ authority: true, castleLife: { wizards: { fight: { _shatter() {} } } } });
+        const v = S.v = { mana: 100, maxMana: 700, fly: true, hp: 60, speed: 0, fx: 0 };
+        if (phase === 'rocket') S.rocket = true;
+        else if (phase !== 'hover') S.air = { st: phase };
+        S.manaStep(v, 1);
+        assert.equal(v.mana, 101 - (phase === 'hover' ? FLIGHT.HOVER_COST : FLIGHT.COST), phase);
+        v.fx = FX.DOME; v.domeT = 1000; v.prep = { spell: 'Bombardo' };
+        for (let i = 0; i < 200 && v.fly; i++) S.manaStep(v, 1);
+        assert.equal(v.fly, false, `${phase}: cannot fly forever`);
+        assert.equal(v.mana, 0); assert.ok(v.vy < 0);
+        assert.equal(v.prep, null); assert.equal(v.fx & FX.DOME, 0); assert.equal(S.air, null);
+        S.manaStep(v, 1);
+        assert.equal(v.mana, 1, 'regenerates on the ground');
+        assert.equal(v.fly, false, 'regeneration does not restore free flight');
+    }
+});
+
+test('Saviour: spells cost the same as player spells, are paid once at release, and cannot cast when short', async () => {
+    const { SPELL_COST } = await import('../../src/game/Combat.js');
+    const { WizardFight } = await import('../../src/game/WizardFight.js');
+    const foe = { x: 0, y: 1.95, z: -10 };
+    const F = new WizardFight({ life: { _playerPos: () => foe }, game: { duel: { clashes: [] } } });
+    F.clearShot = () => true; F._cast = () => true;
+    for (const spell of WHITE_SPELLS) {
+        const v = { id: 's', savior: 0, x: 0, y: 0, z: 0, yaw: 0, mana: 100, W: { cast: 1 } };
+        assert.ok(F._begin(v, spell, 'p', foe, { cost: 1 }));
+        assert.equal(v.mana, 100, 'preparation alone does not pay');
+        F._prepTick(v, 0.5);
+        assert.equal(v.mana, 100 - SPELL_COST[spell], spell);
+        F._prepTick(v, 0.5);
+        assert.equal(v.mana, 100 - SPELL_COST[spell], 'no double charge');
+        v.mana = SPELL_COST[spell] - 1;
+        assert.equal(F._begin(v, spell, 'p', foe), false, spell + ': not enough mana');
+    }
+});
+
+test('Saviour: blink and aerial healing have a budget; failed blink is free', async () => {
+    const { WizardFight } = await import('../../src/game/WizardFight.js');
+    const { SPELL_COST } = await import('../../src/game/Combat.js');
+    const L = { _groundSpot: () => ({ x: 0, y: 0, z: -12 }), _walkable: () => true, _say() {} };
+    const F = new WizardFight({ life: L, game: {}, fx: { smoke() {} } });
+    const v = { savior: 0, mana: SPELL_COST.Flight, x: 0, y: 0, z: 0, W: { blink: { cd: 12 } } };
+    F._blink(v, { x: 0, z: 1 });
+    assert.equal(v.mana, 0); assert.equal(v.z, -12);
+    v.z = 0; F._blink(v, { x: 0, z: 1 });
+    assert.equal(v.z, 0, 'no free blink at zero');
+    v.mana = 30; L._walkable = () => false;
+    F._blink(v, { x: 0, z: 1 }); assert.equal(v.mana, 30, 'failed blink is not paid');
+    const S = new Savior({});
+    Object.assign(v, { hp: 55, maxHp: 60, mana: 2 });
+    S._heal(v, 4); assert.equal(v.hp, 57); assert.equal(v.mana, 0);
+    S._heal(v, 4); assert.equal(v.hp, 57, 'cannot heal with empty mana');
+});

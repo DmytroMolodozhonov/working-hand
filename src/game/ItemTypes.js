@@ -557,7 +557,7 @@ export function strongPentagrams() {
     for (const id of figureIds()) {
         const f = figureOf(id)?.def;
         if (!f) continue;
-        const strong = typeof f.cost !== 'number' || f.cost >= 100 || id === 'devil';
+        const strong = f.lootStrong || typeof f.cost !== 'number' || f.cost >= 100 || id === 'devil';
         if (strong) (f.dark ? out.dark : out.white).push(id);
     }
     return out;
@@ -736,7 +736,7 @@ export const SCROLL_WEIGHTS = [
     ['AvadaKedavra', 4], ['Sectura', 2.5], ['Caligo', 2], ['Spiralis', 0.6], ['Accentric', 2.5], ['Electrum', 2.5], ['Pilbidrio', 1.2], ['TotalDestruction', 1.5], ['Hellfire', 1.5],
     ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],
     ['pent:devil', 0.9], ['pent:*', 0.7], // (the pentagrams' scrolls — rare, Pentagrams.js)
-    ['pent:night', 0.6], ['pent:sight', 0.6], ['pent:firm', 0.6], ['pent:darkward', 0.6], ['pent:fireward', 0.6], ['pent:hydro', 0.6], ['pent:blastward', 0.6], // (…and the white pentagram of absolute steadiness — FirmRules.js)
+    ['pent:night', 0.6], ['pent:sight', 0.6], ['pent:firm', 0.6], ['pent:darkward', 0.6], ['pent:fireward', 0.6], ['pent:hydro', 0.6], ['pent:blastward', 0.6], ['pent:grip', 0.6], // (…and the white pentagram of absolute steadiness — FirmRules.js)
     // (the white pentagrams of sight — SightRules.js: as rare as the devil's, so a hero can find them)
     ['Imperius', 1.2], // (the mind into another body: rare, as the strong ones; a plain chest rerolls it most of the time — MIGHTY)
 ];
@@ -1001,7 +1001,7 @@ function describeItemBase(it) {
         case 'canaryHide': return { title: '🟫 Кожа канарика', color: 0x8a6a44, lines: [`Кож: <b>${it.count || 1}</b>`, 'Грубая плотная кожа болотного жителя, с жёлтой бахромой из перьев', 'Её можно продать на рынке; позже из неё будут делать вещи'] };
         case 'bone': return { title: '🦴 Кость', color: 0xe6dcba, lines: [`Костей: <b>${it.count || 1}</b>`, 'Крепкая жёлтая кость. Её можно продать на рынке; позже из костей будут делать украшения и инструменты'] };
         case 'brightCore': return { title: '🔥 Сердцевина Ярколета', color: 0xffa21f, lines: [`Сердцевин: <b>${it.count || 1}</b>`, 'Тёплая светящаяся сердцевина огненного цветка Ярколето: внутри ещё живёт огонь', 'Её можно продать на рынке. Позже из неё будут варить зелья — храните про запас'] };
-        case 'carnivoreHead': return { title: '🌿 Головка плотоядной', color: 0x6fb83a, lines: [`Головок: <b>${it.count || 1}</b>`, 'Оторванная ловушка-пасть плотоядного растения: зубчики, жилки, липкая слизь', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
+        case 'carnivoreHead': return { title: '🌿 Головка плотоядной', color: 0x6fb83a, lines: [`Головок: <b>${it.count || 1}</b>`, 'Оторванная ловушка-пасть плотоядного растения: зубчики, жилки, липкая слизь', 'Нужна для обряда пентаграммы сильных рук: положите головку на круг'] };
         case 'swanWings': return { title: '🦢 Крылья лебедя', color: 0xf4f2ea, lines: [`Пар: <b>${it.count || 1}</b>`, 'Белые крылья обычного лебедя с озера', 'Бросьте в кипящий котёл вместе с золотым яблоком: выйдет зелье крыльев (годятся и обычные крылья, и магические)'] };
         case 'glowfinTail': return { title: '🐟 Хвост светлохвоста', color: 0x7fe6ff, lines: [`Штук: <b>${it.count || 1}</b>`, 'Прозрачные плавники ещё светятся — с магической рыбы глубин', 'Бросьте в кипящий котёл вместе с грушей Баксади: выйдет зелье русалки'] };
         case 'magicSwanWings': return { title: '🦢 Магические крылья лебедя', color: 0xbfdcff, lines: [`Пар: <b>${it.count || 1}</b>`, 'Перламутровые, светятся изнутри — с магического лебедя', 'Бросьте в кипящий котёл вместе с золотым яблоком: выйдет зелье крыльев'] };

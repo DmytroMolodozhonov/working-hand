@@ -483,7 +483,7 @@ export class WizardLife {
     think(v, dt) {
         const W = v.W;
         if (W) {
-            v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
+            if (v.savior == null) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
             v.castCd -= dt; v.domeCd -= dt; v.windCd -= dt; v.blinkCd -= dt;
         }
         if (v.practice) {

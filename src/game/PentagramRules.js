@@ -13,11 +13,11 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
-import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES, MURUS_LINES } from './PentagramFigures.js';
+import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES, MURUS_LINES, GRIP_LINES } from './PentagramFigures.js';
 import { INFERNUM } from './HellRules.js';
 
 export const PENT = {
-    COST: 20, // mana at once (Combat.SPELL_COST.Pentagranium)
+    COST: 50, // author 08.11: creating EVERY pentagram costs 50, separate from its rite
     DRAIN: 1, // mana a second while drawing
     R: 3.5, // m: EVERY pentagram has this one size (the author: «все пентаграммы одного размера»): the hero is 3.5 m, a body lies inside
     DRAW_T: 2.8, // s: the figure draws itself this long (a tip of light runs round the ring and along its lines), then it fades in
@@ -132,15 +132,20 @@ registerPentagram({
     effect: 'Бросьте в круг лист бронелиста, встаньте в круг и заплатите 150 маны — «Бомбарда» и «Бомбарда Максима» вас больше не ранят, а другие взрывы бьют вдвое слабее. Отбросить и повалить вас взрыв по-прежнему может.',
 });
 
+registerPentagram({
+    id: 'grip', title: 'Пентаграмма сильных рук', dark: false, glow: 0x7be7c5, cost: 150, permanent: true, scroll: 'PentagramGrip', lines: GRIP_LINES, sigils: [[0, 1], [-1, 0], [0, -1], [1, 0]],
+    effect: 'Положите на круг голову плотоядного растения, встаньте в круг и заплатите 150 маны — «Экспеллиармус» больше не выбьет палочку, кроме проигрыша в столкновении двух лучей.',
+});
+
 // The WHITE pentagram of water power (HydroRules.js, PentagramHydro.js): hold a liquid water spell («Waterbollow») at the stand, 50 mana — the water spells take their water from the air (not in a desert).
 registerPentagram({
     id: 'hydro', title: 'Пентаграмма водяной силы', dark: false, glow: 0x6fc4ff, cost: 50, permanent: true, scroll: 'PentagramHydro', lines: HYDRO_LINES,
     effect: 'Поднимите шар воды «Waterbollow» (жидкую воду, не лёд), встаньте в круг, не отпуская её, и заплатите 50 маны — водяным заклинаниям больше не нужна река: воду они возьмут из влажности воздуха. В пустынях воздух слишком сух.',
 });
 
-// «Пентаграмма ада» (HellRules.js, HellGate.js): чёрная; 150 маны и +10 к тьме при слове, жертва — одно тело любого убитого существа, шаг в открытый круг — в ад.
+// «Пентаграмма ада» (HellRules.js, HellGate.js): чёрная; 50 маны и +10 к тьме при слове, жертва — одно тело любого убитого существа, шаг в открытый круг — в ад.
 registerPentagram({
-    id: 'infernum', title: 'Пентаграмма ада', dark: true, glow: 0xff3010, cost: INFERNUM.COST, darkBonus: INFERNUM.DARK, once: false, scroll: 'PentagramInfernum', lines: INFERNUM_LINES,
+    id: 'infernum', lootStrong: true, title: 'Пентаграмма ада', dark: true, glow: 0xff3010, cost: 0, darkBonus: INFERNUM.DARK, once: false, scroll: 'PentagramInfernum', lines: INFERNUM_LINES,
     effect: 'Открывает врата в ад. Положите на круг тело любого убитого существа — оно сгорит, врата откроются, и, постояв в круге, вы окажетесь в аду. Чтобы вернуться, положите на метку в аду голову горгульи.',
 });
 
@@ -161,7 +166,7 @@ export const isPentagramScroll = (it) => !!it && it.kind === 'scroll' && it.stat
  * The mana taken at the word (the author: «в этот момент снимается мана»). Others take theirs where the effect itself pays: the gargoyles' ritual
  * (150, when it starts), the enchanting rite (30 % of the current mana when the thing is laid), the devil rite (50, over the body), mending (by pieces).
  */
-export const CAST_COST = { teleport: 50, life: 50, monster: 200, breakward: 50, unity: 120, vitality: 250, infernum: INFERNUM.COST };
+export const CAST_COST = Object.fromEntries(figureIds().map((id) => [id, PENT.COST])); // author: one creation price for all; ritual costs stay separate
 
 /** The figure's turn so that its apex points away from the hero standing at (hx, hz) (it reads upright from where he stands). */
 export const turnAway = (cx, cz, hx, hz) => { const dx = cx - hx, dz = cz - hz, d = Math.hypot(dx, dz) || 1; return Math.atan2(-dx / d, dz / d); };
