@@ -34,7 +34,7 @@ export class PerfLog {
         const gpu = globalThis.__zns?.gpu?.name || '';
         const nav = globalThis.navigator || {};
         const c = g.renderer?.domElement;
-        this._push(`=== старт ${new Date().toLocaleString('ru-RU')} | режим ${g.config?.mode} | видеокарта: ${gpu || '?'} | ядер ${nav.hardwareConcurrency || '?'}, памяти ${nav.deviceMemory || '?'} ГБ | экран ${globalThis.screen?.width}x${globalThis.screen?.height} ×${globalThis.devicePixelRatio || 1} | холст ${c?.width}x${c?.height} | ${nav.userAgent || ''}`);
+        this._push(`=== старт ${new Date().toLocaleString('ru-RU')} | режим ${g.config?.mode} | видеокарта: ${gpu || '?'} | ядер ${nav.hardwareConcurrency || '?'}, памяти ${nav.deviceMemory || '?'} ГБ | экран ${globalThis.screen?.width}x${globalThis.screen?.height} ×${globalThis.devicePixelRatio || 1} | холст ${c?.width}x${c?.height} | прорисовка мира: ${g.config?.viewDistance ?? 'по умолчанию'} (×${(g.world?.viewDistance ?? 1).toFixed(1)}) | ${nav.userAgent || ''}`);
     }
 
     /** Something happened (a spell, a join…): it shows in the next line. */
