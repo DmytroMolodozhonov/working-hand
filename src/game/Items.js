@@ -181,7 +181,7 @@ const _hq = new THREE.Quaternion();
  * or both hands behind the back. Body space: x right, y up from the hips, the body looks along −Z, its back is at z +0.4;
  * the hero ~3.5 m tall, shoulders at ±0.7 (y ≈ 0.5 above the hips… the arm anchor), arm 1.9 m. The camera's depth is rough, so loose.
  */
-export const BACKPACK_WEAR = { T: 0.35, T_SHOULDER: 0.6, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7, T_OFF: 1.2, STASH_T: 0.5 }; // (T_OFF: an EMPTY hand behind the back this long takes the worn backpack off)
+export const BACKPACK_WEAR = { T: 0.35, T_SHOULDER: 0.6, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7, T_OFF: 1.2, STASH_T: 0.5, MAX_MOVE_V: 4, LOCK_MS: 2500 }; // (T_OFF: an EMPTY hand behind the back this long takes the worn backpack off)
 export function backpackSpot(hand, other, shoulder) {
     const bx = Math.abs(hand.x), sy = shoulder ? shoulder.y : 0.5;
     // behind the back (either hand with the pack; the arm's depth is a guess, so the band is wide)
@@ -1565,10 +1565,21 @@ export class ItemSystem {
      * What can go wrong: a full hand/wand never counts; the monster form has no such hands; a pack taken off while the cells are full
      * keeps every thing (Inventory.setExtraSlots never loses one).
      */
+    /** Running / flying / a fast move: the arms swing behind the back — no putting on or taking off then (the author 08.11: the pack came off and on again while running). */
+    _packMoving(dt, ch) {
+        const p = ch.group.position, l = this._packLast || (this._packLast = { x: p.x, z: p.z, v: 0 });
+        const v = dt > 0 ? Math.hypot(p.x - l.x, p.z - l.z) / dt : 0;
+        l.x = p.x; l.z = p.z; l.v += (Math.min(v, 60) - l.v) * Math.min(1, dt * 6);
+        this._packV = l.v;
+        return l.v > BACKPACK_WEAR.MAX_MOVE_V;
+    }
+    _packLocked() { return performance.now() < (this._packLockUntil || 0); }
+
     _takeOff(dt, ch) {
         const w = this.worn.backpack;
         const g = this.game;
         if (!w || g.monster?.active || g.dead) { this._offT = 0; return; }
+        if (this._packV > BACKPACK_WEAR.MAX_MOVE_V || this._packLocked()) { this._offT = 0; return; }
         let side = null;
         for (const sd of ['right', 'left']) {
             if (this.held[sd] || g.weapons?.hands?.[sd]?.held || g.boards?.handBusy?.(sd)) continue;
@@ -1583,6 +1594,7 @@ export class ItemSystem {
         this._offT = (this._offT || 0) + dt;
         if (this._offT < BACKPACK_WEAR.T_OFF) return;
         this._offT = 0;
+        this._packLockUntil = performance.now() + BACKPACK_WEAR.LOCK_MS; // (not put straight back on by the same hand behind the back)
         const item = w.item;
         this.game.scene.remove(w.model); disposeModel(w.model);
         this.worn.backpack = null;
@@ -1623,10 +1635,12 @@ export class ItemSystem {
     }
 
     _wear(dt, ch) {
+        this._packMoving(dt, ch); // (once a frame: how fast I go — running, the arms swing behind the back)
         this._takeOff(dt, ch);
         this._stash(dt, ch);
         const bp = this.heldOf('backpack');
         if (!bp || (bp.item.shop && !bp.item.shop.paid)) { this._wearT = 0; this._wearWhy = null; return; }
+        if (this._packLocked() || this._packV > BACKPACK_WEAR.MAX_MOVE_V) { this._wearT = 0; return; }
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
         const spot = backpackSpot(ch.getHandWorldPosition(bp.side, _v).applyMatrix4(_inv),
@@ -1637,6 +1651,7 @@ export class ItemSystem {
         if (this._wearT < (spot === 'shoulder' ? BACKPACK_WEAR.T_SHOULDER : BACKPACK_WEAR.T)) { if (!spot && this._wearT === 0 && this._wearWhy !== 'far') { this._wearWhy = 'far'; handLog('рюкзак не надет: рука не у плеча и не за спиной'); } return; }
         this._wearT = 0; this._wearWhy = null;
         const item = this.releaseHand(bp.side);
+        this._packLockUntil = performance.now() + BACKPACK_WEAR.LOCK_MS;
         this.wear(item);
     }
 

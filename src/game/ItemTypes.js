@@ -796,6 +796,9 @@ export const SEA_SCROLLS = ['Unfurl', 'Unfurl', 'WaveAttack', 'AirBubble', 'Wate
 /** The Ice Queen's scrolls: the ice. */
 export const ICE_SCROLLS = ['IceCastle', 'IceBridge', 'IceMaxima', 'Snowman'];
 
+/** The golden magic backpack is HIDDEN from the game for now (the author 08.11: «пока из игры убери, просто скрой кодом»): no chest gives one. Set true to bring it back (MagicPack.js, Items._stash stay as they are). */
+export const MAGIC_PACK_ON = false;
+
 /** The golden magic backpack: no cells of its own; what does not fit the cells goes inside (`store`), unseen — MagicPack.js. */
 export function newMagicBackpack() {
     return { kind: 'backpack', magic: true, uid: newUid(), slots: 0, color: 0xe0b43c, store: [] };
@@ -808,7 +811,7 @@ export function rollKeyItem(r = Math.random) {
     if (x < 0.52) return rollScroll(r);
     if (x < 0.66) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: true, bonus: randInt(r, 1, 60), uid: newUid() };
     if (x < 0.76) { const t = randInt(r, 0, 2); return { kind: 'shield', uid: newUid(), type: t, magic: true, max: randInt(r, 20, 50) }; }
-    if (x < 0.86) return r() < 0.2 ? newMagicBackpack() : { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) }; // (one in five: the golden magic one)
+    if (x < 0.86) return MAGIC_PACK_ON && r() < 0.2 ? newMagicBackpack() : { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) }; // (one in five: the golden magic one)
     if (x < 0.975) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: true, bonus: randInt(r, 1, 60), arrows: 10 };
     return { kind: 'hammer', uid: newUid(), charges: 0 };
 }

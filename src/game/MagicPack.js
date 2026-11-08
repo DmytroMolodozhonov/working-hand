@@ -14,6 +14,7 @@
  *     no free hand → nothing leaves it; the thing was gone → the hint; the pack is far → nothing (it is only heard near, REACH).
  */
 
+import { MAGIC_PACK_ON } from './ItemTypes.js';
 import * as THREE from 'three';
 import { namedGoods, normWords } from './MarketChoice.js';
 
@@ -97,6 +98,7 @@ export class MagicPack {
      * Only «Акцио» + a name is ours; bare «Акцио» is the spell (the pack on the ground flies to the hand like any thing).
      */
     hear(text) {
+        if (!MAGIC_PACK_ON) return false; // (hidden for now: ItemTypes.MAGIC_PACK_ON)
         const g = this.game;
         if (!g.active || !g.items?.auth) return false;
         const p = parseAccioName(text);
