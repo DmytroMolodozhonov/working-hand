@@ -120,12 +120,12 @@ void main() {
     vec2 q = (vUv - 0.5) * 2.0;
     float r = length(q), a = atan(q.y, q.x);
     float core = smoothstep(0.17, 0.1, r);
-    float glow = exp(-r * 3.1) * 1.1 + exp(-r * 8.0) * 1.2;
+    float glow = exp(-r * 3.1) * 0.9 + exp(-r * 8.0) * 0.45; // (the inner glow kept low: the boiling disc must show through it)
     float rays = pow(0.5 + 0.5 * sin(a * 9.0 + uTime * 0.12 + vn(vec2(a * 2.0, uTime * 0.08)) * 6.0), 4.0) * exp(-r * 2.5);
     float rays2 = pow(0.5 + 0.5 * sin(a * 21.0 - uTime * 0.2 + 1.3), 8.0) * exp(-r * 3.6);
     float flare = smoothstep(0.12, 0.2, r) * smoothstep(0.42, 0.18, r) * smoothstep(0.55, 0.9, vn(vec2(a * 5.0 + uTime * 0.4, uTime * 0.7)));   // (prominences)
     float edge = 1.0 - smoothstep(0.8, 1.0, r);
-    vec3 col = vec3(1.0, 0.82, 0.45) * (glow * 0.75 + rays * 0.55 + rays2 * 0.35 + flare * 1.4) + vec3(1.0, 0.97, 0.88) * (glow * 0.5);
+    vec3 col = vec3(1.0, 0.82, 0.45) * (glow * 0.75 + rays * 0.55 + rays2 * 0.35 + flare * 1.4) + vec3(1.0, 0.97, 0.88) * (glow * 0.22);
     float al = clamp((glow * 0.8 + rays * 0.5 + rays2 * 0.3 + flare * 0.9) * edge, 0.0, 1.0) * uK;
     gl_FragColor = vec4(col * uK, al * (1.0 - core * 0.0));
 }`;
