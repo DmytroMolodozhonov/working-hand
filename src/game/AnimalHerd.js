@@ -161,9 +161,11 @@ export function animatePose(a, dt, pose) {
     const ud = a.model.userData;
     const neck = ud.neck || ud.head, head = ud.head || ud.neck;
     if (!neck) return;
-    if (!ud.rest) ud.rest = { nx: neck.rotation.x, hy: head.rotation.y };
+    if (!ud.rest) ud.rest = { nx: neck.rotation.x, hy: head.rotation.y, hx: head.rotation.x };
     neck.rotation.x = ud.rest.nx + a.headP;
     head.rotation.y = ud.rest.hy + a.headY;
+    // (a long neck: the head hangs from it, so as the neck goes down the head swings the other way — else it curls back into the chest)
+    if (ud.grazeHead && ud.grazePitch) head.rotation.x = ud.rest.hx + ud.grazeHead * Math.max(-0.3, Math.min(1.2, a.headP / ud.grazePitch));
 }
 
 /** Lying: the legs folded under the body (lie 0…1 blends from how they stand / walk). */

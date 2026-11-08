@@ -354,6 +354,7 @@ export function horseModel(color) {
     }
     saddle.visible = false;
 
+    g.userData.grazeHead = 1.0; // (the head swings forward again by this much as the neck goes down: the neck alone at −1.8 curled the head back INTO the chest — «голова пропадает»; the muzzle ends 0.15 m over the grass, in front of the forehooves)
     g.userData.grazePitch = -1.8; // (the long neck right down: the muzzle at the grass)
     let wings;
     if (pegasus) {
