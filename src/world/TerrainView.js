@@ -65,10 +65,10 @@ export function prespawnTerrainWorkers() {
 }
 
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, seabed, hell, wizShops, vampire, pyramids, tutorial, school });
+        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, seabed, hell, wizShops, vampire, pyramids, tutorial, school, arenaFlat });
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));

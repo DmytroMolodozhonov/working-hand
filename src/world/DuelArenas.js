@@ -99,9 +99,14 @@ export function buildArena(p, d = ARENA) {
     // lower (the author: «арена у башни выше земли на 3 блока — волшебники упираются и не могут зайти»), its rings come down a block every
     // 2 m, each an ordinary step; where the land is as high, it all lies under the ground and nothing shows (only solid, never air)
     // (flat to the edge of the levelled land, ZONE, then down: the land falls away only past it)
-    if (A.ENTRIES) for (const s of [-1, 1]) for (let i = FORE.STEPS - 1; i >= 0; i--) {
-        const w = A.ZONE + 2 * i;
-        p.box(-w, w, -FORE.DEEP, -1 - i, s * (END + 1), s * (A.ZONE + 1 + 2 * i), B.ENCHANTED);
+    // (generation 29: where the wild beyond the zone lies lower than 7 blocks under the arena's level — `A.FORE_N`, [the −v side, the +v side] — the terrace goes on down
+    // to it, a block every 2 m, so there is always a way up on foot)
+    if (A.ENTRIES) for (const s of [-1, 1]) {
+        const n = Math.max(FORE.STEPS, A.FORE_N ? A.FORE_N[s < 0 ? 0 : 1] : 0);
+        for (let i = n - 1; i >= 0; i--) {
+            const w = A.ZONE + 2 * i;
+            p.box(-w, w, -FORE.DEEP - (n - FORE.STEPS), -1 - i, s * (END + 1), s * (A.ZONE + 1 + 2 * i), B.ENCHANTED);
+        }
     }
     // the place to sign up: a lectern with the book of duels by the front gate (outside, on the right)
     p.box(6, 7, 0, 1, -(END + 3), -(END + 3), B.ENCHANTED);
@@ -146,7 +151,8 @@ export function buildArena(p, d = ARENA) {
  * Every part is a block: nothing is walked through (the counter is a wall to a man, the posts are pillars).
  */
 /** (entries) the forecourt's terrace: steps down from the floor's level, how deep its foundation goes (blocks) */
-export const FORE = { STEPS: 7, DEEP: 10 }; // (7 rings of 2 m: the last ends at ZONE + 13 — inside the cell the arena was placed in, ZONE + BLEND + 4)
+export const FORE = { STEPS: 7, DEEP: 10 };
+export const FORE_MAX = 14; // (generation 29: most steps of a terrace: 28 m out from the zone's edge — the cell leaves ZONE + BLEND + 4) // (7 rings of 2 m: the last ends at ZONE + 13 — inside the cell the arena was placed in, ZONE + BLEND + 4)
 
 function entries(p, A, out, OUT_W, END, T) {
     const B = BLOCK;
@@ -181,9 +187,14 @@ function entries(p, A, out, OUT_W, END, T) {
 }
 
 /** An arena's record at (X, Z) on land levelled to F (`rot`: its front gate towards −v turned by rot·90°). */
-export function arenaSite(id, X, Z, F, rot, extra = {}, d = ARENA) {
-    const A = dims(d), OUT_W = A.W + A.TIERS * A.STEP;
+export function arenaSite(id, X, Z, F, rot, extra = {}, d = ARENA, raw = null) {
+    let A = dims(d);
+    const OUT_W = A.W + A.TIERS * A.STEP;
     const p = new Plan(X, Z, F, rot);
+    if (raw && A.ENTRIES) { // (generation 29: how far under the arena's level the wild lies by each end's forecourt — the terrace comes down to it, at most FORE_MAX steps: it stays in the arena's cell)
+        const lowAt = (sv) => { let low = F; for (const u of [-A.ZONE * 0.5, 0, A.ZONE * 0.5]) { const q = p.pt(u, sv * (A.ZONE + BLEND + 1)); const h = raw(Math.round(q.x), Math.round(q.z)); if (!raw.water) low = Math.min(low, h); } return Math.min(FORE_MAX, Math.ceil(F - low)); };
+        A = { ...A, FORE_N: [lowAt(-1), lowAt(1)] };
+    }
     const out = buildArena(p, A);
     const c = p.pt(0, 0, 0);
     const def = {
@@ -215,10 +226,13 @@ export function inArena(def, x, z) {
 }
 
 // the direction of the arena from its tower (+x, −x, +z, −z) → the plan's rot that turns its front gate (−v) to the tower
+/** Generation 29: the most the land just outside an arena's levelled zone may differ from its level (blocks) — the blend slope then stays walkable (≈ 0.3 per m). */
+export const RING_MAX = 8;
 const DIRS = [[1, 0, 3], [-1, 0, 1], [0, 1, 0], [0, -1, 2]];
 
 /** Level, dry ground for an arena at (X, Z)? → the height its land is levelled to (F), or null. (raw: the world's height field) */
-function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false, wide = false) {
+function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false, wide = false, ring = 0) {
+    const zoneFull = Z0;
     // (the arena twice as large: the land is levelled all the same, so only the heart of it — the floor, the stands, the stall — must be nearly level, and a little more may differ)
     if (wide) { Z0 = Math.round(Z0 * 0.62); loose = loose || 'wide'; }
     let wet = 0, all = 0;
@@ -233,7 +247,18 @@ function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false, wide = false) {
     if (wet > all * (loose ? 0.45 : 0.12) || hs.length < (loose ? 6 : 10)) return null;
     hs.sort((a, b) => a - b);
     if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > (loose === true ? 30 : loose ? 12 : 8)) return null;
-    return Math.max(0, Math.round(hs[hs.length >> 1])); // (the middle of its ground: a low hill levelled, never dug deep)
+    const F = Math.max(0, Math.round(hs[hs.length >> 1])); // (the middle of its ground: a low hill levelled, never dug deep)
+    // generation 29 (`ring` = the biggest step of the land from F, in blocks): the levelled zone falls (or climbs) to the wild over BLEND metres — where the wild
+    // lies far from F that slope is a cliff the wizards cannot climb to their arena; such a place is not taken (while another one is free)
+    if (ring > 0) for (const k of [0.34, 0.67, 1]) {
+        const r = zoneFull + BLEND * k; // (the land's zone is a square: its ring too — 8 points a side)
+        for (let i = -8; i <= 8; i += 2) for (const [qx, qz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const h = raw(X + (qx ? qx * r : i * r / 8), Z + (qz ? qz * r : i * r / 8));
+            if (raw.water) continue;
+            if (Math.abs(h - F) > ring) return null;
+        }
+    }
+    return F;
 }
 
 /**
@@ -241,7 +266,8 @@ function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false, wide = false) {
  * and any a settlement adds. landAt / partsForChunk the castles' way (Sites.js).
  */
 export class ArenaIndex {
-    constructor(seed, raw, towers, villages = null, dims = ARENA, entries = false, x2 = false) {
+    constructor(seed, raw, towers, villages = null, dims = ARENA, entries = false, x2 = false, flat = false) {
+        this.flat = !!flat; // (generation 29: an arena is put where the land round it does not drop away — `RING_MAX`)
         this.big = dims !== ARENA; // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
         this.x2 = !!x2;
         if (x2) dims = this.big ? ARENA_BIG_X2 : ARENA_X2; // (generation ARENA_X2_FROM_GEN: twice the radius)
@@ -270,16 +296,17 @@ export class ArenaIndex {
         const order = DIRS.map((d) => ({ d, room: d[0] > 0 ? x0 + CASTLE_CELL - t.x : d[0] < 0 ? t.x - x0 : d[1] > 0 ? z0 + CASTLE_CELL - t.z : t.z - z0 }))
             .sort((a, b) => b.room - a.room || a.d[2] - b.d[2]);
         // (the twice-as-large arena is wide: it may stand to the side of the tower's line, in a corner of the cell; where even that has no room, the ordinary arena stands)
-        for (const dims of this.tries) {
+        for (const ring of this.flat ? [RING_MAX, 0] : [0]) for (const dims of this.tries) {
+            if (def) break;
             const need = dims.ZONE + BLEND + 4;
             for (const away of dims.AWAYS || [dims.AWAY, dims.AWAY + 30]) {
                 for (const side of dims.SIDES || [0]) {
                     for (const { d } of order) {
                         const X = t.x + d[0] * away - d[1] * side, Z = t.z + d[1] * away + d[0] * side;
                         if (X - need < x0 || X + need > x0 + CASTLE_CELL || Z - need < z0 || Z + need > z0 + CASTLE_CELL) continue;
-                        const F = arenaGround(this.raw, X, Z, dims.ZONE, this.big, this.x2 && dims === this.d); // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
+                        const F = arenaGround(this.raw, X, Z, dims.ZONE, this.big, this.x2 && dims === this.d, ring); // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
                         if (F == null) continue;
-                        def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) }, dims);
+                        def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) }, dims, this.flat ? this.raw : null);
                         break;
                     }
                     if (def) break;

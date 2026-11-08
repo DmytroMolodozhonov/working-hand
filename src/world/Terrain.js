@@ -289,7 +289,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 28;
+export const WORLD_GEN = 29;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -411,6 +411,12 @@ export const VAMPIRE_FROM_GEN = 26;
 export const PYRAMIDS_FROM_GEN = 27;
 /** Generation 28: the Armourleaf (Бронелист — the flower for the pentagram of protection from blasts) grows in the wild (MagicFlora.js: `fromGen`). */
 export const ARMOURLEAF_FROM_GEN = 28;
+/**
+ * Generation 29: a duel arena stands only where the land round its levelled zone does not fall away steeply (DuelArenas.arenaGround `flat`): the author
+ * «возле башни волшебников арена выше земли… волшебники не могут подняться» — on a plateau 15–20 m over the lowland round it the land's blend slope
+ * was a cliff. Older worlds keep their arenas where they stood.
+ */
+export const ARENA_FLAT_FROM_GEN = 29;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -710,7 +716,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false } = {}) {
         this.seed = seed;
         this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
         this.schoolMode = !!school; // («Школа Акселдорф»: the world's own land, the school castle on a terrace near the start — SchoolLand.js)
@@ -755,7 +761,7 @@ export class TerrainData {
             if (this.queenMap) ice = new IceCastleMapSite(seed); // (generation 22: the Queen's palace is on her own far map — the Earth has none)
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
             const iceL = 2.4 * iceMount({ test: ice ? !!ice.testAt : this.test, arena: !!iceArena }).BACK;
-            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries, !!arenaX2); // (the duel arenas: DuelArenas.js)
+            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries, !!arenaX2, !!arenaFlat); // (the duel arenas: DuelArenas.js)
             let near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
             // Count Sracula's castle (VampireCastle.js; generation 26): one in the world, on flat dry land away from every site and the Ice Queen's mountain
