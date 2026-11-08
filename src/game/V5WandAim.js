@@ -11,6 +11,7 @@ import * as THREE from 'three';
 
 export const V5_WAND = {
     BACK: 0.35, // how far the wand's own end is behind its point in the palm (its butt at the heel of the hand)
+    DISAGREE: [0.45, 0.9], // rad: the forearm leads fully while within 26° of the hand, not at all past 52° (a flipped depth guess)
     PALM: 0.4, // how much the hand's own turn leads the wand; the rest — the forearm (V3 points like this: «V3 points exactly where I point»)
     // the wand's own steadying (AimSteady: by its turning speed — a still wand doesn't tremble, a turn passes at once)
     STEADY: { minCutoff: 1.2, beta: 6, dCutoff: 3, dead: 0.3 },
@@ -61,7 +62,12 @@ export function wandAimDir(ch, hand, side, out, r = 0.03) {
     const point = hand.wandBent ? out : _up.set(0, 1, 0).applyQuaternion(hand.palm.getWorldQuaternion(_hq));
     if (point !== out) out.copy(point);
     const fore = ch.getForearmDirection(side, _f);
-    return out.multiplyScalar(V5_WAND.PALM).addScaledVector(fore, 1 - V5_WAND.PALM).normalize();
+    // (the forearm's depth is least sure with the arm in the camera's plane — raised straight up, out to the side: its front/back may flip for a
+    //  moment; the author 08.11: «поднимаю руку вверх — палочка в кисти искривилась, потом сама восстановилась». The wand never leaves the fist for
+    //  it: the farther the forearm disagrees with the hand, the less it leads — the hand alone beyond DISAGREE[1])
+    const ang = out.angleTo(fore), D = V5_WAND.DISAGREE;
+    const fw = (1 - V5_WAND.PALM) * (ang <= D[0] ? 1 : ang >= D[1] ? 0 : 1 - (ang - D[0]) / (D[1] - D[0]));
+    return out.multiplyScalar(1 - fw).addScaledVector(fore, fw).normalize();
 }
 
 /** The palm's «across» axis for the wand's own frame (x of its basis), unit. */
