@@ -203,7 +203,8 @@ export function toRig(doll, rig, c, dy = 0) {
     doll.frame(F);
     _m.makeBasis(_a.set(F[0], F[1], F[2]), _b.set(F[3], F[4], F[5]), _c.set(F[6], F[7], F[8]));
     _q.setFromRotationMatrix(_m);
-    if (rig.restQ) _q.multiply(_qt.set(rig.restQ[0], rig.restQ[1], rig.restQ[2], rig.restQ[3]).invert()); // (a torso lying along the ground at rest — a horse: the model's own axes are the rest frame's turn away)
+    const rq = typeof rig.restQ === 'function' ? rig.restQ(c) : rig.restQ;
+    if (rq) _q.multiply(_qt.set(rq[0], rq[1], rq[2], rq[3]).invert()); // (a torso lying along the ground at rest — a horse: the model's own axes are the rest frame's turn away)
     at(doll, P.PELVIS, _p); _p.y += dy;
     par.matrixWorld.decompose(_d, _q2, _s);
     const h = typeof rig.hipLocal === 'function' ? rig.hipLocal(c) : rig.hipLocal;

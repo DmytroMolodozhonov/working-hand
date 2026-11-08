@@ -467,7 +467,7 @@ export class Animals {
         if (!ci?.ragDeath || !hasDoll(a.type) || a.fly) return false;
         const p = a.group.position, gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
         const w = waterAt(g.terrain?.data, p.x, p.z, gy);
-        if (w && w.depth >= 1.5) return false; // (in deep water the carcass floats on its side, as it did)
+        if (w && w.depth >= (a.type === 'swan' ? 0.5 : 1.5)) return false; // (in deep water — a swan: in any water — the carcass floats on its side, as it did)
         ci.ragDeath(a);
         return ci.ragOf(a);
     }
