@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { P, makeSpec } from './Ragdoll.js';
+import { P, makeSpec, restQuat } from './Ragdoll.js';
 import { VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
@@ -198,11 +198,12 @@ export function fromRig(doll, rig, c) {
 export function toRig(doll, rig, c, dy = 0) {
     const root = rig.root(c), par = root.parent;
     if (!par) return;
-    for (const o of rig.stiff(c)) o.quaternion.identity();
+    for (const o of rig.stiff(c)) { if (o.obj) o.obj.quaternion.set(o.q[0], o.q[1], o.q[2], o.q[3]); else o.quaternion.identity(); } // (a part with a rest turn of its own — an animal's head — keeps it)
     par.updateWorldMatrix(true, false);
     doll.frame(F);
     _m.makeBasis(_a.set(F[0], F[1], F[2]), _b.set(F[3], F[4], F[5]), _c.set(F[6], F[7], F[8]));
     _q.setFromRotationMatrix(_m);
+    if (rig.restQ) _q.multiply(_qt.set(rig.restQ[0], rig.restQ[1], rig.restQ[2], rig.restQ[3]).invert()); // (a torso lying along the ground at rest — a horse: the model's own axes are the rest frame's turn away)
     at(doll, P.PELVIS, _p); _p.y += dy;
     par.matrixWorld.decompose(_d, _q2, _s);
     const h = typeof rig.hipLocal === 'function' ? rig.hipLocal(c) : rig.hipLocal;
@@ -213,7 +214,7 @@ export function toRig(doll, rig, c, dy = 0) {
     _m2.decompose(root.position, root.quaternion, _d);
     root.updateMatrixWorld(true);
     const hd = rig.head(c);
-    if (hd) aimPart(hd.obj, hd.rest, at(doll, P.HEAD, _b).add(_jw.set(0, dy, 0)), null, 0);
+    if (hd) aimPart(hd.obj, hd.rest, at(doll, P.HEAD, _b).add(_jw.set(0, dy, 0)), null, 0, hd.q0);
     for (const L of rig.limbs(c)) {
         at(doll, L.to, _b); _b.y += dy;
         aimPart(L.obj, L.rest, _b, L.joint, L.half || 0);
@@ -221,14 +222,15 @@ export function toRig(doll, rig, c, dy = 0) {
 }
 
 /** Turn a part so that its bone (`rest`, in its own frame) points at the world point `target`; a centred part also moves to the bone's middle. */
-function aimPart(obj, rest, target, joint, half) {
+function aimPart(obj, rest, target, joint, half, q0) {
     const par = obj.parent;
     par.getWorldQuaternion(_pq);
     if (joint) par.localToWorld(_jw.set(joint[0], joint[1], joint[2])); else obj.getWorldPosition(_jw);
     _dl.copy(target).sub(_jw).applyQuaternion(_wq.copy(_pq).invert());
     _rest.set(rest[0], rest[1], rest[2]).normalize();
+    if (q0) _rest.applyQuaternion(_qt.set(q0[0], q0[1], q0[2], q0[3])); // (a part whose rest turn is not the identity: its bone in the parent's frame)
     const n = _dl.length();
-    if (n > 1e-6) turnTo(obj.quaternion, _rest, _dl); // (its side axis kept: no wringing — turnTo)
+    if (n > 1e-6) { turnTo(obj.quaternion, _rest, _dl); if (q0) obj.quaternion.multiply(_qt.set(q0[0], q0[1], q0[2], q0[3])); } // (its side axis kept: no wringing — turnTo)
     if (joint) obj.position.set(joint[0], joint[1], joint[2]).addScaledVector(_rest.applyQuaternion(obj.quaternion), half);
     obj.updateMatrixWorld(true);
 }

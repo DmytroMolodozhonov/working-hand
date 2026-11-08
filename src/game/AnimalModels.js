@@ -195,6 +195,7 @@ function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat
         const [r, h, c] = hoof;
         mesh(knee, cone(r * 0.82, r, h, 9), lam(c), 0, -lLen + h / 2, lz);
     }
+    pivot.userData.legDims = [uLen, uz, lLen, lz]; // (the segments' lengths and bends: the death's rag doll — AnimalRagdoll.js)
     pivot.userData.upper = up;
     pivot.userData.lower = knee;
     pivot.userData.front = front;

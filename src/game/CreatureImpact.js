@@ -32,6 +32,7 @@ import { lieClearPush } from './LieClear.js';
 import { stepBody, bounce, lieProbe, GUARD, guardWorld, standFree, freeSpot } from './SolidGuard.js';
 import { Ragdoll, DOLL } from './Ragdoll.js';
 import * as RagPose from './RagdollPose.js';
+import { ANIMAL_RIG, hasDoll } from './AnimalRagdoll.js';
 
 /**
  * The rag doll (Ragdoll.js, RagdollPose.js): a person knocked off his feet, thrown («Джолт», a blast, a blow) or killed is drawn BY the doll —
@@ -224,6 +225,7 @@ export class CreatureImpact {
         if (ck === 'c') return !c.ship && c.model?.leftKnee && c.model.root ? null : false; // (on a deck: the ship moves under him — his own deck physics)
         if (ck === 'z') return c.group && c.leftArm && c.leftLeg && !c.isTree ? RagPose.ZOMBIE_RIG : false;
         if (ck === 'T') return c.model?.userData?.root && c.model.userData.kneeL ? RagPose.TARON_RIG : false;
+        if (ck === 'a') return c.dead && hasDoll(c.type) && c.model?.userData?.legs?.length === 4 && c.model.userData.neck && c.model.userData.head ? ANIMAL_RIG : false; // (a DEAD cow, pig, sheep, horse — AnimalRagdoll.js; the living keep their own fall)
         return false;
     }
 
@@ -772,7 +774,9 @@ export class CreatureImpact {
         let vx = e?.s.vx || 0, vz = e?.s.vz || 0;
         // (no blow: he sinks back, away from where he looked — the model looks along −Z, a zombie along +Z)
         if (Math.hypot(vx, vz) < 0.5) { const f = K?.faces || -1; vx = Math.sin(yaw) * 0.8 * -f; vz = Math.cos(yaw) * 0.8 * -f; }
-        this._ragStart(ck, c, tmp, vx, 0, vz, RAG.DEAD_TIP);
+        let vy = 0;
+        if (ck === 'a' && c.vel) { vx = c.vel.x; vy = c.vel.y; vz = c.vel.z; if (Math.hypot(vx, vz) < 0.5) { vx = Math.sin(yaw) * 0.8 * -K.faces; vz = Math.cos(yaw) * 0.8 * -K.faces; } } // (killed in the air / thrown: it goes on as it flew)
+        this._ragStart(ck, c, tmp, vx, vy, vz, RAG.DEAD_TIP);
         this.deadRags.set(ck + '|' + c.id, { c, doll: tmp.rag, ck, rig: tmp.rig });
     }
 

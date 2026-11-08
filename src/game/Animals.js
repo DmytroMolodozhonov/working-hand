@@ -44,6 +44,7 @@ import { FLY, takeOff, stepFlight, wingTick, pickMigration, flockSlot } from './
 import { FlapReader, flyStep, FLYERS, armsOf } from './ImperiusFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
+import { hasDoll } from './AnimalRagdoll.js';
 import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
 import { slowFactor, tickSlow } from './Slow.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
@@ -450,15 +451,30 @@ export class Animals {
         if (this.auth && magic && by != null) creditKill(this.game, by, { kind: magic }); // (mana: a magical creature, to whoever struck last)
         a.deadAt = performance.now();
         if (a.rider === this.game.localId) this.dismount();
-        this._layDown(a);
+        this._layDown(a, true);
         if (a.type === 'sheep') this.game.beds?.dropWool(a.group.position); // wool for beds
         if (a.type === 'runbook' && this.auth) this.game.runner?.died(a, !!cooked); // (burnt to ash, or a plain book on the ground)
         if (a.type === 'swan' && this.auth) this.swans.died(a);
         if (isSeaType(a.type) && this.auth) this.sea.died(a); // (the glowfin's tail falls — the potion of the mermaid) // (its white wings fall off it — a magic swan's for the potion of wings)
     }
 
-    _layDown(a) {
+    /** Is this dead animal drawn / placed by its rag doll now (AnimalRagdoll.js)? Then nothing else moves it. */
+    _ragged(a) { return a.dead && !!this.game.creatureImpact?.ragOf?.(a); }
+
+    /** A freshly dead cow / pig / sheep / horse falls as a rag doll (the author 07.11: «так же, как у NPC — у всех животных, когда умирают»): true if one started. */
+    _ragDeath(a) {
+        const g = this.game, ci = g.creatureImpact;
+        if (!ci?.ragDeath || !hasDoll(a.type) || a.fly) return false;
+        const p = a.group.position, gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
+        const w = waterAt(g.terrain?.data, p.x, p.z, gy);
+        if (w && w.depth >= 1.5) return false; // (in deep water the carcass floats on its side, as it did)
+        ci.ragDeath(a);
+        return ci.ragOf(a);
+    }
+
+    _layDown(a, fresh = false) {
         if (isSeaType(a.type)) { a.group.rotation.x = 0; return; } // (a dead fish turns belly up and floats: SeaLife.deadBody)
+        if (fresh && this._ragDeath(a)) { if (a.model.userData.wings) animateWings(a.model, 0); if (a.cooked) this._tintCooked(a); return; } // (the doll takes the pose it died in: no lying down by a turn of the whole body)
         a.group.rotation.z = Math.PI / 2;
         a.group.rotation.x = 0;
         if (a.model.userData.wings) animateWings(a.model, 0);
@@ -1975,7 +1991,7 @@ export class Animals {
                 if (a.dead) {
                     if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)
-                    this._body(a, dt); // (carcasses fall into craters too)
+                    if (!this._ragged(a)) this._body(a, dt); // (carcasses fall into craters too; a rag doll falls by itself)
                     if (a.bonesAt && performance.now() - a.bonesAt > 120000) this._remove(a);
                     else if (!a.bonesAt && performance.now() - a.deadAt > CARCASS_MS) { if (hasSkeleton(a.type)) this._toBones(a); else this._remove(a); } // (24 game minutes, or a night slept: the carcass turns to bones; the meat taken — at once)
                     continue;
@@ -2009,6 +2025,7 @@ export class Animals {
         } else {
             for (const a of this.list) if (a.net && a !== this.riding) {
                 if (a.imp?.mine && !a.dead && g.imperius?.step('a', a, dt)) continue; // (my mind is in it: my computer moves it)
+                if (this._ragged(a)) continue; // (a dead one drawn by its own doll on this computer)
                 a.group.position.lerp(a.net, Math.min(1, dt * 8));
                 if (a.type === 'runbook') continue; // (RunningBook moves its little legs)
                 a.walkT += dt * (a.netMoving && !a.flyCode ? 6 : 0);
@@ -2089,14 +2106,14 @@ export class Animals {
             a.pose = pose || 0;
             a.flyCode = fly || 0; a.bank = bank || 0; a.pitch = pitch || 0; // (a pig in flight: its wings, its roll and pitch)
             a.form = form || 0; a.formK = formK || 0; a.act = act || 0; // (the bull / the minotaur: how far it has changed, what it does)
-            a.group.rotation.y = ry;
+            if (!this._ragged(a)) a.group.rotation.y = ry;
             a.meat = meat;
             if (Number.isFinite(hp)) a.hp = hp; // (its wounds: HurtFlash shows them on every computer)
             a.tamed = tamed || null;
             a.rider = rider || null;
             a.model.userData.saddle && (a.model.userData.saddle.visible = !!rider);
             if (cooked && !a.cooked) { a.cooked = true; if (a.dead) this._tintCooked(a); }
-            if (dead && !a.dead) { a.dead = true; a.state = 'dead'; this._layDown(a); }
+            if (dead && !a.dead) { a.dead = true; a.state = 'dead'; this._layDown(a, true); }
             if (a.dead && meat <= 0 && a.model.visible) this._toBones(a);
         }
         for (const a of [...this.list]) if (!seen.has(a.id)) this._remove(a);

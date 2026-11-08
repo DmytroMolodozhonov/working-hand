@@ -101,7 +101,7 @@ const R0 = [0.68, 0.42, 0.42, 0.42, 0.42, 0.28, 0.28, 0.34, 0.32, 0.34, 0.32];
  * balls along the torso (its thickness), `faces` — −1: the model looks along −Z (villagers, sailors, Tarons), +1: along +Z (zombies);
  * `scale` — the model's size in the world (a Taron ×1.06…). The bones' lengths and the joints' limits are measured from `rest`.
  */
-export function makeSpec({ rest = REST, r = R0, torsoR = [0.5, 0.5, 0.5], faces = -1, scale = 1, rigidHead = false } = {}) {
+export function makeSpec({ rest = REST, r = R0, torsoR = [0.5, 0.5, 0.5], faces = -1, scale = 1, rigidHead = false, quad = false } = {}) {
     const sc = Array.isArray(scale) ? scale : [scale, scale, scale]; // (a zombie is stretched up only: 1 × 1.12 × 1)
     const q = rest.map((p) => [p[0] * sc[0], p[1] * sc[1], p[2] * sc[2]]);
     const sr = (sc[0] + sc[1] + sc[2]) / 3;
@@ -111,8 +111,16 @@ export function makeSpec({ rest = REST, r = R0, torsoR = [0.5, 0.5, 0.5], faces 
     const hipMid = [(q[P.HIPL][0] + q[P.HIPR][0]) / 2, (q[P.HIPL][1] + q[P.HIPR][1]) / 2, (q[P.HIPL][2] + q[P.HIPR][2]) / 2];
     const headHip = Math.hypot(q[P.HEAD][0] - hipMid[0], q[P.HEAD][1] - hipMid[1], q[P.HEAD][2] - hipMid[2]);
     const legLen = d(P.HIPL, P.KNL) + d(P.KNL, P.FTL);
+    // a four-legged body (AnimalRagdoll.js): shoulders = the fore legs' tops, hips = the hind legs' tops (the torso lies along the ground), «hands» = the fore
+    // hooves, knees = the hocks. The human joints' limits do not fit it — its own: the neck does not fold back onto the rump, a hock folds up to half, the legs
+    // do not pass through each other.
+    const quadLimits = quad ? [
+        [P.HEAD, P.HIPL, 0.5 * d(P.HEAD, P.HIPL), Infinity], [P.HEAD, P.HIPR, 0.5 * d(P.HEAD, P.HIPR), Infinity],
+        [P.HIPL, P.FTL, 0.5 * d(P.HIPL, P.FTL), Infinity], [P.HIPR, P.FTR, 0.5 * d(P.HIPR, P.FTR), Infinity],
+        [P.HNL, P.HNR, 0.5 * d(P.HNL, P.HNR), Infinity], [P.KNL, P.KNR, 0.5 * d(P.KNL, P.KNR), Infinity], [P.FTL, P.FTR, 0.5 * d(P.FTL, P.FTR), Infinity],
+    ] : null;
     return {
-        rest: q, r: rr, faces, scale: sr, h,
+        rest: q, r: rr, faces, scale: sr, h, quad,
         // bones that hold their length: [a, b, length, stiffness]
         bones: [
             [P.SHL, P.SHR, d(P.SHL, P.SHR), 1], [P.HIPL, P.HIPR, d(P.HIPL, P.HIPR), 1],
@@ -125,7 +133,7 @@ export function makeSpec({ rest = REST, r = R0, torsoR = [0.5, 0.5, 0.5], faces 
             ...(rigidHead ? [[P.HEAD, P.HIPL, d(P.HEAD, P.HIPL), 1], [P.HEAD, P.HIPR, d(P.HEAD, P.HIPR), 1]] : []),
         ],
         // the joints' limits: [a, b, min, max]
-        limits: [
+        limits: quadLimits || [
             [P.HEAD, P.HIPL, headHip - 0.55 * h, Infinity], [P.HEAD, P.HIPR, headHip - 0.55 * h, Infinity], // (the head does not fold onto the chest / far behind)
             [P.HIPL, P.FTL, 0.62 * legLen / 1.65, Infinity], [P.HIPR, P.FTR, 0.62 * legLen / 1.65, Infinity], // (a knee bends up to ~140°)
             [P.SHL, P.KNL, 1.05 * h, Infinity], [P.SHR, P.KNR, 1.05 * h, Infinity],             // (a thigh does not go up through the chest)
@@ -148,10 +156,23 @@ export function makeSpec({ rest = REST, r = R0, torsoR = [0.5, 0.5, 0.5], faces 
             return out;
         })(),
         // the head, the knees and the feet against the torso's balls (the hands: _handsOut); the head's chin may come to the chest — not into it
-        selfTorso: [[P.HEAD, 0.55], [P.KNL, 0.85], [P.KNR, 0.85], [P.FTL, 0.85], [P.FTR, 0.85]],
+        selfTorso: quad ? [[P.HEAD, 0.5], [P.KNL, 0.7], [P.KNR, 0.7], [P.FTL, 0.7], [P.FTR, 0.7]] : [[P.HEAD, 0.55], [P.KNL, 0.85], [P.KNR, 0.85], [P.FTL, 0.85], [P.FTR, 0.85]],
         // the balls along the torso (weights of the corners SHL, SHR, HIPL, HIPR; radius — the body's thickness)
         torso: [[0.4, 0.4, 0.1, 0.1, torsoR[0] * sr], [0.25, 0.25, 0.25, 0.25, torsoR[1] * sr], [0.1, 0.1, 0.4, 0.4, torsoR[2] * sr]],
     };
+}
+/** The rotation (quaternion [x, y, z, w]) of a spec's rest frame — a body whose torso does not stand up (a horse) has one that is not the identity. */
+export function restQuat(spec) { return quatOfFrame(frameOf(spec.rest, []), [0, 0, 0, 1]); }
+/**
+ * Where a point `p` (the model's frame) is in a spec's rest frame (right, up, back), measured from the shoulders' middle — for a `pin`: a point of the torso
+ * that is no ball of the doll (an animal's neck root: the head ball must keep its distance from IT, not from the shoulder line only, or the drawn head would
+ * come off the drawn neck by as much as the root stands off that line).
+ */
+export function restLocal(spec, p) {
+    const R = spec.rest, F = frameOf(R, []);
+    const m = [(R[P.SHL][0] + R[P.SHR][0]) / 2, (R[P.SHL][1] + R[P.SHR][1]) / 2, (R[P.SHL][2] + R[P.SHR][2]) / 2];
+    const d = [p[0] - m[0], p[1] - m[1], p[2] - m[2]];
+    return [d[0] * F[0] + d[1] * F[1] + d[2] * F[2], d[0] * F[3] + d[1] * F[4] + d[2] * F[5], d[0] * F[6] + d[1] * F[7] + d[2] * F[8]];
 }
 /** A villager's (and a sailor's) doll — the model the game's people are drawn with. */
 export const HUMAN = makeSpec();
@@ -460,7 +481,8 @@ export class Ragdoll {
         for (let it = 0; it < DOLL.ITER; it++) {
             for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
             for (let b = 0; b < this.sp.limits.length; b++) { const L = this.sp.limits[b]; this._len(L[0], L[1], L[2], L[3], 1); };
-            this._knee(P.HIPL, P.KNL, P.FTL); this._knee(P.HIPR, P.KNR, P.FTR);
+            if (this.sp.pin) this._pin();
+            if (!this.sp.quad) { this._knee(P.HIPL, P.KNL, P.FTL); this._knee(P.HIPR, P.KNR, P.FTR); } // (a hock bends the other way: only its limits)
             this._handsOut();
             if (it & 1 && this._selfOn !== false && this.age > SELF_FROM && this.age < DOLL.SELF_T && !(this._hitMask & SELF_GRIP)) { if (this._selfOut() && this.contacts > 0) this._selfFight = (this._selfFight || 0) + 1; else if (it === DOLL.ITER - 1) this._selfFight = 0; if (this._selfFight > 24) this._selfOn = false; } // (while it falls and rolls; if the self-pushes keep fighting the floor / a wall — a knee pushed out of the belly into the floor and back — they stop: lying, the world decides, and it comes to rest)
             // the world last (it wins): every other pass and the final one — the blocks are the dearest question
@@ -570,6 +592,18 @@ export class Ragdoll {
         x[k * 3] -= bx * c; x[k * 3 + 1] -= by * c; x[k * 3 + 2] -= bz * c;
         x[h * 3] += bx * c * 0.2; x[h * 3 + 1] += by * c * 0.2; x[h * 3 + 2] += bz * c * 0.2;
         x[f * 3] += bx * c * 0.2; x[f * 3 + 1] += by * c * 0.2; x[f * 3 + 2] += bz * c * 0.2;
+    }
+
+    /** A ball held at its distance from a point fixed in the torso's frame (`sp.pin`: {pt, at: [right, up, back from the shoulders' middle], len}) — only the ball moves. */
+    _pin() {
+        const { pt, at, len } = this.sp.pin, x = this.x, F = this.frame(this._pf || (this._pf = new Array(9)));
+        const k = pt * 3;
+        const mx = (x[P.SHL * 3] + x[P.SHR * 3]) / 2, my = (x[P.SHL * 3 + 1] + x[P.SHR * 3 + 1]) / 2, mz = (x[P.SHL * 3 + 2] + x[P.SHR * 3 + 2]) / 2;
+        const tx = mx + F[0] * at[0] + F[3] * at[1] + F[6] * at[2], ty = my + F[1] * at[0] + F[4] * at[1] + F[7] * at[2], tz = mz + F[2] * at[0] + F[5] * at[1] + F[8] * at[2];
+        const dx = x[k] - tx, dy = x[k + 1] - ty, dz = x[k + 2] - tz, dd = Math.hypot(dx, dy, dz);
+        if (dd < 1e-6) return;
+        const f = (len - dd) / dd;
+        x[k] += dx * f; x[k + 1] += dy * f; x[k + 2] += dz * f;
     }
 
     /** The hands do not go into the torso (its three balls). */
