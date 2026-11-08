@@ -360,6 +360,8 @@ export function spellGuard(fx, spell) {
  * Mixed sets go by the same thirds. A LIVE MAGIC ROBE takes the blast onto itself first (half of it, off its reserve — like the whole magic set);
  * what the reserve cannot take goes on to the pieces. A plain robe does nothing. → {hp, wear, mag?}
  */
+/** Every blast: the spell's two, a cannonball, a collapse, a crush of falling pieces (the same set as Combat.BLAST_HARM) — all go by the points-and-thirds rule. */
+export const BLAST_KINDS = new Set(['Bombardo', 'BombardoMaxima', 'Cannon', 'collapse', 'crush']);
 export function blastSoak(worn, fx, amount) {
     const wear = {}, mag = {};
     let left = amount;
@@ -394,7 +396,7 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
     if (fx?.magicSet && FIRE.has(kind)) a *= 0.5; // (the whole magic set: fire does half)
     if (fx?.archmage && SPELL_DAMAGE.has(kind)) a *= ARCHMAGE.SPELL_K; // (the High Mage's suit: −40 % from any spell, on top of the rest)
     const wear = {};
-    if (kind === 'Bombardo' && a > 0) return blastSoak(worn, fx, a); // (a blast: points off the armour, not a share at random)
+    if (BLAST_KINDS.has(kind) && a > 0) return blastSoak(worn, fx, a); // (a blast: points off the armour, not a share at random)
     if (kind === 'AvadaKedavra' && a > 0) { const c = avadaCut(worn, a); return { hp: c.hp, wear, mag: c.spent }; } // (it goes through steel; the reserves cut it)
     if (a <= 0 || NOT_SOAKED.has(kind)) return { hp: Math.max(0, a), wear };
     // where it lands: a piece by its share of the body (bare where nothing is worn)

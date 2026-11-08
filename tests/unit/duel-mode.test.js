@@ -232,7 +232,8 @@ test('победа в столкновении лучей доходит до п
     assert.match(src, /applyToCreature\(winnerBolt\.spell, lw, winnerBolt\.by, null, null, \{ clash: true \}\)/);
     assert.match(src, /applyToMe\(winnerBolt\.spell, winnerBolt\.by, winnerBolt\.side, \{ clash: true \}\)/);
     assert.match(src, /if \(!opts\?\.clash && g\.armor\?\.guard\(spell\)\) return;/);
-    assert.match(src, /if \(!opts\?\.clash && c\.isVillager && \(\(c\.robe && ROBE_BLOCKS\.has\(spell\)\)/);
+    // (the robe / set guard is the player's: NpcArmor.npcGuard — 07.11)
+    assert.match(src, /const guard = !opts\?\.clash && c\.isVillager \? npcGuard\(c, spell,/);
 });
 
 import { arcRate, ARC, AIM } from '../../src/game/Duel.js';

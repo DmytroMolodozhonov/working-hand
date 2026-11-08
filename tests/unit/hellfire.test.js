@@ -259,12 +259,13 @@ test('Hellfire on castle knights: a raised shield and armour only slow the burn 
     const cl = Object.create(CastleLife.prototype);
     const noop = () => {};
     Object.assign(cl, { game: { authority: true, fx: { spark: noop } }, _flash: noop, _die: noop, _say: noop, _offence: noop });
-    const knight = () => ({ id: 1, role: 'knight', hp: 20, armor: 50, x: 0, z: 0, yaw: 0, foe: 'p1', mode: 'block', model: { shield: {} }, damageCooldown: 0 });
+    const knight = () => ({ id: 1, role: 'knight', hp: 20, armor: 40, x: 0, z: 0, yaw: 0, foe: 'p1', mode: 'block', model: { shield: {} }, damageCooldown: 0 });
     // (yaw 0 faces −z: the fire is in front of him, at z = −3; the burn comes from there: dir +z)
     const dir = new THREE.Vector3(0, 0, 1);
     const k = knight();
-    for (let i = 0; i < 16; i++) cl.hit(k, HELLFIRE.CREATURE_DMG, dir, 'p1', { spell: true, magic: true, fire: true }); // (4 s in the fire)
-    assert.ok(k.hp <= 0, `a shielded knight in armour burns to death in ~4 s: ${k.hp} HP, armour ${k.armor}`);
+    // (07.11: a knight wears the player's pieces — NpcArmor: steel takes 40 % of fire — so it takes ~5 s, not 4)
+    for (let i = 0; i < 20; i++) cl.hit(k, HELLFIRE.CREATURE_DMG, dir, 'p1', { spell: true, magic: true, fire: true }); // (5 s in the fire)
+    assert.ok(k.hp <= 0, `a shielded knight in armour burns to death in ~5 s: ${k.hp} HP, armour ${k.armor}`);
     const old = knight();
     for (let i = 0; i < 16; i++) cl.hit(old, HELLFIRE.CREATURE_DMG, dir, 'p1', { spell: true, magic: true });
     assert.ok(old.hp > 15, '(an ordinary blow still mostly stops on the shield and the armour)');

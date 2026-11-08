@@ -100,3 +100,12 @@ test('живая магическая мантия забирает взрыв �
     robe.mag = 4; // запас кончается: остаток идёт дальше
     assert.ok(Math.abs(blast({ robe }, 20).hp - 12) < 1e-9);
 });
+
+test('все взрывы — по новой системе: пушка, обрушение, давление считаются как Бомбардо', async () => {
+    const { BLAST_KINDS, soakBlow } = await import('../../src/game/ArmorTypes.js');
+    for (const k of ['Bombardo', 'BombardoMaxima', 'Cannon', 'collapse', 'crush']) {
+        assert.ok(BLAST_KINDS.has(k));
+        const w = set(false);
+        assert.ok(soakBlow(w, wornEffects(w), 8, k).hp < 1e-9, k);
+    }
+});
