@@ -769,7 +769,7 @@ export class WizardFight {
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
         if (!g.spells?.cast) return false;
-        g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id);
+        try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return true; } // (a mistake in the spell is not a crash of the game)
         g.sync?.spell?.(spell, _o, _d, 'right');
         const me = g.character.group.position;
         if (Math.hypot(me.x - v.x, me.z - v.z) < 60) g.sound?.spellCast?.(spell, _o);

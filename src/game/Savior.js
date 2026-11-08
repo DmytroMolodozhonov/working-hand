@@ -46,6 +46,14 @@ export class Savior {
 
     get auth() { return this.game.authority !== false; }
     get life() { return this.game.castleLife; }
+    /** A mistake in the Saviour's code never stops the game: it is written in the journal (once per kind) and he goes on. */
+    _fail(where, e) {
+        this._failed = this._failed || new Set();
+        if (this._failed.has(where)) return;
+        this._failed.add(where);
+        console.error('[Savior]', where, e);
+        this.game.perf?.note?.('⚠️ спаситель: ошибка в ' + where + ': ' + (e?.message || e));
+    }
     _note(e) { this.log.push({ t: Math.round(performance.now() / 1000), ...e }); if (this.log.length > 40) this.log.shift(); }
 
     stageOf(id) { return stageOf(this.stage.get(id) || 0); }
@@ -118,6 +126,9 @@ export class Savior {
     // ------------------------------------------------------------ every frame (host)
     update(dt) {
         this.days += dt / DAY_S;
+        try { this._update(dt); } catch (e) { this._fail('update', e); }
+    }
+    _update(dt) {
         const v = this.v;
         if (!v) return;
         if (!this.auth) return;
@@ -163,6 +174,9 @@ export class Savior {
     // ------------------------------------------------------------ the flight (CastleLife._think calls it before the wizard's own fight)
     /** (host, every frame) True: the flight leads him now (the fight's own code is skipped). */
     drive(v, dt) {
+        try { return this._drive(v, dt); } catch (e) { this._fail('drive', e); this.air = null; return false; }
+    }
+    _drive(v, dt) {
         if (v !== this.v || !this.auth || v.dead) return false;
         if (v.stunT > 0 || v.vy || v.lev || v.carriedBy) return false; // (thrown / stunned: the ordinary code — never a hovering stunned man)
         const L = this.life, g = this.game, F = L.wizards?.fight, W = v.W || {};
