@@ -149,6 +149,18 @@ void main() {
     gl_FragColor = vec4(mix(vec3(1.0, 0.72, 0.25), vec3(1.0, 0.97, 0.85), line1 + dots), a1 * uOpacity);
 }`;
 
+// a bolt of lightning as a camera-facing ribbon: a white-hot thread in a golden glow (a GL line is one pixel — a wire, not lightning)
+const RIB_VS = 'varying float vX; void main() { vX = uv.x; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+const RIB_FS = `
+uniform float uOpacity;
+varying float vX;
+void main() {
+    float d = abs(vX - 0.5) * 2.0;
+    float core = exp(-d * d * 14.0), glow = exp(-d * 2.6);
+    vec3 col = mix(vec3(1.0, 0.74, 0.26), vec3(1.0, 0.98, 0.88), core);
+    gl_FragColor = vec4(col, clamp(core + glow * 0.55, 0.0, 1.0) * uOpacity);
+}`;
+
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _c = new THREE.Vector3(), _p = new THREE.Vector3(), _u = new THREE.Vector3(), _w = new THREE.Vector3();
 let _geo = null;
 function geo() { return _geo || (_geo = (() => { const g = new THREE.PlaneGeometry(1, 1); g.userData.shared = true; return g; })()); }
@@ -175,11 +187,15 @@ export class Helios {
         const flat = new THREE.CircleGeometry(1, 64); flat.rotateX(-Math.PI / 2); flat.userData.shared = true;
         this.runeMats = [0, 1, 2].map((i) => shader(RUNE_FS, { uTime: { value: 0 }, uOpacity: { value: 0 }, uDir: { value: i === 1 ? -1 : 1 } }));
         this.runes = this.runeMats.map((m) => { const mesh = new THREE.Mesh(flat, m); mesh.frustumCulled = false; mesh.renderOrder = 8; mesh.visible = false; this.fxGroup.add(mesh); return mesh; });
-        const lineMat = (c, o) => { const m = new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }); m.userData.shared = true; return m; };
-        this.arcMats = [lineMat(0xffe9a0, 0.5), lineMat(0xfff8e0, 1)];
+        const ribMat = (o) => { const m = new THREE.ShaderMaterial({ vertexShader: RIB_VS, fragmentShader: RIB_FS, uniforms: { uOpacity: { value: o } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }); m.userData.shared = true; return m; };
+        this.arcMats = [ribMat(0.5), ribMat(1)];
         this.arcs = Array.from({ length: ARCS }, () => [0, 1].map((k) => {
-            const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((ARC_PTS + 1) * 3), 3));
-            const l = new THREE.Line(g, this.arcMats[k]); l.frustumCulled = false; l.renderOrder = 9; this.fxGroup.add(l); return l;
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((ARC_PTS + 1) * 2 * 3), 3));
+            const uv = new Float32Array((ARC_PTS + 1) * 2 * 2), idx = [];
+            for (let i = 0; i <= ARC_PTS; i++) { uv[i * 4] = 0; uv[i * 4 + 1] = i / ARC_PTS; uv[i * 4 + 2] = 1; uv[i * 4 + 3] = i / ARC_PTS; if (i < ARC_PTS) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2); }
+            g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
+            const l = new THREE.Mesh(g, this.arcMats[k]); l.frustumCulled = false; l.renderOrder = 9; l.visible = false; this.fxGroup.add(l); return l;
         }));
         game.scene.add(this.fxGroup);
         this.ign = null; // the ignition now: { t, x, y, z }
@@ -187,7 +203,7 @@ export class Helios {
     }
 
     sampleModels() {
-        const out = [new THREE.Mesh(geo(), this.discMat), new THREE.Mesh(geo(), this.coronaMat), new THREE.Mesh(this.runes[0].geometry, this.runeMats[0]), new THREE.Line(this.arcs[0][0].geometry, this.arcMats[1])];
+        const out = [new THREE.Mesh(geo(), this.discMat), new THREE.Mesh(geo(), this.coronaMat), new THREE.Mesh(this.runes[0].geometry, this.runeMats[0]), new THREE.Mesh(this.arcs[0][0].geometry, this.arcMats[1])];
         for (const m of out) m.scale.setScalar(0.01);
         return out;
     }
@@ -399,22 +415,34 @@ export class Helios {
         }
     }
 
-    /** A jagged line from a to b: `amp` m of sideways wander (bigger in the middle, none at the ends); the glow copy and the white core share the same points. */
+    /** A jagged bolt from a to b as two camera-facing ribbons (a wide dim glow and a thin white core) sharing the same wandering points: `amp` m of sideways wander (most in the middle, none at the ends). */
     _arc(pair, a, b, amp) {
         _d.subVectors(b, a);
         const len = _d.length();
         if (len < 1) { for (const l of pair) l.visible = false; return; }
         _d.divideScalar(len);
         _u.set(-_d.z, 0, _d.x).normalize(); _w.crossVectors(_d, _u).normalize(); // (two directions across the stroke)
-        const arr = pair[0].geometry.attributes.position.array, arr2 = pair[1].geometry.attributes.position.array;
+        const cam = this.game.camera?.position;
+        this._pts = this._pts || Array.from({ length: ARC_PTS + 1 }, () => new THREE.Vector3());
+        const P = this._pts;
         for (let i = 0; i <= ARC_PTS; i++) {
             const u = i / ARC_PTS, env = Math.sin(Math.PI * u) * amp;
             const sx = (Math.random() - 0.5) * env * 2, sz = (Math.random() - 0.5) * env * 2;
-            const x = a.x + _d.x * len * u + _u.x * sx + _w.x * sz, y = a.y + _d.y * len * u + _u.y * sx + _w.y * sz, z = a.z + _d.z * len * u + _u.z * sx + _w.z * sz;
-            arr[i * 3] = x; arr[i * 3 + 1] = y; arr[i * 3 + 2] = z;
-            arr2[i * 3] = x + 0.35; arr2[i * 3 + 1] = y; arr2[i * 3 + 2] = z + 0.35; // (the glow copy a little aside: a thicker, softer stroke)
+            P[i].set(a.x + _d.x * len * u + _u.x * sx + _w.x * sz, a.y + _d.y * len * u + _u.y * sx + _w.y * sz, a.z + _d.z * len * u + _u.z * sx + _w.z * sz);
         }
-        for (const l of pair) { l.geometry.attributes.position.needsUpdate = true; l.visible = true; }
+        for (let k = 0; k < 2; k++) {
+            const arr = pair[k].geometry.attributes.position.array, W = k === 0 ? 3.2 : 1.1; // (half widths, m: a bolt 380 m long is seen from far — thick enough to be a bolt)
+            for (let i = 0; i <= ARC_PTS; i++) {
+                const q = P[i], nx = P[Math.min(ARC_PTS, i + 1)], pv = P[Math.max(0, i - 1)];
+                _c.subVectors(nx, pv).normalize();
+                _p.set(cam ? cam.x - q.x : 0, cam ? cam.y - q.y : 1, cam ? cam.z - q.z : 0).normalize();
+                _v.crossVectors(_c, _p).normalize().multiplyScalar(W * (0.35 + 0.65 * Math.pow(Math.sin(Math.PI * (i / ARC_PTS)), 0.35)));
+                arr[i * 6] = q.x - _v.x; arr[i * 6 + 1] = q.y - _v.y; arr[i * 6 + 2] = q.z - _v.z;
+                arr[i * 6 + 3] = q.x + _v.x; arr[i * 6 + 4] = q.y + _v.y; arr[i * 6 + 5] = q.z + _v.z;
+            }
+            pair[k].geometry.attributes.position.needsUpdate = true;
+            pair[k].visible = true;
+        }
     }
 
     dispose() {
