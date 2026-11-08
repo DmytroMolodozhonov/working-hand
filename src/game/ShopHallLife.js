@@ -436,6 +436,7 @@ export class ShopHallLife {
             if (items.loose.get(L.item.uid) !== L) return false; // (taken in the air)
             const c = f.caster;
             if (c && (c.dead || c.stunT > 0 || c.lev || c.carriedBy || c.foe)) { L.hover = null; return false; } // (the seller hit: the spell breaks — it falls)
+            if (!L.hover) L.hover = L.model.position.clone(); // (something else — a spell, a hand, the physics — dropped the hover: take it up again, never crash)
             f.t += dt;
             const k = Math.min(1, f.t / f.T), e = ease(k);
             L.hover.copy(f.from).lerp(f.to, e);
