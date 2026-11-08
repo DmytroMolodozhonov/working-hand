@@ -20,7 +20,7 @@ import { NPC_COST } from './WizardAI.js';
 import { FX } from './WizardLife.js';
 
 const DAY_S = 24 * 60; // s of game a game day (Bounty.js: Game.DAY_CYCLE_MS)
-const _v = new THREE.Vector3();
+const _v = new THREE.Vector3(), _w2 = new THREE.Vector3();
 
 export class Savior {
     constructor(game) {
@@ -188,15 +188,23 @@ export class Savior {
         const now = performance.now() / 1000;
         // the ground: a danger? (the damage of the last seconds, health, mana)
         if (!this.air) {
-            // not standing aside: the foe is far — he flies to him at once (low, fast), the fight itself begins when he is near
+            // not standing aside — a ROCKET at the foe (low, fast), and the moment he is there: a «Bombardo» on him (his style)
             const hd = Math.hypot(pp.x - v.x, pp.z - v.z);
-            if (hd > SAVIOR.HELP_FROM && !v.prep && !(v.castT > 0)) {
+            if (hd > (this.rocket ? SAVIOR.HELP_FROM : SAVIOR.ROCKET_AGAIN) && !v.prep) {
+                this.rocket = true; this.opener = true;
                 const c = g.collision, gy = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY(v.x, v.z);
-                const mx = (pp.x - v.x) / hd, mz = (pp.z - v.z) / hd, sp = SAVIOR.AIR_SPEED, nx = v.x + mx * sp * dt, nz = v.z + mz * sp * dt;
-                if (!c.pointBlocked?.(nx, v.y + 2, nz)) { v.x = nx; v.z = nz; } else v.y += 6 * dt; // (a wall / a hill: up over it)
-                v.y += (gy + SAVIOR.FLY_H + 2 - v.y) * Math.min(1, dt * 2.5);
+                const mx = (pp.x - v.x) / hd, mz = (pp.z - v.z) / hd, sp = Math.min(SAVIOR.ROCKET, hd * 3 + 6), nx = v.x + mx * sp * dt, nz = v.z + mz * sp * dt;
+                if (!c.pointBlocked?.(nx, v.y + 2, nz)) { v.x = nx; v.z = nz; } else v.y += 8 * dt; // (a wall / a hill: up over it)
+                v.y += (gy + SAVIOR.FLY_H + 2 - v.y) * Math.min(1, dt * 3);
                 v.yaw = yawTo(v.x, v.z, pp.x, pp.z); v.speed = Math.min(sp, 8); v.mode = 'run';
+                if (Math.random() < dt * 30) g.fx?.spark?.(_v.set(v.x, v.y + 2, v.z), 0xfff6d8, 0.12, _w2.set((Math.random() - 0.5) * 2, 0.4, (Math.random() - 0.5) * 2), 0.5); // (a bright trail)
                 return true;
+            }
+            this.rocket = false;
+            if (this.opener && !v.prep && !(v.castT > 0) && !v.noWand) { // (arrived: the first word is a «Bombardo» at once — «Bombardo Maxima» if he has seen it from the foe)
+                const m = this.seen.get(this.foe) || {}, big = m.BombardoMaxima != null && performance.now() / 1000 - m.BombardoMaxima < SAVIOR.SEEN_S && v.mana >= 40;
+                const spell = big ? 'BombardoMaxima' : 'Bombardo', fp = { x: pp.x, y: pp.y - 0.4, z: pp.z };
+                if (F._begin(v, spell, this.foe, fp, { cost: NPC_COST[spell], cd: 1.2 })) { this.opener = false; this.cd[spell] = SAVIOR.SPECIAL_CD[spell]; }
             }
             this.airCd -= dt;
             this.hurtLog.push([now, v.hp]);

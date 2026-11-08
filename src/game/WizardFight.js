@@ -542,7 +542,7 @@ export class WizardFight {
     _begin(v, spell, foeId, fp, o = {}) {
         if (v.prep || v.noWand) return false;
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
-        const t = prepTime();
+        const t = v.savior != null ? 0.4 : prepTime(); // (the Saviour says it at once: no seconds of standing silent)
         if (v.lesson) v.lesson.casts++;
         v.prep = { spell, foe: foeId, at: o.at || null, vs: o.vs || null, cost: o.cost ?? (NPC_COST[spell] ?? 10), cd: o.cd ?? v.W.cast, sq: o.sq || null, t, age: 0 };
         v.castCd = Math.max(v.castCd ?? 0, t + 0.1); // (nothing else begun meanwhile)
@@ -574,7 +574,8 @@ export class WizardFight {
         v.mode = 'cast';
         if (P.t > 0) return true;
         if (v.mana < P.cost) return lost();
-        if (!this.clearShot(v, fp, target)) return true; // (a moment more: the line may clear; the target himself is never «in the way»)
+        if (!this.clearShot(v, fp, target) && !(v.savior != null && P.age > 1.2)) return true; // (the Saviour waits for a clear line no longer than a second)
+        // (a moment more: the line may clear; the target himself is never «in the way»)
         if (!this._cast(v, P.spell, P.foe, fp, P.vs, P.at)) return true; // (not facing it fully yet: still turning)
         v.prep = null;
         v.mana -= P.cost;

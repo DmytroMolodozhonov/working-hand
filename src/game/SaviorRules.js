@@ -53,7 +53,9 @@ export const SAVIOR = {
     AIR_REGEN: 1.6, // health a second while he is away
     AIR_CD: 14, // s on the ground before the next take-off (unless below DANGER_HP × 0.6)
     WIND_NEAR: 9, // m: a player this close — the wind first (to push him off)
-    HELP_FROM: 17, // m: farther from the foe than this, he flies to him at once (he comes into the fight, not stands aside)
+    ROCKET: 32, // m/s: he flies at the foe like a rocket …
+    HELP_FROM: 13, // m: … until he is this close, and at once a «Bombardo» on him (his style: the author 08.11) — and the same each time the foe gets farther than this
+    ROCKET_AGAIN: 22, // m: the foe got away this far — a new rocket // m: farther from the foe than this, he flies to him at once (he comes into the fight, not stands aside)
     LINE_GAP_S: 9, // s between two lines
 };
 
