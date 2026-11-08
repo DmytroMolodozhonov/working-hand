@@ -1143,6 +1143,18 @@ export class Duel {
             }
         }
         if (hit && hit.s > wallS) { b.front.lerpVectors(from, b.front, wallS); this._end(b, 'fizzle'); return false; }
+        // «Disarmor» also takes the armour off the DEAD (the author 08.11): a body lying on its way, nearer than any living one and any wall (the host decides)
+        if (b.spell === 'Disarmor' && g.authority && g.death?.corpseOnWay) {
+            const dead = g.death.corpseOnWay(from, b.front);
+            if (dead && dead.s < Math.min(wallS, hit ? hit.s : 2)) {
+                b.front.lerpVectors(from, b.front, dead.s);
+                this._hitBurst('Disarmor', b.front, 30);
+                const r = dead.v ? g.armor?.stripVillager(dead.v, b.by) : (g.armor?.stripBody(dead.body) ? 'strip' : 'none');
+                if (r === 'strip') g.sound?.playItemFly?.(b.front, 1);
+                this._end(b, 'hit');
+                return false;
+            }
+        }
         if (hit) {
             b.front.lerpVectors(from, b.front, hit.s);
             b.prev.copy(b.front);

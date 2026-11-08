@@ -543,7 +543,17 @@ export class ArmorSystem {
      */
     stripVillager(v, byId = null) {
         const g = this.game;
-        if (v.dead || v.stripped) return 'none';
+        if (v.stripped) return 'none';
+        if (v.dead) { // (a dead one: everything comes off — his magic too; the lying model and his body in the world are made again without it)
+            const a = this.deadArmor(v);
+            if (!a) return 'none';
+            const items = this.armorItems(a);
+            const at = new THREE.Vector3(v.x, v.y + 1.2, v.z);
+            for (const it of items) { const f = pickFlight(g, at); g.items?.spawnLoose(it, at, { vel: f.vel, spin: f.spin }); }
+            this._strippedDead(v);
+            for (const b of g.death?.bodies?.values?.() || []) if (b.k === 'v' && b.who === v.id) { b.arm = null; g.death.restyleBody(b); }
+            return items.length ? 'strip' : 'none';
+        }
         const steel = v.role === 'knight' || v.role === 'king' || !!v.magicPieces;
         if (!steel && !v.wizard) return 'none';
         if (v.wizard && v.robe) return 'magic'; // (a magic robe stays on)
@@ -602,14 +612,41 @@ export class ArmorSystem {
     }
 
     /** What a dead castle person leaves of armour (Death.villagerDied): a knight's plates, a wizard's magic robe. */
-    villagerLoot(v) {
-        let out = [];
-        if ((v.role === 'knight' || v.role === 'king' || v.magicPieces) && !v.stripped) out = this._villagerSteel(v);
-        else if (v.wizard && v.robe && !v.stripped) out = [makeRobe(true)];
-        // (the author: «он продолжил лежать в доспехах, но с него выпали доспехи — продублировались»: what falls by
-        //  the body is no longer on it — the body lying there is made again without it, on every computer)
-        if (out.length) this._strippedDead(v);
-        return out;
+    villagerLoot() {
+        // (the author 08.11: «Авада Кедавра на рыцаря — и вся броня падает, как от Disarmor, а так не должно»: the armour STAYS on the dead one;
+        //  «Disarmor» takes it off a dead body — Armor.stripVillager on a dead one, Armor.stripBody on a lying body, the descriptor — deadArmor)
+        return [];
+    }
+
+    /** What a dead (or living) castle person wears that «Disarmor» can take: {p: [pieces], mg, k} (plates) | {r: 'magic'|'plain'} (a robe) | null. */
+    deadArmor(v) {
+        if (!v || v.stripped) return null;
+        if (v.role === 'knight' || v.role === 'king' || v.magicPieces) return { p: v.magicPieces ? [...v.magicPieces] : ['helmet', 'chest', 'legs'], mg: !!v.magicPieces, k: v.maxArmor > 0 ? Math.max(0.1, (v.armor || 0) / v.maxArmor) : 1 };
+        if (v.wizard) return { r: v.robe ? 'magic' : 'plain' };
+        return null;
+    }
+
+    /** The things a descriptor of `deadArmor` is. */
+    armorItems(a) {
+        if (!a) return [];
+        if (a.r) return [makeRobe(a.r === 'magic')];
+        return (a.p || []).map((p) => { const it = makePiece(p, { magic: !!a.mg }); it.hp = Math.max(1, Math.round(it.hp * (a.k ?? 1))); return it; });
+    }
+
+    /**
+     * (host) «Disarmor» on a dead body lying in the world (Death.js record `b`): its plates / robe fly off as things, the lying body is made again without them (every computer).
+     * → true if something came off.
+     */
+    stripBody(b) {
+        const g = this.game;
+        if (!b || b.st || !b.arm) return false;
+        const items = this.armorItems(b.arm);
+        b.arm = null;
+        const at = new THREE.Vector3(b.x, b.y + 1.2, b.z);
+        for (const it of items) { const f = pickFlight(g, at); g.items?.spawnLoose(it, at, { vel: f.vel, spin: f.spin }); }
+        g.death?.restyleBody?.(b);
+        g.sync?.armor?.({ a: 'bstrip', id: b.id });
+        return items.length > 0;
     }
 
     /** (any computer) A dead one's lying model without its steel / robe (they lie beside it now). */
@@ -651,6 +688,9 @@ export class ArmorSystem {
             this.remote.set(from, clean);
             const r = g.remotes?.get(from);
             if (r?.character) { dressArmor(r.character, clean); r.character._armorKey = JSON.stringify(clean); }
+        } else if (m.a === 'bstrip' && !g.authority) {
+            const b = g.death?.bodies?.get(m.id);
+            if (b) { b.arm = null; g.death.restyleBody(b); }
         } else if (m.a === 'vstrip' && !g.authority) {
             const v = g.castleLife?.byId?.get(m.id);
             this.stripped.add(m.id);

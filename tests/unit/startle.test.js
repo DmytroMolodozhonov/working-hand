@@ -97,16 +97,15 @@ test('the road folk: about a third are brave and fight (fists too) — the rest 
     assert.equal(roadBrave({ entry: { seed: 0 }, brave: 0.9, elder: true }), false, 'not an old one');
 });
 
-test('a knight killed: his plates fall by the body — and the body lies without them (no double)', async () => {
+test('a knight killed: his armour STAYS on the body (the author 08.11: Avada must not strip him like «Disarmor»)', async () => {
     const { ArmorSystem: Armor } = await import('../../src/game/Armor.js');
     const A = Object.create(Armor.prototype);
     A.game = { authority: true };
     let restyled = 0;
     A._restyle = (v) => { restyled++; v.stripped = true; };
     const v = { role: 'knight', armor: 30, maxArmor: 50, dead: true, model: { setHeldTool() {}, update() {}, isDeadDone: true } };
-    const loot = A.villagerLoot(v);
-    assert.equal(loot.length, 3);
-    assert.equal(restyled, 1, 'the lying body is made without the steel');
-    assert.equal(v.armor, 0);
-    assert.equal(A.villagerLoot(v).length, 0, 'never twice');
+    assert.equal(A.villagerLoot(v).length, 0, 'nothing falls at the death');
+    assert.equal(restyled, 0, 'the body is not made again');
+    assert.equal(v.armor, 30);
+    assert.deepEqual(A.deadArmor(v).p, ['helmet', 'chest', 'legs'], 'but «Disarmor» can take it off the dead');
 });
