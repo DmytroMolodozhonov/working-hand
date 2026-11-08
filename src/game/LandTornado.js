@@ -53,6 +53,13 @@ export class LandTornado {
         return data.get(ix, top + 1, iz) === BLOCK.WATER || data.get(ix, top, iz) === BLOCK.WATER;
     }
 
+    /** Water at (x, z) or a few metres round it (a called tornado's loop stops short of it). */
+    _wetNear(x, z, r = 6) {
+        if (this.wetAt(x, z)) return true;
+        for (let k = 0; k < 4; k++) if (this.wetAt(x + Math.cos(k * 1.571) * r, z + Math.sin(k * 1.571) * r)) return true;
+        return false;
+    }
+
     /** Dry land far enough from the sea (for being born / called): the raw ground has no water here. */
     landAt(x, z) {
         const g = this.game, data = g.terrain?.data;
@@ -100,7 +107,12 @@ export class LandTornado {
             const s = this.summoned[i], age = t - s.born;
             if (age > s.life || age < -8 || this.dead.has(s.id)) { this.summoned.splice(i, 1); continue; }
             const [rx, rz] = TORNADO.SUMMON_ROAM;
-            const x = s.x0 + Math.sin(age / 37 + s.ph) * rx * Math.min(1, age / 50), z = s.z0 + Math.sin(age / 27 + s.ph * 1.7) * rz * Math.min(1, age / 50);
+            let x = s.x0 + Math.sin(age / 37 + s.ph) * rx * Math.min(1, age / 50), z = s.z0 + Math.sin(age / 27 + s.ph * 1.7) * rz * Math.min(1, age / 50);
+            // (a called one never wanders INTO water — the author 08.11: «сам вихрь не создаётся»: its loop took it over a river or a pond near
+            //  the place, and it fell apart at once, often before it was down out of the clouds. Its loop stops at the water's edge: it stays
+            //  on the last dry spot and turns back when the loop does. Only water that comes to IT — a flood, a spell — still kills it.)
+            if (s.lx == null) { s.lx = s.x0; s.lz = s.z0; }
+            if (this._wetNear(x, z)) { x = s.lx; z = s.lz; } else { s.lx = x; s.lz = z; }
             const k = Math.max(0, Math.min(1, age / 5, (s.life - age) / TORNADO.FADE));
             out.push({ id: s.id, x, z, k, born: s.born, life: s.life, spin: s.spin, summoned: true, land: true });
         }
