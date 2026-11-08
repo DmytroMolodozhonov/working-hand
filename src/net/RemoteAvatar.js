@@ -9,6 +9,7 @@ import { attachTail } from '../game/Mermaid.js';
 import { applyRemoteMonster } from '../game/MonsterTransform.js';
 import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
+import { FarShape } from '../core/FarShape.js';
 import { CombatVisuals } from '../game/Combat.js';
 import { KD_NAME } from '../game/Impact.js';
 import { wrapPi, stepAngle, neckLimit, TWIST } from './RemoteTwist.js';
@@ -63,6 +64,7 @@ export class RemoteAvatar {
     setLook(look) {
         if (!look || JSON.stringify(look) === this._lookKey) return;
         this._lookKey = JSON.stringify(look);
+        this._one?.dispose(); this._one = null; // (new clothes: the one shape is made again — update())
         this.character.setLook(look);
         this.color = look.topColor ?? this.color;
     }
@@ -251,6 +253,11 @@ export class RemoteAvatar {
         ch.leftSimplifiedHand.applyState(s.s.lh);
         ch.rightSimplifiedHand.applyState(s.s.rh);
         ch.update(dt, null, false);
+        // (the other player drawn as ONE shape per material, its parts moved by the video card — FarShape, as villagers and the hero's
+        //  hands. The author 08.11, a guest's FPS 33 instead of 44: a dressed hero is 60–90 parts — with its shadows ~250 draws a frame.
+        //  'layers': the game's own `visible` of every part stays the truth — held things, wings, a cut limb — checked every frame)
+        if (!this._one) this._one = new FarShape(ch.group, { cache: false, hide: 'layers', batch: false });
+        if (!this._one.on) this._one.set(true); else this._one.check();
         if (this.visuals) {
             if (this.combat.shieldLeft > 0) this.combat.shieldLeft = Math.max(0, this.combat.shieldLeft - dt);
             const hp = this.handPose(this.combat.side);
@@ -268,6 +275,7 @@ export class RemoteAvatar {
 
     dispose() {
         this.visuals?.dispose();
+        this._one?.dispose(); this._one = null;
         this.tag.material.map.dispose();
         this.tag.material.dispose();
         this.character.dispose();
