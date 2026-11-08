@@ -124,6 +124,7 @@ export const SPELL_COST = {
     Caligo: 50, // «Caligo»: the dark mage's fog, a great jet for 10 s (DarkFog.js)
     Sectura: 50, // «Sectura» (the cutting curse of black magic): paid at the swing of the wand, not at the word (Slash.js)
     Accentric: 50, // «Акцентрик»: the haze — −40 over 8 s, a minute lost
+    Axis: 2000, // «Axis»: the gods' turn of the planet — day to night, night to day over ~10 s (a scroll of the gods — TimeTurn.js)
     Kidarius: 1000, // «Кидариус»: the gods' bolt — blows up on the target, −500 (a scroll of the gods — StrongSpells.js)
     Pilbidrio: 100, // «Пилбидрио»: −80, the body burst at ≤ 80
     Electrum: 50, // «Электром»: then 3 a second while the lightning is held

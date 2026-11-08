@@ -100,6 +100,7 @@ const COLD = /^(Ice|IceMaxima|Frozen|IceCastle|IceBridge|Snowman)$/;
 export function hellSpellBlock(name) {
     if (STEAM.test(name || '')) return '♨️ В адском жаре вода испаряется, не успев появиться — это заклинание здесь не действует';
     if (COLD.test(name || '')) return '♨️ В адском жаре лёд и снег тают, не успев появиться — это заклинание здесь не действует';
+    if (name === 'Axis') return '🌍 В аду вечные сумерки — суток нет, поворачивать нечего';
     if (name === 'Helios') return '☀️ В аду нет неба — Солнцу негде повиснуть';
     if (name === 'BrainrotMaxima') return '🐉 В аду нет земных драконов — «Брейнрот Максима» некого успокоить';
     return null;

@@ -855,3 +855,4 @@
 - `Helios.js` — «Helios»: the gods' artificial Sun on a planet (held, 500 mana + 3/s; a boiling disc + corona over the caster, full daylight within 260 m via Space._planetSky; titans: Titans.sunAt/_myLook; tests/unit/helios.test.js)
 - `SunRay.js` / `SunRayRules.js` — «Sun Ray»: the Sun's energy into the wand, then the burning beam at «Атак» (damage by the planet's place in the list; titans); tests/unit/sun-ray.test.js
 - Kidarius — a strong duel spell of the gods (StrongSpells.STRONG.Kidarius, Duel._divineBlast, StrongMagic): golden lightning that blows up, −500; tests/unit/kidarius.test.js; the gods' library check — tests/unit/gods-library.test.js
+- `TimeTurn.js` — «Axis»: the planet turns, day ↔ night over ~10 s (Earth: Game.dayStart; planets: def.spinShift in Space.localSun); tests/unit/time-turn.test.js

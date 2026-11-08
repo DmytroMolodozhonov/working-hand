@@ -255,6 +255,7 @@ import { WaterWalk } from './WaterWalk.js';
 import { WaterPart } from './WaterPart.js';
 import { Helios } from './Helios.js';
 import { SunRay } from './SunRay.js';
+import { TimeTurn } from './TimeTurn.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
 import { PentagramResist } from './PentagramResist.js';
@@ -658,6 +659,7 @@ export class Game {
             waterPart: (o, d, casterId, side) => this.waterPart?.fire(o, d, casterId, side),
             helios: (o, d, casterId, side) => this.helios?.fire(o, d, casterId, side),
             sunRay: (o, d, casterId, side) => this.sunRay?.start(o, d, casterId, side),
+            axis: (o, d, casterId) => this.timeTurn?.start(o, d, casterId),
             sunRayFire: (o, d, casterId, side) => this.sunRay?.fire(o, d, casterId, side),
             bridge: (o, d, casterId) => this.bridge?.grow(o, d, casterId),
             groundprud: (o, d, casterId) => this.groundprud?.grow(o, d, casterId),
@@ -742,6 +744,7 @@ export class Game {
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
+        this.timeTurn = new TimeTurn(this); // «Axis»: the planet turns — day to night, night to day over ~10 s (TimeTurn.js)
         this.sunRay = new SunRay(this); // «Sun Ray»: the Sun's energy taken into the wand, then the burning beam at «Атак» (SunRay.js)
         this.helios = new Helios(this); // «Helios»: the gods' Sun over the caster on a planet (Helios.js)
         this.waterPart = new WaterPart(this); // «Aquadivide»: the water stands aside round the hero (WaterPart.js)
@@ -2329,6 +2332,7 @@ export class Game {
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
+        if (name === 'Axis') return this.timeTurn.cast(isFinal); // (the turn of the planet: 2000 mana — TimeTurn.js)
         if (name === 'SunRay') return this.sunRay.cast(isFinal); // (the Sun's energy into the wand: 500 mana — SunRay.js)
         if (name === 'Helios') return this.helios.cast(isFinal); // (the gods' Sun: 500 mana, then 3 a second — Helios.js)
         if (name === 'WaterPart') return this.waterPart.cast(isFinal); // (the water stands aside: 300 mana, then 3 a second — WaterPart.js)
@@ -4073,6 +4077,7 @@ export class Game {
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.gargoyles?.sampleModels?.() || []) zoo.add(m); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
         for (const m of this.wandMagic?.sampleModels?.() || []) zoo.add(m); // (the flashlight's soft beam: its shader)
+        for (const m of this.timeTurn?.sampleModels?.() || []) zoo.add(m); // («Axis»: the sky's disc of star-trails, the axis, a rune ring — TimeTurn.js)
         for (const m of this.sunRay?.sampleModels?.() || []) zoo.add(m); // («Sun Ray»: the thread of light, the orb, a ring — SunRay.js)
         for (const m of this.helios?.sampleModels?.() || []) zoo.add(m); // («Helios»: the Sun's disc and corona — Helios.js)
         for (const m of this.rainFx?.sampleModels?.() || []) zoo.add(m); // («Let it rain»: the beam, the deck of clouds, a ring, a curtain of rain — RainSummon.js)
@@ -4534,6 +4539,7 @@ export class Game {
         this.waterPart?.update(dt);
         this.helios?.update(dt);
         this.sunRay?.update(dt);
+        this.timeTurn?.update(dt);
         this.visibleGodi?.update(dt);
         this.pentagranium?.update(dt);
         this.steam?.update(dt);
@@ -5622,6 +5628,7 @@ export class Game {
         this.books?.dispose();
         this.scrolls?.dispose();
         this.swim?.dispose();
+        this.timeTurn?.dispose();
         this.sunRay?.dispose();
         this.helios?.dispose();
         this.waterPart?.dispose();

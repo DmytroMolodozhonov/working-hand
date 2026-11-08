@@ -183,6 +183,18 @@ function melody(rows, beat, t0, play) { for (const [b, n, l = 1] of rows) play(h
 
 // ------------------------------------------------------------------ the tunes
 const TUNES = {
+    /** «Axis»'s tune (10 s, the length of the turn): a vast slow drone of the planet turning — low strings swelling, a choir-like pad climbing through Dm – Bb – F – A, bells like stars passing, a long settling chord. */
+    thAxis(sr) {
+        const o = buf(sr, 11), r = rng(193);
+        pad(o, sr, ['D2', 'A2', 'D3'], 0, 4, 0.42, { att: 2.2, vib: 0.005, harm: 3 });
+        pad(o, sr, ['D3', 'F3', 'A3', 'D4'], 2.4, 3.2, 0.5, { att: 1.2, vib: 0.005, harm: 3 });
+        pad(o, sr, ['Bb2', 'F3', 'Bb3', 'D4'], 5, 3, 0.52, { att: 1.0, vib: 0.005, harm: 3 });
+        pad(o, sr, ['A2', 'E3', 'A3', 'C#4', 'E4'], 7.6, 3.2, 0.58, { att: 0.8, rel: 2.2, vib: 0.005, harm: 3 });
+        melody([[0, 'D5'], [1, 'A5'], [2, 'F5', 2], [4, 'Bb5'], [5, 'D6', 2], [7, 'C#6'], [8, 'A5', 3]], 0.9, 0.7, (f, t) => bell(o, sr, f, t, 0.15, 3));
+        for (let k = 0; k < 18; k++) bell(o, sr, hz('D7') * (1 + 0.5 * (k % 3)), 1 + k * 0.5, 0.04, 1.4); // (stars passing)
+        noise(o, sr, 0, 10, 0.03, (u) => 0.2 + 0.6 * Math.sin(u * 3.14), swell(0.5, 0.4), r); // (the wind of the turning)
+        return finish(o, sr, { rms: 0.072 });
+    },
     /** «Кидариус»'s tune: the gods' lightning — a gathering storm of strings, a blazing brass call in D, the thunder-roll and a ringing ending. */
     thKidarius(sr) {
         const o = buf(sr, 8), r = rng(179);
@@ -999,6 +1011,23 @@ const LOOPS = {
         melody([[0, 'D5'], [1, 'F#5'], [2, 'A5'], [3, 'D6', 2]], 0.22, 0.6, (f, t) => bell(o, sr, f, t, 0.16, 1.0, 0.3));
         return finish(o, sr, { peak: 0.62 });
     },
+    /** «Axis» at the word: a deep rising hum and a few bells — the turning begins. */
+    fxAxis(sr) {
+        const o = buf(sr, 1.9), r = rng(197);
+        glide(o, sr, 0, 1.6, 0.2, (u) => 70 + 130 * u * u, swell(0.3, 0.5), 3);
+        ['A5', 'E6', 'A6'].forEach((n, k) => bell(o, sr, hz(n), 0.3 + k * 0.25, 0.14, 1.3, 0.3));
+        pad(o, sr, ['D2', 'A2', 'D3'], 0, 1.9, 0.32, { att: 0.8, rel: 0.9, harm: 3, vib: 0.006 });
+        noise(o, sr, 0.2, 1.5, 0.04, () => 0.4, swell(0.4, 0.5), r);
+        return finish(o, sr, { peak: 0.55 });
+    },
+    /** «Axis» as the turn starts, at the caster: a heavy low groan of something enormous beginning to move. */
+    fxAxisTurn(sr) {
+        const o = buf(sr, 2), r = rng(199);
+        glide(o, sr, 0, 1.9, 0.3, (u) => 38 + 22 * Math.sin(u * 3.14) + 20 * u, swell(0.4, 0.5), 4);
+        noise(o, sr, 0, 1.9, 0.08, (u) => 0.12 + 0.2 * u, swell(0.5, 0.5), r);
+        drum(o, sr, 0.02, 0.9, 42, 0.5, r);
+        return finish(o, sr, { peak: 0.62 });
+    },
     /** «Кидариус» at the word: a crackle gathering into a bright electric ring, a high bell. */
     fxKidarius(sr) {
         const o = buf(sr, 1.2), r = rng(181);
@@ -1223,7 +1252,7 @@ export const SPELL_SOUND = {
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
-    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, WaterPart: { cast: 'fxWaterPart', theme: 'thWaterPart' }, Helios: { cast: 'fxHelios', theme: 'thHelios' }, SunRay: { cast: 'fxSunRayCharge', theme: 'thSunRay' }, Kidarius: { cast: 'fxKidarius', theme: 'thKidarius' }, SunRayFire: { cast: 'fxSunRayFire' }, Rescue: { cast: 'fxHeal' },
+    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, WaterPart: { cast: 'fxWaterPart', theme: 'thWaterPart' }, Helios: { cast: 'fxHelios', theme: 'thHelios' }, SunRay: { cast: 'fxSunRayCharge', theme: 'thSunRay' }, Kidarius: { cast: 'fxKidarius', theme: 'thKidarius' }, Axis: { cast: 'fxAxis', theme: 'thAxis' }, SunRayFire: { cast: 'fxSunRayFire' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
     Breakthrough: { cast: 'fxStone' }, BreakthroughMaxima: { cast: 'fxStone', rate: 0.85 },
     Flight: { own: ['cast'] }, Pause: { cast: 'fxPause' },

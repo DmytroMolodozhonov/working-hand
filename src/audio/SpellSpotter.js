@@ -72,6 +72,7 @@ const SAID = [
     ['авада кедавра', 'авада кидавра'],
     ['сектура', 'сэктура', 'сектюра'], // («Sectura»: the cutting curse — Slash.js; «сектора» is the everyday word and is not in it)
     ['спиралис', 'спиралес'], // («Spiralis»: the beams of a clash whirled — Whirl.js)
+    ['аксис', 'эксис', 'аксес', 'аксис'], // («Axis»: the turn of the planet's day — TimeTurn.js)
     ['кидариус', 'кидариас', 'кидариос', 'кидариус', 'кидарус'], // («Кидариус»: the gods' lightning that blows up — StrongSpells.js)
     ['санрей', 'сан рей', 'санрэй', 'сан рэй', 'санрай'], // («Sun Ray»: the Sun's energy — SunRay.js; «сан» first)
     ['гелиос', 'хелиос', 'гелиас', 'хелиас', 'гелиус'], // («Helios»: the gods' Sun on a planet — Helios.js)

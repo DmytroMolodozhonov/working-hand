@@ -93,6 +93,8 @@ export function spaceSpellBlock(name, where, air, def = null) {
     // («Planet Liquidation» — only from space: from the ground one cannot aim at a whole planet — PlanetDestroy.js)
     if (name === 'PlanetLiquidation' && where !== 'space') return where === 'earth' ? '🌌 «Planet Liquidation» — только в космосе: взлетите «Flying Maxima» и наведите руку на планету' : '🌌 «Planet Liquidation» — только из космоса: стоя на планете, её не взорвать (взлетите «Flying Maxima» и наведите руку на неё)';
     // («Helios» — the gods' artificial Sun: only on the surface of another planet; the Earth has its own Sun, open space has no ground to hang it over — Helios.js)
+    // («Axis» — turns the planet's day: no day in open space — TimeTurn.js)
+    if (name === 'Axis' && where === 'space') return '🌍 В открытом космосе нет суток — встаньте на землю или на планету';
     if (name === 'Helios') return where === 'space' ? '☀️ «Helios» зажигается над поверхностью — сядьте на землю или на планету' : null; // (the Earth too — the author 07.11)
     if (where === 'earth') return null;
     // («Brain Rot Maxima»: the dragons live on the Earth alone — Planets.earthly; off it there is nobody to calm — DragonTame.js)
@@ -363,7 +365,7 @@ export class Space {
         const def = this.planets.get(from === 'earth' ? 'earth' : from) || this.planets.get('earth');
         planetPosition(def, t, _p, this.planets);
         if (from === 'earth') earthToDir(p.x, p.z, _d);
-        else { surfaceToDir(def, p.x, p.z, _d); toSpace(_d, def, t); }
+        else { surfaceToDir(def, p.x, p.z, _d); toSpace(_d, def, t + (def.spinShift || 0)); }
         const R = def.radius;
         this.P.x = _p.x + _d.x * (R + 45); this.P.y = _p.y + _d.y * (R + 45); this.P.z = _p.z + _d.z * (R + 45);
         this.O.x = this.P.x; this.O.y = this.P.y; this.O.z = this.P.z;
@@ -840,15 +842,18 @@ export class Space {
         this._weather(dt, def);
     }
 
+    /** The Sun's place `extraSpin` s of the planet's own time later (TimeTurn.plan: how far to turn to reach the night / the day). */
+    localSunSpun(def, x, z, t, extraSpin) { return this.localSun(def, x, z, t, extraSpin); }
+
     /**
      * Where the Sun is in a planet's sky over a place of its surface (a unit vector in the world's axes:
      * x east, y up, z south). Also leaves the planet's centre in _p and the local frame in _v1 (up),
      * _v3 (east), _v4 (north).
      */
-    localSun(def, x, z, t = this.now()) {
+    localSun(def, x, z, t = this.now(), extraSpin = 0) {
         const c = planetPosition(def, t, _p, this.planets);
         surfaceToDir(def, x, z, _d);
-        toSpace(_d, def, t);
+        toSpace(_d, def, t + (def.spinShift || 0) + extraSpin); // (the planet's own time: «Axis» turns it — TimeTurn.js)
         const n = _v1.set(_d.x, _d.y, _d.z).normalize();
         const s = _v2.set(-c.x - n.x * def.radius, -c.y - n.y * def.radius, -c.z - n.z * def.radius).normalize();
         // the local frame: up = n, east = axis × n, north = n × east (the world's x east, −z north)
