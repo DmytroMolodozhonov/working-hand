@@ -330,6 +330,8 @@ export class NetSync {
         if (!this._screenOpen && now - this._bornAt > 120000) { this._screenOpen = true; this._screenAt = now; netLog('экран загрузки не сообщил о готовности за 2 мин — считаю, что готов'); }
         if (!this._ready && this._screenOpen && now - this._screenAt > 20000) { this._gotWelcome = true; netLog('мир хоста не пришёл за 20 с — говорю ready без него'); this._tryReady(); }
         for (const n of this.presence.due(now)) this._notice(n);
+        // (listed but not drawn for a while: ask — a lost «ready» or look must never leave a friend invisible; PlayerPresence.toAsk)
+        for (const q of this.presence.toAsk(now)) this.net.send({ t: q.kind === 'ready' ? 'readyq' : 'lookq', to: q.id }, true);
     }
 
     /** My things changed hands (thrown, given, paid, sold, a body, a sword pocketed): the host hears of it within ~0.3 s, not up to 8 s
@@ -1261,6 +1263,7 @@ export class NetSync {
                 break;
             }
             case 'lookq': if (m.to === this.me) this.sendLook(); break;
+            case 'readyq': if (m.to === this.me && this._ready) { this.net.send({ t: 'ready', by: this.me }, true); this.sendLook(); } break; // (somebody never heard my «ready»: again, with my look)
             case 'an': if (!this.net.isHost) g.animals?.applyNet(rows(m.l)); break;
             case 'vil': if (!this.net.isHost) g.castleLife?.applyNet(rows(m.l, 4, (id) => typeof id === 'string')); break;
             case 'vhit': if (this.net.isHost && m.by !== this.me) { const v = g.castleLife?.byId.get(m.id); if (v) { const f = +m.mg || 0; g.castleLife.hit(v, Math.min(30, +m.dmg || 1), Array.isArray(m.d) ? new THREE.Vector3(m.d[0], 0, m.d[1]) : null, m.by, { magic: !!(f & 1), weapon: !!(f & 2), spell: !!(f & 4), pierce: !!(f & 8), hard: !!(f & 16) }); } } break;

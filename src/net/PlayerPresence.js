@@ -14,6 +14,9 @@ export const PRESENCE = {
     LEAVE_HOLD: 6500, // ms a «left» notice waits (5–8 s: not at a short lag)
     SHOW_MS: 5000, // ms a notice stays
     MAX_NOTICES: 4,
+    POSES_MEAN_READY: 5, // poses that came from a player whose «ready» never did: he IS in the world (his pose goes out only after ready) — a lost «ready» must not make him invisible
+    ASK_EVERY: 3000, // ms between the questions «are you ready?» / «how do you look?» to a player who is listed but still not drawn
+    ASK_AFTER: 2500, // ms a listed player may take to be drawn before we begin to ask
 };
 
 /** Shirt colours by the server's colour number (also the dot in Escape → «Игроки»). */
@@ -75,9 +78,35 @@ export class PlayerPresence {
     gotPose(id, msg) {
         if (!poseOk(msg)) return;
         const e = this.byId.get(id);
-        if (!e) { const x = this._early(id); if (x.ready) x.pose = msg; return; }
-        if (!e.ready) return;
+        if (!e) { const x = this._early(id); if (!x.ready && (x.poses = (x.poses || 0) + 1) >= PRESENCE.POSES_MEAN_READY) x.ready = true; if (x.ready) x.pose = msg; return; }
+        if (!e.ready) {
+            // (the author 08.11: after a rejoin «я его не видел, ни на карте, ни перед собой, а он меня видел» — his «ready» was lost, and every pose was thrown away for ever:
+            //  a player whose poses keep coming is in the world; a loading one sends none — NetSync sends a pose only after «ready»)
+            e.poses = (e.poses || 0) + 1;
+            if (e.poses < PRESENCE.POSES_MEAN_READY) return;
+            e.ready = true;
+            this._note(`игрок ${e.name}: ready (не пришёл — но поза идёт ${e.poses} раз: он в мире)`);
+        }
         e.pose = msg;
+    }
+
+    /**
+     * What to ask a listed player who is still not drawn (called ~ every second with `now`): «ready?» if we never heard it, «look?» if we have no look.
+     * → [{kind: 'ready' | 'look', id}] (each id at most once per ASK_EVERY ms; a player who is drawn is never asked).
+     */
+    toAsk(now) {
+        const out = [];
+        for (const e of this.byId.values()) {
+            if (e.shown) continue;
+            if (e.listedAt == null) { e.listedAt = now; continue; }
+            if (now - e.listedAt < PRESENCE.ASK_AFTER || now - (e.askedAt ?? -1e9) < PRESENCE.ASK_EVERY) continue;
+            const kind = !e.ready ? 'ready' : !e.look ? 'look' : null;
+            if (!kind) continue;
+            e.askedAt = now; e.asks = (e.asks || 0) + 1;
+            if (e.asks === 1 || e.asks % 10 === 0) this._note(`игрок ${e.name}: ещё не виден (${!e.ready ? 'нет ready' : 'нет внешнего вида'}) — спрашиваю`);
+            out.push({ kind, id: e.id });
+        }
+        return out;
     }
 
     /** May the avatar be made now? — ready, look and a real pose all known, and not made yet. */

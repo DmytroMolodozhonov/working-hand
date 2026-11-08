@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { PlayerPresence } from '../../src/net/PlayerPresence.js';
+import { PlayerPresence, PRESENCE } from '../../src/net/PlayerPresence.js';
 
 const POSE = { t: 'p', id: 'g1', s: { p: [120, 30, -45] } };
 const STEPS = {
@@ -81,4 +81,33 @@ test('NetSync: аватар из списка игроков не создаёт
     assert.ok(!/new RemoteAvatar/.test(joinFn), 'peer-join не должен делать аватар');
     assert.equal((src.match(/new RemoteAvatar/g) || []).length, 1, 'аватар делается в одном месте — _tryShow');
     assert.match(src, /\$\{?[^]*?\|\| this\._ready\b|&& this\._ready\)/, 'поза уходит только после ready');
+});
+
+// 08.11 (автор): после перезахода друга «я его не видел — ни на карте, ни перед собой, а он меня видел»: потерянное ready навсегда выкидывало все его позы.
+test('потерянное ready не делает игрока невидимым: поза идёт — он в мире; а одна поза без ready по-прежнему не принимается', () => {
+    const pr = new PlayerPresence();
+    pr.setList([{ id: 'g1', name: 'Друг' }], 'me');
+    pr.gotLook('g1');
+    for (let i = 0; i < PRESENCE.POSES_MEAN_READY - 1; i++) { pr.gotPose('g1', POSE); assert.ok(!pr.canShow('g1'), 'пока рано: ' + i); }
+    pr.gotPose('g1', POSE);
+    assert.ok(pr.canShow('g1'), 'позы идут — игрок в мире, аватар можно делать');
+});
+test('до поз раньше списка (поза обогнала список) — то же самое', () => {
+    const pr = new PlayerPresence();
+    for (let i = 0; i < PRESENCE.POSES_MEAN_READY; i++) pr.gotPose('g1', POSE);
+    pr.gotLook('g1');
+    pr.setList([{ id: 'g1', name: 'Друг' }], 'me');
+    assert.ok(pr.canShow('g1'));
+});
+test('спрашиваем: «ready?» и «внешний вид?» у того, кто в списке, но не виден; увиденного — не спрашиваем', () => {
+    const pr = new PlayerPresence();
+    pr.setList([{ id: 'g1', name: 'Друг' }, { id: 'g2', name: 'Второй' }], 'me');
+    assert.deepEqual(pr.toAsk(0), [], 'сразу не спрашиваем');
+    assert.deepEqual(pr.toAsk(PRESENCE.ASK_AFTER + 1).map((q) => q.kind + q.id).sort(), ['readyg1', 'readyg2']);
+    assert.deepEqual(pr.toAsk(PRESENCE.ASK_AFTER + 100), [], 'не чаще раза в ASK_EVERY');
+    pr.markReady('g1'); pr.gotLook('g2'); pr.markReady('g2');
+    const q = pr.toAsk(PRESENCE.ASK_AFTER + PRESENCE.ASK_EVERY + 200);
+    assert.deepEqual(q.map((x) => x.kind + x.id), ['lookg1']);
+    pr.gotLook('g1'); pr.gotPose('g1', POSE); pr.shown('g1');
+    assert.ok(!pr.toAsk(1e6).some((x) => x.id === 'g1'), 'увиденного не спрашиваем');
 });
