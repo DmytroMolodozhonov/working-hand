@@ -348,6 +348,7 @@ test('карта: титан планеты помечен всегда (вда�
     assert.equal(T.markOf('mercury'), null, 'убитого на карте нет');
     const hud = (await import('node:fs')).readFileSync(new URL('../../src/ui/Hud.js', import.meta.url), 'utf8');
     assert.match(hud, /icon === '⚡' \? 'titan'/, 'значок титана, не замок');
+});
 
 test('the titans\' health is 1000…1500 (the author 08.11) and the bar shows the nearest fighting one', async () => {
     const { TITANS } = await import('../../src/game/TitanRules.js');
