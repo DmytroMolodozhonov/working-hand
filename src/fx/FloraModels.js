@@ -160,6 +160,7 @@ export function floraMaterials() {
         bloom: glowByColour(swayify(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, side, emissive: 0xffc040, emissiveIntensity: 1 }), 0.05), 0.55),
         crystal: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.14, metalness: 0.25, side, emissive: 0x7fc8ff, emissiveIntensity: 1 }), 0.4),
         shard: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.1, metalness: 0.3, side, emissive: 0x9fdcff, emissiveIntensity: 1 }), 0.8),
+        plate: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.5, side, emissive: 0xbfe4ff, emissiveIntensity: 1 }), 0.12),
         frond: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side, emissive: 0x6cff9a, emissiveIntensity: 1 }), 0.12),
     };
     return _mats;
@@ -469,9 +470,71 @@ function frostPick() {
     return (_shard = B.geometry());
 }
 
+// ================================================================== ARMOURLEAF (Бронелист)
+const PLATE = { deep: hexRGB(0x2f5560), mid: hexRGB(0x5f8f94), light: hexRGB(0xa9d0cf), bronze: hexRGB(0xc8a24c), rivet: hexRGB(0xf0d27a), stalk: hexRGB(0x3a5a48) };
+/**
+ * One armour plate (a leaf shaped like a pauldron / a lamellar scale): a shield-shaped, cupped blade with a raised midrib, bands across it like
+ * riveted lamellae, a bronze rim and a row of rivet-like bumps. `o` the foot, `a` the heading, `tilt` out from the vertical (rad), L length, W half-width.
+ */
+function plateInto(B, o, a, tilt, L, W, rnd, rivets = true) {
+    const A = [Math.sin(tilt) * Math.cos(a), Math.cos(tilt), Math.sin(tilt) * Math.sin(a)];
+    const S = [-Math.sin(a), 0, Math.cos(a)];
+    const N = [Math.cos(tilt) * Math.cos(a), -Math.sin(tilt), Math.cos(tilt) * Math.sin(a)];
+    const worn = 0.9 + rnd() * 0.15;
+    const at = (u, v) => {
+        const s = (u - 0.5) * 2, w = W * Math.sin(Math.min(1, v * 4.5) * Math.PI / 2) * (1 - Math.pow(v, 2.6)); // (a shield: broad shoulders, a pointed tip)
+        const along = v * L, cup = 0.55 * (s * s) * w * (0.4 + 0.6 * v), rib = 0.022 * Math.exp(-((s / 0.16) ** 2)) * Math.min(1, v * 3), droop = v * v * L * 0.16;
+        const side = s * w, out = cup + rib - droop * 0.2;
+        return { s, w, p: [o[0] + A[0] * along + S[0] * side + N[0] * out, o[1] + A[1] * along + S[1] * side + N[1] * out - droop * 0.8, o[2] + A[2] * along + S[2] * side + N[2] * out], v };
+    };
+    B.grid(6, 12, (u, v) => {
+        const q = at(u, v), edge = Math.pow(Math.abs(q.s), 6) + Math.pow(v, 9) * 0.8;
+        const band = 0.88 + 0.12 * Math.sin(v * 38 + 1.2), midrib = Math.exp(-((q.s / 0.14) ** 2));
+        let c = lerpC(PLATE.deep, PLATE.mid, clamp01(0.25 + v * 0.55 + 0.2 * Math.cos(q.s * 2.4)));
+        c = lerpC(c, PLATE.light, midrib * 0.55);
+        c = lerpC(c, PLATE.bronze, clamp01(edge * 1.1));
+        return { p: q.p, c: shade(c, band * worn) };
+    }, true);
+    if (rivets) for (const v of [0.26, 0.44, 0.62]) for (const sgn of [-1, 1]) {
+        const q = at(0.5 + sgn * 0.5 * 0.74, v), r = 0.017 * (L / 0.75);
+        B.blob(q.p[0] + N[0] * 0.012, q.p[1] + N[1] * 0.012, q.p[2] + N[2] * 0.012, r, r, r, () => PLATE.rivet, 5, 3, 0);
+    }
+}
+function armourBody(v) {
+    const B = new Builder(), rnd = rng(6000 + v * 37);
+    // the mound: dark soil with a few pebbles
+    B.blob(0, 0, 0, 0.85, 0.2, 0.8, (nx, ny, nz) => shade(lerpC(hexRGB(0x3a3228), hexRGB(0x5a5040), 0.5 + 0.5 * Math.sin(nx * 9 + nz * 7)), 0.8 + 0.2 * ny), 9, 3);
+    // the stalk
+    B.tube([[0, 0.05, 0], [0.02, 0.5, 0.01], [-0.01, 0.95, 0.02], [0, 1.3, 0]], (t) => 0.07 * (1 - 0.45 * t), (t) => lerpC(PLATE.stalk, PLATE.mid, t * 0.4), 6, { cap: false });
+    const picks = [];
+    // the skirt: five big plates spread low, then three tiers of overlapping plates up the stalk, each smaller and steeper (like the scales of armour)
+    const tiers = [[5, 0.12, 1.2, 0.95, 0.34, 0.0], [5, 0.42, 0.95, 0.8, 0.29, 0.6], [4, 0.76, 0.7, 0.66, 0.24, 0.3], [4, 1.05, 0.45, 0.5, 0.19, 0.9]];
+    tiers.forEach(([n, h, tilt, L, W, off], ti) => {
+        for (let i = 0; i < n; i++) {
+            const a = off + (i / n) * Math.PI * 2 + rnd() * 0.25, y = h + rnd() * 0.05;
+            plateInto(B, [Math.cos(a) * 0.05, y, Math.sin(a) * 0.05], a, tilt + (rnd() - 0.5) * 0.12, L * (0.92 + rnd() * 0.16), W * (0.92 + rnd() * 0.16), rnd, ti < 2);
+            if (ti === 0 && picks.length < 4) { const A = [Math.sin(tilt) * Math.cos(a), Math.cos(tilt), Math.sin(tilt) * Math.sin(a)]; picks.push([Math.cos(a) * 0.05 + A[0] * L * 0.55, y + A[1] * L * 0.55 - L * 0.04, Math.sin(a) * 0.05 + A[2] * L * 0.55, 0.9 + rnd() * 0.2]); }
+        }
+    });
+    // the bud: a crown of narrow spearhead plates
+    for (let i = 0; i < 6; i++) plateInto(B, [0, 1.3, 0], (i / 6) * Math.PI * 2, 0.18, 0.4, 0.07, rnd, false);
+    B.cone([0, 1.3, 0], [0, 1, 0], 0.32, 0.05, PLATE.bronze, PLATE.rivet, 6);
+    const g = B.geometry();
+    g.userData.picks = picks;
+    return g;
+}
+let _plate = null;
+function armourPick() {
+    if (_plate) return _plate;
+    const B = new Builder(), rnd = rng(6600);
+    plateInto(B, [0, 0, 0], 0, Math.PI / 2 - 0.05, 0.75, 0.3, rnd, true); // (lying: the picked leaf, along +X)
+    B.tube([[0, 0, 0], [-0.07, 0.01, 0]], () => 0.022, () => PLATE.stalk, 5, { cap: true });
+    return (_plate = B.geometry());
+}
+
 // ================================================================== the table
-const BODY_BUILD = { glowcap: glowcapBody, giantfern: fernBody, azureberry: azureBody, sunherb: sunBody, frostcrystal: frostBody };
-const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick };
+const BODY_BUILD = { glowcap: glowcapBody, giantfern: fernBody, azureberry: azureBody, sunherb: sunBody, frostcrystal: frostBody, armourleaf: armourBody };
+const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick, armourleaf: armourPick };
 /** Which shared material draws the body / the picked part of each kind. */
 export const FLORA_MATERIAL = {
     glowcap: { body: 'body', pick: 'glowcap' },
@@ -479,6 +542,7 @@ export const FLORA_MATERIAL = {
     azureberry: { body: 'body', pick: 'berry' },
     sunherb: { body: 'body', pick: 'bloom' },
     frostcrystal: { body: 'crystal', pick: 'shard' },
+    armourleaf: { body: 'plate', pick: 'plate' },
 };
 /** The picked part's size factor in the hand (the item model). */
 const _body = new Map(), _pick = new Map();
@@ -499,7 +563,7 @@ export function floraPick(kind) {
 export function floraItemModel(kind) {
     const g = new THREE.Group();
     const m = new THREE.Mesh(floraPick(kind), floraMaterials()[FLORA_MATERIAL[kind].pick]);
-    const s = { glowcap: 0.34, giantfern: 0.42, azureberry: 1.1, sunherb: 1.3, frostcrystal: 0.5 }[kind] || 0.4;
+    const s = { glowcap: 0.34, giantfern: 0.42, azureberry: 1.1, sunherb: 1.3, frostcrystal: 0.5, armourleaf: 0.8 }[kind] || 0.4;
     m.scale.setScalar(s);
     g.add(m);
     return g;

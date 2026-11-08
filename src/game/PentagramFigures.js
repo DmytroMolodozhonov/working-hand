@@ -176,3 +176,17 @@ export const HYDRO_LINES = (() => {
     const thread = (k) => curve([ringPt(k > 0 ? 5 : 11), pt(0.74 * k, 0.12), pt(0.66 * k, 0.4), pt(0.52 * k, 0.66)]); // moisture rising from the ring to the drop
     return [...curve(bowl), ...curve(left), ...curve(right), ...curve(wave(-0.32)), ...curve(wave(-0.1)), ...curve(wave(0.12)), ...thread(1), ...thread(-1)];
 })();
+
+/**
+ * «Защита от взрывов» (Pentagranium Murus, белая): ЗУБЧАТАЯ СТЕНА — прямоугольник с бойницами по верхней кромке (квадратная волна), внутри неё восьмиконечная вспышка
+ * взрыва, упёршаяся в стену и погасшая, а под вспышкой — кладка (два ряда кирпичей). Ни щит, ни капля, ни цветок, ни звезда: свой рисунок.
+ */
+export const MURUS_LINES = (() => {
+    const crest = [];
+    for (let k = 0; k < 5; k++) { const x0 = -0.7 + k * 0.28; crest.push(pt(x0, 0.62), pt(x0, 0.82), pt(x0 + 0.14, 0.82), pt(x0 + 0.14, 0.62)); } // the merlons
+    const wall = [pt(-0.7, -0.78), pt(-0.7, 0.62), ...crest, pt(0.7, -0.78)];
+    const burst = Array.from({ length: 16 }, (_, k) => { const a = (k / 16) * Math.PI * 2, r = k % 2 ? 0.17 : 0.4; return pt(Math.cos(a) * r, 0.14 + Math.sin(a) * r); });
+    const brick1 = [pt(-0.7, -0.5), pt(0.7, -0.5)], brick2 = [pt(-0.7, -0.28), pt(0.7, -0.28)];
+    const seam1 = [pt(-0.2, -0.78), pt(-0.2, -0.5)], seam2 = [pt(0.25, -0.5), pt(0.25, -0.28)], seam3 = [pt(-0.4, -0.5), pt(-0.4, -0.28)];
+    return [wall, burst, brick1, brick2, seam1, seam2, seam3];
+})();

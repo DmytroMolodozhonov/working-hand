@@ -18,9 +18,9 @@ import { newUid, ITEM_INFO } from './ItemTypes.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
-const PICK_COUNT = { glowcap: 8, giantfern: 5, azureberry: 9, sunherb: 7, frostcrystal: 5 }; // (a plant has at most this many picked parts)
+const PICK_COUNT = { glowcap: 8, giantfern: 5, azureberry: 9, sunherb: 7, frostcrystal: 5, armourleaf: 4 }; // (a plant has at most this many picked parts)
 const BUDGET_MS = 1.2; // placing groups: at most this long a frame
-const REACH = { glowcap: 2.2, giantfern: 4.5, azureberry: 2.4, sunherb: 1.8, frostcrystal: 3 }; // m round the plant: what a spell / ray touches
+const REACH = { glowcap: 2.2, giantfern: 4.5, azureberry: 2.4, sunherb: 1.8, frostcrystal: 3, armourleaf: 2.2 }; // m round the plant: what a spell / ray touches
 
 export class MagicFloraLife {
     constructor(game) {
@@ -81,7 +81,7 @@ export class MagicFloraLife {
         const gx0 = Math.floor((p.x - R) / C), gx1 = Math.floor((p.x + R) / C), gz0 = Math.floor((p.z - R) / C), gz1 = Math.floor((p.z + R) / C);
         const cx = p.x / C - 0.5, cz = p.z / C - 0.5, q = [];
         for (let gz = gz0; gz <= gz1; gz++) for (let gx = gx0; gx <= gx1; gx++) {
-            for (const kind of FLORA_ORDER) { const key = kind + '|' + gx + ',' + gz; if (!this.groups.has(key)) q.push({ key, kind, gx, gz, d: (gx - cx) ** 2 + (gz - cz) ** 2 }); }
+            for (const kind of FLORA_ORDER) { if ((FLORA_KINDS[kind].fromGen || 0) > (this.game.gen ?? 1)) continue; const key = kind + '|' + gx + ',' + gz; if (!this.groups.has(key)) q.push({ key, kind, gx, gz, d: (gx - cx) ** 2 + (gz - cz) ** 2 }); }
         }
         q.sort((a, b) => a.d - b.d);
         this._queue = q;

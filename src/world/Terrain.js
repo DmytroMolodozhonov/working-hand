@@ -289,7 +289,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 27;
+export const WORLD_GEN = 28;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -409,6 +409,8 @@ export const WIZ_SHOPS_FROM_GEN = 25;
 export const VAMPIRE_FROM_GEN = 26;
 /** The first generation with the three pyramids of Pharaoh Sandy in a desert of their own, one in the world (Pyramids.js). */
 export const PYRAMIDS_FROM_GEN = 27;
+/** Generation 28: the Armourleaf (Бронелист — the flower for the pentagram of protection from blasts) grows in the wild (MagicFlora.js: `fromGen`). */
+export const ARMOURLEAF_FROM_GEN = 28;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of

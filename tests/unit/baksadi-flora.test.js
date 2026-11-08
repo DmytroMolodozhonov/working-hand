@@ -65,7 +65,7 @@ test('the Baksadi pear heals more than a golden apple, is eaten like food, is a 
 });
 
 test('wild plants: every kind has a shape of the right size, finite and with its picked part; items have stable ids', () => {
-    const H = { glowcap: [1.2, 2.2], giantfern: [3.4, 5.2], azureberry: [1.3, 2.2], sunherb: [0.8, 1.6], frostcrystal: [3, 5.2] };
+    const H = { glowcap: [1.2, 2.2], giantfern: [3.4, 5.2], azureberry: [1.3, 2.2], sunherb: [0.8, 1.6], frostcrystal: [3, 5.2], armourleaf: [1.4, 2.4] };
     for (const kind of FLORA_ORDER) {
         const K = FLORA_KINDS[kind];
         for (let v = 0; v < FLORA_VARIANTS; v++) {
@@ -82,7 +82,7 @@ test('wild plants: every kind has a shape of the right size, finite and with its
         assert.equal(FLORA_OF_ITEM[K.item], kind);
         assert.ok(makeItemModel({ kind: K.item }).children.length);
     }
-    assert.deepEqual(Object.keys(FLORA_ITEMS).sort(), ['azure_berry', 'frost_shard', 'fern_frond', 'glowcap_mushroom', 'sun_herb'].sort());
+    assert.deepEqual(Object.keys(FLORA_ITEMS).sort(), ['armor_leaf', 'azure_berry', 'frost_shard', 'fern_frond', 'glowcap_mushroom', 'sun_herb'].sort());
     assert.ok(foodHeal({ kind: 'azure_berry' }) > 0 && !ITEM_INFO.glowcap_mushroom.heal);
 });
 

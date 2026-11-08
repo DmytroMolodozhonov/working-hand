@@ -7,6 +7,8 @@
  *   fire «Ignaris» — a Brightflower's heart lying on the circle, 150 mana → ordinary fire does nothing to me (no harm, no catching fire); the hell's fire still hurts but cannot set me
  *                    alight; the fire serpent (hell fire) hurts at half. The cut is `filterDamage`, called by Combat.damage; the «no catching fire» is `Burning._igniteMe`.
  *
+ *   blast «Murus» — a leaf of the Armourleaf lying on the circle, 150 mana → «Бомбарда» / «Бомбарда Максима» do no harm to me (the push stays), the other blasts are twice as weak (`filterDamage`).
+ *
  * The gifts live with the hero (the world's player record `resist`; a death takes them — `onDeath`; «Give Me My Power» brings them back — Legacy.js).
  *
  * «А если»: not enough mana / a flower missing — nothing is paid or burnt, a hint says what to bring (once per standing); two circles of one kind — «already have», nothing paid; dead / game closed
@@ -15,32 +17,34 @@
  * dark level above 10 in an old save — taken off at the first look.
  */
 import * as THREE from 'three';
-import { RESIST, RESIST_HINT, findFlowers, findFireHeart, canGetDarkWard, keepsDarkWard, darkFactor, fireFactor } from './ResistRules.js';
+import { RESIST, RESIST_HINT, findFlowers, findFireHeart, findArmorLeaf, canGetDarkWard, keepsDarkWard, darkFactor, fireFactor, blastFactor } from './ResistRules.js';
 import { darkLevel } from './DarkMagic.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3();
-const COLS = { dark: [0xffffff, 0xfff4d0, 0xcfe8ff, 0xffe9a8], fire: [0xff7a1a, 0xffc15a, 0xfff0b0, 0xff4a10] };
+const COLS = { dark: [0xffffff, 0xfff4d0, 0xcfe8ff, 0xffe9a8], fire: [0xff7a1a, 0xffc15a, 0xfff0b0, 0xff4a10], blast: [0xc8d6e4, 0xf2c24a, 0xffffff, 0x8ea6bf] };
 
 export class PentagramResist {
     constructor(game) {
         this.game = game;
         this.dark = false;
         this.fire = false;
+        this.blast = false;
         this.anim = null; // the picture {kind, t, m}
         this._chk = 0;
     }
 
     // ------------------------------------------------------------ saving
-    snapshot() { return this.dark || this.fire ? { d: this.dark ? 1 : 0, f: this.fire ? 1 : 0 } : null; }
-    restore(o) { this.dark = !!o?.d; this.fire = !!o?.f; this._chk = 0; }
+    snapshot() { return this.dark || this.fire || this.blast ? { d: this.dark ? 1 : 0, f: this.fire ? 1 : 0, b: this.blast ? 1 : 0 } : null; }
+    restore(o) { this.dark = !!o?.d; this.fire = !!o?.f; this.blast = !!o?.b; this._chk = 0; }
     /** Death: both gifts go (they lie in the body with the rest of the power: Legacy.js). */
-    onDeath() { const had = this.dark || this.fire; this.restore(null); this.anim = null; if (had) this.game.perf?.note?.('🛡️ защита от тёмной магии / огня: дары забрала смерть'); }
+    onDeath() { const had = this.dark || this.fire || this.blast; this.restore(null); this.anim = null; if (had) this.game.perf?.note?.('🛡️ защита от тёмной магии / огня: дары забрала смерть'); }
 
     // ------------------------------------------------------------ what it does
     /** Combat.damage: a blow of `amount` of `kind` against me — how much of it gets through. */
     filterDamage(amount, kind) {
         if (this.dark) amount *= darkFactor(kind);
         if (this.fire) amount *= fireFactor(kind);
+        if (this.blast) amount *= blastFactor(kind); // (only the harm: the push and the fall come from CreatureImpact / the blast itself)
         return amount;
     }
     /** Burning._igniteMe: may fire set me alight? (the ward: never — neither the ordinary fire nor the hell's) */
@@ -54,8 +58,8 @@ export class PentagramResist {
     useCircle(kind, ctx) {
         const g = this.game, pays = ctx.pays;
         if (g.isDeadLocal || g.combat?.dead) return false;
-        const dark = kind === 'dark';
-        if (dark ? this.dark : this.fire) { ctx.hint('🛡️ ' + (dark ? RESIST_HINT.darkHave : RESIST_HINT.fireHave)); return false; }
+        const dark = kind === 'dark', blast = kind === 'blast';
+        if (dark ? this.dark : blast ? this.blast : this.fire) { ctx.hint('🛡️ ' + (dark ? RESIST_HINT.darkHave : blast ? RESIST_HINT.blastHave : RESIST_HINT.fireHave)); return false; }
         let used = [];
         if (dark) {
             const can = canGetDarkWard({ level: darkLevel(g.dark), broken: !!g.breakward?.marked, has: this.dark });
@@ -65,6 +69,12 @@ export class PentagramResist {
                 if (!f.ok) { ctx.hint('🤍 ' + RESIST_HINT.noFlowers(f.missing)); return false; }
                 used = f.used;
             }
+        } else if (blast) {
+            if (pays) {
+                const h = findArmorLeaf(this._looseIn(ctx.m));
+                if (!h) { ctx.hint('🛡️ ' + RESIST_HINT.noLeaf); return false; }
+                used = [h];
+            }
         } else if (pays) {
             const h = findFireHeart(this._looseIn(ctx.m));
             if (!h) { ctx.hint('🛡️ ' + RESIST_HINT.noHeart); return false; }
@@ -73,11 +83,11 @@ export class PentagramResist {
         if (pays && ctx.mana < RESIST.COST) { ctx.hint((dark ? '🤍 ' : '🛡️ ') + RESIST_HINT.noMana(RESIST.COST)); return false; }
         if (pays) { g.combat.fatigue -= RESIST.COST; g.combat._hudKey = ''; }
         for (const L of used) this._take(L);
-        if (dark) this.dark = true; else { this.fire = true; g.burning?._outMe?.('ward'); } // (given at once: the picture below is only the picture; a burning one is put out)
+        if (dark) this.dark = true; else if (blast) this.blast = true; else { this.fire = true; g.burning?._outMe?.('ward'); } // (given at once: the picture below is only the picture; a burning one is put out)
         this.anim = { kind, t: 0, m: ctx.m };
         ctx.fx?.();
-        g.hud?.setVoice?.(dark ? RESIST_HINT.darkDone : RESIST_HINT.fireDone, true);
-        g.perf?.note?.(dark ? '🤍 Пентаграмма защиты от тёмной магии: дар получен' : '🛡️ Пентаграмма защиты от огня: дар получен');
+        g.hud?.setVoice?.(dark ? RESIST_HINT.darkDone : blast ? RESIST_HINT.blastDone : RESIST_HINT.fireDone, true);
+        g.perf?.note?.(dark ? '🤍 Пентаграмма защиты от тёмной магии: дар получен' : blast ? '🛡️ Пентаграмма защиты от взрывов: дар получен' : '🛡️ Пентаграмма защиты от огня: дар получен');
         return true;
     }
 

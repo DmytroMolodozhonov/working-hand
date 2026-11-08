@@ -13,7 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
-import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES } from './PentagramFigures.js';
+import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES, MURUS_LINES } from './PentagramFigures.js';
 import { INFERNUM } from './HellRules.js';
 
 export const PENT = {
@@ -124,6 +124,12 @@ registerPentagram({
 registerPentagram({
     id: 'fireward', title: 'Пентаграмма защиты от огня', dark: false, glow: 0xff9a3a, cost: 150, permanent: true, scroll: 'PentagramFireward', lines: FIREWARD_LINES,
     effect: 'Бросьте в круг сердцевину Ярколета, встаньте в него и заплатите 150 маны — обычный огонь вас больше не берёт и не поджигает. Адский огонь всё ещё жжёт (но не поджигает), а огненный змей — вдвое слабее.',
+});
+
+// The WHITE pentagram of protection from blasts (ResistRules.js, PentagramResist.js): a leaf of the Armourleaf on the circle, 150 mana — «Bombardo» does no harm, the other blasts are twice as weak.
+registerPentagram({
+    id: 'blastward', title: 'Пентаграмма защиты от взрывов', dark: false, glow: 0xc8d6e4, cost: 150, permanent: true, scroll: 'PentagramBlastward', lines: MURUS_LINES,
+    effect: 'Бросьте в круг лист бронелиста, встаньте в круг и заплатите 150 маны — «Бомбарда» и «Бомбарда Максима» вас больше не ранят, а другие взрывы бьют вдвое слабее. Отбросить и повалить вас взрыв по-прежнему может.',
 });
 
 // The WHITE pentagram of water power (HydroRules.js, PentagramHydro.js): hold a liquid water spell («Waterbollow») at the stand, 50 mana — the water spells take their water from the air (not in a desert).

@@ -110,3 +110,64 @@ test('подключено в игре: урон, поджог, сохранен
     assert.match(src('src/game/Offerings.js'), /g\.resist\?\.dark/);
     assert.match(src('src/game/ItemTypes.js'), /pent:darkward/); assert.match(src('src/game/ItemTypes.js'), /pent:fireward/);
 });
+
+// ---- «Pentagranium Murus»: protection from blasts (the author 08.11: «Бомбардо и Бомбардо Максима — иммунитет, толкать можно; Бум и Инспириус — вдвое слабее»)
+import { blastFactor, findArmorLeaf, RESIST as RES_B } from '../../src/game/ResistRules.js';
+import { floraHarm as _fh, FLORA_KINDS as _FK, FLORA_ITEMS as _FI } from '../../src/game/MagicFlora.js';
+import { PENT_NAMES as _PN } from '../../src/game/PentagramWords.js';
+
+test('blast ward: Bombardo (both) none, Boom / Inspirius / a cannonball half, the rest whole', () => {
+    for (const k of ['Bombardo', 'BombardoMaxima']) assert.equal(blastFactor(k), 0, k);
+    for (const k of ['Boom', 'Inspirius', 'Cannon']) assert.equal(blastFactor(k), 0.5, k);
+    for (const k of ['Inferno', 'AvadaKedavra', 'melee', 'Sectura']) assert.equal(blastFactor(k), 1, k);
+});
+
+test('blast ward: the gift cuts the harm, saves and goes with death, needs the leaf of the Armourleaf', () => {
+    const r = new PentagramResist({ perf: { note() {} } });
+    assert.equal(r.filterDamage(100, 'Bombardo'), 100);
+    r.blast = true;
+    assert.equal(r.filterDamage(100, 'Bombardo'), 0);
+    assert.equal(r.filterDamage(100, 'Inspirius'), 50);
+    assert.equal(r.filterDamage(40, 'Inferno'), 40);
+    const snap = r.snapshot(), r2 = new PentagramResist({ perf: { note() {} } });
+    r2.restore(snap);
+    assert.equal(r2.blast, true);
+    r2.onDeath();
+    assert.equal(r2.blast, false);
+    assert.equal(r2.snapshot(), null);
+    assert.equal(findArmorLeaf([{ item: { kind: 'apple' } }]), null);
+    assert.ok(findArmorLeaf([{ item: { kind: RES_B.BLAST_ITEM, count: 1 } }]));
+});
+
+test('blast ward: used in a circle — a leaf is burnt and 150 mana paid; nothing without them', () => {
+    const hints = [], loose = new Map(), gone = [];
+    const g = { isDeadLocal: false, combat: { fatigue: 300, dead: false }, perf: { note() {} }, hud: { setVoice() {} },
+        items: { loose, removeLoose: (u) => { loose.delete(u); gone.push(u); } } };
+    const r = new PentagramResist(g);
+    const m = { x: 0, y: 0, z: 0, r: 5 };
+    const ctx = { m, pays: true, mana: 300, hint: (s) => hints.push(s) };
+    assert.equal(r.useCircle('blast', ctx), false); // (no leaf)
+    assert.ok(hints.length && !r.blast);
+    loose.set(1, { item: { kind: 'armor_leaf', count: 1 }, model: { position: { x: 1, y: 0, z: 1 } }, rest: true });
+    assert.equal(r.useCircle('blast', { ...ctx, mana: 100 }), false); // (no mana)
+    assert.equal(g.combat.fatigue, 300);
+    assert.equal(r.useCircle('blast', ctx), true);
+    assert.equal(r.blast, true);
+    assert.deepEqual(gone, [1]);
+    assert.equal(g.combat.fatigue, 150);
+    assert.equal(r.useCircle('blast', ctx), false); // (already have)
+});
+
+test('blast ward: the name, the picture, the price, the plant (only worlds of generation 28+) and its «who/what»', () => {
+    assert.equal(_PN.blastward.en, 'Murus');
+    const def = PENTAGRAMS.blastward;
+    assert.equal(def.dark, false);
+    assert.equal(def.cost, 150);
+    assert.ok(def.lines.length >= 5);
+    const K = _FK.armourleaf;
+    assert.equal(K.fromGen, 28);
+    assert.equal(K.item, 'armor_leaf');
+    assert.ok(_FI.armor_leaf.name);
+    assert.equal(_fh('armourleaf', 'Bombardo'), 'destroy');
+    assert.equal(_fh('armourleaf', 'Inferno'), 'burn');
+});

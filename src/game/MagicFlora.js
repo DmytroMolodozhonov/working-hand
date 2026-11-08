@@ -61,6 +61,14 @@ export const FLORA_KINDS = {
         solid: { r: 0.42, h: 4 }, // the crystal trunk
         harm: { fire: 'melt', blast: 'destroy', lightning: 'destroy', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
     },
+    armourleaf: {
+        id: 'armourleaf', name: 'Бронелист', nameMany: 'бронелисты', icon: '🛡️', item: 'armor_leaf', fromGen: 28, // (= ARMOURLEAF_FROM_GEN in Terrain.js) (only worlds of generation 28 and newer: old worlds do not change)
+        biomes: { steppe: 0.32, emerald: 0.3, meadow: 0.1, autumn: 0.16, tundra: 0.14 },
+        group: { min: 1, max: 2, spread: 9, gap: 3.4 },
+        salt: 6607, height: [1.9, 2.2],
+        solid: { r: 0.3, h: 1.6 }, // the stalk
+        harm: { fire: 'burn', blast: 'destroy', lightning: 'burn', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
+    },
 };
 /**
  * Where a plant's foot stands on the real ground. The ground is not flat under its mound: in the smooth world (generation 6+) the
@@ -70,7 +78,7 @@ export const FLORA_KINDS = {
  * ground — a grown-in foot, never a gap); a footprint over water / an empty column / a cliff (spread > `MAX_SPREAD`) grows nothing.
  * `t` — TerrainData (surfaceY, topLayer, get). Returns { y, spread } or null.
  */
-export const FOOT_R = { glowcap: 1.3, giantfern: 0.9, azureberry: 0.9, sunherb: 0.7, frostcrystal: 0.8 }; // (m at scale 1: the mound / the foot)
+export const FOOT_R = { glowcap: 1.3, giantfern: 0.9, azureberry: 0.9, sunherb: 0.7, frostcrystal: 0.8, armourleaf: 0.8 }; // (m at scale 1: the mound / the foot)
 export const MAX_SPREAD = 2; // (m: more height between the foot's points — a slope too steep for a mound)
 export function plantFoot(t, kind, x, z, scale, water) {
     const r = (FOOT_R[kind] || 0.8) * scale;
@@ -97,6 +105,7 @@ export const FLORA_ITEMS = {
     azure_berry: { name: 'Лазурная ягода', icon: '🫐', weight: 0.05, stack: 30, heal: 2 },
     sun_herb: { name: 'Солнечница', icon: '🌼', weight: 0.05, stack: 30, heal: 1 },
     frost_shard: { name: 'Ледяная игла', icon: '❄️', weight: 0.1, stack: 20 },
+    armor_leaf: { name: 'Лист бронелиста', icon: '🛡️', weight: 0.3, stack: 10 },
 };
 /** Which plant an item came from (item id → kind id). */
 export const FLORA_OF_ITEM = Object.fromEntries(FLORA_ORDER.map((k) => [FLORA_KINDS[k].item, k]));
@@ -107,6 +116,7 @@ export const FLORA_ITEM_TEXT = {
     fern_frond: { color: 0x4a9a3a, lines: ['Молодой завиток исполинского папоротника — пригодится для зелий', 'Растёт у подножия папоротника в лесах и зарослях'] },
     azure_berry: { color: 0x3a58c8, lines: ['Поднесите ко рту: +2 HP', 'Растёт на кустах лазурницы на лугах; ягоды вырастают снова'] },
     sun_herb: { color: 0xffb030, lines: ['Поднесите ко рту: +1 HP — жуётся горьковато', 'Целебная трава для зелий', 'Растёт золотыми кустиками на лугах и в степи'] },
+    armor_leaf: { color: 0x8fb4b8, lines: ['Твёрдый лист, похожий на пластину брони', 'Нужен для пентаграммы защиты от взрывов', 'Растёт бронелистами в степях и на изумрудных холмах'] },
     frost_shard: { color: 0x9fdcff, lines: ['Холодная игла хрусталя — пригодится для зелий', 'Растёт на хрустальниках на холодном севере'] },
 };
 
