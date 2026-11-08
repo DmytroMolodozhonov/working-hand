@@ -1,5 +1,5 @@
 /**
- * Helios.js — «Helios» («Гелиос»): the gods' spell that lights up a planet — a Sun of one's own over the caster. Only on the other planets, only from the gods' library.
+ * Helios.js — «Helios» («Гелиос»): the gods' spell that lights up the land — a Sun of one's own, high over the caster. On the planets AND on the Earth (the author 07.11: «на Земле пусть тоже срабатывает»), not in open space or in hell; only from the gods' library.
  *
  * The author 07.11: «новое заклинание, которое работает только на планетах. Божественное, позволяет симулировать Солнце. Игрок поднимает руку вверх (палочку или руку) и
  * произносит заклинание, крутая магия — появляется большой свет. Он позволит реально очень-очень много осветить, особенно на таких планетах помогает. 500 маны и 3 в секунду.»
@@ -8,18 +8,18 @@
  * runs up from the wand to a spot `HELIOS.HEIGHT` m above, the sky flashes, a wave of light runs out over the ground — and a SUN IGNITES there: a great boiling disc with a granular
  * surface, spots, a corona and turning rays. It hangs over the caster and FOLLOWS him (slowly: `HELIOS.FOLLOW` m/s), so whoever walks keeps their daylight.
  * What it does to the world (only the picture and the light — it burns nobody, and no heat: it is a light, not a star): within `R_FULL` m of it the planet is in FULL DAYLIGHT,
- * fading to the planet's own light at `R_FADE` m (the sky, the fog, the ambient light, the shadows all turn — `Space._planetSky` asks `lightAt`); the shadows fall from it;
+ * fading to the planet's own light at `R_FADE` m (the sky, the fog, the ambient light, the shadows all turn — on a planet `Space._planetSky` asks `lightAt`, on the Earth `World.setHelios` turns the night to day); the shadows fall from it;
  * a titan of the shade sees a light there (Titans._myLook), the iron titan has a Sun over it (Titans.sunAt) — the spell lights the foe too.
  * End: «стоп», no mana, a stun / a knock-down (Concentration.lose), death, going into space / to the Earth, leaving → the Sun goes out in `FADE` s (shrinks, cools, goes dark).
  *
  * The same on every computer: the cast goes as an ordinary spell (`spell Helios`), «стоп» as `stop`, a player leaving ends his Sun; each computer draws the Sun and lights ITS player
  * from the position of the caster's body (the avatar). Nothing is saved (a held spell ends with the session).
  *
- * «А если»: cast on the Earth / in open space / in hell → not cast (a hint, nothing paid: Space.spaceSpellBlock); no mana → not cast; flying / swimming / in another body → allowed
+ * «А если»: cast in open space / in hell → not cast (a hint, nothing paid: Space.spaceSpellBlock / HellRules.hellSpellBlock); no mana → not cast; flying / swimming / in another body → allowed
  * except Imperius / a dragon form (the hand is not yours); two casters → each their own Sun (the light of the nearer wins — no doubling, `lightAt` takes the strongest);
  * a second «Helios» while on → «already», nothing paid; two Suns near each other → one light (max); the caster flies away fast → the Sun lags behind him (28 m/s) and his daylight
  * fades gently (R_FADE) instead of vanishing; a planet without sky (Mercury: black) → the ground and everything on it lit, the sky stays black (it is space there); night on the
- * planet → the Sun is the day; a terraformed planet's own clouds etc.: untouched; the world's save: nothing; MAX_T 30 min — nothing holds for ever (a guard); the caster dies → off at once.
+ * Earth or the planet → the Sun is the day (on the Earth the day returns to its own hour when the Sun goes out); a terraformed planet's own clouds etc.: untouched; the world's save: nothing; MAX_T 30 min — nothing holds for ever (a guard); the caster dies → off at once.
  */
 import * as THREE from 'three';
 import { castingHand } from './WandAim.js';
@@ -27,10 +27,10 @@ import { aimedAtSky } from '../fx/Storm.js';
 
 export const HELIOS = {
     DRAIN: 3, // mana a second (the cost at once: Combat.SPELL_COST.Helios — 500)
-    HEIGHT: 150, // m above the caster
-    SUN_R: 17, // m: the disc's radius
-    R_FULL: 260, // m: full daylight within this of the Sun (horizontally)
-    R_FADE: 600, // m: no more light than the planet's own beyond this
+    HEIGHT: 380, // m above the caster (the author 07.11: «достаточно высоко… оно большое, оно и так будет хорошо освещать»)
+    SUN_R: 38, // m: the disc's radius (seen from below ~11° across: a great Sun)
+    R_FULL: 450, // m: full daylight within this of the Sun (horizontally)
+    R_FADE: 1000, // m: no more light than the place's own beyond this
     FOLLOW: 28, // m/s
     IGNITE: 3.2, // s: from the thread of light to a full Sun
     FADE: 3.5, // s: going out
@@ -47,14 +47,14 @@ export const HELIOS_TARGETS = {
     zombies: { does: 'none', why: 'не действует: это свет, а не жар — никого не жжёт' }, castlePeople: { does: 'none', why: 'не действует' },
     animals: { does: 'none', why: 'не действует' }, sailors: { does: 'none', why: 'не действует' },
     titans: { does: 'light', why: 'Железный титан видит Солнце над собой (его луч и накал работают); Титан-тень видит свет и замирает, когда на неё смотрят; остальных не трогает' },
-    vampire: { does: 'none', why: 'граф и его замок — на Земле, а Helios там не колдуется' },
-    ghosts: { does: 'none', why: 'призраки — Земля; не действует' },
+    vampire: { does: 'none', why: 'граф и его тучи на Земле: Солнце богов их не разгоняет (тучи рассеивает «To the Sun»); свет — только свет' },
+    ghosts: { does: 'none', why: 'призраки не боятся света: не действует' },
     fire: { does: 'none', why: 'не греет и не поджигает: это свет, не звезда' },
     water: { does: 'none', why: 'воду не испаряет' },
     blocks: { does: 'none', why: 'ничего не ломает и не плавит; лёд, снег и растения не трогает' },
-    earth: { does: 'none', why: 'на Земле не колдуется — у неё своё Солнце (Space.spaceSpellBlock)' },
+    earth: { does: 'light', why: 'на Земле колдуется: ночь вокруг сменяется днём (World.setHelios), небо, туман и тени идут от Солнца богов' },
     space: { does: 'none', why: 'в открытом космосе не колдуется — нужна поверхность планеты (Space.spaceSpellBlock)' },
-    hell: { does: 'none', why: 'в аду не колдуется — там Земля под землёй, а не планета' },
+    hell: { does: 'none', why: 'в аду не колдуется — там нет неба, Солнцу негде повиснуть (HellRules.hellSpellBlock)' },
     spells: { does: 'none', why: 'другие заклинания идут как обычно (кроме тех, что требуют концентрации: «сначала стоп»)' },
 };
 
@@ -166,8 +166,8 @@ export class Helios {
         const g = this.game, ch = g.character;
         const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
         const S = g.space, realm = S?.realm;
-        if (!S?.offEarth || !realm || realm === 'earth') return hint('☀️ «Helios» работает только на других планетах — на Земле у вас есть настоящее Солнце');
-        if (realm === 'space' || !S.planets?.get?.(realm)) return hint('☀️ «Helios» зажигается над поверхностью планеты — сядьте на неё');
+        if (g.hellGate?.inHell) return hint('☀️ В аду нет неба — Солнцу негде повиснуть');
+        if (realm === 'space' || (realm && realm !== 'earth' && !S?.planets?.get?.(realm))) return hint('☀️ «Helios» зажигается над поверхностью — сядьте на землю или на планету');
         if (this.on) return hint('☀️ Ваше Солнце уже горит. «Стоп» — погасить его');
         const aim = castingHand(g);
         if (!aim || !ch.isArmRaised(aim.side)) return hint('☀️ Поднимите руку (или палочку) к небу и скажите «Helios»');
@@ -238,7 +238,7 @@ export class Helios {
         const ch = g.character, now = performance.now();
         if (this.on) {
             if (g.combat?.dead || g.isDeadLocal) this.stop('dead');
-            else if (g.imperius?.active || !g.space?.offEarth || g.space?.realm === 'space' || g.space?.realm === 'earth') this.stop('stop');
+            else if (g.imperius?.active || g.space?.realm === 'space' || g.hellGate?.inHell) this.stop('stop');
             else if (g.combat?.drain(HELIOS.DRAIN * dt, dt) === false) this.stop('mana');
             else {
                 const c = g.combat;

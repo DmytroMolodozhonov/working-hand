@@ -93,7 +93,7 @@ export function spaceSpellBlock(name, where, air, def = null) {
     // («Planet Liquidation» — only from space: from the ground one cannot aim at a whole planet — PlanetDestroy.js)
     if (name === 'PlanetLiquidation' && where !== 'space') return where === 'earth' ? '🌌 «Planet Liquidation» — только в космосе: взлетите «Flying Maxima» и наведите руку на планету' : '🌌 «Planet Liquidation» — только из космоса: стоя на планете, её не взорвать (взлетите «Flying Maxima» и наведите руку на неё)';
     // («Helios» — the gods' artificial Sun: only on the surface of another planet; the Earth has its own Sun, open space has no ground to hang it over — Helios.js)
-    if (name === 'Helios') return where === 'earth' ? '☀️ «Helios» работает только на других планетах — на Земле у вас есть настоящее Солнце' : where === 'space' ? '☀️ «Helios» зажигается над поверхностью планеты — сядьте на неё' : null;
+    if (name === 'Helios') return where === 'space' ? '☀️ «Helios» зажигается над поверхностью — сядьте на землю или на планету' : null; // (the Earth too — the author 07.11)
     if (where === 'earth') return null;
     // («Brain Rot Maxima»: the dragons live on the Earth alone — Planets.earthly; off it there is nobody to calm — DragonTame.js)
     if (name === 'BrainrotMaxima') return '🐉 Драконы живут только на Земле — здесь «Брейнрот Максима» некого успокоить';

@@ -4607,6 +4607,11 @@ export class Game {
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost);
         this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
+        // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)
+        if (!this.space?.offEarth && !this.hellGate?.inHell) {
+            const me = this.character.group.position, L = this.helios?.active ? this.helios.lightAt(me.x, me.y, me.z, this._heliosL || (this._heliosL = { k: 0, dir: new THREE.Vector3() })) : null;
+            if (L || this._heliosOn) { this.world.setHelios(L); this._heliosOn = !!L; if (this.frameCount % 3 === 0 || !L) this.world.setDayPhase(this.dayPhase()); }
+        }
         this.underwaterLight?.update(dt); // (the depth of the eyes, the shafts, the caustics — before the haze takes its colour)
         this.swim.applyFog(); // (under the water: murky and blue)
         this.underwaterLight?.afterFog?.(); // (the background past the surface's edge: the water's own colour, set just now)

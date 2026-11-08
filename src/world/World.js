@@ -325,14 +325,18 @@ export class VoxelWorld {
     setDayPhase(phase) {
         const p = ((phase % 1) + 1) % 1;
         // night amount: 0 by day, 1 by night (the last quarter: 6 of 24 hours), soft around sunset and sunrise
-        const k = nightAt(p);
-        if (Math.abs(k - (this._night ?? -1)) < 0.002 && Math.abs(p - (this._phase ?? -1)) < 0.0005) return;
+        const hb = this._helios && this._helios.k > 0.002 ? this._helios : null; // («Helios»: the gods' Sun over the caster — the night gives way, the sun comes to it: setHelios)
+        const k = nightAt(p) * (1 - (hb ? hb.k : 0));
+        const hbKey = hb ? Math.round(hb.k * 100) + ':' + Math.round(hb.dir.x * 50) + ',' + Math.round(hb.dir.z * 50) : '';
+        if (Math.abs(k - (this._night ?? -1)) < 0.002 && Math.abs(p - (this._phase ?? -1)) < 0.0005 && hbKey === (this._hbKey ?? '')) return;
         this._night = k;
         this._phase = p;
+        this._hbKey = hbKey;
         // The sun moves across the sky and on under the horizon; the moon crosses the night
         const sun = (this._sunTrue || (this._sunTrue = new THREE.Vector3()));
         const moon = (this._moonDir || (this._moonDir = new THREE.Vector3()));
-        const elev = sunAt(p, sun, moon);
+        let elev = sunAt(p, sun, moon);
+        if (hb && hb.k > ss(-0.02, 0.1, elev)) { sun.lerp(hb.dir, Math.min(1, hb.k)).normalize(); elev = sun.y; } // (it outshines the real one: the light, the shadows and the sky's sun follow IT)
         const glow = sunsetGlow(elev);
         this.sky?.setNightAmount(k);
         this.sky?.setSunDirection(sun, moon);
@@ -377,6 +381,13 @@ export class VoxelWorld {
         this.hemiLight.intensity = (0.35 + (0.08 - 0.35) * k) * eve;
         this._shadowX = null; // re-aim the shadow
         this._rememberBase(k);
+    }
+
+    /** «Helios» (Helios.js): the gods' Sun lights this place — { k (0…1), dir (unit, to the Sun) } or null; the next setDayPhase turns the day on / off. */
+    setHelios(L) {
+        if (!L || !(L.k > 0.002)) { this._helios = null; return; }
+        const h = this._helios || (this._helios = { k: 0, dir: new THREE.Vector3() });
+        h.k = L.k; h.dir.copy(L.dir);
     }
 
     get nightAmount() {

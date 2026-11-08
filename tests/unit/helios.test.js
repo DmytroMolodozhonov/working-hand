@@ -28,10 +28,12 @@ test('цена 500 + 3 в секунду; удерживаемое; божест
     assert.equal(TEMPLE_SCROLLS[11], 'Helios');
 });
 
-test('только на планетах: на Земле и в космосе — отказ с причиной, на планете — можно', () => {
-    assert.match(spaceSpellBlock('Helios', 'earth', 'air'), /Земле/);
-    assert.match(spaceSpellBlock('Helios', 'space', 'space'), /планет/);
-    for (const where of ['mercury', 'mars', 'venus', 'neptune']) assert.equal(spaceSpellBlock('Helios', where, where === 'mercury' ? 'none' : 'air'), null, where);
+test('на Земле и на планетах можно; в открытом космосе и в аду — отказ с причиной (автор 07.11: «на Земле пусть тоже срабатывает»)', async () => {
+    const { hellSpellBlock } = await import('../../src/game/HellRules.js');
+    assert.match(spaceSpellBlock('Helios', 'space', 'space'), /сядьте/);
+    assert.match(hellSpellBlock('Helios'), /нет неба/);
+    for (const where of ['earth', 'mercury', 'mars', 'venus', 'neptune']) assert.equal(spaceSpellBlock('Helios', where, where === 'mercury' ? 'none' : 'air'), null, where);
+    assert.ok(HELIOS.HEIGHT >= 300, 'высоко — большое Солнце светит далеко');
 });
 
 test('свет: полный до R_FULL, плавно к нулю у R_FADE; Солнце загорается и гаснет плавно', () => {
@@ -97,14 +99,22 @@ test('своё Солнце гаснет, когда кончилась мана
     H2.fire({ x: 0, y: 8, z: 0 }, new THREE.Vector3(0, 1, 0), 'me', 'right');
     g2.space.realm = 'earth'; g2.space.offEarth = false;
     H2.update(1 / 30);
-    assert.equal(H2.on, false, 'на Земле нельзя держать');
+    assert.equal(H2.on, true, 'на Земле держится');
+    g2.hellGate = { inHell: true };
+    H2.update(1 / 30);
+    assert.equal(H2.on, false, 'в аду гаснет');
+    const g3 = fakeGame(); const H3 = new Helios(g3);
+    H3.fire({ x: 0, y: 8, z: 0 }, new THREE.Vector3(0, 1, 0), 'me', 'right');
+    g3.space.realm = 'space';
+    H3.update(1 / 30);
+    assert.equal(H3.on, false, 'в космосе гаснет');
 });
 
-test('cast: на Земле / в космосе — подсказка, мана не списана; на планете без поднятой руки — тоже', () => {
+test('cast: в космосе и в аду — подсказка, мана не списана', () => {
     const g = fakeGame(); const H = new Helios(g);
-    g.space.realm = 'earth'; g.space.offEarth = false;
+    g.hellGate = { inHell: true };
     assert.equal(H.cast(true), null); assert.ok(!g.calls.includes('pay'));
-    g.space.realm = 'space'; g.space.offEarth = true;
+    g.hellGate = null; g.space.realm = 'space'; g.space.offEarth = true;
     assert.equal(H.cast(true), null); assert.ok(!g.calls.includes('pay'));
 });
 
@@ -130,4 +140,11 @@ test('подключено: Game, сеть, концентрация, небо �
     assert.ok(plan.pedestals.some((p) => p.spell === 'Helios'));
     const ps = plan.pedestals.filter((p) => p.spell === 'Helios')[0];
     for (const q of plan.pedestals) if (q !== ps) assert.ok(Math.hypot(q.x - ps.x, q.z - ps.z) >= 1.9, 'постаменты не слиплись: ' + q.spell);
+});
+
+test('на Земле: World.setHelios — ночь уступает дню вокруг Солнца и возвращается, когда оно погасло', async () => {
+    const src2 = fs.readFileSync(new URL('../../src/world/World.js', import.meta.url), 'utf8');
+    assert.match(src2, /setHelios\(L\)/);
+    assert.match(src2, /nightAt\(p\) \* \(1 - \(hb \? hb\.k : 0\)\)/);
+    assert.match(fs.readFileSync(new URL('../../src/game/Game.js', import.meta.url), 'utf8'), /this\.world\.setHelios\(L\)/);
 });
