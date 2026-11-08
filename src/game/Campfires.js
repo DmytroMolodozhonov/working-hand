@@ -23,6 +23,7 @@
 import * as THREE from 'three';
 import { isWood, BLOCK } from '../world/Terrain.js';
 import { FX_RENDER_ORDER } from '../fx/Particles.js';
+import { FarShape } from '../core/FarShape.js';
 
 /** Seconds in a spell's flame that roast meat / fish (a campfire takes CAMPFIRE.COOK_TIME). */
 export const ROAST_T = 1;
@@ -371,6 +372,7 @@ export class Campfires {
 
     _remove(f) {
         if (!f) return;
+        f.one?.dispose(); f.one = null;
         disposeFire(f.model);
         this.list.delete(f.id);
     }
@@ -419,6 +421,9 @@ export class Campfires {
                 continue;
             }
             this._animate(f, dt, t, cam);
+            // (one shape per material, its stones, logs and tongues moved by the video card — FarShape: ~30 draws → a few)
+            if (!f.one) { f.model.userData.farRadius = 2; f.one = new FarShape(f.model); }
+            if (!f.one.on) f.one.set(true); else f.one.check();
         }
         this._light();
         this._feed(dt);
@@ -685,6 +690,7 @@ export class Campfires {
         const m = campfireModel();
         // (own geometries: prewarm disposes the sample's geometries, the shared ones stay)
         m.traverse((o) => { if (o.isMesh) o.geometry = o.geometry.clone(); });
+        new FarShape(m, { cache: false }).set(true); // (its one shape's shaders too)
         return m;
     }
 
