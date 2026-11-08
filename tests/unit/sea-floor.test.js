@@ -21,7 +21,9 @@ test('only in the sea, ≥ 2 m deep; the same from the same seed; the deep and t
     }
     assert.equal(land, 0, 'nothing on the land');
     assert.ok(!shallow.kelp && !shallow.lily, 'no kelp in the shallows');
-    assert.ok(deep.kelp > 0 && deep.lily > 0 && shallow.grass > 0 && shallow.staghorn > 0, JSON.stringify({ shallow, deep }));
+    assert.ok(deep.kelp > 0 && deep.lily > 0 && shallow.grass > 0, JSON.stringify({ shallow, deep }));
+    // (the author 07.11: «на берегу очень много кораллов — кораллы там не живут»: the shallows hold no corals at all)
+    for (const k of ['staghorn', 'fan', 'brain', 'table', 'tube', 'soft', 'anemone', 'glowcoral', 'glowfan', 'glowbrain', 'crystal']) assert.ok(!shallow[k], 'no ' + k + ' in the shallows');
 });
 
 test('it builds and lays the plants round the player within the caps; the fish swim in the water', () => {
@@ -61,4 +63,32 @@ test('kelp never reaches out of the water: ≤ depth − 3 and ≤ KELP_MAX (the
         assert.ok(p.s <= depth(p.x, p.z) - 3 + 1e-9 && p.s <= KELP_MAX && p.s >= 2, `kelp ${p.s.toFixed(2)} m in ${depth(p.x, p.z)} m of water`);
     }
     assert.ok(n > 100, 'there is kelp');
+});
+
+
+test('reef formations (the author 07.11: «целые структуры»): only in deep water, whole foot and top under it; the same from the seed; all seven build within the triangle budget', async () => {
+    const { reefStructures, reefGeo, reefTris, REEF_KINDS, REEF } = await import('../../src/fx/ReefStructures.js');
+    const depth = (x, z) => (x < 0 ? 0 : x < 400 ? 3 : x < 700 ? 9 : 26);
+    const kinds = {}; let shallowOnes = 0, n = 0;
+    for (let rx = -5; rx < 40; rx++) for (let rz = -10; rz < 10; rz++) {
+        const a = reefStructures(rx, rz, 7, depth), b = reefStructures(rx, rz, 7, depth);
+        assert.deepEqual(a, b);
+        for (const st of a) {
+            n++; kinds[st.kind] = (kinds[st.kind] || 0) + 1;
+            if (st.x < 400) shallowOnes++;
+            assert.ok(st.s >= REEF.MIN_SCALE);
+            assert.ok(REEF_KINDS[st.kind].H * st.s <= depth(st.x, st.z) - REEF.TOP_GAP + 1e-9, 'the top is under the water: ' + st.kind);
+        }
+    }
+    assert.equal(shallowOnes, 0, 'no formation in the shallows or on a beach');
+    assert.ok(n > 30 && Object.keys(kinds).length >= 5, JSON.stringify(kinds));
+    for (const k of Object.keys(REEF_KINDS)) {
+        const tris = reefTris(k);
+        assert.ok(tris > 3000 && tris < 26000, `${k}: ${tris} triangles`);
+        const g = reefGeo(k); g.computeBoundingBox();
+        const h = g.boundingBox.max.y, w = Math.max(g.boundingBox.max.x - g.boundingBox.min.x, g.boundingBox.max.z - g.boundingBox.min.z);
+        assert.ok(h > REEF_KINDS[k].H * 0.6 && h < REEF_KINDS[k].H * 1.6, `${k} height ${h.toFixed(1)} vs ${REEF_KINDS[k].H}`);
+        assert.ok(w > 4, `${k} width ${w.toFixed(1)}`);
+        assert.ok(g.getAttribute('color') && g.getAttribute('normal'));
+    }
 });
