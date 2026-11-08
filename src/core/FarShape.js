@@ -36,6 +36,23 @@ function plainMat(side) {
     if (!m) { m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side }); m.name = 'farshape-plain'; m.userData.shared = true; _plain.set(side, m); }
     return m;
 }
+/**
+ * The same with a picture (the author 08.11, «красиво, но дёшево»): Lambert parts that share ONE texture and differ only by colour
+ * (a hero's clothes — a pale cloth / leather picture tinted by each wearer's colour: 30–50 materials, ~30 draws even as one shape)
+ * share one bucket too — the colour baked into the vertices, the picture kept. The texture is shared (a cache by name), so the
+ * buckets stay few. Its look is the same: Lambert draws map × colour, here map × vertex colour.
+ */
+const mapLit = (m) => m.isMeshLambertMaterial && !!m.map && !m.vertexColors && !m.transparent && !m.alphaTest && m.opacity === 1 && !m.envMap && !m.lightMap && !m.aoMap && !m.emissiveMap && !(m.emissive && (m.emissive.r || m.emissive.g || m.emissive.b)) && m.onBeforeCompile === THREE.Material.prototype.onBeforeCompile && m.customProgramCacheKey === THREE.Material.prototype.customProgramCacheKey;
+const _mapped = new Map(); // map id | side → the shared white vertex-coloured Lambert with that picture
+function mapMat(map, side) {
+    const k = map.id + '|' + side;
+    let m = _mapped.get(k);
+    if (!m) {
+        if (_mapped.size > 256) _mapped.clear(); // (bounded: the pictures are a cache by name — a few dozen)
+        m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, map, side }); m.name = 'farshape-plain-map'; m.userData.shared = true; _mapped.set(k, m);
+    }
+    return m;
+}
 /** Before a draw: the twin takes what the game changed on its material (opacity, colours) this frame. */
 function syncTwin() {
     const tw = this.material, src = tw.userData.src;
@@ -208,7 +225,7 @@ export class FarShape {
         // (a bucket: one material (or the plain-coloured family), one set of camera layers, one shadow — as its parts had them)
         const by = new Map();
         for (const p of list) {
-            const bm = baseMat(p), mat = plainLit(bm) ? plainMat(bm.side) : bm, cs = !!(p.userData._cs ?? p.castShadow), lm = layerOf(p);
+            const bm = baseMat(p), mat = plainLit(bm) ? plainMat(bm.side) : mapLit(bm) && p.geometry.attributes.uv ? mapMat(bm.map, bm.side) : bm, cs = !!(p.userData._cs ?? p.castShadow), lm = layerOf(p);
             const k = mat.id + '|' + lm + '|' + (cs ? 1 : 0);
             let a = by.get(k);
             if (!a) by.set(k, (a = { mat, lm, cs, parts: [] }));
@@ -221,7 +238,7 @@ export class FarShape {
             const mat = b.mat;
             // (its parts' places in the skeleton and their shapes: the same for every model of the kind — one geometry for all)
             const idxs = b.parts.map((p) => list.indexOf(p));
-            const bake = mat.name === 'farshape-plain';
+            const bake = mat.name === 'farshape-plain' || mat.name === 'farshape-plain-map';
             const geo = mergedGeometry(b.parts, idxs, this.cache ? idxs.join(',') + '|' + b.parts.map((p) => p.geometry.id + (bake ? '.' + baseMat(p).id : '')).join(',') : null, bake);
             const mesh = new THREE.SkinnedMesh(geo, skinnedMaterial(mat));
             // (a material that changes as the game goes — a sparkle's pulse, a glow: its twin follows it before each draw)
@@ -264,6 +281,7 @@ export class FarShape {
  * Small skinned meshes in these materials' twins (and the shared plain one, both sides) — for Game.prewarm: the shaders
  * the one shapes need are compiled on the loading screen, not when the first herd / far crowd / red flash is seen.
  */
+let _px = null;
 export function skinnedSamples(materials) {
     const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
     const n = geo.attributes.position.count;
@@ -273,7 +291,10 @@ export function skinnedSamples(materials) {
     const c = new Float32Array(n * 3).fill(1);
     geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
     const out = [];
-    for (const m of [...materials, plainMat(THREE.FrontSide), plainMat(THREE.DoubleSide)]) {
+    // (the picture-and-baked-colour bucket's shader too: its program depends on «has a map», not on which — one 1×1 picture)
+    const px = _px || (_px = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1));
+    px.needsUpdate = true;
+    for (const m of [...materials, plainMat(THREE.FrontSide), plainMat(THREE.DoubleSide), mapMat(px, THREE.FrontSide), mapMat(px, THREE.DoubleSide)]) {
         const bone = new THREE.Object3D();
         const sm = new THREE.SkinnedMesh(geo, skinnedMaterial(m));
         sm.add(bone);
