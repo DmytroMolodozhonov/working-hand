@@ -1956,9 +1956,18 @@ export class ArenaDuels {
         for (const A of this.list.values()) {
             if (!A.def.desk) continue;
             const ph = this.auth ? (A.duel?.phase || 'idle') : A.ph, pl = this.auth ? (A.duel?.p ?? null) : A.pl;
-            if (pl == null || ph === 'idle' || ph === 'over') continue;
+            // (signed up and paid, the turn not come yet — the arena is busy or the stands are filling: the places are lit at once, dimmer, with the arrow,
+            //  so it is clear where to go and wait; the author 08.11: «оплатил участие — непонятно что дальше, метки никакой нет»)
+            const queued = (this.auth ? A.queue.has(g.localId) : this.myQueue === A.id) && !(pl === g.localId && ph !== 'idle' && ph !== 'over');
+            if (!queued && (pl == null || ph === 'idle' || ph === 'over')) continue;
             const d = Math.hypot(me.x - A.def.x, me.z - A.def.z);
             if (d >= bd) continue;
+            if (queued) {
+                const p = duelSpots(A.def), pm = Math.hypot(me.x - p.player.x, me.z - p.player.z);
+                bd = d;
+                best = { player: { x: p.player.x, y: A.def.floorY, z: p.player.z }, foe: { x: p.foe.x, y: A.def.floorY, z: p.foe.z }, power: 0.6, foePower: 0, arrow: pm > STEWARD.MARK_R };
+                continue;
+            }
             const mine = pl === g.localId, fight = ph === 'fight';
             const k = fight ? 0.35 : 1;
             const p = duelSpots(A.def);
