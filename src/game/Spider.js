@@ -502,7 +502,7 @@ export class Spiders {
 
     _animate(s, k, dt) {
         // (one shape per material, legs moved by the video card — FarShape: 27 draws → 3; her shapes are her own — no cache)
-        if (!s.one) { s.model.userData.farRadius = 14; // (her legs' span, the model ×SIZE: never culled while seen) s.one = new FarShape(s.model, { cache: false }); }
+        if (!s.one) { s.model.userData.farRadius = 14; s.one = new FarShape(s.model, { cache: false }); } // (14: her legs' span, the model ×SIZE — never culled while seen)
         if (!s.one.on) s.one.set(true); else s.one.check();
         s.walkT += dt * 7 * k;
         s.model.userData.legs.forEach((l, i) => { l.rotation.x = Math.sin(s.walkT + i * 1.3) * 0.35 * k; });
