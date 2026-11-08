@@ -153,6 +153,8 @@ export class Savior {
             if (kind) { const s = saviorLine(kind, this.lastLine); if (s) { this.lastLine = s; L._say(v, s, 4); this.lineT = SAVIOR.LINE_GAP_S; } }
         }
         if (!(v.fx & FX.DOME)) this.said.dome = 0;
+        this._diagT = (this._diagT || 0) - dt; // (a line in the journal every 8 s: where he is and what he does — to see at once if he stands aside)
+        if (this._diagT <= 0) { this._diagT = 8; this.game.perf?.note?.(`🤍 спаситель: до цели ${Math.round(d)} м, foe ${v.foe != null}, режим ${v.mode}, мана ${Math.round(v.mana)}, перерыв ${(v.castCd || 0).toFixed(1)}, высота ${Math.round(v.y)}, воздух ${this.air?.st || '-'}, роль боя ${v.engage?.role || '-'}`); }
         this._special(v, pp, d, dt);
     }
 

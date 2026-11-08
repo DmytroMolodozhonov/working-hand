@@ -239,7 +239,7 @@ export class WizardFight {
         const ready = (v.cs?.alertUntil || 0) > Date.now() || (v.readyUntil || 0) > Date.now() || !!(v.fx & FX.SHIELD);
         const level = this.life.wantedLevel(v.foe) || 0;
         const role = huntRole({ role: v.role, rank: v.rank, level, saw: true, tied: v.role === 'master', timid: false, hasWand: !v.noWand }, () => ((v.id.length * 31 + (v.idx | 0) * 17) % 100) / 100);
-        v.engage = { foe: v.foe, t: ready ? lag.t * 0.4 : lag.t, role, level, until: Date.now() + 20000 };
+        v.engage = { foe: v.foe, t: ready ? lag.t * 0.4 : lag.t, role: v.savior != null ? 'hunt' : role, level: v.savior != null ? Math.max(level, 3) : level, until: Date.now() + 20000 }; // (the Saviour always hunts: he does not keep a place)
         L.alog?.decision(v, `${reactLagText(lag)}${ready ? ' (уже настороже — вдвое быстрее)' : ''}; в погоне: ${role === 'hunt' ? 'идёт искать, если убежит' : 'держит место'}; розыск героя: ${level}`);
     }
 
