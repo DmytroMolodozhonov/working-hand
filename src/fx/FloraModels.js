@@ -160,7 +160,7 @@ export function floraMaterials() {
         bloom: glowByColour(swayify(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, side, emissive: 0xffc040, emissiveIntensity: 1 }), 0.05), 0.55),
         crystal: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.14, metalness: 0.25, side, emissive: 0x7fc8ff, emissiveIntensity: 1 }), 0.4),
         shard: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.1, metalness: 0.3, side, emissive: 0x9fdcff, emissiveIntensity: 1 }), 0.8),
-        plate: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.5, side, emissive: 0xbfe4ff, emissiveIntensity: 1 }), 0.12),
+        plate: glowByColour(new THREE.MeshLambertMaterial({ vertexColors: true, side, emissive: 0x9fc8d0, emissiveIntensity: 1 }), 1.4),
         frond: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side, emissive: 0x6cff9a, emissiveIntensity: 1 }), 0.12),
     };
     return _mats;
@@ -487,14 +487,14 @@ function plateInto(B, o, a, tilt, L, W, rnd, rivets = true) {
         const side = s * w, out = cup + rib - droop * 0.2;
         return { s, w, p: [o[0] + A[0] * along + S[0] * side + N[0] * out, o[1] + A[1] * along + S[1] * side + N[1] * out - droop * 0.8, o[2] + A[2] * along + S[2] * side + N[2] * out], v };
     };
-    B.grid(6, 12, (u, v) => {
+    B.grid(10, 18, (u, v) => {
         const q = at(u, v), edge = Math.pow(Math.abs(q.s), 6) + Math.pow(v, 9) * 0.8;
         const band = 0.88 + 0.12 * Math.sin(v * 38 + 1.2), midrib = Math.exp(-((q.s / 0.14) ** 2));
         let c = lerpC(PLATE.deep, PLATE.mid, clamp01(0.25 + v * 0.55 + 0.2 * Math.cos(q.s * 2.4)));
         c = lerpC(c, PLATE.light, midrib * 0.55);
         c = lerpC(c, PLATE.bronze, clamp01(edge * 1.1));
         return { p: q.p, c: shade(c, band * worn) };
-    }, true);
+    }, false);
     if (rivets) for (const v of [0.26, 0.44, 0.62]) for (const sgn of [-1, 1]) {
         const q = at(0.5 + sgn * 0.5 * 0.74, v), r = 0.017 * (L / 0.75);
         B.blob(q.p[0] + N[0] * 0.012, q.p[1] + N[1] * 0.012, q.p[2] + N[2] * 0.012, r, r, r, () => PLATE.rivet, 5, 3, 0);
