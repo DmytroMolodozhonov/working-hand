@@ -76,7 +76,7 @@ export class Godhood {
         this.almostT = GOD.ALMOST_WAIT;
         this.warm();
         this.state.renounced = false;
-        g.hud?.toast?.('☀️ Вы почти бог. Магии у вас пока нет совсем — подождите: сила богов вот-вот придёт');
+        this._almostToast = true; // (said when the world is shown — update)
     }
 
     /** The pillar's shaders compiled ahead (an idle moment), never in the ascension's first frame (CLAUDE.md «Шейдеры только на загрузке»). */
@@ -397,6 +397,8 @@ export class Godhood {
     update(dt) {
         const g = this.game;
         if (!(dt > 0)) return;
+        if (this.almostT > 0 && g.revealed === false) return; // (the 10 seconds are counted from the moment the world is SEEN: behind the loading screen the ascension would play to nobody — the author 08.11)
+        if (this._almostToast) { this._almostToast = false; g.hud?.toast?.('☀️ Вы почти бог. Магии у вас пока нет совсем — подождите: сила богов вот-вот придёт'); }
         if (this.almostT > 0) {
             this.almostT -= dt;
             if (this.almostT <= 0) { this.almostT = 0; this.ascend(true); }
