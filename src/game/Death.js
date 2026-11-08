@@ -526,6 +526,10 @@ export class DeathSystem {
         if (b.model) { g.scene.remove(b.model); b.one?.dispose(); b.one = null; releaseShapes(b.model); b.model = null; }
         if (b.bones || !g.scene) return;
         const s = skeletonModel();
+        // (still bones: one shape per material — FarShape: 15 draws and 15 shadows → 1–2; up to MAX_BODIES lie about)
+        s.userData.farRadius = 2.5;
+        b.bonesOne = new FarShape(s, { cache: false });
+        b.bonesOne.set(true);
         s.scale.setScalar((b.len || 3) / 3);
         if (b.headPlusZ ?? b.k === 'v') s.rotation.y = Math.PI;
         const pivot = new THREE.Group();
@@ -545,6 +549,7 @@ export class DeathSystem {
         if (b.bones) {
             if (dust && g.fx) for (let i = 0; i < 24; i++) g.fx.spark(_v.set(b.x + (Math.random() - 0.5) * 1.5, b.y + 0.2, b.z + (Math.random() - 0.5) * 1.5), 0xd8d0bc, 0.12, _v2.set((Math.random() - 0.5) * 1.5, Math.random() * 1.5, (Math.random() - 0.5) * 1.5), 1.2);
             g.scene.remove(b.bones);
+            b.bonesOne?.dispose(); b.bonesOne = null; // (its shape first: its twin materials are shared — disposeTree must not take them)
             disposeTree(b.bones);
         }
     }
