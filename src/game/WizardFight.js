@@ -30,7 +30,7 @@
  */
 
 import * as THREE from 'three';
-import { SAVIOR } from './SaviorRules.js';
+import { SAVIOR, SAVIOR_SPECIAL } from './SaviorRules.js';
 import { duelRange, emptyRange } from './DuelRange.js';
 import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist, prepTime, CAST_PREP } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
@@ -308,7 +308,7 @@ export class WizardFight {
         // (a held shield: the guards and the screen keep it up — it costs a little mana)
         if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2) { if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; }
         // the Master: he comes too close → blink away
-        if ((v.role === 'master' || v.savior) && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
+        if ((v.role === 'master' || v.savior != null) && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
         let spot = this._spot(v, fp, d, sq);
         // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
         const shot = this._castReady(v, d) && this.clearShot(v, fp);
@@ -329,10 +329,10 @@ export class WizardFight {
         if (v.unstickT > 0 && v.path) {
             // (stuck: round by the tower's paths for a while)
             v.unstickT -= dt;
-            if (L._followPath(v, dt, RUN * (v.savior ? SAVIOR_SPEED : 1))) { v.unstickT = 0; v.path = null; }
+            if (L._followPath(v, dt, RUN * (v.savior != null ? SAVIOR_SPEED : 1))) { v.unstickT = 0; v.path = null; }
             moving = true;
         } else if (spot) {
-            const there = L._goSpot(v, spot.x, spot.z, (spot.run ? RUN : WALK * 1.3) * (v.savior ? SAVIOR_SPEED : 1), dt, 0.7, spot.y); // (the Saviour is quick: SaviorRules.SPEED_K)
+            const there = L._goSpot(v, spot.x, spot.z, (spot.run ? RUN : WALK * 1.3) * (v.savior != null ? SAVIOR_SPEED : 1), dt, 0.7, spot.y); // (the Saviour is quick: SaviorRules.SPEED_K)
             moving = !there && v.speed > 0;
             if (!there) this._stuck(v, spot, dt); else v.stk = null;
         }
@@ -586,6 +586,7 @@ export class WizardFight {
 
     /** The spell a wizard really casts at this foe (by his wanted level: Wanted.wantedTactics). */
     _spellFor(v, spell, T, foe = null) {
+        if (v.savior != null) return 'Electrum'; // (the white Saviour: only the blue «Электром» of the duel charges — SaviorRules.js; his wind and blasts are his own: Savior.js)
         if (v.lesson) return lessonSpell(); // (a lesson: only Expelliarmus / Stupefy — never freezing, never deadly)
         if (spell === 'LevitateDuel' || spell === 'AvadaKedavra') spell = 'Stupefy'; // (they don't lift a man to hold him)
         if (T.soft && spell === 'SapiraDuel') spell = v.role !== 'student' && Math.random() < 0.4 ? 'IceDuel' : 'Stupefy'; // (calm: only stun, freeze)
@@ -723,6 +724,7 @@ export class WizardFight {
     /** A duel charge from the wand at a player (the charge itself: Duel.js, seen by everybody). */
     _cast(v, spell, foeId, fp, vs = null, at = null) {
         const g = this.game, duel = g.duel;
+        if (SAVIOR_SPECIAL.has(spell)) return this._castSpecial(v, spell, fp); // (the Saviour's own: the wind, the blasts — not duel charges)
         if (!duel?._addBolt) return false;
         // «лицом к цели»: from the side or with his back — no spell; he turns first (step / pursueThreat)
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
@@ -756,6 +758,29 @@ export class WizardFight {
         return true;
     }
 
+    /**
+     * The white Saviour's attack spells that are not duel charges (SaviorRules.SPECIAL): «Wind Maxima», «Bombardo Maxima», «Bombardo» — the very spells of the players
+     * (SpellManager.cast with his id: the host runs it and tells the others, whose computers decide what it does to their hero).
+     */
+    _castSpecial(v, spell, fp) {
+        const g = this.game;
+        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
+        if (v.group.visible) v.model.getWandTip(_o);
+        else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
+        _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
+        if (!g.spells?.cast) return false;
+        g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id);
+        g.sync?.spell?.(spell, _o, _d, 'right');
+        const me = g.character.group.position;
+        if (Math.hypot(me.x - v.x, me.z - v.z) < 60) g.sound?.spellCast?.(spell, _o);
+        v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));
+        v.castT = 0.55;
+        v.model.castNow = true;
+        this._startHold(v);
+        v.holdAt = { x: fp.x, z: fp.z };
+        return true;
+    }
+
     /** A charge flies at this wizard: a shield, the dome, or a step aside (WizardAI.react). */
     _react(v, dt) {
         const duel = this.game.duel;
@@ -778,7 +803,8 @@ export class WizardFight {
             seen.add(v.id);
             if (!n.shield) { this._caught(v, b); continue; } // (too late to do anything)
             const domeOk = !!v.W?.dome && (v.domeCd ?? 0) <= 0 && !(v.fx & FX.DOME);
-            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: (v.role === 'master' || !!v.savior) && domeOk, spell: b.spell, eta, robe: !!v.robe });
+            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: (v.role === 'master' || v.savior != null) && domeOk, spell: b.spell, eta, robe: !!v.robe });
+            if (v.savior != null && r === 'counter') r = 'shield'; // (he never answers with a duel spell of his own: the shield, the dome)
             // the strong ones (300+ mana) raise «Protection Maxima» when it is really worth it: a heavy spell, a volley, many foes, a bad state
             if (r === 'shield' && domeOk && canDome(v.maxMana, v.rank)) {
                 let inc = 0;

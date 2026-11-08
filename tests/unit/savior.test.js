@@ -1,7 +1,7 @@
 // «Волшебник-спаситель» (the author 08.11): 10 wizards in 2 min → 50 %; beaten → 2 game days of peace, then 1500 mana after 5 killed.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SAVIOR, STAGES, stageOf, KillWatch, saviorComes, saviorLine, SAVIOR_LINES, WHITE_SPELLS, saviorEntry, GX0, SAVIOR_TARGETS } from '../../src/game/SaviorRules.js';
+import { SAVIOR, STAGES, stageOf, KillWatch, saviorComes, saviorLine, SAVIOR_LINES, WHITE_SPELLS, SAVIOR_SPECIAL, pickSpecial, dangerNow, saviorEntry, GX0, SAVIOR_TARGETS } from '../../src/game/SaviorRules.js';
 import { WIZ, WIZ_RANKS, wizardStats, pickSpell, WIZARD_ROLES } from '../../src/game/WizardAI.js';
 import { Savior } from '../../src/game/Savior.js';
 import { DARK_SPELLS } from '../../src/game/DarkMagic.js';
@@ -36,21 +36,38 @@ test('the stages: 700 mana, then 1500 for good; the entry is the same on every c
     assert.equal(wizardStats('savior', 'savior', 1500).mana, 1500);
 });
 
-test('the white mage: no black spell, the favourite is «Электром»; the dome is held better than the Master\'s', () => {
-    for (const s of Object.keys(WIZ.savior.spells)) assert.ok(!DARK_SPELLS.has(s) && s !== 'AvadaKedavra' && s !== 'SapiraDuel', s);
-    for (const s of WHITE_SPELLS) assert.ok(!DARK_SPELLS.has(s));
-    const sp = WIZ.savior.spells;
-    assert.equal(Object.entries(sp).sort((a, b) => b[1] - a[1])[0][0], 'Electrum');
-    assert.ok(Math.abs(Object.values(sp).reduce((a, b) => a + b, 0) - 1) < 1e-9);
-    const picks = {}; for (let i = 0; i < 4000; i++) { const s = pickSpell('savior', () => (i + 0.5) / 4000); picks[s] = (picks[s] || 0) + 1; }
-    assert.ok(picks.Electrum > picks.Stupefy && !picks.AvadaKedavra);
+test('only BLUE spells (the author 08.11): the duel charge is «Электром» alone; no Dust, Stupefy, Jolt, Ice, Expelliarmus, nothing dark', () => {
+    assert.deepEqual(Object.keys(WIZ.savior.spells), ['Electrum']);
+    assert.deepEqual([...SAVIOR_SPECIAL].sort(), ['Bombardo', 'BombardoMaxima', 'WindMaxima']);
+    for (const s of [...WHITE_SPELLS, ...Object.keys(WIZ.savior.spells)]) assert.ok(!DARK_SPELLS.has(s) && !/Sands|Stupefy|Jolt|Ice|Expelliarmus|Sapira|Avada/.test(s), s);
+    for (let i = 0; i < 500; i++) assert.equal(pickSpell('savior', () => (i + 0.5) / 500), 'Electrum');
     assert.ok(WIZ.savior.dome.hits > WIZ.master.dome.hits && WIZ.savior.dome.t > WIZ.master.dome.t && WIZ.savior.dome.cd < WIZ.master.dome.cd);
     assert.ok(SAVIOR.SPEED_K > 1);
+});
+
+test('Bombardo Maxima only if he saw the player use it; the plain Bombardo if the player used any; the wind close or now and then', () => {
+    const base = { cd: {}, dist: 20, mana: 500 };
+    assert.equal(pickSpecial({ ...base, seen: {}, rng: () => 0.5 }), null, 'a bomb never out of the blue');
+    assert.equal(pickSpecial({ ...base, seen: { BombardoMaxima: 5 }, rng: () => 0.5 }), 'BombardoMaxima');
+    assert.equal(pickSpecial({ ...base, seen: { Bombardo: 5 }, rng: () => 0.5 }), 'Bombardo');
+    assert.equal(pickSpecial({ ...base, seen: { Bombardo: 100 }, rng: () => 0.5 }), null, 'seen long ago: not counted');
+    assert.equal(pickSpecial({ ...base, seen: { BombardoMaxima: 5 }, cd: { BombardoMaxima: 4 }, rng: () => 0.5 }), 'Bombardo', 'the Maxima rests: the plain one');
+    assert.equal(pickSpecial({ ...base, dist: 5, seen: {}, rng: () => 0.5 }), 'WindMaxima');
+    assert.equal(pickSpecial({ ...base, dist: 5, seen: {}, mana: 3, rng: () => 0.5 }), null, 'no mana: nothing');
+});
+
+test('the flight is the insurance: a danger = hurt badly, little mana, or a burst of damage', () => {
+    assert.equal(dangerNow({ hpK: 1, manaK: 1, burst: 0 }), false);
+    assert.equal(dangerNow({ hpK: 0.45 }), true);
+    assert.equal(dangerNow({ manaK: 0.1 }), true);
+    assert.equal(dangerNow({ burst: 0.35 }), true);
+    assert.ok(SAVIOR.SKY_H > 10 && SAVIOR.AIR_SPEED > 10 && SAVIOR.FLY_H < SAVIOR.SKY_H);
 });
 
 test('up to ten prepared lines, never the same twice in a row', () => {
     const all = Object.values(SAVIOR_LINES).flat();
     assert.ok(all.length >= 6 && all.length <= 10, String(all.length));
+    assert.ok(SAVIOR_LINES.fly.length >= 1, 'a line for the flight away');
     let last = null; for (let i = 0; i < 50; i++) { const s = saviorLine('attack', last); assert.notEqual(s, last); last = s; }
     assert.ok(SAVIOR_TARGETS.me.why);
 });

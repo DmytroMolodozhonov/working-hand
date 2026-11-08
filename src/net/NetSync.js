@@ -1166,6 +1166,7 @@ export class NetSync {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.name, performance.now(), { by: m.by }); // (my microphone may hear their voice)
                 g.noteCaster?.(m.name, m.by);
+                g.savior?.noteSpell(m.by, m.name); // (the white Saviour sees a Bombardo of the player and answers in kind — Savior.js)
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
                 break;
             }

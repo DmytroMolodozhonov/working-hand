@@ -35,7 +35,7 @@ WIZ.adept = { hp: 14, ward: 5, mana: 100, regen: 1.0, skill: 0.9, cast: 2.7, rea
 // the Saviour (SaviorRules.js): the Master's tricks (the dome — held much better, the wind, the blink), more health and ward, quick, steady, and his own spells — the favourite «Электром»
 WIZ.savior = {
     hp: 60, ward: 40, mana: 700, regen: 3.0, skill: 2.2, cast: 1.0, react: 0.95, reactT: 0.2, stunK: 0.2, range: [9, 20],
-    spells: { Electrum: 0.42, JoltMaxima: 0.16, SandsDuel: 0.14, Stupefy: 0.16, IceDuel: 0.12 },
+    spells: { Electrum: 1 }, // (only the blue «Электром»; his wind and blasts — Savior.js)
     dome: { hits: 8, t: 11, cd: 9 }, wind: { r: 4.5, cd: 6 }, blink: { cd: 12 }, heal: 0.25,
 };
 WIZ.seller = WIZ.teacher;
@@ -158,7 +158,7 @@ export function manaPace(mana, max) {
 }
 
 /** Mana a spell costs a wizard (the same as a player's base spell). */
-export const NPC_COST = { Electrum: 30, SandsDuel: 12, LiquidationDuel: 25, Expelliarmus: 8, Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
+export const NPC_COST = { Electrum: 30, WindMaxima: 18, BombardoMaxima: 25, Bombardo: 10, SandsDuel: 12, LiquidationDuel: 25, Expelliarmus: 8, Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
 
 export const WIZ_ROLE_RU = {
     student: ['Ученик', 'Ученица'], teacher: ['Наставник', 'Наставница'], seller: ['Торговец свитками', 'Торговка свитками'],
