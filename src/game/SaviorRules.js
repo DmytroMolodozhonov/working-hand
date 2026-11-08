@@ -47,12 +47,13 @@ export const SAVIOR = {
     BURST_S: 5,
     UP_T: 2.2, // s of the climb
     AWAY: [46, 4.5], // flies off to this distance (m) or for this long (s)
-    STRAFE_T: 10, // s over the foe, bombing
+    STRAFE_T: 11, // s over the foe, bombing
     STRAFE_R: 18, // m from the foe (horizontal), circling
     BOMB_EVERY: 3.2, // s between two bombs from above
     AIR_REGEN: 1.6, // health a second while he is away
     AIR_CD: 14, // s on the ground before the next take-off (unless below DANGER_HP × 0.6)
     WIND_NEAR: 9, // m: a player this close — the wind first (to push him off)
+    GROUND_T: 11, // s of the ground fight (a few «Электром») — and up again for the bombs: the cycle (the author 08.11: from above → down, a few spells → up again)
     ROCKET: 32, // m/s: he flies at the foe like a rocket …
     HELP_FROM: 13, // m: … until he is this close, and at once a «Bombardo» on him (his style: the author 08.11) — and the same each time the foe gets farther than this
     ROCKET_AGAIN: 22, // m: the foe got away this far — a new rocket // m: farther from the foe than this, he flies to him at once (he comes into the fight, not stands aside)
@@ -61,7 +62,7 @@ export const SAVIOR = {
 
 /** The Saviours by stage: 0 — the first (700 mana, after 10 killed), 1 — every later one (1500 mana, after 5 killed). */
 export const STAGES = [
-    { n: 0, mana: 700, kills: 10, hp: 60, ward: 40, speed: 1.9, dome: { hits: 8, t: 11, cd: 9 }, names: [['Аурелий Светлый', 'Аурелия Светлая']] },
+    { n: 0, mana: 700, kills: 10, hp: 60, ward: 40, speed: 1.9, dome: { hits: 8, t: 11, cd: 9 }, names: [['Бирмолиус Храбрый', 'Бирмолия Храбрая']] },
     { n: 1, mana: 1500, kills: 5, hp: 90, ward: 70, speed: 2.15, dome: { hits: 12, t: 14, cd: 7 }, names: [['Лучезар Сияющий', 'Лучезара Сияющая']] },
 ];
 export const stageOf = (n) => STAGES[Math.min(1, Math.max(0, n | 0))];

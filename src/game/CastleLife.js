@@ -1518,6 +1518,12 @@ export class CastleLife {
     }
 
     // ------------------------------------------------------------- think
+    /** Is the white Saviour alive within `r` m of `p` (the battle music, Savior.js)? */
+    saviorNear(p, r = 160) {
+        for (const v of this.byId.values()) if (v.savior != null && !v.dead && Math.hypot(v.x - p.x, v.z - p.z) < r) return true;
+        return false;
+    }
+
     _think(v, dt) {
         const g = this.game;
         const cs = v.cs;

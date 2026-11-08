@@ -34,7 +34,7 @@ export function musicPlace(g) {
     if (!p) return null;
     if (g.space?.realm && g.space.realm !== 'earth') return null; // (space is quiet)
     if (g.school && g.school.phase !== 'free') return { cat: g.school.phase === 'ride' || g.school.phase === 'intro' ? 'schoolEpic' : 'school' }; // («Акселдорф»: the opening's grand theme, then the calm one of the tour — MusicCatalog)
-    if (g.inFight?.()) return { cat: 'battle', intensity: fightIntensity(g) };
+    if (g.inFight?.() || g.castleLife?.saviorNear?.(p, 160)) return { cat: 'battle', intensity: fightIntensity(g) };
     if (g.hellGate?.inHell) return { cat: 'hell' };
     if (g._inCave) return { cat: 'cave' };
     const t = g.terrain?.data, x = Math.round(p.x), z = Math.round(p.z);
@@ -64,6 +64,7 @@ export function fightIntensity(g) {
     if (g.iceQueen?.active || g.iceCastle?.queen?.fighting) k = Math.max(k, 1);
     if (g.spiders?.list?.some?.((s) => !s.dead && s.angry && near(s.group?.position, 80))) k = Math.max(k, 0.85);
     if (g.diabolos?.awake || g.diabolos?.fighting) k = Math.max(k, 1);
+    for (const v of g.castleLife?.byId?.values?.() || []) if (v.savior != null && !v.dead && near({ x: v.x, z: v.z }, 160)) { k = 1; break; } // (the white Saviour is on the hunt: the boss's battle music)
     return Math.min(1, k);
 }
 

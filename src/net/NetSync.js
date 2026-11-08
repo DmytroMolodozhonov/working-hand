@@ -808,6 +808,9 @@ export class NetSync {
         this.net.send({ t: 'tdes', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], k: max ? 1 : 0 }, true);
     }
 
+    /** (host) The white Saviour has come: every player is told (Savior.announce). */
+    saviorCome(name, female = false) { this.net.send({ t: 'savior', name: String(name).slice(0, 40), f: female ? 1 : 0 }, true); }
+
     /** «Circle Attack» of mine at `p` (my feet): every computer runs the same wave, the same rays. */
     circleAttack(p, max = false, rays = []) {
         this.net.send({ t: 'circ', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], k: max ? 1 : 0, rays }, true);
@@ -1180,6 +1183,10 @@ export class NetSync {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.k ? 'TotalDestructionMaxima' : 'TotalDestruction', performance.now()); // (my microphone may hear their voice)
                 g.destruction?.start(vec(m.p), m.by, false, !!m.k);
+                break;
+            }
+            case 'savior': {
+                if (typeof m.name === 'string') g.savior?.announce(m.name.slice(0, 40), !!m.f);
                 break;
             }
             case 'circ': {

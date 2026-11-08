@@ -118,9 +118,17 @@ export class Savior {
         v.W = { ...v.W, hp: st.hp, ward: st.ward, mana: st.mana, dome: st.dome, stunK: SAVIOR.STUN_K, spells: SAVIOR.SPELLS };
         v.mana = v.maxMana = st.mana; v.castCd = 2; v.domeCd = 0;
         v.foe = by; v.grudge = { id: by, until: Date.now() + 3600e3 };
+        this.announce(v.name || 'Волшебник-спаситель', v.entry?.female);
+        this.game.sync?.saviorCome?.(v.name || 'Волшебник-спаситель', !!v.entry?.female); // (the guests are told too)
         this.life.wizards?.fx?.smoke?.(v);
         g.fx?.lightFlash?.(_v.set(v.x, v.y + 2, v.z), 0xfff6d8, 3, 0.8, 40);
         g.sound?.playSpellFxAt?.('fxLife', _v, 1, 1, 40);
+    }
+
+    /** The word to every player: he has come (the host here; a guest — NetSync 'savior'). */
+    announce(name, female = false) {
+        this.game.hud?.setVoice?.(`🤍 Появился${female ? 'ась' : ''} <b>${name}</b>, спасител${female ? 'ьница' : 'ь'} всех невинных волшебников! Трепещите, убийцы магов и чёрные маги!`, true);
+        this.game.perf?.note?.('🤍 спаситель пришёл: ' + name);
     }
 
     // ------------------------------------------------------------ every frame (host)
@@ -201,11 +209,17 @@ export class Savior {
                 return true;
             }
             this.rocket = false;
-            if (this.opener && !v.prep && !(v.castT > 0) && !v.noWand) { // (arrived: the first word is a «Bombardo» at once — «Bombardo Maxima» if he has seen it from the foe)
-                const m = this.seen.get(this.foe) || {}, big = m.BombardoMaxima != null && performance.now() / 1000 - m.BombardoMaxima < SAVIOR.SEEN_S && v.mana >= 40;
-                const spell = big ? 'BombardoMaxima' : 'Bombardo', fp = { x: pp.x, y: pp.y - 0.4, z: pp.z };
-                if (F._begin(v, spell, this.foe, fp, { cost: NPC_COST[spell], cd: 1.2 })) { this.opener = false; this.cd[spell] = SAVIOR.SPECIAL_CD[spell]; }
+            this.groundT = (this.groundT || 0) + dt;
+            if (this.opener && !v.prep && !(v.castT > 0)) { // (arrived: up over the foe at once and bombs from above — his style)
+                this.opener = false; this.groundT = 0;
+                this.air = { st: 'strafe', t: 0, a: Math.random() * 6.28, bomb: 0.3, cycle: true };
+                this._note({ ev: 'strafe-first' });
+            } else if (this.groundT >= SAVIOR.GROUND_T && !v.prep && !(v.castT > 0) && !(v.fx & FX.DOME)) { // (a few spells on the ground — and up again for the bombs: the cycle)
+                this.groundT = 0;
+                this.air = { st: 'strafe', t: 0, a: Math.random() * 6.28, bomb: 0.6, cycle: true };
+                this._note({ ev: 'strafe-again' });
             }
+            if (!this.air) {
             this.airCd -= dt;
             this.hurtLog.push([now, v.hp]);
             while (this.hurtLog.length > 2 && now - this.hurtLog[0][0] > SAVIOR.BURST_S) this.hurtLog.shift();
@@ -218,6 +232,7 @@ export class Savior {
                 g.fx?.lightFlash?.(_v.set(v.x, v.y + 2, v.z), 0xfff6d8, 2, 0.5, 30);
                 this._note({ ev: 'fly-up', hp: Math.round(v.hp) });
             } else return false;
+            }
         }
         const A = this.air;
         A.t += dt;
@@ -258,7 +273,7 @@ export class Savior {
             targetY = gy + SAVIOR.FLY_H;
             moveX = dx / d; moveZ = dz / d; speed = d > 14 ? SAVIOR.AIR_SPEED * 0.6 : 0;
             face(pp.x, pp.z);
-            if (Math.abs(v.y - targetY) < 0.7) { this.air = null; this.airCd = SAVIOR.AIR_CD; v.castCd = Math.max(v.castCd || 0, 1); this._note({ ev: 'landed' }); }
+            if (Math.abs(v.y - targetY) < 0.7) { this.air = null; this.groundT = 0; this.airCd = SAVIOR.AIR_CD; v.castCd = Math.max(v.castCd || 0, 1); this._note({ ev: 'landed' }); }
         }
         if (speed > 0) {
             const nx = v.x + moveX * speed * dt, nz = v.z + moveZ * speed * dt;
