@@ -163,7 +163,8 @@ export class Savior {
         const now = performance.now() / 1000, m = this.seen.get(this.foe) || {};
         const seen = {};
         for (const n of ['Bombardo', 'BombardoMaxima']) seen[n] = m[n] != null ? now - m[n] : null;
-        const spell = pickSpecial({ seen, cd: this.cd, dist: d, mana: v.mana });
+        let crowd = 1; for (const [, r] of this.game.remotes || []) if (r.position && !r.dead && Math.hypot(r.position.x - pp.x, r.position.z - pp.z) < 18) crowd++;
+        const spell = pickSpecial({ seen, cd: this.cd, dist: d, mana: v.mana, crowd });
         if (!spell) return;
         const fp = { x: pp.x, y: pp.y - 0.4, z: pp.z }; // (the chest: the hero's group is higher than his feet)
         if (!this.life.wizards?.fight?.clearShot?.(v, fp)) return;
@@ -185,6 +186,16 @@ export class Savior {
         const now = performance.now() / 1000;
         // the ground: a danger? (the damage of the last seconds, health, mana)
         if (!this.air) {
+            // not standing aside: the foe is far — he flies to him at once (low, fast), the fight itself begins when he is near
+            const hd = Math.hypot(pp.x - v.x, pp.z - v.z);
+            if (hd > SAVIOR.HELP_FROM && !v.prep && !(v.castT > 0)) {
+                const c = g.collision, gy = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY(v.x, v.z);
+                const mx = (pp.x - v.x) / hd, mz = (pp.z - v.z) / hd, sp = SAVIOR.AIR_SPEED, nx = v.x + mx * sp * dt, nz = v.z + mz * sp * dt;
+                if (!c.pointBlocked?.(nx, v.y + 2, nz)) { v.x = nx; v.z = nz; } else v.y += 6 * dt; // (a wall / a hill: up over it)
+                v.y += (gy + SAVIOR.FLY_H + 2 - v.y) * Math.min(1, dt * 2.5);
+                v.yaw = yawTo(v.x, v.z, pp.x, pp.z); v.speed = Math.min(sp, 8); v.mode = 'run';
+                return true;
+            }
             this.airCd -= dt;
             this.hurtLog.push([now, v.hp]);
             while (this.hurtLog.length > 2 && now - this.hurtLog[0][0] > SAVIOR.BURST_S) this.hurtLog.shift();

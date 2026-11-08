@@ -260,7 +260,7 @@ export class WizardFight {
         const hunter = v.engage.role === 'hunt';
         // (a hunter does not stop at the edge of his land: the more they want the criminal, the farther he follows)
         const leash = hunter ? huntLeash({ role: v.role, level: v.engage.level, saw: true }) : 25;
-        const gone = !fp || (!L._inLand(cs.def, fp, 30) && (d > leash || !L._inLand(cs.def, fp, Math.max(160, leash))));
+        const gone = !fp || (v.savior == null && !L._inLand(cs.def, fp, 30) && (d > leash || !L._inLand(cs.def, fp, Math.max(160, leash)))); // (the Saviour never gives the killer up for a border: Savior.js)
         const grudge = v.grudge && v.grudge.id === v.foe && v.grudge.until > now;
         const wanted = cs.hostile.get(v.foe) > now || grudge;
         if (gone || !wanted) {

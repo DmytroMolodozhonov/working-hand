@@ -102,3 +102,9 @@ test('the system: kills of wizards only; one at a time; a beaten Saviour → sta
     const S2 = new Savior(g); S2.restore(JSON.parse(JSON.stringify(S.snapshot())));
     assert.equal(S2.stageOf('p').mana, 1500);
 });
+
+test('a crowd of enemies: he blasts and winds without having seen a Bombardo', () => {
+    assert.equal(pickSpecial({ seen: {}, cd: {}, dist: 20, mana: 200, crowd: 3, rng: () => 0.9 }), 'Bombardo');
+    assert.equal(pickSpecial({ seen: {}, cd: { Bombardo: 5 }, dist: 20, mana: 200, crowd: 3, rng: () => 0.9 }), 'WindMaxima');
+    assert.equal(pickSpecial({ seen: {}, cd: {}, dist: 20, mana: 200, crowd: 1, rng: () => 0.9 }), null);
+});
