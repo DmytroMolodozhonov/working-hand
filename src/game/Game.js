@@ -254,6 +254,7 @@ import { VisibleGodi } from './VisibleGodi.js';
 import { WaterWalk } from './WaterWalk.js';
 import { WaterPart } from './WaterPart.js';
 import { Fishing } from './Fishing.js';
+import { FishPier } from './FishPier.js';
 import { Helios } from './Helios.js';
 import { SunRay } from './SunRay.js';
 import { TimeTurn } from './TimeTurn.js';
@@ -750,6 +751,7 @@ export class Game {
         this.helios = new Helios(this); // «Helios»: the gods' Sun over the caster on a planet (Helios.js)
         this.waterPart = new WaterPart(this); // «Aquadivide»: the water stands aside round the hero (WaterPart.js)
         this.fishing = new Fishing(this); // the fishing rod in the hand: the cast, the bite, the fight (Fishing.js)
+        this.fishPier = new FishPier(this); // the fishermen's mini-pier of the Creative test ground and its free rods (FishPier.js)
         this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
@@ -4398,6 +4400,7 @@ export class Game {
         if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();
+        this.fishPier?.update(dt);
         this.fishing?.update(dt); // (after the items set the rod in the hand: the tip is where the hand put it)
         this.armor.update(dt);
         this.achievements.update();
@@ -5595,6 +5598,7 @@ export class Game {
         this.helios?.dispose();
         this.waterPart?.dispose();
         this.fishing?.dispose();
+        this.fishPier?.dispose();
         this.rainFx?.dispose();
         this.seaSurface?.dispose();
         this.steam?.dispose();

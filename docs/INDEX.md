@@ -439,6 +439,11 @@
 - `QueenBolts.js` — the rules of the Ice Queen's far blows (pure numbers, no THREE: tests/unit/queen-bolts.test.js).
 - `Ragdoll.js` — a rag doll for a person knocked off his feet, thrown («Джолт», a blast, a blow) or dead (the author: «даже не анимация, а скорее тряпичная кукла… чтобы они фактически обтекающе взаимодействовали со стеной, сундуком, с другими…
 - `RagdollPose.js` — the villager's model drawn BY the rag doll (Ragdoll.js): what is seen is where the doll's balls are, no animation.
+- `AnimalRagdoll.js` — the rag doll of a DEAD cow, pig, sheep, horse, swan (the same doll on a four-legged body: shoulders = fore legs' tops, hips = hind legs', measures from a fresh model of the kind); `tests/unit/animal-ragdoll.test.js`.
+- `Fishing.js` — fishing with the rod in the hand (`g.fishing`): the float and the line, the cast by a real swing, the bite, the strike, the fight, the catch (rules: `FishingRules.js`, models: `FishingRodModel.js`); `docs/rules/fishing.md`; `tests/unit/fishing.test.js`.
+- `FishingRules.js` — fishing rules, pure: `castVelocity`, `isStrike`, `pickSpecies`, `fightStep`, `FISHING_TARGETS`.
+- `FishingRodModel.js` — the rod (cork grip, reel, 4 bending pieces, guides, the line) and the caught fish as a thing (the sea's own fish: `ReefFish.fishItemMesh`).
+- `FishPier.js` + `world/FishPierPlan.js` — the fishermen's mini-pier of the Creative test ground (built in blocks when the hero is near; «Где появиться → Причал рыбаков»), a rack of free rods; `tests/unit/fish-pier.test.js`; снимки `node tools/shot.mjs fishing`.
 - `Ranks.js` — what the king may entrust to a friend (the author: «скажу визирю: это мой друг… поручаю ему должность… слушайтесь его… — визирь передал всем… градация слушания»). The king says it to his vizier (the advisor); the vizier tells the…
 - `Rebellion.js` — «недовольство королевством» (the author: «Как только король убит — тебя подчиняются все (формально), но в большей степени тебя ненавидят. Если ты вторгаешься в дома — с процентной вероятностью на тебя нападут, даже если ты…
 - `RebellionLife.js` — the game side of Rebellion.js: the hidden unrest of a castle / village toward its owner.

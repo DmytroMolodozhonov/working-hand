@@ -62,7 +62,8 @@ test('the steel takes its share of a blow (fire less), magic twice the points; n
     const f = soakBlow({ chest }, wornEffects({ chest }), 10, 'Inferno', onChest);
     assert.equal(f.wear.chest, 10 * ARMOR.FIRE_SOAK);
     assert.equal(soakBlow({ chest }, wornEffects({ chest }), 5, 'poison', onChest).hp, 5, 'poison is no blow');
-    for (const k of ['zombie', 'bite', 'animal', 'thrown', 'crush', 'Pistol', 'knight', 'Ward', 'Liquidation', undefined]) assert.ok(Math.abs(soakBlow({ chest }, wornEffects({ chest }), 2, k, onChest).hp - 2 * (1 - ARMOR.SOAK)) < 1e-9, `the steel takes a ${k} blow`);
+    for (const k of ['zombie', 'bite', 'animal', 'thrown', 'Pistol', 'knight', 'Ward', 'Liquidation', undefined]) assert.ok(Math.abs(soakBlow({ chest }, wornEffects({ chest }), 2, k, onChest).hp - 2 * (1 - ARMOR.SOAK)) < 1e-9, `the steel takes a ${k} blow`);
+    // (07.11, the author: a BLAST — Bombardo, a cannon, a collapse, a crush of falling pieces — is taken off the armour's points by thirds of the body: blastSoak, tests/unit/npc-armor.test.js)
     for (const k of ['bleed', 'cold', 'fall', 'air', 'AvadaKedavra']) assert.equal(soakBlow({ chest }, wornEffects({ chest }), 2, k, onChest).hp, 2, `${k}: no blow on the steel`);
     assert.equal(soakBlow({}, wornEffects({}), 5, 'melee', onChest).hp, 5, 'bare');
 });

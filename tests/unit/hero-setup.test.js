@@ -174,7 +174,7 @@ import { SPAWN_SPOTS, SPAWN_IDS, spotTarget, safeNear, normalizeSpawn, pointTowa
 import { TEST_CAVE, TEST_DRAGON_SPOT } from '../../src/world/Terrain.js';
 
 test('точки появления: список, по умолчанию «Начальная площадка», безопасность, сохранение', () => {
-    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle', 'port', 'tower', 'arena', 'village', 'magevillage', 'magehut', 'spider', 'hellmap', 'potionlair', 'pyramids', 'vampire', 'sea', 'titan_mercury', 'titan_venus', 'titan_mars', 'titan_jupiter', 'titan_saturn', 'titan_uranus', 'titan_neptune', 'almostgod', 'blackship']); // («В море» — the author 05.11; «Логово зельевара» — 05.11; by each titan and «Почти стал богом» — 06.11)
+    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle', 'port', 'fishpier', 'tower', 'arena', 'village', 'magevillage', 'magehut', 'spider', 'hellmap', 'potionlair', 'pyramids', 'vampire', 'sea', 'titan_mercury', 'titan_venus', 'titan_mars', 'titan_jupiter', 'titan_saturn', 'titan_uranus', 'titan_neptune', 'almostgod', 'blackship']); // («В море» — the author 05.11; «Логово зельевара» — 05.11; «Причал рыбаков» — 07.11; by each titan and «Почти стал богом» — 06.11)
     assert.equal(normalizeHero({}).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'nope' }).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'dragon' }).spawn, 'dragon');
