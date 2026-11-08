@@ -253,6 +253,7 @@ import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { WaterWalk } from './WaterWalk.js';
 import { WaterPart } from './WaterPart.js';
+import { Fishing } from './Fishing.js';
 import { Helios } from './Helios.js';
 import { SunRay } from './SunRay.js';
 import { TimeTurn } from './TimeTurn.js';
@@ -748,6 +749,7 @@ export class Game {
         this.sunRay = new SunRay(this); // «Sun Ray»: the Sun's energy taken into the wand, then the burning beam at «Атак» (SunRay.js)
         this.helios = new Helios(this); // «Helios»: the gods' Sun over the caster on a planet (Helios.js)
         this.waterPart = new WaterPart(this); // «Aquadivide»: the water stands aside round the hero (WaterPart.js)
+        this.fishing = new Fishing(this); // the fishing rod in the hand: the cast, the bite, the fight (Fishing.js)
         this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
@@ -4023,6 +4025,7 @@ export class Game {
         for (const m of VampireLife.samples()) zoo.add(m);
         // (the titans are NOT warmed here: they live on the planets only, and painting their textures made the loading screen stall — a friend's
         //  complaint 06.11. Titans.warm() readies one titan when its planet is reached, behind the burning air of the landing.)
+        try { zoo.add(this.fishing.sample()); } catch (e) { console.error('prewarm fishing', e); } // (the float, the ring on the water)
         try { for (const m of PharaohLife.samples()) zoo.add(m); } catch (e) { console.error('prewarm pharaoh', e); } // (the pharaoh's locusts, darts, sarcophagus, wave ring)
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
@@ -4395,6 +4398,7 @@ export class Game {
         if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();
+        this.fishing?.update(dt); // (after the items set the rod in the hand: the tip is where the hand put it)
         this.armor.update(dt);
         this.achievements.update();
         this.death.update(dt);
@@ -5590,6 +5594,7 @@ export class Game {
         this.sunRay?.dispose();
         this.helios?.dispose();
         this.waterPart?.dispose();
+        this.fishing?.dispose();
         this.rainFx?.dispose();
         this.seaSurface?.dispose();
         this.steam?.dispose();

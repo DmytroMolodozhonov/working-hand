@@ -50,6 +50,9 @@ import { FLORA_ITEMS, FLORA_ITEM_TEXT, FLORA_OF_ITEM } from './MagicFlora.js';
 import { floraItemModel } from '../fx/FloraModels.js';
 import { pouchModel } from './PouchModel.js';
 import { backpackModel } from './BackpackModel.js';
+import { fishingRodModel, fishItemModel } from './FishingRodModel.js';
+import { FISH_SPECIES } from '../fx/ReefFish.js';
+import { fishValue } from './FishingRules.js';
 import { wandModel } from './WandModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
@@ -215,6 +218,9 @@ export const ITEM_INFO = {
     robe: { name: 'Мантия', icon: '🧥', weight: 1 },
     // the Ice Queen's rod (IceQueen.js): one in the world, she drops it — not a wand: a staff of ice
     iceRod: { name: 'Ледяной Жезл', icon: '❄️', weight: 2 },
+    // fishing (Fishing.js, FishingRules.js): the rod (free at the fishermen's pier of the Creative test ground; port chests and ships hold some) and what it catches — one of the sea's hundred fish
+    fishingRod: { name: 'Удочка', icon: '🎣', weight: 1.2 },
+    fish: { name: 'Рыба', icon: '🐟', weight: 0.8 },
 };
 
 /**
@@ -249,6 +255,8 @@ function baseValue(it) {
         case 'bow': return it.magic ? 90 + (it.bonus || 0) : 25;
         case 'hammer': return 300;
         case 'iceRod': return 2000;
+        case 'fishingRod': return 40;
+        case 'fish': return fishValue(it);
         case 'book': return 50;
         case 'apple': return 12 * (it.count || 1);
         case 'redApple': return 1 * (it.count || 1);
@@ -388,7 +396,7 @@ export function rollHouseLoot(r = Math.random, rich = false, count = 0) {
  * Things other features add to loot tables. The fishing rod (fishing session): set
  * `LOOT_EXTRA.fishingRod = (r) => item` and port chests hold one fairly often.
  */
-export const LOOT_EXTRA = { fishingRod: null };
+export const LOOT_EXTRA = { fishingRod: (r) => ({ kind: 'fishingRod', uid: newUid() }) }; // (the fishing rod — Fishing.js: port chests and the ships' stores hold one now and then)
 
 /** A dragon's chest: the treasure it guards — two precious things, fine armour, a plain thing now and then (coins: Game._chestPouch). */
 /**
@@ -948,6 +956,12 @@ function describeItemBase(it) {
             return { title: '🏹 ' + BOW_KINDS[it.type || 0] + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: [it.magic ? `Стрелы бьют сильнее на <b>${it.bonus}%</b>` : 'Обычный лук', `Стрел: <b>${it.arrows ?? 0}</b> (до 25)`] };
         case 'iceRod':
             return { title: '❄️ Ледяной Жезл', color: 0xbfefff, lines: ['Посох Ледяной Королевы (не палочка): держите в кулаке', 'Направьте кристалл на существо и скажите <b>«Frozen»</b> — оно во льду, <b>даже в магических доспехах</b>', 'Направьте на землю, стену или воду — <b>«Frozen»</b> кладёт слой льда (ещё раз — следующий слой)', 'Снеговики рядом слушаются: идут за вами; <b>«Атака»</b> — нападают, на кого показывает жезл'] };
+        case 'fishingRod':
+            return { title: '🎣 Удочка', color: 0xc99a52, lines: ['Держите в кулаке. <b>Забросьте</b>: взмахните удочкой вперёд и резко остановите — поплавок полетит с той скоростью, с какой шёл кончик (чем резче взмах, тем дальше)', 'Клюнет — поплавок нырнёт и пойдут круги: <b>подсеките</b> рывком удочки вверх или на себя', 'Вываживайте: поднимайте удочку (леска идёт к вам) и опускайте (слабину выбираете сами). Дёрнете слишком резко — леска порвётся, ослабите — рыба сорвётся'] };
+        case 'fish': {
+            const sp = FISH_SPECIES[Math.max(0, Math.min(FISH_SPECIES.length - 1, it.species | 0))];
+            return { title: `🐟 ${it.cooked ? 'Жареная рыба' : 'Рыба'}: ${sp.name}`, color: it.magic ? 0x9fd8ff : 0xaecbe0, lines: [`Длина: <b>${Math.round((it.len || sp.len) * 100)} см</b>, вес <b>${(it.weight ?? 0.3).toFixed(2)} кг</b>`, `Поднесите ко рту: +${foodHeal(it)} HP`, it.cooked ? 'Хорошо прожарена' : 'Пожарьте на костре («Fire») или огнём заклинания — будет вдвое сытнее'] };
+        }
         case 'hammer':
             return { title: '🔨 Молот Тора', color: 0xbfe3ff, lines: ['В грозу поднимите его вверх — в него ударит молния', 'Наведите на цель: молния бьёт туда (до 3 раз)', `Заряды: <b>${it.charges || 0}</b>`] };
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
@@ -1262,7 +1276,7 @@ function meatModel(cooked) {
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
 export const ITEM_SCALE = { swanWings: 9, magicSwanWings: 9, // (swan wings ×4.5: «раза в 4–5 больше» — the author 06.11)
-    glowfinTail: 1.6, gargoyleHead: 2, iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, armor_leaf: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, taronAxe: 1.6, taronIron: 2, redStone: 2.2, spencerFeather: 2, beslanGrass: 2 };
+    glowfinTail: 1.6, gargoyleHead: 2, iceRod: 2.1, fishingRod: 2.1, fish: 2.2, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, armor_leaf: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, taronAxe: 1.6, taronIron: 2, redStone: 2.2, spencerFeather: 2, beslanGrass: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1283,6 +1297,8 @@ function buildItemModel(it) {
         case 'bow': return bowModel(it);
         case 'hammer': return hammerModel(it);
         case 'iceRod': return iceRodModel();
+        case 'fishingRod': return fishingRodModel(it);
+        case 'fish': return fishItemModel(it);
         case 'apple': return appleModel(it);
         case 'redApple': return appleModel(it, true);
         case 'baksadi_pear': return pearModel();

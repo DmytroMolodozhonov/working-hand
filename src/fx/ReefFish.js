@@ -328,3 +328,48 @@ export class ReefFish {
 
     dispose() { this.mesh.parent?.remove(this.mesh); this.mesh.material.dispose(); }
 }
+
+// ------------------------------------------------------------------ a caught fish as a thing (an item: held, laid on the ground — FishingRodModel.fishItemModel)
+// The same shape and the same painting (the shader above), drawn through the model's own matrix instead of the reef's world places; dead: the body does not beat its tail,
+// only a gentle arc; one material for every fish thing, one geometry per kind (and per raw / cooked): at most 200, never more.
+const VS_ITEM = VS
+    .replace('p.x += (wave * 0.07 * back + aSwim.w', 'p.x += (0.0 * wave * back + aSwim.w')
+    .replace('vec4 wp = vec4(p + aWorld.xyz, 1.0);\n  vec4 mv = viewMatrix * wp;', 'vec4 mv = viewMatrix * modelMatrix * vec4(p, 1.0);')
+    .replace('vN = normalize(mat3(viewMatrix) * n);', 'vN = normalize(mat3(viewMatrix) * mat3(modelMatrix) * n);');
+export const FISH_ITEM_SHADER_OK = VS_ITEM !== VS && VS_ITEM.includes('modelMatrix * vec4(p, 1.0)') && VS_ITEM.includes('0.0 * wave');
+let _itemMat = null;
+const _itemGeo = new Map();
+const _cooked = new THREE.Color();
+const itemMaterial = () => _itemMat || (_itemMat = Object.assign(new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uLight: { value: new THREE.Color(0.85, 0.88, 0.85) }, uAmb: { value: new THREE.Color(0.5, 0.52, 0.52) }, uSunDir: { value: new THREE.Vector3(0.3, 1, 0.2).normalize() }, uNight: { value: 0 }, fogColor: { value: new THREE.Color(0xbfd2e0) }, fogNear: { value: 1e5 }, fogFar: { value: 2e5 } },
+    vertexShader: VS_ITEM, fragmentShader: FS, side: THREE.DoubleSide,
+}), { userData: { shared: true } }));
+/** The geometry of one kind, `len` m long, raw or cooked (a cooked fish: browned, no glow, the pattern burnt in). Cached per kind: ≤ 200. */
+function itemGeometry(sp, cooked) {
+    const key = sp.id * 2 + (cooked ? 1 : 0);
+    let g = _itemGeo.get(key);
+    if (g) return g;
+    g = fishGeometry().clone();
+    g.instanceCount = 1;
+    const set = (name, vals) => { const a = new THREE.InstancedBufferAttribute(new Float32Array(vals), vals.length); g.setAttribute(name, a); };
+    set('aShape', [sp.h, sp.w, sp.tail, sp.dorsal]);
+    set('aSwim', [0, 0, 1, 0.5]); // (the length is set by the model's scale; a gentle arc)
+    const c = (i) => { _cooked.copy(sp.cols[i]); if (cooked) _cooked.multiplyScalar(0.42).lerp(new THREE.Color(0x7a4a22), 0.5); return [_cooked.r, _cooked.g, _cooked.b]; };
+    set('aCol1', c(0)); set('aCol2', c(1)); set('aCol3', c(2));
+    set('aPat', [sp.pat, sp.pat === 1 ? 3 + (sp.id % 3) : 4 + (sp.id % 5), cooked ? 0 : sp.glow, sp.id * 0.37]);
+    set('aWorld', [0, 0, 0, 0]);
+    set('aPitch', [0]);
+    g.userData.shared = true;
+    _itemGeo.set(key, g);
+    return g;
+}
+/** A mesh of one fish thing: nose at −z, tail at +z, `len` m long (the model's own unit — ITEM_SCALE then makes it the hero's size). */
+export function fishItemMesh(sp, len = sp.len, cooked = false) {
+    const m = new THREE.Mesh(itemGeometry(sp, cooked), itemMaterial());
+    m.frustumCulled = false;
+    m.scale.setScalar(len);
+    m.name = 'fish';
+    return m;
+}
+/** How many kind-geometries exist (a test: bounded). */
+export const fishItemCache = () => _itemGeo.size;

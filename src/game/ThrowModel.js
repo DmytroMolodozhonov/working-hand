@@ -138,6 +138,8 @@ export const ITEM_PHYS = {
     cheese: { shape: 'round', e: 0.12, mu: 0.6, roll: 0.3, float: true, len: 0.4 },
     wand: { shape: 'long', e: 0.3, mu: 0.45, float: true, len: 0.75 },
     iceRod: { shape: 'long', e: 0.35, mu: 0.15, float: true, len: 2.2 },
+    fishingRod: { shape: 'long', e: 0.3, mu: 0.3, float: true, len: 4.4 }, // (a light cane: it floats)
+    fish: { shape: 'long', e: 0.1, mu: 0.8, float: true, len: 0.5 }, // (a wet fish: slides, flops no more; it floats)
     hammer: { shape: 'long', e: 0.15, mu: 0.6, float: false, len: 0.9 },
     tool: { shape: 'long', e: 0.15, mu: 0.65, float: true, len: 2 }, // (a pitchfork, a hoe: long, wooden — it floats)
     taronAxe: { shape: 'long', e: 0.1, mu: 0.7, float: false, len: 1.1 }, // (heavy: a dull thud, no bounce)

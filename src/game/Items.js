@@ -80,7 +80,7 @@ const PICK_REACH = 0.35;
 /** ms after the hand / the held thing last touched something solid: nothing leaves the hand yet. */
 export const TOUCH_MS = 1500;
 /** Long things are taken by their handle (wand, hammer, bow): the rest by their body. */
-const BY_HANDLE = new Set(['wand', 'hammer', 'bow', 'iceRod']);
+const BY_HANDLE = new Set(['wand', 'hammer', 'bow', 'iceRod', 'fishingRod']);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 /** (Items._nearMouth) the food just taken from the mouth still never falls: the hand comes down with relaxed fingers */
@@ -95,7 +95,7 @@ const _inv = new THREE.Matrix4();
 
 /** The rooms of a keep whose chest is the king's own (Castles.js ROOM_NAMES). */
 const ROYAL_ROOMS = new Set(['king', 'treasury', 'throne', 'vault']);
-const AIMED = new Set(['bow', 'wand', 'hammer', 'shield', 'iceRod']);
+const AIMED = new Set(['bow', 'wand', 'hammer', 'shield', 'iceRod', 'fishingRod']);
 /** Held in the fist like the sword: handle (model y, before scaling) at the fingers, the axis across the palm. */
 /**
  * pose: how the fingers lie round it (SimplifiedHand GRIP_POSES); at: [y, z] where its handle /
@@ -107,6 +107,8 @@ const AIMED = new Set(['bow', 'wand', 'hammer', 'shield', 'iceRod']);
 const GRIPPED = {
     wand: { axis: 'y', handle: 0.12, curl: 0.38, pose: 'pen' }, // like a pen (V4 hands): see _penGrip
     hammer: { axis: 'y', handle: 0.12, pose: 'power', at: [0.13, -0.148] },
+    fishingRod: { axis: 'y', handle: 0.2, pose: 'power', at: [0.13, -0.148] }, // (a fishing rod: the fist round the cork grip, the reel under it, the long tip out before — Fishing.js)
+    fish: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true }, // (a fish by the middle, across the palm, the nose up)
     iceRod: { axis: 'y', handle: 0.5, pose: 'power', at: [0.13, -0.148] }, // (a staff: the fist round its shaft a third of the way up, the crystal above)
     bow: { axis: 'y', handle: 0, pose: 'thick', at: [0.13, -0.155] },
     scroll: { axis: 'x', handle: 0, curl: 0.5, pose: 'roll', at: [0.15, -0.194] },
@@ -190,7 +192,7 @@ export function backpackSpot(hand, other, shoulder) {
     return null;
 }
 
-export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, baksadi_pear: 0.008, glowcap_mushroom: 0.02, fern_frond: 0.3, azure_berry: 0.01, sun_herb: 0.15, frost_shard: 0.01, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, spencerFeather: 0.6, beslanGrass: 0.3, telewilpinLeaf: 0.5, carnivoreHead: 0.02, brightCore: 0.03, canaryHide: 0.2, bone: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
+export const AERO = { fishingRod: 0.008, fish: 0.03, iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, baksadi_pear: 0.008, glowcap_mushroom: 0.02, fern_frond: 0.3, azure_berry: 0.01, sun_herb: 0.15, frost_shard: 0.01, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, spencerFeather: 0.6, beslanGrass: 0.3, telewilpinLeaf: 0.5, carnivoreHead: 0.02, brightCore: 0.03, canaryHide: 0.2, bone: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
     constructor(game) {
@@ -1468,7 +1470,7 @@ export class ItemSystem {
     /** (the letting-go guard) Is this hand's food / potion at the mouth now, or was it there in the last MOUTH_HOLD_MS (game ms)? */
     _nearMouth(side, h, ch, t) {
         const k = h.item.kind;
-        if (!(k === 'apple' || k === 'meat' || k === 'steak' || k === 'potion' || ITEM_INFO[k]?.heal) || !ch.head) return false;
+        if (!(k === 'apple' || k === 'meat' || k === 'steak' || k === 'fish' || k === 'potion' || ITEM_INFO[k]?.heal) || !ch.head) return false;
         const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
         const m = this._mouthAt || (this._mouthAt = { left: -1e9, right: -1e9 });
         if (h.model.position.distanceTo(mouth) < 1.0 || this.game.currentPose?.mouthHand?.[side]) m[side] = t;
@@ -1478,7 +1480,7 @@ export class ItemSystem {
     _eat(dt, ch) {
         const g = this.game;
         let food = null;
-        for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || h.item.kind === 'potion' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
+        for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || h.item.kind === 'fish' || h.item.kind === 'potion' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
         if (!food) { this._eatT = 0; g.darkLord?.mouthFree?.(); return; }
         const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
         // the food at the mouth: the model's hand there, or the camera sees the hand cover the mouth
@@ -1920,7 +1922,7 @@ export class ItemSystem {
                 // a book open in their hands: as they hold it, at the page they read
                 if (h.item.kind === 'book' && this.game.books?.reading?.placeRemote(ch, h.model, h.item, r.target?.bk || null)) continue;
                 if (h.item.kind === 'scroll' && this.game.scrolls?.placeRemote(ch, h.model, h.item, side, r.target?.sc || null)) continue; // (a scroll open in their hands: unrolled as far as they have)
-                if (h.item.kind === 'wand' || h.item.kind === 'hammer' || h.item.kind === 'iceRod') { this._remoteGrip(ch, side, h); continue; }
+                if (h.item.kind === 'wand' || h.item.kind === 'hammer' || h.item.kind === 'iceRod' || h.item.kind === 'fishingRod') { this._remoteGrip(ch, side, h); continue; }
                 const grip = ch.getGripObject(side);
                 grip.getWorldPosition(h.model.position);
                 grip.getWorldQuaternion(h.model.quaternion);
@@ -1956,7 +1958,7 @@ export class ItemSystem {
 
     /** One model of each kind, for compiling the shaders while loading. */
     sampleModels() {
-        return [{ kind: 'armor', piece: 'helmet', magic: true }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true }, { kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'iceRod' }, { kind: 'apple' }, { kind: 'redApple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'coins', magic: true }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
+        return [{ kind: 'armor', piece: 'helmet', magic: true }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true }, { kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'iceRod' }, { kind: 'fishingRod', uid: 'sample' }, { kind: 'fish', species: 7, len: 0.3 }, { kind: 'apple' }, { kind: 'redApple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'coins', magic: true }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
     }
 
     /** Everything this player carries (for the save). */
