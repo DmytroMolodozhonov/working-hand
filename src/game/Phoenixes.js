@@ -50,6 +50,7 @@ import { registerKind } from './CreatureImpact.js';
 import { creditKill } from './Mana.js';
 import { earthly } from '../world/Planets.js';
 import { mergeInto } from '../core/MergeGeometry.js';
+import { FarShape } from '../core/FarShape.js';
 
 export const PHOENIX = {
     HP: 30,
@@ -579,8 +580,11 @@ export class Phoenixes {
         const model = phoenixModel();
         model.position.copy(pos);
         g.scene?.add(model);
+        // (one shape per material, the parts moved by the video card — FarShape: 91 draws → 9; its shapes are its own — no cache)
+        model.userData.farRadius = 4;
+        const one = new FarShape(model, { cache: false });
         const f = {
-            id: id ?? 'ph' + Math.floor(Math.random() * 1e9).toString(36), ck: 'F', isPhoenix: true, model, group: model, hp: PHOENIX.HP, dead: false,
+            id: id ?? 'ph' + Math.floor(Math.random() * 1e9).toString(36), ck: 'F', isPhoenix: true, model, group: model, one, hp: PHOENIX.HP, dead: false,
             get isDead() { return this.dead; }, get position() { return this.model.position; },
             bodyCapsule: (out) => phoenixBody(f, out),
             damageCooldown: 0, stunT: 0, state: 'soar', t: 0, vel: new THREE.Vector3(), yaw: 0,
@@ -596,6 +600,7 @@ export class Phoenixes {
     }
 
     _remove(f) {
+        f.one?.dispose(); f.one = null;
         this.game.scene?.remove(f.model);
         f.model.traverse((o) => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose?.(); } });
         const i = this.list.indexOf(f);
@@ -1323,6 +1328,7 @@ export class Phoenixes {
             f.a.night = night;
             f.a.flame = f.flame;
             posePhoenix(f.model, f.a, dt);
+            if (f.one) { if (!f.one.on) f.one.set(true); else f.one.check(); }
             this._embers(f, dt);
             if (f.flame > 0.3 && !this.auth) this._flames(f);
             if (me && (!nearest || fd < nearest.d)) nearest = { f, d: fd };

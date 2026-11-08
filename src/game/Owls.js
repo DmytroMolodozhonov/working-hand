@@ -55,6 +55,7 @@ import { crowdStep } from './CrowdSources.js';
 import { bossOfWords, bossTo, BOSS_FINDERS } from './OwlBosses.js';
 import { irMaterial, IR } from '../fx/Iridescent.js';
 import { mergeInto } from '../core/MergeGeometry.js';
+import { FarShape } from '../core/FarShape.js';
 
 export const OWL = {
     SHED_CHANCE: 0.06, // a startled owl loses a feather (a dead one always leaves one)
@@ -476,7 +477,7 @@ export class Owls {
     _note(e) { this.log.push({ t: Math.round(this.clock), ...e }); if (this.log.length > 60) this.log.shift(); }
 
     /** One of each look (Game.prewarm): the shimmering plumage, the eyes, the hearts. */
-    sampleModels() { return [owlModel()]; }
+    sampleModels() { const m = owlModel(); new FarShape(m).set(true); return [m]; } // (its one shape's shaders too — FarShape)
 
     // ------------------------------------------------------------ life
     spawn(pos, id = null) {
@@ -484,8 +485,11 @@ export class Owls {
         const model = owlModel();
         model.position.copy(pos);
         g.scene?.add(model);
+        // (one shape per material, the parts moved by the video card — FarShape: 46 draws → 8; the author 08.11, FPS)
+        model.userData.farRadius = 2.5;
+        const one = new FarShape(model);
         const o = {
-            id: id ?? 'ow' + Math.floor(Math.random() * 1e9).toString(36), ck: 'O', isOwl: true, model, group: model, hp: OWL.HP, dead: false,
+            id: id ?? 'ow' + Math.floor(Math.random() * 1e9).toString(36), ck: 'O', isOwl: true, model, group: model, one, hp: OWL.HP, dead: false,
             get isDead() { return this.dead; }, get position() { return this.model.position; },
             bodyCapsule: (out) => owlBody(o, out),
             state: 'fly', t: 0, vel: new THREE.Vector3(), yaw: Math.random() * Math.PI * 2,
@@ -501,6 +505,7 @@ export class Owls {
     }
 
     _remove(o) {
+        o.one?.dispose();
         this.game.scene?.remove(o.model);
         // (every shape and material of an owl is shared: nothing of its own to dispose)
         const i = this.list.indexOf(o);
@@ -1107,6 +1112,7 @@ export class Owls {
             o.model.visible = !far;
             if (far) continue;
             poseOwl(o.model, o.a, dt);
+            if (o.one) { if (!o.one.on) o.one.set(true); else o.one.check(); }
             if (o.state === 'adore' || o.hearts) this._heartsFrom(o, dt);
         }
         this._heartsStep(dt);
