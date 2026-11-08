@@ -22,6 +22,7 @@
  * guests show them and send their hits.
  */
 
+import { npcBlastFactor } from './BlastWardNpc.js';
 import { ActionLog } from './ActionLog.js';
 import { guardWorld, insideSolid, freeSpot, solidName, standFree, GUARD } from './SolidGuard.js';
 import { stateOf as gestureState, sayCtx, mark as markEmo } from './GestureLife.js';
@@ -2898,6 +2899,8 @@ export class CastleLife {
         v.hellT = opts.hell ? Date.now() : 0; // (the last blow was the Hellfire's: a kill darkens the caster — HellKills.js)
         v.darkT = darkHit(opts, isDark) ? Date.now() : 0; // (the last blow was black magic: the body fits the rite of monstrous vitality — VitalityRules.js)
         if (v.wizard) v.hurtAt = Date.now();
+        // the pentagram of protection from blasts, by the wizard's rank (BlastWardNpc.js): «Бомбарда» does no harm, «Бум» / «Инспириус» / a cannonball half
+        if (opts.kind && v.wizard) { dmg *= npcBlastFactor(v, opts.kind); if (!(dmg > 0)) { this._flash(v); return; } }
         // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
         // (a spell: half its mana from his — an unnamed one as an ordinary 10; a blow: nothing. Out of mana it shatters)
         if (v.wizard && (v.fx & FX.DOME) && !opts.pierce && this.wizards.fight.shieldPays(v, opts.spell ? opts.kind || 'spell' : 'melee', true)) { this._flash(v); return; }
@@ -3872,8 +3875,8 @@ export class CastleLife {
         }
     }
 
-    hitAt(p, radius, dmg, by) {
-        for (const v of [...this.byId.values()]) if (!v.dead && Math.hypot(v.x - p.x, v.z - p.z) < radius + 1 && Math.abs(v.y + 2 - p.y) < radius + 3 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 2, z: v.z })) this.hit(v, dmg, _v.set(v.x - p.x, 0, v.z - p.z).normalize().clone(), by, { spell: true });
+    hitAt(p, radius, dmg, by, kind = null) { // (kind: 'Bombardo' / 'BombardoMaxima' … — a wizard with the ward against blasts: BlastWardNpc.js)
+        for (const v of [...this.byId.values()]) if (!v.dead && Math.hypot(v.x - p.x, v.z - p.z) < radius + 1 && Math.abs(v.y + 2 - p.y) < radius + 3 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 2, z: v.z })) this.hit(v, dmg, _v.set(v.x - p.x, 0, v.z - p.z).normalize().clone(), by, kind ? { spell: true, kind } : { spell: true });
         if (this.auth && by) this.startleAround(p, radius, by); // (the ones near: startled — Startle.js)
     }
 

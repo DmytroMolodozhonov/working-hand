@@ -411,7 +411,7 @@ export class Cannons {
         }
         for (const v of g.castleLife?.targets?.() || []) {
             if (v.dead || !near(v.group.position, 1.2)) continue;
-            g.castleLife.hit(v, 14, dir.clone(), b.by, {});
+            g.castleLife.hit(v, 14, dir.clone(), b.by, { kind: 'Cannon' });
             return true;
         }
         for (const v of this.ships.crew.targets?.() || []) {
