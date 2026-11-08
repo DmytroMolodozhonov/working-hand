@@ -12,7 +12,7 @@ export default async function (h) {
     if (!g.fishPier.plan) return;
     const P = g.fishPier.plan, xc = a.x;
     await h.frames(40);
-    const stand = (x, y, z) => { g.character.group.position.set(x, y + 2.1, z); g.character.verticalVelocity = 0; g.faceYaw?.(0); };
+    const stand = (x, y, z) => { window.__pin = [x, y + 2.1, z]; g.character.group.position.set(x, y + 2.1, z); g.character.verticalVelocity = 0; g.faceYaw?.(0); }; // (the helper's pin held the hero up in the air where he flew in: re-pinned on the deck)
     stand(P.stand.x, P.stand.y, P.stand.z);
     await h.frames(30);
     h.cam([xc + 11, P.D + 6, P.zL + 11], [xc - 1, P.D + 1, P.zL - 8]);
@@ -37,7 +37,7 @@ export default async function (h) {
     await h.frames(5); await h.shot('rod-in-hand', { settle: 2 });
     // a cast
     F._launch({ x: 0, y: 7, z: -15, speed: 17 });
-    await h.until(() => F.state === 'float' || F.state === 'ground', 8000);
+    await h.until(() => F.state === 'float' || F.state === 'ground', 40000);
     h.log('cast →', F.state, 'water', JSON.stringify(F.water), 'b', F.b.toArray().map((v) => +v.toFixed(1)));
     h.cam([xc + 8, P.D + 6, P.zE + 8], [F.b.x, F.b.y, F.b.z]);
     await h.frames(40); await h.shot('float', { settle: 2 });
@@ -56,7 +56,7 @@ export default async function (h) {
     h.log('fight state', F.state, F.fight && JSON.stringify({ line: F.fight.line, st: F.fight.stamina }));
     // the catch
     if (F.fight) { F.fight.stamina = 0.05; F.fight.line = 3; }
-    await h.until(() => F.log.includes('back') || F.state === 'back', 6000);
+    await h.until(() => F.log.includes('back') || F.state === 'back', 40000);
     await h.frames(30);
     h.cam([xc + 4, P.D + 6, P.zE + 6], [xc, P.D + 1, P.zE + 1]);
     await h.frames(25); await h.shot('catch', { settle: 1 });
