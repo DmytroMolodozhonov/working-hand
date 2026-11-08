@@ -61,7 +61,7 @@ export const FLYMAX = {
     ENTRY_T: 1.7, // s of burning air (planets with air); 0.8 without
     DESC_H: 240, // m over the ground after the fall into the air (Earth); planets: 160
     MAX_SPEED: 18000, // m/s far out (the speed near a planet is held down by its distance)
-    UP_DEG: 80, // the flight path must point this steeply up (° over the horizon) …
+    UP_DEG: 68, // the flight path must point this steeply up (° over the horizon; was 80 — the author 08.11: «Flying Maxima всё ещё не позволяет вылететь из атмосферы»: a body leaning back as far as a person can still gave only ~75° after the path's smoothing) …
     UP_HOLD: 5, // … for this many seconds in a row — only then «Flying Maxima» leaves the air for space
     UP_GRACE: 0.4, // s: a tracking glitch / a wobble of the body while holding up is forgiven
     CEIL_EARTH: 405, // m (world y): the fast flight's top over the Earth, just under where the climb ends (EARTH_TOP)
@@ -272,6 +272,8 @@ export class Space {
             this._upBad = (this._upBad || 0) + dt;
             if (this._upBad > FLYMAX.UP_GRACE || !fl.fast) { this.upHold = 0; this._upBad = 0; }
         }
+        // (a climb that is not steep enough yet: say what is missing — once in a while, not at every frame)
+        if (!up && fl.fast && fl.state === 'cruise' && !fl.hovering && fl.pitch >= 0.6 && fl.pitch < FLYMAX.UP_DEG * Math.PI / 180) this._say('🚀 Круче вверх — к звёздам летят почти вертикально', 'steeper', 4000);
         const k = clamp((this.upHold || 0) / FLYMAX.UP_HOLD, 0, 1);
         this.upK = k;
         if (k > 0) {
