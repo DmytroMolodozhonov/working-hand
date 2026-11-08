@@ -60,6 +60,7 @@ export const HELD = {
     DragonTame: { ru: 'Дракон (Брейнрот Максима)', icon: '🐉', own: ['BrainrotMaxima', 'Attack'] }, // (the calmed dragon: 0,5 mana a second — DragonRide.js; «Атак» sends it at one it is already angry at)
     GroundVortex: { ru: 'Вихрь земли', icon: '🌪️', own: ['GroundVortex', 'GroundShield', 'Attack'] }, // (blocks circling the hero: 0,5 mana a second — GroundVortex.js)
     SunClouds: { ru: 'To the Sun (тучи горгулий)', icon: '☀️', own: [] }, // (the beam on the black clouds of the gargoyle ritual: 20 mana a second after 5 s — SunContest.js; «стоп» ends it)
+    SunRay: { ru: 'Энергия Солнца (Sun Ray)', icon: '☀️', own: ['Attack'] }, // (the charge in the wand: «Атак» sends it — SunRay.js)
     Helios: { ru: 'Helios (Солнце богов)', icon: '☀️', own: [] }, // (the gods' Sun over the caster: 3 mana a second — Helios.js; «стоп» puts it out)
     WaterPart: { ru: 'Aquadivide', icon: '🌊', own: [] }, // (the water stands aside: 3 mana a second — WaterPart.js; «стоп» lets it close)
     WaterWalk: { ru: 'Aquambula', icon: '🌊', own: [] }, // (walking on the water: 1 mana a second — WaterWalk.js; «стоп» lets the water go)
@@ -79,7 +80,7 @@ export const HELD = {
 export const CONC_SPELLS = new Set(['Waterball', 'WaterVortex', 'WaterVortexSuperMaxima', 'Levitation', 'LevitationMaxima', 'LevitationSuperMaxima',
     'Alive', 'AliveMaxima', 'Hellfire', 'FireSerpent', 'Inferno', 'Drawdown', 'DrawdownMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle',
     'IceCastle', 'IceBridge', 'ProtectionHouse', 'ProtectionInvisible', 'WardGrow', 'StrengthenHouse', 'WaveAttack', 'WaveAttackMaxima',
-    'LightningStrike', 'Ice', 'ProtectionGods', 'ProtectionGodsMaxima', 'BrainrotMaxima', 'GroundVortex', 'VisibleGodi', 'WaterWalk', 'WaterPart', 'Helios', 'Fireworks', 'Electrum',
+    'LightningStrike', 'Ice', 'ProtectionGods', 'ProtectionGodsMaxima', 'BrainrotMaxima', 'GroundVortex', 'VisibleGodi', 'WaterWalk', 'WaterPart', 'Helios', 'SunRay', 'Fireworks', 'Electrum',
     'Imperius', 'ImperiusMaxima']);
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
@@ -136,6 +137,7 @@ export class Concentration {
         if (g.waterWalk?.on) return 'WaterWalk';
         if (g.waterPart?.on) return 'WaterPart';
         if (g.helios?.on) return 'Helios';
+        if (g.sunRay?.busy) return 'SunRay';
         if (g.visibleGodi?.on) return 'VisibleGodi';
         if (g.sunContest?.active) return 'SunClouds';
         if (g.dragonRide?.active) return 'DragonTame';
@@ -200,6 +202,7 @@ export class Concentration {
         if (g.waterWalk?.stop?.('focus')) done.push('Aquambula');
         if (g.waterPart?.stop?.('focus')) done.push('Aquadivide');
         if (g.helios?.stop?.('focus')) done.push('Helios');
+        if (g.sunRay?.cancel?.('stop')) done.push('Sun Ray');
         if (g.visibleGodi?.stop?.('focus')) done.push('Visible Godi');
         if (g.sunContest?.stop?.('focus')) done.push('To the Sun');
         if (g.dragonRide?.stop?.(why === 'dead' ? 'dead' : 'thrown')) done.push('дракон');

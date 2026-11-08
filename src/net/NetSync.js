@@ -157,6 +157,7 @@ export class NetSync {
         this.looks?.delete(id);
         this.game.waterPart?.stopBy(id);
         this.game.helios?.stopBy(id);
+        this.game.sunRay?.stopBy(id);
         const r = this.game.remotes.get(id);
         if (r) {
             this.game.bleeding?.clearCuts(r.character);
@@ -1151,7 +1152,7 @@ export class NetSync {
             case 'stop':
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)
-                g.spells.stopBy(m.by); g.darkFog?.stopBy(m.by); g.waterPart?.stopBy(m.by); g.helios?.stopBy(m.by); // (a player's «стоп»: his dark fogs thin away on every computer — DarkFog.js)
+                g.spells.stopBy(m.by); g.darkFog?.stopBy(m.by); g.waterPart?.stopBy(m.by); g.helios?.stopBy(m.by); g.sunRay?.stopBy(m.by); // (a player's «стоп»: his dark fogs thin away on every computer — DarkFog.js)
                 break;
             case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
             case 'wpat': if (m.by !== this.me && Array.isArray(m.a)) g.waterPart?.onNet(m.by, m.a); break; // («Aquadivide»: where the wand points now — WaterPart.js)

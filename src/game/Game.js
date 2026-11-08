@@ -254,6 +254,7 @@ import { VisibleGodi } from './VisibleGodi.js';
 import { WaterWalk } from './WaterWalk.js';
 import { WaterPart } from './WaterPart.js';
 import { Helios } from './Helios.js';
+import { SunRay } from './SunRay.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
 import { PentagramResist } from './PentagramResist.js';
@@ -656,6 +657,8 @@ export class Game {
             caligo: (o, d, casterId, side) => this.darkFog?.fire(o, d, casterId, side),
             waterPart: (o, d, casterId, side) => this.waterPart?.fire(o, d, casterId, side),
             helios: (o, d, casterId, side) => this.helios?.fire(o, d, casterId, side),
+            sunRay: (o, d, casterId, side) => this.sunRay?.start(o, d, casterId, side),
+            sunRayFire: (o, d, casterId, side) => this.sunRay?.fire(o, d, casterId, side),
             bridge: (o, d, casterId) => this.bridge?.grow(o, d, casterId),
             groundprud: (o, d, casterId) => this.groundprud?.grow(o, d, casterId),
             collision: this.collision,
@@ -739,6 +742,7 @@ export class Game {
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
+        this.sunRay = new SunRay(this); // «Sun Ray»: the Sun's energy taken into the wand, then the burning beam at «Атак» (SunRay.js)
         this.helios = new Helios(this); // «Helios»: the gods' Sun over the caster on a planet (Helios.js)
         this.waterPart = new WaterPart(this); // «Aquadivide»: the water stands aside round the hero (WaterPart.js)
         this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
@@ -2213,6 +2217,7 @@ export class Game {
         if (name === 'Lumos' || name === 'LumosMaxima' || name === 'LumosFlashlight' || name === 'LumosAhead' || name === 'LumosFollowing' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
         if (name === 'Rescue') return this.bleeding.rescue(isFinal);
         if (name === 'Breakthrough' || name === 'BreakthroughMaxima') return this._castBreakthrough(name, isFinal);
+        if (name === 'Attack' && this.sunRay?.charged) { const r = this.sunRay.attack(isFinal); if (r !== undefined) return r; } // (the Sun's energy in the wand: the burning beam at the one it points at — SunRay.js)
         if (name === 'Attack' && this.whirl?.mine) return this.whirl.attack(isFinal); // (the whirled beams: let them go at him — Whirl.js)
         if (name === 'Attack') {
             // the Ice Rod: the snowmen go for whom it points at (IceQueen.rodAttack)
@@ -2324,6 +2329,7 @@ export class Game {
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
+        if (name === 'SunRay') return this.sunRay.cast(isFinal); // (the Sun's energy into the wand: 500 mana — SunRay.js)
         if (name === 'Helios') return this.helios.cast(isFinal); // (the gods' Sun: 500 mana, then 3 a second — Helios.js)
         if (name === 'WaterPart') return this.waterPart.cast(isFinal); // (the water stands aside: 300 mana, then 3 a second — WaterPart.js)
         if (name === 'WaterWalk') return this.waterWalk.cast(isFinal); // (walking on the water: 50 mana, then 1 a second — WaterWalk.js)
@@ -2524,6 +2530,7 @@ export class Game {
         if (this.waterWalk?.stop('stop')) done.push('Aquambula');
         if (this.waterPart?.stop('stop')) done.push('Aquadivide');
         if (this.helios?.stop('stop')) done.push('Helios');
+        if (this.sunRay?.cancel('stop')) done.push('Sun Ray');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.sunContest?.stop('stop')) done.push('To the Sun');
         if (this.fireworks?.stop('stop')) done.push('салют');
@@ -4066,6 +4073,7 @@ export class Game {
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.gargoyles?.sampleModels?.() || []) zoo.add(m); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
         for (const m of this.wandMagic?.sampleModels?.() || []) zoo.add(m); // (the flashlight's soft beam: its shader)
+        for (const m of this.sunRay?.sampleModels?.() || []) zoo.add(m); // («Sun Ray»: the thread of light, the orb, a ring — SunRay.js)
         for (const m of this.helios?.sampleModels?.() || []) zoo.add(m); // («Helios»: the Sun's disc and corona — Helios.js)
         for (const m of this.rainFx?.sampleModels?.() || []) zoo.add(m); // («Let it rain»: the beam, the deck of clouds, a ring, a curtain of rain — RainSummon.js)
         for (const m of this.sun?.sampleModels?.() || []) zoo.add(m); // («To the Sun»: the beam's column, the heart at the clouds, a ring of shock, a shaft of the sun — SunBeam.js)
@@ -4525,6 +4533,7 @@ export class Game {
         this.waterWalk?.update(dt);
         this.waterPart?.update(dt);
         this.helios?.update(dt);
+        this.sunRay?.update(dt);
         this.visibleGodi?.update(dt);
         this.pentagranium?.update(dt);
         this.steam?.update(dt);
@@ -5613,6 +5622,7 @@ export class Game {
         this.books?.dispose();
         this.scrolls?.dispose();
         this.swim?.dispose();
+        this.sunRay?.dispose();
         this.helios?.dispose();
         this.waterPart?.dispose();
         this.rainFx?.dispose();

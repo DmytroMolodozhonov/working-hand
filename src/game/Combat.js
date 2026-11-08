@@ -172,6 +172,7 @@ export const SPELL_COST = {
     Invisibility: 250, // nobody sees me; then 2 a second (only from a scroll — Invisibility.js)
     GroundVortex: 20, // «Ground Vortex»: the earth rises and circles; then 1 a second while held (a scroll — GroundVortex.js)
     Nihilis: 40, // «Nihilis Atra»: a cone of light scatters black magic; instant (only from a scroll — Nihilis.js)
+    SunRay: 500, // «Sun Ray»: the Sun's energy into the wand, then the burning beam at «Атак» — 500 once (a scroll of the gods — SunRay.js)
     Helios: 500, // «Helios»: the gods' Sun over the caster on a planet — 500 at once, then 3 a second (Helios.js)
     WaterPart: 300, // «Aquadivide»: the water stands aside like the sea for Moses — 300 at once, then 3 a second (a scroll only — WaterPart.js)
     WaterWalk: 50, // «Aquambula»: walking on the water — 50 at once, then 1 a second (a scroll only — WaterWalk.js)

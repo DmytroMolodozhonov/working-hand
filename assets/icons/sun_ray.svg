@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="sr-bg" cx="0.5" cy="0.3" r="0.8"><stop offset="0" stop-color="#4a2a06"/><stop offset="0.6" stop-color="#1c1004"/><stop offset="1" stop-color="#070402"/></radialGradient>
+    <radialGradient id="sr-sun" cx="0.45" cy="0.42" r="0.6"><stop offset="0" stop-color="#fffbe0"/><stop offset="0.5" stop-color="#ffd24a"/><stop offset="1" stop-color="#f07a12"/></radialGradient>
+    <radialGradient id="sr-glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffe08a" stop-opacity="0.95"/><stop offset="0.5" stop-color="#ffb030" stop-opacity="0.35"/><stop offset="1" stop-color="#ff8a10" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sr-beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6c8" stop-opacity="0.95"/><stop offset="1" stop-color="#ff9a1a" stop-opacity="0.9"/></linearGradient>
+    <clipPath id="sr-clip"><circle cx="64" cy="64" r="60"/></clipPath>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#sr-bg)"/>
+  <g clip-path="url(#sr-clip)">
+    <circle cx="64" cy="20" r="40" fill="url(#sr-glow)"/>
+    <!-- the Sun and its rays -->
+    <g stroke="#ffe9a0" stroke-linecap="round" opacity="0.8"><path d="M64 22 L64 -6" stroke-width="3"/><path d="M64 22 L96 -2" stroke-width="2.6"/><path d="M64 22 L32 -2" stroke-width="2.6"/><path d="M64 22 L112 16" stroke-width="2"/><path d="M64 22 L16 16" stroke-width="2"/></g>
+    <circle cx="64" cy="22" r="14" fill="url(#sr-sun)" stroke="#ffe9a0" stroke-width="1.4"/>
+    <g fill="#c85a10" opacity="0.5"><ellipse cx="59" cy="19" rx="2.6" ry="1.8"/><ellipse cx="69" cy="26" rx="1.8" ry="1.2"/></g>
+    <!-- the beam: from the sun down, swinging to the right, burning -->
+    <path d="M56 32 L72 32 L112 100 L84 112 Z" fill="url(#sr-beam)" opacity="0.55"/>
+    <path d="M61 32 L67 32 L102 102 L92 106 Z" fill="#fffbe6" opacity="0.95"/>
+    <!-- the impact: flare, sparks, smoke -->
+    <circle cx="98" cy="106" r="16" fill="url(#sr-glow)"/>
+    <circle cx="98" cy="106" r="5" fill="#fff"/>
+    <g fill="#ffd24a"><circle cx="88" cy="96" r="1.6"/><circle cx="108" cy="92" r="1.4"/><circle cx="110" cy="112" r="1.8"/><circle cx="84" cy="110" r="1.4"/><circle cx="100" cy="88" r="1.2"/></g>
+    <path d="M90 118 Q96 104 104 118" fill="#2a2018" opacity="0.7"/>
+    <!-- the wand -->
+    <g transform="rotate(35 30 100)"><rect x="29" y="70" width="3.6" height="46" rx="1.8" fill="#6a4020" stroke="#2a1608" stroke-width="1"/><circle cx="30.8" cy="70" r="4" fill="#fffbe6"/><circle cx="30.8" cy="70" r="9" fill="url(#sr-glow)"/></g>
+    <!-- the thread of light from the sun into the wand's tip -->
+    <path d="M60 36 Q40 52 40 72" fill="none" stroke="#ffe08a" stroke-width="2.4" stroke-linecap="round" opacity="0.85" stroke-dasharray="3 4"/>
+  </g>
+  <circle cx="64" cy="64" r="60" fill="none" stroke="#ffcf4a" stroke-width="2"/>
+</svg>

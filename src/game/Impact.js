@@ -177,6 +177,7 @@ export const SPELL_PHYSICS = {
     // («Drawdown»: the ground sinks — bodies stand on it and go down with it, nobody is pushed;
     //  «Stitching»: stones laid where nobody stands; «Invisibility»: nobody sees — Drawdown.js / Stitching.js / Invisibility.js)
     Spiralis: null, // («Спиралис»: it takes the beams of a clash; the double charge pushes as the two spells themselves do — Whirl.js)
+    SunRay: null, SunRayFire: null, // («Sun Ray»: the beam burns, it pushes nobody — SunRay.js)
     Helios: null, // («Helios»: a light — it moves nobody, burns nobody — Helios.js)
     WaterPart: null, // («Aquadivide»: it moves nobody — WaterPart.js)
     WaterWalk: null, // («Aquambula»: it moves nobody — WaterWalk.js)

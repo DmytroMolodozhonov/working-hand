@@ -224,6 +224,7 @@ export function matchSpell(text) {
     if (has('drawdown', 'draw down', 'drowdown', 'drow down', 'дравдаун', 'драв даун', 'дродаун', 'дро даун', 'драудаун', 'драу даун', 'дровдаун', 'дров даун', 'драфдаун', 'дравдан', 'дродан', 'дравдаон', 'просядь')) return mx() ? 'DrawdownMaxima' : 'Drawdown';
     if (has('ликвидейш', 'ликвидэйш', 'ликвидеш', 'ликвидайш', 'ликвидац', 'ликвидир', 'ликвидей', 'liquidat', 'liquidation', 'ликвидейтион')) return mx() ? 'LiquidationMaxima' : 'Liquidation';
     if (has('spiralis', 'спиралис', 'спиралес', 'спирализ', 'spiralus', 'спираллис')) return 'Spiralis'; // (the beams of a clash whirled: Whirl.js)
+    if (has('sunray', 'sun ray', 'sunrei', 'sunrey', 'санрей', 'сан рей', 'санрэй', 'сан рэй', 'санрей', 'санрая', 'сан рая', 'сан рай', 'санрай')) return 'SunRay'; // (the Sun's energy into the wand: SunRay.js — «сан» first)
     if (has('helios', 'хелиос', 'гелиос', 'хэлиос', 'хелиас', 'гелиас', 'гелиус', 'хелиус', 'heliyos')) return 'Helios'; // (the gods' Sun on a planet: Helios.js)
     if (has('aquadivide', 'akvadivide', 'aquadivida', 'aquadivaid', 'аквадивиде', 'аквадивайд', 'аквадивида', 'акводивиде', 'аквадивид', 'аквадевайд', 'аквавайд', 'акваявайд', 'акваввайд', 'акуавайд', 'аквавид', 'аквавиде', 'aquavide', 'aquawide', 'aquavaid', 'aquawaid') ||
         (/(aqua|akva|аква|акуа|акво|аквэ|аква|аква)/.test(s) && /(divid|divaid|devaid|divide|дивид|дивайд|девайд|дэвайд|вайд|вайт|вайде|wide|wid\b|vide|vaid|виде|видэ|вид\b|вит\b)/.test(s) && !/(ambul|амбул|мбул|ris\b|рис\b)/.test(s))) return 'WaterPart'; // (the water stands aside: WaterPart.js)
@@ -592,6 +593,8 @@ export class SpellManager {
             case 'Drawdown': case 'DrawdownMaxima': this.hooks.drawdown?.(name, o, casterId); break; // (Drawdown.js)
             case 'Liquidation': case 'LiquidationMaxima': this.hooks.liquidation?.(name, o, d, casterId); break; // (Liquidation.js)
             case 'Stitching': this.hooks.stitching?.(o, d, casterId); break; // (Stitching.js)
+            case 'SunRay': this.hooks.sunRay?.(o, direction.clone(), casterId, handSide); break; // (the charge: the Sun's energy into the wand — SunRay.js)
+            case 'SunRayFire': this.hooks.sunRayFire?.(o, direction.clone(), casterId, handSide); break; // (the burning beam: the direction's LENGTH carries the power — SunRay.js)
             case 'Helios': this.hooks.helios?.(o, direction.clone(), casterId, handSide); break; // (the gods' Sun: o = the caster's feet — Helios.js)
             case 'WaterPart': this.hooks.waterPart?.(o, direction.clone(), casterId, handSide); break; // (the water stands aside: o = the caster's feet, direction = the corridor's axis — WaterPart.js)
             case 'Caligo': this.hooks.caligo?.(o, direction.clone(), casterId, handSide); break; // (the dark fog: o = its middle, the direction = the way back to the wand — DarkFog.js)

@@ -383,6 +383,9 @@ export class VoxelWorld {
         this._rememberBase(k);
     }
 
+    /** The Sun's true direction now (unit, y < 0 below the horizon) — the real one, without the gods' Sun's blend (SunRay.js). */
+    trueSun(out) { return sunAt(this._phase ?? 0, out); }
+
     /** «Helios» (Helios.js): the gods' Sun lights this place — { k (0…1), dir (unit, to the Sun) } or null; the next setDayPhase turns the day on / off. */
     setHelios(L) {
         if (!L || !(L.k > 0.002)) { this._helios = null; return; }

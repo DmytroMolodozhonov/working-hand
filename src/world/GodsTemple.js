@@ -44,7 +44,8 @@ export const TEMPLE = {
 /** The eight scrolls of the library's pedestals (the spells' names — taught by burning a scroll): the four of the
  * planets, «Бум» (Boom.js) on the fifth, before the god of Wisdom, and «Planet Liquidation» (PlanetDestroy.js) on
  * the sixth, further down the aisle. */
-export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die', 'ImperiusMaxima', 'DivineCreation', 'Helios'];
+export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die', 'ImperiusMaxima', 'DivineCreation', 'Helios', 'SunRay'];
+// (the thirteenth: «Sun Ray» — the Sun's energy into the wand, then a burning beam at «Атак» against the titans, SunRay.js; right of the carpet, beyond «Да пусть создастся»)
 // (the twelfth: «Helios» — the gods' artificial Sun on a planet, Helios.js; on the carpet between «Planet Liquidation» and «Дай»)
 // (the eleventh: «Да пусть создастся» — the gods make what is described, DivineCreation.js; on its pedestal right of the carpet, level with «Planet Liquidation», the twin of «Империус Максима»)
 // (the tenth: «Империус Максима» — the mind into any creature or player, Imperius.js; on its pedestal left of the carpet, by «Planet Liquidation»)
@@ -740,6 +741,7 @@ export function templePlan(seed = 1) {
     pedestals.push({ x: -4.6, z: WZ + 9.5, spell: TEMPLE_SCROLLS[9] }); // («Империус Максима»: left of the carpet, level with «Planet Liquidation» — 1 m before the desks, 2 m before the stacks)
     pedestals.push({ x: 4.6, z: WZ + 9.5, spell: TEMPLE_SCROLLS[10] }); // («Да пусть создастся»: right of the carpet, the twin of «Империус Максима»)
     pedestals.push({ x: 0, z: WZ + 11.5, spell: TEMPLE_SCROLLS[11] }); // («Helios»: on the carpet, between «Planet Liquidation» and «Дай»)
+    pedestals.push({ x: 4.6, z: WZ + 12.5, spell: TEMPLE_SCROLLS[12] }); // («Sun Ray»)
     // the colonnade along both sides holding the gallery of the upper storey
     const BY = 7; // the gallery's floor
     for (const sx of [-1, 1]) {

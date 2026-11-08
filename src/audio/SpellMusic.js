@@ -183,6 +183,18 @@ function melody(rows, beat, t0, play) { for (const [b, n, l = 1] of rows) play(h
 
 // ------------------------------------------------------------------ the tunes
 const TUNES = {
+    /** «Sun Ray»'s tune: the Sun's energy drawn down — a rising drone, a bright brass-like fanfare in open fifths (E major), bells like sparks falling, a long white end. */
+    thSunRay(sr) {
+        const o = buf(sr, 9), r = rng(163);
+        pad(o, sr, ['E2', 'B2', 'E3'], 0, 3, 0.42, { att: 1.5, vib: 0.004, harm: 3 });
+        pad(o, sr, ['E3', 'B3', 'E4', 'G#4'], 2, 3.4, 0.52, { att: 0.9, vib: 0.004, harm: 3 });
+        pad(o, sr, ['A3', 'C#4', 'E4', 'A4'], 4.8, 2.6, 0.55, { att: 0.5, vib: 0.004, harm: 3 });
+        pad(o, sr, ['E3', 'B3', 'E4', 'G#4', 'B4', 'E5'], 6.6, 2.4, 0.66, { att: 0.3, rel: 1.6, vib: 0.004, harm: 3 });
+        melody([[0, 'E4'], [1, 'B4'], [2, 'E5', 2], [4, 'G#5'], [5, 'B5', 2], [7, 'A5'], [8, 'G#5'], [9, 'E6', 3]], 0.62, 1.0, (f, t) => bell(o, sr, f, t, 0.19, 2.4));
+        for (let k = 0; k < 16; k++) bell(o, sr, hz('E7') * (1 + 0.5 * (k % 3)), 6.0 + k * 0.12, 0.05, 1.2); // (sparks of light falling)
+        noise(o, sr, 0, 5, 0.035, (u) => 0.15 + 0.6 * u, swell(0.5, 0.4), r);
+        return finish(o, sr, { rms: 0.078 });
+    },
     /** «Helios»'s tune: a sunrise — a low drone swelling, a brass-like fanfare of open fifths rising in D major, bells like sparks over a bright pad, a long glowing end. */
     thHelios(sr) {
         const o = buf(sr, 10), r = rng(151);
@@ -974,6 +986,34 @@ const LOOPS = {
         melody([[0, 'D5'], [1, 'F#5'], [2, 'A5'], [3, 'D6', 2]], 0.22, 0.6, (f, t) => bell(o, sr, f, t, 0.16, 1.0, 0.3));
         return finish(o, sr, { peak: 0.62 });
     },
+    /** «Sun Ray» at the word: a thin high whistle of light drawn down, a warm swell, a few bells like sparks. */
+    fxSunRayCharge(sr) {
+        const o = buf(sr, 1.9), r = rng(167);
+        glide(o, sr, 0, 1.5, 0.14, (u) => 1500 - 900 * u, swell(0.2, 0.5), 2);
+        ['E5', 'B5', 'E6', 'G#6'].forEach((n, k) => bell(o, sr, hz(n), 0.2 + k * 0.2, 0.15, 1.3, 0.3));
+        pad(o, sr, ['E3', 'B3', 'E4'], 0.1, 1.9, 0.3, { att: 0.6, rel: 0.9, harm: 3, vib: 0.005 });
+        noise(o, sr, 0.2, 1.4, 0.04, () => 0.7, swell(0.3, 0.5), r);
+        return finish(o, sr, { peak: 0.55 });
+    },
+    /** «Sun Ray» the beam: a thunderous roar of fire — a sub-bass hit, a rising scream of white noise and a metallic shriek, a long burning roar falling away. */
+    fxSunRayFire(sr) {
+        const o = buf(sr, 2, 1), r = rng(173);
+        drum(o, sr, 0, 0.9, 46, 0.7, r);
+        noise(o, sr, 0, 0.4, 0.5, (u) => 0.9 - 0.3 * u, swell(0.01, 0.5), r);
+        glide(o, sr, 0, 0.8, 0.22, (u) => 380 + 2400 * u * u, swell(0.05, 0.6), 2);
+        noise(o, sr, 0.15, 1.8, 0.2, (u) => 0.45 - 0.35 * u, swell(0.1, 0.9), r);
+        pad(o, sr, ['E1', 'B1', 'E2'], 0, 2, 0.45, { att: 0.05, rel: 1.2, harm: 4, vib: 0.01 });
+        bell(o, sr, hz('E6'), 0.05, 0.12, 1.6, 0.4);
+        return finish(o, sr, { peak: 0.75 });
+    },
+    /** «Sun Ray» held: the charge in the wand — a deep warm hum rising a little, a thin singing overtone, a faint crackle. */
+    loopSunRay(sr) {
+        const o = buf(sr, 3.6), r = rng(761);
+        pad(o, sr, [82.4, 123.5, 164.8], 0, 3.6, 0.24, { att: 0.01, rel: 0, harm: 4, vib: 0.006 });
+        noise(o, sr, 0, 3.5, 0.03, (u) => 0.6 + 0.15 * Math.sin(u * 6.28 * 3), swell(0.5, 0.5), r);
+        bell(o, sr, hz('E6'), 0.8, 0.03, 1.2, 0.1); bell(o, sr, hz('B6'), 2.3, 0.025, 1.2, 0.1);
+        return finish(loopSeam(o, sr), sr, { peak: 0.3 });
+    },
     /** «Helios» at the cast: a bright bell rises into a wide warm swell, a soft crackle of light. */
     fxHelios(sr) {
         const o = buf(sr, 1.9), r = rng(157);
@@ -1152,7 +1192,7 @@ export const SPELL_SOUND = {
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
-    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, WaterPart: { cast: 'fxWaterPart', theme: 'thWaterPart' }, Helios: { cast: 'fxHelios', theme: 'thHelios' }, Rescue: { cast: 'fxHeal' },
+    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, WaterPart: { cast: 'fxWaterPart', theme: 'thWaterPart' }, Helios: { cast: 'fxHelios', theme: 'thHelios' }, SunRay: { cast: 'fxSunRayCharge', theme: 'thSunRay' }, SunRayFire: { cast: 'fxSunRayFire' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
     Breakthrough: { cast: 'fxStone' }, BreakthroughMaxima: { cast: 'fxStone', rate: 0.85 },
     Flight: { own: ['cast'] }, Pause: { cast: 'fxPause' },
@@ -1176,6 +1216,7 @@ export const HELD_SOUND = {
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
     SunClouds: { loop: 'loopSunFight', end: 'fxStop' }, // («To the Sun» on the gargoyles' black clouds held: SunContest.js)
+    SunRay: { loop: 'loopSunRay', end: 'fxStop' }, // («Sun Ray» held: the charge in the wand)
     Helios: { loop: 'loopHelios', end: 'fxStop' }, // («Helios» held: the glow of the gods' Sun)
     WaterPart: { loop: 'loopWaterPart', end: 'fxWaterSlam' }, // («Aquadivide» held: walls of water; the end — the slam)
     WaterWalk: { loop: 'loopWaterWalk', end: 'fxStop' }, // («Aquambula» held: the hum of still water)
