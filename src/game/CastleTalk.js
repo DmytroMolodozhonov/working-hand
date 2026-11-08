@@ -653,6 +653,8 @@ export class CastleTalk {
         // (the voices load quietly in the background: nothing for the player to read in the game — the author)
         if (st.state === 'failed') console.warn('[CastleTalk]', st.text);
         else if (st.state === 'ready') {
+            if (this._voicesSaid) return; // (preload() is asked again and again: the line once a game — it filled the journal every 20 s)
+            this._voicesSaid = true;
             console.info('[CastleTalk]', st.text);
             const d = this.speech?.neural?.device;
             journal(`голоса жителей готовы: ${d === 'webgpu' ? 'на видеокарте (WebGPU)' : d === 'native' ? 'программа на компьютере (процессор)' : 'в браузере на процессоре'}`);
