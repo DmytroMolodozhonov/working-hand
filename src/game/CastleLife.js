@@ -2906,8 +2906,9 @@ export class CastleLife {
         if (v.wizard) v.hurtAt = Date.now();
         // the Saviour (SaviorRules.js): every protection pentagram is closed on him — dark magic ×½, ordinary fire does nothing (the hell's fire still burns, the serpent's ×½)
         if (v.savior != null && !opts.pierce) { if (opts.fire && !opts.hell && !opts.dark) { this._flash(v); return; } if (opts.dark || isDark(opts.kind)) dmg *= 0.5; }
+        // (only «Дай» is let past: it carries 0 damage and kills outright, a zero must not read as «no harm». «Авада» is an ordinary blow here — nothing changed for it)
         // the pentagram of protection from blasts, by the wizard's rank (BlastWardNpc.js): «Бомбарда» does no harm, «Бум» / «Инспириус» / a cannonball half
-        if (opts.kind && v.wizard && !opts.pierce) { dmg *= npcBlastFactor(v, opts.kind); if (!(dmg > 0)) { this._flash(v); return; } }
+        if (opts.kind && v.wizard && opts.kind !== 'Die') { dmg *= npcBlastFactor(v, opts.kind); if (!(dmg > 0)) { this._flash(v); return; } }
         // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
         // (a spell: half its mana from his — an unnamed one as an ordinary 10; a blow: nothing. Out of mana it shatters)
         if (v.wizard && (v.fx & FX.DOME) && !opts.pierce && this.wizards.fight.shieldPays(v, opts.spell ? opts.kind || 'spell' : 'melee', true)) { this._flash(v); return; }
