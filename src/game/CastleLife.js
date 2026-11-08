@@ -534,9 +534,17 @@ export class CastleLife {
 
     /** All living villagers near the local player (targets for weapons and fists). */
     targets(reach = 40) {
-        const out = [];
-        const me = this.game.character.group.position;
-        for (const v of this.byId.values()) if (!v.dead && Math.abs(v.x - me.x) < reach && Math.abs(v.z - me.z) < reach) out.push(v);
+        const out = [], g = this.game;
+        const me = g.character.group.position;
+        // (the host decides every player's blows — a guest's charge, his fists, his sword: the people near a GUEST are targets too, not only the ones near the host.
+        //  The author 08.11: «в мультиплеере не могу сражаться с некоторыми волшебниками, а они со мной могут, но я не хост» — the guest's charges flew through them)
+        const guests = this.auth && g.remotes?.size ? [...g.remotes.values()].filter((r) => !r.dead && r.position) : null;
+        for (const v of this.byId.values()) {
+            if (v.dead) continue;
+            let near = Math.abs(v.x - me.x) < reach && Math.abs(v.z - me.z) < reach;
+            if (!near && guests) for (const r of guests) { if (Math.abs(v.x - r.position.x) < reach && Math.abs(v.z - r.position.z) < reach) { near = true; break; } }
+            if (near) out.push(v);
+        }
         return out;
     }
 
