@@ -71,12 +71,21 @@ export class PerfLog {
         const g = this.game;
         const groups = {};
         let objects = 0;
+        const draws = {}; // (shown meshes by the scene's top group: what the draw calls are made of — the author 08.11, a guest's FPS:
+        //  «вызовов» 600 → 1 400 and nothing said which; a shown mesh is a draw, a shadow caster one more in the sun's pass)
+        let shown = 0, shadows = 0;
+        const walk = (o, k) => {
+            if (!o.visible) return;
+            if ((o.isMesh || o.isLine || o.isPoints || o.isSprite) && o.layers.mask & 1) { const e = draws[k] || (draws[k] = [0, 0]); e[0]++; shown++; if (o.castShadow) { e[1]++; shadows++; } }
+            for (const c of o.children) walk(c, k);
+        };
         for (const top of g.scene?.children || []) {
             let c = 0;
             top.traverse(() => { c++; });
             objects += c;
             const k = top.name || top.type;
             groups[k] = (groups[k] || 0) + c;
+            walk(top, k);
         }
         const info = g.renderer?.info;
         const now = {
@@ -94,7 +103,9 @@ export class PerfLog {
         const parts = Object.entries(now).map(([k, v]) => `${k} ${v} (${d(v, first.now[k] ?? v)})`);
         const grew = Object.entries(groups).map(([k, v]) => [k, v - (first.groups[k] || 0)]).filter(([, v]) => v > 50)
             .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} +${v}`);
+        const top = Object.entries(draws).sort((a, b) => b[1][0] - a[1][0]).slice(0, 10).map(([k, v]) => `${k} ${v[0]}${v[1] ? ` (тень ${v[1]})` : ''}`);
         this._push(`${((performance.now() - this._t0) / 1000).toFixed(0)}с | рост (с начала игры): ${parts.join(', ')}${grew.length ? ' | выросло в сцене: ' + grew.join(', ') : ''}`);
+        this._push(`${((performance.now() - this._t0) / 1000).toFixed(0)}с | показано частей ${shown}, с тенью ${shadows} — по видам: ${top.join(', ')}`);
     }
 
     _line() {
