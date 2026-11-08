@@ -1217,7 +1217,7 @@ const ui = {
     isLoading: () => portal.on && portal.phase !== 'arrive', // (the passage into the world is on — PortalLoader)
     isMenuVoiceActive: () => isMenuVoiceActive,
     fatal(e) {
-        alert('Критическая ошибка: ' + (e?.message || e));
+        alert('Критическая ошибка: ' + (e?.message || e) + (e?.stack ? '\n' + String(e.stack).split('\n').slice(1, 4).join('\n') : ''));
     },
 };
 

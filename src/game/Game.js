@@ -4316,6 +4316,12 @@ export class Game {
                 // Log and keep running: one bad frame must never kill the session.
                 this._errors = (this._errors || 0) + 1;
                 console.error('[Game] frame error', e);
+                // (the journal must show WHERE: a message alone — «reading 'copy'» — says nothing; once per distinct place)
+                try {
+                    const where = String(e?.stack || e).split('\n').slice(0, 5).map((x) => x.trim().replace(/^at /, '').replace(/https?:\/\/[^/]+\//, '')).join(' < ');
+                    this._errSeen = this._errSeen || new Set();
+                    if (!this._errSeen.has(where) && this._errSeen.size < 20) { this._errSeen.add(where); this.perf?.note?.('⚠️ ошибка в кадре: ' + where); }
+                } catch (e2) { /* (the journal only) */ }
                 if (this._errors > 120) {
                     this.stop();
                     this.ui.fatal?.(e);
