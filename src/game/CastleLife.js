@@ -22,6 +22,8 @@
  * guests show them and send their hits.
  */
 
+import { SAVIOR } from './SaviorRules.js';
+const SAVIOR_FLY_H = SAVIOR.FLY_H;
 import { npcBlastFactor } from './BlastWardNpc.js';
 import { ActionLog } from './ActionLog.js';
 import { guardWorld, insideSolid, freeSpot, solidName, standFree, GUARD } from './SolidGuard.js';
@@ -137,8 +139,8 @@ export const STATS = {
 };
 /** The king's advisor stands by the throne: roster number -1 (not one of the people counted by `population`). */
 export const ADVISOR_IDX = -1;
-export const ROLE_NAMES = { builder: 'Строитель', farmer: 'Фермер', merchant: 'Торговец', knight: 'Рыцарь', king: 'Король', advisor: 'Советник' };
-const ROLE_NAMES_F = { builder: 'Строительница', farmer: 'Фермерша', merchant: 'Торговка', knight: 'Рыцарь', king: 'Король', advisor: 'Советница' };
+export const ROLE_NAMES = { savior: 'Волшебник-спаситель', builder: 'Строитель', farmer: 'Фермер', merchant: 'Торговец', knight: 'Рыцарь', king: 'Король', advisor: 'Советник' };
+const ROLE_NAMES_F = { savior: 'Волшебница-спасительница', builder: 'Строительница', farmer: 'Фермерша', merchant: 'Торговка', knight: 'Рыцарь', king: 'Король', advisor: 'Советница' };
 const MALE = ['Иван', 'Пётр', 'Фёдор', 'Михаил', 'Григорий', 'Степан', 'Яков', 'Тимофей', 'Матвей', 'Савелий', 'Никита', 'Еремей', 'Захар', 'Остап', 'Богдан', 'Мирон', 'Лука', 'Демьян', 'Филипп', 'Аким', 'Гордей', 'Игнат', 'Кузьма', 'Прохор', 'Тарас', 'Ефим', 'Арсений', 'Любомир', 'Ратибор', 'Всеслав'];
 const FEMALE = ['Мария', 'Анна', 'Дарья', 'Агафья', 'Василиса', 'Марфа', 'Ульяна', 'Евдокия', 'Аксинья', 'Пелагея', 'Олеся', 'Любава', 'Злата', 'Милана', 'Забава', 'Настасья', 'Варвара', 'Фёкла', 'Ярослава', 'Дуняша'];
 
@@ -1359,6 +1361,7 @@ export class CastleLife {
     _ground(v) {
         const c = this.game.collision;
         const gy = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY(v.x, v.z);
+        if (v.fly) { v.y += (gy + SAVIOR_FLY_H - v.y) * 0.1; return; } // (the Saviour flies: hovers above the ground, a sweep over it, down from the sky in a few seconds)
         v.y += (gy - v.y) * (gy > v.y ? 1 : 0.5);
     }
 
@@ -1730,6 +1733,7 @@ export class CastleLife {
                 v.mode = v.path ? 'walk' : 'idle';
                 break;
             }
+            case 'savior': v.mode = 'idle'; v.speed = 0; this._ground(v); break; // (the white Saviour hovers where he is until his foe is near: Savior.js)
             case 'road':
             case 'cart': // (the people of the roads: on foot or on a cart — Travelers.js)
                 if (g.travelers?.step(v, dt)) return;
@@ -2899,6 +2903,8 @@ export class CastleLife {
         v.hellT = opts.hell ? Date.now() : 0; // (the last blow was the Hellfire's: a kill darkens the caster — HellKills.js)
         v.darkT = darkHit(opts, isDark) ? Date.now() : 0; // (the last blow was black magic: the body fits the rite of monstrous vitality — VitalityRules.js)
         if (v.wizard) v.hurtAt = Date.now();
+        // the Saviour (SaviorRules.js): every protection pentagram is closed on him — dark magic ×½, ordinary fire does nothing (the hell's fire still burns, the serpent's ×½)
+        if (v.savior != null && !opts.pierce) { if (opts.fire && !opts.hell && !opts.dark) { this._flash(v); return; } if (opts.dark || isDark(opts.kind)) dmg *= 0.5; }
         // the pentagram of protection from blasts, by the wizard's rank (BlastWardNpc.js): «Бомбарда» does no harm, «Бум» / «Инспириус» / a cannonball half
         if (opts.kind && v.wizard) { dmg *= npcBlastFactor(v, opts.kind); if (!(dmg > 0)) { this._flash(v); return; } }
         // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
@@ -3310,6 +3316,7 @@ export class CastleLife {
             if (v.byOrder == null) this._comradeDown(v, by); // (on the king's order: nobody is startled)
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
         }
+        if (v.wizard && this.auth) { if (v.savior != null) this.game.savior?.onDeath(v, by); else if (!quiet) this.game.savior?.noteKill(by, v); } // (the white Saviour: ten killed in a row bring him — Savior.js)
         if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z], aw: aware ? 1 : 0 }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
         else if (v.entry?.elder && !st.kingDead) { // (a settlement's Elder: the hall's chests open; the wizards are not «captured» — WizVillages.js)
@@ -3869,6 +3876,7 @@ export class CastleLife {
     playerDied(id) {
         this.aud?.playerDied(id);
         this.game.bounty?.playerDied(id); // (a new life: the hunters forget him — Bounty.js)
+        this.game.savior?.playerDied(id); // (the counts of the dead hero are forgotten, a Saviour out goes — Savior.js)
         for (const cs of this.castles.values()) {
             cs.hostile.delete(id);
             for (const v of cs.active.values()) if (v.foe === id) { v.foe = null; v.grudge = null; }

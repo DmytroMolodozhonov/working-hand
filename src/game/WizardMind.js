@@ -22,7 +22,7 @@ export function seededRng(seed) {
 
 // ------------------------------------------------------------------ 1. reaction
 /** Levels of reaction by rank: 1 — junior, 2 — middle, 3 — strong, 4 — the head of the tower. */
-export const REACT_LEVEL = { novice: 1, adept: 2, teacher: 3, elder: 3, master: 4 };
+export const REACT_LEVEL = { novice: 1, adept: 2, teacher: 3, elder: 3, master: 4, savior: 4 };
 export const REACT_LEVEL_RU = { 1: 'младший', 2: 'средний', 3: 'сильный', 4: 'глава башни' };
 
 /**
@@ -124,7 +124,7 @@ export const SHIELD = {
 };
 
 /** May this wizard use «Protection Maxima»? (The Master always; the others with 300+ mana.) */
-export const canDome = (maxMana, rank) => rank === 'master' || maxMana >= SHIELD.MAXIMA_MANA;
+export const canDome = (maxMana, rank) => rank === 'master' || rank === 'savior' || maxMana >= SHIELD.MAXIMA_MANA;
 
 /**
  * The shield for this moment: 'dome' (Protection Maxima), 'hand' (Protection) or null (no mana).

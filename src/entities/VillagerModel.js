@@ -32,8 +32,8 @@ import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js'
 import { slopeLean } from '../game/HillWay.js';
 
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
-export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage'];
-export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage']);
+export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage', 'savior'];
+export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage', 'savior']);
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife', 'heka'];
@@ -294,8 +294,8 @@ export function strippedLook(L) {
  * A wizard's rank (WizardAI.WIZ_RANKS) on his robe: the colour of its trim, stripes on the cuffs
  * (none — a beginner, 1 — an adept, 2 — a teacher, 3 — the Master), stars on the chest, the hat's band.
  */
-export const RANK_TRIM = { novice: 0xd8d4c8, adept: 0xc8d4ea, teacher: 0xe0b84a, master: GOLD, elder: 0x7fe0c8 };
-const RANK_LEVEL = { novice: 0, adept: 1, teacher: 2, master: 3, elder: 2 };
+export const RANK_TRIM = { novice: 0xd8d4c8, adept: 0xc8d4ea, teacher: 0xe0b84a, master: GOLD, elder: 0x7fe0c8, savior: 0xf6e7a6 };
+const RANK_LEVEL = { novice: 0, adept: 1, teacher: 2, master: 3, elder: 2, savior: 3 };
 
 /** Wizards: a robe to the ground, a pointed hat, a wand (a wanderer too: no staffs in the game, only the Ice Rod), the Master — a long beard. */
 function wizardLook(L, r, pick) {
@@ -307,6 +307,7 @@ function wizardLook(L, r, pick) {
         teacher: [0x1f2f6b, 0x4b2a7a, 0x23364f, 0x5a2d82],
         seller: [0x6a2c91, 0x2b5f8e, 0x7a3b1f],
         master: [0x3a1d5e],
+        savior: [0xf0ece0],
         wanderer: [0x6d6a62, 0x6b5640, 0x55584f],
         townwiz: [0x2f7f86, 0x3b4f8a, 0x5b3a7a, 0x6a4a2a, 0x2f5a3a, 0x7a2f4a], // (the settlements' folk: all colours)
         mage: [0x2b5f8e, 0x4b2a7a, 0x2f6b5a, 0x6b2f5a, 0x3d4a8a], // (a hamlet's wizard: Hamlets.js)
@@ -314,7 +315,7 @@ function wizardLook(L, r, pick) {
     L.dressColor = pick(robes);
     L.shirt = L.dressColor; // (the sleeves are the robe's)
     L.pants = shade(L.dressColor, 0.6);
-    L.accent = role === 'master' ? GOLD : role === 'wanderer' ? 0x8a7a5a : role === 'student' ? 0xd8d4c8 : 0xc0c8d8;
+    L.accent = role === 'master' || role === 'savior' ? GOLD : role === 'wanderer' ? 0x8a7a5a : role === 'student' ? 0xd8d4c8 : 0xc0c8d8;
     L.hatColor = role === 'student' ? shade(L.dressColor, 0.8) : role === 'wanderer' ? shade(L.dressColor, 0.85) : shade(L.dressColor, 0.9);
     L.hat = role === 'master' ? 'wizardTall' : role === 'wanderer' ? 'wizardWide' : 'wizard';
     L.tool = 'wand';
@@ -331,6 +332,7 @@ function wizardLook(L, r, pick) {
     // (the tower: the students wear one of four uniforms with short rolled sleeves — the «vest and school robe» was not chosen; the Master — the High Mage's mantle; the author, 05.11)
     if (role === 'student') { uniformLook(L, pick(['u1', 'u3', 'u4', 'u5'])); L.sleeves = 'rolled'; }
     else if (role === 'master') { uniformLook(L, 'm1'); L.hairColor = GREY_HAIR; }
+    else if (role === 'savior') { uniformLook(L, 'm2'); L.hairColor = 0xf4f0e8; } // (the white Saviour: the «white sage» robe — white with gold, a hood-crown; SaviorRules.js)
 }
 
 // ==================================================================== parts

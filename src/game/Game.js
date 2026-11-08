@@ -6,6 +6,7 @@
  * ones from main.js; see the README for the list of fixes.
  */
 
+import { Savior } from './Savior.js';
 import { threatStep, THREAT_BACK } from './ThreatBack.js';
 import { FIGHT_UPGRADE, UPGRADE_MS } from '../input/NativeVoice.js';
 import { marketDef, buildMarketStall } from './CreativeMarket.js';
@@ -817,6 +818,7 @@ export class Game {
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.glassBlowing = new GlassBlowing(this); // «Create a Flask»: empty flasks of sand or glass (GlassBlowing.js)
         this.cauldronForge = new CauldronForge(this); // «Create a Cauldron»: a cauldron cast out of three armour pieces (CauldronForge.js)
+        this.savior = new Savior(this); // the white Saviour: comes after the wizards killed in a row (Savior.js, SaviorRules.js)
         this.bounty = new Bounty(this); // the hunters for one's head: a settlement's record of heavy crimes, the parties it sends (Bounty.js)
         this.shopHalls = new ShopHallLife(this); // a wizards' settlement's potion hall and scroll hall: the shelves, the keeper who serves (ShopHallLife.js)
         this.potionMaster = new PotionMasterLife(this); // the potion master of the lair: brews, talks, lifts things (PotionMasterLife.js)
@@ -4461,6 +4463,7 @@ export class Game {
         this.potionMaster?.update(dt);
         this.shopHalls?.update(dt);
         this.bounty?.update(dt);
+        this.savior?.update(dt);
         if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         if (earth && !duelOnly) this.crystals?.update(dt);
@@ -5648,6 +5651,7 @@ export class Game {
         this.potionLair?.dispose();
         this.shopHalls?.dispose();
         this.bounty?.dispose();
+        this.savior?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
         this.buildingFx?.dispose();

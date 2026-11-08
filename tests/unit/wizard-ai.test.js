@@ -19,7 +19,7 @@ test('wizards look like wizards: robes, pointed hats, wands (a wanderer too), th
             // (the wanderers and the settlements' wizards wear one of five costumes now — a cowl, a wreath, an ice crown among them:
             //  VillagerOutfits.js, the author's request; the tower's own keep the pointed hat)
             // (the tower's students wear four uniforms now — one of them a soft floppy hat with the work robe: TowerUniforms.js, the author's decision)
-            assert.ok(L.hat.startsWith('wizard') || (L.outfit && ['cowl', 'wreath', 'icecrown'].includes(L.hat)) || (role === 'student' && ['floppy', 'beret', 'mortar'].includes(L.hat)), `${role} hat ${L.hat}`);
+            assert.ok(L.hat.startsWith('wizard') || (L.outfit && ['cowl', 'wreath', 'icecrown'].includes(L.hat)) || (role === 'student' && ['floppy', 'beret', 'mortar'].includes(L.hat)) || (role === 'savior' && L.hat === 'hoodcrown'), `${role} hat ${L.hat}`); // (the white Saviour: the «white sage» robe with a hood-crown — SaviorRules.js, the author 08.11)
             assert.equal(L.tool, 'wand');
             const m = new VillagerModel(L);
             if (L.hat.startsWith('wizard')) assert.ok(m.hat && m.hatTop, 'the pointed hat is its own mesh (it folds under a low ceiling)'); // (a cowl / a wreath / an ice crown is low: part of the head)

@@ -30,6 +30,7 @@
  */
 
 import * as THREE from 'three';
+import { SAVIOR } from './SaviorRules.js';
 import { duelRange, emptyRange } from './DuelRange.js';
 import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist, prepTime, CAST_PREP } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
@@ -44,6 +45,7 @@ import { reactLagText, huntRole, huntLeash, chooseShield, canDome, SHIELD } from
 import { pickThreat } from './FireSerpentRules.js';
 
 const WALK = 2.3, RUN = 5.6;
+const SAVIOR_SPEED = SAVIOR.SPEED_K;
 const DUEL_DRAIN = 1; // mana a second a wizard spends pushing in a duel (as a player's fatigue)
 const URGENT = new Set(['punish', 'regroup', 'guardMaster', 'kite']);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -306,7 +308,7 @@ export class WizardFight {
         // (a held shield: the guards and the screen keep it up — it costs a little mana)
         if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2) { if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; }
         // the Master: he comes too close → blink away
-        if (v.role === 'master' && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
+        if ((v.role === 'master' || v.savior) && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
         let spot = this._spot(v, fp, d, sq);
         // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
         const shot = this._castReady(v, d) && this.clearShot(v, fp);
@@ -327,10 +329,10 @@ export class WizardFight {
         if (v.unstickT > 0 && v.path) {
             // (stuck: round by the tower's paths for a while)
             v.unstickT -= dt;
-            if (L._followPath(v, dt, RUN)) { v.unstickT = 0; v.path = null; }
+            if (L._followPath(v, dt, RUN * (v.savior ? SAVIOR_SPEED : 1))) { v.unstickT = 0; v.path = null; }
             moving = true;
         } else if (spot) {
-            const there = L._goSpot(v, spot.x, spot.z, spot.run ? RUN : WALK * 1.3, dt, 0.7, spot.y);
+            const there = L._goSpot(v, spot.x, spot.z, (spot.run ? RUN : WALK * 1.3) * (v.savior ? SAVIOR_SPEED : 1), dt, 0.7, spot.y); // (the Saviour is quick: SaviorRules.SPEED_K)
             moving = !there && v.speed > 0;
             if (!there) this._stuck(v, spot, dt); else v.stk = null;
         }
@@ -776,7 +778,7 @@ export class WizardFight {
             seen.add(v.id);
             if (!n.shield) { this._caught(v, b); continue; } // (too late to do anything)
             const domeOk = !!v.W?.dome && (v.domeCd ?? 0) <= 0 && !(v.fx & FX.DOME);
-            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && domeOk, spell: b.spell, eta, robe: !!v.robe });
+            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: (v.role === 'master' || !!v.savior) && domeOk, spell: b.spell, eta, robe: !!v.robe });
             // the strong ones (300+ mana) raise «Protection Maxima» when it is really worth it: a heavy spell, a volley, many foes, a bad state
             if (r === 'shield' && domeOk && canDome(v.maxMana, v.rank)) {
                 let inc = 0;

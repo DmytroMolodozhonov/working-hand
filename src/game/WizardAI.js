@@ -14,7 +14,7 @@
 
 import { createRng } from '../core/math.js';
 
-export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage'];
+export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage', 'savior'];
 
 /**
  * hp, ward (magic armour: takes spells and magic blows), mana and its regen per s,
@@ -32,6 +32,12 @@ export const WIZ = {
 };
 // (between a student and a teacher: a senior student — «продвинутый»)
 WIZ.adept = { hp: 14, ward: 5, mana: 100, regen: 1.0, skill: 0.9, cast: 2.7, react: 0.48, reactT: 0.55, stunK: 0.85, range: [7, 15], spells: { Stupefy: 0.4, SapiraDuel: 0.4, IceDuel: 0.1, Jolt: 0.1 } };
+// the Saviour (SaviorRules.js): the Master's tricks (the dome — held much better, the wind, the blink), more health and ward, quick, steady, and his own spells — the favourite «Электром»
+WIZ.savior = {
+    hp: 60, ward: 40, mana: 700, regen: 3.0, skill: 2.2, cast: 1.0, react: 0.95, reactT: 0.2, stunK: 0.2, range: [9, 20],
+    spells: { Electrum: 0.42, JoltMaxima: 0.16, SandsDuel: 0.14, Stupefy: 0.16, IceDuel: 0.12 },
+    dome: { hits: 8, t: 11, cd: 9 }, wind: { r: 4.5, cd: 6 }, blink: { cd: 12 }, heal: 0.25,
+};
 WIZ.seller = WIZ.teacher;
 WIZ.wanderer = { ...WIZ.teacher, mana: 50, range: [8, 18] }; // (a wanderer has seen more: a duel won against him is worth more)
 WIZ.townwiz = { ...WIZ.teacher }; // (a wizard of a settlement — WizardVillages.js: his rank decides how he fights)
@@ -54,6 +60,7 @@ export const WIZ_RANKS = {
     adept: { mana: 100, spread: 0.15, as: 'adept' },
     teacher: { mana: 200, spread: 0.15, as: 'teacher' },
     master: { mana: 500, spread: 0.10, as: 'master' },
+    savior: { mana: 700, spread: 0, as: 'savior' }, // (the white Saviour: SaviorRules.js)
     elder: { mana: 400, spread: 0.10, as: 'teacher' }, // (a settlement's strong wizard: ~400 — only the Master of a tower is stronger)
 };
 export const WIZ_RANK_RU = {
@@ -94,7 +101,7 @@ export const REGEN = 1;
  * «Максима» in a beam clash (as a player shouts it: 5 mana, at most once in 3 s): how readily a
  * wizard of this rank shouts it when he may — a beginner seldom, a teacher nearly always, the Master always.
  */
-export const NPC_MAXIMA = { student: 0.5, adept: 0.75, teacher: 0.9, master: 1 };
+export const NPC_MAXIMA = { student: 0.5, adept: 0.75, teacher: 0.9, master: 1, savior: 1 };
 export function wantsMaxima(skillRole, mana, rng = Math.random) {
     return mana >= 5 && rng() < (NPC_MAXIMA[skillRole] ?? 0.5);
 }
@@ -151,11 +158,11 @@ export function manaPace(mana, max) {
 }
 
 /** Mana a spell costs a wizard (the same as a player's base spell). */
-export const NPC_COST = { LiquidationDuel: 25, Expelliarmus: 8, Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
+export const NPC_COST = { Electrum: 30, SandsDuel: 12, LiquidationDuel: 25, Expelliarmus: 8, Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
 
 export const WIZ_ROLE_RU = {
     student: ['Ученик', 'Ученица'], teacher: ['Наставник', 'Наставница'], seller: ['Торговец свитками', 'Торговка свитками'],
-    master: ['Мастер', 'Мастер'], wanderer: ['Странник', 'Странница'], townwiz: ['Волшебник', 'Волшебница'], mage: ['Волшебник', 'Волшебница'],
+    master: ['Мастер', 'Мастер'], savior: ['Волшебник-спаситель', 'Волшебница-спасительница'], wanderer: ['Странник', 'Странница'], townwiz: ['Волшебник', 'Волшебница'], mage: ['Волшебник', 'Волшебница'],
 };
 
 const MALE = ['Альберт', 'Бенедикт', 'Валентин', 'Гаспар', 'Дориан', 'Евстафий', 'Игнатий', 'Леонард', 'Максимилиан', 'Натаниэль', 'Освальд', 'Персиваль', 'Руфус', 'Себастьян', 'Теодор', 'Феликс', 'Финеас', 'Эразм', 'Юлиан', 'Ярополк', 'Мирослав', 'Велимир', 'Светозар', 'Остромир'];
@@ -302,7 +309,7 @@ export function decide(input, rng = Math.random) {
         if (input.role === 'student' && input.clashP < 0.2 && input.mana < 5) return { a: 'giveup' };
         return { a: 'clash' };
     }
-    if (input.role === 'master') {
+    if (input.role === 'master' || input.role === 'savior') {
         if (input.domeReady && input.mana >= NPC_COST.ProtectionMaxima && (hpK < 0.6 || input.incoming >= 2)) return { a: 'dome' };
         if (input.windReady && input.dist < W.wind.r && input.mana >= NPC_COST.Wind) return { a: 'wind' };
         if (input.blinkReady && input.closeT > 1.5) return { a: 'blink' };
@@ -325,7 +332,7 @@ export function react({ role, mana, shieldReady = true, domeReady = false, spell
     // (a wizard in a magic robe is a better one: answers more often, and with a shield rather than a spell)
     if (rng() >= (robe ? Math.min(0.97, W.react + 0.3) : W.react)) return null;
     if (robe && shieldReady && mana >= NPC_COST.Protection && rng() < 0.5) return 'shield';
-    if (role === 'master' && domeReady && mana >= NPC_COST.ProtectionMaxima && (spell === 'AvadaKedavra' || rng() < 0.3)) return 'dome';
+    if ((role === 'master' || role === 'savior') && domeReady && mana >= NPC_COST.ProtectionMaxima && (spell === 'AvadaKedavra' || rng() < 0.3)) return 'dome';
     const counterCost = NPC_COST.Stupefy;
     if (mana >= counterCost && eta > 0.25 && rng() < 0.6) return 'counter';
     if (shieldReady && mana >= NPC_COST.Protection) return 'shield';

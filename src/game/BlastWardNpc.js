@@ -27,6 +27,7 @@ export function wardRank(v) {
 /** Has this wizard the ward? (stable for him: the id decides) */
 export function hasBlastWard(v) {
     if (!v || !v.wizard) return false;
+    if (v.savior != null) return true; // (the white Saviour: every protection pentagram is closed on him — SaviorRules.js)
     const c = BLAST_WARD_CHANCE[wardRank(v)];
     if (!c) return false;
     return c >= 1 || hashOf(v.id + ':blastward') < c;

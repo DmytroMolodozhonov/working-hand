@@ -26,6 +26,7 @@ import { BLOCK } from './Terrain.js';
 import { CASTLE_CELL, BLEND, hash01, Plan, buildHouse, rotLot, inwardRy } from './Castles.js';
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
+import { GX0, saviorEntry } from '../game/SaviorRules.js'; // (the Saviour's own place: ww<GX0+n>_<stage>)
 
 export const TOWER_ZONE = 58; // half-size of the levelled land
 const TOWER_P = 0.2; // (old worlds: the share of castle-free cells that held a tower — only to find them: isLost)
@@ -861,6 +862,7 @@ export class TowerIndex {
                 wseed: this.seed, population: type === 'ww' ? 3 : 40, knights: type === 'wk' ? 99 : 0, stalls: [], houses: [], chests: [], nodes: [], edges: [], pens: [], fields: [], rooms: [], posts: [],
                 wallWalk: [], zone: 0, color: type === 'wk' ? 0x6b4a2a : 0x7a6a55, colorName: 'серые', name: kind === 'errant' ? 'Странствующие рыцари' : kind === 'folk' ? 'Путники' : 'Дороги', king: '', parts: [], _byChunk: new Map(),
             };
+            if (type === 'ww' && gx >= GX0 && gx < GX0 + 100000) { d.people = [saviorEntry(gx, gz)]; d.population = 1; } // (the white Saviour: SaviorRules.js)
             this._wander.set(key, d);
         }
         return d;
