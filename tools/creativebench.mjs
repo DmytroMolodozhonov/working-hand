@@ -38,7 +38,7 @@ const ABLATE = opt('ablate', null); // e.g. trees,villagers,animals,terrain: sta
 /** --check: what the Creative start scene must keep (only tighten). */
 const LIMITS = { gameMeanMs: 10, gameP95Ms: 19, calls: 520, triangles: 480000, newShaders: 0 }; // (24.10: 7.9 / 14.9 ms, 425 calls (477 the worst way), 418k triangles; 23.10 before the fixes: 9.2 ms, 702 calls)
 const [W, H] = opt('size', '480x270').split('x').map(Number);
-const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' }, ultra: { graphics: '3', viewDistance: 'high', ultra: 'on' } };
+const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' }, ultra: { graphics: '3', viewDistance: 'high', ultra: 'on' }, umax: { graphics: '3', viewDistance: 'max', ultra: 'on' } };
 
 async function scene(FRAMES) {
     const g = window.__zns.game, ch = g.character;
