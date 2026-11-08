@@ -29,6 +29,8 @@ export const START_SPELLS = new Set([
     'Fireworks',
     // «забрать свою силу» со своего скелета (слова автора: «известно с начала, без свитка»)
     'GiveMyPower',
+    // the way to my own last body (the author 08.11: «изначально доступно любому, без свитка»; black magic)
+    'Reperio',
     // a thing in the hand is the key (the Ice Rod, Thor's hammer)
     'RodFrozen', 'RodIce', 'Hammer',
 ]);
@@ -38,7 +40,7 @@ export const START_SPELLS = new Set([
  * TAUGHT at the lessons (SchoolLessons.js gives them as `bonus.spells`) — not known until then.
  */
 export const SCHOOL_UNKNOWN = new Set(['Sands', 'Sapira', 'Stupefy', 'Expelliarmus', 'Disarmor', 'Ice', 'Frozen', 'Jolt', 'Maxima',
-    'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Wind', 'WindMaxima', 'Attack', 'GiveMyPower']);
+    'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Wind', 'WindMaxima', 'Attack', 'GiveMyPower', 'Reperio']); // (a pupil of the school learns no black magic)
 
 /** A spell taught by another spell's scroll / book (the rest: by the key of their own name). */
 export const TAUGHT_BY = {

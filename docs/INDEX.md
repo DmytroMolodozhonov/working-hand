@@ -440,6 +440,7 @@
 - `Ragdoll.js` — a rag doll for a person knocked off his feet, thrown («Джолт», a blast, a blow) or dead (the author: «даже не анимация, а скорее тряпичная кукла… чтобы они фактически обтекающе взаимодействовали со стеной, сундуком, с другими…
 - `RagdollPose.js` — the villager's model drawn BY the rag doll (Ragdoll.js): what is seen is where the doll's balls are, no animation.
 - `AnimalRagdoll.js` — the rag doll of a DEAD cow, pig, sheep, horse, swan (the same doll on a four-legged body: shoulders = fore legs' tops, hips = hind legs', measures from a fresh model of the kind); `tests/unit/animal-ragdoll.test.js`.
+- `BodyFinder.js` + `BodyFinderRules.js` — «Reperio»: the way to my own last body (beads of light, the minimap's line, a pillar over the body); black magic, known from the start, 10 mana; `tests/unit/body-finder.test.js`.
 - `Fishing.js` — fishing with the rod in the hand (`g.fishing`): the float and the line, the cast by a real swing, the bite, the strike, the fight, the catch (rules: `FishingRules.js`, models: `FishingRodModel.js`); `docs/rules/fishing.md`; `tests/unit/fishing.test.js`.
 - `FishingRules.js` — fishing rules, pure: `castVelocity`, `isStrike`, `pickSpecies`, `fightStep`, `FISHING_TARGETS`.
 - `FishingRodModel.js` — the rod (cork grip, reel, 4 bending pieces, guides, the line) and the caught fish as a thing (the sea's own fish: `ReefFish.fishItemMesh`).

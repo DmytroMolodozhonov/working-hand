@@ -231,6 +231,7 @@ export function matchSpell(text) {
     if (has('aquadivide', 'akvadivide', 'aquadivida', 'aquadivaid', 'аквадивиде', 'аквадивайд', 'аквадивида', 'акводивиде', 'аквадивид', 'аквадевайд', 'аквавайд', 'акваявайд', 'акваввайд', 'акуавайд', 'аквавид', 'аквавиде', 'aquavide', 'aquawide', 'aquavaid', 'aquawaid') ||
         (/(aqua|akva|аква|акуа|акво|аквэ|аква|аква)/.test(s) && /(divid|divaid|devaid|divide|дивид|дивайд|девайд|дэвайд|вайд|вайт|вайде|wide|wid\b|vide|vaid|виде|видэ|вид\b|вит\b)/.test(s) && !/(ambul|амбул|мбул|ris\b|рис\b)/.test(s))) return 'WaterPart'; // (the water stands aside: WaterPart.js)
     if (has('aquambula', 'akvambula', 'aquambule', 'akwambula', 'аквамбула', 'аквамбулу', 'аквамбуле', 'аквамбулла', 'аквамбулы')) return 'WaterWalk'; // (walking on the water: WaterWalk.js)
+    if (has('reperio', 'reperyo', 'reperyio', 'reperyo', 'реперио', 'репирио', 'реперью', 'репэрио', 'репериа', 'реперё', 'репэриё', 'reperiyo')) return 'Reperio'; // (the way to my own last body: BodyFinder.js; black magic, from the start, 10 mana)
     if (has('caligo', 'kaligo', 'калиго', 'калигу', 'каллиго', 'каліго', 'caligu')) return 'Caligo'; // (the dark fog: DarkFog.js)
     if (has('sectura', 'sektura', 'сектура', 'сэктура', 'сектюра', 'сектура', 'sectur')) return 'Sectura'; // (the cutting curse: Slash.js — «сектора» is the everyday word, not taken)
     if (has('стичинг', 'стичин', 'ститчинг', 'ститчин', 'стиччинг', 'стичен', 'стечинг', 'стичэнг', 'stitching', 'stitchin', 'stiching', 'stitch', 'сшив', 'сшей')) return 'Stitching';

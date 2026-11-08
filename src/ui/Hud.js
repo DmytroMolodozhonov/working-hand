@@ -1015,6 +1015,43 @@ export class Hud {
                 bigLabel(distText(Math.hypot(cx, cz) / scale), bx - Math.cos(a) * 30, by + up);
             }
         }
+        // «Reperio»: the way to my own body — a dotted line of cold light (the points of the route that fall on the map), the body's mark; far — an arrow on the edge and the distance
+        const sp = this.seekPath;
+        if (sp?.points?.length && sp.target) {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'rgba(122,255,208,0.95)'; ctx.fillStyle = 'rgba(160,112,255,0.9)'; ctx.lineWidth = 2.2;
+            ctx.setLineDash([2, 6]); ctx.lineDashOffset = -((performance.now() / 90) % 8);
+            ctx.beginPath();
+            let pen = false;
+            for (const q of sp.points) {
+                const px = (q.x - charPos.x) * scale, pz = (q.z - charPos.z) * scale;
+                if (Math.abs(px) < hw + 40 && Math.abs(pz) < hh + 40) { if (!pen) { ctx.moveTo(px, pz); pen = true; } else ctx.lineTo(px, pz); } else pen = false;
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+            const tx = (sp.target.x - charPos.x) * scale, tz = (sp.target.z - charPos.z) * scale;
+            if (inside(tx, tz, 10)) {
+                ctx.fillStyle = 'rgba(8,20,24,0.92)'; ctx.strokeStyle = '#7affd0'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(tx, tz, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.font = '13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#e8f6f0'; ctx.fillText('💀', tx, tz + 1);
+                label('Моё тело', tx, Math.max(-hh + 12, tz - 14));
+            } else {
+                const a = Math.atan2(tz, tx), m = 19;
+                const k = Math.min((hw - m) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - m) / Math.max(1e-6, Math.abs(Math.sin(a))));
+                const bx = Math.cos(a) * k, by = Math.sin(a) * k;
+                ctx.save(); ctx.translate(bx, by); ctx.rotate(a);
+                ctx.fillStyle = '#7affd0'; ctx.strokeStyle = '#06201a'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(4, -8); ctx.lineTo(4, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+                ctx.fillStyle = 'rgba(8,20,24,0.92)'; ctx.strokeStyle = '#7affd0'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(bx, by, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#e8f6f0'; ctx.fillText('💀', bx, by + 1);
+                const up = by > 0 ? -22 : 30;
+                bigLabel(distText(Math.hypot(tx, tz) / scale), bx - Math.cos(a) * 30, by + up);
+            }
+            ctx.restore();
+        }
         // Houses made by «Create a House»: a small house badge (mine — bigger, gold ring); my far house — a pointer on the edge with the distance
         for (const h of houses) {
             const hx = (h.x - charPos.x) * scale, hz = (h.z - charPos.z) * scale;

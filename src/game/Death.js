@@ -252,6 +252,7 @@ export class DeathSystem {
         //  thing gone but the gods' gifts, and no body to take the old power back from: StrongMagic)
         const how = g._deathHow || null;
         g._deathHow = null;
+        g.lastDeath = { x: p.x, y: p.y, z: p.z, t: Date.now() }; // (where I died last — «Reperio» finds it even when no body is left: BodyFinder.js; kept in the save)
         if (g.config?.mode !== 'creative' || g.combat?.enabled) { // (Creative with «Обычное здоровье»: a body and the things dropped, as in the free world)
             const y = this._ground(p.x, p.z, p.y + 0.5);
             const yaw = ch.group.rotation.y;

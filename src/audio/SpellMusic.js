@@ -439,6 +439,16 @@ const TUNES = {
      * «Дай» (Die): death of the gods — a black, slow descent: a low choir in D minor and a cluster, a funeral
      * brass falling by semitones, a single bell tolling, the drone left alone at the end.
      */
+    /** «Reperio» — the search for my own body: a whisper of air going away from the caster, a low drone, a far bell that answers from the dark and gets nearer (three strokes closer together), a cold rising pad at the end. A tune of 8 s. */
+    thReperio(sr) {
+        const o = buf(sr, 8.2), r = rng(419);
+        noise(o, sr, 0, 7, 0.4, (u) => 0.05 + 0.1 * Math.sin(u * 2.4) ** 2, swell(0.2, 0.4), r);
+        glide(o, sr, 0, 7.6, 0.28, (u) => 55 + 14 * u, swell(0.1, 0.4), 3);
+        pad(o, sr, ['D2', 'A2', 'F3'], 0.2, 4.6, 0.36, { att: 1.2, rel: 1, vib: 0.006, harm: 4, det: 0.012 });
+        pad(o, sr, ['D3', 'A3', 'C4'], 4.4, 8, 0.3, { att: 1.6, rel: 1.4, vib: 0.006, harm: 3, det: 0.01 });
+        bell(o, sr, hz('A3'), 1.2, 0.13, 3.2, 0.3); bell(o, sr, hz('A3'), 3.6, 0.15, 3, 0.34); bell(o, sr, hz('A3'), 5.2, 0.18, 2.6, 0.4); bell(o, sr, hz('E4'), 6.2, 0.14, 2.2, 0.4);
+        return finish(o, sr, { rms: 0.15 });
+    },
     /** «Caligo» — the black jet out of the wand (10 s of it): a deep rushing noise swelling and sinking, a low drone, cold choir-less pads, a few far rumbles. A tune of 9 s. */
     thCaligo(sr) {
         const o = buf(sr, 9.5), r = rng(331);
@@ -1227,6 +1237,7 @@ export const SPELL_SOUND = {
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
     Nihilis: { cast: 'fxNihilis' }, // («Nihilis Atra»: a short bright shimmer — an instant, not a tune; Nihilis.js)
     Spiralis: { theme: 'thSpiralis' }, // («Спиралис»: the clash's beams whirled, 9 s — Whirl.js)
+    Reperio: { own: ['magic'], theme: 'thReperio' }, // («Reperio»: a whisper and a far bell, a cold tune of 8 s — BodyFinder.js)
     Caligo: { theme: 'thCaligo' }, // («Caligo»: the black jet, 10 s — a tune; DarkFog.js)
     Sectura: { cast: 'fxSectura' }, SecturaSwing: { cast: 'fxSecturaSwing' }, // («Sectura»: the word arms the wand — a «shing»; the swing — the air tears: Slash.js)
     Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' }, MonsterForm: { cast: 'fxMonsterRoar', theme: 'thMonster' }, MonsterBack: { cast: 'fxMonsterBack' }, // («Пентаграмма страшного монстра» — MonsterForm.js: not a spoken spell, the pentagram's)

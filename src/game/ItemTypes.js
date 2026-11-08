@@ -100,7 +100,7 @@ export const SPELL_RU = {
     DivineCreation: 'Да пусть создастся', // (the eleventh: the gods make what is described — DivineCreation.js)
     Pentagranium: 'Пентаграниум', // (black magic: a pentagram drawn on the ground — Pentagranium.js; a scroll)
     Imperius: 'Империус', // (the mind into an ordinary creature: a rare strong scroll on the Earth — Imperius.js)
-    WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Whirlpool: 'Maelstrom', Spiralis: 'Spiralis', Caligo: 'Caligo', Sectura: 'Sectura', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', IceMaxima: 'Айс Максима', // (the strong duel spells: scrolls on the Earth)
+    WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Whirlpool: 'Maelstrom', Spiralis: 'Spiralis', Caligo: 'Caligo', Reperio: 'Reperio', Sectura: 'Sectura', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', IceMaxima: 'Айс Максима', // (the strong duel spells: scrolls on the Earth)
     // (scrolls since the author's list of what a beginner knows — SpellBook.js)
     EarthquakeMaxima: 'Earthquake Максима', ProtectionMaxima: 'Protection Максима', JoltMaxima: 'Джолт Максима', GiveMyPower: 'Give Me My Power', Waterball: 'Waterbollow', WaterForming: 'Water forming',
     AirBubble: 'Air Bubble', AirBubbleMaxima: 'Air Bubble Максима', WaveAttackMaxima: 'Wave Attack Максима', CircleAttackMaxima: 'Circle Attack Maxima', Snowman: 'Snowman',

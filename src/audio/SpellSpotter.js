@@ -79,6 +79,7 @@ const SAID = [
     ['аквадивиде', 'аквадивайд', 'аквадивида', 'акводивиде', 'аквавайд', 'аква вайд', 'аквадивид', 'аквавиде', 'аквадевайд'], // («Aquadivide»: the water stands aside — WaterPart.js)
     ['мальстрем', 'мэйлстром', 'мейлстром', 'мельстром'], // («Maelstrom»: the whirlpool — Whirlpool.js)
     ['аквамбула', 'аквамбулла', 'аквамбулу', 'аквамбуле'], // («Aquambula»: walking on the water — WaterWalk.js)
+    ['реперио', 'репирио', 'реперью', 'репэрио'], // («Reperio»: the way to my own body — BodyFinder.js)
     ['калиго', 'каллиго'], // («Caligo»: the dark fog — DarkFog.js)
     ['акцентрик', 'аксентрик', 'эксентрик'], // (the strong duel spells — StrongSpells.js; «Дай» is not here: only its written whole word casts)
     ['пилбидрио', 'пилбидро', 'пильбидрио'],

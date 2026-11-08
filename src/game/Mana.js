@@ -75,7 +75,7 @@ export const FIRST_SPELL = {
     Snowman: 3, WaterVortex: 8, Alive: 8, AliveMaxima: 12, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
     TotalDestructionMaxima: 20, Hellfire: 20, FireSerpent: 15, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8, CreateCastle: 20,
-    IceCastle: 15, IceBridge: 3, GiveMyPower: 2,
+    IceCastle: 15, IceBridge: 3, GiveMyPower: 2, Reperio: 2,
     Spiralis: 20, Caligo: 6, Sectura: 6, IceMaxima: 5, Accentric: 8, Electrum: 10, Pilbidrio: 12, // (the strong duel spells — StrongSpells.js)
     // the gods' scrolls (the author: «за использование любого заклинания из этой библиотеки первый раз — 100 ячеек маны»)
     CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100, Boom: 100, PlanetLiquidation: 100,
@@ -433,7 +433,7 @@ const TITLES = {
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', WardDispel: 'Dispel Ward', ProtectionHouse: 'Protection House', StrengthenHouse: 'Strengthen House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
-    Axis: 'Axis', Kidarius: 'Кидариус', SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
+    Axis: 'Axis', Kidarius: 'Кидариус', SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Reperio: 'Reperio', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', FireSerpent: 'Serpent', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
     WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',

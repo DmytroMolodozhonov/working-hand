@@ -182,6 +182,7 @@ export const SPELL_PHYSICS = {
     Helios: null, // («Helios»: a light — it moves nobody, burns nobody — Helios.js)
     WaterPart: null, // («Aquadivide»: it moves nobody — WaterPart.js)
     WaterWalk: null, // («Aquambula»: it moves nobody — WaterWalk.js)
+    Reperio: null, // («Reperio»: light for my own eyes — nobody is pushed: BodyFinder.js)
     Caligo: null, // («Caligo»: a fog, nobody is pushed — DarkFog.js)
     Sectura: null, // («Sectura»: a cut, not a push — an invisible blade: Slash.js; the body is cut or wounded, nothing is shoved)
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, Groundprud: null, /* (the ground rises where nobody stands — Groundprud.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)

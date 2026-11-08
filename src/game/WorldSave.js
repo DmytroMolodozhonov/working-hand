@@ -177,6 +177,7 @@ export function playerSnapshot(game) {
         ownWand: inv?.ownWand || undefined, // my own wand (lying on the ground when the game was left: «Акцио» brings it back, the stand-in goes — Inventory.gotWand)
         learned: game.books ? [...game.books.learned] : [],
         look: game.character?.look ? { ...game.character.look } : undefined, // the skin (author 07.11): fixed for this world at the first entry — a new pick in «Персонаж» applies to NEW worlds only
+        ld: game.lastDeath ? [r2(game.lastDeath.x), r2(game.lastDeath.y), r2(game.lastDeath.z), game.lastDeath.t || 0] : undefined, // where I died last («Reperio», BodyFinder.js)
         pos: [r2(p.x), r2(p.y), r2(p.z)],
         hp: game.monster?.active ? game.monster.origHp : game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
         mp: manaRules(game) ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
@@ -232,6 +233,7 @@ export function applyPlayerSnapshot(game, s) {
         inv._render?.();
     }
     if (game.books && Array.isArray(s.learned)) for (const k of s.learned) game.books.learned.add(k);
+    if (Array.isArray(s.ld) && s.ld.slice(0, 3).every(Number.isFinite)) game.lastDeath = { x: s.ld[0], y: s.ld[1], z: s.ld[2], t: Number.isFinite(s.ld[3]) ? s.ld[3] : 0 };
     if (Array.isArray(s.pos) && s.pos.every(Number.isFinite)) game.character.group.position.set(s.pos[0], s.pos[1] + 0.5, s.pos[2]);
     if (Number.isFinite(s.hp) && s.hp > 0) game.playerHP = Math.min(game.maxHP, s.hp);
     if (s.bonus) {

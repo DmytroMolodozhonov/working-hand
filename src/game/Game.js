@@ -255,6 +255,7 @@ import { WaterWalk } from './WaterWalk.js';
 import { WaterPart } from './WaterPart.js';
 import { Fishing } from './Fishing.js';
 import { FishPier } from './FishPier.js';
+import { BodyFinder } from './BodyFinder.js';
 import { Helios } from './Helios.js';
 import { SunRay } from './SunRay.js';
 import { TimeTurn } from './TimeTurn.js';
@@ -751,6 +752,7 @@ export class Game {
         this.helios = new Helios(this); // «Helios»: the gods' Sun over the caster on a planet (Helios.js)
         this.waterPart = new WaterPart(this); // «Aquadivide»: the water stands aside round the hero (WaterPart.js)
         this.fishing = new Fishing(this); // the fishing rod in the hand: the cast, the bite, the fight (Fishing.js)
+        this.bodyFinder = new BodyFinder(this); // «Reperio»: the way to my own last body — beads of light, the map's line, a pillar over it (BodyFinder.js)
         this.fishPier = new FishPier(this); // the fishermen's mini-pier of the Creative test ground and its free rods (FishPier.js)
         this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
@@ -2276,6 +2278,7 @@ export class Game {
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (name === 'GiveMyPower') return this._castGiveMyPower(isFinal);
+        if (name === 'Reperio') return this._castReperio(isFinal); // (the way to my own last body: 10 mana, from the start, black magic — BodyFinder.js)
         if (name === 'LetItRain') return this._castRain(isFinal);
         if (name === 'Tornado') return this._castTornado(isFinal);
         if (name === 'Whirlpool') return this._castWhirlpool(isFinal);
@@ -3107,6 +3110,22 @@ export class Game {
             this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Луч бьёт в чёрные тучи — они сопротивляются. Держите палочку на них', true);
         } else this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Тучи расходятся, дождь стихает', true);
         return 'ToTheSun';
+    }
+
+    /**
+     * «Reperio» (the author 08.11; 10 mana, known from the start, black magic): the way to my own last body — a trail of light along the ground, a line on the map, a pillar of
+     * light over the body (BodyFinder.js). Nothing is paid when there is nothing to find (never died; the body is in another realm).
+     */
+    _castReperio(isFinal) {
+        if (!isFinal) return null;
+        const f = this.bodyFinder.find();
+        if (!f.ok) { this.hud.setVoice(f.why, true); return null; }
+        const tired = this.combat.check('Reperio');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('Reperio');
+        this.bodyFinder.start(f);
+        onDarkCast(this, 'Reperio'); // (black magic: +1 to the darkness at 50 %)
+        return 'Reperio';
     }
 
     /**
@@ -4027,6 +4046,7 @@ export class Game {
         for (const m of VampireLife.samples()) zoo.add(m);
         // (the titans are NOT warmed here: they live on the planets only, and painting their textures made the loading screen stall — a friend's
         //  complaint 06.11. Titans.warm() readies one titan when its planet is reached, behind the burning air of the landing.)
+        try { zoo.add(this.bodyFinder.sample()); } catch (e) { console.error('prewarm bodyFinder', e); } // (the beads, the halo, the pillar's light)
         try { zoo.add(this.fishing.sample()); } catch (e) { console.error('prewarm fishing', e); } // (the float, the ring on the water)
         try { for (const m of PharaohLife.samples()) zoo.add(m); } catch (e) { console.error('prewarm pharaoh', e); } // (the pharaoh's locusts, darts, sarcophagus, wave ring)
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
@@ -4400,6 +4420,7 @@ export class Game {
         if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();
+        this.bodyFinder?.update(dt);
         this.fishPier?.update(dt);
         this.fishing?.update(dt); // (after the items set the rod in the hand: the tip is where the hand put it)
         this.armor.update(dt);
@@ -5598,6 +5619,7 @@ export class Game {
         this.helios?.dispose();
         this.waterPart?.dispose();
         this.fishing?.dispose();
+        this.bodyFinder?.dispose();
         this.fishPier?.dispose();
         this.rainFx?.dispose();
         this.seaSurface?.dispose();
