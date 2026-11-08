@@ -353,6 +353,37 @@ export function spellGuard(fx, spell) {
 }
 
 /**
+ * A BLAST («Бомбардо», «Бомбардо Максима», пушка) on the wearer — the author's rule (07.11): the damage is simply taken off the armour's points.
+ * The body is three equal thirds (helmet, breastplate, greaves): a third of the blast goes to each piece. A plain piece takes its third off its points;
+ * a MAGIC piece takes half of it (twice as little); what its points cannot take, and the whole third of a missing (or spent) piece, reaches the health.
+ * A full plain set in good shape: a blast does not hurt at all, it only wears. Only a helmet and a breastplate: a third hurts; only a helmet: two thirds.
+ * Mixed sets go by the same thirds. A LIVE MAGIC ROBE takes the blast onto itself first (half of it, off its reserve — like the whole magic set);
+ * what the reserve cannot take goes on to the pieces. A plain robe does nothing. → {hp, wear, mag?}
+ */
+export function blastSoak(worn, fx, amount) {
+    const wear = {}, mag = {};
+    let left = amount;
+    const robe = worn.robe;
+    if (fx?.robe === 'magic' && hasMag(robe)) {
+        const take = Math.min(magOf(robe), left * 0.5);
+        if (take > 0) { mag.robe = take; left -= take * 2; }
+    }
+    let hp = 0;
+    const share = left / PIECES.length;
+    for (const p of PIECES) {
+        const it = worn[p];
+        if (!it || !(it.hp > 0)) { hp += share; continue; }
+        const k = it.magic ? 0.5 : 1; // (magic armour: twice less damage)
+        const need = share * k, take = Math.min(it.hp, need);
+        wear[p] = take;
+        hp += (need - take) / k;
+    }
+    const out = { hp: Math.max(0, hp), wear };
+    if (Object.keys(mag).length) out.mag = mag;
+    return out;
+}
+
+/**
  * A blow of `amount` (damage kind `kind`) on the wearer: how much reaches the health, and
  * what each worn piece loses. `r` picks where it lands (a piece's COVER share).
  * → {hp, wear: {helmet: n, …}, mag?: {slot: reserve spent}}
@@ -363,6 +394,7 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
     if (fx?.magicSet && FIRE.has(kind)) a *= 0.5; // (the whole magic set: fire does half)
     if (fx?.archmage && SPELL_DAMAGE.has(kind)) a *= ARCHMAGE.SPELL_K; // (the High Mage's suit: −40 % from any spell, on top of the rest)
     const wear = {};
+    if (kind === 'Bombardo' && a > 0) return blastSoak(worn, fx, a); // (a blast: points off the armour, not a share at random)
     if (kind === 'AvadaKedavra' && a > 0) { const c = avadaCut(worn, a); return { hp: c.hp, wear, mag: c.spent }; } // (it goes through steel; the reserves cut it)
     if (a <= 0 || NOT_SOAKED.has(kind)) return { hp: Math.max(0, a), wear };
     // where it lands: a piece by its share of the body (bare where nothing is worn)

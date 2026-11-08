@@ -58,3 +58,45 @@ test('Bombardo Maxima is the blast, fire is fire', () => {
     assert.equal(npcKind({ kind: 'BombardoMaxima' }), 'Bombardo');
     assert.equal(npcKind({ fire: true }), 'fire');
 });
+
+// --- взрыв (Бомбардо): урон просто снимается с очков брони, по третям тела (автор 07.11)
+import { blastSoak, wornEffects, makePiece, makeRobe } from '../../src/game/ArmorTypes.js';
+const set = (magic, parts = ['helmet', 'chest', 'legs']) => Object.fromEntries(parts.map((p) => [p, makePiece(p, { magic })]));
+const blast = (worn, a) => blastSoak(worn, wornEffects(worn), a);
+
+test('полный комплект обычной брони: Бомбардо не ранит, только снимает очки', () => {
+    const w = set(false);
+    const r = blast(w, 8);
+    assert.ok(r.hp < 1e-9);
+    assert.ok(Math.abs(Object.values(r.wear).reduce((a, b) => a + b, 0) - 8) < 1e-9);
+});
+test('магическая броня берёт вдвое меньше урона с очков', () => {
+    const r = blast(set(true), 9);
+    assert.equal(r.hp, 0);
+    assert.ok(Math.abs(Object.values(r.wear).reduce((a, b) => a + b, 0) - 4.5) < 1e-9);
+});
+test('нет детали — её треть урона идёт в здоровье (шлем+нагрудник: 33 %, только шлем: 66 %)', () => {
+    assert.ok(Math.abs(blast(set(false, ['helmet', 'chest']), 9).hp - 3) < 1e-9);
+    assert.ok(Math.abs(blast(set(false, ['helmet']), 9).hp - 6) < 1e-9);
+});
+test('смешанный комплект считается по тем же третям', () => {
+    const w = { helmet: makePiece('helmet', { magic: true }), chest: makePiece('chest', { magic: false }) };
+    const r = blast(w, 9);
+    assert.ok(Math.abs(r.hp - 3) < 1e-9); // (только поножей нет)
+    assert.ok(Math.abs(r.wear.helmet - 1.5) < 1e-9 && Math.abs(r.wear.chest - 3) < 1e-9);
+});
+test('изношенная деталь пропускает остаток в здоровье', () => {
+    const w = set(false); w.chest.hp = 1;
+    const r = blast(w, 30); // треть 10: шлем 10 из 10, поножи 10 из 10, нагрудник 1 из 10
+    assert.ok(Math.abs(r.hp - 9) < 1e-9);
+});
+test('живая магическая мантия забирает взрыв на себя (половина урона из запаса), обычная не помогает', () => {
+    const robe = makeRobe(true); robe.mag = robe.magMax = 100;
+    const r = blast({ robe }, 20);
+    assert.equal(r.hp, 0);
+    assert.ok(Math.abs(r.mag.robe - 10) < 1e-9);
+    const plain = blast({ robe: makeRobe(false) }, 20);
+    assert.ok(Math.abs(plain.hp - 20) < 1e-9);
+    robe.mag = 4; // запас кончается: остаток идёт дальше
+    assert.ok(Math.abs(blast({ robe }, 20).hp - 12) < 1e-9);
+});
