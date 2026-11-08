@@ -177,7 +177,7 @@ function glowcapShape() {
     const warts = [];
     for (let i = 0; i < 9; i++) warts.push([rnd() * Math.PI * 2, 0.15 + rnd() * 0.65, 0.025 + rnd() * 0.03]);
     // the dome: u from the centre (0) to the rim (1), around v
-    B.grid(10, 18, (u, v) => {
+    B.grid(6, 10, (u, v) => {
         const a = v * Math.PI * 2, rr = 0.5 * u;
         const y = 0.34 * Math.cos(u * Math.PI / 2) ** 0.9 - 0.02 * u * u + 0.012 * Math.sin(a * 7) * u; // (a ruffled edge)
         let c = u < 0.5 ? lerpC(CAP.heart, CAP.mid, u / 0.5) : lerpC(CAP.mid, CAP.rim, (u - 0.5) / 0.5);
@@ -487,7 +487,7 @@ function plateInto(B, o, a, tilt, L, W, rnd, rivets = true) {
         const side = s * w, out = cup + rib - droop * 0.2;
         return { s, w, p: [o[0] + A[0] * along + S[0] * side + N[0] * out, o[1] + A[1] * along + S[1] * side + N[1] * out - droop * 0.8, o[2] + A[2] * along + S[2] * side + N[2] * out], v };
     };
-    B.grid(10, 18, (u, v) => {
+    B.grid(6, 10, (u, v) => {
         const q = at(u, v), edge = Math.pow(Math.abs(q.s), 6) + Math.pow(v, 9) * 0.8;
         const band = 0.88 + 0.12 * Math.sin(v * 38 + 1.2), midrib = Math.exp(-((q.s / 0.14) ** 2));
         let c = lerpC(PLATE.deep, PLATE.mid, clamp01(0.25 + v * 0.55 + 0.2 * Math.cos(q.s * 2.4)));
