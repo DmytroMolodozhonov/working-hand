@@ -30,6 +30,7 @@ import {
 } from './TitanRules.js';
 import { titanModel, titanSamples, poseWalker, titanSite, cloneTitan } from './TitanModels.js';
 import { GOD_SPELLS } from './Mana.js';
+import { TitanBar } from '../ui/TitanBar.js';
 import { BLOCK } from '../world/Terrain.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _e = new THREE.Euler();
@@ -214,8 +215,20 @@ export class Titans {
             this._draw(T, dt);
         }
         this._stepFx(dt);
+        this._bar(me);
         if (this.auth) this._netSend(dt);
         this.mapMark = this.markOf(realm);
+    }
+
+    /** The health bar: the nearest awake titan within BAR_R that is fighting (or was just hurt); nothing otherwise. */
+    _bar(me) {
+        let best = null, bd = TITAN.BAR_R;
+        if (me) for (const T of this.active.values()) {
+            if (T.mode !== 'fight' && !(T.hurtT > 0)) continue;
+            const d = Math.hypot(me.x - T.pos.x, me.z - T.pos.z);
+            if (d < bd) { bd = d; best = T; }
+        }
+        (this._barUi || (this._barUi = new TitanBar())).show(best ? { name: best.def.name, hp: best.hp, max: best.def.hp } : null);
     }
 
     _remoteNear(T) {
@@ -1882,7 +1895,7 @@ export class Titans {
         // an ice cage saved in the middle: it melts as soon as the land is there (never left standing for ever)
         for (const c of s.cages || []) { const cage = { blocks: c.blocks || [] }; this.state.cages.push(cage); this._later.push({ t: 3, fn: () => this._melt(cage) }); }
     }
-    dispose() { for (const id of [...this.active.keys()]) this._drop(id); for (const f of this.fxList) this._endFx(f); this.fxList.length = 0; this._later.length = 0; }
+    dispose() { this._barUi?.dispose(); for (const id of [...this.active.keys()]) this._drop(id); for (const f of this.fxList) this._endFx(f); this.fxList.length = 0; this._later.length = 0; }
 
     /** Shapes and materials to compile when a titan's planet is reached (Titans.warm). */
     static samplesFx() {

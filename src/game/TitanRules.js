@@ -15,11 +15,12 @@
  */
 
 /** Every titan (one per planet). `kit` — its own way to fight (Titans.js), `look` — its body (TitanModels.js). */
+// (the author 08.11: the titans' health 1000…1500 — the iron 1170, the stone 1500, the lava 1080, the worm 1250, the ice 1000, the shade 1130, the storm 1420)
 export const TITANS = {
     mercury: {
         id: 'mercury', planet: 'mercury', name: 'Железный титан', title: 'Солнечный кузнец',
         about: 'Живёт на Меркурии, ближе всех к Солнцу. Подходить к нему с мечом или топором в руках — плохая затея: оружие можно и не удержать. А если он поворачивается к вам и начинает разгораться светом — уходите в сторону, и побыстрее.',
-        height: 80, radius: 10, hp: 3400, walk: 4, kit: 'iron', look: 'iron',
+        height: 80, radius: 10, hp: 1170, walk: 4, kit: 'iron', look: 'iron',
         blow: 15, reach: 30,
         ranged: { every: [7, 11], dmg: 9, r: 3, len: 260, blind: 3 }, // the sun ray (blinds 3 s); the magnet pulls the weapons out of the hands
         magnet: { r: 90, every: [12, 18] },
@@ -27,35 +28,35 @@ export const TITANS = {
     saturn: {
         id: 'saturn', planet: 'saturn', name: 'Каменный титан', title: 'Гора, что ходит',
         about: 'Самый огромный из титанов, бродит по облачной равнине Сатурна. Под его шагами дрожит земля, а камни он швыряет так далеко, что держаться на расстоянии мало — надо ещё и двигаться.',
-        height: 110, radius: 15, hp: 4200, walk: 3.4, kit: 'rock', look: 'rock',
+        height: 110, radius: 15, hp: 1500, walk: 3.4, kit: 'rock', look: 'rock',
         blow: 16, reach: 38, // the fist of a boulder / the stomp
         ranged: { every: [7, 11], dmg: 12, r: 8, speed: 36, n: 2 }, // boulders thrown; a stomp raises stone spikes round him
     },
     venus: {
         id: 'venus', planet: 'venus', name: 'Огненный титан', title: 'Живая лава',
         about: 'Живёт на раскалённой Венере. Всё вокруг него горит, а огненные шары он бросает издалека. Не стойте там, куда он смотрит, и не тяните время рядом с ним.',
-        height: 75, radius: 9.5, hp: 3200, walk: 4.2, kit: 'fire', look: 'lava',
+        height: 75, radius: 9.5, hp: 1080, walk: 4.2, kit: 'fire', look: 'lava',
         blow: 14, reach: 28,
         ranged: { every: [6, 10], dmg: 9, r: 9, speed: 32, n: 3 }, // fireballs; a pool of lava under him
     },
     mars: {
         id: 'mars', planet: 'mars', name: 'Песчаный змей', title: 'Владыка дюн',
         about: 'Его почти не видно: он плывёт под песками Марса и находит вас по шагам. Если земля под ногами загудела — бегите, не оглядываясь. Бить его можно, только пока он над песком.',
-        height: 300, radius: 14, hp: 3600, walk: 11, kit: 'worm', look: 'worm', burrows: true,
+        height: 300, radius: 14, hp: 1250, walk: 11, kit: 'worm', look: 'worm', burrows: true,
         blow: 30, reach: 16, // the swallow: in the circle of its mouth when it rises
         ranged: { every: [5, 8], dmg: 10, r: 18 }, // the tail's sweep / a falling wall of sand
     },
     neptune: {
         id: 'neptune', planet: 'neptune', name: 'Ледяной титан', title: 'Страж вечного льда',
         about: 'Живёт среди холода Нептуна. Рядом с ним легко вмёрзнуть в лёд и стать беззащитным, поэтому не стойте на месте и не подпускайте его близко.',
-        height: 70, radius: 9, hp: 3000, walk: 3.9, kit: 'frost', look: 'ice',
+        height: 70, radius: 9, hp: 1000, walk: 3.9, kit: 'frost', look: 'ice',
         blow: 12, reach: 26,
         ranged: { every: [8, 12], dmg: 6, r: 14, freeze: 2.5 }, // a ring of spikes round the foe: −6, frozen 2.5 s; the freezing breath
     },
     uranus: {
         id: 'uranus', planet: 'uranus', name: 'Титан-тень', title: 'Полуночный',
         about: 'На Уране половину жизни стоит ночь, и он прячется в ней. В темноте его не разглядеть, пока он не окажется прямо рядом с вами — а свет для него большая неприятность.',
-        height: 85, radius: 10, hp: 3300, walk: 4.4, kit: 'shade', look: 'shade',
+        height: 85, radius: 10, hp: 1130, walk: 4.4, kit: 'shade', look: 'shade',
         blow: 13, reach: 30,
         ranged: { every: [8, 12], dmg: 8, r: 20, dark: 6 }, // a wave of darkness: −8, the light round the hero gone for 6 s; then he steps through the dark (a blink)
         blink: { every: [9, 14], far: [25, 60] },
@@ -63,7 +64,7 @@ export const TITANS = {
     jupiter: {
         id: 'jupiter', planet: 'jupiter', name: 'Титан-вихрь', title: 'Живой смерч',
         about: 'Огромный живой смерч над бурями Юпитера. Подходить к нему опасно: он затягивает к себе и швыряет, а молнии бьют издалека. Держитесь дальше и смотрите, куда он движется.',
-        height: 200, radius: 30, hp: 4000, walk: 6, kit: 'storm', look: 'storm', flies: true,
+        height: 200, radius: 30, hp: 1420, walk: 6, kit: 'storm', look: 'storm', flies: true,
         blow: 10, reach: 40, // the wall of its whirl
         ranged: { every: [3, 5], dmg: 7, r: 4 }, // a lightning bolt
         pull: { r: 140, speed: 6 }, // m/s towards its heart within r
@@ -74,6 +75,7 @@ export const TITAN_IDS = Object.keys(TITANS);
 export const TITAN = {
     CELLS: 1000, // the reward for each (mana cells — Achievements 'titan_<id>')
     GOD_CELLS: 10000, // all of them: 10 000 more — and immortality (Achievements 'godhood', Godhood.js)
+    BAR_R: 700, // m: the health bar shows for a fighting titan this near (TitanBar.js)
     ACTIVE_R: 1400, // m: a player on its planet nearer than this — it is in the world (its body, its mind)
     GONE_R: 1800,
     SEE: 320, // m: it notices a player
