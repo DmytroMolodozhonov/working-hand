@@ -33,6 +33,7 @@ import { confusedMiss } from './StrongSpells.js';
 import { crowdStep } from './CrowdSources.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
+import { FarShape } from '../core/FarShape.js';
 import { rollWand, rollLoot, newUid } from './ItemTypes.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
@@ -192,6 +193,7 @@ export class Spiders {
     }
 
     _remove(s) {
+        s.one?.dispose(); s.one = null;
         this.game.scene.remove(s.model);
         s.model.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
         this.list.splice(this.list.indexOf(s), 1);
@@ -499,6 +501,9 @@ export class Spiders {
     }
 
     _animate(s, k, dt) {
+        // (one shape per material, legs moved by the video card — FarShape: 27 draws → 3; her shapes are her own — no cache)
+        if (!s.one) { s.model.userData.farRadius = 14; // (her legs' span, the model ×SIZE: never culled while seen) s.one = new FarShape(s.model, { cache: false }); }
+        if (!s.one.on) s.one.set(true); else s.one.check();
         s.walkT += dt * 7 * k;
         s.model.userData.legs.forEach((l, i) => { l.rotation.x = Math.sin(s.walkT + i * 1.3) * 0.35 * k; });
         const f = s.holding ? Math.sin(performance.now() / 120) * 0.3 : 0;
