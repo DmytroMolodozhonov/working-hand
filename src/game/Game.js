@@ -253,6 +253,7 @@ import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { WaterWalk } from './WaterWalk.js';
 import { WaterPart } from './WaterPart.js';
+import { Helios } from './Helios.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
 import { PentagramResist } from './PentagramResist.js';
@@ -654,6 +655,7 @@ export class Game {
             slash: (o, d, casterId, side) => this.slash?.fire(o, d, casterId, side),
             caligo: (o, d, casterId, side) => this.darkFog?.fire(o, d, casterId, side),
             waterPart: (o, d, casterId, side) => this.waterPart?.fire(o, d, casterId, side),
+            helios: (o, d, casterId, side) => this.helios?.fire(o, d, casterId, side),
             bridge: (o, d, casterId) => this.bridge?.grow(o, d, casterId),
             groundprud: (o, d, casterId) => this.groundprud?.grow(o, d, casterId),
             collision: this.collision,
@@ -737,6 +739,7 @@ export class Game {
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
+        this.helios = new Helios(this); // «Helios»: the gods' Sun over the caster on a planet (Helios.js)
         this.waterPart = new WaterPart(this); // «Aquadivide»: the water stands aside round the hero (WaterPart.js)
         this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
@@ -2321,6 +2324,7 @@ export class Game {
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
+        if (name === 'Helios') return this.helios.cast(isFinal); // (the gods' Sun: 500 mana, then 3 a second — Helios.js)
         if (name === 'WaterPart') return this.waterPart.cast(isFinal); // (the water stands aside: 300 mana, then 3 a second — WaterPart.js)
         if (name === 'WaterWalk') return this.waterWalk.cast(isFinal); // (walking on the water: 50 mana, then 1 a second — WaterWalk.js)
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
@@ -2519,6 +2523,7 @@ export class Game {
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.waterWalk?.stop('stop')) done.push('Aquambula');
         if (this.waterPart?.stop('stop')) done.push('Aquadivide');
+        if (this.helios?.stop('stop')) done.push('Helios');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.sunContest?.stop('stop')) done.push('To the Sun');
         if (this.fireworks?.stop('stop')) done.push('салют');
@@ -4061,6 +4066,7 @@ export class Game {
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.gargoyles?.sampleModels?.() || []) zoo.add(m); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
         for (const m of this.wandMagic?.sampleModels?.() || []) zoo.add(m); // (the flashlight's soft beam: its shader)
+        for (const m of this.helios?.sampleModels?.() || []) zoo.add(m); // («Helios»: the Sun's disc and corona — Helios.js)
         for (const m of this.rainFx?.sampleModels?.() || []) zoo.add(m); // («Let it rain»: the beam, the deck of clouds, a ring, a curtain of rain — RainSummon.js)
         for (const m of this.sun?.sampleModels?.() || []) zoo.add(m); // («To the Sun»: the beam's column, the heart at the clouds, a ring of shock, a shaft of the sun — SunBeam.js)
         for (const m of this.customPlants?.sampleModels?.() || []) zoo.add(m); // (a plant of one's own: its lit body, its glow)
@@ -4518,6 +4524,7 @@ export class Game {
         this.groundVortex?.update(dt);
         this.waterWalk?.update(dt);
         this.waterPart?.update(dt);
+        this.helios?.update(dt);
         this.visibleGodi?.update(dt);
         this.pentagranium?.update(dt);
         this.steam?.update(dt);
@@ -5601,6 +5608,7 @@ export class Game {
         this.books?.dispose();
         this.scrolls?.dispose();
         this.swim?.dispose();
+        this.helios?.dispose();
         this.waterPart?.dispose();
         this.rainFx?.dispose();
         this.seaSurface?.dispose();

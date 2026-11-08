@@ -79,6 +79,15 @@ function placeIcon(ctx, kind, s) {
         ctx.beginPath(); ctx.moveTo(-8, -5); ctx.quadraticCurveTo(-9, 5, 0, 10); ctx.quadraticCurveTo(9, 5, 8, -5); ctx.quadraticCurveTo(0, -9, -8, -5); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#ffd040'; ctx.beginPath(); ctx.moveTo(-6, -1); ctx.lineTo(-2, 0); ctx.lineTo(-5, 1.5); ctx.closePath(); ctx.moveTo(6, -1); ctx.lineTo(2, 0); ctx.lineTo(5, 1.5); ctx.closePath(); ctx.fill();
         ctx.strokeStyle = '#1a0000'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-3, 5); ctx.quadraticCurveTo(0, 7, 3, 5); ctx.stroke();
+    } else if (kind === 'titan') {
+        // a titan: a colossal stone head — a heavy brow, a crown of jagged spikes, two burning eyes, cracks, a stone beard (not a castle: the author 07.11)
+        ctx.fillStyle = '#7d7485'; ctx.strokeStyle = '#17121f'; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.moveTo(-9, -3); ctx.lineTo(-10, -9); ctx.lineTo(-6, -6); ctx.lineTo(-5, -12); ctx.lineTo(-2, -7); ctx.lineTo(0, -13); ctx.lineTo(2, -7); ctx.lineTo(5, -12); ctx.lineTo(6, -6); ctx.lineTo(10, -9); ctx.lineTo(9, -3);
+        ctx.lineTo(9, 4); ctx.lineTo(6, 9); ctx.lineTo(3, 11); ctx.lineTo(-3, 11); ctx.lineTo(-6, 9); ctx.lineTo(-9, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#4a4356'; ctx.beginPath(); ctx.moveTo(-9, -1); ctx.lineTo(0, -4); ctx.lineTo(9, -1); ctx.lineTo(9, 0.5); ctx.lineTo(0, -2); ctx.lineTo(-9, 0.5); ctx.closePath(); ctx.fill(); // (the brow)
+        ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.moveTo(-7, 0.5); ctx.lineTo(-2.5, 0); ctx.lineTo(-3.5, 3); ctx.lineTo(-6.5, 2.6); ctx.closePath(); ctx.moveTo(7, 0.5); ctx.lineTo(2.5, 0); ctx.lineTo(3.5, 3); ctx.lineTo(6.5, 2.6); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#17121f'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-1, 2); ctx.lineTo(-2, 6); ctx.moveTo(1, 2); ctx.lineTo(2, 6); ctx.moveTo(-4, 8); ctx.lineTo(4, 8); ctx.stroke(); // (the nose and the mouth)
+        ctx.strokeStyle = '#bfb6c8'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(5, -8); ctx.lineTo(7, -3); ctx.lineTo(6, 1); ctx.moveTo(-6, 4); ctx.lineTo(-7, 8); ctx.stroke(); // (cracks)
     } else if (kind === 'sword') {
         // the divine sword (Creative): a white-gold blade point down in a ray of light
         ctx.fillStyle = 'rgba(255, 236, 170, 0.35)'; ctx.beginPath(); ctx.moveTo(-5, -12); ctx.lineTo(5, -12); ctx.lineTo(3, 11); ctx.lineTo(-3, 11); ctx.closePath(); ctx.fill();
@@ -936,7 +945,7 @@ export class Hud {
             ctx.font = 'bold 12px sans-serif';
         };
         const badge = (x, y, kind, a = null) => {
-            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : kind === 'wizvillage' ? '#7fd7c4' : kind === 'devil' ? '#ff2a14' : kind === 'hellmark' ? '#ff8a3a' : kind === 'sword' ? '#fff2c0' : '#ffd76a';
+            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : kind === 'wizvillage' ? '#7fd7c4' : kind === 'devil' ? '#ff2a14' : kind === 'hellmark' ? '#ff8a3a' : kind === 'titan' ? '#ff6a3a' : kind === 'sword' ? '#fff2c0' : '#ffd76a';
             if (a != null) {
                 // the pointer: which way the place is
                 ctx.save(); ctx.translate(x, y); ctx.rotate(a);
@@ -980,7 +989,7 @@ export class Hud {
         for (const c of shown) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
-            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : icon === '✨' ? 'wizvillage' : icon === '😈' ? 'devil' : icon === '⛧' ? 'hellmark' : icon === '🗡' ? 'sword' : 'castle';
+            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : icon === '✨' ? 'wizvillage' : icon === '😈' ? 'devil' : icon === '⚡' ? 'titan' : icon === '⛧' ? 'hellmark' : icon === '🗡' ? 'sword' : 'castle';
             this.minimapCastles.push(icon === '🏰' ? c.name : `${icon} ${c.name}`);
             if (inside(cx, cz, BADGE)) {
                 badge(cx, cz, kind);

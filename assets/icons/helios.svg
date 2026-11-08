@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="helios-bg" cx="0.5" cy="0.55" r="0.65"><stop offset="0" stop-color="#5a3406"/><stop offset="0.6" stop-color="#241405"/><stop offset="1" stop-color="#080503"/></radialGradient>
+    <radialGradient id="helios-disc" cx="0.45" cy="0.42" r="0.6"><stop offset="0" stop-color="#fffbe0"/><stop offset="0.45" stop-color="#ffd24a"/><stop offset="1" stop-color="#f07a12"/></radialGradient>
+    <radialGradient id="helios-glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffe08a" stop-opacity="0.9"/><stop offset="0.5" stop-color="#ffb030" stop-opacity="0.35"/><stop offset="1" stop-color="#ff8a10" stop-opacity="0"/></radialGradient>
+    <linearGradient id="helios-ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a5a2c"/><stop offset="1" stop-color="#2a170a"/></linearGradient>
+    <clipPath id="helios-clip"><circle cx="64" cy="64" r="60"/></clipPath>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#helios-bg)"/>
+  <g clip-path="url(#helios-clip)">
+    <circle cx="64" cy="52" r="56" fill="url(#helios-glow)"/>
+    <!-- long rays -->
+    <g stroke="#ffe9a0" stroke-linecap="round" opacity="0.85">
+      <path d="M64 52 L64 -4" stroke-width="3.2"/><path d="M64 52 L104 12" stroke-width="3"/><path d="M64 52 L124 52" stroke-width="3"/><path d="M64 52 L24 12" stroke-width="3"/><path d="M64 52 L4 52" stroke-width="3"/>
+      <path d="M64 52 L88 -2" stroke-width="2"/><path d="M64 52 L40 -2" stroke-width="2"/><path d="M64 52 L120 28" stroke-width="2"/><path d="M64 52 L8 28" stroke-width="2"/>
+    </g>
+    <!-- the sun: a granular disc with spots -->
+    <circle cx="64" cy="52" r="21" fill="url(#helios-disc)" stroke="#ffe9a0" stroke-width="1.6"/>
+    <g fill="#c85a10" opacity="0.55"><ellipse cx="57" cy="47" rx="3.6" ry="2.4"/><ellipse cx="72" cy="58" rx="2.6" ry="1.8"/><ellipse cx="66" cy="42" rx="1.8" ry="1.2"/></g>
+    <g fill="#fff6c8" opacity="0.7"><circle cx="58" cy="60" r="1.6"/><circle cx="70" cy="46" r="1.4"/><circle cx="62" cy="52" r="1.2"/><circle cx="74" cy="53" r="1.1"/></g>
+    <!-- prominences -->
+    <path d="M44 44 q-6 -8 2 -13" fill="none" stroke="#ffb030" stroke-width="2.4" stroke-linecap="round"/><path d="M84 62 q8 4 6 12" fill="none" stroke="#ffb030" stroke-width="2.4" stroke-linecap="round"/>
+    <!-- a dark planet's ground lit from above: a hand raised to the sun -->
+    <path d="M-2 108 Q30 90 64 96 Q98 90 130 108 L130 130 L-2 130 Z" fill="url(#helios-ground)"/>
+    <path d="M-2 108 Q30 90 64 96 Q98 90 130 108" fill="none" stroke="#ffd98a" stroke-width="2" opacity="0.8"/>
+    <g fill="#1a0e06" stroke="#ffd98a" stroke-width="1.2"><rect x="60" y="82" width="8" height="18" rx="3"/><rect x="58.2" y="76" width="2.4" height="9" rx="1.2"/><rect x="61.4" y="73" width="2.4" height="12" rx="1.2"/><rect x="64.6" y="73" width="2.4" height="12" rx="1.2"/><rect x="67.8" y="76" width="2.4" height="9" rx="1.2"/></g>
+  </g>
+  <circle cx="64" cy="64" r="60" fill="none" stroke="#ffcf4a" stroke-width="2"/>
+</svg>

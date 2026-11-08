@@ -334,3 +334,18 @@ test('the Hall of the Sun: built when a god comes; the pentagram makes him morta
     for (let t = 0; t < SUN_HALL.EXIT_T + 0.5; t += 0.1) G.update(0.1);
     assert.ok(Math.hypot(me.position.x, me.position.z - 8) < 1, 'home at the start');
 });
+
+test('карта: титан планеты помечен всегда (вдали, спящий), своим значком, пока не убит (автор 07.11: «указывался какой-то замок»)', async () => {
+    const { Titans } = await import('../../src/game/Titans.js');
+    const T = Object.create(Titans.prototype);
+    T.state = { dead: [] }; T.active = new Map(); T.home = () => ({ x: 120, y: 5, z: -40 });
+    const m = T.markOf('mercury');
+    assert.ok(m && m.x === 120 && m.z === -40 && m.icon === '⚡' && m.always && m.titan === 'mercury', JSON.stringify(m));
+    assert.equal(T.markOf('earth'), null, 'на Земле титана нет');
+    T.active.set('mercury', { mode: 'idle', pos: { x: 5, z: 6 } });
+    assert.deepEqual([T.markOf('mercury').x, T.markOf('mercury').z], [5, 6], 'проснулся — там, где стоит');
+    T.state.dead.push('mercury');
+    assert.equal(T.markOf('mercury'), null, 'убитого на карте нет');
+    const hud = (await import('node:fs')).readFileSync(new URL('../../src/ui/Hud.js', import.meta.url), 'utf8');
+    assert.match(hud, /icon === '⚡' \? 'titan'/, 'значок титана, не замок');
+});

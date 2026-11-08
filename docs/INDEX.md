@@ -852,3 +852,4 @@
 - `wakebench.mjs` — what it costs when a castle / a wizards' settlement wakes (its people made at once). node tools/wakebench.mjs [--site castle/village/tower] [--times 4] [--profile] Flies (teleports) the hero to the nearest such place, waits for…
 - `wandbench.mjs` — Одна палочка: выбита в точке `at` (м), летит по pickFlight; → {y, floor, fell}
 - `ReefStructures.js` — coral reef formations (bommie, spur, tower, arch, atoll, wall, magic glow head): lumpy rock with a living skin and dense baked corals, one InstancedMesh each (SeaFloor); corals only from 6 m of water; tests/unit/sea-floor.test.js; scene tools/shots/reef.mjs
+- `Helios.js` — «Helios»: the gods' artificial Sun on a planet (held, 500 mana + 3/s; a boiling disc + corona over the caster, full daylight within 260 m via Space._planetSky; titans: Titans.sunAt/_myLook; tests/unit/helios.test.js)

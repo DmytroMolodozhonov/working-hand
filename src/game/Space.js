@@ -92,6 +92,8 @@ const EPOCH = 1.79e9; // (the shared clock: seconds since then — the same on e
 export function spaceSpellBlock(name, where, air, def = null) {
     // («Planet Liquidation» — only from space: from the ground one cannot aim at a whole planet — PlanetDestroy.js)
     if (name === 'PlanetLiquidation' && where !== 'space') return where === 'earth' ? '🌌 «Planet Liquidation» — только в космосе: взлетите «Flying Maxima» и наведите руку на планету' : '🌌 «Planet Liquidation» — только из космоса: стоя на планете, её не взорвать (взлетите «Flying Maxima» и наведите руку на неё)';
+    // («Helios» — the gods' artificial Sun: only on the surface of another planet; the Earth has its own Sun, open space has no ground to hang it over — Helios.js)
+    if (name === 'Helios') return where === 'earth' ? '☀️ «Helios» работает только на других планетах — на Земле у вас есть настоящее Солнце' : where === 'space' ? '☀️ «Helios» зажигается над поверхностью планеты — сядьте на неё' : null;
     if (where === 'earth') return null;
     // («Brain Rot Maxima»: the dragons live on the Earth alone — Planets.earthly; off it there is nobody to calm — DragonTame.js)
     if (name === 'BrainrotMaxima') return '🐉 Драконы живут только на Земле — здесь «Брейнрот Максима» некого успокоить';
@@ -757,11 +759,15 @@ export class Space {
         if (!def) return;
         const t = this.now(), p = g.character.group.position;
         const local = this.localSun(def, p.x, p.z, t);
+        // («Helios»: the gods' Sun over a caster near me — the strongest light of them; when it outshines the real one, the sky and the shadows follow IT — Helios.js)
+        const art = g.helios?.lightAt?.(p.x, p.y, p.z, this._helL || (this._helL = { k: 0, dir: new THREE.Vector3() })) || null;
+        const realDay = smoothstep(-0.06, 0.12, local.y);
+        const useArt = !!art && art.k * 0.97 > realDay;
+        if (useArt) local.copy(art.dir);
         const c = _p, n = _v1, east = _v3, north = _v4;
         this.P.x = c.x + n.x * def.radius; this.P.y = c.y + n.y * def.radius; this.P.z = c.z + n.z * def.radius; // (for the light's strength, the map)
         this._localFrame = { n: n.clone(), east: east.clone(), north: north.clone() };
-        const elev = local.y;
-        const day = smoothstep(-0.06, 0.12, elev);
+        const day = useArt ? art.k * 0.97 : realDay;
         const tk = this._terraFx(dt, def); // («Terraform Planet» going on here: its stages)
         const vac = def.sky === 'vacuum' || (tk >= 0 && tk < TERRA_STAGE.AIR); // (no air yet: the black sky of before)
         const airK = tk < 0 ? 1 : smoothstep(TERRA_STAGE.AIR, TERRA_STAGE.AIR + 0.2, tk); // (the new sky coming)
@@ -824,6 +830,12 @@ export class Space {
                 w.ambientLight.intensity = Math.max(w.ambientLight.intensity, 0.35 + 0.45 * pulse);
                 w.hemiLight.intensity = Math.max(w.hemiLight.intensity, 0.2 + 0.25 * pulse);
             }
+        }
+        if (art && dl) { // («Helios»: its light on the ground — the ambient and the shadows at least as strong as the daylight the Sun gives)
+            dl.color.set(0xfff0d0);
+            dl.intensity = Math.max(dl.intensity, 1.05 * art.k);
+            w.ambientLight.intensity = Math.max(w.ambientLight.intensity, 0.42 * art.k);
+            w.hemiLight.intensity = Math.max(w.hemiLight.intensity, 0.3 * art.k);
         }
         this._weather(dt, def);
     }

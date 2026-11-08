@@ -184,7 +184,7 @@ export class WaterPart {
         this.parts.set(by, { by, mine: by === g.localId, ax, az, wax: ax, waz: az, px: o.x, pz: o.z, on: true, t: 0, seen: performance.now(), sent: -1e9, side: side || 'right', dirSent: [ax, az] });
         if (by === g.localId) this.on = true;
         this._cast(o, ax, az);
-        g.sound?.spellCast?.('WaterPart', _v.set(o.x, o.y + 1.6, o.z));
+        if (by !== g.localId) g.sound?.spellCast?.('WaterPart', _v.set(o.x, o.y + 1.6, o.z)); // (mine is played by the cast itself)
     }
 
     /** Another computer's axis (wpat): the wand's yaw now. */

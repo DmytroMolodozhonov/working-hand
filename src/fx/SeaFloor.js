@@ -28,7 +28,7 @@ import { SeaCritters } from './SeaCritters.js';
 import { reefStructures, reefGeo, reefTint, REEF_KINDS } from './ReefStructures.js';
 
 export const KELP_MAX = 12; // m: the tallest kelp (and never higher than the water's depth − 3)
-export const FLOOR = { R: 76, CELL: 8, PER_CELL: 12, REEF_CELL: 40, BUDGET: 1.2, CAP: { kelp: 600, grass: 2600, staghorn: 1000, fan: 700, brain: 650, anemone: 520, lily: 260, table: 480, tube: 520, soft: 650, urchin: 320, star: 220, glowcoral: 800, glowfan: 420, glowbrain: 340, crystal: 420, reefHead: 12, reefSpur: 6, reefTower: 6, reefArch: 4, reefAtoll: 5, reefGlow: 8, reefCliff: 4 } };
+export const FLOOR = { R: 76, CELL: 8, PER_CELL: 12, REEF_CELL: 40, BUDGET: 1.2, CAP: { kelp: 600, grass: 2600, staghorn: 1000, fan: 700, brain: 650, anemone: 520, lily: 260, table: 480, tube: 520, soft: 650, urchin: 320, star: 220, glowcoral: 800, glowfan: 420, glowbrain: 340, crystal: 420, reefHead: 10, reefSpur: 5, reefTower: 5, reefArch: 3, reefAtoll: 4, reefGlow: 6, reefCliff: 3 } };
 /** The kinds that shine (their own light: brighter at night and in the dark depths). */
 /** m of water from which corals live (the shallows near the shore have none). */
 export const CORAL_DEPTH = 6;

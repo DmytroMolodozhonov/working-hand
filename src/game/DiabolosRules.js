@@ -432,7 +432,7 @@ const WEAPON = new Set(['melee', 'fist', 'arrow', 'punch', 'sword', 'axe', 'spea
 /** Божественные (Mana.GOD_SPELLS + ProtectionGods): ломают любую защиту боссов — но Дьяволос не умирает, его заточили, а не убили. */
 const GODS = new Set(['Boom', 'Inspirius', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'FlyingMaxima', 'TotalDestructionMaxima']);
 /** Не направлены на существо (свет, щиты, стройка, полёт…): ни урона, ни обиды. */
-const SELF = /^(Lumos|LumosMaxima|Nox|LumosAhead|LumosFollowing|Protection|ProtectionMaxima|ProtectionGods|ProtectionGodsMaxima|ProtectionHouse|ProtectionInvisible|ProtectionHouseGrant|Flight|FlyingMaxima|Create|Build|Improve|Strengthen|Change|Suit|Unfurl|Furl|Up|Pause|Attack|Maxima|Stop|Draw|Fireworks|Air|Breakthrough|GiveMyPower|DivineCreation|WardDispel|MonsterBack|Visible|Ground(Shield)?$|Enlarge|Terraform|IceBridge)/;
+const SELF = /^(Lumos|LumosMaxima|Nox|LumosAhead|LumosFollowing|Protection|ProtectionMaxima|ProtectionGods|ProtectionGodsMaxima|ProtectionHouse|ProtectionInvisible|ProtectionHouseGrant|Flight|FlyingMaxima|Create|Build|Improve|Strengthen|Change|Suit|Unfurl|Furl|Up|Pause|Attack|Maxima|Stop|Draw|Fireworks|Air|Breakthrough|GiveMyPower|DivineCreation|Helios|WardDispel|MonsterBack|Visible|Ground(Shield)?$|Enlarge|Terraform|IceBridge)/;
 
 export const DEVIL_VS = {
     death:   'он создал заклинания смерти и чёрную магию — у него иммунитет («Дай», «Авада» его не берут)',

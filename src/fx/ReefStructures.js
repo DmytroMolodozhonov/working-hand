@@ -30,8 +30,8 @@ export const REEF = {
 /** [name]: { H: height at scale 1 (m), FOOT: radius of the foot (m) the depth is checked and the loose plants kept away over }. */
 export const REEF_KINDS = {
     // (measured on the built shapes — `reefGeo(k)` bounding boxes, the corals' thickets included; tests/unit/sea-floor.test.js keeps them honest)
-    reefHead: { H: 8.6, FOOT: 7 }, reefSpur: { H: 7.3, FOOT: 13 }, reefTower: { H: 13.5, FOOT: 6 }, reefArch: { H: 9.9, FOOT: 8.5 },
-    reefAtoll: { H: 4.9, FOOT: 10.5 }, reefGlow: { H: 6.8, FOOT: 8.6 }, reefCliff: { H: 9.5, FOOT: 13 },
+    reefHead: { H: 10.6, FOOT: 9 }, reefSpur: { H: 7.2, FOOT: 15 }, reefTower: { H: 14.8, FOOT: 7 }, reefArch: { H: 11.3, FOOT: 10 },
+    reefAtoll: { H: 6.5, FOOT: 11.8 }, reefGlow: { H: 8.4, FOOT: 9 }, reefCliff: { H: 11.7, FOOT: 14.5 },
 };
 
 function h01(a, b, c) {
@@ -240,7 +240,7 @@ function planted(lumps, rng, glow, density) {
     const L = lib()[glow ? 'glow' : 'normal'], parts = [];
     for (const lp of lumps) {
         const n = Math.max(2, Math.round(lp.r * lp.r * density));
-        const unit = 0.9 + lp.r * 0.28;
+        const unit = 1.15 + lp.r * 0.36;
         for (let i = 0; i < n; i++) {
             const t = lp.tris[Math.floor(rng() * lp.tris.length)];
             _n.set(t.n[0], t.n[1], t.n[2]);
@@ -251,7 +251,7 @@ function planted(lumps, rng, glow, density) {
             if (top) { kind = r < 0.42 ? 'branch' : r < 0.6 ? 'plate' : r < 0.78 ? 'brain' : r < 0.9 ? 'soft' : 'tube'; }
             else if (side) { kind = r < 0.32 ? 'plate' : r < 0.58 ? 'fan' : r < 0.74 ? 'soft' : r < 0.88 ? 'tube' : 'branch'; }
             else kind = r < 0.5 ? 'tube' : 'soft';
-            size = unit * (kind === 'branch' ? 1.7 : kind === 'plate' ? 1.7 : kind === 'fan' ? 1.6 : kind === 'brain' ? 1.2 : 1.1) * (0.6 + rng() * 0.8);
+            size = unit * (kind === 'branch' ? 2.0 : kind === 'plate' ? 2.1 : kind === 'fan' ? 1.9 : kind === 'brain' ? 1.5 : 1.3) * (0.6 + rng() * 0.8);
             const geo = L[kind][Math.floor(rng() * L[kind].length)];
             // orientation: up = the surface's normal mixed with the world's up (thickets lean outward), a plate lies nearly flat, a fan faces outward
             _v.set(0, 1, 0).multiplyScalar(kind === 'plate' ? 0.8 : 0.45).addScaledVector(_n, kind === 'plate' ? 0.2 : 0.55).normalize();
@@ -317,7 +317,7 @@ export function reefGeo(kind) {
     const seeds = { reefHead: 11, reefSpur: 23, reefTower: 37, reefArch: 41, reefAtoll: 53, reefGlow: 67, reefCliff: 79 };
     const rng = K.rng(seeds[kind] || 5), glow = kind === 'reefGlow';
     const lumps = layout(kind, rng, glow);
-    const dens = kind === 'reefSpur' || kind === 'reefCliff' ? 1.15 : 1.35;
+    const dens = kind === 'reefSpur' || kind === 'reefCliff' ? 1.7 : 2.6;
     const parts = [...lumps.map((l) => ({ geo: l.geo })), ...planted(lumps, rng, glow, dens)];
     const g = mergeParts(parts);
     g.userData.shared = true;

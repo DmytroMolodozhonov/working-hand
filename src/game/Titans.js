@@ -120,6 +120,22 @@ export class Titans {
         return S.surfaceSpot(def.planet, 'titan');
     }
 
+    /**
+     * The mark of the planet's titan on the minimap (the author 07.11: «на каждой планете должно быть указание, где этот Титан… а у меня указывался какой-то замок»):
+     * always — however far, asleep or awake (where it stands now, or its home), until it is dead — with its own icon (⚡ → the colossus badge in Hud.placeIcon), never a castle.
+     */
+    markOf(realm) {
+        for (const id of TITAN_IDS) {
+            const def = TITANS[id];
+            if (def.planet !== realm || this.isDead(id)) continue;
+            const T = this.active.get(id);
+            if (T && T.mode !== 'dying') return { x: T.pos.x, z: T.pos.z, name: def.name, icon: '⚡', always: true, titan: id };
+            const h = this.home(id);
+            if (h) return { x: h.x, z: h.z, name: def.name, icon: '⚡', always: true, titan: id };
+        }
+        return null;
+    }
+
     /** The ground height (the top of the land) under (x, z). */
     ground(x, z) {
         const d = this.data;
@@ -139,7 +155,10 @@ export class Titans {
     sunAt(T) {
         const S = this.game.space, p = S?.planets?.get?.(T.def.planet);
         if (!p || !S.localSun) return 0.5;
-        try { return S.localSun(p, T.pos.x, T.pos.z, S.now()).y; } catch { return 0.5; }
+        let y = 0.5;
+        try { y = S.localSun(p, T.pos.x, T.pos.z, S.now()).y; } catch { y = 0.5; }
+        const L = this.game.helios?.lightAt?.(T.pos.x, T.pos.y ?? 0, T.pos.z); // («Helios»: the gods' Sun over it is a Sun too — Helios.js)
+        return L ? Math.max(y, 0.9 * L.k) : y;
     }
 
     hint(key) {
@@ -196,8 +215,7 @@ export class Titans {
         }
         this._stepFx(dt);
         if (this.auth) this._netSend(dt);
-        this.mapMark = null;
-        for (const T of this.active.values()) if (T.mode !== 'dying') this.mapMark = { x: T.pos.x, z: T.pos.z, name: T.def.name, icon: '⚡' };
+        this.mapMark = this.markOf(realm);
     }
 
     _remoteNear(T) {
@@ -1093,7 +1111,7 @@ export class Titans {
         _v2.copy(titanCenter(T, _v3)).sub(cam.position);
         const dist = _v2.length();
         const dot = dist > 1 ? _v.dot(_v2.normalize()) : 0;
-        const lit = !!(g.wandMagic?.light || g.wandMagic?.follow) || (g.fireLights?.near?.(T.pos, 40) ?? false);
+        const lit = !!(g.wandMagic?.light || g.wandMagic?.follow) || (g.fireLights?.near?.(T.pos, 40) ?? false) || ((g.helios?.lightAt?.(me.x, me.y, me.z)?.k ?? 0) > 0.5); // (+ the gods' Sun: Helios.js)
         const on = dist < 220 && dot > 0.82 && lit;
         const id = g.localId ?? 'me';
         this._looks.set(id, { on, lit, dot, t: T.t });
