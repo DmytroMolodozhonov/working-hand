@@ -36,11 +36,11 @@ export function isUpWord(text) {
 // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
 // (the hand (the author): not high up — only not lowered; a little above level is enough. Held straight out
 //  level counts only lying down (LIFT_DOWN), standing it must be a little above it: ARM_UP ≈ 9°; the camera's armLift ≥ 0.55 — journal 21:53: both hands raised read 0.58/0.66 and were refused at 1.1)
-export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.15, LIFT_DOWN: 0.85, LIFT_UP: 0.55, AGAIN_MS: 2500, COOLDOWN_MS: 7000, HINT_MS: 3000 };
+export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.15, LIFT_DOWN: 0.85, LIFT_UP: 0.55, AGAIN_MS: 2500, COOLDOWN_MS: 0, HINT_MS: 3000 };
 
 /**
- * «Up» may be cast once in COOLDOWN_MS (the author: not more often than every 7 s, Creative too; no bar, no sign — only a quiet
- * «wait a little» at most once in HINT_MS). The same phrase heard twice is handled by AGAIN_MS before.
+ * «Up» had a wait of 7 s between casts; the author 08.11: «Stand Up: убрать ограничение на секунды, не должно быть такого ограничения» — COOLDOWN_MS is 0 now
+ * (no wait at all; the code stays so the number can be given back; the quiet «wait a little» is at most once in HINT_MS). The same phrase heard twice is handled by AGAIN_MS before.
  * @returns {null|'wait'|'wait-quiet'} null: free; 'wait': not cast, tell the player; 'wait-quiet': not cast, said just now
  */
 export function upCooldown(now, castAt, hintAt) {
