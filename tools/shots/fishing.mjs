@@ -41,19 +41,21 @@ export default async function (h) {
     h.log('cast →', F.state, 'water', JSON.stringify(F.water), 'b', F.b.toArray().map((v) => +v.toFixed(1)));
     h.cam([xc + 8, P.D + 6, P.zE + 8], [F.b.x, F.b.y, F.b.z]);
     await h.frames(40); await h.shot('float', { settle: 2 });
-    // a bite
+    // a bite: wait for the float to dip (the game here draws ~1 frame a second: the window is waited for, not guessed)
     F.wait = 0;
-    await h.frames(70);
+    await h.until(() => F.state === 'bite' && F.bite?.phase === 'dip', 60000);
     h.log('state', F.state, F.bite && F.bite.phase);
-    await h.shot('bite', { settle: 1 });
-    await h.frames(14);
-    // the hook is set: a fight
-    if (F.state === 'bite') { F.bite.phase = 'dip'; F._hook(); }
-    F.tension = 0.8;
-    await h.frames(25);
+    h.cam([xc + 6, P.D + 4, P.zE + 5], [F.b.x, F.b.y, F.b.z]);
+    await h.frames(3); await h.shot('bite', { settle: 1 });
+    // the hook is set at once: a fight, the rod bent by the tension
+    if (F.state === 'bite') F._hook();
+    if (F.fight) { F.fight.strength = 0.5; F.fight.stamina = 0.9; }
+    await h.frames(12);
     h.cam([xc + 6, P.D + 5, P.zE + 6], [F.b.x, F.b.y + 2, F.b.z]);
-    await h.frames(4); await h.shot('fight', { settle: 1 });
-    h.log('fight state', F.state, F.fight && JSON.stringify({ line: F.fight.line, st: F.fight.stamina }));
+    await h.frames(3); await h.shot('fight', { settle: 1 });
+    h.cam([xc + 5, P.D + 2.5, P.zE + 3], [xc - 2, P.D + 3, P.zE + 2]); // (the rod, bent, from near)
+    await h.frames(3); await h.shot('fight-rod', { settle: 1 });
+    h.log('fight state', F.state, F.fight && JSON.stringify({ line: F.fight.line, st: F.fight.stamina }), 'tension', F.tension);
     // the catch
     if (F.fight) { F.fight.stamina = 0.05; F.fight.line = 3; }
     await h.until(() => F.log.includes('back') || F.state === 'back', 40000);
