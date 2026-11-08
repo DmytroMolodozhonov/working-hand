@@ -123,7 +123,7 @@ export const IMPERIUS_TARGETS = {
 /** Living things «Империус» cannot take at all, and why (the plants have no mind to enter). */
 export const IMPERIUS_NO = {
     // the titans (Titans.js): the gods' power has no mind to take
-    titan: { ru: 'титан', icon: '⚡', why: 'В титана не вселиться: это осколок силы богов, а не разум — ему нечем подчиниться' },
+    titan: { ru: 'титан', icon: '⚡', why: 'В титана не вселиться: ему нечем подчиниться' },
     // Count Sracula's castle (VampireLife.js): his will holds it all
     vampireCount: { ru: 'граф Сракула', icon: '🦇', why: 'В графа Сракулу не вселиться: древняя кровь держит его разум крепче любой воли — он только усмехнётся' },
     vampireGuard: { ru: 'скелет-страж графа', icon: '💀', why: 'Стражей графа держит его воля: пока граф жив, чужая магия в них не войдёт' },

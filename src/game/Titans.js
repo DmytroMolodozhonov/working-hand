@@ -268,7 +268,7 @@ export class Titans {
         T.bodyCapsule = (out) => titanBody(T, out);
         this.active.set(id, T);
         this.list.push(T);
-        if (!this._seen.has(id)) { this._seen.add(id); g.hud?.setVoice?.(`⚡ Вдалеке земля дрожит: здесь живёт ${def.name} — осколок силы богов`, true); }
+        this._seen.add(id); // (no hint on seeing a titan: «земля дрожит… осколок силы богов» was lore, not a hint — the author 07.11)
     }
 
     _drop(id) {
@@ -1567,7 +1567,7 @@ export class Titans {
         g.sound?.playTitan?.(T.pos, 'death', 1.6);
         g.cameraShake?.(0.8, 2.5);
         g.achievements?.killed?.('titan_' + T.id, T.id, by, T.pos);
-        g.hud?.setVoice?.(`⚡ ${T.def.name} пал. Из его тела поднимается осколок силы богов и уходит к Солнцу…`, true);
+        g.hud?.setVoice?.(`⚡ ${T.def.name} пал`, true); // (what rises from its body is shown, not told: no lore in the hints)
         for (const d of T.decoys) if (d.alive) this._decoyGone(T, d);
         this._shard(T);
         g.godhood?.titanDied?.(T.id);
