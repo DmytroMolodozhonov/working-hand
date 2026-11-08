@@ -112,7 +112,7 @@ export const WARD = {
     FEED_SEND: 0.25, // s between the portions a guest sends the host
     FEED_PORTION: 4, // the most strength the host takes from one message
     DISPEL_T: 6, // s: «Dispel Ward» must be said again within this
-    BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100, Boom: 100, Pilbidrio: 80 }, // strength taken (nothing else breaks it)
+    BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100, Boom: 100, Pilbidrio: 80, Kidarius: 100 }, // strength taken (nothing else breaks it)
     ACC_DPS: 5, // «Акцентрик» sitting on it: strength a second…
     ACC_TOTAL: 40, // …until this much is taken, then its haze goes out by itself
     ELEC_DPS: 8.4, // «Электром» held on it: strength a second (a whole one gives way in ~12 s); the cracks spread from the spot
@@ -1138,8 +1138,8 @@ export class HouseWards {
      */
     chargeHit(w, p, spell, by) {
         if (!this.auth || !this.list.has(w.id)) return;
-        if (spell === 'Pilbidrio') {
-            w.hp -= WARD.BREAK.Pilbidrio;
+        if (spell === 'Pilbidrio' || spell === 'Kidarius') { // (the gods' bolt breaks a dome outright)
+            w.hp -= WARD.BREAK[spell];
             const broken = w.hp <= 0;
             if (!broken) this.game.sound?.playCrack?.(_v1.set(p.x, p.y, p.z), 1.4);
             this._wounded(w, spell, by, broken);

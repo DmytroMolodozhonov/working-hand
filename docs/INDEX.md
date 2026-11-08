@@ -853,3 +853,5 @@
 - `wandbench.mjs` — Одна палочка: выбита в точке `at` (м), летит по pickFlight; → {y, floor, fell}
 - `ReefStructures.js` — coral reef formations (bommie, spur, tower, arch, atoll, wall, magic glow head): lumpy rock with a living skin and dense baked corals, one InstancedMesh each (SeaFloor); corals only from 6 m of water; tests/unit/sea-floor.test.js; scene tools/shots/reef.mjs
 - `Helios.js` — «Helios»: the gods' artificial Sun on a planet (held, 500 mana + 3/s; a boiling disc + corona over the caster, full daylight within 260 m via Space._planetSky; titans: Titans.sunAt/_myLook; tests/unit/helios.test.js)
+- `SunRay.js` / `SunRayRules.js` — «Sun Ray»: the Sun's energy into the wand, then the burning beam at «Атак» (damage by the planet's place in the list; titans); tests/unit/sun-ray.test.js
+- Kidarius — a strong duel spell of the gods (StrongSpells.STRONG.Kidarius, Duel._divineBlast, StrongMagic): golden lightning that blows up, −500; tests/unit/kidarius.test.js; the gods' library check — tests/unit/gods-library.test.js

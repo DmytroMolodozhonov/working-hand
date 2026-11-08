@@ -144,7 +144,7 @@ export const GROUND_VORTEX_TARGETS = {
  */
 export const HIT_BLOCKS = {
     Sapira: 2, Sands: 2, Stupefy: 3, IceBall: 3, Ice: 1, Inferno: 1, Wind: 0, WindMaxima: 0, Thunderwave: 4, Electrum: 1, Jolt: 3, JoltMaxima: 7, Disarmor: 2,
-    Expelliarmus: 2, Bombardo: 10, BombardoMaxima: 24, Cannon: 6, Frozen: 3, Die: 12, Accentric: 4, Pilbidrio: 5, WaterVortex: 3, GroundVortex: 3, Bounce: 1,
+    Expelliarmus: 2, Bombardo: 10, BombardoMaxima: 24, Cannon: 6, Frozen: 3, Die: 12, Kidarius: 14, Accentric: 4, Pilbidrio: 5, WaterVortex: 3, GroundVortex: 3, Bounce: 1,
 };
 export const hitBlocks = (kind) => HIT_BLOCKS[kind] ?? 4;
 

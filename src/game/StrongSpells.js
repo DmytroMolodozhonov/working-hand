@@ -19,6 +19,9 @@
  *                              и магическую броню; божественную защиту первый удар только разбивает. Испепеляет:
  *                              ни тела, ни вещей (дары богов падают на землю). Игрок, убитый им, теряет прежнюю
  *                              силу навсегда (тела нет — «Give Me My Power» не к чему применить).
+ *   «Кидариус» (Kidarius)      божественное: свиток в библиотеке храма богов на Венере. 1000 маны. Золотисто-белая молния,
+ *                              похожая на «Электром», но божественная: попав в цель, взрывается огромной силой и снимает 500 HP
+ *                              (титан — те же 500, без «×3»); в столкновении лучей ×3; защиты и броню проходит как божественное.
  *   «Электром» (Electrum)      удерживаемое (концентрация), свиток. 50 маны + 3/с. Настоящая молния из руки до цели,
  *                              идёт за рукой: −25 при попадании, потом −20 HP/с, пока держишь на цели.
  *   «Айс» = «Frozen»           одно заклинание (оба слова). По живому: 5 маны, заморозка 10 с и −3 HP/с.
@@ -30,19 +33,20 @@ export const STRONG = {
     Accentric: { cost: 50, dps: 5, total: 40, time: 60, fade: 40, clash: 1.2 },
     Pilbidrio: { cost: 100, dmg: 80, clash: 1.4 },
     Die: { cost: 1000, drain: 10, clash: 5 },
+    Kidarius: { cost: 1000, dmg: 500, clash: 3, blast: 9 }, // (the gods' bolt: a golden-white lightning; on a hit it BLOWS UP and takes 500 HP — StrongMagic)
     Electrum: { cost: 50, drain: 3, hit: 25, dps: 20, clash: 1, reach: 64, cone: 0.55, tick: 0.25 },
     Ice: { cost: 5, time: 10, dps: 3 },
     IceMaxima: { cost: 20, time: 10, dps: 10 },
 };
 
 /** The duel charges of these spells (Duel.DUEL_SPELLS keys). */
-export const STRONG_DUEL = new Set(['Accentric', 'Pilbidrio', 'Die', 'Electrum']);
+export const STRONG_DUEL = new Set(['Accentric', 'Pilbidrio', 'Die', 'Electrum', 'Kidarius']);
 export const isStrongDuel = (spell) => STRONG_DUEL.has(spell);
 /** The ice charges: «Айс» / «Frozen» and «Айс Максима». */
 export const isIceCharge = (spell) => spell === 'IceDuel' || spell === 'IceDuelMaxima';
 
 /** How much stronger a charge pushes in a clash (Duel._updateClash): ×1.2, ×1.4, ×5 (+400 %); the rest ×1. */
-export const CLASH_POWER = { Accentric: STRONG.Accentric.clash, Pilbidrio: STRONG.Pilbidrio.clash, Die: STRONG.Die.clash };
+export const CLASH_POWER = { Accentric: STRONG.Accentric.clash, Pilbidrio: STRONG.Pilbidrio.clash, Die: STRONG.Die.clash, Kidarius: STRONG.Kidarius.clash };
 export const clashPower = (spell) => CLASH_POWER[spell] || 1;
 
 /**

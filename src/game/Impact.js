@@ -125,7 +125,7 @@ export const SPELL_PHYSICS = {
     Protection: null, ProtectionMaxima: null, ProtectionGods: null, ProtectionGodsMaxima: null, /* (the gods' shield pushes nobody: ProtectionGods.js) */ ProtectionHouse: null, ProtectionInvisible: null, ProtectionHouseGrant: null, WardDispel: null, WardGrow: null, // (a house's sphere pushes only who walks into it: HouseWards.js)
     Levitation: null, LevitationMaxima: null, /* (lifts — no push: LevitationMaxima.js) */ LevitateDuel: null, Ice: null, IceDuel: null, IceMaxima: null, IceDuelMaxima: null, Hammer: null,
     // (the strong duel spells push nobody: a haze, a beam of light that bursts or not, a lightning, the black light — StrongMagic)
-    Accentric: null, Pilbidrio: null, Electrum: null, Die: null,
+    Accentric: null, Pilbidrio: null, Electrum: null, Die: null, Kidarius: null,
     SuitUp: null, // (the armour goes on, nobody is pushed — Armor.js)
     LumosFlashlight: null, LumosAhead: null, LumosFollowing: null, // (the Lumos' modes: light only)
     CreateHouse: null, ImproveHouse: null, IceCastle: null, IceBridge: null, // (building by magic: nobody is pushed)

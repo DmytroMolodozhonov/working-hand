@@ -647,7 +647,7 @@ export class Gargoyles {
     /** A duel charge touched it (Duel._bodies / hit): the table says what each does; «Авада» does not act. */
     boltHit(o, spell, by) {
         if (!o || o.dead) return;
-        const dmg = { Stupefy: 6, Jolt: 8, JoltMaxima: 20, Accentric: 40, Pilbidrio: 80, Electrum: 60, Die: 100, AvadaKedavra: 0, IceDuel: 0 }[spell] ?? 4;
+        const dmg = { Stupefy: 6, Jolt: 8, JoltMaxima: 20, Accentric: 40, Pilbidrio: 80, Electrum: 60, Kidarius: 500, Die: 100, AvadaKedavra: 0, IceDuel: 0 }[spell] ?? 4;
         this.hit(o, dmg, spell, by);
     }
 

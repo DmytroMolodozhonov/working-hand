@@ -1544,7 +1544,10 @@ export class Titans {
         }
     }
 
-    boltHit(T, spell, by, front = null) { this.hit(T, TITAN_BOLT[spell] ?? 4, spell, by, null, front || null); }
+    boltHit(T, spell, by, front = null) {
+        if (spell === 'Kidarius') { this.hit(T, 500, null, by, 'Kidarius', front || null); return; } // (the gods' bolt: its own 500, not ×3 — the author 07.11)
+        this.hit(T, TITAN_BOLT[spell] ?? 4, spell, by, null, front || null);
+    }
 
     /** The worm's mouth (its head) in the world. */
     _mouth(T, out) { const R = T.model.userData.rig; return R?.head ? R.head.getWorldPosition(out) : titanCenter(T, out); }

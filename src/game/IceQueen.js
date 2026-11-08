@@ -84,7 +84,7 @@ const small = (type) => type === 'snowman' || type === 'friend';
 export const SCROLL_KINDS = new Set(['Lightning', 'LightningStrike', 'Thunderwave', 'ToTheSun', 'AvadaKedavra', 'TotalDestruction', 'TotalDestructionMaxima', 'LetItRain',
     'BombardoMaxima', 'Inspirius', 'LevitationMaxima', 'WindImpulse', 'WindImpulseMaxima', 'Invisibility', 'OvergrownMaxima', 'AlohomoraMaxima', 'FirefightingMaxima',
     'Alive', 'AliveMaxima', 'servant', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'WaterVortexSuperMaxima', 'Boom',
-    'Accentric', 'Pilbidrio', 'Electrum', 'Die']); // (the strong duel spells — StrongSpells.js: scrolls; «Дай» kills her outright) // («Бум» — not cold: on the queen as on anyone)
+    'Accentric', 'Pilbidrio', 'Electrum', 'Die', 'Kidarius']); // (the strong duel spells — StrongSpells.js: scrolls; «Дай» kills her outright) // («Бум» — not cold: on the queen as on anyone)
 /** Not magic at all: blows, arrows, a cauldron bursting, a house's sphere shoving. */
 const PLAIN = { melee: 1, arrow: 1, fist: 1, punch: 1, Cauldron: 1, Ward: 1, fall: 1, crush: 1, snow: 1, Liquidation: 0 };
 

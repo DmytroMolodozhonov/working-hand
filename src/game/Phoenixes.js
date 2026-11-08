@@ -95,6 +95,7 @@ export const TARGETS = {
     AvadaKedavra: { does: 'hit', why: '−25 HP, как у всех существ' },
     Accentric: { does: 'hit', why: '«Акцентрик»: −40 за 8 с и минуту летает растерянно (StrongMagic)' },
     Pilbidrio: { does: 'hit', why: '«Пилбидрио»: −80 — почти всегда разрывает в искры' },
+    Kidarius: { does: 'hit', why: '«Кидариус»: взрыв, −500 — феникс сгорает дотла' },
     Electrum: { does: 'hit', why: '«Электром»: −25, потом −20/с' },
     Die: { does: 'hit', why: '«Дай»: испепеляет — даже пера не остаётся' },
     Stupefy: { does: 'down', why: 'падает на землю и лежит STUN_T с, потом улетает' },

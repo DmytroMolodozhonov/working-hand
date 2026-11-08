@@ -118,6 +118,8 @@ export const DUEL_SPELLS = {
     Pilbidrio: { color: 0xfff1b0, name: 'Пилбидрио', speed: 20, core: 0.07, glow: 0.34, coreColor: 0xffffff, jag: 0.25 },
     // «Дай»: a black beam (its core drawn over, not added — black stays black) in a dark-violet haze
     Die: { color: 0x3a0060, name: 'Дай', speed: 16, core: 0.085, glow: 0.32, coreColor: 0x000000, fixed: true, light: 0x5a00a0 },
+    // «Кидариус»: the gods' lightning — a thicker, golden-white jagged bolt with a hot white core, faster and brighter than «Электром» (on a hit it blows up: _divineBlast)
+    Kidarius: { color: 0xffd24a, name: 'Кидариус', speed: 32, core: 0.09, glow: 0.5, coreColor: 0xffffff, jag: 3.4 },
     // «Электром»: real lightning — a jagged crackling line (held on the target afterwards: StrongMagic)
     Electrum: { color: 0x5fc8ff, name: 'Электром', speed: 26, core: 0.04, glow: 0.2, coreColor: 0xffffff, jag: 2.4 },
 };
@@ -2235,11 +2237,29 @@ export class Duel {
         g.sound?.playCrumble?.();
     }
 
+    /** «Кидариус» lands: a blinding golden-white explosion — a fireball, rings of light, a pillar of sparks, the air and ground shaking, a roar (every computer; `n` ≥ 30: the real hit). */
+    _divineBlast(p, n) {
+        const g = this.game, fx = g.fx, big = n >= 30;
+        this._burst(p, 0xfff1b0, Math.min(n, 60));
+        if (!big) return;
+        fx.explosion?.(p, STRONG.Kidarius.blast, 2.2);
+        fx.lightFlash?.(p, 0xffe08a, 9, 0.7, 140);
+        for (let i = 0; i < 140; i++) { // a ring of gold flung flat, a pillar of sparks upward
+            const a = (i / 140) * Math.PI * 2, sp = 16 + Math.random() * 22;
+            fx.spark(p, i % 3 ? 0xffd24a : 0xffffff, 0.22, _v2.set(Math.cos(a) * sp, 1 + Math.random() * 3, Math.sin(a) * sp), 0.9 + Math.random() * 0.5);
+        }
+        for (let i = 0; i < 90; i++) fx.spark(p, i % 2 ? 0xfff1b0 : 0xffa020, 0.28, _v2.set((Math.random() - 0.5) * 6, 18 + Math.random() * 34, (Math.random() - 0.5) * 6), 1.1 + Math.random() * 0.9);
+        const c = g.camera?.position;
+        if (c) fx.shake = Math.max(fx.shake || 0, 0.55 * Math.max(0, 1 - Math.hypot(c.x - p.x, c.z - p.z) / 160));
+        g.sound?.playSpellFxAt?.('fxKidariusBlast', p, 1, 1);
+    }
+
     /** Where a charge hits / bursts: «Айс» shatters into ice, «Джолт» rings of air, the others spark. */
     _hitBurst(spell, p, n) {
         if (isJolt(spell)) { this.jolt.hit(p, _v1.set(0, 0, 1), spell === 'JoltMaxima'); if (n >= 30) this.game.sound?.playJolt?.(spell === 'JoltMaxima', true); return; }
         if (isIceCharge(spell)) this.ice?.shatter(p, (n / 30) * (spell === 'IceDuelMaxima' ? 1.5 : 1));
         else if (spell === 'Die') this._burst(p, 0x6a1ab0, n); // (a dark-violet spray: black light adds nothing)
+        else if (spell === 'Kidarius') this._divineBlast(p, n); // (the gods' bolt blows up on what it hits)
         else if (spell === 'AvadaKedavra') this.avada.hit(p, n); // (the green flash, the ring of poison, the sound)
         else if (isLiquidationDuel(spell)) this._liquidHit(p, n, spell);
         else this._burst(p, DUEL_SPELLS[spell].color, n);

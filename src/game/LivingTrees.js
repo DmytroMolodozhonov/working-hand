@@ -93,9 +93,9 @@ export const isFireDamage = (kind) => FIRE.has(kind);
  * «Total Destruction» (+ Maxima), «Circle Attack» (+ Maxima), «Inspirius». Blades, fists,
  * «Авада» and the other spells still do nothing.
  */
-export const MIGHTY_ON_TREES = new Set(['Electrum', 'Pilbidrio', 'Die', 'Lightning', 'LightningStrike', 'Thunderwave', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom', 'Nihilis']); // («Nihilis Atra»: the light scatters what black magic woke; «Бум»: the mountain torn apart from inside — a tree in it too)
+export const MIGHTY_ON_TREES = new Set(['Electrum', 'Pilbidrio', 'Kidarius', 'Die', 'Lightning', 'LightningStrike', 'Thunderwave', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom', 'Nihilis']); // («Nihilis Atra»: the light scatters what black magic woke; «Бум»: the mountain torn apart from inside — a tree in it too)
 /** These tear it apart (splinters; killed — it falls like a felled trunk) instead of burning it. */
-const TEARS = new Set(['Pilbidrio', 'Die', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom', 'Nihilis']);
+const TEARS = new Set(['Pilbidrio', 'Kidarius', 'Die', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom', 'Nihilis']);
 /** How much of a blow of `kind` a living tree takes. */
 export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has(kind) || kind === 'DivineSword' ? dmg : 0); // (the divine sword's touch kills anything — DivineSword.js)
 /** The caster's mana after dt seconds of their living tree (Creative: no limit). */

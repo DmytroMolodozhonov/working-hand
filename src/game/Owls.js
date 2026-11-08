@@ -129,6 +129,7 @@ export const TARGETS = {
     AvadaKedavra: { does: 'hit', why: 'со свитка: −25 — насмерть' },
     Accentric: { does: 'hit', why: '«Акцентрик» (со свитка): −40 за 8 с — насмерть' },
     Pilbidrio: { does: 'hit', why: '«Пилбидрио» (со свитка): −80 — разрывает' },
+    Kidarius: { does: 'hit', why: '«Кидариус» (божественный, со свитка): взрыв, −500' },
     Electrum: { does: 'hit', why: '«Электром» (со свитка): насмерть' },
     Die: { does: 'hit', why: '«Дай»: испепеляет, пера не остаётся' },
     Lightning: { does: 'hit', why: 'молния (со свитка): −20 — насмерть' },

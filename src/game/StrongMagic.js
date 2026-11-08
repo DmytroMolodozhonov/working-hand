@@ -88,6 +88,12 @@ export class StrongMagic {
             c.damage(STRONG.Pilbidrio.dmg, by, 'Pilbidrio');
             return true;
         }
+        if (spell === 'Kidarius') {
+            g.hud?.flashColor?.('rgba(255, 236, 170, 0.8)');
+            if (c.enabled) c.damage(STRONG.Kidarius.dmg, by, 'Kidarius');
+            else g.hud?.setVoice?.('✨ «Кидариус» взорвался на вас (здесь не ранит)', true);
+            return true;
+        }
         if (spell === 'Die') { this._dieMe(by); return true; }
         if (spell === 'Electrum') {
             g.hud?.flashColor?.('rgba(150, 210, 255, 0.5)');
@@ -148,6 +154,7 @@ export class StrongMagic {
         if (!c) return false;
         const g = this.game;
         if (spell === 'Die') { this.annihilate(k, c, by); return true; }
+        if (spell === 'Kidarius') { this._flash(this._center(k, c, _v), 0xfff1b0); this._hurt(k, c, STRONG.Kidarius.dmg, 'Kidarius', by); return true; } // (it blew up on it — the blast is drawn by every computer: Duel._divineBlast; the damage — as any blow)
         if (k === 'b') { g.books?.hitBird?.(c, 99); return true; } // (a book-bird: any of them knocks it down as a book)
         if (spell === 'Accentric') {
             // (no eyes, no mind to blur: a living tree, a skeleton of the black ship — no effect, and no harm)

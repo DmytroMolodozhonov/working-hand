@@ -81,6 +81,7 @@ export const FIRST_SPELL = {
     CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100, Boom: 100, PlanetLiquidation: 100,
     FlyingMaxima: 100, // (the gods' own flight through space: given by the gods at 1000 cells — Space.checkUnlock)
     Die: 100, // («Дай»: the ninth scroll of the gods' library — StrongSpells.js)
+    Kidarius: 100, // (the fourteenth: «Кидариус» — the gods' bolt, StrongSpells.js; the library's 100)
     SunRay: 100, // (the thirteenth: «Sun Ray» — the Sun's beam, SunRay.js; the library's 100)
     Helios: 100, // (the twelfth: «Helios» — the gods' Sun, Helios.js; the library's 100)
     DivineCreation: 100, // (the eleventh: «Да пусть создастся» — DivineCreation.js; the library's 100)
@@ -119,7 +120,7 @@ export function firstSpellGain(name) {
 }
 
 /** A duel charge's name → the spell it came from. */
-export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', IceDuelMaxima: 'IceMaxima', Accentric: 'Accentric', Pilbidrio: 'Pilbidrio', Die: 'Die', Electrum: 'Electrum', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima', LiquidationDuel: 'Liquidation', LiquidationMaximaDuel: 'LiquidationMaxima' };
+export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', IceDuelMaxima: 'IceMaxima', Accentric: 'Accentric', Pilbidrio: 'Pilbidrio', Die: 'Die', Electrum: 'Electrum', Kidarius: 'Kidarius', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima', LiquidationDuel: 'Liquidation', LiquidationMaximaDuel: 'LiquidationMaxima' };
 
 /**
  * Magical creatures: the first kill of each kind + this much (to whoever struck the last blow).
@@ -431,7 +432,7 @@ const TITLES = {
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', WardDispel: 'Dispel Ward', ProtectionHouse: 'Protection House', StrengthenHouse: 'Strengthen House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
-    SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
+    Kidarius: 'Кидариус', SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', FireSerpent: 'Serpent', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
     WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',

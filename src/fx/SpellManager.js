@@ -224,6 +224,7 @@ export function matchSpell(text) {
     if (has('drawdown', 'draw down', 'drowdown', 'drow down', 'дравдаун', 'драв даун', 'дродаун', 'дро даун', 'драудаун', 'драу даун', 'дровдаун', 'дров даун', 'драфдаун', 'дравдан', 'дродан', 'дравдаон', 'просядь')) return mx() ? 'DrawdownMaxima' : 'Drawdown';
     if (has('ликвидейш', 'ликвидэйш', 'ликвидеш', 'ликвидайш', 'ликвидац', 'ликвидир', 'ликвидей', 'liquidat', 'liquidation', 'ликвидейтион')) return mx() ? 'LiquidationMaxima' : 'Liquidation';
     if (has('spiralis', 'спиралис', 'спиралес', 'спирализ', 'spiralus', 'спираллис')) return 'Spiralis'; // (the beams of a clash whirled: Whirl.js)
+    if (has('kidarius', 'kidarias', 'kidarios', 'kidarus', 'кидариус', 'кидариас', 'кидариос', 'кидарус', 'кидариуc', 'киддариус', 'кидарьюс')) return 'Kidarius'; // (the gods' lightning: StrongSpells.js)
     if (has('sunray', 'sun ray', 'sunrei', 'sunrey', 'санрей', 'сан рей', 'санрэй', 'сан рэй', 'санрей', 'санрая', 'сан рая', 'сан рай', 'санрай')) return 'SunRay'; // (the Sun's energy into the wand: SunRay.js — «сан» first)
     if (has('helios', 'хелиос', 'гелиос', 'хэлиос', 'хелиас', 'гелиас', 'гелиус', 'хелиус', 'heliyos')) return 'Helios'; // (the gods' Sun on a planet: Helios.js)
     if (has('aquadivide', 'akvadivide', 'aquadivida', 'aquadivaid', 'аквадивиде', 'аквадивайд', 'аквадивида', 'акводивиде', 'аквадивид', 'аквадевайд', 'аквавайд', 'акваявайд', 'акваввайд', 'акуавайд', 'аквавид', 'аквавиде', 'aquavide', 'aquawide', 'aquavaid', 'aquawaid') ||
