@@ -18,6 +18,10 @@ export default async function (h, args) {
         if (!Ti.active.get(id)) Ti._build(id, { x: home.x, y: 0, z: home.z });
         const T = Ti.active.get(id);
         if (!T) { h.log(id, 'not built'); continue; }
+        // what the body itself costs: parts, triangles, shadow casters (a body of many separate parts is one draw call each — and again in the shadow pass)
+        { let meshes = 0, tris = 0, casters = 0, skinned = 0, transp = 0;
+          T.model.traverse((o) => { if (!o.isMesh) return; meshes++; const gm = o.geometry; tris += (gm.index ? gm.index.count : gm.attributes.position.count) / 3; if (o.castShadow) casters++; if (o.isSkinnedMesh) skinned++; if (o.material?.transparent) transp++; });
+          h.log(id, 'BODY meshes', meshes, 'tris', Math.round(tris), 'shadow casters', casters, 'skinned', skinned, 'transparent', transp); }
         // wrap the titan methods with timers
         const names = ['update', '_think', '_draw', '_stepFx', '_netSend', 'hit'];
         const acc = {}; const orig = {};
