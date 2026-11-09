@@ -93,7 +93,18 @@ test('killed herd: the place stays empty until a quiet while, then full again; a
     assert.ok(!A.emptied.has(r.key), 'after a quiet while it is full again');
     g.character.group.position.set(r.x, 1.5, r.z + 150);
     scan(A, 60);
-    assert.ok(r.awake && r.members.size === n, 'woke with the full herd');
+    const returned = A.sites.get(r.key);
+    assert.ok(returned?.awake && returned.members.size === n, 'woke with the full herd after its distant cache record was discarded');
+});
+
+test('distant sleeping site records are discarded while the separate killed-herd memory survives', () => {
+    const { A } = world();
+    A._site({ key: '8,8', x: 1000, z: 1000, type: 'sheep', n: 3 });
+    A.emptied.set('8,8', A.clock);
+    scan(A);
+    assert.equal(A.sites.has('8,8'), false);
+    assert.equal(A.emptied.has('8,8'), true);
+    assert.ok('8,8' in A.sitesSnapshot());
 });
 
 test('the places emptied lately are saved; an old save without them has all places full', () => {

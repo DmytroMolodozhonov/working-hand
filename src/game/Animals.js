@@ -56,7 +56,7 @@ import { appleTreeModel, baksadiTreeModel, pulseGolden } from './AppleTrees.js';
 import { SwanLife, SWAN, swanSiteAt, swanSitesNear, swanMagic, floatY as swanFloatY } from './SwanLife.js';
 import { SeaLife, seaSiteAt, seaSitesNear, isSeaType } from './SeaLife.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
-export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1, NEAR_REAL: 12 }; // (NEAR_REAL m: a horse this near is drawn as its own parts)
+export const FAR = { DRAW: 600, LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1, NEAR_REAL: 12 }; // (NEAR_REAL m: a horse this near is drawn as its own parts)
 const _farF = new THREE.Frustum(), _farM = new THREE.Matrix4(), _farS = new THREE.Sphere();
 
 export { animalModel };
@@ -110,6 +110,7 @@ export const HERDS = {
     SEE_D: 110, // m: nearer than this to a player a herd appears only out of the host's sight (guests: not at all)
     BEHIND: 1.9, // rad from where the player looks (~110°): only behind them
     GONE: 200, // m: farther than this (from every player) a herd is put away (only when not in sight)
+    MAX_GONE: FAR.DRAW, // a backwards journey must not keep every herd on the horizon forever
     REFILL_D: 250, // m: while a player is this near an emptied place stays empty
     REFILL_T: 600, // s of game time without a player near: an emptied place is full again
     SCAN: 0.5, // s between looks at the places around the players
@@ -288,14 +289,14 @@ export class Animals {
     }
 
     /** The creature my «Империус» mind is in is within GONE of the point (its herds stay round it). */
-    _nearEyes(p) {
+    _nearEyes(p, range = HERDS.GONE) {
         const e = this.game.imperius?.focusPos?.(this._impEye2 || (this._impEye2 = new THREE.Vector3()));
-        return !!e && Math.hypot(e.x - p.x, e.z - p.z) <= HERDS.GONE;
+        return !!e && Math.hypot(e.x - p.x, e.z - p.z) <= range;
     }
 
     /** (host) No guest is nearer than GONE to the point. */
-    _farFromGuests(p) {
-        for (const r of this.game.remotes?.values() || []) if (r.position && !r.dead && Math.hypot(r.position.x - p.x, r.position.z - p.z) <= HERDS.GONE) return false;
+    _farFromGuests(p, range = HERDS.GONE) {
+        for (const r of this.game.remotes?.values() || []) if (r.position && !r.dead && Math.hypot(r.position.x - p.x, r.position.z - p.z) <= range) return false;
         return true;
     }
 
@@ -329,10 +330,13 @@ export class Animals {
         const me = people[0];
         if (!earthly(me)) return;
         // awake places: who of the herd is still there; an empty one is sleeping (put away) or emptied (killed, eaten, tamed)
-        for (const r of this.sites.values()) {
-            if (!r.awake) continue;
-            for (const id of r.members) { const a = this.byId.get(id); if (!a || a.dead || a.tamed) { r.members.delete(id); r.lost++; } }
-            if (!r.members.size) { r.awake = false; if (r.lost) this.emptied.set(r.key, this.clock); }
+        for (const [key, r] of this.sites) {
+            if (r.awake) {
+                for (const id of r.members) { const a = this.byId.get(id); if (!a || a.dead || a.tamed) { r.members.delete(id); r.lost++; } }
+                if (!r.members.size) { r.awake = false; if (r.lost) this.emptied.set(r.key, this.clock); }
+            }
+            // The place is deterministic; only recently emptied places need lasting memory (kept separately below).
+            if (!r.awake && !r.members.size && !people.some(p => Math.hypot(p.x - r.x, p.z - r.z) <= H.MAX_GONE)) this.sites.delete(key);
         }
         // emptied places: while a player is near they stay empty; after a quiet while they are full again
         for (const [k, t] of this.emptied) {
@@ -1890,6 +1894,12 @@ export class Animals {
         let builds = 0;
         for (const a of this.list) {
             const p = a.group.position, d = Math.hypot(p.x - me.x, p.z - me.z);
+            const hidden = d > FAR.DRAW;
+            if (hidden && a.model.visible) { a.model.visible = false; a.drawHidden = true; }
+            else if (!hidden && a.drawHidden) { a.model.visible = !a.bones; a.drawHidden = false; }
+            if (a.bones) a.bones.visible = !hidden;
+            if (hidden) { a.animStep = 1e9; a.thinkEvery = 8; a.group.userData.matFrozen = true; continue; }
+            a.group.userData.matFrozen = false;
             // (a horse right by me — fed by hand, led, about to be mounted — is drawn as its own parts, as when ridden: the author 06.11 saw a horse's
             //  head «fall off» by him and come back the moment he sat on it — the one-shape way lost it there; a few horses near cost a few draws)
             const byMe = a.type === 'horse' && d < FAR.NEAR_REAL;
@@ -1994,7 +2004,9 @@ export class Animals {
             for (const a of [...this.list]) {
                 // (gone only far away and out of sight: never vanishing in front of the player)
                 const ap = a.group.position;
-                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.keep && !a.rider && !a.cart && !a.mount && !a.imp && !this._nearEyes(ap) && outOfSight(me, look, ap.x, ap.z, 1.2) && this._farFromGuests(ap)) { a.site?.members.delete(a.id); this._remove(a); continue; } // (the herd place sleeps: it is full again when somebody comes)
+                const dist = Math.hypot(ap.x - me.x, ap.z - me.z);
+                const beyondView = dist > HERDS.MAX_GONE && this._farFromGuests(ap, HERDS.MAX_GONE) && !this._nearEyes(ap, HERDS.MAX_GONE);
+                if (dist > HERDS.GONE && !a.tamed && !a.keep && !a.rider && !a.cart && !a.mount && !a.imp && !a.lev && a.servantOf == null && !this._nearEyes(ap) && (beyondView || outOfSight(me, look, ap.x, ap.z, 1.2)) && this._farFromGuests(ap)) { a.site?.members.delete(a.id); this._remove(a); continue; } // (the herd place sleeps: it is full again when somebody comes)
                 if (a.dead) {
                     if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)

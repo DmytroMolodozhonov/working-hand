@@ -38,6 +38,7 @@ const OUT = opt('out', null);
 const CHECK = args.includes('--check');
 const SPACE = args.includes('--space');
 const BOOM = args.includes('--boom');
+const NO_DIALOGUE = args.includes('--no-dialogue'); // isolate world/creature lifetime without a generative dialogue model
 const ULTRA = args.includes('--ultra'); // «Ультра качество» on (Settings → Графика)
 const [W, H] = opt('size', '480x270').split('x').map(Number);
 /** Draw the picture only every N-th frame: here the processor draws it (seconds a frame), so without
@@ -268,11 +269,11 @@ try {
     page.on('crash', () => { console.error('soak page crashed; stopping the browser'); browser.close().catch(() => {}); });
     errors = o.errors;
     await page.evaluate(() => { let s = 0x2545F491; Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; });
-    await page.evaluate(({ SEED, ULTRA }) => {
+    await page.evaluate(({ SEED, ULTRA, NO_DIALOGUE }) => {
         for (const [id, v] of [['graphics-quality', '3'], ['view-distance', 'high'], ['ultra-quality', ULTRA ? 'on' : 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
-        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: '3', viewDistance: 'high', ultra: ULTRA });
-    }, { SEED, ULTRA });
+        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: '3', viewDistance: 'high', ultra: ULTRA, ...(NO_DIALOGUE ? { villagerAI: 'off' } : {}) });
+    }, { SEED, ULTRA, NO_DIALOGUE });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     await sleep(3000);
@@ -325,7 +326,7 @@ console.log('  растут коллекции:');
 for (const x of grow.slice(0, 40)) console.log(`    ${x.k}: ${x.a} → ${x.b} (в конце ${x.last}${x.mono ? ', всё время растёт' : ''})`);
 const errs = errors.filter((e) => !/AudioContext|favicon|ERR_|WebGL|GPU stall|GL Driver/i.test(e));
 if (errs.length) console.log('  ошибки:', errs.slice(0, 8));
-if (OUT) { fs.writeFileSync(OUT, JSON.stringify({ samples, grow, ggrow, errors: errs.slice(0, 50) }, null, 1)); console.log('saved:', OUT); }
+if (OUT) { fs.writeFileSync(OUT, JSON.stringify({ samples, grow, ggrow, errors: errs.slice(0, 50), dialogue: !NO_DIALOGUE, renderEvery: RENDER_EVERY }, null, 1)); console.log('saved:', OUT); }
 if (CHECK) {
     const bad = [];
     if (!(samples.at(-1)?.gt >= MINUTES * 60)) bad.push('не завершено заданное время игры');

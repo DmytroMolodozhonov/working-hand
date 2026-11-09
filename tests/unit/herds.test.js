@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { Animals, SPECIES, pigSize } from '../../src/game/Animals.js';
+import { Animals, SPECIES, pigSize, FAR, HERDS } from '../../src/game/Animals.js';
 import { solidGap, pairRoom, measureBody, ROOM } from '../../src/game/AnimalHerd.js';
 
 /**
@@ -49,6 +49,51 @@ function run(A, secs, each, dt = 1 / 30) {
     const n = Math.round(secs / dt);
     for (let i = 0; i < n; i++) { A.update(dt); if (each && i % 15 === 0) each(i * dt); }
 }
+
+test('a backwards journey cannot accumulate every herd kept on the horizon', () => {
+    const { A, g } = fakeGame([0, 0]); A._migT = 1e9;
+    let peak = 0;
+    for (let i = 0; i < 40; i++) {
+        g.character.group.position.z = i * 100; // move backwards, still looking toward −Z
+        for (let k = 0; k < 2; k++) A._spawn('sheep', new THREE.Vector3(k * 8, 0.5, i * 100 - 50));
+        A.update(1 / 30);
+        peak = Math.max(peak, A.list.length);
+    }
+    assert.ok(peak <= 2 * Math.ceil(HERDS.MAX_GONE / 100), 'bounded live models: ' + peak);
+    assert.equal(A.byId.size, A.list.length);
+});
+
+test('distant guest animals stay alive but are not drawn at the host; pets and held/controlled/servant animals are never discarded', () => {
+    const { A, g } = fakeGame([0, 0]); A._migT = 1e9;
+    const view = g.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 3000);
+    view.lookAt(0, 0, -1); view.updateMatrixWorld(true);
+    const protectedAnimals = [];
+    for (const flag of ['tamed', 'keep', 'lev', 'imp', 'servantOf']) {
+        const a = A._spawn('sheep', new THREE.Vector3(0, 0.5, -2000));
+        a[flag] = flag === 'lev' ? { body: true } : 'me'; protectedAnimals.push(a);
+    }
+    const guestAnimal = A._spawn('sheep', new THREE.Vector3(10, 0.5, -1500));
+    g.remotes.set('guest', { position: guestAnimal.group.position.clone(), dead: false });
+    A.update(1 / 30);
+    for (const a of protectedAnimals) assert.ok(A.byId.has(a.id), 'keep ' + a.id);
+    assert.ok(A.byId.has(guestAnimal.id));
+    assert.equal(guestAnimal.model.visible, false);
+    assert.ok(guestAnimal.animStep > 1e8);
+    g.character.group.position.copy(guestAnimal.group.position);
+    A._lookFar(g.character.group.position, 1 / 30);
+    assert.equal(guestAnimal.model.visible, true);
+    assert.equal(guestAnimal.group.userData.matFrozen, false);
+    assert.ok(FAR.DRAW >= 200, 'all duel-range animals still drawn');
+    guestAnimal.dead = true; guestAnimal.model.visible = false;
+    guestAnimal.bones = new THREE.Group();
+    g.character.group.position.z += FAR.DRAW + 1;
+    A._lookFar(g.character.group.position, 1 / 30);
+    assert.equal(guestAnimal.bones.visible, false);
+    g.character.group.position.copy(guestAnimal.group.position);
+    A._lookFar(g.character.group.position, 1 / 30);
+    assert.equal(guestAnimal.model.visible, false, 'a return to view cannot resurrect the old model over bones');
+    assert.equal(guestAnimal.bones.visible, true);
+});
 
 for (const type of ['sheep', 'pig', 'cow', 'horse']) {
     test(`herd of ${type}: 60 s of grazing — personal space kept, loose spread, several states`, () => {
