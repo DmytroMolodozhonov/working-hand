@@ -468,6 +468,7 @@ export class PoseService {
 
     /** The program looks at the camera; its points arrive as a stream. False if it can't. */
     _startNative() {
+        this._nativeCapture = null; this._nativeTs = null;
         return new Promise((resolve) => {
             this._status('Нейросеть камеры (отдельная программа) запускается...');
             const hands = this.handsWanted;
@@ -505,6 +506,23 @@ export class PoseService {
     }
 
     _onNative(r) {
+        const now = performance.now(), wall = Date.now();
+        if (this._nativeWall != null && Math.abs((wall - this._nativeWall) - (now - this._nativeNow)) > 1000) {
+            this._nativeCapture = null; this._nativeTs = null; // system clock corrected while the game was open
+        }
+        this._nativeWall = wall; this._nativeNow = now;
+        const age = Number.isFinite(r.t) ? Math.max(0, wall - r.t) : 0;
+        this.stats.handAge = age;
+        // After a busy frame, buffered camera results can arrive together. Never turn an old/duplicate capture into
+        // a new picture 1 ms later: that opens the velocity filters and makes a stationary aiming hand jump.
+        if (age > 500 || (Number.isFinite(r.t) && this._nativeCapture != null && r.t <= this._nativeCapture)) {
+            this.stats.nativeRejected = (this.stats.nativeRejected || 0) + 1;
+            return;
+        }
+        const ts = now - age;
+        if (this._nativeTs != null && ts <= this._nativeTs) { this.stats.nativeRejected = (this.stats.nativeRejected || 0) + 1; return; }
+        this._nativeCapture = Number.isFinite(r.t) ? r.t : null;
+        this._nativeTs = ts;
         this.stats.lastResultAt = performance.now();
         if (r.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + r.cost * 0.1 : r.cost;
         this.stats.backend = r.backend;
@@ -524,12 +542,9 @@ export class PoseService {
         }
         // (the picture's own time, not when it reached the game: the hand filters see its real speed
         // even when results come unevenly — the program's clock is this computer's)
-        const age = r.t ? Math.max(0, Math.min(500, Date.now() - r.t)) : 0;
-        this.stats.handAge = age;
         // (the journal «Руки»: where the picture's time went in the program — waited, the networks, the rest — and the camera's own rate)
         if (r.st) this.stats.stages = r.st;
         if (r.camFps != null) this.stats.camFps = r.camFps;
-        const ts = this._nativeTs = Math.max((this._nativeTs || 0) + 1, performance.now() - age); // (never back in time)
         if (r.hands) this._handleResult({ ts, cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks, torsoTilt: r.torsoTilt });
         else this._onHolistic(r);
     }

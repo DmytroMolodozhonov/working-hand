@@ -238,6 +238,10 @@ export class HandsLog {
         if (now - (this._camAt || 0) < HANDS.CAM_MS) return;
         this._camAt = now;
         const g = this.game, ps = g.poseService?.stats, sm = g.poseSmoother;
+        if (ps?.nativeRejected && ps.nativeRejected !== this._nativeRejected) {
+            this._nativeRejected = ps.nativeRejected;
+            allLog('Руки', `камера: отброшено повторных или устаревших кадров ${ps.nativeRejected}; возраст последнего ${Math.round(ps.handAge || 0)} мс`);
+        }
         if (!ps || !this._poseTimes.length || now - this._lastPose > 2000) return;
         const line = cameraLine({ poses: this._poseTimes.length, camFps: ps.camFps, age: ps.handAge, stages: ps.stages, gameFps: g.fpsNow, lead: sm ? sm.lead * 1000 : null, engine: ps.handsEngine === 'v5' ? `V5${ps.v5Engine === 'gpu' ? ' (видеокарта)' : ps.v5Engine === 'cpu' ? ' (процессор)' : ''}` : ps.handsEngine });
         if (!line || line.key === this._camKey) return;

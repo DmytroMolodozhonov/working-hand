@@ -15,6 +15,7 @@
 
 import { Emitter } from '../core/events.js';
 import { allLog } from '../core/AllLog.js';
+import { NetOutbox, OUTBOX } from './NetOutbox.js';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
 const PREFIX = 'zns-room-';
@@ -556,12 +557,22 @@ export class Network extends Emitter {
     _sendConn(conn, msg) {
         if (!conn || !conn.open) return;
         try {
+            if (!conn._outbox) {
+                conn._outbox = new NetOutbox(conn, text => netLog(text));
+                conn.on?.('close', () => conn._outbox.dispose());
+            }
+            msg = conn._outbox.mergeState(msg);
             const text = JSON.stringify(msg);
-            if (text.length * 3 < PIECE_BYTES || utf8Bytes(text) < PIECE_BYTES) { conn.send(msg); return; }
+            if (text.length * 3 < PIECE_BYTES || utf8Bytes(text) < PIECE_BYTES) {
+                const q = conn._outbox;
+                // A queued cast keeps the origin/direction it had when spoken, even if the caller reuses its arrays.
+                const packet = q.buffered() >= OUTBOX.STATE || conn.bufferSize > 0 || q.events.length || q.states.size ? JSON.parse(text) : msg;
+                q.push(packet, [packet]); return;
+            }
             const parts = splitPieces(text);
             if (parts.length > PIECES_MAX) { netLog(`сообщение «${msg?.t}» слишком большое (${text.length} знаков) — не отправлено`); return; }
             const k = ++this._pieceId;
-            for (let i = 0; i < parts.length; i++) conn.send({ t: '_pc', k, i, n: parts.length, s: parts[i] });
+            conn._outbox.push(msg, parts.map((s, i) => ({ t: '_pc', k, i, n: parts.length, s })));
         } catch (e) { /* channel closing */ }
     }
 

@@ -192,6 +192,7 @@ function disposeTree(o) {
 const LEGACY_FX = { T: 2.6, ARC: 2.2 };
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _legacyRay = new THREE.Ray(), _legacyA = new THREE.Vector3(), _legacyB = new THREE.Vector3(), _legacyPoint = new THREE.Vector3();
 
 /**
  * Лужа крови под раздавленным телом (монстр сжал лапу до конца — MonsterGrab): неровное пятно, одна общая форма и
@@ -477,11 +478,23 @@ export class DeathSystem {
     }
 
     _copy(group) {
-        const c = group.clone(true);
+        // FarShape's live controller in userData points back to its root: clone(true) overflows the stack.
+        // Copy the visual tree and plain flags, leaving optimization controllers on the living avatar.
+        const copy = (o) => {
+            if (o.isSprite || o.userData.farOne || o.name === 'head-shadow') return null;
+            const data = o.userData;
+            let c;
+            try { o.userData = {}; c = o.clone(false); } finally { o.userData = data; }
+            for (const [k, v] of Object.entries(data)) {
+                if (k !== 'farMask' && k !== 'farHid' && ['boolean', 'string', 'number'].includes(typeof v)) c.userData[k] = v;
+            }
+            c.layers.set(0);
+            if (data.vroot || data.farHid) c.visible = true;
+            for (const child of o.children) { const made = copy(child); if (made) c.add(made); }
+            return c;
+        };
+        const c = copy(group);
         c.visible = true;
-        const sprites = [];
-        c.traverse((o) => { o.layers.set(0); if (o.isSprite || o.userData.farOne) sprites.push(o); if (o.userData.vroot || o.userData.farHid) o.visible = true; }); // (a far person's one shape: its parts instead — FarShape)
-        for (const s of sprites) s.parent?.remove(s);
         holdShapes(c); // (a person's shapes it shares: kept while it lies there — removeBody gives them back)
         return c;
     }
@@ -730,14 +743,19 @@ export class DeathSystem {
     /** «Give Me My Power»: my own body with my legacy the hand points at (from `o` along `d`), or null. */
     legacyAimed(o, d) {
         const mine = legacyOwner(this.game);
+        _legacyRay.set(o, _v2.copy(d).normalize());
         let best = null, bs = Infinity;
         for (const b of this.bodies.values()) {
             if (b.lg?.owner !== mine) continue;
-            const to = _v.set(b.x, b.y + 0.4, b.z).sub(o);
+            const half = Math.max(1, (b.len || 3) * 0.5), sx = Math.sin(b.yaw || 0) * half, sz = Math.cos(b.yaw || 0) * half;
+            _legacyA.set(b.x - sx, b.y + 0.4, b.z - sz);
+            _legacyB.set(b.x + sx, b.y + 0.4, b.z + sz);
+            const miss = _legacyRay.distanceSqToSegment(_legacyA, _legacyB, null, _legacyPoint);
+            const to = _v.copy(_legacyPoint).sub(o);
             const dist = to.length();
             if (dist > LEGACY.RANGE) continue;
             const ang = dist < 1.5 ? 0 : d.angleTo(to.normalize());
-            if (ang > LEGACY.CONE) continue;
+            if (ang > LEGACY.CONE && (miss > LEGACY.AIM_RADIUS ** 2 || d.dot(to) <= 0)) continue;
             const sc = ang * 5 + dist * 0.05;
             if (sc < bs) { bs = sc; best = b; }
         }

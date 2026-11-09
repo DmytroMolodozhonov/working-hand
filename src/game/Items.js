@@ -182,12 +182,12 @@ const _hq = new THREE.Quaternion();
  * or both hands behind the back. Body space: x right, y up from the hips, the body looks along −Z, its back is at z +0.4;
  * the hero ~3.5 m tall, shoulders at ±0.7 (y ≈ 0.5 above the hips… the arm anchor), arm 1.9 m. The camera's depth is rough, so loose.
  */
-export const BACKPACK_WEAR = { T: BACK_HOLD, T_SHOULDER: BACK_HOLD, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7, T_OFF: 1.2, STASH_T: BACK_HOLD, MAX_MOVE_V: 4, LOCK_MS: 2500 };
+export const BACKPACK_WEAR = { T: BACK_HOLD, T_SHOULDER: BACK_HOLD, SHOULDER_R: 1.0, BACK_Z: 0.3, BACK_X: 1.7, T_OFF: 1.2, STASH_T: BACK_HOLD, MAX_MOVE_V: 4, LOCK_MS: 2500 };
 export function backpackSpot(hand, other, shoulder) {
     const bx = Math.abs(hand.x), sy = shoulder ? shoulder.y : 0.5;
     // behind the back (either hand with the pack; the arm's depth is a guess, so the band is wide)
-    if (hand.z > BACKPACK_WEAR.BACK_Z && bx < BACKPACK_WEAR.BACK_X && hand.y > sy - 2.4 && hand.y < sy + 1.0) return 'back';
-    if (hand.z > 0.25 && other.z > 0.25) return 'back2';
+    if (hand.z > BACKPACK_WEAR.BACK_Z && bx < BACKPACK_WEAR.BACK_X && hand.y > sy - 0.8 && hand.y < sy + 1.0) return 'back';
+    if (hand.z > BACKPACK_WEAR.BACK_Z && other.z > BACKPACK_WEAR.BACK_Z && hand.y > sy - 0.8 && other.y > sy - 0.8) return 'back2';
     // at the shoulder (same side or the far one) or over it
     if (shoulder && hand.y > sy - 0.7 && hand.y < sy + 1.4 && hand.z > -0.9 && Math.hypot(hand.x - shoulder.x, hand.y - sy, hand.z - shoulder.z) < BACKPACK_WEAR.SHOULDER_R) return 'shoulder';
     return null;
@@ -1583,6 +1583,7 @@ export class ItemSystem {
         if (this._packV > BACKPACK_WEAR.MAX_MOVE_V || this._packLocked()) { this._offT = 0; return; }
         let side = null;
         for (const sd of ['right', 'left']) {
+            if (this._packWaitAway?.[sd]) continue;
             if (this.held[sd] || g.weapons?.hands?.[sd]?.held || g.boards?.handBusy?.(sd)) continue;
             ch.group.updateMatrixWorld(true);
             _inv.copy(ch.group.matrixWorld).invert();
@@ -1596,6 +1597,7 @@ export class ItemSystem {
         this._offT = (this._offT || 0) + dt;
         if (this._offT < BACKPACK_WEAR.T_OFF) return;
         this._offT = 0;
+        (this._packWaitAway || (this._packWaitAway = {}))[side] = true;
         this._packLockUntil = performance.now() + BACKPACK_WEAR.LOCK_MS; // (not put straight back on by the same hand behind the back)
         const item = w.item;
         this.game.scene.remove(w.model); disposeModel(w.model);
@@ -1608,11 +1610,15 @@ export class ItemSystem {
 
     /** Is this hand behind the back (the same place the backpack is put on and taken off)? */
     _handAtBack(ch, sd) {
+        return this._packSpot(ch, sd) === 'back';
+    }
+
+    _packSpot(ch, sd) {
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
         return backpackSpot(ch.getHandWorldPosition(sd, _v).applyMatrix4(_inv),
             ch.getHandWorldPosition(sd === 'left' ? 'right' : 'left', _v2).applyMatrix4(_inv),
-            (sd === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_f).applyMatrix4(_inv)) === 'back';
+            (sd === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_f).applyMatrix4(_inv));
     }
 
     /**
@@ -1651,10 +1657,15 @@ export class ItemSystem {
             if (this._stashT) this._stashT.left = this._stashT.right = 0;
             return;
         }
+        // One reach is one action. A still hand must leave the zone before it can put the pack straight back on.
+        if (this._packWaitAway) for (const side of ['left', 'right']) {
+            if (this._packWaitAway[side] && !this._packSpot(ch, side)) this._packWaitAway[side] = false;
+        }
         this._takeOff(dt, ch);
         this._stash(dt, ch);
         const bp = this.heldOf('backpack');
         if (!bp || (bp.item.shop && !bp.item.shop.paid)) { this._wearT = 0; this._wearWhy = null; return; }
+        if (this._packWaitAway?.[bp.side]) { this._wearT = 0; return; }
         if (this._packLocked() || this._packV > BACKPACK_WEAR.MAX_MOVE_V) { this._wearT = 0; return; }
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
@@ -1665,6 +1676,7 @@ export class ItemSystem {
         if (spot) this._wearT += dt; else this._wearT = 0;
         if (this._wearT < (spot === 'shoulder' ? BACKPACK_WEAR.T_SHOULDER : BACKPACK_WEAR.T)) { if (!spot && this._wearT === 0 && this._wearWhy !== 'far') { this._wearWhy = 'far'; handLog('рюкзак не надет: рука не у плеча и не за спиной'); } return; }
         this._wearT = 0; this._wearWhy = null;
+        (this._packWaitAway || (this._packWaitAway = {}))[bp.side] = true;
         const item = this.releaseHand(bp.side);
         this._packLockUntil = performance.now() + BACKPACK_WEAR.LOCK_MS;
         this.wear(item);

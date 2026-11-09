@@ -180,6 +180,7 @@ export function playerSnapshot(game) {
         ld: game.lastDeath ? [r2(game.lastDeath.x), r2(game.lastDeath.y), r2(game.lastDeath.z), game.lastDeath.t || 0] : undefined, // where I died last («Reperio», BodyFinder.js)
         pos: [r2(p.x), r2(p.y), r2(p.z)],
         hp: game.monster?.active ? game.monster.origHp : game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
+        dead: !!(game.combat?.dead || game.isDeadLocal) || undefined,
         mp: manaRules(game) ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
@@ -210,6 +211,7 @@ export function playerSnapshot(game) {
 /** Give a player their things back. */
 export function applyPlayerSnapshot(game, s) {
     if (!s) return;
+    const wasDead = !!s.dead || (Number.isFinite(s.hp) && s.hp <= 0);
     retireScrollsIn(s); // (the scrolls of health and of mana cells are gone from the game: an old one is an apple)
     game._playerRestored = true; // (a player of this world before: their own things, no starting gifts)
     if (s.look && typeof s.look === 'object' && game.character?.setLook) { // (the skin they began this world with — not the one picked in «Персонаж» since)
@@ -234,7 +236,7 @@ export function applyPlayerSnapshot(game, s) {
     }
     if (game.books && Array.isArray(s.learned)) for (const k of s.learned) game.books.learned.add(k);
     if (Array.isArray(s.ld) && s.ld.slice(0, 3).every(Number.isFinite)) game.lastDeath = { x: s.ld[0], y: s.ld[1], z: s.ld[2], t: Number.isFinite(s.ld[3]) ? s.ld[3] : 0 };
-    if (Array.isArray(s.pos) && s.pos.every(Number.isFinite)) game.character.group.position.set(s.pos[0], s.pos[1] + 0.5, s.pos[2]);
+    if (!wasDead && Array.isArray(s.pos) && s.pos.every(Number.isFinite)) game.character.group.position.set(s.pos[0], s.pos[1] + 0.5, s.pos[2]);
     if (Number.isFinite(s.hp) && s.hp > 0) game.playerHP = Math.min(game.maxHP, s.hp);
     if (s.bonus) {
         game.bonus = { ...s.bonus };
@@ -280,6 +282,11 @@ export function applyPlayerSnapshot(game, s) {
         if (Number.isFinite(s.mp) && s.mp >= 0) c.fatigue = Math.min(c.maxFatigue || s.mp, s.mp);
         c._hudKey = '';
     } else if (manaRules(game) && Number.isFinite(s.mp) && s.mp >= 0) c.fatigue = Math.min(c.maxFatigue || s.mp, s.mp); // (Creative with a finite mana: the mana left)
+    // Leaving/rejoining on the death screen must use the same bed/start respawn, never revive at the corpse's coordinates.
+    if (wasDead) {
+        if (game.active && game.respawn) game.respawn();
+        else game._respawnAfterRestore = true;
+    }
 }
 
 /**

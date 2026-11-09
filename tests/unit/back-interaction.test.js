@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { backAllowed, BACK_HOLD } from '../../src/game/BackInteraction.js';
-import { ItemSystem, BACKPACK_WEAR } from '../../src/game/Items.js';
+import { ItemSystem, BACKPACK_WEAR, backpackSpot } from '../../src/game/Items.js';
 import { Inventory } from '../../src/game/Inventory.js';
 
 function pack(dom = 'right') {
@@ -67,4 +67,33 @@ test('running cancels taking off, putting on and stashing a backpack immediately
     A._wear(0.05, ch);
     assert.equal(A._wearT, 0); assert.equal(A._offT, 0);
     assert.equal(A._stashT.left, 0); assert.equal(A._stashT.right, 0);
+});
+
+test('lowered hands cannot touch the backpack even when depth tracking puts them slightly behind the torso', () => {
+    for (const sign of [-1, 1]) for (const z of [0.12, 0.3, 0.6, 0.9]) {
+        assert.equal(backpackSpot(new THREE.Vector3(sign, -1.2, z), new THREE.Vector3(-sign, -1.2, z), new THREE.Vector3(sign * 0.7, 0.5, 0)), null);
+    }
+});
+
+for (const magic of [false, true]) test(`one reach cannot repeatedly remove and wear a backpack while the hand stays still (magic: ${magic})`, () => {
+    const A = Object.create(ItemSystem.prototype), group = new THREE.Group();
+    const hands = { right: new THREE.Vector3(0.8, 0.2, 0.6), left: new THREE.Vector3(-1, -1.2, -0.3) };
+    const right = new THREE.Object3D(), left = new THREE.Object3D();
+    right.position.set(0.7, 0.5, 0); left.position.set(-0.7, 0.5, 0); group.add(right, left);
+    const ch = { group, rightArmAnchor: right, leftArmAnchor: left, getHandWorldPosition: (s, v) => v.copy(hands[s]) };
+    A.game = { character: ch, currentPose: {}, scene: new THREE.Scene(), inventory: { setExtraSlots() {} }, hud: {} };
+    A.worn = { backpack: { item: { kind: 'backpack', magic }, model: new THREE.Group() } };
+    A.held = { right: null, left: null }; A._stash = () => {}; A._packLocked = () => false;
+    A.takeIntoHand = (item, side) => { A.held[side] = { item, side }; return true; };
+    A.heldOf = () => A.held.right;
+    A.releaseHand = side => { const item = A.held[side].item; A.held[side] = null; return item; };
+    let worn = 0; A.wear = () => { worn++; };
+    A._wear(1.3, ch);
+    assert.equal(A.worn.backpack, null); assert.ok(A.held.right);
+    for (let i = 0; i < 100; i++) A._wear(0.1, ch);
+    assert.equal(worn, 0, 'a still hand cannot automatically wear it again after the cooldown');
+    hands.right.set(1, -1.2, 0.3); A._wear(0.1, ch);
+    hands.right.set(0.8, 0.2, 0.6); A._wear(0.9, ch);
+    assert.equal(worn, 0, 'the deliberate new reach still requires the full hold');
+    A._wear(0.11, ch); assert.equal(worn, 1);
 });

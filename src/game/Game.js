@@ -55,6 +55,7 @@ import { HandsLog } from './HandsLog.js';
 import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID, WARD_PEDESTAL_ID } from './BookBirds.js';
 import { RunningBook } from './RunningBook.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
+import { startRespawn } from './RespawnSpot.js';
 import { Quake } from './Quake.js';
 import { Swimming } from './Swimming.js';
 import { ItemSystem } from './Items.js';
@@ -3800,9 +3801,9 @@ export class Game {
         } else {
             if (this.config.map && this.world.mapResult?.playerSpawn) p.copy(this.world.mapResult.playerSpawn);
             else {
-                const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 14;
-                p.x = Math.cos(a) * d;
-                p.z = Math.sin(a) * d;
+                const spot = startRespawn(this.lastDeath || p);
+                p.x = spot.x;
+                p.z = spot.z;
             }
             p.y = this.collision.groundY(p.x, p.z) + 2.5;
             if (home?.gone) this.hud.setVoice('🛏️ Ваша кровать разрушена — вы возродились в обычном месте', true);
@@ -4303,6 +4304,7 @@ export class Game {
             if (!this._playerRestored && this.inventory.coins() === 0) { this.inventory.purse.add(100); this.inventory._render?.(); }
         }
         this.heroApply.start(); // (Creative: the mana cells, the armour and robe, the dark level… from the world's settings)
+        if (this._respawnAfterRestore) { this._respawnAfterRestore = false; this.respawn(); }
         this.prewarm(); // (already done on the loading screen — prewarmAsync — then this does nothing)
         this.lastTime = performance.now(); // (the shaders compiled behind the loading screen are not the first frame's time)
         // The microphone listens all game long: shield (arm forward), water

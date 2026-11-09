@@ -38,7 +38,8 @@ import { MANA, DUEL_MASTERY } from './Mana.js';
 export const LEGACY = {
     GLOW_R: 40, // m: golden sparks over the owner's body when they are this near
     RANGE: 16, // m: «Give Me My Power» reaches the skeleton this far
-    CONE: 0.35, // rad: … the hand pointed this close to it
+    CONE: 0.6, // rad: aim toward the body, with room for natural hand tracking error
+    AIM_RADIUS: 0.9, // m: the whole lying body, not a single point at its centre
 };
 
 /** Who I am for my legacy (the lasting player id; a single player — 'me'). */

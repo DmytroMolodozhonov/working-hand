@@ -800,7 +800,8 @@ export class NetSync {
 
     /** I'm back in the game. */
     respawned() {
-        this.net.send({ t: 'prespawn', by: this.me }, true);
+        const g = this.game, p = g.character.group.position;
+        this.net.send({ t: 'prespawn', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], ry: r3(g.character.group.rotation.y) }, true);
     }
 
     /** «Total Destruction» of mine begins at `p`: every computer shakes and brings down the same blocks. */
@@ -1449,7 +1450,16 @@ export class NetSync {
             }
             case 'prespawn': {
                 const r = g.remotes.get(m.by);
-                if (r) { r.setDead(false); r.hp = null; g.hud.notify?.(`✨ ${r.name} возродился`); }
+                if (r) {
+                    // A slow next pose must never reveal the living avatar at its old death position.
+                    if (arr(m.p, 3)) {
+                        r.position.set(m.p[0], m.p[1], m.p[2]);
+                        r.target = null; r._ppOk = false; r.vel?.set(0, 0, 0);
+                        r.ship = null;
+                        if (Number.isFinite(m.ry)) r.character.group.rotation.y = m.ry;
+                    }
+                    r.setDead(false); r.hp = null; g.hud.notify?.(`✨ ${r.name} возродился`);
+                }
                 break;
             }
             case 'bite': if (this.net.isHost) break; g.zombieHitsMe({ x: +m.dx || 0, z: +m.dz || 0 }); break;
