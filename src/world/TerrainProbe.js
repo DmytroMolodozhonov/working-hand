@@ -15,7 +15,9 @@ export function terrainProbe(g, phase = 1) {
     const lines = [], put = (kind, data) => lines.push(prefix + kind + ' ' + JSON.stringify(data).slice(0, 1050));
     put('мир', { mode: g.config?.mode, gen: g.gen, seed: d.seed, saved: !!g.config?.saved, savedVersion: g.config?.saved?.version,
         at: [p.x, p.y, p.z].map(round), lush: d.lush, slopes: d.slopes, seabed: d.seabed, seaY: UNDERSEA.y.value,
-        ultra: ULTRA.on.value, wet: round(ULTRA.wet.value), sea: round(g.sea?.s?.(p.x, p.z)), contextLost: g.renderer?.getContext?.().isContextLost() });
+        ultra: ULTRA.on.value, wet: round(ULTRA.wet.value), sea: round(g.sea?.s?.(p.x, p.z)), contextLost: g.renderer?.getContext?.().isContextLost(),
+        workers: t._workers?.length || 0, queued: t._queue?.length, local: t._local?.length,
+        rebuilding: t._rebuilding?.size, rebuilt: t._rebuilt?.length, dirty: d.dirtyChunks?.size });
     const samples = [];
     for (const [dx, dz] of [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4]]) {
         const x = Math.round(p.x + dx), z = Math.round(p.z + dz), cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
@@ -38,7 +40,8 @@ export function terrainProbe(g, phase = 1) {
             if (pat) patterns.add(round(pat.getX(k))); if (sky) skies.add(round(sky.getX(k)));
         }
         const program = g.renderer?.properties?.get(mat)?.currentProgram;
-        put('меш', { key: chunkKey(cx, cz), visible: mesh.visible, material: mat.type, vertexColors: mat.vertexColors, color: hex(mat.color),
+        put('меш', { key: chunkKey(cx, cz), visible: mesh.visible, groupVisible: t.group?.visible,
+            pending: t._rebuilding?.has(chunkKey(cx, cz)), material: mat.type, vertexColors: mat.vertexColors, color: hex(mat.color),
             keyShader: mat.customProgramCacheKey?.().slice(0, 100), vertices: geo.getAttribute('position')?.count, colors: color?.count,
             rgb: rgb.slice(0, 5), patterns: [...patterns], sky: [...skies], attributes: program ? Object.keys(program.getAttributes()) : null,
             runnable: program?.diagnostics?.runnable });

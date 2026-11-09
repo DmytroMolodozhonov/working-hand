@@ -311,8 +311,10 @@ export class Terrain {
         this._floraDone.length = 0;
         this._siteAsked.clear();
         for (const key of this._rebuilding.keys()) this.data.dirtyChunks.add(key); // (made here instead)
+        for (const m of this._rebuilt) this.data.dirtyChunks.add(m.key); // replies not installed yet still own empty shells
         this._rebuilding.clear();
         this._rebuilt.length = 0;
+        this._local.length = 0; // the next plan puts these back in the ordinary queue
         this._center = null; // (plan again: what was being made is wanted again)
     }
 
@@ -578,7 +580,8 @@ export class Terrain {
 
     /** Nothing left to build, in flight or to merge: the ground around is all shown (Game.readyToShow — the loading screen may close). */
     settled() {
-        return !this._queue.length && !this._inFlight.size && !this._done.length && !this._local.length;
+        return !this._queue.length && !this._inFlight.size && !this._done.length && !this._local.length
+            && !this._rebuilding.size && !this._rebuilt.length;
     }
 
     /** Build every chunk around a point right now (loading screen). */
@@ -602,10 +605,20 @@ export class Terrain {
         const total = this._queue.length || 1;
         let t0 = performance.now();
         if (this._workers) {
+            // Meshes made at the initial spawn may have been changed by restoreWorld before this flush.
+            for (const key of this.data.dirtyChunks) {
+                const entry = this.meshes.get(key);
+                if (entry && !this._rebuilding.has(key)) {
+                    this.data.dirtyChunks.delete(key);
+                    this._sendRebuild(key, entry);
+                }
+            }
             // (every worker busy at once: the loading screen is over sooner; the page breathes meanwhile)
-            while (this._workers && (this._queue.length || this._inFlight.size || this._done.length || this._local.length)) {
+            while (this._workers && !this.settled()) {
                 this._dispatch(this._workers.length * 4);
                 while (this._done.length) this._applyBuilt(this._done.shift());
+                // Restored edits use rebuild jobs too. An entry in meshes is only an empty shell until its reply is applied.
+                while (this._rebuilt.length) this._applyRebuilt(this._rebuilt.shift());
                 this._buildLocal(performance.now(), 30);
                 onProgress(Math.min(1, this.meshes.size / (total + 1)));
                 await new Promise((r) => setTimeout(r, 4));
@@ -621,6 +634,12 @@ export class Terrain {
                 await new Promise((r) => setTimeout(r, 0));
                 t0 = performance.now();
             }
+        }
+        // Workers may have failed with an empty shell already in meshes: _plan cannot queue that key again.
+        for (const key of this.data.dirtyChunks) {
+            const entry = this.meshes.get(key);
+            if (entry) this._build(entry);
+            if (performance.now() - t0 > 40) { await new Promise((r) => setTimeout(r, 0)); t0 = performance.now(); }
         }
         this.data.dirtyChunks.clear();
         onProgress(1);
