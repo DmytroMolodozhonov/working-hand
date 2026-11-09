@@ -190,6 +190,7 @@ import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
+import { terrainProbe } from '../world/TerrainProbe.js';
 import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
@@ -3932,6 +3933,11 @@ export class Game {
         if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera);
         this.darkFog?.end();
         this.seeFx?.render(); // («Visible Godi»: the cloud over the picture — nothing when the spell is off)
+        if (this.active && this.config.mode !== 'test' && (this._terrainProbeN || 0) < 2 && performance.now() >= (this._terrainProbeAt || 0)) {
+            this._terrainProbeN = (this._terrainProbeN || 0) + 1; this._terrainProbeAt = performance.now() + 15000;
+            try { for (const line of terrainProbe(this, this._terrainProbeN)) allLog('Мир', line); }
+            catch (e) { allLog('Мир', 'Земля диагностика v1: ' + (e?.message || e)); }
+        }
     }
 
     /**

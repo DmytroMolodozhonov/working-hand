@@ -1,7 +1,7 @@
 /**
  * Builder.js — gathering resources and building with magic.
  *
- *   «Gather»            point a raised hand at a tree / stone / earth / leaves
+ *   «Gather»            point a raised hand at a tree / leaves / another allowed resource
  *                       (≤ 20 m): it comes apart and flies into a slot. A whole
  *                       tree gives 20 wood of its kind.
  *   «Create a Floor»    a block of the chosen resource appears where the hand
@@ -43,7 +43,7 @@ const MAX_SPAN = 6; // cells from the first block in each direction
 const BUILD_TIME = 14; // s at most per spell
 const ICE_LIFE = 24 * 60; // s: ice buildings melt within a game day
 const WOOD_PER_TREE = 20;
-/** (Builder.gather) the ground: never gathered (sand still is — «Create a House» makes its glass of it) */
+/** The ground is never gathered; rock is rejected separately through resourceOf below. */
 const EARTH_BLOCKS = new Set(['DIRT', 'GRASS', 'SAND', 'SNOW', 'GRAVEL', 'FARMLAND', 'PATH', 'PLANET_GRASS', 'HELL_ASH'].map((k) => BLOCK[k]).filter((v) => v != null));
 const GATHER_RANGE = 20; // m: how far the hand may be from the tree / stone it gathers
 
@@ -94,7 +94,7 @@ export class Builder {
     gather() {
         const g = this.game;
         const h = this._hand();
-        if (!h) return '🪄 Поднимите руку и направьте её на дерево, камень, песок или листву — и скажите «Gather»';
+        if (!h) return '🪄 Поднимите руку и направьте её на дерево или листву — и скажите «Gather»';
         // Any tree (every kind, big and small): a spawn-area tree (drawn separately from the blocks) or a tree of
         // blocks — a trunk or a crown just beside the line of the hand counts too (a hand never points exactly)
         let cell = this._hitCell(h.o, h.d, GATHER_RANGE);
@@ -118,10 +118,11 @@ export class Builder {
             return null;
         }
         if (!cell || cell.type === BLOCK.AIR || cell.type === BLOCK.BEDROCK || cell.type === BLOCK.WATER || cell.type === BLOCK.ICE_SHAPE) {
-            return `🪄 Направьте руку на дерево, камень, песок или листву (не дальше ${GATHER_RANGE} м)`;
+            return `🪄 Направьте руку на дерево или листву (не дальше ${GATHER_RANGE} м)`;
         }
         // (the author 05.11: «Gather больше никогда не собирает землю» — the ground stays: dirt, grass, sand, snow, gravel, mud)
-        if (EARTH_BLOCKS.has(cell.type)) return '🌱 «Gather» не берёт землю — направьте руку на дерево, камень, песок или листву';
+        if (EARTH_BLOCKS.has(cell.type)) return '🌱 «Gather» не берёт землю — направьте руку на дерево или листву';
+        if (resourceOf(cell.type) === BLOCK.STONE) return '🪨 «Gather» не берёт камень — направьте руку на дерево или листву';
         const data = this.data;
         if (isEnchanted(cell.type)) return '✨ Заколдованный камень — его не взять'; // (EnchantedStone.js: no spell takes it)
         // (a house's sphere of protection: only its owner and the ones let in take its blocks — HouseWards.js)

@@ -63,3 +63,17 @@ test('Gather with no tree near the line: a clear hint (no crash)', () => {
     assert.match(g.builder.gather() || '', /Направьте руку/);
     assert.deepEqual(added.filter((a) => a[0] === BLOCK.WOOD), []);
 });
+
+test('Gather leaves stone and earth in place, with no resources credited', () => {
+    for (const type of [BLOCK.STONE, BLOCK.DEEPSTONE, BLOCK.PLANET_ROCK, BLOCK.PLANET_DARK, BLOCK.DIRT, BLOCK.GRASS, BLOCK.SAND, BLOCK.GRAVEL]) {
+        const { g, data, added } = setup();
+        data.set(8, G + 3, 0, type);
+        aim(g.builder, [0, G + 1.5, 0], [1, 0, 0]);
+        g.builder._hitCell = () => ({ x: 8, L: G + 3, z: 0, type, point: new THREE.Vector3(8, G + 1.5, 0) });
+        g.builder._treeOnRay = () => null;
+        g.livingTrees._treeNearRay = () => null;
+        assert.match(g.builder.gather(), /не берёт (камень|землю)/);
+        assert.equal(data.get(8, G + 3, 0), type, 'no hole in the ground');
+        assert.deepEqual(added, [], 'no resource credited');
+    }
+});
