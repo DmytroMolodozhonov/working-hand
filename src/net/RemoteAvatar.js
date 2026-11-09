@@ -128,6 +128,7 @@ export class RemoteAvatar {
 
     applyState(s) {
         this.target = s;
+        if (Number.isFinite(s.dlv)) this.blackLevel = Math.max(0, Math.min(100, s.dlv));
         const t = performance.now();
         (this._pk || (this._pk = [])).push(t); // (arrival times: the journal «Руки» — packets a second, the longest gap)
         if (this._pk.length > 64) this._pk.shift();

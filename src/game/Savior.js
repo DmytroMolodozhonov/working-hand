@@ -10,13 +10,14 @@
  *
  * «А если»: the killer dies / leaves the game / is far (FAR) / ten quiet minutes → he says a line, goes in a flash of light (no mercy given: he leaves, never forgives);
  * the killer is invisible → he knows where the player is (`_playerPos`), as any wizard of the world: a Saviour is not fooled by it; a Saviour already out → no second one;
- * a guest kills the wizards → the host counts them for his id, the Saviour comes at the guest; the host leaves → the Saviour is gone with the world (not saved);
+ * a guest kills the wizards → the host rolls by his own true black-magic level, the Saviour comes at the guest; the host leaves → the Saviour is gone with the world (not saved);
  * night / sleep / school lesson / arena duel kills (`quietKill`, practice) are not counted; the game saved → the counters of the days and of the stages are kept.
  */
 import * as THREE from 'three';
-import { SAVIOR, STAGES, stageOf, GX0, KillWatch, saviorComes, saviorLine, pickSpecial, dangerNow } from './SaviorRules.js';
+import { SAVIOR, STAGES, stageOf, GX0, VisitCooldown, saviorComes, saviorLine, pickSpecial, dangerNow } from './SaviorRules.js';
 import { turnToward, yawTo, FACE } from './FaceTarget.js';
 import { PVP, SPELL_COST } from './Combat.js';
+import { darkLevel } from './DarkMagic.js';
 import { FLIGHT } from './Flight.js';
 import { FX } from './WizardLife.js';
 
@@ -26,7 +27,7 @@ const _v = new THREE.Vector3(), _w2 = new THREE.Vector3();
 export class Savior {
     constructor(game) {
         this.game = game;
-        this.watch = new KillWatch();
+        this.watch = new VisitCooldown();
         this.v = null; // the Saviour out now
         this.foe = null; // his player
         this.stage = new Map(); // player id → the stage of the next Saviour (0, then 1 for good)
@@ -60,7 +61,7 @@ export class Savior {
     stageOf(id) { return stageOf(this.stage.get(id) || 0); }
     resting(id) { return this.days < (this.rest.get(id) || 0); }
 
-    // ------------------------------------------------------------ the count (host)
+    // ------------------------------------------------------------ each kill (host)
     /** (CastleLife._die) A wizard `victim` died by `by`. */
     noteKill(by, victim) {
         const L = this.life;
@@ -69,8 +70,9 @@ export class Savior {
         if (this.resting(by)) return; // (two game days of peace after the beating)
         const now = performance.now() / 1000;
         if (this.watch.resting(by, now)) return;
-        if (!this.watch.note(by, now, this.stageOf(by).kills)) return;
-        if (!saviorComes()) { this._note({ ev: 'roll-no', by }); return; }
+        const hero = by === this.game.localId || by === 'local' ? this.game.dark : { level: this.game.remotes?.get(by)?.blackLevel ?? this.game.sync?._states?.get(by)?.dark?.level ?? 0 };
+        const level = darkLevel(hero);
+        if (!saviorComes(level)) { this._note({ ev: 'roll-no', by, chance: level }); return; }
         this._spawn(by);
     }
 
@@ -345,7 +347,6 @@ export class Savior {
 
     /** The hero died: the counts of the dead hero are forgotten; a Saviour out goes. */
     playerDied(id) {
-        this.watch.forget(id);
         if (this.v && this.foe === id) this._leave(this.v, 'win');
     }
 

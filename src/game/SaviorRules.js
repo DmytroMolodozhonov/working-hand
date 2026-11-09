@@ -2,8 +2,8 @@
  * SaviorRules.js — «Волшебник-спаситель» (the author 08.11): pure rules, numbers and words (Savior.js plays them).
  *
  * The idea: a player who cuts down the wizards of the world meets one who has come to stop him.
- *   WHEN   10 wizards killed by one player within 2 minutes → a 50 % roll → the Saviour comes (the killing of anybody but wizards does not count).
- *   AFTER  the player beat him: two game days he cannot come at all; then — only by chance (50 %) and only after FIVE wizards killed — a new Saviour: 1500 mana, a little
+ *   WHEN   each wizard killed gives a separate roll: the killer’s actual black-magic level, in percent (0…100). No kill-count window.
+ *   AFTER  the player beat him: two game days he cannot come at all; then — the same per-kill chance by black-magic level — a new Saviour: 1500 mana, a little
  *          different (another name, stronger dome and ward, quicker), the same in principle. Beaten again: the next one is again of 1500 (STAGES[1]), again after two days.
  *   WHO    a white wizard in white robes (the «white sage» robe of the tower's Head, TowerUniforms m2): 700 mana, fast, flies (hovers and sweeps over the ground),
  *          holds «Protection Maxima» well (the dome: more hits, longer, quicker again); his attacks are only the BLUE spells (the author 08.11: «даст он не использует, только синие»):
@@ -22,9 +22,6 @@ import { createRng } from '../core/math.js';
 import { SPELL_COST } from './Combat.js';
 
 export const SAVIOR = {
-    WINDOW_S: 120, // s: the kills are counted within this time …
-    KILLS: 10, // … this many wizards killed by one player
-    CHANCE: 0.5, // the roll
     COOLDOWN_S: 600, // s: a player is not visited again so soon (and only one Saviour in the world at a time)
     MANA: 700, // (the first Saviour; the later ones: STAGES[1])
     REST_DAYS: 2, // game days after the player beat him: no Saviour for him
@@ -63,10 +60,10 @@ export const SAVIOR = {
     LINE_GAP_S: 9, // s between two lines
 };
 
-/** The Saviours by stage: 0 — the first (700 mana, after 10 killed), 1 — every later one (1500 mana, after 5 killed). */
+/** The Saviours by stage: 0 — the first (700 mana), 1 — every later one (1500 mana); the same per-kill probability at both stages. */
 export const STAGES = [
-    { n: 0, mana: 700, kills: 10, hp: 60, ward: 40, speed: 1.9, dome: { hits: 8, t: 11, cd: 9 }, names: [['Бирмолиус Храбрый', 'Бирмолия Храбрая']] },
-    { n: 1, mana: 1500, kills: 5, hp: 90, ward: 70, speed: 2.15, dome: { hits: 12, t: 14, cd: 7 }, names: [['Лучезар Сияющий', 'Лучезара Сияющая']] },
+    { n: 0, mana: 700, hp: 60, ward: 40, speed: 1.9, dome: { hits: 8, t: 11, cd: 9 }, names: [['Бирмолиус Храбрый', 'Бирмолия Храбрая']] },
+    { n: 1, mana: 1500, hp: 90, ward: 70, speed: 2.15, dome: { hits: 12, t: 14, cd: 7 }, names: [['Лучезар Сияющий', 'Лучезара Сияющая']] },
 ];
 export const stageOf = (n) => STAGES[Math.min(1, Math.max(0, n | 0))];
 
@@ -91,26 +88,16 @@ export const SAVIOR_LINES = {
     leave: ['Я не пощадил бы тебя. Радуйся, что ушёл.'],
 };
 
-/** Kills of wizards by one player, counted in a sliding window (pure; `now` in seconds). */
-export class KillWatch {
-    constructor() { this.by = new Map(); this.until = new Map(); }
-    /** A wizard killed by `id` at `now` → true when the tenth within the window is reached (and the window is then emptied). */
-    note(id, now, need = SAVIOR.KILLS) {
-        const list = (this.by.get(id) || []).filter((t) => now - t <= SAVIOR.WINDOW_S);
-        list.push(now);
-        this.by.set(id, list);
-        if (list.length < need) return false;
-        this.by.set(id, []);
-        return true;
-    }
-    /** Is this player on rest (just visited)? */
-    resting(id, now) { return now < (this.until.get(id) || 0); }
+/** Rest between visits; there is no kill counter or time window. */
+export class VisitCooldown {
+    constructor() { this.until = new Map(); }
+    resting(id, now) { for (const [key, until] of this.until) if (until <= now) this.until.delete(key); return now < (this.until.get(id) || 0); }
     rest(id, now) { this.until.set(id, now + SAVIOR.COOLDOWN_S); }
-    forget(id) { this.by.delete(id); }
+    forget(id) { this.until.delete(id); }
 }
 
-/** The roll (rng 0…1) once the tenth kill is made and the player is not on rest. */
-export const saviorComes = (rng = Math.random) => rng() < SAVIOR.CHANCE;
+/** Each wizard killed: the true black-magic level is the percentage chance, regardless of skin whitening. */
+export const saviorComes = (level, rng = Math.random) => rng() < Math.max(0, Math.min(100, Number(level) || 0)) / 100;
 
 /** A line of a kind, never the same twice in a row (`last`: the previous one). */
 export function saviorLine(kind, last = null, rng = Math.random) {
