@@ -3167,6 +3167,7 @@ export class CastleLife {
         const R = WANDER.WITNESS_R;
         for (const o of this.byId.values()) {
             if (o === dead || o.dead || Math.abs(o.x - pos.x) > R || Math.abs(o.z - pos.z) > R) continue;
+            if (o.wizard && !o.sleep && this._sees(o, pos) && this._knows(o, by, pos)) this.wizards?.seals?.witness(by, [o]);
             if (this._wClass(o) !== 'commoner' || Math.hypot(o.x - pos.x, o.z - pos.z) > R || !this._sees(o, pos)) continue;
             if (o.party) this.game.travelers?.alert?.(o.party, null);
             this.wanderAttacked(o, by, 'witness');
@@ -3526,6 +3527,7 @@ export class CastleLife {
             if (via) for (const w of saw) this._defend(w, src, opts);
             return false;
         }
+        if (killed) this.wizards?.seals?.witness(by, witnesses);
         const was = cs.hostile.get(by) > Date.now();
         cs.hostile.set(by, Date.now() + HOSTILE_MS);
         this.aud?.deed(cs, by, killed ? 'slay' : victim ? 'hurt' : 'rob', witnesses, { victim }); // (the player's audacity in this place: those who saw it and knew him — Audacity.js)
@@ -4307,6 +4309,7 @@ export class CastleLife {
         const wasDead = st.kingDead;
         st.owner = s.owner || null; st.ownerName = s.ownerName || null; st.kingDead = !!s.kingDead;
         st.killed = new Set(s.killed || []);
+        if (s.sealLoot && typeof s.sealLoot === 'object') st.sealLoot = s.sealLoot;
         // (the king's friends: told to everybody; if mine changed, I am told too)
         const myBefore = levelOf(st.ranks, this.game.localId);
         st.ranks = s.ranks && typeof s.ranks === 'object' ? s.ranks : {};
@@ -4322,9 +4325,9 @@ export class CastleLife {
 
     snapshot() {
         const out = {};
-        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length || (s.reb && s.reb.v > 0)) {
+        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || Object.keys(s.sealLoot || {}).length || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length || (s.reb && s.reb.v > 0)) {
                 const cs = this.castles.get(id);
-                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.reb && s.reb.v > 0 ? { reb: s.reb } : {}), ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
+                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(Object.keys(s.sealLoot || {}).length ? { sealLoot: s.sealLoot } : {}), ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.reb && s.reb.v > 0 ? { reb: s.reb } : {}), ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
             }
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;

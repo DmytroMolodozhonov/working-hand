@@ -200,3 +200,10 @@ export const GRIP_LINES = (() => {
         ...[-1, 1].flatMap((k) => [0.25, 0.42, 0.56].map((x) => [pt(k * x, 0.27), pt(k * (x + 0.07), 0.1)])),
         ...chain(0, 1), ...chain(0, 15)];
 })();
+
+/** A closed tomb with crossed bars and its small lock: the white seal of a dead black mage. */
+export const SOUL_SEAL_LINES = [
+    ...loop(0, 3, 6, 10, 13), ...chain(2, 9), ...chain(14, 7),
+    [[-0.18, 0.12], [0.18, 0.12], [0.18, -0.2], [-0.18, -0.2], [-0.18, 0.12]],
+    [[0, 0.12], [0, 0.35]],
+];

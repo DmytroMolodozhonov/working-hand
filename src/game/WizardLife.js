@@ -25,6 +25,7 @@ import { DANGERS } from './Danger.js';
 import { staffVillage, crowdVillage, villageTrip } from './WizVillages.js';
 import { reactLag, reactLagText, knowsFirefighting, canDome, SHIELD, HUNT, huntRole, huntStart, huntStep, huntLeash, seededRng, LONERS, npcSweeps, SMOKE, MAGIC_REACT, reaction, chooseShield, windShield, WIND_SHIELD } from './WizardMind.js';
 import { hashString } from '../core/math.js';
+import { SoulSeal } from './SoulSeal.js';
 import { WizardBlast } from './WizardBlast.js';
 import { WizardHome } from './WizardHome.js';
 import { knowsFlight } from './WizardMind.js';
@@ -77,6 +78,7 @@ export class WizardLife {
         this.fight = new WizardFight(this); // (a fight: duel spells, shields, the circle's plans)
         this.home = new WizardHome(this);
         this.blasts = new WizardBlast(this);
+        this.seals = new SoulSeal(this);
         this._dayT = 0;
         this._practiceT = 0;
     }
@@ -503,6 +505,7 @@ export class WizardLife {
             v.practice.t -= dt;
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;
         }
+        if (this.seals?.think(v, dt)) return true;
         if (this.home?.step(v, dt)) return true;
         if (v.lostWand) return this._fetchWand(v, dt);
         // a reaction that waits for his wits (WizardMind.REACT_LAG): a beginner stands lost a few seconds, the Master at once
@@ -586,6 +589,7 @@ export class WizardLife {
                 this._dayT = 5;
                 for (const cs of L.castles.values()) if (cs.awake && isWizHome(cs.def) && cs.wizNight !== g.isNight && !(cs.wizAlarmUntil > Date.now())) { cs.wizNight = g.isNight; this._staff(cs); }
             }
+            this.seals.update(dt);
             this._practice(dt, wizards);
             this.fight.update(dt); // (the circles after a foe: plans and roles)
             const night = g.isNight;
@@ -596,7 +600,7 @@ export class WizardLife {
                 if (v.practice) f |= v.practice.bits;
                 if (v.job === 'brew' && v.mode === 'work') f |= FX.BREW;
                 if (v.job === 'teach' && v.sparkT > 0) { v.sparkT -= dt; f |= FX.SPARK; }
-                if (v.prep || v.care?.wand) f |= FX.CAST; // (saying a spell: the wand glows — seen by all, before the charge flies)
+                if (v.prep || v.care?.wand || v.soulTask?.mark) f |= FX.CAST; // (saying a spell: the wand glows — seen by all, before the charge flies)
                 if (v.noWand) f = FX.NOWAND; // (no wand in the hand: no Lumos, no magic of the hand — seen by all)
                 f |= this._smoke(v, dt);
                 v.fx = (v.fx & (FX.SHIELD | FX.DOME | FX.BLINK)) | f;

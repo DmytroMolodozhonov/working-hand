@@ -26,6 +26,9 @@
  * to late joiners and kept in the world save); every computer draws them.
  */
 
+import { LegacyClaim } from './LegacyClaim.js';
+import { markSoulSeal } from './SoulSealMark.js';
+import { SEALED_WHY } from './SoulSealRules.js';
 import { CorpseRagdoll, playerCorpseRig } from './CorpseRagdoll.js';
 import { apply as ragApply, capture as ragCapture } from './RagdollPose.js';
 import * as THREE from 'three';
@@ -232,6 +235,7 @@ function crushLook(pivot) {
 export class DeathSystem {
     constructor(game) {
         this.game = game;
+        this.claims = new LegacyClaim(this);
         this.bodies = new Map(); // id -> {id, k, who, name, x, y, z, yaw, age, look, role, model, bones}
         this.falling = new Map(); // id -> {b, vel, gentle}: a body let go by «Левиоса» falls to the ground
         // body makers: (b) => {pivot, len} or null — one per kind of creature
@@ -246,6 +250,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ players
     /** My player was killed: the body stays, everything drops (not in creative), the hooks run. */
     playerDied(byId = null, text = '', legacy = null) {
+        this.claims.cancel();
         const g = this.game;
         const ch = g.character;
         const p = ch.group.position;
@@ -260,9 +265,10 @@ export class DeathSystem {
             const yaw = ch.group.rotation.y;
             let drops = this.takeEverything();
             if (how === 'annihilate') drops = drops.filter((d) => isGodGift(d));
-            this.scatter(drops, { x: p.x, y, z: p.z });
+            const equipment = this.scatter(drops, { x: p.x, y, z: p.z });
             if (how !== 'annihilate') {
                 const b = { id: 'p' + (g.localId || 'me') + '_' + Date.now().toString(36), k: 'p', who: g.localId || 'local', name: g.net?.name || null, x: p.x, y: how === 'burst' ? y : p.y, z: p.z, yaw, age: how === 'burst' ? DEATH.BODY_S : 0, look: g.config?.look || null };
+                b.equipment = equipment;
                 if (legacy) b.lg = legacy; // (all the hero grew: theirs to take back — Legacy.js)
                 b.mh = Math.round((g.maxHP || 20) + (legacy?.hp || 0)); // (wipeHero has already taken the grown part off: it is in the legacy) // (his maximum health and whether black magic killed him: the rite of monstrous vitality — VitalityRules.js)
                 if (DARK_DEATH.has(g._deathKind)) b.dk = 1;
@@ -311,13 +317,15 @@ export class DeathSystem {
 
     /** Things fall around a spot (a weapon lies as a real weapon; the rest are world items). */
     scatter(drops, at) {
+        const equipment = { items: [], weapons: [] };
         drops.forEach((d, i) => {
             const o = dropSpot(i, drops.length);
             const p = new THREE.Vector3(at.x + o.x, at.y + 1.1, at.z + o.z);
             const vel = new THREE.Vector3(o.x * 0.8, 1.5, o.z * 0.8);
-            if (d.kind === 'weapon') this._dropWeapon(d, p, Math.atan2(o.x, o.z));
-            else this.dropItem(d, p, vel);
+            if (d.kind === 'weapon') equipment.weapons.push(this._dropWeapon(d, p, Math.atan2(o.x, o.z)).id);
+            else { this.dropItem(d, p, vel); if (d.uid) equipment.items.push(d.uid); }
         });
+        return equipment;
     }
 
     /** One thing into the world: the host spawns it; a guest throws it to the host. */
@@ -379,7 +387,8 @@ export class DeathSystem {
         // (a sword knocked out by «Экспеллиармус», or just fallen from the hand: not a second one)
         const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, dark: v.wizard && darkMageLevel(v.id, v.role === 'wanderer' ? 'wanderer' : 'lone') > 0, darkHead: v.wizard && v.dark > 0 && (v.role === 'wanderer' || (v.cs?.def?.kind === 'hamlet' && v.cs.def.people?.length === 1)), coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
         // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
-        const steel = g.armor?.villagerLoot(v) || []; // (none: the armour stays on the body — «Disarmor» takes it off — Armor.deadArmor)
+        const steel = g.armor?.villagerLoot(v) || [];
+        drops.push(...(g.soulSeal?.takeLoot(v) || [])); // (none: the armour stays on the body — «Disarmor» takes it off — Armor.deadArmor)
         drops.push(...steel);
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
@@ -438,10 +447,11 @@ export class DeathSystem {
 
     // ------------------------------------------------------------ bodies
     /** A body appears (its model from `from` — a live model to copy — or made by its kind's maker). */
-    addBody(b, from = null) {
+    addBody(b, from = null, restored = false) {
         if (this.bodies.has(b.id)) return this.bodies.get(b.id);
         b.age = b.age || 0;
         this.bodies.set(b.id, b);
+        this.game.soulSeal?.onBody(b, restored);
         if (bodyStage(b.age) === 'body') this._makeBody(b, from);
         return b;
     }
@@ -467,6 +477,7 @@ export class DeathSystem {
         g.scene.add(b.model);
         // (one shape per material, its parts moved by the video card — FarShape: a body was a whole person's ~15 parts;
         // after a battle 40–60 bodies were the most of the picture's 2000+ draws in the author's journal)
+        markSoulSeal(b);
         b.model.userData.farRadius = 4;
         b.one = new FarShape(b.model, { cache: false });
         b.one.set(true);
@@ -575,6 +586,7 @@ export class DeathSystem {
         pivot.rotation.y = b.yaw || 0;
         g.scene.add(pivot);
         b.bones = pivot;
+        markSoulSeal(b);
     }
 
     removeBody(id, dust = true) {
@@ -834,10 +846,16 @@ export class DeathSystem {
         return best;
     }
 
+    sealBody(b, seal) {
+        b.seal = seal; markSoulSeal(b);
+    }
+
     /** I take my legacy back from my body («Give Me My Power»): everybody is told the body is empty now. */
-    takeLegacy(b) {
+    takeLegacy(b, approved = false) {
         const g = this.game;
         if (!b?.lg || b.lg.owner !== legacyOwner(g)) return false;
+        if (b.seal) { g.hud?.setVoice?.(SEALED_WHY, true); return false; }
+        if (g.net?.isClient && !approved) { this.claims.request(b); return false; }
         const rec = b.lg;
         delete b.lg;
         absorbLegacy(g, rec);
@@ -850,7 +868,8 @@ export class DeathSystem {
     /** (network) Its owner took the legacy from this body. */
     onNetLegacy(id, by = null) {
         const b = this.bodies.get(id);
-        if (b) { delete b.lg; if (by) this.legacyShow(b, by); }
+        if (!this.claims.clear(id, by)) return false;
+        delete b.lg; if (by) this.legacyShow(b, by); return true;
     }
 
     /**
@@ -988,25 +1007,26 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, arm: b.arm || undefined, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined, cp: b.doll?.pack() || b.cp || undefined, moved: b.moved || undefined, rp: b.rp ? b.rp.map((x) => Math.round(x * 1000) / 1000) : undefined };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, arm: b.arm || undefined, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined, seal: b.seal || undefined, witnesses: b.witnesses || undefined, equipment: b.equipment || undefined, cp: b.doll?.pack() || b.cp || undefined, moved: b.moved || undefined, rp: b.rp ? b.rp.map((x) => Math.round(x * 1000) / 1000) : undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */
-    onNetBody(w) {
+    onNetBody(w, restored = false) {
         if (!w || typeof w.id !== 'string' || this.bodies.has(w.id)) return;
         const b = { ...w, x: +w.x || 0, y: +w.y || 0, z: +w.z || 0, yaw: +w.yaw || 0, age: Math.max(0, +w.age || 0) };
         if (b.cp && b.k === 'v') b.moved = true;
         const r = b.k === 'p' && this.game.remotes?.get(b.who);
-        this.addBody(b, r ? r.character.group : null);
+        this.addBody(b, r ? r.character.group : null, restored);
     }
 
     snapshot() { return [...this.bodies.values()].map((b) => this._wire(b)); }
 
     restore(list) {
-        for (const w of list || []) this.onNetBody(w);
+        for (const w of list || []) this.onNetBody(w, true);
     }
 
     dispose() {
+        this.claims.cancel();
         for (const id of [...this.bodies.keys()]) this.removeBody(id, false);
     }
 

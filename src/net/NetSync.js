@@ -153,6 +153,7 @@ export class NetSync {
     }
 
     _onLeave(id, fromPresence = false) {
+        this.game.death?.claims?.leave(id);
         if (!fromPresence) this.presence.leave(id, performance.now());
         this.looks?.delete(id);
         this.game.waterPart?.stopBy(id);
@@ -789,9 +790,9 @@ export class NetSync {
     }
 
     /** I took my legacy back from my body (Legacy.js): it is empty now for everybody. */
-    bodyLegacy(id) {
+    bodyLegacy(id, by = this.me) {
         this._mineSoon();
-        this.net.send({ t: 'dblg', id }, true);
+        this.net.send({ t: 'dblg', id, by });
     }
 
     /** A body carried by my «Левиоса» (air) / where it landed. */
@@ -1432,8 +1433,19 @@ export class NetSync {
                 if (r && Array.isArray(m.h)) g.bleeding?.addCut(r.character, m.h.slice(0, 3).map((v) => Math.max(-3, Math.min(3, Number(v)))));
                 break;
             }
+            case 'sseal': {
+                if (m.from === 'H' && !this.net.isHost && typeof m.id === 'string' && m.seal) { const b = g.death?.bodies.get(m.id); if (b) g.death.sealBody(b, m.seal); }
+                break;
+            }
             case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
-            case 'dblg': if (typeof m.id === 'string') g.death?.onNetLegacy(m.id, m.from || null); break; // (the light flows to him on every computer)
+            case 'dlreq': if (this.net.isHost) g.death?.claims.host(m); break;
+            case 'dlack': if (!this.net.isHost) g.death?.claims.reply(m); break;
+            case 'dblg': {
+                if (typeof m.id !== 'string') break;
+                if (this.net.isHost) { if (g.death?.onNetLegacy(m.id, m.from)) this.bodyLegacy(m.id, m.from); }
+                else if (m.from === 'H') g.death?.onNetLegacy(m.id, m.by || null);
+                break;
+            } // (the light flows to him on every computer)
             case 'bmv': if (typeof m.id === 'string') g.death?.onNetMove(m); break;
             case 'pdead': {
                 if (m.by === this.me) break;

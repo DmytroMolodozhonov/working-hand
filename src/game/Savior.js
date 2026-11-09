@@ -28,6 +28,7 @@ export class Savior {
     constructor(game) {
         this.game = game;
         this.watch = new VisitCooldown();
+        this.sealing = false;
         this.v = null; // the Saviour out now
         this.foe = null; // his player
         this.stage = new Map(); // player id → the stage of the next Saviour (0, then 1 for good)
@@ -113,6 +114,7 @@ export class Savior {
 
     _prepare(v, st, by) {
         const g = this.game;
+        this.sealing = false;
         this.air = null; this.airCd = SAVIOR.AIR_CD * 0.5; this.hurtLog.length = 0;
         this.v = v; this.foe = by; this.quiet = 0; this.lineT = 2.2; this.lastLine = null;
         this.said = { arrive: false, attack: false, hurt: false, dome: 0 };
@@ -144,6 +146,8 @@ export class Savior {
         if (!v) return;
         if (!this.auth) return;
         if (v.dead || !this.life.byId.has(v.id)) { this._over(v); return; }
+        if (v.soulTask) return;
+        if (this.sealing) { this.sealing = false; this._leave(v, 'win'); return; }
         const L = this.life, pp = L._playerPos(this.foe);
         this.lineT -= dt;
         if (!pp) { this._leave(v, 'win'); return; } // (the player is dead / gone: he has done what he came for)
@@ -220,7 +224,7 @@ export class Savior {
         try { return this._drive(v, dt); } catch (e) { this._fail('drive', e); this.air = null; return false; }
     }
     _drive(v, dt) {
-        if (v !== this.v || !this.auth || v.dead) return false;
+        if (v !== this.v || !this.auth || v.dead || v.soulTask || this.sealing) return false;
         if (v.stunT > 0 || v.vy || v.lev || v.carriedBy) return false; // (thrown / stunned: the ordinary code — never a hovering stunned man)
         const L = this.life, g = this.game, F = L.wizards?.fight;
         const pp = L._playerPos(this.foe);
@@ -347,7 +351,12 @@ export class Savior {
 
     /** The hero died: the counts of the dead hero are forgotten; a Saviour out goes. */
     playerDied(id) {
-        if (this.v && this.foe === id) this._leave(this.v, 'win');
+        if (this.v && this.foe === id) {
+            if (this.game.soulSeal?.holdSavior(this.v, id)) {
+                this.sealing = true; this.v.fly = false; this.air = null; this.rocket = null; this.v.vy = -0.1; return;
+            }
+            this._leave(this.v, 'win');
+        }
     }
 
     // ------------------------------------------------------------ saving

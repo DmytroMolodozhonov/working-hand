@@ -13,7 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
-import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES, MURUS_LINES, GRIP_LINES } from './PentagramFigures.js';
+import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES, MURUS_LINES, GRIP_LINES, SOUL_SEAL_LINES } from './PentagramFigures.js';
 import { INFERNUM } from './HellRules.js';
 
 export const PENT = {
@@ -84,6 +84,11 @@ export function figureLines(id, a = 0) {
 
 // The good pentagrams the author asked for (PentagramUse.js: what standing on them does). `permanent`: drawn once, they stay on the ground for good (saved, at most USE.PERM_MAX).
 const sq = Math.SQRT1_2;
+registerPentagram({
+    id: 'soulseal', title: 'Пентаграмма запрета возвращения тёмного мага', dark: false, glow: 0xe9edff,
+    cost: 75, permanent: true, scroll: 'PentagramSoulSeal', lines: SOUL_SEAL_LINES,
+    effect: 'Помечает останки тёмного мага и не позволяет вернуть силу погибшей жизни. Тело, кости и рисунок остаются на месте. Знающий обряд волшебник-свидетель проводит его, когда бой закончен.',
+});
 registerPentagram({
     id: 'teleport', title: 'Пентаграмма телепортации', dark: false, glow: 0xcfe8ff, cost: 50, permanent: true, scroll: 'PentagramTeleport',
     draw: [{ t: 'circle', r: 1 }, { t: 'poly', pts: [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([x, z]) => [x * 0.999, z * 0.999]) }, { t: 'circle', r: 0.3 }], // (a square set in the circle by its corners, a small circle inside it that touches nothing)

@@ -38,6 +38,7 @@ import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
 import { isDivine } from './ProtectionGods.js';
 import { chestCoins } from './CastleTreasure.js';
 import { scaleCoins } from './CoinScale.js';
+import { SEALED_WHY } from './SoulSealRules.js';
 import { DAMAGE, blastDamage } from './Damage.js';
 const BLAST = DAMAGE.BlastPeak, LIGHTNING = DAMAGE.Lightning;
 import { Levitation } from './Levitation.js';
@@ -3146,11 +3147,21 @@ export class Game {
         if (!side || !ch.isArmRaised(side)) { this.hud.setVoice('✋ Поднимите руку и направьте её на свой скелет — тогда «Give Me My Power» сработает', true); return null; }
         const b = this.death?.legacyAimed(this.castOrigin(side), ch.getHandDirection(side, new THREE.Vector3()));
         if (!b) { this.hud.setVoice('💀 Направьте руку на свой скелет — там, где вы погибли и где осталась ваша сила', true); return null; }
+        if (b.seal) { this.hud.setVoice(SEALED_WHY, true); return null; }
+        const tired = this.combat.check('GiveMyPower');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        if (this.net?.isClient) { this.death.claims.request(b); return null; }
+        return this._finishGiveMyPower(b);
+    }
+
+    _finishGiveMyPower(b, approved = false) {
+        if (!b?.lg || b.lg.owner !== String(this.net?.pid || 'me')) return null;
+        if (b.seal) { this.hud.setVoice(SEALED_WHY, true); return null; }
         const tired = this.combat.check('GiveMyPower');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('GiveMyPower');
-        this.death.takeLegacy(b);
-        onDarkCast(this, 'GiveMyPower'); // (чёрная магия: всегда +1)
+        if (!this.death.takeLegacy(b, approved)) return null;
+        onDarkCast(this, 'GiveMyPower');
         return 'GiveMyPower';
     }
 

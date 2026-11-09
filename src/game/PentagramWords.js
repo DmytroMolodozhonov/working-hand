@@ -12,6 +12,7 @@ export const PENT_FIRST = ['pentagrani', 'pentagrany', 'pentogran', 'pentegran',
 
 /** id пентаграммы → английское имя (то, что говорит игрок) и как его пишет распознавание (русские и английские обрывки). */
 export const PENT_NAMES = {
+    soulseal: { en: 'Sepultura', say: ['сепультура', 'сепултура'], stems: ['sepultura', 'сепультура', 'сепултура', 'сэпультура'] },
     grip: { en: 'Stronghands', say: ['стронгхэндс', 'стронгхандс', 'стронг хэндс'], stems: ['stronghands', 'strong hands', 'стронгхэндс', 'стронгхандс', 'стронг хэндс', 'стронг хандс'] },
     teleport: { en: 'Teleportis', say: ['телепортис', 'телепортес', 'телепортэс', 'тэлэпортис', 'телепортиз'], stems: ['teleportis', 'teleportes', 'телепортис', 'телепортес', 'телепортэс', 'тэлэпортис', 'телепортиз'] },
     life: { en: 'Vita', say: ['вита', 'вайта', 'вита'], stems: ['vita', 'vyta', 'вита', 'вайта', 'вытта'] },

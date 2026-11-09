@@ -30,8 +30,8 @@
  *       creates it and tells the others.
  *   game.beds.list — Map id → {id, x, y, z, ry, color, model}.
  *   game.beds.lying — the id of the bed I lie in (or null).
- *   game.beds.home — the bed I come back to life at (the last one I lay in):
- *       {id, x, y, z, ry, gen} or null; kept with the player's things (WorldSave).
+ *   game.beds.home — the bed where I completed a night in my own created home;
+ *       its sleep and ownership proof is kept with the player's things (WorldSave).
  *
  * Multiplayer: the host owns the beds (creating consumes its loose things,
  * recolouring, the night skip); guests ask. Beds are in the world snapshot.
@@ -423,6 +423,18 @@ export class Beds {
     }
 
     // ============================================================ sleeping
+    /** Only the creator's home, never a generated NPC bed or another player's home. */
+    _ownHouse(b, by = this.game.localId) {
+        if (!b || b.gen) return null;
+        const g = this.game;
+        return this._houseIn(g.houseMagic, b, by) || this._houseIn(g.castleMagic, b, by) || this._houseIn(g.divine, b, by);
+    }
+
+    _houseIn(magic, b, by) {
+        const rec = magic?.houseNear(b);
+        return rec && rec.owner === magic._key(by) ? rec : null;
+    }
+
     /** Is a point (the hero's position) at / on a bed? `pad`: how far from its edges. */
     _nearBed(b, p, pad = 1.3) {
         const dx = p.x - b.x, dz = p.z - b.z;
@@ -438,7 +450,7 @@ export class Beds {
             const top = b.y + BED.top;
             if (feet < top - 0.35 || feet > top + 1.3) continue;
             const dx = p.x - b.x, dz = p.z - b.z, c = Math.cos(b.ry), s = Math.sin(b.ry);
-            if (Math.abs(dx * c - dz * s) < BED.W / 2 - 0.15 && Math.abs(dx * s + dz * c) < BED.L / 2 - 0.15) return b;
+            if (Math.abs(dx * c - dz * s) < BED.W / 2 - 0.15 && Math.abs(dx * s + dz * c) < BED.L / 2 - 0.15 && this._ownHouse(b)) return b;
         }
         return null;
     }
@@ -448,6 +460,7 @@ export class Beds {
         const col = this.game.collision;
         for (const b of this.list.values()) {
             if (!this._nearBed(b, p)) continue;
+            if (!this._ownHouse(b)) continue;
             // (sitting down behind the wall the bed stands against is not at the bed)
             if (col?.lineOfSight && !col.lineOfSight(p.x, b.y + BED.top + 0.4, p.z, b.x, b.y + BED.top + 0.4, b.z, 0.25)) continue;
             const d = Math.hypot(p.x - b.x, p.z - b.z);
@@ -468,22 +481,23 @@ export class Beds {
     /** The hero lies down in a bed. */
     lieDown(b) {
         if (!b || this.game.monster?.active) return; // (the monster form does not fit a bed)
+        if (!this._ownHouse(b)) { this.game.hud.setVoice('🛏️ Лечь можно только в своём созданном доме', true); return; }
         if (this.game.hellGate?.inHell) { this.game.hud.setVoice('🔥 В аду не уснуть — здесь не отдохнуть и не возродиться', true); return; } // (hell: no sleep, no home — HellRules)
         this.lying = b.id;
         this._upT = 0; this._bedJump = this.game.currentPose?.jump?.jumps; this._stillT = 0; this._healT = 0; this._waitSaid = false;
         this._noSleepSaid = this._isNight() || !this.game.dayCycle; // (laid down by day: once, when the hero keeps still and sleep does not come)
         this._holdLying(b);
-        const fresh = this.home?.id !== b.id;
-        this.setHome(b);
         this.game.hud.setVoice((this._isNight() ? '🛏️ Вы легли спать. Не двигайтесь — и ночь пройдёт. Чтобы встать — подпрыгните' : '🛏️ Вы прилегли отдохнуть: здоровье понемногу восстанавливается. Чтобы встать — подпрыгните')
-            + (fresh ? '. Теперь вы будете возрождаться у этой кровати' : ''), true);
-        if (fresh) this.game.hud.toast?.('🛏️ Теперь вы будете возрождаться у этой кровати', 3500);
+            + (this.home?.id !== b.id ? '. Чтобы возрождаться здесь, нужно проспать ночь' : ''), true);
     }
 
     /** This bed becomes the place I come back to life at (a bed or its saved record). */
-    setHome(b) {
-        if (!b || !b.id || ![b.x, b.y, b.z].every(Number.isFinite)) { this.home = null; return; }
-        this.home = { id: String(b.id), x: r2(b.x), y: r2(b.y), z: r2(b.z), ry: r3(b.ry || 0), gen: b.gen ? 1 : 0 };
+    setHome(b, completedNight = false) {
+        const rec = completedNight ? this._ownHouse(b) : null;
+        // Old saves registered merely lying down, including in NPC houses. They need a real night first.
+        if (!b || !b.id || ![b.x, b.y, b.z].every(Number.isFinite) || (completedNight ? !rec : b.slept !== 1 || !b.house || !b.owner)) { this.home = null; return; }
+        this.home = { id: String(b.id), x: r2(b.x), y: r2(b.y), z: r2(b.z), ry: r3(b.ry || 0), gen: 0,
+            slept: 1, house: rec?.id || b.house, owner: rec?.owner || b.owner };
     }
 
     /**
@@ -493,6 +507,9 @@ export class Beds {
      */
     respawnSpot() {
         const g = this.game;
+        if (!this.home) return null;
+        const own = this._ownHouse(this.home);
+        if (this.home.slept !== 1 || !own || own.id !== this.home.house || own.owner !== this.home.owner) { this.home = null; return { gone: true }; }
         // a house bed far away is not loaded: it stands while the floor under it does (as Houses._activate)
         const t = g.world?.terrain?.data;
         const res = homeBed(this.home, this.list, (h) => !t || floorUnder(t, h.x, h.y, h.z) != null);
@@ -539,7 +556,7 @@ export class Beds {
         const dead = g.combat.dead || g.isDeadLocal;
         if (this.lying) {
             const b = this.list.get(this.lying);
-            if (!b || dead || g.flight?.active) this.standUp();
+            if (!b || dead || g.flight?.active || !this._ownHouse(b)) this.standUp();
             else {
                 this._holdLying(b);
                 // getting up: ONLY a real jump (the author's rule) — standing, walking, the arms: still lying;
@@ -579,7 +596,7 @@ export class Beds {
         // the host: everybody asleep at night → morning
         if (this.auth && !this.sleeping && this._isNight()) {
             const players = [{ dead, lying: !!this.lying, still: this._stillT }];
-            for (const [id, r] of g.remotes || []) { const o = this.others.get(id); players.push({ dead: r.dead, lying: !!o?.bed, still: o?.ready ? 99 : 0 }); }
+            for (const [id, r] of g.remotes || []) { const o = this.others.get(id), own = o && this._ownHouse(this.list.get(o.bed), id); players.push({ dead: r.dead, lying: !!own, still: own && o.ready ? 99 : 0 }); }
             if (everyoneAsleep(players, STILL_NEEDED)) this.skipNight();
             else if (ready && !this._waitSaid && players.length > 1) {
                 this._waitSaid = true;
@@ -612,7 +629,9 @@ export class Beds {
 
     _beginSleep(dayStart) {
         if (this.sleeping || this.game.burning?.me) return; // (a burning man does not fall asleep)
-        this.sleeping = { t: 0, dayStart, switched: false };
+        const b = this.list.get(this.lying), g = this.game;
+        const participant = this._isNight() && !g.combat.dead && !g.isDeadLocal && this._stillT >= STILL_NEEDED && this._ownHouse(b);
+        this.sleeping = { t: 0, dayStart, switched: false, bed: participant ? b.id : null };
         this._showOverlay('💤 Вы заснули…', 0);
     }
 
@@ -624,6 +643,14 @@ export class Beds {
         if (!S.switched && S.t >= 2.2) {
             S.switched = true;
             const g = this.game;
+            if (S.bed && this.lying === S.bed && !g.combat.dead && !g.isDeadLocal && !g.burning?.me) {
+                const b = this.list.get(S.bed);
+                if (this._ownHouse(b)) {
+                    const fresh = this.home?.id !== b.id;
+                    this.setHome(b, true);
+                    if (fresh) g.hud.toast?.('🛏️ Ночь проспана — теперь вы будете возрождаться у этой кровати', 4500);
+                }
+            }
             const was = g.dayPhase?.() ?? 0;
             g.dayStart = S.dayStart;
             const jump = ((g.dayPhase?.() ?? 0) - was + 1) % 1 * (DAY_MS / 1000); // (s of the game day that went by in the sleep)
@@ -666,8 +693,8 @@ export class Beds {
             case 'color': if (host && BED_COLORS[m.color]) this.setColor(m.id, m.color); break;
             case 'spend': stockTake(g, cleanClaim(m)); break; // (the host used what I carry)
             case 'msg': if (m.text) g.hud.setVoice(m.text, true); break;
-            case 'lie': if (m.from) { if (m.bed) this.others.set(m.from, { bed: m.bed, ready: !!m.ready }); else this.others.delete(m.from); } break;
-            case 'sleep': if (!host && m.dayStart) this._beginSleep(m.dayStart); break;
+            case 'lie': if (m.from) { if (m.bed && (!host || this._ownHouse(this.list.get(m.bed), m.from))) this.others.set(m.from, { bed: m.bed, ready: !!m.ready }); else this.others.delete(m.from); } break;
+            case 'sleep': if (!host && m.from === 'H' && m.dayStart) this._beginSleep(m.dayStart); break;
             default: break;
         }
     }
