@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { FarShape } from '../../src/core/FarShape.js';
+import { RemoteAvatar } from '../../src/net/RemoteAvatar.js';
 import { DeathSystem } from '../../src/game/Death.js';
 import { startRespawn } from '../../src/game/RespawnSpot.js';
 import { NetSync } from '../../src/net/NetSync.js';
@@ -73,4 +74,11 @@ test('Give Me My Power accepts the head, feet and approximate pointing, but stil
     assert.equal(d.legacyAimed(new THREE.Vector3(0, 3, 50), new THREE.Vector3(0, 0, -1)), null);
     delete b.lg;
     assert.equal(d.legacyAimed(o, new THREE.Vector3(0, -0.3, -1).normalize()), null);
+});
+
+test('the old knocked-down avatar hides immediately when its independent corpse takes over', () => {
+    const r = { _placed: true, character: { knockedDown: true, group: new THREE.Group() } };
+    RemoteAvatar.prototype.setDead.call(r, true);
+    assert.equal(r.character.group.visible, false);
+    assert.equal(r._hideT, undefined);
 });

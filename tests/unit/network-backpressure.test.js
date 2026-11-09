@@ -89,3 +89,25 @@ test('coalescing weapon motion retains the final sleeping pose and applies remov
         assert.deepEqual(sent[0].l, [['sleeping', 1], ['moving', 100]]);
     } finally { conn._outbox?.dispose(); }
 });
+
+test('an hour of congested multiplayer keeps NPC snapshots bounded and preserves sleeping item deltas', () => {
+    const { net, conn, sent, drain } = link();
+    try {
+        net._sendConn(conn, { t: 'ipos', from: 'H', l: [['asleep', 2, 0, 3, 1]] });
+        for (let i = 0; i < 18000; i++) {
+            net._sendConn(conn, { t: 'vil', from: 'H', l: [['npc', i]] });
+            net._sendConn(conn, { t: 'an', from: 'H', l: [['horse', i]] });
+            net._sendConn(conn, { t: 'ipos', from: 'H', l: [['moving', i, 1, 2, 0]] });
+        }
+        assert.equal(conn.open, true);
+        assert.equal(conn._outbox.events.length, 0);
+        assert.equal(conn._outbox.states.size, 3);
+        net._sendConn(conn, { t: 'igone', from: 'H', uid: 'moving' });
+        net._sendConn(conn, { t: 'spell', name: 'Bombardo' });
+        drain();
+        assert.deepEqual(sent.map(m => m.t), ['ipos', 'igone', 'spell', 'vil', 'an']);
+        assert.deepEqual(sent[0].l, [['asleep', 2, 0, 3, 1], ['moving', 17999, 1, 2, 0]]);
+        assert.equal(sent[3].l[0][1], 17999);
+        assert.equal(sent[4].l[0][1], 17999);
+    } finally { conn._outbox?.dispose(); }
+});

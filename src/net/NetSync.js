@@ -795,7 +795,7 @@ export class NetSync {
 
     /** A body carried by my «Левиоса» (air) / where it landed. */
     bodyMove(b, q, air) {
-        this.net.send({ t: 'bmv', id: b.id, x: r3(b.x), y: r3(b.y), z: r3(b.z), q: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)], a: air ? 1 : 0 }, true);
+        this.net.send({ t: 'bmv', id: b.id, x: r3(b.x), y: r3(b.y), z: r3(b.z), q: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)], a: air === 2 ? 2 : air ? 1 : 0, cp: b.doll?.pack() }, true);
     }
 
     /** I'm back in the game. */

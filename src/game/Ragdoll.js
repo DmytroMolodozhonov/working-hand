@@ -493,7 +493,7 @@ export class Ragdoll {
         for (let i = 0; i < N * 3; i++) { const d = Math.abs(x[i] - o[i]); if (d > mv) mv = d; }
         this._mvPrev = mv;
         if (mv < DOLL.SLEEP_V && this.contacts > 0) { this.still += dt; if (this.still >= DOLL.SLEEP_T) this._sleep(); } else this.still = 0;
-        if (this.age > DOLL.SIM_MAX) this._sleep();
+        if (this.age > DOLL.SIM_MAX && this.contacts > 0) this._sleep();
     }
 
     /**

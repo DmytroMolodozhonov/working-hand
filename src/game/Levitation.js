@@ -390,6 +390,10 @@ export class Levitation {
             w.drive.quaternion.copy(turn).multiply(s.objQ0);
         } else if (s.kind === 'cauldron') {
             this.game.cauldrons.levMove(s.obj, s.target, _q2.copy(turn).multiply(s.objQ0), dt);
+        } else if (s.kind === 'corpse' && s.obj.doll) {
+            _v1.copy(m.position);
+            this.game.death.levitateBody(s.obj, s.target, dt);
+            s.vel.lerp(_v1.subVectors(m.position, _v1).divideScalar(Math.max(dt, 0.001)), Math.min(1, dt * 6));
         } else if (m) {
             // carried by the magic: it lags a little behind the hand, turns with the wrist
             _v1.subVectors(s.target, m.position);

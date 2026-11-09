@@ -26,7 +26,8 @@
  * to late joiners and kept in the world save); every computer draws them.
  */
 
-import { apply as ragApply } from './RagdollPose.js';
+import { CorpseRagdoll, playerCorpseRig } from './CorpseRagdoll.js';
+import { apply as ragApply, capture as ragCapture } from './RagdollPose.js';
 import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
 import { RESOURCE } from './Inventory.js';
@@ -261,7 +262,7 @@ export class DeathSystem {
             if (how === 'annihilate') drops = drops.filter((d) => isGodGift(d));
             this.scatter(drops, { x: p.x, y, z: p.z });
             if (how !== 'annihilate') {
-                const b = { id: 'p' + (g.localId || 'me') + '_' + Date.now().toString(36), k: 'p', who: g.localId || 'local', name: g.net?.name || null, x: p.x, y, z: p.z, yaw, age: how === 'burst' ? DEATH.BODY_S : 0, look: g.config?.look || null };
+                const b = { id: 'p' + (g.localId || 'me') + '_' + Date.now().toString(36), k: 'p', who: g.localId || 'local', name: g.net?.name || null, x: p.x, y: how === 'burst' ? y : p.y, z: p.z, yaw, age: how === 'burst' ? DEATH.BODY_S : 0, look: g.config?.look || null };
                 if (legacy) b.lg = legacy; // (all the hero grew: theirs to take back — Legacy.js)
                 b.mh = Math.round((g.maxHP || 20) + (legacy?.hp || 0)); // (wipeHero has already taken the grown part off: it is in the legacy) // (his maximum health and whether black magic killed him: the rite of monstrous vitality — VitalityRules.js)
                 if (DARK_DEATH.has(g._deathKind)) b.dk = 1;
@@ -390,6 +391,8 @@ export class DeathSystem {
 
     /** A lying body is made again (its armour taken off by «Disarmor»: `b.st` = 1; every computer). */
     restyleBody(b) {
+        if (b.doll) b.cp = b.doll.pack();
+        this._dropDoll(b);
         b.st = 1; b.arm = null;
         const g = this.game;
         if (b.model) { g.scene.remove(b.model); b.one?.dispose(); b.one = null; releaseShapes(b.model); b.model = null; }
@@ -448,7 +451,10 @@ export class DeathSystem {
         if (!g.scene) return;
         let made = null;
         try {
-            if (from) made = layDown(this._copy(from));
+            if (from) {
+                const ch = g.character?.group === from ? g.character : g.remotes?.get(b.who)?.character;
+                made = ch?.torso ? this._playerMade(ch) : layDown(this._copy(from));
+            }
             else made = this.makers[b.k]?.(b) || null;
         } catch (e) { console.warn('[Death] body', e); made = null; }
         if (!made) return;
@@ -464,20 +470,35 @@ export class DeathSystem {
         b.model.userData.farRadius = 4;
         b.one = new FarShape(b.model, { cache: false });
         b.one.set(true);
+        b.corpseGeo = made.own || null;
+        if (!b.cr && (made.rig || (b.k === 'v' && b.moved))) {
+            b.doll = new CorpseRagdoll(b, made.rig);
+            if (b.cp) b.doll.apply(b.cp);
+            else b.doll.draw();
+        }
+    }
+
+    _playerMade(ch) {
+        const map = new Map(), obj = this._copy(ch.group, map), pivot = new THREE.Group();
+        obj.position.set(0, 0, 0); obj.rotation.y = 0; pivot.add(obj);
+        const { rig, own } = playerCorpseRig(ch, map);
+        return { pivot, len: 4.5, rig, own };
     }
 
     _playerBody(b) {
         const g = this.game;
         const r = b.who && g.remotes?.get(b.who);
-        if (r) return layDown(this._copy(r.character.group));
+        if (r) return this._playerMade(r.character);
         if (!g.scene) return this._dummyBody();
         const ch = new VoxelCharacter(g.scene, { remote: true });
         if (b.look) try { ch.setLook(b.look); } catch (e) { /* an old look */ }
         ch.group.parent?.remove(ch.group);
-        return layDown(ch.group);
+        const pivot = new THREE.Group(); pivot.add(ch.group);
+        const { rig, own } = playerCorpseRig(ch);
+        return { pivot, len: 4.5, rig, own };
     }
 
-    _copy(group) {
+    _copy(group, map = null) {
         // FarShape's live controller in userData points back to its root: clone(true) overflows the stack.
         // Copy the visual tree and plain flags, leaving optimization controllers on the living avatar.
         const copy = (o) => {
@@ -488,6 +509,7 @@ export class DeathSystem {
             for (const [k, v] of Object.entries(data)) {
                 if (k !== 'farMask' && k !== 'farHid' && ['boolean', 'string', 'number'].includes(typeof v)) c.userData[k] = v;
             }
+            map?.set(o, c);
             c.layers.set(0);
             if (data.vroot || data.farHid) c.visible = true;
             for (const child of o.children) { const made = copy(child); if (made) c.add(made); }
@@ -535,6 +557,8 @@ export class DeathSystem {
     }
 
     _toBones(b) {
+        if (b.doll) b.y = b.doll.doll.lowest();
+        this._dropDoll(b);
         const g = this.game;
         if (b.model) { g.scene.remove(b.model); b.one?.dispose(); b.one = null; releaseShapes(b.model); b.model = null; }
         if (b.bones || !g.scene) return;
@@ -557,6 +581,8 @@ export class DeathSystem {
         const b = this.bodies.get(id);
         if (!b) return;
         this.bodies.delete(id);
+        this.falling.delete(id);
+        this._dropDoll(b);
         const g = this.game;
         if (b.model) { g.scene.remove(b.model); b.one?.dispose(); releaseShapes(b.model); }
         if (b.bones) {
@@ -601,6 +627,7 @@ export class DeathSystem {
                 const v = g.castleLife?.byId?.get(b.who);
                 b.model.visible = near && (!!b.moved || !(v && v.dead));
             } else if (b.model) b.model.visible = near;
+            if (b.doll) { this._dollFrame(b, dt, near); continue; }
             // (another computer's «Левиоса» carries it: it follows the word smoothly)
             if (b.netAt && !b.lev) {
                 const o = b.model || b.bones;
@@ -628,7 +655,7 @@ export class DeathSystem {
         if (this._supT > 0) return;
         this._supT = 0.4;
         for (const b of this.bodies.values()) {
-            if (b.lev || b.netAt || this.falling.has(b.id)) continue;
+            if (b.doll || b.lev || b.netAt || this.falling.has(b.id)) continue;
             const o = b.model || b.bones;
             if (!o) continue;
             if (b.k === 'v' && !b.moved) { const v = g.castleLife?.byId?.get(b.who); if (v && v.dead && !v.bodyMoved) continue; } // (the villager's own body falls itself: CastleLife._deadFall)
@@ -664,11 +691,46 @@ export class DeathSystem {
     // ------------------------------------------------------------ «Вингардиум Левиоса»
     /** The body is taken up by my «Левиоса» (Levitation.js): it is the copy that moves now. */
     liftBody(b) {
+        b.netAt = 0; b.localDoll = true;
+        if (!b.doll && b.model?.userData.vm) {
+            const v = this.game.castleLife?.byId?.get(b.who);
+            if (v?.dead && !v.bodyMoved && v.model) {
+                b.x = v.group.position.x; b.y = v.group.position.y - VILLAGER_FOOT_OFFSET; b.z = v.group.position.z;
+                b.model.position.set(b.x, b.y, b.z); b.model.rotation.y = v.group.rotation.y;
+                ragApply(b.model.userData.vm, ragCapture(v.model));
+            }
+            b.doll = new CorpseRagdoll(b);
+        }
+        b.doll?.doll.wake();
         b.lev = true;
         this.falling.delete(b.id);
         this._moved(b);
         const o = b.model || b.bones;
         if (o) o.visible = true;
+    }
+
+    levitateBody(b, at, dt) {
+        if (!b.doll) return false;
+        b.doll.hold(this.game, at, dt); this.heldAt(b, b.model, dt); return true;
+    }
+
+    _dropDoll(b) {
+        b.doll = null;
+        for (const geo of b.corpseGeo || []) geo.dispose();
+        b.corpseGeo = null;
+    }
+
+    _dollFrame(b, dt, near) {
+        if (b.lev || !near) return;
+        const remote = b.netAt && performance.now() - b.netAt < 2000 && b.netAir;
+        if (remote || (this.game.authority === false && !b.localDoll)) return;
+        if (b.netAir) { b.netAir = 0; b.doll.doll.wake(); }
+        if (b.doll.step(this.game, dt)) {
+            b.sendT = (b.sendT || 0) - dt;
+            if (b.sendT <= 0 || b.doll.doll.asleep) {
+                b.sendT = 0.1; this.game.sync?.bodyMove?.(b, b.model.quaternion, b.doll.doll.asleep ? 0 : 2);
+            }
+        }
     }
 
     /** (my hand) The held body is here now: remember it and tell the others now and then. */
@@ -683,6 +745,10 @@ export class DeathSystem {
     /** Let go: the body falls limp (gently: slowly) and lies on the ground where it lands. */
     dropBody(b, vel, gentle = false) {
         b.lev = false;
+        if (b.doll) {
+            b.doll.release(vel); b.netAt = 0; b.localDoll = true;
+            this.game.sync?.bodyMove?.(b, b.model.quaternion, 2); return;
+        }
         this.falling.set(b.id, { b, vel: (vel || new THREE.Vector3()).clone(), gentle });
     }
 
@@ -712,7 +778,7 @@ export class DeathSystem {
         b.moved = true;
         if (b.k !== 'v') return;
         const v = this.game.castleLife?.byId?.get(b.who);
-        if (v && v.dead) v.bodyMoved = true;
+        if (v && v.dead) { v.bodyMoved = true; if (v.group) v.group.visible = false; }
     }
 
     /** (network) Somebody's «Левиоса» carries a body / it has landed (`air` 0). */
@@ -727,6 +793,12 @@ export class DeathSystem {
         if (o) o.visible = true;
         if (!m.a && b.netQ) b.yaw = new THREE.Euler().setFromQuaternion(b.netQ, 'YXZ').y;
         b.netAt = performance.now();
+        if (m.cp) {
+            if (!b.doll && b.model?.userData.vm) b.doll = new CorpseRagdoll(b);
+            if (b.doll?.apply(m.cp)) {
+                b.cp = m.cp; b.netAir = m.a || 0; b.localDoll = false;
+            }
+        }
     }
 
     // ------------------------------------------------------------ the legacy (Legacy.js)
@@ -916,13 +988,14 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, arm: b.arm || undefined, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined, rp: b.rp ? b.rp.map((x) => Math.round(x * 1000) / 1000) : undefined };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, arm: b.arm || undefined, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined, cp: b.doll?.pack() || b.cp || undefined, moved: b.moved || undefined, rp: b.rp ? b.rp.map((x) => Math.round(x * 1000) / 1000) : undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */
     onNetBody(w) {
         if (!w || typeof w.id !== 'string' || this.bodies.has(w.id)) return;
         const b = { ...w, x: +w.x || 0, y: +w.y || 0, z: +w.z || 0, yaw: +w.yaw || 0, age: Math.max(0, +w.age || 0) };
+        if (b.cp && b.k === 'v') b.moved = true;
         const r = b.k === 'p' && this.game.remotes?.get(b.who);
         this.addBody(b, r ? r.character.group : null);
     }

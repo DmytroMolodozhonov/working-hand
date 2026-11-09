@@ -65,6 +65,10 @@ test('большое сообщение (мир для нового игрока
     const msg = bigWorld(30000);
     assert.ok(utf8Bytes(JSON.stringify(msg)) > 20 * LIMIT, 'the test world is really big');
     host.sendTo('g1', msg);
+    // World transfer now yields between 2 ms send budgets, as it does between game frames.
+    const q = ends.get('g1').atHost._outbox;
+    for (let i = 0; q.events.length && i < 1000; i++) q.pump();
+    assert.equal(q.events.length, 0);
     assert.equal(ends.get('g1').atHost.refused, 0, 'nothing refused by the channel');
     assert.equal(host.conns.has('g1'), true, 'the guest is still in the game');
     const w = got.get('g1').find((m) => m.t === 'welcome');

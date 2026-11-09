@@ -23,6 +23,24 @@ function fakeGame() {
     return g;
 }
 
+test('holding the ordinary pocket cycles items every two seconds without looking or removing the hand', () => {
+    const g = fakeGame(), inv = g.inventory;
+    const items = [{ kind: 'apple', uid: 'a' }, { kind: 'scroll', stat: 'pentagram', pent: 'life', uid: 'b' }, { kind: 'scroll', stat: 'spell', spell: 'Ice', uid: 'c' }];
+    inv.slots.splice(0, 3, ...items); inv.purse.takeAll(); inv.headDown = false;
+    let now = 10000;
+    const hold = (seconds, zone = true, side = 'left') => { for (let i = 0; i < seconds * 10; i++) inv.pocketStay(side, zone, 0.1, now += 100); };
+    hold(1.9); assert.equal(g.items.held.left, null);
+    hold(0.1); assert.equal(g.items.held.left.item, items[0]);
+    hold(2); assert.equal(g.items.held.left.item, items[1]);
+    hold(2); assert.equal(g.items.held.left.item, items[2]);
+    hold(2); assert.equal(g.items.held.left.item, items[0]);
+    hold(1); hold(0.1, false); hold(1);
+    assert.equal(g.items.held.left.item, items[0], 'leaving the pocket resets the continuous hold');
+    g.character.isRunning = true; hold(5); g.character.isRunning = false;
+    hold(1); assert.equal(g.items.held.left.item, items[0], 'running cannot advance or pre-charge the hold');
+    hold(5, true, 'right'); assert.equal(g.items.held.right, null, 'the primary hand never operates the ordinary pocket');
+});
+
 test('pocket: three touches — the third slot\'s thing is in the hand, the others are back in their slots', () => {
     const g = fakeGame(), inv = g.inventory;
     const a = { kind: 'meat', uid: 'a', count: 1 }, b = { kind: 'scroll', uid: 'b' }, c = { kind: 'apple', uid: 'c', count: 1 };

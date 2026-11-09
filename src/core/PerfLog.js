@@ -79,11 +79,16 @@ export class PerfLog {
             if ((o.isMesh || o.isLine || o.isPoints || o.isSprite) && o.layers.mask & 1) { const e = draws[k] || (draws[k] = [0, 0]); e[0]++; shown++; if (o.castShadow) { e[1]++; shadows++; } }
             for (const c of o.children) walk(c, k);
         };
+        // Name anonymous roots by their owner: otherwise thousands of growing objects were only «Group».
+        const owners = new Map();
+        for (const b of g.death?.bodies?.values() || []) { if (b.model) owners.set(b.model, 'тело'); if (b.bones) owners.set(b.bones, 'кости'); }
+        for (const L of g.items?.loose?.values() || []) owners.set(L.model, 'предмет:' + L.item.kind);
+        for (const r of g.remotes?.values() || []) owners.set(r.character.group, 'друг');
         for (const top of g.scene?.children || []) {
             let c = 0;
             top.traverse(() => { c++; });
             objects += c;
-            const k = top.name || top.type;
+            const k = owners.get(top) || top.name || top.type;
             groups[k] = (groups[k] || 0) + c;
             walk(top, k);
         }
@@ -136,7 +141,12 @@ export class PerfLog {
         const spikes = (g.stats?.spikes || []).slice(this._spikesSeen).map((s) => `${s.ms}мс:${s.reason}`);
         this._spikesSeen = (g.stats?.spikes || []).length;
         if (this._spikesSeen >= 30) { g.stats.spikes.length = 0; this._spikesSeen = 0; }
-        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${ai}${voice ? ' | ' + voice : ''} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
+        const queues = [];
+        const inspect = c => { const q = c?._outbox; if (q) queues.push(`${Math.round(q.buffered() / 1024)}КБ, событий ${q.events.length}, состояний ${q.states.size}, PeerJS ${c.bufferSize || 0}`); };
+        if (g.net?.isHost) for (const c of g.net.conns?.values() || []) inspect(c);
+        else inspect(g.net?.hostConn);
+        const connection = queues.length ? ' | сеть: ' + queues.join('; ') : '';
+        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${ai}${voice ? ' | ' + voice : ''} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${connection}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
         this.gaps.length = 0;
         this.parts = {};
         this.events.length = 0;

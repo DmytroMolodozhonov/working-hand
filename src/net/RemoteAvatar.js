@@ -73,9 +73,8 @@ export class RemoteAvatar {
         this.dead = dead;
         clearTimeout(this._hideT);
         if (!this._placed) return; // (not yet standing where it is: stays hidden — update() shows it)
-        // (knocked down as they died — Avada, a blast: the body is seen falling first)
-        if (dead && this.character.knockedDown && typeof setTimeout === 'function') this._hideT = setTimeout(() => { if (this.dead) this.character.group.visible = false; }, 1200);
-        else this.character.group.visible = !dead;
+        // Death owns the falling doll now; the old avatar must not hang beside it for 1.2 seconds.
+        this.character.group.visible = !dead;
     }
 
     /** The diary line «ноги назад» when the sent head is turned far back from the body (once in 10 s per player). */

@@ -613,7 +613,7 @@ export class Inventory {
     /** The pocket on this hand's side waits until the hand has gone away from the hip (the pouches just did something). */
     pocketHold(side) {
         const st = this._pocket[side];
-        if (st) { st.armed = false; st.inT = 0; st.outT = 0; st.hold = performance.now() + 700; }
+        if (st) { st.armed = false; st.inT = 0; st.outT = 0; st.stayT = 0; st.hold = performance.now() + 700; }
     }
 
     _fx(text, side = 'right') {
@@ -633,7 +633,7 @@ export class Inventory {
         const g = this.game;
         this.ensureCreativeApples(dt);
         this._renderCoins();
-        if (!g.currentPose || g.combat.immobile) { this.belt._show(); this.purse._show(); this._updateHandBlock(); return; }
+        if (!g.currentPose || g.combat.immobile) { for (const st of Object.values(this._pocket)) st.stayT = 0; this.belt._show(); this.purse._show(); this._updateHandBlock(); return; }
         const ch = g.character;
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
@@ -646,7 +646,7 @@ export class Inventory {
             const sx = side === 'right' ? 1 : -1;
             st.hist.push({ t: now, y: local.y });
             while (st.hist.length && now - st.hist[0].t > 600) st.hist.shift();
-            if (ch.isRunning || ch.flying) { st.hist.length = 0; continue; }
+            if (ch.isRunning || ch.flying) { st.hist.length = 0; st.stayT = 0; st.inT = 0; continue; }
             // the hand put INTO the pocket (as the camera sees it): it stays there a moment
             // (a slap on the hip no longer counts: people did it by accident)
             // (the things' pocket is at the leading hand's hip — the right one, a left-hander's left —
@@ -657,7 +657,7 @@ export class Inventory {
             const emptyPocketTake = !g.items?.held[off] && !g.weapons?.hands?.[off]?.held && g.coinDeal && !g.coinDeal.mayTake();
             if (side === off && inPocket !== true && g.currentPose.purse?.off === true && (this._pocketable(off) || this._cyc?.side === off || emptyPocketTake)) inPocket = true;
             const zone = inPocket === true;
-            if (inPocket && !this.headDown) inPocket = false;
+
             if (side === off) this._pocketJournal(side, local, zone, st);
             if (side === off) this._hintStep(side, local, sx, dt);
             // (the wand is not put away / drawn by a pocket — lowering the arm did it by
@@ -672,16 +672,16 @@ export class Inventory {
                 if (gone) this._lost(this._cyc);
                 this._cyc = null;
             }
-            const putIn = st.armed && st.inT > POCKET_DWELL && now >= (st.hold || 0);
+            const putIn = this.headDown && st.armed && st.inT > POCKET_DWELL && now >= (st.hold || 0);
             if (putIn && now - st.out > 700) {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
-                const had = !!(g.items?.held[side] || g.weapons.hands[side].held);
+                st.stayT = 0;
                 this.pocketTouch(side);
-                const rb = g.currentPose?.belt?.[side]; console.info('[Предметы]', `карман: рука ${side}, 3D=${d.toFixed(2)}м, cam dy=${rb?.dy?.toFixed(2)} u=${rb?.u?.toFixed(2)} pk=${g.currentPose?.pocket?.off} purse=${g.currentPose?.purse?.off} headDown=${this.headDown} pos=${g.character?.group?.position?.toArray?.()?.map((x) => Math.round(x))?.join(',')}, в руке ${holds ? 'вещь' : 'пусто'}, ${why}`);
                 this._handsOff(side);
             }
+            if (!(putIn && now === st.out)) this.pocketStay(side, zone, dt, now);
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
             const b = this._back[side];
             if (backAllowed(g) && behindBack(local, ch.handVelocity[side].length())) b.t += dt; else b.t = 0;
@@ -825,6 +825,21 @@ export class Inventory {
      * in a circle (the author: touch — the first, move away and touch — the second…; never thrown out).
      * Any other thing in the hand goes into a slot; an empty hand takes the next thing.
      */
+    /** Keep the other hand in the ordinary pocket: every two seconds choose the next thing, even looking ahead. */
+    pocketStay(side, zone, dt, now = performance.now()) {
+        const st = this._pocket[side];
+        if (!zone || side !== (this.game.dom === 'left' ? 'right' : 'left') || this.game.character?.isRunning || this.game.character?.flying) { st.stayT = 0; return false; }
+        st.stayT = (st.stayT || 0) + dt;
+        if (st.stayT < 2 || now < (st.hold || 0)) return false;
+        st.stayT = 0; st.armed = false; st.out = now;
+        const cycling = this._cyc?.side === side;
+        const ok = this.pocketTouch(side);
+        // Manual touches retain their empty-hand step; a continuous hold directly shows the next item.
+        if (ok && cycling && !this._cyc) this.takeNext(side);
+        if (ok) this._handsOff(side);
+        return ok;
+    }
+
     pocketTouch(side) {
         if (this.monsterShut()) return false;
         const g = this.game, c = this._cyc;

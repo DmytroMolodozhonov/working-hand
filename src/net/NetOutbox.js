@@ -1,5 +1,8 @@
 /** A slow reliable channel must not collect seconds of obsolete poses ahead of a spell. */
-export const OUTBOX = { HIGH: 16384, STATE: 4096, POLL: 25, MAX_EVENTS: 4096 };
+export const OUTBOX = { HIGH: 16384, STATE: 4096, POLL: 25, MAX_EVENTS: 4096, BUDGET_MS: 2 };
+const SNAPSHOTS = new Set(['p', 'pstate', 'z', 'w', 'vil', 'an', 'ipos', 'bmv']);
+const stateKey = msg => msg.t + ':' + (msg.from || msg.id || '') + (msg.t === 'bmv' ? ':' + msg.id : '');
+const ITEM_EVENTS = new Set(['igone', 'inew']);
 const WEAPON_EVENTS = new Set(['wgone', 'wnew', 'wspawn', 'grant', 'drop']);
 
 export class NetOutbox {
@@ -27,12 +30,20 @@ export class NetOutbox {
             const key = 'w:' + (msg.from || ''), pending = this.states.get(key);
             if (pending) { this.events.push({ packets: pending.packets, i: 0 }); this.states.delete(key); }
         }
-        if (msg.t === 'p' || msg.t === 'pstate' || msg.t === 'z' || msg.t === 'w') this.states.set(msg.t + ':' + (msg.from || msg.id || ''), { msg, packets });
+        if (ITEM_EVENTS.has(msg.t)) this.flushState('ipos:' + (msg.from || ''));
+        if (msg.t === 'vhit') this.flushState('vil:' + (msg.from || ''));
+        if (msg.t === 'ahit') this.flushState('an:' + (msg.from || ''));
+        if (SNAPSHOTS.has(msg.t)) this.states.set(stateKey(msg), { msg, packets });
         else {
             if (this.events.length >= OUTBOX.MAX_EVENTS) { this.report?.('связь не успевает передавать игровые действия — соединение закрыто'); this.conn.close(); this.dispose(); return; }
             this.events.push({ packets, i: 0 });
         }
         this.pump();
+    }
+
+    flushState(key) {
+        const pending = this.states.get(key);
+        if (pending) { this.events.push({ packets: pending.packets, i: 0 }); this.states.delete(key); }
     }
 
     buffered() {
@@ -48,7 +59,8 @@ export class NetOutbox {
                 this.pressureAt = performance.now();
                 this.report?.(`перегрузка канала: ${Math.round(this.buffered() / 1024)} КБ в передаче, действий ждёт ${this.events.length}; устаревшие позы заменяются свежими`);
             }
-            while (this.buffered() < OUTBOX.HIGH && !(this.conn.bufferSize > 0)) {
+            const until = performance.now() + OUTBOX.BUDGET_MS;
+            while (performance.now() < until && this.buffered() < OUTBOX.HIGH && !(this.conn.bufferSize > 0)) {
                 const task = this.events[0];
                 if (task) {
                     this.conn.send(task.packets[task.i]);
@@ -72,8 +84,8 @@ export class NetOutbox {
     }
 
     mergeState(msg) {
-        if (msg.t === 'w') {
-            const previous = this.states.get('w:' + (msg.from || ''))?.msg;
+        if (msg.t === 'w' || msg.t === 'ipos') {
+            const previous = this.states.get(msg.t + ':' + (msg.from || ''))?.msg;
             if (!previous) return msg;
             // Weapons send deltas: a weapon that fell asleep is sent once, and must survive subsequent moving updates.
             const rows = new Map((previous.l || []).map(row => [row[0], row]));
