@@ -35,6 +35,12 @@ export class Nihilis {
         if (now - this._at < NIHIL.COOLDOWN * 1000) return null;
         const hand = aim ? { side: 'right', origin: aim.origin, dir: aim.dir } : castingHand(g);
         if (!hand || (!aim && !g.character.isArmRaised(hand.side))) return hint('✨ Поднимите палочку и направьте её туда, где чёрная магия, — и скажите «Nihilis Atra»');
+        const target = !aim && g.duel?.pickSide(false, g._duelReach());
+        if (target && (target.t.kind === 'p' || (target.t.kind === 'v' && g.castleLife?.byId.get(target.t.id)?.wizard))) {
+            const result = g._castDuel(NIHIL.NAME, 'NihilisDuel', isFinal, target, target.side);
+            if (result) this._at = now;
+            return result;
+        }
         const tired = g.combat.check(NIHIL.NAME);
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay(NIHIL.NAME);
@@ -115,6 +121,14 @@ export class Nihilis {
         if (g.combat?.dead || g.isDeadLocal) return;
         const me = g.combat?.center ? g.combat.center(_c) : _c.copy(ch.group.position);
         if (inCone(o, d, me, 0.8) < 0) return;
+        this.hitMe(by);
+    }
+
+    /** A duel hit affects only its recipient, without a cone through bystanders. */
+    hitMe(by) {
+        const g = this.game;
+        if (by === g.localId || by === 'local' || g.combat?.dead || g.isDeadLocal) return;
+        g.combat?.center?.(_c);
         const lvl = g.dark?.level || 0;
         const c = g.combat;
         // the form of the monster falls apart (the man inside lives)
@@ -130,6 +144,17 @@ export class Nihilis {
         for (let i = 0; i < 24; i++) g.fx?.spark(_c, pick(LIGHT), 0.14, _w.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.8);
         if (c?.enabled) c.damage(hp, by, NIHIL.NAME);
         else g.damageLocalPlayer?.(hp);
+    }
+
+    hitWizard(v, by, src) {
+        if (!v.wizard || v.dead) return;
+        const wound = blackWound(v.dark || 0);
+        if (!wound) return;
+        const g = this.game;
+        g.castleLife?.wizards?.fight?.breakDome?.(v);
+        const dir = _q.set(v.x - src.x, 0, v.z - src.z).normalize();
+        g.castleLife?.hit?.(v, woundHp(wound, v.maxHp || 20), dir, by, { spell: true, magic: true, kind: NIHIL.NAME });
+        if (wound === 'heavy') this._scare(v, src);
     }
 
     // ------------------------------------------------------------ the world (the host)

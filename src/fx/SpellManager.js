@@ -172,6 +172,7 @@ export function matchSpell(text) {
     if (pentFirstSaid(s)) return null;
     // «Nihilis Atra» («нихилис атра»): BOTH words — never «нигилист» in talk (NihilisWords.js)
     if (nihilisWords(s)) return 'Nihilis';
+    if (/^(?:cardilon|кардилон|кардиллон|карделон)$/.test(s)) return 'Cardilon';
     // «Give Me My Power» («Гив ми май пауэр», «Верни мне мою силу»): your power back from your own skeleton (Legacy.js)
     if (has('give me my power', 'give me power', 'give my power', 'гив ми май пауэр', 'гив ми май пауер', 'гив ми май пауа', 'гив ми май павер', 'гиф ми май пауэр', 'гив ми мой пауэр',
         'верни мне мою силу', 'верни мою силу', 'дай мне мою силу', 'верните мне мою силу')) return 'GiveMyPower';
@@ -557,7 +558,7 @@ export class SpellManager {
         return name;
     }
 
-    cast(name, origin, direction, handSide, casterId = 'local') {
+    cast(name, origin, direction, handSide, casterId = 'local', castId = null) {
         const o = origin.clone();
         const d = direction.clone().normalize();
         this._from = o; // (where the spell comes from: a house's sphere stops it from outside)
@@ -590,8 +591,8 @@ export class SpellManager {
             case 'Firefighting': case 'FirefightingMaxima': this.castFirefighting(name === 'FirefightingMaxima', o, d, casterId, handSide || 'right'); break;
             case 'Sands': this.castSands(o, d, casterId); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
-            case 'Bombardo': this.castBombardo(o, d, casterId); break;
-            case 'BombardoMaxima': this.castBombardo(o, d, casterId, MAXIMA_POWER); break;
+            case 'Bombardo': this.castBombardo(o, d, casterId, 1, castId); break;
+            case 'BombardoMaxima': this.castBombardo(o, d, casterId, MAXIMA_POWER, castId); break;
             case 'WindImpulse': case 'WindImpulseMaxima': this.castImpulse(name, o, casterId); break;
             case 'Drawdown': case 'DrawdownMaxima': this.hooks.drawdown?.(name, o, casterId); break; // (Drawdown.js)
             case 'Liquidation': case 'LiquidationMaxima': this.hooks.liquidation?.(name, o, d, casterId); break; // (Liquidation.js)
@@ -1609,7 +1610,7 @@ export class SpellManager {
     }
 
     // ------------------------------------------------------------ Bombardo
-    castBombardo(origin, direction, casterId, power = 1) {
+    castBombardo(origin, direction, casterId, power = 1, castId = null) {
         this.hooks.blastCast?.(casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo', origin, direction);
         const maxima = power > 1;
         this._sound('playBombardoCast');
@@ -1637,12 +1638,16 @@ export class SpellManager {
             if (this.auth && this.hooks.explode) this.hooks.explode(p.clone(), radius, casterId, power);
             else this.fx.lightFlash(p, 0xffaa55, 2 * size, 0.15, 20 * size); // client: real blast arrives from the host
         };
-        this.spells.push({
+        const bomb = this.lastBomb = { id: castId || casterId + ':bomb:' + Date.now().toString(36) + ':' + (this._bombSeq = (this._bombSeq || 0) + 1), by: casterId, power, p: orb.position, v: vel, age: 0 };
+        const task = {
+            bomb,
+            capture: () => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
             life: maxima ? 3.2 : 2.6,
             onUpdate: (spell, dt) => {
                 // first frame: the way from the hand to where the orb appeared (a wall or a knight right before the hand)
                 if (gapFrom) { prev.copy(gapFrom); gapFrom = null; } else prev.copy(orb.position);
                 age += dt;
+                bomb.age = age;
                 vel.y -= gravity * dt;
                 orb.position.addScaledVector(vel, dt);
                 orb.rotation.y += dt * 8;
@@ -1717,6 +1722,7 @@ export class SpellManager {
                 if (!exploded) explodeAt(orb.position); // fizzles out with a bang at max range
                 this._freeBall(orb);
             },
-        });
+        };
+        this.spells.push(task);
     }
 }

@@ -36,6 +36,8 @@ import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, c
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
+import { knowsNihilis } from './MonsterFear.js';
+import { skinOf, wizardDetects } from './DarkMagic.js';
 import { DUEL, DUEL_SPELLS } from './Duel.js';
 import { PVP, SPELL_COST, shieldHitCost, pressCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
@@ -594,7 +596,13 @@ export class WizardFight {
 
     /** The spell a wizard really casts at this foe (by his wanted level: Wanted.wantedTactics). */
     _spellFor(v, spell, T, foe = null) {
-        if (v.savior != null) return 'Electrum'; // (the white Saviour: only the blue «Электром» of the duel charges — SaviorRules.js; his wind and blasts are his own: Savior.js)
+        const g = this.game;
+        const skin = foe === g.localId || foe === 'local' ? skinOf(g.dark) : g.remotes?.get(foe)?.dark || 0;
+        if (!v.lesson && foe != null && v.mana >= 40 && wizardDetects(skin) && knowsNihilis(v)) {
+            const seen = this.life._playerPos(foe);
+            if (seen && this.life._sees(v, seen)) return 'NihilisDuel';
+        }
+        if (v.savior != null) return 'Electrum'; // (the white Saviour: blue «Электром» unless the recognized-darkness exception above applies — SaviorRules.js; his wind and blasts are his own: Savior.js)
         if (v.lesson) return lessonSpell();
         if (v.blastThreat?.by === foe && v.blastThreat.until > Date.now()) return v.blastThreat.reply; // (a lesson: only Expelliarmus / Stupefy — never freezing, never deadly)
         if (spell === 'LevitateDuel' || spell === 'AvadaKedavra') spell = 'Stupefy'; // (they don't lift a man to hold him)
@@ -754,6 +762,7 @@ export class WizardFight {
         if (reach <= 0) return false;
         const b = duel._addBolt({ rng: emptyRange(reach, true), id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: at ? at.k : 'p', tid: at ? at.id : foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true, vs });
         if (spell === 'AvadaKedavra') this.life._say(v, 'Авада Кедавра!', 2); // (the killing words are heard)
+        if (spell === 'NihilisDuel') { this.life._say(v, 'Nihilis Atra!', 2); g.sound?.spellCast?.('Nihilis', _o); g.sync?.castSound?.('Nihilis', _o); }
         g.sync?.duelCast?.(b);
         v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));
         v.castT = 0.55;
@@ -763,7 +772,7 @@ export class WizardFight {
         const me = g.character.group.position;
         if (spell === 'AvadaKedavra' && duel.avada) duel.avada.cast(_o, _d, Math.hypot(me.x - v.x, me.z - v.z) < 60); // (the same poison-green flash and terrible sound as a player's)
         else duel._burst?.(_o, duel.colors(spell, v.id).glow, 12);
-        if (spell !== 'AvadaKedavra' && Math.hypot(me.x - v.x, me.z - v.z) < 40) { if (spell === 'IceDuel') g.sound?.playIce?.(); else if (spell === 'Jolt' || spell === 'JoltMaxima') g.sound?.playJolt?.(spell === 'JoltMaxima', false); else g.sound?.playSapira?.(); }
+        if (spell !== 'AvadaKedavra' && spell !== 'NihilisDuel' && Math.hypot(me.x - v.x, me.z - v.z) < 40) { if (spell === 'IceDuel') g.sound?.playIce?.(); else if (spell === 'Jolt' || spell === 'JoltMaxima') g.sound?.playJolt?.(spell === 'JoltMaxima', false); else g.sound?.playSapira?.(); }
         return true;
     }
 
@@ -779,7 +788,7 @@ export class WizardFight {
         _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
         if (!g.spells?.cast) return false;
         try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return false; } // (a failed spell is not entry into combat)
-        g.sync?.spell?.(spell, _o, _d, 'right');
+        g.sync?.spell?.(spell, _o, _d, 'right', v.id);
         const me = g.character.group.position;
         if (Math.hypot(me.x - v.x, me.z - v.z) < 60) g.sound?.spellCast?.(spell, _o);
         v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));

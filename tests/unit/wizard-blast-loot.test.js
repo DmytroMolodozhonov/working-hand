@@ -59,7 +59,7 @@ test('a witnessed Bombardo immediately raises capable domes and makes other mage
     assert.equal(weak.blastThreat.reply, 'Bombardo'); assert.equal(strong.blastThreat.reply, 'Stupefy');
     assert.equal(weak.foe, 'guest'); assert.equal(WizardFight.fights(weak), true);
     assert.equal(hidden.foe, undefined); assert.equal(hidden.fx, 0, 'no knowledge through a wall');
-    assert.equal(WizardFight.prototype._spellFor.call({}, weak, 'Expelliarmus', {}, 'guest'), 'Bombardo');
+    assert.equal(WizardFight.prototype._spellFor.call({ game: W.game }, weak, 'Expelliarmus', {}, 'guest'), 'Bombardo');
     weak.noWand = true;
     const mana = weak.mana; new WizardBlast(W).cast('guest', 'Bombardo', new THREE.Vector3(), new THREE.Vector3(0, 0, -1));
     assert.equal(weak.mana, mana, 'disarmed wizard casts nothing');

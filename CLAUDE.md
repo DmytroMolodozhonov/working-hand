@@ -458,3 +458,9 @@
 Подробно про стиль — `docs/rules/texture-style.md`. Что уже переписано «как ворота» и подключено: рюкзаки (`BackpackModel.js`), палочки (`WandModel.js`), одежда/волосы/шапки героя (`HeroWardrobe.js` → `Appearance.applyLook`), броня героя (`KnightArmorLook.js` → `ArmorLook.dressArmor`: открытый норманнский шлем, накидка с крестом), крылья лебедя (связка). **Пять костюмов магов** (архимаг, огненный маг, друид, маг льда, звездочёт) — `VillagerOutfits.js`: ТОЛЬКО для магов-странников (`wanderer`), городских/деревенских (`townwiz`) и хуторских (`mage`); башня магов (`student`, `teacher`, `seller`, `master`) — всегда единая форма (автор: «для башни нужны однотипные»). Новая мантия героя (`MageRobeLook.js`, `MageOutfits.js`) НЕ подключена: у героя прежняя мантия. Стенды-снимки: `tools/*-screenshots.mjs` → `docs/media/`.
 
 - **Кровать и возрождение (09.11):** только свой созданный дом, точка возрождения после полной ночёвки → `docs/rules/misc-rules.md`, тест `bed-ownership`.
+
+- **Дуэльный Nihilis Atra (09.11):** знание 50/80/100%, видимая тьма с 41, усиление по настоящей тьме соперника → `docs/rules/spells-creatures.md`, `nihilis-duel`.
+
+- **Кардилон (09.11):** обычный Protection ловит Бомбарду за 7/15 маны, расходуя щит; задержка NPC, подтверждение хоста и GPU-выворот → `docs/rules/spells-creatures.md`, `cardilon`.
+
+- **Позднее дрожание палочки (09.11):** отдельный угловой журнал и полчасовая проверка всей цепочки → `docs/rules/hands-body.md`, `AimShake.js`, `long-pointing.mjs`.

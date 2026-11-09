@@ -20,7 +20,7 @@ export const START_SPELLS = new Set([
     // duel («Айс» = «Frozen»: one spell; «Максима» in a clash of charges)
     'Sands', 'Sapira', 'Stupefy', 'Expelliarmus', 'Disarmor', 'Ice', 'Frozen', 'Jolt', 'Maxima',
     // fight and guard
-    'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection',
+    'Cardilon', 'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection',
     // water: only «Firefighting»
     'Firefighting',
     // building: the campfire, a bed and its colour, a passage sewn up, gathering, a bridge (the author: «без свитка»)
@@ -43,7 +43,7 @@ export const SCHOOL_UNKNOWN = new Set(['Sands', 'Sapira', 'Stupefy', 'Expelliarm
     'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Wind', 'WindMaxima', 'Attack', 'GiveMyPower', 'Reperio']); // (a pupil of the school learns no black magic)
 
 /** A spell taught by another spell's scroll / book (the rest: by the key of their own name). */
-export const TAUGHT_BY = {
+export const TAUGHT_BY = { NihilisDuel: 'Nihilis',
     WindImpulseMaxima: 'WindImpulse', AliveMaxima: 'Alive', TotalDestructionMaxima: 'TotalDestruction',
     CircleAttackMaxima: 'CircleAttack', DrawdownMaxima: 'Drawdown', AirBubbleMaxima: 'AirBubble', WaveAttackMaxima: 'WaveAttack',
     WaterForming: 'Waterball', VortexBubble: 'WaterVortex', Furl: 'Unfurl', BreakthroughMaxima: 'Breakthrough',

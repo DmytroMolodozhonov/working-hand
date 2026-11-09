@@ -32,6 +32,7 @@ const NEG = -1e9;
 // Written as a Russian speaker says them («криейт э уолл», not «Create a Wall»): the network writes Russian.
 // A «… Максима» form is added by itself for every spell that has one (matchSpell decides).
 const SAID = [
+    ['кардилон', 'кардиллон', 'карделон'],
     ['инферно'],
     ['тандервейв', 'тандер вейв', 'сандервейв'],
     ['гром'],

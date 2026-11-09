@@ -32,6 +32,11 @@ export class NetOutbox {
         }
         if (ITEM_EVENTS.has(msg.t)) this.flushState('ipos:' + (msg.from || ''));
         if (msg.t === 'vhit') this.flushState('vil:' + (msg.from || ''));
+        if (msg.t === 'cdl' && !msg.no) {
+            // An older queued shield pose must arrive before the event that spends it.
+            this.flushState('vil:' + (msg.from || ''));
+            this.flushState('p:' + (msg.by || msg.from || ''));
+        }
         if (msg.t === 'ahit') this.flushState('an:' + (msg.from || ''));
         if (SNAPSHOTS.has(msg.t)) this.states.set(stateKey(msg), { msg, packets });
         else {

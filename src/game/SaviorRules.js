@@ -108,7 +108,7 @@ export function saviorLine(kind, last = null, rng = Math.random) {
 }
 
 /** The spells he may cast: none of them dark (the white mage). */
-export const WHITE_SPELLS = ['Electrum', 'WindMaxima', 'BombardoMaxima', 'Bombardo'];
+export const WHITE_SPELLS = ['NihilisDuel', 'Electrum', 'WindMaxima', 'BombardoMaxima', 'Bombardo'];
 /** His spells that are not duel charges (cast as the players' own: SpellManager.cast with his id). Mana of each: WizardAI.NPC_COST. */
 export const SAVIOR_SPECIAL = new Set(['WindMaxima', 'BombardoMaxima', 'Bombardo']);
 

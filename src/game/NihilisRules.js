@@ -25,6 +25,11 @@ export const NIHIL = {
     FIRST_GAIN: 5, // cells of mana for the first real scattering (Mana.firstSpellGain)
 };
 
+/** Extra beam strength after all ordinary buffs, using the opponent's true level. */
+export function nihilDuelPower(spell, level) {
+    return spell === 'NihilisDuel' ? 1 + Math.min(100, Math.max(0, Number(level) || 0)) / 100 : 1;
+}
+
 /** A point in the cone from `o` along unit `d`, with a body of radius `r`: along-distance or -1. */
 export function inCone(o, d, p, r = 0, range = NIHIL.RANGE) {
     const tx = p.x - o.x, ty = p.y - o.y, tz = p.z - o.z;

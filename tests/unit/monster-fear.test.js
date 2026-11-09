@@ -31,12 +31,12 @@ describe('MonsterFear — кто бежит от монстра', () => {
         expect(near(share(w('elder'), (d) => d.act === 'flee'), 0.45)).toBe(true);
         expect(share(w('master'), (d) => d.act === 'flee')).toBe(0);
     });
-    it('знание «Nihilis Atra» (у не убежавших): среднему 35%, высокому 60%, младшему нет, главе всегда', () => {
+    it('знание «Nihilis Atra» (у не убежавших): среднему 80%, высокому 100%, младшему 50%, главе всегда', () => {
         // знание считается независимо от бегства: считаем по всем, у кого d.dispel || бежит — смотрим долю знающих среди дерущихся
         const knows = (rank) => { let fight = 0, k = 0; for (let i = 0; i < 40000; i++) { const d = decide({ id: rank + i, role: 'wizard', wizard: true, rank }); if (d.act === 'fight') { fight++; if (d.dispel) k++; } } return fight ? k / fight : 0; };
-        expect(Math.abs(knows('adept') - 0.35)).toBeLessThan(0.02);
-        expect(Math.abs(knows('teacher') - 0.6)).toBeLessThan(0.02);
-        expect(knows('novice')).toBe(0);
+        expect(Math.abs(knows('adept') - 0.8)).toBeLessThan(0.02);
+        expect(Math.abs(knows('teacher') - 1)).toBeLessThan(0.02);
+        expect(Math.abs(knows('novice') - 0.5)).toBeLessThan(0.02);
         expect(share((i) => ({ id: 'm' + i, role: 'master', wizard: true, rank: 'master' }), (d) => d.dispel && d.act === 'fight')).toBe(1);
     });
     it('решение одно и то же для одного существа (не мигает)', () => {

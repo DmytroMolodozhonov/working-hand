@@ -659,6 +659,7 @@ const FX = {
     /** «Раскрой секреты»: a mysterious whole-tone sparkle over a low hum. */
     fxReveal(sr) { const o = buf(sr, 1.6); pad(o, sr, [110, 165], 0, 1, 0.4, { att: 0.3, rel: 0.5 }); ['C6', 'D6', 'E6', 'F#6', 'G#6', 'A#6'].forEach((n, k) => bell(o, sr, hz(n), 0.1 + k * 0.11, 0.12, 1)); return finish(o, sr, { peak: 0.6 }); },
     /** «Protection»: a glassy shield blooming — a hum swelling with a bright ping. */
+    fxCardilon(sr) { const o = buf(sr, 1.1); glide(o, sr, 0, 0.75, 0.32, (u) => 900 - 700 * u, swell(0.03, 0.4), 3); bell(o, sr, 1480, 0.5, 0.28, 0.5, 0.4); bell(o, sr, 2210, 0.57, 0.18, 0.4, 0.5); return finish(o, sr, { peak: 0.65 }); },
     fxShield(sr) { const o = buf(sr, 0.9); glide(o, sr, 0, 0.9, 0.35, (u) => 330 + 30 * Math.sin(u * 40), (u) => Math.min(1, u * 10) * (1 - u), 4); bell(o, sr, 1975, 0.02, 0.2, 0.8, 0.5); return finish(o, sr, { peak: 0.6 }); },
     /** «Invisibility»: a shimmering hiss falling away, a bell fading. */
     fxInvis(sr) { const o = buf(sr, 1.3), r = rng(5); noise(o, sr, 0, 1.3, 0.25, (u) => 0.6 - 0.5 * u, swell(0.15, 0.7), r); glide(o, sr, 0, 1.3, 0.12, (u) => 2400 - 1600 * u, swell(0.1, 0.8), 2); return finish(o, sr, { peak: 0.55 }); },
@@ -1235,6 +1236,7 @@ export const SPELL_SOUND = {
     Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] }, LiquidationDuel: { own: ['fxLiquidDuel'] }, LiquidationMaximaDuel: { own: ['fxLiquidDuelMax'] },
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
+    Cardilon: { cast: 'fxCardilon' },
     Nihilis: { cast: 'fxNihilis' }, // («Nihilis Atra»: a short bright shimmer — an instant, not a tune; Nihilis.js)
     Spiralis: { theme: 'thSpiralis' }, // («Спиралис»: the clash's beams whirled, 9 s — Whirl.js)
     Reperio: { own: ['magic'], theme: 'thReperio' }, // («Reperio»: a whisper and a far bell, a cold tune of 8 s — BodyFinder.js)

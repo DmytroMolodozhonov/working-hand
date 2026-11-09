@@ -27,7 +27,7 @@ export class SoulSeal {
     }
 
     free(v) {
-        if (v.dead || v.noWand || v.sleep || v.lev || v.carriedBy || v.stunT > 0 || v.fleeT > 0 || v.prep || v.servantOf != null) return false;
+        if (v.dead || v.noWand || v.sleep || v.lev || v.carriedBy || v.stunT > 0 || v.fleeT > 0 || v.prep || v.cardilon || v.servantOf != null) return false;
         if (!v.foe) return true;
         const p = this.life._playerPos(v.foe);
         if (p && (Math.hypot(p.x - v.x, p.z - v.z) < 25 || this.life._sees(v, p))) return false;

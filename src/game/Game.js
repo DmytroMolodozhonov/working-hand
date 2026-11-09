@@ -282,6 +282,7 @@ import { SeeThroughFx } from '../fx/SeeThroughFx.js';
 import { SteamBodies } from '../fx/SteamFx.js';
 import { Fireworks } from './Fireworks.js';
 import { Nihilis } from './Nihilis.js';
+import { Cardilon } from './Cardilon.js';
 import { EnchantCircles } from './EnchantCircles.js';
 import { glowSamples } from '../fx/EnchantGlow.js';
 import { LedgeClimb } from './LedgeClimb.js';
@@ -301,13 +302,13 @@ import { randomLook as _rollLook, cleanLook as _cleanLook } from '../entities/Ap
 
 const SPELL_COOLDOWN = 1000;
 /** The duel's one-word spells: cast the moment they are heard — no wait for a «… Максима» (NativeVoice.DUEL_FAST). */
-const DUEL_FAST = new Set(['Jolt', 'Sapira', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Disarmor', 'Ice', 'Sands']);
+const DUEL_FAST = new Set(['Cardilon', 'Jolt', 'Sapira', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Disarmor', 'Ice', 'Sands']);
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
 const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
+const MANA_LATER = new Set(['Cardilon', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -766,6 +767,7 @@ export class Game {
         this.offerings = new Offerings(this); // what must lie on the pentagram of the gargoyles / the monster before the ritual (Offerings.js)
         this.united = new UnitedPower(this); // «Пентаграмма объединённой силы» (`Pentagranium Unitas`): two things of one kind into one (UnitedPower.js)
         this.enchantCircles = new EnchantCircles(this); // «Пентаграмма зачарования»: the permanent circles and the rite (EnchantCircles.js, Enchant.js)
+        this.cardilon = new Cardilon(this);
         this.nihilis = new Nihilis(this); // «Nihilis Atra»: a cone of light scatters black magic (Nihilis.js)
         this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
@@ -2312,6 +2314,7 @@ export class Game {
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
         if (name === 'Pentagranium') return this.pentagranium.cast(isFinal, text); // («Pentagranium <Name>»: the pentagram named in the phrase, laid where the wand points — Pentagranium.js)
         if (name === 'Fireworks') return this.fireworks.cast(isFinal);
+        if (name === 'Cardilon') return this.cardilon.cast(isFinal);
         if (name === 'Nihilis') return this.nihilis.cast(isFinal); // (a cone of light against black magic — Nihilis.js; instant, white magic)
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
@@ -4068,6 +4071,7 @@ export class Game {
         for (const m of VampireLife.samples()) zoo.add(m);
         // (the titans are NOT warmed here: they live on the planets only, and painting their textures made the loading screen stall — a friend's
         //  complaint 06.11. Titans.warm() readies one titan when its planet is reached, behind the burning air of the landing.)
+        try { zoo.add(this.cardilon.look.sample()); } catch (e) { console.error('prewarm cardilon', e); }
         try { zoo.add(this.bodyFinder.sample()); } catch (e) { console.error('prewarm bodyFinder', e); } // (the beads, the halo, the pillar's light)
         try { zoo.add(this.fishing.sample()); } catch (e) { console.error('prewarm fishing', e); } // (the float, the ring on the water)
         try { for (const m of PharaohLife.samples()) zoo.add(m); } catch (e) { console.error('prewarm pharaoh', e); } // (the pharaoh's locusts, darts, sarcophagus, wave ring)
@@ -4611,6 +4615,7 @@ export class Game {
         this.hurtFlash?.update(dt); // (a creature that lost HP glows red a moment — every computer sees it)
         mark('зомби');
 
+        this.cardilon.update(dt);
         this.spells.update(dt);
         this._updateMagicGesture();
         this._updatePendingSpell();
@@ -5666,6 +5671,7 @@ export class Game {
         this.waterPart?.dispose();
         this.fishing?.dispose();
         this.bodyFinder?.dispose();
+        this.cardilon?.dispose();
         this.fishPier?.dispose();
         this.rainFx?.dispose();
         this.seaSurface?.dispose();

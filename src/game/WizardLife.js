@@ -27,6 +27,7 @@ import { reactLag, reactLagText, knowsFirefighting, canDome, SHIELD, HUNT, huntR
 import { hashString } from '../core/math.js';
 import { SoulSeal } from './SoulSeal.js';
 import { WizardBlast } from './WizardBlast.js';
+import { PVP } from './Combat.js';
 import { WizardHome } from './WizardHome.js';
 import { knowsFlight } from './WizardMind.js';
 
@@ -506,6 +507,10 @@ export class WizardLife {
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;
         }
         if (this.seals?.think(v, dt)) return true;
+        if (this.game.cardilon?.busy(v)) {
+            if (v.savior == null) { v.mana = Math.max(0, v.mana - PVP.SHIELD_DRAIN * dt); v.shieldT -= dt; }
+            v.speed = 0; v.path = null; v.mode = 'cast'; v.castT = 0.3; this.life._ground(v); return true;
+        }
         if (this.home?.step(v, dt)) return true;
         if (v.lostWand) return this._fetchWand(v, dt);
         // a reaction that waits for his wits (WizardMind.REACT_LAG): a beginner stands lost a few seconds, the Master at once
@@ -600,7 +605,7 @@ export class WizardLife {
                 if (v.practice) f |= v.practice.bits;
                 if (v.job === 'brew' && v.mode === 'work') f |= FX.BREW;
                 if (v.job === 'teach' && v.sparkT > 0) { v.sparkT -= dt; f |= FX.SPARK; }
-                if (v.prep || v.care?.wand || v.soulTask?.mark) f |= FX.CAST; // (saying a spell: the wand glows — seen by all, before the charge flies)
+                if (v.prep || v.care?.wand || v.soulTask?.mark || v.cardilon) f |= FX.CAST; // (saying a spell: the wand glows — seen by all, before the charge flies)
                 if (v.noWand) f = FX.NOWAND; // (no wand in the hand: no Lumos, no magic of the hand — seen by all)
                 f |= this._smoke(v, dt);
                 v.fx = (v.fx & (FX.SHIELD | FX.DOME | FX.BLINK)) | f;

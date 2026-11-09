@@ -13,6 +13,7 @@
  */
 
 import { allLog } from '../core/AllLog.js';
+import { AimShake } from './AimShake.js';
 
 export const HANDS = {
     SAMPLE_MS: 100, // the hand is looked at this often
@@ -200,6 +201,7 @@ export class HandsLog {
         this._remoteSig = new Map();
         this._arm = { left: {}, right: {} };
         this.shake = { left: new ArmShake(), right: new ArmShake() };
+        this.aimShake = new AimShake();
         this._shakeAt = 0;
     }
 
@@ -261,13 +263,23 @@ export class HandsLog {
             ch.getHandWorldPosition(side, v).applyMatrix4(inv);
             this.shake[side].step(v.x, v.y, v.z, dt, g.handBlocks?.pushed?.[side] || 0);
         }
+        const side = g.wandSide?.();
+        if (side !== this._aimSide) { this.aimShake.reset(); this._aimSide = side; }
+        const dir = this._aimDir || (this._aimDir = ch.group.position.clone());
+        if (side && ch.isHandTracked?.(side) !== false && g.wandMagic?.tip(v, dir)) {
+            dir.transformDirection(inv);
+            this.aimShake.step(dir.x, dir.y, dir.z, dt);
+        } else this.aimShake.reset();
         const now = performance.now();
         if (now - this._shakeAt < 1000) return;
         this._shakeAt = now;
         for (const side of ['right', 'left']) {
-            const line = ch.isHandTracked?.(side) === false ? null : shakeLine(this.shake[side].take(), this._poseTimes.length);
+            const sample = this.shake[side].take(); // drain the window even when tracking is lost
+            const line = ch.isHandTracked?.(side) === false ? null : shakeLine(sample, this._poseTimes.length);
             if (line) allLog('Руки', `${SIDE[side]}: ${line}`, 'warn');
         }
+        const aim = this.aimShake.take();
+        if (aim.n >= 8 && (aim.degrees > 1.5 || aim.jump > 8)) allLog('Руки', `палочка: дрожь направления ${f1(aim.degrees)}°, рывок ${f1(aim.jump)}°, игра ${g.fpsNow || 0} FPS, камера ${this._poseTimes.length} поз/с`, 'warn');
     }
 
     _event(side, now, text) {

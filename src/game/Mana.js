@@ -58,7 +58,7 @@ export const FIRST_SPELL = {
     Lumos: 1, LumosFlashlight: 1, LumosAhead: 1, Draw: 1, Accio: 1, Gather: 1, Levitation: 1, Up: 1, Fire: 1, Wind: 1,
     CreateFloor: 1, CreateCeiling: 1, CreateWall: 1, CreateDoor: 1, BuildRoof: 1, CreateBed: 1, CreateBoard: 1,
     ChangeColor: 1, Unfurl: 1, Furl: 1, Alohomora: 1, Lock: 1, Waterball: 1, WaterForming: 1, AirBubble: 1, VortexBubble: 1,
-    Protection: 1, WardDispel: 1, Rescue: 1, Brainrot: 3, Firefighting: 1, Drawdown: 1, Stitching: 1, CreateBridge: 1, GroundVortex: 8, VisibleGodi: 5, WaterWalk: 2, WaterPart: 6, Nihilis: 5, Pentagranium: 6, // («Visible Godi»: the author — +5 cells at the first real look behind a wall; VisibleGodi.js)
+    Cardilon: 2, Protection: 1, WardDispel: 1, Rescue: 1, Brainrot: 3, Firefighting: 1, Drawdown: 1, Stitching: 1, CreateBridge: 1, GroundVortex: 8, VisibleGodi: 5, WaterWalk: 2, WaterPart: 6, Nihilis: 5, Pentagranium: 6, // («Visible Godi»: the author — +5 cells at the first real look behind a wall; VisibleGodi.js)
     Flourish: 2, // («Flourish»: the first time the earth turns green — +2 cells)
     Groundprud: 2, // (Groundprud: a wall of the ground — the author: +2 cells at the first cast; Groundprud.js)
     Fireworks: 3, // (the author: «за первое применение даётся 3 ячейки маны» — once, at the first real salvo)
@@ -108,7 +108,7 @@ export const GOD_SPELLS = new Set([...TEMPLE_SCROLLS, 'FlyingMaxima']); // (Plan
 export const NOT_SPELLS = new Set(['GroundShield', 'Stand', 'Stop', 'Pause', 'Nox', 'Attack', 'Reveal', 'Hammer', 'WardGrow', 'ProtectionHouseGrant']);
 
 /** Other names a spell reports itself by → the spell. */
-export const SAME_SPELL = { WallRise: 'Breakthrough', WallRiseMaxima: 'BreakthroughMaxima', InfernoMaxima: 'Inferno' };
+export const SAME_SPELL = { NihilisDuel: 'Nihilis', WallRise: 'Breakthrough', WallRiseMaxima: 'BreakthroughMaxima', InfernoMaxima: 'Inferno' };
 
 /** Bonuses of a spell's second «first time» (not spells: no scroll, no words). */
 export const FIRST_EXTRA = { VisibleGodiLens: 5 };
@@ -121,7 +121,7 @@ export function firstSpellGain(name) {
 }
 
 /** A duel charge's name → the spell it came from. */
-export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', IceDuelMaxima: 'IceMaxima', Accentric: 'Accentric', Pilbidrio: 'Pilbidrio', Die: 'Die', Electrum: 'Electrum', Kidarius: 'Kidarius', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima', LiquidationDuel: 'Liquidation', LiquidationMaximaDuel: 'LiquidationMaxima' };
+export const DUEL_SPELL_NAME = { NihilisDuel: 'Nihilis', SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', IceDuelMaxima: 'IceMaxima', Accentric: 'Accentric', Pilbidrio: 'Pilbidrio', Die: 'Die', Electrum: 'Electrum', Kidarius: 'Kidarius', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima', LiquidationDuel: 'Liquidation', LiquidationMaximaDuel: 'LiquidationMaxima' };
 
 /**
  * Magical creatures: the first kill of each kind + this much (to whoever struck the last blow).
@@ -436,7 +436,7 @@ const TITLES = {
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
     Axis: 'Axis', Kidarius: 'Кидариус', SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Reperio: 'Reperio', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', FireSerpent: 'Serpent', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
-    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
+    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Cardilon: 'Кардилон', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima', ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', PlanetLiquidation: 'Planet Liquidation',
 };

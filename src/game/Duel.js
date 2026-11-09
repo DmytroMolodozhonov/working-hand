@@ -74,17 +74,19 @@ import { WHIRL } from './WhirlRules.js';
 import { manaRules, creativeFiniteMana } from './HeroSetup.js';
 import { segmentToSegment } from './SegmentContact.js';
 import { DUEL_RANGE, emptyRange } from './DuelRange.js';
+import { nihilDuelPower } from './NihilisRules.js';
 export { segmentToSegment } from './SegmentContact.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
 /** Own charges that leave a reason in the spell journal (`_chargeStart/_chargeEnd`): hit, miss (angle), shield, range. */
 const LOGGED_CHARGES = new Set(['Ice', 'IceMaxima', 'Frozen', 'Disarmor', 'Expelliarmus', 'Stupefy']);
-const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor', LiquidationDuel: 'fxLiquidDuel', LiquidationMaximaDuel: 'fxLiquidDuelMax' };
+const DUEL_FX = { NihilisDuel: 'fxNihilis', Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor', LiquidationDuel: 'fxLiquidDuel', LiquidationMaximaDuel: 'fxLiquidDuelMax' };
 export { JERK, sharpJerk } from './Jerk.js';
 
 const _tipP = new THREE.Vector3(), _tipQ = new THREE.Quaternion(), _tipD = new THREE.Quaternion();
 const _tipM = new THREE.Matrix4(), _tipRest = new THREE.Vector3(0, -1.95, 0), _tipR = [null, null, 0, 0, 0]; // (a villager's root at rest: his feet, 1.95 below the group — VillagerModel)
 export const DUEL_SPELLS = {
+    NihilisDuel: { color: 0xfff3c4, name: 'Nihilis Atra', speed: 17, core: 0.04, glow: 0.22, coreColor: 0xffffff, fixed: true },
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
     // a poison-green charge: an acid core (never white), a murky swamp-green glow, smoke and sparks (AvadaLook.js);
     // the same green for every wizard (`fixed`: only a slight shade apart, so two of them in a clash still differ)
@@ -1227,6 +1229,7 @@ export class Duel {
 
     /** The charge touched a body: who decides what happens? */
     _arrive(b, dt) {
+        if (b.spell === 'NihilisDuel' && b.tk !== 'p' && b.tk !== 'v' && this._referee()) { this._end(b, 'fizzle'); return; }
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') && this._referee()) { this._arriveAtCreature(b); return; }
@@ -1333,6 +1336,7 @@ export class Duel {
     applyToCreature(spell, c, byId, from = null, part = null, opts = null) { // (opts.clash: it won a beam clash — a robe does not turn it away)
         const g = this.game;
         const src = from || this._casterAt(byId, c);
+        if (spell === 'NihilisDuel') { g.nihilis?.hitWizard(c, byId, src); return; }
         const p = this._creaturePoint(c, _v1);
         this._hitBurst(spell, p, 30);
         // a spell at a person is an attack, hurt or not (Остолбеней, Левиоса, Пески, a robe or a shield that took it…):
@@ -1449,6 +1453,7 @@ export class Duel {
     applyToMe(spell, byId, side = 'right', opts = null) { // (opts.clash: the charge WON a beam clash — it reaches the loser whatever he wears: no armour / robe turns it away)
         this._note({ ev: 'hitMe', spell, byId });
         const g = this.game;
+        if (spell === 'NihilisDuel') { g.nihilis?.hitMe(byId); return; }
         const c = g.combat;
         const p = c.center(_v1);
         this._hitBurst(spell, p, 40);
@@ -1816,6 +1821,17 @@ export class Duel {
         return v?.wizard ? v : null;
     }
 
+    _darkLevel(id) {
+        const g = this.game;
+        if (id === this.me || id === 'local') return g.dark?.level || 0;
+        return this._npcWizard(id)?.dark || g.remotes?.get(id)?.blackLevel || 0;
+    }
+
+    _beamPower(b, opponent, luck) {
+        return this._strength(b.by, luck, opponent) * clashPower(b.spell) * this._wandK(b.by, b.spell)
+            * (b.extra ? WHIRL.DOUBLE_K : 1) * nihilDuelPower(b.spell, this._darkLevel(opponent));
+    }
+
     /**
      * Strength in a duel — ONE scale for players and wizards (WizardAI.duelPower): mana now, health, a
      * little luck. In Creative mana never runs out: a player there is as strong in mana as his opponent
@@ -2002,8 +2018,8 @@ export class Duel {
         // A hand off the opponent doesn't push at all
         // (the strong charges push harder: Accentric ×1.2, Pilbidrio ×1.4, «Дай» ×5 — StrongSpells.CLASH_POWER)
         // (the wand counts as everywhere: +15 % and its own bonuses — WandMagic.wandPower)
-        const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) * this._wandK(a.by, a.spell) * (a.extra ? WHIRL.DOUBLE_K : 1) : 0; // (a double charge — two spells in one beam — pushes harder: Whirl.js)
-        const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) * this._wandK(b.by, b.spell) * (b.extra ? WHIRL.DOUBLE_K : 1) : 0;
+        const sa = ca.ok ? this._beamPower(a, b.by, c.luckA) : 0;
+        const sb = cb.ok ? this._beamPower(b, a.by, c.luckB) : 0;
         c.pwA = sa; c.pwB = sb; // (what each side pushes with now: the bar shows mine)
         this._clashArcs(c, (sa + sb) / 2, dt);
         const S = c.stat || (c.stat = { n: 0, sa: 0, sb: 0, ca: 0, cb: 0 }); // (for the duel journal: what each side really pushed with)

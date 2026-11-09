@@ -250,9 +250,22 @@ const srv = await startServer(port);
 const browser = await launch({ extraArgs: ['--enable-precise-memory-info', '--js-flags=--expose-gc'] });
 let samples = [];
 let errors = [];
+async function readSamples(page) {
+    let timer;
+    try {
+        return await Promise.race([
+            page.evaluate(() => window.__soak.samples),
+            new Promise((_, reject) => { timer = setTimeout(() => {
+                browser.close().catch(() => {});
+                reject(new Error('soak browser stopped responding for 45 seconds; partial samples are not a completed run'));
+            }, 45000); }),
+        ]);
+    } finally { clearTimeout(timer); }
+}
 try {
     const o = await openPage(browser, srv.url, { noCamera: true, viewport: { width: W, height: H } });
     const page = o.page;
+    page.on('crash', () => { console.error('soak page crashed; stopping the browser'); browser.close().catch(() => {}); });
     errors = o.errors;
     await page.evaluate(() => { let s = 0x2545F491; Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; });
     await page.evaluate(({ SEED, ULTRA }) => {
@@ -270,7 +283,7 @@ try {
     let shown = 0;
     while (Date.now() < end && !(samples.at(-1)?.gt >= MINUTES * 60)) {
         await sleep(5000);
-        samples = await page.evaluate(() => window.__soak.samples);
+        samples = await readSamples(page);
         if (OUT) fs.writeFileSync(OUT, JSON.stringify({ samples, partial: true })); // (to look at while it runs)
         for (; shown < samples.length; shown++) {
             const s = samples[shown];
@@ -315,6 +328,7 @@ if (errs.length) console.log('  ошибки:', errs.slice(0, 8));
 if (OUT) { fs.writeFileSync(OUT, JSON.stringify({ samples, grow, ggrow, errors: errs.slice(0, 50) }, null, 1)); console.log('saved:', OUT); }
 if (CHECK) {
     const bad = [];
+    if (!(samples.at(-1)?.gt >= MINUTES * 60)) bad.push('не завершено заданное время игры');
     const lastMinute = (f) => avg(B, f), first = (f) => avg(A, f);
     if (lastMinute((s) => s.game) > first((s) => s.game) * 1.5 + 2) bad.push(`работа игры за кадр выросла: ${sum((s) => s.game)} мс`);
     for (const [name, f, slack] of [['объектов сцены', (s) => s.objects, 400], ['геометрий', (s) => s.geometries, 150], ['текстур', (s) => s.textures, 40], ['шейдеров', (s) => s.programs, 5]]) if (lastMinute(f) > first(f) + slack) bad.push(`${name}: ${sum(f)}`);

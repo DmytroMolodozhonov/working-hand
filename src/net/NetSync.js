@@ -574,8 +574,9 @@ export class NetSync {
         this.net.send({ t: 'csnd', by: this.me, n: name, p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
     }
 
-    spell(name, origin, dir, side) {
-        this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
+    spell(name, origin, dir, side, casterId = this.me) {
+        const bomb = /^(Bombardo|BombardoMaxima)$/.test(name) ? this.game.spells?.lastBomb : null;
+        this.net.send({ t: 'spell', by: casterId, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side, ...(bomb && bomb.by === casterId ? { bid: bomb.id } : {}) }, true);
     }
 
     /** «Fireworks»: one salvo from my wand tip (the seed makes the same bursts on every computer — Fireworks.js). */
@@ -1173,11 +1174,12 @@ export class NetSync {
                 g.voiceGate?.noteRemote(m.name, performance.now(), { by: m.by }); // (my microphone may hear their voice)
                 g.noteCaster?.(m.name, m.by);
                 g.savior?.noteSpell(m.by, m.name); // (the white Saviour sees a Bombardo of the player and answers in kind — Savior.js)
-                g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
+                g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by, typeof m.bid === 'string' ? m.bid.slice(0, 160) : null);
                 break;
             }
             case 'vgs': if (m.by !== this.me) g.visibleGodi?.onNet(m.by, m); break; // (steam of «Visible Godi»: VisibleGodi.js)
             case 'ench': g.enchantCircles?.onNet(m); break; // (the rite of the enchanting pentagram: EnchantCircles.js)
+            case 'cdreq': case 'cdl': g.cardilon?.onNet(m); break;
             case 'nhl': if (m.by !== this.me) g.nihilis?.onNet(m.by, m); break; // (a cone of «Nihilis Atra»: Nihilis.js)
             case 'pgm': if (m.by !== this.me) g.pentagranium?.onNet(m.by, m); break; // (a pentagram / its rite: Pentagranium.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)

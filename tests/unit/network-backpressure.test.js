@@ -111,3 +111,16 @@ test('an hour of congested multiplayer keeps NPC snapshots bounded and preserves
         assert.equal(sent[4].l[0][1], 17999);
     } finally { conn._outbox?.dispose(); }
 });
+
+test('Cardilon spends the shield after older queued NPC/player poses, so congestion cannot restore the old shield', () => {
+    const { net, conn, sent, drain } = link();
+    try {
+        net._sendConn(conn, { t: 'vil', from: 'H', l: [['npc', 'shield']] });
+        net._sendConn(conn, { t: 'p', from: 'guest', c: [1] });
+        net._sendConn(conn, { t: 'cdl', from: 'H', by: 'guest', id: 'bomb' });
+        net._sendConn(conn, { t: 'p', from: 'guest', c: [0] });
+        drain();
+        assert.deepEqual(sent.map(m => m.t), ['vil', 'p', 'cdl', 'p']);
+        assert.equal(sent[1].c[0], 1); assert.equal(sent[3].c[0], 0);
+    } finally { conn._outbox?.dispose(); }
+});
