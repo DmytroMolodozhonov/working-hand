@@ -135,6 +135,11 @@ export function onCounter(stall, p) {
     return p.x >= c.x0 - 0.7 && p.x <= c.x1 + 0.7 && p.z >= c.z0 - 0.7 && p.z <= c.z1 + 0.7 && p.y > c.top - 0.3 && p.y < c.top + 1.2;
 }
 
+function coinOnCounter(stall, L) {
+    return !!stall?.counter && L.item.kind === 'coins' && !L.item.shop && !L.hover && !L.accio
+        && !(L.remote && L.remoteRest === false) && L.vel.lengthSq() <= 0.05 && onCounter(stall, L.model.position);
+}
+
 /**
  * What is left of the whole answer after the part already said while the net wrote it
  * (compared by letters: the tidying may change a quote or a space). '' when it does not match — never said twice.
@@ -1110,7 +1115,7 @@ export class CastleTalk {
         const st = def.stalls?.[i], out = [];
         if (!st?.counter) return out;
         for (const L of this.game.items.loose.values()) {
-            if (L.item.kind === 'coins' && !L.item.shop && !L.hover && !L.accio && onCounter(st, L.model.position) && L.vel.lengthSq() <= 0.05) out.push(L);
+            if (coinOnCounter(st, L)) out.push(L);
         }
         return out;
     }
@@ -1322,7 +1327,7 @@ export class CastleTalk {
     _pursePay(v) {
         const P = this.purse;
         const L = P && P.v === v ? this.game.items.loose.get(P.uid) : null;
-        if (L && L.item.kind === 'coins' && !L.item.shop) return L;
+        if (L && coinOnCounter(v.cs?.def?.stalls?.[v.entry?.stall], L)) return L;
         // (any pouch lying still on his counter: the one he greeted may have been taken back, another put)
         return this._trader(v) ? this._counterCoins(v.cs.def, v.entry.stall)[0] || null : null;
     }
@@ -1547,11 +1552,14 @@ export class CastleTalk {
                 // my pouch of coins put down on the counter: «what do you want?» (not at a buyer's: he sells nothing — coins there mean nothing to him)
                 let coins = false;
                 if (!stall.pawn && !stall.fence) for (const L of g.items.loose.values()) {
-                    if (L.item.kind !== 'coins' || L.item.shop || !(L.item.count > 0) || L.hover || !on(L.model.position) || L.vel.lengthSq() > 0.05) continue;
+                    if (!(L.item.count > 0) || !coinOnCounter(stall, L)) continue;
                     coins = true;
-                    if (this.purse?.uid !== L.item.uid) {
-                        this.purse = { uid: L.item.uid, v };
-                        if (performance.now() - (v.talkedAt || -1e9) < 6000) break; // (the change he just left: no new question)
+                    if (this.purse?.uid !== L.item.uid) this.purse = { uid: L.item.uid, v, announced: false };
+                    if (!this.purse.announced && !this._labelOff.has(key)) {
+                        // A greeting must delay the question, not mark a new pouch as already handled forever.
+                        // After a purchase _labelOff suppresses a new question about the change left on the counter.
+                        if (performance.now() - (v.talkedAt ?? -1e9) < 6000) break;
+                        this.purse.announced = true;
                         v.talking = 4;
                         this._sayReply(v, `Вижу монеты — ${L.item.count}. Что желаешь купить?`, 6);
                         g.hud.setVoice?.(`💰 На прилавке ${L.item.count} монет — назовите товар (цена — на карточке рядом с ним)`, true);
@@ -1564,7 +1572,7 @@ export class CastleTalk {
                     for (const [uid, lb] of labelGoods(stall, this._goodsAt(key))) texts.set(uid, lb.text);
                 }
                 for (const L of g.items.loose.values()) {
-                    if (L.item.shop || L.item.kind === 'coins' || L.hover) continue;
+                    if (L.item.shop || L.item.kind === 'coins' || L.hover || (L.remote && L.remoteRest === false)) continue;
                     const sp = L.model.position;
                     if (!on(sp) || L.vel.lengthSq() > 0.6) continue; // (lying, or nearly)
                     found = { uid: L.item.uid, item: L.item, pos: sp.clone() };

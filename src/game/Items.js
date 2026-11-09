@@ -223,7 +223,7 @@ export class ItemSystem {
 
     // ----------------------------------------------------------- the world
     /** A thing appears lying / hovering (authority; the others are told). */
-    spawnLoose(item, pos, { vel = null, hover = false, broadcast = true, quat = null, spin = null, rise = false } = {}) {
+    spawnLoose(item, pos, { vel = null, hover = false, broadcast = true, quat = null, spin = null, rise = false, rest = false } = {}) {
         retireScroll(item); // (an old health / mana scroll: an apple now)
         if (this.loose.has(item.uid)) return this.loose.get(item.uid);
         const model = makeItemModel(item);
@@ -231,7 +231,7 @@ export class ItemSystem {
         if (quat) model.quaternion.copy(quat); // (thrown: as it was in the hand)
         this.game.scene.add(model);
         oneShape(model);
-        const L = { item, model, vel: vel ? vel.clone() : new THREE.Vector3(), spin: new THREE.Vector3(), hover: hover ? pos.clone() : null, t: Math.random() * 6, noPick: performance.now() + (vel ? 700 : 0), rest: false };
+        const L = { item, model, vel: vel ? vel.clone() : new THREE.Vector3(), spin: new THREE.Vector3(), hover: hover ? pos.clone() : null, t: Math.random() * 6, noPick: performance.now() + (vel ? 700 : 0), rest };
         // spin: an angular velocity (world axis × rad/s) — a throw keeps the wrist's snap; a spill tumbles
         if (spin) L.spin.copy(spin);
         else if (vel) L.spin.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
@@ -1200,7 +1200,17 @@ export class ItemSystem {
         }
         if (L.rest && this.auth && !L.inCaul && !L.accio && !L.lev && !L.remote) { this._restCheck(L, dt); return; }
         if (L.rest || L.accio || L.lev) return; // («Акцио» / «Левиоса» carries it)
-        if (L.remote) { m.position.lerp(L.remote, Math.min(1, dt * 8)); return; }
+        if (L.remote) {
+            // Remote interpolation must update the motion state too: a pouch used to keep its launch velocity forever,
+            // so the guest's merchant never accepted it as money lying on the counter.
+            const k = Math.min(1, dt * 8);
+            L.vel.subVectors(L.remote, m.position).multiplyScalar(dt > 0 ? k / dt : 0);
+            m.position.lerp(L.remote, k);
+            if (L.remoteRest && m.position.distanceToSquared(L.remote) < 0.0001) {
+                m.position.copy(L.remote); L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true;
+            }
+            return;
+        }
         // (in space — above everything, Space.js: no weight, no air — it floats on as it was let go)
         const space = m.position.y > 30000;
         // (its land is not made yet — the workers bring it: it waits where it is, instead of making the ground here in a frame)
@@ -1926,17 +1936,18 @@ export class ItemSystem {
         this._netT = 0.25;
         const moving = [];
         const r = (v) => Math.round(v * 100) / 100;
-        for (const L of this.loose.values()) if (!L.hover && !L.sentRest) { moving.push([L.item.uid, r(L.model.position.x), r(L.model.position.y), r(L.model.position.z)]); if (L.rest) L.sentRest = true; }
+        for (const L of this.loose.values()) if (!L.hover && !L.sentRest) { moving.push([L.item.uid, r(L.model.position.x), r(L.model.position.y), r(L.model.position.z), L.rest ? 1 : 0]); if (L.rest) L.sentRest = true; }
         if (moving.length) this.game.sync.itemPositions?.(moving);
     }
 
     /** (guests) Positions of the host's lying things. */
     applyPositions(list) {
-        for (const [uid, x, y, z] of list || []) {
+        for (const [uid, x, y, z, rest] of list || []) {
             const L = this.loose.get(uid);
             if (!L) continue;
             L.remote = (L.remote || new THREE.Vector3()).set(x, y, z);
             L.rest = false;
+            L.remoteRest = rest == null ? undefined : rest === 1;
             L.hover = null; // (the host moves it: it no longer floats — e.g. its chest burnt down)
         }
     }

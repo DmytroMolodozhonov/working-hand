@@ -196,7 +196,7 @@ export class NetSync {
             config: sanitizeConfig(g.config),
             explosions: g.explosions,
             chests: [...new Set([...g.chests.filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
-            items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r3(L.model.position.x), r3(L.model.position.y), r3(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
+            items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r3(L.model.position.x), r3(L.model.position.y), r3(L.model.position.z)], h: L.hover ? 1 : 0, r: L.rest ? 1 : 0 })) : [],
             weapons: g.weapons.weapons.map((w) => ({ s: w.serialize(), owner: this.weaponOwners.get(w.id) || (w.holder ? this.me : null), hover: !!w.hover })),
             zombies: g.zombies.map((z) => z.serialize()),
             ice: g.iceCells,
@@ -289,7 +289,7 @@ export class NetSync {
             const c = g.chests.find((x) => x.id === id);
             if (c) c.setOpenInstant();
         }
-        for (const e of msg.items || []) g.items?.spawnLoose(e.item, vec(e.p), { hover: !!e.h, broadcast: false });
+        for (const e of msg.items || []) g.items?.spawnLoose(e.item, vec(e.p), { hover: !!e.h, rest: !!e.r, broadcast: false });
         const known = new Set(g.weapons.weapons.map((w) => w.id));
         for (const wd of msg.weapons || []) {
             let w = g.weapons.byId.get(wd.s[0]);
