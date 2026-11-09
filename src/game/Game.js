@@ -4975,6 +4975,12 @@ export class Game {
      */
     /** «Отход назад от нападающих» (ThreatBack.js): is a foe coming at me in front now? The crowd's bodies, without me. */
     _threatBack(dt) {
+        const primaryHand = this.dom, weapon = this.weapons?.hands?.[primaryHand]?.held;
+        // Melee in the leading hand: approach to strike. Thor's hammer is an item, not a blade.
+        if (weapon && (weapon.type === 'sword' || weapon.type === 'axe' || weapon.type === 'divine')) {
+            this._tb = null; // do not keep an old retreat active across a weapon change
+            return false;
+        }
         const ch = this.character, p = ch.group.position, now = performance.now() / 1000;
         const bodies = this._tbBodies || (this._tbBodies = []);
         bodies.length = 0;

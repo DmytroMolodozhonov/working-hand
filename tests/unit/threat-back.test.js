@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { threatStep, THREAT_BACK } from '../../src/game/ThreatBack.js';
+import { Game } from '../../src/game/Game.js';
 
 /** Run `secs` at 30 a second: the foe moves by fn(t) → {x, z}; me at the origin looking along −z (yaw 0) or as given. */
 function run(st, secs, foe, yaw = 0, t0 = 0) {
@@ -9,6 +10,33 @@ function run(st, secs, foe, yaw = 0, t0 = 0) {
     for (let i = 1; i <= secs * 30; i++) { const t = t0 + i / 30, p = foe(t); r = threatStep(st, { x: 0, z: 0, yaw }, p ? [{ id: 'v1', hostile: true, ...p }] : [], 1 / 30, t); }
     return r;
 }
+
+test('only a sword or axe in the primary hand disables retreat (right- and left-handed, including the divine sword)', () => {
+    for (const leftHanded of [false, true]) {
+        const g = Object.create(Game.prototype);
+        Object.assign(g, {
+            settings: { leftHanded },
+            character: { group: { position: { x: 0, y: 1.95, z: 0 }, rotation: { y: 0 } } },
+            weapons: { hands: { left: { held: null }, right: { held: null } } },
+            items: { held: { left: null, right: null } },
+            crowd: { update() {}, near: () => [{ id: 'attacker', kind: 'zombie', x: 0, z: -3, ref: {} }] },
+        });
+        assert.equal(g._threatBack(1 / 30), true, 'an attacker in front normally triggers retreat');
+        for (const type of ['sword', 'axe', 'divine']) {
+            g.weapons.hands[g.dom].held = { type };
+            assert.equal(g._threatBack(1 / 30), false, type + ' in the primary hand');
+            g.weapons.hands[g.dom].held = null;
+            assert.equal(g._threatBack(1 / 30), true, 'releasing the blade restores normal behaviour');
+            g.weapons.hands[g.off].held = { type };
+            assert.equal(g._threatBack(1 / 30), true, type + ' in the secondary hand does not disable retreat');
+            g.weapons.hands[g.off].held = null;
+        }
+        for (const kind of ['wand', 'hammer', 'bow']) {
+            g.items.held[g.dom] = { item: { kind } };
+            assert.equal(g._threatBack(1 / 30), true, kind + ' is not a melee blade');
+        }
+    }
+});
 
 test('a villager running at me from the front: back; turned away from him: forward (running away)', () => {
     const st = {};
