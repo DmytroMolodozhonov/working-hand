@@ -25,6 +25,7 @@ import { DANGERS } from './Danger.js';
 import { staffVillage, crowdVillage, villageTrip } from './WizVillages.js';
 import { reactLag, reactLagText, knowsFirefighting, canDome, SHIELD, HUNT, huntRole, huntStart, huntStep, huntLeash, seededRng, LONERS, npcSweeps, SMOKE, MAGIC_REACT, reaction, chooseShield, windShield, WIND_SHIELD } from './WizardMind.js';
 import { hashString } from '../core/math.js';
+import { WizardBlast } from './WizardBlast.js';
 import { WizardHome } from './WizardHome.js';
 import { knowsFlight } from './WizardMind.js';
 
@@ -75,6 +76,7 @@ export class WizardLife {
         this.fx = new WizardFx(this.game);
         this.fight = new WizardFight(this); // (a fight: duel spells, shields, the circle's plans)
         this.home = new WizardHome(this);
+        this.blasts = new WizardBlast(this);
         this._dayT = 0;
         this._practiceT = 0;
     }
@@ -237,6 +239,7 @@ export class WizardLife {
                 if (v.dead || v.lev || v.servantOf != null) continue;
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
                 if (d > D.hear) continue;
+                if (MAGIC_OF[kind] === 'blast' && d < (r ?? D.r) + 10) this.blasts.protect(v);
                 if (cs.def.type === 'magehut') {
                     this.home.alarm(v, pos, bp && L._knows(v, by, pos, via) ? by : null);
                     continue;

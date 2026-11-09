@@ -18,6 +18,7 @@
  * Who / what (CLAUDE.md): `SAVIOR_TARGETS`.
  */
 
+import { createRng } from '../core/math.js';
 import { SPELL_COST } from './Combat.js';
 
 export const SAVIOR = {
@@ -73,7 +74,7 @@ export const stageOf = (n) => STAGES[Math.min(1, Math.max(0, n | 0))];
 export const GX0 = 7000;
 export function saviorEntry(gx, gz = 0) {
     const st = stageOf(gz), female = (gx & 1) === 1, seed = (Math.imul(gx, 2654435761) ^ 0x5a17) >>> 0;
-    return { idx: 1, role: 'savior', female, name: st.names[0][female ? 1 : 0], home: -1, stall: -1, seed, brave: 1, wizard: true, robe: true, rank: 'savior', mana: st.mana, savior: st.n };
+    return { idx: 1, role: 'savior', female, name: st.names[0][female ? 1 : 0], home: -1, stall: -1, seed, brave: 1, wizard: true, robe: createRng(seed ^ 0x726f6265)() < 0.5, rank: 'savior', mana: st.mana, savior: st.n };
 }
 
 /** Is it a danger for him now (pure)? hurt badly, little mana, or a burst of damage (shares of his health / mana). */

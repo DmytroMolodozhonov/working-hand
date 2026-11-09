@@ -605,8 +605,7 @@ function ghostMagicThing(r) {
 function magicDungeonThing(r, big, size) {
     if (r() < 0.2 * big) return rollKeyItem(r); // (a great ruin: a precious thing more often)
     const x = r() * 100;
-    if (x < 58) { for (let i = 0; i < 30; i++) { const it = rollScroll(r, size !== 'L'); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); }
-    if (x < 70) { const ids = figureIds(); return pentagramScroll(ids[Math.floor(r() * ids.length) % ids.length], newUid()); }
+    if (x < 70) return rollScroll(r, size !== 'L');
     if (x < 79) return rollWand(r);
     if (x < 86) return makeRobe(true, r);
     if (x < 92) return rollKeyItem(r);
@@ -716,7 +715,7 @@ export const LOOT_FOR = { maxMana: 0, known: null }; // (known: (scroll) => bool
 /** A scroll of a chest (a spell, a pentagram…). `mild`: the mightiest spells are rerolled most of the time (a plain chest's scroll). */
 export function rollScroll(r = Math.random, mild = false) {
     const it = _rollScroll(r);
-    return mild && MIGHTY.has(it.spell) && r() < 0.65 ? _rollScroll(r) : it;
+    return mild && MIGHTY.has(it.spell) && r() < 0.65 ? _rollSpellScroll(r) : it;
 }
 const MIGHTY = new Set(['Imperius', 'AvadaKedavra', 'Pilbidrio', 'TotalDestruction', 'Hellfire', 'Inspirius', 'LevitationMaxima', 'GiveMyPower', 'CircleAttack', 'WaterVortexSuperMaxima', 'CreateCastle']);
 /**
@@ -740,7 +739,10 @@ export const SCROLL_WEIGHTS = [
     // (the white pentagrams of sight — SightRules.js: as rare as the devil's, so a hero can find them)
     ['Imperius', 1.2], // (the mind into another body: rare, as the strong ones; a plain chest rerolls it most of the time — MIGHTY)
 ];
-const SCROLL_TOTAL = SCROLL_WEIGHTS.reduce((a, [, w]) => a + w, 0);
+const SPELL_SCROLLS = SCROLL_WEIGHTS.filter(([id]) => !id.startsWith('pent:'));
+const PENT_SCROLLS = SCROLL_WEIGHTS.filter(([id]) => id.startsWith('pent:'));
+const SCROLL_TOTAL = SPELL_SCROLLS.reduce((a, [, w]) => a + w, 0);
+const PENT_TOTAL = PENT_SCROLLS.reduce((a, [, w]) => a + w, 0);
 
 /**
  * ONE place for «a scroll already known never comes again» (the author): every scroll in `items` that the opener (LOOT_FOR.known) already knows is
@@ -779,11 +781,18 @@ export function freshShopScroll(it, r = Math.random, pool = null) {
 export const spellScroll = (spell) => ({ kind: 'scroll', uid: newUid(), stat: 'spell', spell });
 
 function _rollScroll(r) {
+    if (r() >= 0.5) return _rollSpellScroll(r);
+    let y = r() * PENT_TOTAL;
+    for (const [k, w] of PENT_SCROLLS) if ((y -= w) < 0) { const ids = figureIds(); return pentagramScroll(k === 'pent:*' ? pick(r, ids) : k.slice(5), newUid()); }
+    return pentagramScroll('life', newUid());
+}
+
+function _rollSpellScroll(r) {
     // «Inspirius»: only for a great wizard (the chance asked only then: nothing else changes for the rest)
     if ((LOOT_FOR.maxMana || 0) >= 500 && r() < 0.06) return spellScroll('Inspirius');
     // (no scroll of flight: «Флайн» is learned only from the swift book-bird's book; «Дай» and the gods' — only in their temple)
     let y = r() * SCROLL_TOTAL;
-    for (const [k, w] of SCROLL_WEIGHTS) {
+    for (const [k, w] of SPELL_SCROLLS) {
         if ((y -= w) >= 0) continue;
         if (k.startsWith('pent:')) { const ids = figureIds(); return pentagramScroll(k === 'pent:*' ? ids[Math.floor(r() * ids.length) % ids.length] : k.slice(5), newUid()); } // ('pent:*': any other pentagram of the table)
         return spellScroll(k);
@@ -846,12 +855,12 @@ export function rollPlainItem(r = Math.random, deep = false) {
  * happen now and then — the shares are the author's, thing by thing.)
  */
 export const CAVE_LOOT = [
-    ['spellScroll', 57.6], ['armor', 10], ['shield', 8], ['weapon', 7], ['wand', 4.5],
+    ['scroll', 57.6], ['armor', 10], ['shield', 8], ['weapon', 7], ['wand', 4.5],
     ['arrows', 3], ['robe', 3], ['magicArmor', 2.6], ['bow', 2], ['magicRobe', 1], ['backpack', 1], ['hammer', 0.3],
 ]; // (no mana scroll and no health scroll: the author — «не вижу смысла»; their shares went to the spell scrolls)
 const CAVE_MAGIC = 0.18; // (about every fifth weapon, shield or bow of a cave is a magic one — as before)
 const CAVE_MAKE = {
-    spellScroll: (r) => { for (let i = 0; i < 30; i++) { const it = rollScroll(r, true); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); },
+    scroll: (r) => rollScroll(r, true),
     armor: (r) => makePiece(pick(r, PIECES)),
     magicArmor: (r) => makePiece(pick(r, PIECES), { magic: true }),
     shield: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'shield', uid: newUid(), type: randInt(r, 0, m ? 2 : 1), magic: m, max: m ? randInt(r, 20, 50) : 0 }; },

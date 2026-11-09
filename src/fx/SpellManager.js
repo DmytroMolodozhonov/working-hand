@@ -1610,6 +1610,7 @@ export class SpellManager {
 
     // ------------------------------------------------------------ Bombardo
     castBombardo(origin, direction, casterId, power = 1) {
+        this.hooks.blastCast?.(casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo', origin, direction);
         const maxima = power > 1;
         this._sound('playBombardoCast');
         const orb = this._takeBall(this.orbs);

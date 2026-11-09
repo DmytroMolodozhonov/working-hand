@@ -8,7 +8,7 @@
  * their reserve; a magic robe at 0 falls apart; a plain piece at 0 falls off). `v.armor` / `v.maxArmor` stay as the sum of the pieces' points (the health bars read them).
  *
  * Who wears what (`NPC_GEAR`): a knight — three plain pieces; the king — the whole magic set; an advisor — a magic breastplate and greaves; a ship's captain — helmet and
- * breastplate, a boatswain — a helmet (plain); anyone with `v.robe` (a wizard) — a magic robe of a kind by his rank (the reserve is his mana's worth, as for the player).
+ * breastplate, a boatswain — a helmet (plain); each wizard — a real plain or magic robe; a magic one rolls its category, reserve and effects as for the player.
  * A wizard's WARD (his `armor` pool by rank: WIZ stats) is magic, not steel: it stays as it is. «Disarmor» / swimming strip the steel (`v.stripped`) — a magic robe stays.
  *
  * What is NOT yet the same (the list the next sessions go through, the rule stays): «Авада Кедавра» on an NPC still kills outright (`pierce`) instead of 25 cut by the
@@ -29,14 +29,6 @@ const hashOf = (s) => { let h = 2166136261; for (let i = 0; i < String(s).length
 /** A deterministic random for an NPC (the same gear on every computer). */
 const rnd = (id) => { let a = hashOf(id) || 1; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 
-/** The robe's kind by the wizard's rank (apprentice → master): the reserve is the real thing's. */
-function robeTier(v) {
-    const r = v.role || '';
-    if (r === 'master') return 'strong';
-    if (r === 'teacher' || r === 'seller') return 'mid';
-    return 'simple';
-}
-
 /** What `v` wears: {helmet, chest, legs, robe} (items or null). Built once, kept on `v.worn`; the steel is dropped once `v.stripped`. */
 export function npcWorn(v) {
     let w = v.worn;
@@ -49,7 +41,7 @@ export function npcWorn(v) {
             for (const p of gear.plain || []) w[p] = makePiece(p, { magic: false }, r);
             for (const p of gear.magic || []) { const it = makePiece(p, { magic: true }, r); if (v.magicReserve != null) it.mag = it.magMax = v.magicReserve; w[p] = it; }
         }
-        if (v.robe) w.robe = makeRobe(true, r, robeTier(v));
+        if ((v.wizard || v.robe) && !v.stripped) w.robe = makeRobe(!!v.robe, r);
         npcSync(v);
     }
     if (v.stripped) for (const p of PIECES) if (w[p]) w[p] = null; // («Disarmor» / the water took the steel; a magic robe stays — it cannot be taken off)

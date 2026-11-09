@@ -201,8 +201,8 @@ export function wizardRoster(def, idx) {
     else if (role === 'master') home = def.houses.length - 1;
     const stall = role === 'seller' ? idx - 1 : -1;
     const brave = rng();
-    // a magic robe (ArmorTypes): the Master always, one wizard in five — a stronger wand, «Protection» more often
-    const robe = role === 'master' || rng() < 0.2;
+    // Author 09.11: any wizard may wear a plain or a magic robe, independent of rank.
+    const robe = rng() < 0.5;
     // the rank and his own mana: from the world's seed (another world — other ranks); a roll of its
     // own, so the names, homes and robes of the towers stay as they were. Every computer rolls the same.
     const rr = createRng((seed ^ strHash('rank:' + String(def.wseed ?? ''))) >>> 0);
@@ -232,7 +232,7 @@ function villageRoster(def, idx, seed, rng) {
     const rr = createRng((seed ^ strHash('rank:' + String(def.wseed ?? ''))) >>> 0);
     const rank = elder ? 'elder' : role === 'seller' ? (def.stalls[stall]?.hall ? 'adept' : 'novice') : villageRank(rr()); // (the big shops' sellers and guard: wizards of the middle rank — the author 05.11)
     const mana = rollMana(rank, rr);
-    const robe = rank === 'elder' || rng() < 0.15;
+    const robe = rng() < 0.5;
     return { idx, role, female, name, home, stall, seed, brave, wizard: true, robe, rank, mana, elder, town: true };
 }
 
@@ -329,6 +329,11 @@ export function decide(input, rng = Math.random) {
  */
 export function react({ role, mana, shieldReady = true, domeReady = false, spell = 'Stupefy', eta = 1, robe = false }, rng = Math.random) {
     const W = WIZ[role] || WIZ.teacher;
+    if (/^Bombardo/.test(spell)) {
+        if (domeReady && mana >= NPC_COST.ProtectionMaxima) return 'dome';
+        if (eta > 0.25 && mana >= NPC_COST.Bombardo) return 'counter';
+        return shieldReady && mana >= NPC_COST.Protection ? 'shield' : null;
+    }
     // (a wizard in a magic robe is a better one: answers more often, and with a shield rather than a spell)
     if (rng() >= (robe ? Math.min(0.97, W.react + 0.3) : W.react)) return null;
     if (robe && shieldReady && mana >= NPC_COST.Protection && rng() < 0.5) return 'shield';

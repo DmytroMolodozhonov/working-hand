@@ -23,6 +23,7 @@
  */
 
 import * as THREE from 'three';
+import { npcWorn } from './NpcArmor.js';
 import { logLine } from './BumpRules.js';
 import { PIECES, ARMOR, MAG, pieceMax, wornEffects, spellGuard, soakBlow, guardSpend, ensureMag, hasMag, magOf, wornCode, wearSpot, wearSpotNear, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
 import { shieldHitCost } from './Combat.js';
@@ -622,14 +623,14 @@ export class ArmorSystem {
     deadArmor(v) {
         if (!v || v.stripped) return null;
         if (v.role === 'knight' || v.role === 'king' || v.magicPieces) return { p: v.magicPieces ? [...v.magicPieces] : ['helmet', 'chest', 'legs'], mg: !!v.magicPieces, k: v.maxArmor > 0 ? Math.max(0.1, (v.armor || 0) / v.maxArmor) : 1 };
-        if (v.wizard) return { r: v.robe ? 'magic' : 'plain' };
+        if (v.wizard) { const robe = npcWorn(v).robe; return robe ? { r: robe.magic ? 'magic' : 'plain', robe: { ...robe } } : null; }
         return null;
     }
 
     /** The things a descriptor of `deadArmor` is. */
     armorItems(a) {
         if (!a) return [];
-        if (a.r) return [makeRobe(a.r === 'magic')];
+        if (a.r) return [a.robe ? { ...a.robe, strong: a.robe.strong?.slice() } : makeRobe(a.r === 'magic')];
         return (a.p || []).map((p) => { const it = makePiece(p, { magic: !!a.mg }); it.hp = Math.max(1, Math.round(it.hp * (a.k ?? 1))); return it; });
     }
 

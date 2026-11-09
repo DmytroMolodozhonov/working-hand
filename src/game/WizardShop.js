@@ -91,7 +91,7 @@ export function rollShopScroll(r = Math.random) {
 }
 function rollShopScroll0(r) {
     const x = r();
-    if (x < 0.03) return pentagramScroll(pick(r, figureIds()), newUid()); // (rare: a drawing of a pentagram — the black mage's shop closes to the one with a high black level: DarkMagic)
+    if (x < 0.5) return pentagramScroll(pick(r, figureIds()), newUid()); // (rare: a drawing of a pentagram — the black mage's shop closes to the one with a high black level: DarkMagic)
     const y = r();
     return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.25 ? 'ToTheSun' : y < 0.45 ? 'Thunderwave' : y < 0.6 ? 'LightningStrike' : pick(r, SHOP_SPELLS) };
 }

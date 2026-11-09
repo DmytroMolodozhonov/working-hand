@@ -55,14 +55,14 @@ test('an ordinary chest holds exactly three things (a coin pouch counts as one)'
     assert.equal(fitThings([1, 2, 3, 4, 5].map((k) => ({ kind: 'bread', k })), 3, r).length, 3);
 });
 
-test('loot balance: a deep cave chest gives the author\'s shares (no food; spell scrolls take the rest)', async () => {
+test('loot balance: a deep cave chest gives the author\'s shares (no food; both kinds of scroll share the rest)', async () => {
     const { CAVE_LOOT } = await import('../../src/game/ItemTypes.js');
     const want = Object.fromEntries(CAVE_LOOT);
     assert.ok(Math.abs(Object.values(want).reduce((a, b) => a + b, 0) - 100) < 1e-9, 'the shares make 100 %');
     const c = {}; let tot = 0;
     const r = rng(9);
     for (let i = 0; i < 40000; i++) for (const it of rollLoot(r, { deep: true, count: 2 })) {
-        const k = it.kind === 'scroll' ? (it.stat === 'spell' ? 'spellScroll' : it.stat === 'hp' ? 'hpScroll' : 'manaScroll')
+        const k = it.kind === 'scroll' ? 'scroll'
             : it.kind === 'armor' ? (it.magic ? 'magicArmor' : 'armor') : it.kind === 'robe' ? (it.magic ? 'magicRobe' : 'robe')
             : it.kind === 'coins' ? 'magicPouch' : it.kind;
         c[k] = (c[k] || 0) + 1; tot++;

@@ -69,7 +69,7 @@ export class WizardFight {
     }
 
     /** Does this one fight (the brave; a timid student runs)? */
-    static fights(v) { return !!v.W && !v.entry?.stranger && (v.role !== 'student' || (v.entry?.brave ?? 0) >= 0.55); }
+    static fights(v) { return !!v.W && !v.entry?.stranger && ((v.blastThreat?.until || 0) > Date.now() || v.role !== 'student' || (v.entry?.brave ?? 0) >= 0.55); }
 
     // ------------------------------------------------------------ the circle
     /** (host) The wizards after one foe: plans and roles, a few times a second. */
@@ -595,7 +595,8 @@ export class WizardFight {
     /** The spell a wizard really casts at this foe (by his wanted level: Wanted.wantedTactics). */
     _spellFor(v, spell, T, foe = null) {
         if (v.savior != null) return 'Electrum'; // (the white Saviour: only the blue «Электром» of the duel charges — SaviorRules.js; his wind and blasts are his own: Savior.js)
-        if (v.lesson) return lessonSpell(); // (a lesson: only Expelliarmus / Stupefy — never freezing, never deadly)
+        if (v.lesson) return lessonSpell();
+        if (v.blastThreat?.by === foe && v.blastThreat.until > Date.now()) return v.blastThreat.reply; // (a lesson: only Expelliarmus / Stupefy — never freezing, never deadly)
         if (spell === 'LevitateDuel' || spell === 'AvadaKedavra') spell = 'Stupefy'; // (they don't lift a man to hold him)
         if (T.soft && spell === 'SapiraDuel') spell = v.role !== 'student' && Math.random() < 0.4 ? 'IceDuel' : 'Stupefy'; // (calm: only stun, freeze)
         if (T.heavy && (spell === 'Stupefy' || spell === 'Jolt') && Math.random() < T.heavy) spell = 'SapiraDuel';
@@ -811,7 +812,7 @@ export class WizardFight {
             seen.add(v.id);
             if (!n.shield) { this._caught(v, b); continue; } // (too late to do anything)
             const domeOk = !!v.W?.dome && (v.domeCd ?? 0) <= 0 && !(v.fx & FX.DOME);
-            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: (v.role === 'master' || v.savior != null) && domeOk, spell: b.spell, eta, robe: !!v.robe });
+            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: !!v.W?.dome && domeOk, spell: b.spell, eta, robe: !!v.robe });
             if (v.savior != null && r === 'counter') r = 'shield'; // (he never answers with a duel spell of his own: the shield, the dome)
             // the strong ones (300+ mana) raise «Protection Maxima» when it is really worth it: a heavy spell, a volley, many foes, a bad state
             if (r === 'shield' && domeOk && canDome(v.maxMana, v.rank)) {

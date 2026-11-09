@@ -33,7 +33,7 @@ import { FarShape } from '../core/FarShape.js';
 import { RESOURCE } from './Inventory.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, holdShapes, releaseShapes } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
-import { newUid, isGodGift, ITEM_INFO } from './ItemTypes.js';
+import { newUid, isGodGift, ITEM_INFO, rollScroll } from './ItemTypes.js';
 import { kingPurse } from './CastleTreasure.js';
 import { scaleRange } from './CoinScale.js';
 import { VoxelCharacter } from '../entities/Character.js';
@@ -101,8 +101,8 @@ export function lootOfVillager(role, { shield = false, coins = null, rank = null
     const wr = wizardPurse(role, rank);
     if (wr) {
         const out = [{ kind: 'coins', uid: newUid(), count: coins != null ? coins : wr[0] + Math.floor(rng() * (wr[1] - wr[0] + 1)) }]; // (a wizard's pouch; the wand falls from his hand — dropHeld)
-        // (rarely a wizard carries a drawing-scroll of a pentagram: wanderers and black mages most — Pentagrams.js)
-        if (rng() < (role === 'wanderer' ? 0.1 : rank === 'master' || rank === 'elder' ? 0.06 : 0.02) * (dark ? 3 : 1)) out.push(pentagramScroll(figureIds()[Math.floor(rng() * figureIds().length) % figureIds().length], newUid()));
+        const scrolls = role === 'wanderer' ? 1 + (rng() < 0.5 ? 1 : 0) : rng() < 0.25 ? 1 : 0;
+        for (let i = 0; i < scrolls; i++) out.push(rollScroll(rng));
         if (darkMageHead(darkHead, rng())) out.push({ kind: HEAD.KIND, uid: newUid() }); // (a black mage — a wanderer or a lone one — 0.5 %: a gargoyle's head, the way back from hell — HellRules)
         return out;
     }
