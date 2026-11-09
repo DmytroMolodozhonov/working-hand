@@ -78,18 +78,19 @@ test('distant guest animals stay alive but are not drawn at the host; pets and h
     for (const a of protectedAnimals) assert.ok(A.byId.has(a.id), 'keep ' + a.id);
     assert.ok(A.byId.has(guestAnimal.id));
     assert.equal(guestAnimal.model.visible, false);
+    assert.ok(A.targets().includes(guestAnimal), 'host damage still targets a live animal near the guest despite local render culling');
     assert.ok(guestAnimal.animStep > 1e8);
-    g.character.group.position.copy(guestAnimal.group.position);
+    view.position.copy(guestAnimal.group.position); // including a remote Imperius/spectator camera while the body stays here
     A._lookFar(g.character.group.position, 1 / 30);
     assert.equal(guestAnimal.model.visible, true);
     assert.equal(guestAnimal.group.userData.matFrozen, false);
     assert.ok(FAR.DRAW >= 200, 'all duel-range animals still drawn');
     guestAnimal.dead = true; guestAnimal.model.visible = false;
     guestAnimal.bones = new THREE.Group();
-    g.character.group.position.z += FAR.DRAW + 1;
+    view.position.z += FAR.DRAW + 1;
     A._lookFar(g.character.group.position, 1 / 30);
     assert.equal(guestAnimal.bones.visible, false);
-    g.character.group.position.copy(guestAnimal.group.position);
+    view.position.copy(guestAnimal.group.position);
     A._lookFar(g.character.group.position, 1 / 30);
     assert.equal(guestAnimal.model.visible, false, 'a return to view cannot resurrect the old model over bones');
     assert.equal(guestAnimal.bones.visible, true);

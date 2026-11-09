@@ -1893,16 +1893,16 @@ export class Animals {
         _farF.setFromProjectionMatrix(_farM);
         let builds = 0;
         for (const a of this.list) {
-            const p = a.group.position, d = Math.hypot(p.x - me.x, p.z - me.z);
+            const p = a.group.position, eye = cam.position || me, d = Math.hypot(p.x - eye.x, p.z - eye.z);
             const hidden = d > FAR.DRAW;
             if (hidden && a.model.visible) { a.model.visible = false; a.drawHidden = true; }
-            else if (!hidden && a.drawHidden) { a.model.visible = !a.bones; a.drawHidden = false; }
+            else if (!hidden && a.drawHidden) { a.model.visible = !a.bones && !a.burst; a.drawHidden = false; }
             if (a.bones) a.bones.visible = !hidden;
             if (hidden) { a.animStep = 1e9; a.thinkEvery = 8; a.group.userData.matFrozen = true; continue; }
             a.group.userData.matFrozen = false;
             // (a horse right by me — fed by hand, led, about to be mounted — is drawn as its own parts, as when ridden: the author 06.11 saw a horse's
             //  head «fall off» by him and come back the moment he sat on it — the one-shape way lost it there; a few horses near cost a few draws)
-            const byMe = a.type === 'horse' && d < FAR.NEAR_REAL;
+            const byMe = a.type === 'horse' && Math.hypot(p.x - me.x, p.z - me.z) < FAR.NEAR_REAL;
             const plain = !byMe && !a.dead && !a.rider && a !== this.riding && !a.lev && !a.cart && !a.mount?.on && !a.guard && !a.form && !a.formK
                 && !a.fly && !a.flyCode && a.type !== 'runbook' && !a.model.userData.minotaur && !a.model.userData.bronze && !(a.stunT > 0);
             const seen = _farF.intersectsSphere(_farS.set(p, 4 * (a.group.scale.x || 1) + 2));
