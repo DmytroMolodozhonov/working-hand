@@ -5432,6 +5432,7 @@ export class Game {
 
     _updateCamera(dt) {
         const ch = this.character;
+        if (this._bookFov != null && this.cameraMode !== 'fpv') { this.camera.fov = this._bookFov; this.camera.updateProjectionMatrix(); this._bookFov = null; }
         if (this.config.mode === 'test') {
             if (this.testState === 'setup') {
                 this.orbit?.update();
@@ -5444,6 +5445,15 @@ export class Game {
         } else if (this.cameraMode === 'fpv') {
             ch.getHeadPosition(this.camera.position);
             ch.getHeadQuaternion(this.camera.quaternion);
+            // Read closer without moving the physical book out of the holding fingers.
+            const reading = this.books?.reading?.s;
+            if (reading && reading.phi > 1.2) this._bookFov ??= this.camera.fov;
+            if (this._bookFov != null) {
+                const target = reading && reading.phi > 1.2 ? Math.min(48, this._bookFov) : this._bookFov;
+                this.camera.fov += (target - this.camera.fov) * (1 - Math.exp(-dt * 6));
+                this.camera.updateProjectionMatrix();
+                if (Math.abs(this.camera.fov - target) < 0.02 && target === this._bookFov) { this.camera.fov = target; this.camera.updateProjectionMatrix(); this._bookFov = null; }
+            }
         } else {
             _v1.copy(this.cameraOffset).multiplyScalar(ch.size || 1).applyAxisAngle(_v2.set(0, 1, 0), ch.group.rotation.y).add(ch.group.position);
             this.camera.position.lerp(_v1, frameAlpha(0.1, dt));

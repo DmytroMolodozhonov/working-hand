@@ -53,3 +53,16 @@ test('holoWidth: a middle size — ~28% of the screen width at any distance, tex
     }
     assert.ok(holoWidth(3) < 2.6); // ~2.1 m at 3 m
 });
+
+test('scroll descriptions name their own magic and end with just the burning instruction, never Inferno as an instruction', () => {
+    for (const spell of ['WindMaxima', 'VisibleGodi', 'LevitationMaxima', 'IceMaxima']) {
+        const it = { kind: 'scroll', stat: 'spell', spell };
+        const base = describeItem(it), info = withSpellDescription(base, it);
+        const note = 'Сожгите свиток, если хотите запомнить это заклинание';
+        assert.equal(info.lines.at(-1), note);
+        assert.equal(info.lines.filter(l => l === note).length, 1);
+        assert.ok(!info.lines.join(' ').includes('Инферно'));
+        const short = withSpellDescription(base, it, true);
+        assert.ok(short.lines.some(l => l.includes(spellDescription(spell).desc.split('. ')[0])));
+    }
+});

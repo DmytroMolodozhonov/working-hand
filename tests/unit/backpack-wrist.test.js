@@ -15,7 +15,7 @@ test('backpack: a hand behind the back, or at the shoulder, puts it on; a hand h
     assert.equal(backpackSpot(V(1.0, -1.2, -0.3), V(-1, -1.2, -0.3), rs), null, 'hanging at the side');
     assert.equal(backpackSpot(V(0.4, 0.5, -1.6), V(-1, -1.2, -0.3), rs), null, 'held out in front');
     assert.equal(backpackSpot(V(0.9, -0.6, -0.9), V(-1, -1.2, -0.3), rs), null, 'in front of the belt');
-    assert.ok(BACKPACK_WEAR.T <= 0.4 && BACKPACK_WEAR.SHOULDER_R <= 1.2);
+    assert.ok(BACKPACK_WEAR.T >= 1 && BACKPACK_WEAR.T_SHOULDER >= 1 && BACKPACK_WEAR.STASH_T >= 1 && BACKPACK_WEAR.SHOULDER_R <= 1.2);
 });
 
 test('the wrist is never torn off the forearm: any pose, a push on the hand, a quick shake', () => {

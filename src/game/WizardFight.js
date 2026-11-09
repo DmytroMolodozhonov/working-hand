@@ -312,6 +312,7 @@ export class WizardFight {
         // the Master: he comes too close → blink away
         if ((v.role === 'master' || v.savior != null) && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
         let spot = this._spot(v, fp, d, sq);
+        spot = this.wl.home?.spot(v, spot) ?? spot;
         // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
         const shot = this._castReady(v, d) && this.clearShot(v, fp);
         // (ready, but one of his own in the line: a step to the side for a clear one)

@@ -587,7 +587,22 @@ export class Duel {
         for (const [id, r] of g.remotes || []) if (!r.dead && id !== skip) this._heroBody(r.character.group, put('p', id));
         for (const z of g.zombies || []) if (!z.isDead) this._tipped(z, this._zombieBody(z, put('z', z.id)));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
-        for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
+        for (const a of g.animals?.targets() || []) {
+            this._roundBody('a', a, put('a', a.id));
+            if (a.type === 'horse' && a.dims && a.model?.userData?.neck && a.model.userData.head) {
+                // Its raised neck/head and individual legs stay hittable without a rider-sized sphere.
+                const u = a.model.userData, neck = put('a', a.id);
+                u.neck.getWorldPosition(neck.a); u.head.localToWorld(neck.b.set(0, -0.1, -0.2));
+                neck.r = Math.max(0.2, a.dims.wid * 0.25);
+                for (const leg of u.legs || []) {
+                    const dims = leg.userData.legDims, lower = leg.userData.lower;
+                    if (!dims || !lower) continue;
+                    const e = put('a', a.id);
+                    leg.getWorldPosition(e.a); lower.localToWorld(e.b.set(0, -dims[2], dims[3]));
+                    e.r = Math.max(0.12, a.dims.wid * 0.1);
+                }
+            }
+        }
         for (const v of g.castleLife?.targets(reach) || []) if (v.id !== skip && !isSpectator(v)) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
         // the ships' crews (on their decks, or swimming)
         for (const v of g.ships?.crew.byId.values() || []) if (!v.dead && v.id !== skip) this._tipped(v, this._villagerBody(v, put('c', v.id))); // (never Captain Black Moustache by the charge he beat back himself)
@@ -751,6 +766,19 @@ export class Duel {
 
     /** An animal / a book-bird: a ball round its middle. */
     _roundBody(kind, c, e) {
+        if (kind === 'a' && c.type === 'horse' && c.dims) {
+            // A long horse is not a sphere as tall as its length: that sphere swallowed its rider.
+            // Capsule along the torso; the rider above the saddle keeps his own hit body.
+            const d = c.dims, p = c.group.position, sy = c.group.scale.y || 1;
+            const r = Math.max(0.4, Math.min(d.wid * 0.5, d.height * 0.28));
+            const y = (d.minY + d.height * 0.53 / sy) * sy;
+            const lo = d.minZ * sy + r, hi = d.maxZ * sy - r;
+            const yaw = c.group.rotation.y, sn = Math.sin(yaw), cs = Math.cos(yaw);
+            e.a.set(p.x + sn * lo, p.y + y, p.z + cs * lo);
+            e.b.set(p.x + sn * hi, p.y + y, p.z + cs * hi);
+            e.r = r;
+            return this._tipped(c, e);
+        }
         if (kind === 'a' && c.bodyH) {
             // (the grown bronze bull / the ram turned minotaur: its real tall body, not the sheep's ball)
             const s = bodySpan(c, {});

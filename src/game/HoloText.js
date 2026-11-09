@@ -33,6 +33,7 @@ let _byId = null;
 /** The description of the spell in the spell book (a Maxima form is told by its base card), or null. */
 export function spellDescription(id) {
     if (!id) return null;
+    if (id === 'Pentagranium') return { name: 'Pentagranium', desc: 'Создаёт на земле пентаграмму для обряда. Каждую фигуру нужно выучить с её собственного свитка; создание круга стоит 50 маны, а условия и цена обряда зависят от фигуры.' };
     if (!_byId) {
         _byId = new Map();
         for (const s of SPELLS) { const k = s.name.split(' / ').map((n) => matchSpell(n)).find(Boolean); if (k && !_byId.has(k)) _byId.set(k, s); }
@@ -42,13 +43,18 @@ export function spellDescription(id) {
 }
 
 /** The hologram text of a thing, plus the description of the spell it is about (a scroll, a wand's favourite). */
-export function withSpellDescription(info, item) {
+export function withSpellDescription(info, item, concise = false) {
     if (!info || !item) return info;
     const id = item.kind === 'scroll' && item.stat === 'spell' ? item.spell : item.kind === 'wand' ? item.fav : null;
     const card = spellDescription(id);
     if (!card) return info;
     const head = item.kind === 'wand' ? `Особое заклинание — <b>${card.name}</b>:` : `<b>${card.name}</b>:`;
-    return { ...info, lines: [...info.lines, `${head} ${card.desc}`] };
+    const desc = concise ? (card.desc.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || card.desc) : card.desc;
+    const lines = [...info.lines];
+    const note = item.kind === 'scroll' && lines.at(-1)?.startsWith('Сожгите свиток') ? lines.pop() : null;
+    lines.push(`${head} ${desc}`);
+    if (note) lines.push(note);
+    return { ...info, lines };
 }
 
 /** The hologram card's width in metres: HOLO_SCREEN of the screen width seen from `dist` (author: clear, not the whole screen). */

@@ -90,3 +90,13 @@ test('the same-side hand (the leading one) and passing hands put nothing; the ti
     assert.ok(nearPocket({ x: 0.45, y: 0.05, z: -0.5 }, 1) && !nearPocket({ x: -0.45, y: 0.05, z: -0.5 }, 1));
     assert.ok(nearPocket({ x: -0.45, y: 0.05, z: -0.5 }, -1) && POCKET_HINT_R < 1.2);
 });
+
+test('the inner belt edge accepts a wrist slightly closer to the torso, for either handedness', () => {
+    for (const lefty of [false, true]) {
+        const f = frame({ arms: 'hang', pocket: 'cross', mirror: lefty });
+        const lm = f.poseLandmarks, hip = lm[lefty ? 23 : 24], wrist = lefty ? 16 : 15, shoulder = lm[lefty ? 12 : 11];
+        const T = hip.y - shoulder.y;
+        lm[wrist] = { ...lm[wrist], x: hip.x + (lefty ? -1 : 1) * 0.34 * T / (4 / 3), y: hip.y };
+        assert.equal(bodyPlaces(lm, null, null, 4 / 3, lefty).pocket.off, true);
+    }
+});

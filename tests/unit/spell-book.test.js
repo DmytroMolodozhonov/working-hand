@@ -38,7 +38,7 @@ test('the author\'s list: what a beginner knows outside Creative — and the Max
     const me = survival();
     for (const n of ['Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Ice', 'Frozen', 'Jolt', 'Firefighting', 'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'CreateBridge', 'Gather', 'Draw', 'Lumos', 'Accio', 'GiveMyPower'])
         assert.ok(knows(n, me), `${n}: known from the start`);
-    for (const n of ['BombardoMaxima', 'EarthquakeMaxima', 'LiquidationMaxima', 'ProtectionMaxima', 'IceMaxima', 'JoltMaxima', 'CircleAttack', 'CircleAttackMaxima',
+    for (const n of ['WindMaxima', 'BombardoMaxima', 'EarthquakeMaxima', 'LiquidationMaxima', 'ProtectionMaxima', 'IceMaxima', 'JoltMaxima', 'CircleAttack', 'CircleAttackMaxima',
         'Drawdown', 'DrawdownMaxima', 'Overgrown', 'OvergrownMaxima', 'Brainrot', 'Waterball', 'WaterForming', 'AirBubble', 'AirBubbleMaxima', 'WaveAttack', 'WaveAttackMaxima',
         'WaterVortex', 'WaterVortexSuperMaxima', 'FirefightingMaxima', 'LetItRain', 'Snowman', 'Unfurl', 'Furl', 'LevitationMaxima', 'CreateFloor', 'CreateWall', 'CreateDoor',
         'CreateBoard', 'CreateHouse', 'CreateCastle', 'IceCastle', 'IceBridge', 'Breakthrough', 'FireMaxima'])
@@ -46,6 +46,8 @@ test('the author\'s list: what a beginner knows outside Creative — and the Max
     // a burnt scroll teaches its spell (and the Maxima it carries); the default «knew it» of an old save is gone
     assert.ok(knows('DrawdownMaxima', survival({ Drawdown: true })) && knows('Furl', survival({ Unfurl: true })));
     assert.ok(!knows('BombardoMaxima', survival({ Bombardo: true })), 'the plain spell\'s name teaches no Maxima');
+    assert.ok(!knows('WindMaxima', survival({ Wind: true })), 'plain Wind does not teach Wind Maxima');
+    assert.ok(knows('WindMaxima', survival({ WindMaxima: true })), 'its own burnt scroll teaches Wind Maxima');
     assert.ok(knows('CreateWall', survival({}, new Set(['CreateWall']))), 'a book-bird\'s page');
     for (const n of allSpells()) assert.ok(knows(n, { mode: 'creative' }), `Creative: ${n}`);
 });

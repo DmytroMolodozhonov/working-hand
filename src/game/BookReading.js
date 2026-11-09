@@ -49,7 +49,7 @@ export const HOLD = {
     CLOSE_RATE: 9, // 1/s: how fast the squeezing hand shuts it
 };
 /** A fingertip drawn across the open book turns a page (the author: «проводит пальцем по книге. И даже немного»): metres along the page, within WINDOW s, just above the paper. */
-export const SWIPE = { DIST: 0.07, WINDOW: 0.4, BACK: 0.025, ABOVE: 0.22, BELOW: 0.03, COOL: 0.5, MIN_PHI: 1.2, OMEGA: 11 };
+export const SWIPE = { DIST: 0.055, WINDOW: 0.6, BACK: 0.025, ABOVE: 0.3, BELOW: 0.05, COOL: 0.5, MIN_PHI: 1.2, OMEGA: 11 };
 // a fingertip catches a page by its edge: the outer part of the page, close to it
 // (a fingertip hovering over the page, or anywhere on it, catches nothing: only at the very edge, on it)
 const CATCH = { R0: 0.72, R1: 1.1, ABOVE: 0.07, BELOW: 0.1, T: 0.1, LOST_IN: 0.1, LOST_OUT: 1.18 };
@@ -74,7 +74,7 @@ function canvasPage(draw) {
     const c = document.createElement('canvas');
     c.width = 256; c.height = 360;
     const x = c.getContext('2d');
-    x.fillStyle = '#f3ead2'; x.fillRect(0, 0, 256, 360);
+    x.fillStyle = '#fff3d7'; x.fillRect(0, 0, 256, 360);
     x.strokeStyle = '#c9b88f'; x.lineWidth = 3; x.strokeRect(8, 8, 240, 344);
     draw(x);
     return new THREE.CanvasTexture(c);
@@ -91,7 +91,7 @@ export function drawTitlePage(side, spells) {
             // a silver shield
             x.fillStyle = '#c9d6e2'; x.strokeStyle = '#1b2f7a'; x.lineWidth = 3;
             x.beginPath(); x.moveTo(98, 180); x.lineTo(158, 180); x.lineTo(158, 214); x.quadraticCurveTo(158, 248, 128, 266); x.quadraticCurveTo(98, 248, 98, 214); x.closePath(); x.fill(); x.stroke();
-            x.fillStyle = '#7a6a4a'; x.font = 'italic 15px serif';
+            x.fillStyle = '#30251a'; x.font = 'italic 15px serif';
             x.fillText('три заклинания — одна группа', 128, 318);
         } else if (side === 'left') {
             x.fillStyle = '#5a1a1a'; x.font = 'bold 26px serif';
@@ -100,12 +100,12 @@ export function drawTitlePage(side, spells) {
             x.beginPath(); x.moveTo(60, 176); x.lineTo(196, 176); x.stroke();
             x.fillStyle = '#9b5bff';
             for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; x.fillRect(128 + Math.cos(a) * 34 - 3, 236 + Math.sin(a) * 34 - 3, 6, 6); }
-            x.fillStyle = '#7a6a4a'; x.font = 'italic 15px serif';
+            x.fillStyle = '#30251a'; x.font = 'italic 15px serif';
             x.fillText('страницы листают пальцем', 128, 318);
         } else {
             x.fillStyle = '#5a1a1a'; x.font = 'bold 22px serif';
             x.fillText('Содержание', 128, 60);
-            x.fillStyle = '#3a2a1a'; x.font = '18px serif'; x.textAlign = 'left';
+            x.fillStyle = '#17130f'; x.font = '18px serif'; x.textAlign = 'left';
             spells.forEach((s, i) => x.fillText(`${i + 1}. ${bookSpellName(s)}`, 26, 110 + i * 34));
         }
     });
@@ -121,12 +121,12 @@ export function drawRunPage(side) {
             x.strokeStyle = '#d4af37'; x.lineWidth = 3;
             // two little running legs
             x.beginPath(); x.moveTo(110, 200); x.lineTo(96, 250); x.moveTo(146, 200); x.lineTo(166, 246); x.stroke();
-            x.fillStyle = '#7a6a4a'; x.font = 'italic 15px serif';
+            x.fillStyle = '#30251a'; x.font = 'italic 15px serif';
             x.fillText('у неё одна страница', 128, 318);
         } else {
             x.fillStyle = '#5a1a1a'; x.font = 'bold 22px serif';
             x.fillText('Быстрота', 128, 70);
-            x.fillStyle = '#3a2a1a'; x.font = '17px serif';
+            x.fillStyle = '#17130f'; x.font = '17px serif';
             ['Кто прочтёт эту', 'страницу, получит', 'мою быстроту:', 'бег на 30% быстрее,', 'пока он жив.'].forEach((t, i) => x.fillText(t, 128, 130 + i * 30));
             x.fillStyle = '#d4af37'; x.font = '30px serif';
             x.fillText('✦', 128, 310);
@@ -227,7 +227,8 @@ export class BookReading {
     /** A hand eased steadily (a still hand's tremble smoothed, a real move followed at once). */
     _steady(s, key, p, dt) {
         const st = s.steady || (s.steady = {});
-        if (!s[key] || !st[key]) { st[key] = new Steady({ minCutoff: 2, beta: 10 }); s[key] = p.clone(); return s[key]; }
+        if (!s[key] || !st[key]) { st[key] = new Steady({ minCutoff: 0.8, beta: 6 }); s[key] = p.clone(); return s[key]; }
+        if (s[key].distanceToSquared(p) < 0.000025) return s[key];
         const a = st[key].alpha(dt > 0 ? s[key].distanceTo(p) / dt : 0, dt);
         return s[key].lerp(p, a);
     }
@@ -254,6 +255,12 @@ export class BookReading {
     _free(side) {
         const g = this.game;
         return !g.items.held[side] && !g.weapons.hands[side].held && !g.boards?.handBusy(side);
+    }
+
+    /** A wand leaves the index finger available; other held objects still block page turning. */
+    _pageHand(side) {
+        const g = this.game, held = g.items.held[side]?.item;
+        return (!held || held.kind === 'wand') && !g.weapons.hands[side].held && !g.boards?.handBusy(side);
     }
 
     /** Where the reader looks from: the eyes (the same in both camera modes — the hands decide, not the camera). */
@@ -494,7 +501,13 @@ export class BookReading {
         const h = this._hand(H);
         // the squeeze: as open as the fist is loose
         const c = this._closed(h);
-        const k = c <= HOLD.SQUEEZE0 ? 1 : c >= HOLD.SQUEEZE1 ? 0 : 1 - (c - HOLD.SQUEEZE0) / (HOLD.SQUEEZE1 - HOLD.SQUEEZE0);
+        // Holding a book already curls the fingers. Close only for a sustained EXTRA squeeze,
+        // relative to the hand that took it, never for a tracking spike or an ordinary holding fist.
+        s.gripBase ??= c;
+        s.gripSmooth = (s.gripSmooth ?? c) + (c - (s.gripSmooth ?? c)) * (1 - Math.exp(-dt * 8));
+        const close0 = Math.max(HOLD.SQUEEZE0, Math.min(0.95, s.gripBase + 0.12));
+        s.squeezeT = s.gripSmooth > close0 ? (s.squeezeT || 0) + dt : 0;
+        const k = s.squeezeT < 0.25 ? 1 : Math.max(0, 1 - (s.gripSmooth - close0) / (1 - close0));
         const want = HOLD.ONE_HAND_PHI * k;
         s.phi += (want - s.phi) * Math.min(1, dt * (want < s.phi ? HOLD.CLOSE_RATE : HOLD.OPEN_RATE));
         const { P } = this._palm(h);
@@ -530,7 +543,7 @@ export class BookReading {
         }
         // the free hand: turns the pages with a swipe of the finger
         const Fr = other(H);
-        if (!this._free(Fr)) { s.swp = null; return; }
+        if (!this._pageHand(Fr)) { s.swp = null; return; }
         const fh = this._hand(Fr);
         this._swipe(s, fh, dt);
         this._pushOut(s, Fr, fh);
@@ -573,7 +586,9 @@ export class BookReading {
     _place(s, pos, quat, dt) {
         const m = s.model;
         s.pos.copy(pos);
-        s.quat.copy(quat);
+        const angle = s.quat.angleTo(quat);
+        s.quat.slerp(quat, 1 - Math.exp(-dt * (angle < 0.06 ? 3 : 14)));
+        quat = s.quat;
         const fr = s.from;
         const T = fr?.T || HOLD.BLEND_T;
         if (fr && fr.t < T) {
@@ -802,7 +817,7 @@ export class BookReading {
         const cam = g.camera;
         const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect);
         const vfov = THREE.MathUtils.degToRad(cam.fov);
-        const dist = Math.max(2 * w / 0.7 / (2 * Math.tan(hfov / 2)), BOOK.H * (ITEM_SCALE.book || 1.6) / 0.7 / (2 * Math.tan(vfov / 2)));
+        const dist = Math.max(2 * w / 0.88 / (2 * Math.tan(hfov / 2)), BOOK.H * (ITEM_SCALE.book || 1.6) / 0.88 / (2 * Math.tan(vfov / 2)));
         this.readCam = { at, from: (this._from || (this._from = new THREE.Vector3())).copy(at).addScaledVector(n, dist), k: Math.min(1, (s.phi - 1.0) * 1.2) };
     }
 
@@ -907,7 +922,7 @@ export class BookReading {
             const sides = s.fingerSide ? [s.fingerSide] : ['right', 'left'];
             let used = null;
             for (const side of sides) {
-                if (!this._free(side)) continue;
+                if (!this._pageHand(side)) continue;
                 const fh = this._hand(side);
                 this._finger(s, fh, dt);
                 this._pushOut(s, side, fh);

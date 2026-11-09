@@ -193,12 +193,12 @@ function drawPage(spell, side) {
     const c = document.createElement('canvas');
     c.width = 256; c.height = 360;
     const x = c.getContext('2d');
-    x.fillStyle = '#f3ead2'; x.fillRect(0, 0, 256, 360);
+    x.fillStyle = '#fff3d7'; x.fillRect(0, 0, 256, 360);
     x.strokeStyle = '#c9b88f'; x.lineWidth = 3; x.strokeRect(8, 8, 240, 344);
     const how = HOW[spell];
     if (side === 'left') {
         // a little drawing of the gesture: a wizard and his hand
-        x.strokeStyle = '#3a2a1a'; x.lineWidth = 4; x.lineCap = 'round';
+        x.strokeStyle = '#17130f'; x.lineWidth = 4; x.lineCap = 'round';
         x.beginPath(); x.arc(90, 110, 18, 0, Math.PI * 2); x.stroke(); // head
         x.beginPath(); x.moveTo(90, 128); x.lineTo(90, 210); x.lineTo(70, 270); x.moveTo(90, 210); x.lineTo(110, 270); x.stroke();
         if (how.hand === 'up') { x.beginPath(); x.moveTo(90, 150); x.lineTo(65, 95); x.stroke(); } // (both arms up)
@@ -229,7 +229,7 @@ function drawPage(spell, side) {
             // a friend, and an arrow from the dome to him
             x.strokeStyle = '#3a6fd8'; x.lineWidth = 3;
             x.beginPath(); x.arc(200, 250, 34, Math.PI, 0); x.stroke();
-            x.strokeStyle = '#3a2a1a'; x.lineWidth = 4;
+            x.strokeStyle = '#17130f'; x.lineWidth = 4;
             x.beginPath(); x.arc(205, 120, 12, 0, Math.PI * 2); x.stroke();
             x.beginPath(); x.moveTo(205, 132); x.lineTo(205, 180); x.lineTo(195, 210); x.moveTo(205, 180); x.lineTo(215, 210); x.stroke();
             x.strokeStyle = '#d4af37'; x.beginPath(); x.moveTo(200, 236); x.lineTo(205, 200); x.stroke();
@@ -255,7 +255,7 @@ function drawPage(spell, side) {
     } else {
         x.fillStyle = '#5a1a1a'; x.font = 'bold 24px serif'; x.textAlign = 'center';
         x.fillText('«' + how.words + '»', 128, 54);
-        x.fillStyle = '#3a2a1a'; x.font = '16px serif'; x.textAlign = 'left';
+        x.fillStyle = '#17130f'; x.font = '16px serif'; x.textAlign = 'left';
         const words = how.text.split(' ');
         let line = '', y = 92;
         for (const w of words) {
@@ -263,7 +263,7 @@ function drawPage(spell, side) {
             if (x.measureText(t).width > 216) { x.fillText(line, 20, y); line = w; y += 21; } else line = t;
         }
         if (line) x.fillText(line, 20, y);
-        x.fillStyle = '#7a6a4a'; x.font = 'italic 14px serif'; x.textAlign = 'center';
+        x.fillStyle = '#30251a'; x.font = 'italic 14px serif'; x.textAlign = 'center';
         x.fillText(bookSpellName(spell), 128, 336);
     }
     const tex = new THREE.CanvasTexture(c);

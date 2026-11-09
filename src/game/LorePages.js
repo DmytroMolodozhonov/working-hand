@@ -8,7 +8,7 @@
  */
 
 export const PAGE = { W: 256, H: 360, X0: 26, X1: 230, Y0: 46, Y1: 324 };
-const PAPER = '#f3ead2', EDGE = '#c9b88f', INK = '#3a2a1a', RED = '#5a1a1a', SEPIA = '#7a6a4a';
+const PAPER = '#fff3d7', EDGE = '#c9b88f', INK = '#17130f', RED = '#5a1a1a', SEPIA = '#30251a';
 const FONT = { h: 'bold 19px serif', p: '15px serif', cap: 'italic 14px serif' };
 const LH = { h: 25, p: 20 };
 
@@ -178,8 +178,8 @@ function bust(x, cx, cy, s, o) {
     const ey = cy - 4 * s;
     for (const k of [-1, 1]) {
         ell(x, cx + k * 11 * s, ey, 5 * s, 3.2 * s, '#ffffff');
-        ell(x, cx + k * 11 * s, ey, 2.4 * s, 2.6 * s, o.eyes || '#3a2a1a');
-        x.strokeStyle = o.brows || o.hair || '#3a2a1a'; x.lineWidth = 2.4 * s;
+        ell(x, cx + k * 11 * s, ey, 2.4 * s, 2.6 * s, o.eyes || '#17130f');
+        x.strokeStyle = o.brows || o.hair || '#17130f'; x.lineWidth = 2.4 * s;
         x.beginPath(); x.moveTo(cx + k * 5 * s, ey - 8 * s); x.lineTo(cx + k * 17 * s, ey - (o.proud ? 11 : 9) * s); x.stroke();
     }
     if (o.glasses) { x.strokeStyle = '#8a7a50'; x.lineWidth = 1.6 * s; for (const k of [-1, 1]) { x.beginPath(); x.arc(cx + k * 11 * s, ey, 7 * s, 0, Math.PI * 2); x.stroke(); } x.beginPath(); x.moveTo(cx - 4 * s, ey); x.lineTo(cx + 4 * s, ey); x.stroke(); }
@@ -326,7 +326,7 @@ export const PICTURES = {
         x.fillStyle = grad(x, 0, Y, 0, Y + H, [[0, '#4a5a7a'], [0.6, '#2a3040'], [1, '#141820']]); x.fillRect(X, Y, W, H);
         // the sea and a mast behind
         x.fillStyle = '#1a2a40'; x.fillRect(X, Y + 170, W, 90);
-        x.fillStyle = '#3a2a1a'; x.fillRect(X + 160, Y, 8, 200);
+        x.fillStyle = '#17130f'; x.fillRect(X + 160, Y, 8, 200);
         // the rapier
         x.strokeStyle = '#d8dde6'; x.lineWidth = 3; x.beginPath(); x.moveTo(X + 30, Y + 250); x.lineTo(X + 70, Y + 60); x.stroke();
         x.strokeStyle = '#c9a227'; x.lineWidth = 4; x.beginPath(); x.arc(X + 32, Y + 238, 9, 0, Math.PI * 2); x.stroke();
@@ -397,7 +397,7 @@ export const PICTURES = {
         x.strokeStyle = '#d4a840'; x.lineWidth = 3; x.strokeRect(X + 34, Y + 64, 72, 160);
         ell(x, X + 70, Y + 170, 40, 46, '#8a1a2a'); // (the belly in a red robe)
         x.strokeStyle = '#e8c860'; x.lineWidth = 3; x.beginPath(); x.ellipse(X + 70, Y + 170, 40, 46, 0, 0, Math.PI * 2); x.stroke();
-        bust(x, X + 70, Y + 110, 0.62, { skin: '#e8b090', robe: '#8a1a2a', trim: '#e8c860', hair: '#a07040', beard: '#a07040', beardLen: 22, eyes: '#3a2a1a', proud: true, smile: true });
+        bust(x, X + 70, Y + 110, 0.62, { skin: '#e8b090', robe: '#8a1a2a', trim: '#e8c860', hair: '#a07040', beard: '#a07040', beardLen: 22, eyes: '#17130f', proud: true, smile: true });
         poly(x, [[X + 52, Y + 92], [X + 56, Y + 76], [X + 63, Y + 86], [X + 70, Y + 72], [X + 77, Y + 86], [X + 84, Y + 76], [X + 88, Y + 92]], '#f0c840');
         // gold heaped at his feet
         for (let i = 0; i < 14; i++) ell(x, X + 20 + (i * 17) % 110, Y + 236 - (i % 4) * 4, 7, 4, i % 2 ? '#f0c840' : '#c8a030');

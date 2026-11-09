@@ -229,3 +229,27 @@ test('wandering wizards out of sight: wounded and angry ones are remembered by n
     L.state(def).killed.add(idx);
     assert.equal(L._activate(cs, idx, { x: 0, y: 0, z: 0 }, 'road') && null, null);
 });
+
+test('mounted travellers find a route around a wide obstacle, instead of circling its bank forever', () => {
+    const { g, T } = fakeGame({ walls: [{ x0: -10, x1: 10, z0: 10, z1: 12 }] });
+    const v = { id: 'mounted', idx: 1, x: 0, y: 0, z: 0 };
+    const P = { id: 'mounted-party', members: [v], state: 'go', dest: { x: 0, z: 60, r: 2 } };
+    T.riders.mount(v, P, 0, 0, Math.PI);
+    let detour = 0;
+    for (let i = 0; i < 2400 && v.z < 35; i++) {
+        T.riders.update(P, 0.05);
+        detour = Math.max(detour, Math.abs(v.x));
+        assert.ok(!(Math.abs(v.x) <= 10 && v.z >= 10 && v.z <= 12), 'the horse never goes through the obstacle');
+    }
+    assert.ok(v.z > 35 && detour > 10, `got round it: ${v.x.toFixed(1)},${v.z.toFixed(1)}, detour ${detour.toFixed(1)}`);
+});
+
+test('horses can wade a shallow river, but never enter water deeper than two blocks', () => {
+    const { g } = fakeGame();
+    const t = g.world.terrain.data;
+    t.get = (x, y) => y >= 1 && y <= 2 ? BLOCK.WATER : BLOCK.AIR;
+    assert.equal(wayFree(g, 0, 0, 1, 0, 5, { wade: true }), 5);
+    assert.equal(wayFree(g, 0, 0, 1, 0, 5), 0, 'ordinary carts still avoid all water');
+    t.get = (x, y) => y >= 1 && y <= 3 ? BLOCK.WATER : BLOCK.AIR;
+    assert.equal(wayFree(g, 0, 0, 1, 0, 5, { wade: true }), 0);
+});

@@ -1120,6 +1120,7 @@ export class HouseWards {
     /** (host) The sphere took a blow: who did it is noted, its owner told; broken — it falls apart. */
     _wounded(w, spell, by, broken, quiet = false) {
         w.hitAt = this._t;
+        this.game.castleLife?.wizards?.home?.attacked(w, by);
         // (who: its owner is told, wherever they are — the host's list carries it)
         w.hitKey = by != null ? this.keyOf(by) : '';
         w.hitBy = by != null ? String(this.game.playerName?.(by) || '').slice(0, 16) : '';

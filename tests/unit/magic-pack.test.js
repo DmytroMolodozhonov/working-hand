@@ -51,10 +51,10 @@ test('цвет кожи — из набора (кэш материалов не 
     for (let i = 0; i < 200; i++) assert.ok(LEATHER.includes(leatherOf(Math.floor(Math.random() * 0xffffff))));
 });
 
-// (the author 08.11: the magic backpack is hidden from the game for now — no chest gives one; MAGIC_PACK_ON brings it back)
-test('в сундуках магический рюкзак скрыт (MAGIC_PACK_ON = false), обычные есть', () => {
+// Restored after deliberate back gestures were added (author 09.11).
+test('в сундуках снова встречается магический рюкзак, обычные остаются чаще', () => {
     let n = 0, mag = 0;
     let s = 1; const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
     for (let i = 0; i < 6000; i++) { const x = rollKeyItem(r); if (x.kind === 'backpack') { n++; if (x.magic) { mag++; assert.deepEqual(x.store, []); } } }
-    assert.ok(n > 100 && mag === 0, `${mag} из ${n}`);
+    assert.ok(n > 100 && mag > 50 && mag < n * 0.4, `${mag} из ${n}`);
 });

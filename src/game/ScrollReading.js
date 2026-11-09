@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { describeItem, ITEM_SCALE } from './ItemTypes.js';
-import { holoParts, holoPlain } from './HoloText.js';
+import { holoParts, holoPlain, withSpellDescription } from './HoloText.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
 import { pentagramSpell } from './PentagramWords.js';
@@ -43,7 +43,7 @@ const _qs = new THREE.Quaternion();
 
 /** Faces already drawn (a kind of scroll, not a frame: ~70 spells at most; the oldest go first). */
 const _faces = new Map();
-const FACES_MAX = 48;
+const FACES_MAX = 32; // 1024×640: the canvas cache stays below the old 48 × 1024×440 byte budget.
 
 /** The face of a scroll as a canvas: the school's colours, a drop cap, runes, a picture of the spell (ScrollArt.js). Cached by kind. */
 function faceOf(item) {
@@ -57,9 +57,9 @@ function faceOf(item) {
             school, title: P.ru,
             lines: [
                 [{ text: 'Чтобы создать её, направьте палочку на землю и скажите: ', bold: false }, { text: pentagramSpell(P.id) || '', bold: true }],
-                [{ text: P.id === 'devil' ? 'Так вы получите силу убитого мага.' : P.def?.dark ? 'Тёмный знак для особого обряда.' : 'Светлый знак с особой пользой.', bold: false }],
+                [{ text: P.def?.effect || 'Позволяет получить силу убитого мага.', bold: false }],
             ],
-            note: 'Пентаграмму выучит тот, кто сожжёт свиток',
+            note: 'Сожгите свиток, если хотите запомнить это заклинание',
             custom: (x, { cx, cy, R }) => {
                 const g = x.createRadialGradient(cx, cy, R * 0.2, cx, cy, R);
                 g.addColorStop(0, 'rgba(255,248,226,0.95)'); g.addColorStop(1, 'rgba(228,205,150,0.85)');
@@ -78,18 +78,19 @@ function faceOf(item) {
             },
         };
     } else {
-        const info = describeItem(item) || { title: '📜 Свиток', lines: [] };
+        const info = withSpellDescription(describeItem(item), item, true) || { title: '📜 Свиток', lines: [] };
         spec = {
             school, title: holoPlain(info.title).replace(/^📜\s*/u, ''),
-            lines: info.lines.filter((l) => holoPlain(l).trim()).map((l) => holoParts(l)), // (a scroll without a kind: no empty gap)
-            note: 'Прочитать может каждый — выучит тот, кто сожжёт свиток',
+            lines: info.lines.filter((l) => holoPlain(l).trim() && !l.startsWith('Сожгите свиток')).map((l) => holoParts(l)),
+            note: item.stat === 'schedule' ? '' : 'Сожгите свиток, если хотите запомнить это заклинание',
+            picture: false,
         };
     }
     const key = artKey(spec);
     let c = _faces.get(key);
     if (!c) {
         c = document.createElement('canvas');
-        c.width = 1024; c.height = 440;
+        c.width = 1024; c.height = 640;
         paintParchment(c.getContext('2d'), c.width, c.height, spec);
         if (_faces.size >= FACES_MAX) _faces.delete(_faces.keys().next().value);
         _faces.set(key, c);
@@ -107,7 +108,7 @@ export function drawParchment(item) {
 /** The parchment between two rollers (the same for the reader and for everybody who watches). */
 function buildParchment(item) {
     const tex = drawParchment(item);
-    const mat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissive: 0x3a3020 });
+    const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }); // Legible ink even in shade; no additive glow washing it out.
     const parch = new THREE.Mesh(new THREE.PlaneGeometry(1, PARCH_H), mat);
     const rodMat = new THREE.MeshLambertMaterial({ color: 0xf3e2b3 });
     const knob = new THREE.MeshLambertMaterial({ color: 0x5a3a1e });

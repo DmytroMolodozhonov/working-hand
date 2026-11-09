@@ -1000,6 +1000,8 @@ export class CreatureImpact {
         const [la, ra] = K.arms(c);
         overlay(la, 'z', 0); overlay(ra, 'z', 0);
         for (const l of K.legs(c)) { overlay(l, 'x', 0); overlay(l, 'z', 0); }
+        // A living knockback finishing after death must not straighten a carcass back onto its feet.
+        if (dead && kindOf(c) === 'a') this.game.animals?._layDown?.(c);
         s.state = 'up'; s.held = false; s.rest = 0; s.slid = 0; s.slid2 = 0; s.noted = false;
     }
 }

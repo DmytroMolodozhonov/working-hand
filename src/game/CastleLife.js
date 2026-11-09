@@ -1361,7 +1361,8 @@ export class CastleLife {
     _ground(v) {
         const c = this.game.collision;
         const gy = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY(v.x, v.z);
-        if (v.fly) { v.y += (gy + SAVIOR_FLY_H - v.y) * 0.1; return; } // (the Saviour flies: hovers above the ground, a sweep over it, down from the sky in a few seconds)
+        if (v.fly && (v.savior != null || v.knowsFlight)) { v.y += (gy + SAVIOR_FLY_H - v.y) * 0.1; return; } // Only wizards who know flight may hover.
+        if (v.fly) { v.fly = false; v.vy = -0.01; return; }
         v.y += (gy - v.y) * (gy > v.y ? 1 : 0.5);
     }
 
@@ -1950,6 +1951,9 @@ export class CastleLife {
     _fight(v, dt) {
         const cs = v.cs;
         const fp = this._playerPos(v.foe);
+        const visible = fp && this._sees(v, fp);
+        if (visible) { v.lastFoe = { x: fp.x, y: fp.y - 1.95, z: fp.z, by: v.foe }; v.lostFoeT = 0; }
+        else v.lostFoeT = (v.lostFoeT || 0) + dt;
         if (v.hd && this.home.leash(v, fp)) return; // (on guard at home: not after him through the village)
         const d = fp ? Math.hypot(fp.x - v.x, fp.z - v.z) : Infinity;
         // they don't stop at the edge of their land: only when the enemy got well
@@ -1958,9 +1962,15 @@ export class CastleLife {
         // (the whole castle against them — or only this one, angry at this player: a blow, a theft)
         const grudge = v.grudge && v.grudge.id === v.foe && v.grudge.until > Date.now();
         if (v.lesson && (gone || Date.now() > v.lesson.until || v.lesson.casts >= LESSON.MAX_CASTS || this._pupilDown(v.foe))) { this._lessonOver(v); return; }
-        if (gone || !(cs.hostile.get(v.foe) > Date.now() || grudge)) {
+        const wanted = cs.hostile.get(v.foe) > Date.now() || grudge;
+        if (gone || !wanted || v.lostFoeT > 2.5) {
             if (fp && gone) v.gaveUp = { id: v.foe, until: Date.now() + 15000 }; // (not straight back at them)
+            if (wanted && v.lastFoe) {
+                v.investigate = { ...v.lastFoe, t: STARTLE.SEARCH_S, search: true, origin: { ...v.lastFoe }, probe: 0 };
+                this.alog?.decision(v, 'потерял противника — ищет у последнего замеченного места');
+            }
             v.foe = null; v.path = null; v.chaseT = 0; v.grudge = null;
+            v.speed = 0; v.mode = 'idle';
             return;
         }
         v.seated = false;
@@ -3726,7 +3736,7 @@ export class CastleLife {
                 const p = this._playerPos(id);
                 return p && Math.hypot(p.x - I.x, p.z - I.z) < 40 && Math.hypot(p.x - v.x, p.z - v.z) < R && this._sees(v, p);
             };
-            const who = I.by && seeIt(I.by) ? I.by : seeIt(g.localId) ? g.localId : [...g.remotes.keys()].find(seeIt);
+            const who = I.by ? (seeIt(I.by) ? I.by : null) : seeIt(g.localId) ? g.localId : [...g.remotes.keys()].find(seeIt);
             if (who && who !== this.state(v.cs.def.id).owner) {
                 this._catch(v.cs, who, I);
                 return false;
@@ -3751,7 +3761,23 @@ export class CastleLife {
             v.speed = 0; v.path = null;
             v.yaw = I.blocked ? turn(v.yaw, Math.atan2(-(I.x - v.x), -(I.z - v.z)), dt * 4) : turn(v.yaw, v.yaw + 1, dt * 0.8);
             v.mode = 'idle';
-            if (I.t > 12) I.t = 12;
+            if (I.search) {
+                I.scanT = (I.scanT || 0) + dt;
+                if (I.scanT > 2) {
+                    I.scanT = 0;
+                    const n = ++I.probe, o = I.origin;
+                    if (n <= 3) {
+                        const a = n * 2.4 + (v.idx || 0);
+                        I.x = o.x + Math.cos(a) * 9; I.z = o.z + Math.sin(a) * 9;
+                    } else {
+                        // Regroup with a companion (including checking the place where one fell).
+                        const mate = v.party?.members.find((m) => m !== v && !m.removable);
+                        if (!mate || n > 4) { v.investigate = null; v.path = null; return false; }
+                        I.x = mate.x; I.y = mate.y; I.z = mate.z;
+                    }
+                    I.blocked = false; I.prog = null; v.path = null;
+                }
+            } else if (I.t > 12) I.t = 12;
         }
         this._ground(v);
         return true;

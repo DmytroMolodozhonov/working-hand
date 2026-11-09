@@ -99,7 +99,7 @@ export function beltHips(lm, aspect = 4 / 3) {
     return { est: true, lh: { x: sx + sgn * hw, y: sy + T, visibility: 0.9 }, rh: { x: sx - sgn * hw, y: sy + T, visibility: 0.9 } };
 }
 
-export const BELT_AT = { dy: [-0.45, 0.1], u: [-0.02, 0.25] };
+export const BELT_AT = { dy: [-0.45, 0.1], u: [-0.14, 0.25] }; // More room towards the belly; the preview derives its centre from this same zone.
 /** The wider zone a hand at the wand stays in / takes it from (beltPose `near`), the same way to the left. */
 export const BELT_NEAR = { dy: [-0.6, 0.25], u: [-0.2, 0.7] };
 export function beltPose(lm, side, aspect = 4 / 3) {
@@ -182,7 +182,7 @@ const mirrorHand = (h) => (h ? h.map((p) => ({ ...p, x: 1 - p.x })) : h);
 // (moved in onto the belt: the middle of the zone is on the right half of the belt, between the hip joint and the belly's
 // middle - the author: the things' place «right on the belt, on the right»; it used to be centred on the hip joint itself, at
 // the body's edge, and its hint in the camera window hung off the belt. The outside edge still a little past the hip joint)
-export const OFF_POCKET = [-0.3, 0.1]; // (wide: the author — crossing the body must be as easy as the rest; from in front of the hip to a little outside it) // (the wrist outward of the hip joint, torso heights)
+export const OFF_POCKET = [-0.36, 0.1]; // More room onto the belt, stopping before the wand's place; outside edge stays beside the hip.
 // (its height: the wrist from this far above the hip to this far below, torso heights — the author puts the hand
 // in a little higher than the hip joint: the opening of a real pocket is at the waist)
 export const OFF_POCKET_DY = [-0.6, 0.45]; // (±25 cm around the hip: the hand passes at the belt or lower, not exactly at one height)
@@ -200,7 +200,9 @@ export function offHip(lm, hand, aspect = 4 / 3) {
     const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
     const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
     if (nu < 1e-4 || nf < 1e-4) return false;
-    if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < 0.25) return false;
+    // At the inner belt edge the forearm is less crossed; the old bend threshold cancelled that new strip.
+    const minBend = wOut < -0.3 ? 0.18 : 0.25;
+    if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < minBend) return false;
     if (wOut >= OFF_POCKET[0] && wOut <= OFF_POCKET[1] && dy > OFF_POCKET_DY[0] && dy < OFF_POCKET_DY[1]) {
         if (!hand || hand.length < 21) return 'pocket';
         const dxh = (hand[9].x - hand[0].x) * aspect, dyh = hand[9].y - hand[0].y;

@@ -445,6 +445,12 @@ export class Animals {
         const magic = animalMagicKind(a); // (before it lies down: the bull / the minotaur still in its form)
         a.dead = true;
         a.state = 'dead';
+        a.spd = 0;
+        if (a.mount?.on) {
+            const rider = this.game.castleLife?.byId?.get(a.mount.v);
+            if (rider) this.game.travelers?.riders?.unseat(rider, true);
+            a.mount.on = false;
+        }
         a.fly = null; a.flyCode = 0; a.riderFly = false; a.defend = null;
         a.cooked = a.cooked || cooked;
         if (this.auth) this.guards.died(a); // (the bronze bull's horn, the minotaur's horn)
@@ -469,7 +475,8 @@ export class Animals {
         const w = waterAt(g.terrain?.data, p.x, p.z, gy);
         if (w && w.depth >= (a.type === 'swan' ? 0.5 : 1.5)) return false; // (in deep water — a swan: in any water — the carcass floats on its side, as it did)
         ci.ragDeath(a);
-        return ci.ragOf(a);
+        // ragOf also includes the OLD living knockdown pose; only a death doll owns a corpse.
+        return !!ci.deadRags?.has('a|' + a.id);
     }
 
     _layDown(a, fresh = false) {

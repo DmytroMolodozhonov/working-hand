@@ -8,7 +8,23 @@
  *     rough), the water murkier green; the sky's reflection broken by the current.
  * «Ультра качество» adds the rain's rings. Added to the material's own program at loading.
  */
+import * as THREE from 'three';
 import { ULTRA_PARS, addUltraUniforms } from './UltraUniforms.js';
+
+// One small shared noise map, made once. Two filtered reads replace the river's repeating stripes;
+// no new draw calls, render passes or per-frame texture work (128² RGBA, ~85 KB with mipmaps).
+let rippleMap;
+function ripples() {
+    if (rippleMap) return rippleMap;
+    const data = new Uint8Array(128 * 128 * 4);
+    let seed = 17321;
+    for (let i = 0; i < data.length; i++) { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; data[i] = seed >>> 24; }
+    const t = rippleMap = new THREE.DataTexture(data, 128, 128, THREE.RGBAFormat);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.generateMipmaps = true; t.needsUpdate = true;
+    return t;
+}
 
 const COLOR_FRAG = `#include <color_fragment>
 // (a river's face colour is its flow, not a colour: its own murky green instead)
@@ -31,12 +47,12 @@ const WATER_FRAG = `
         // the current: everything slides downstream (≈ 1.6 m/s), stretched along the flow
         vec2 F = fwFlow, S = vec2(-F.y, F.x);
         vec2 q = vec2(dot(up, S), dot(up, F) - ut * 1.6);
-        g = (F * sin(q.y * 3.1 + sin(q.x * 1.7) * 1.2) * 0.07 + S * sin(q.x * 4.3 + q.y * 0.9) * 0.03)
-          + (F * sin(q.y * 7.7 + q.x * 2.1 - ut * 1.1) * 0.03);
-        // threads of foam and the riffles' white water, carried along
-        float th = sin(q.x * 6.0 + sin(q.y * 0.7) * 2.0) * 0.5 + 0.5;
-        float rif = sin(q.y * 0.9 + sin(q.x * 0.6) * 3.0) * sin(q.x * 1.3 + 1.7) ;
-        foam = smoothstep(0.93, 1.0, th) * (0.4 + 0.6 * smoothstep(0.2, 0.8, rif)) + smoothstep(0.75, 0.95, rif) * 0.35 * (0.5 + 0.5 * sin(q.y * 9.0));
+        vec4 broad = texture2D(uFreshRipple, q * vec2(0.055, 0.022));
+        vec4 fine = texture2D(uFreshRipple, q * vec2(0.19, 0.11) + broad.rg * 0.035 + vec2(0.13, ut * 0.001));
+        vec2 tilt = (broad.rg - 0.5) * 0.055 + (fine.rg - 0.5) * 0.025;
+        g = S * tilt.x + F * tilt.y;
+        // Sparse broken foam patches, never continuous parallel white ribs across the river.
+        foam = smoothstep(0.74, 0.94, broad.b) * smoothstep(0.65, 0.9, fine.b) * 0.22;
         if (!top) foam *= 0.3;
     } else {
         // the lake: the faintest drifting ripples — a mirror
@@ -50,7 +66,7 @@ const WATER_FRAG = `
     vec3 uR = reflect(uV, un);
     uR.y = abs(uR.y);
     float mirror = fwRiver > 0.5 ? 0.6 : 0.92; // (a still lake mirrors the most)
-    vec3 body = gl_FragColor.rgb * (fwRiver > 0.5 ? vec3(1.0) : mix(vec3(1.0), vec3(0.75, 0.85, 0.7), 0.4)); // (a lake's water: darker green-brown in itself)
+    vec3 body = gl_FragColor.rgb * (fwRiver > 0.5 ? vec3(1.0) : vec3(0.62, 0.74, 0.65)); // (darker lake water; the sky still reflects at grazing angles)
     gl_FragColor.rgb = mix(body * mix(1.0, 0.85, ufr), ultraSky(uR), clamp(ufr * (fwRiver > 0.5 ? 0.9 : 1.15), 0.0, mirror));
     float usg = max(dot(uR, normalize(uUltraSunDir)), 0.0);
     gl_FragColor.rgb += uUltraSunCol * (pow(usg, fwRiver > 0.5 ? 300.0 : 1400.0) * (fwRiver > 0.5 ? 3.0 : 8.0) + pow(usg, 80.0) * 0.25) * uUltraSunVis;
@@ -66,15 +82,16 @@ export function applyUltraWater(material) {
     material.onBeforeCompile = (shader, renderer) => {
         if (before) before.call(material, shader, renderer);
         addUltraUniforms(shader);
+        shader.uniforms.uFreshRipple = { value: ripples() };
         shader.vertexShader = shader.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec3 vUltraWorld;')
             .replace('#include <project_vertex>', '#include <project_vertex>\nvUltraWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
         shader.fragmentShader = shader.fragmentShader
-            .replace('#include <common>', '#include <common>\nvarying vec3 vUltraWorld;\nfloat fwRiver = 0.0;\nvec2 fwFlow = vec2(0.0, 1.0);\n' + ULTRA_PARS)
+            .replace('#include <common>', '#include <common>\nuniform sampler2D uFreshRipple;\nvarying vec3 vUltraWorld;\nfloat fwRiver = 0.0;\nvec2 fwFlow = vec2(0.0, 1.0);\n' + ULTRA_PARS)
             .replace('#include <color_fragment>', COLOR_FRAG)
             .replace('#include <fog_fragment>', WATER_FRAG);
     };
     const key = material.customProgramCacheKey?.bind(material);
-    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw2';
+    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw3';
     return material;
 }

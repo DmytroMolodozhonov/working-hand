@@ -20,10 +20,9 @@ export function hash01(a, b, seed) {
 }
 
 export const SUNKEN = {
-    // (the author 05.11: wrecks «в 2 раза реже, чем пещеры» — the caves are ~110 a km² of land (cave systems: one in ~9 of 10 cells of
-    //  90 m); a wreck is tried ~36 times a km² of sea, ~half of them fit the bottom: it was ~1.7 tries a km², twenty times rarer)
+    // (the author 09.11: wrecks twice rarer than before — ~18 tries a km² instead of ~36; seabed fitting stays the same)
     CELL: 150, // m: one place tried per cell
-    WRECK: 0.8, // of the cells: a wreck tried
+    WRECK: 0.4, // of the cells: a wreck tried
     TEMPLE: 0.0064, // of the cells: the temple tried (rare: as before, ~0.28 a km²)
     WRECK_DEPTH: 8, // m of water over the bottom at least
     TEMPLE_DEPTH: 13,

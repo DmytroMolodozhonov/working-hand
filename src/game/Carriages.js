@@ -110,7 +110,7 @@ export function wayFree(game, x, z, dx, dz, dist, o = {}) {
             const f = t.floorBelow(ix, iz, prev + rise);
             if (f < prev - Math.max(2, rise + 1)) return s - 1; // (a drop)
             if (t.solidIn(ix, iz, f + 1, f + clear)) return s - 1; // (a step too high, a trunk, a wall)
-            if (t.get(ix, f + 1, iz) === BLOCK.WATER || t.isSeaColumn?.(ix, iz)) return s - 1;
+            if ((t.get(ix, f + 1, iz) === BLOCK.WATER && (!o.wade || t.get(ix, f + 3, iz) === BLOCK.WATER)) || t.isSeaColumn?.(ix, iz)) return s - 1;
             if (treeAt(game, px, pz, sd ? 0.3 : 0.6)) return s - 1; // (a tree that is a model, not blocks: an apple tree…)
             if (o.avoidLand && idx?.landAt) { const land = idx.landAt(ix, iz); if (land && land.castle?.id !== o.into) return s - 1; }
             if (!sd) centre = f;

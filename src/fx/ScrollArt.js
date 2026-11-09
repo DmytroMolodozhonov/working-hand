@@ -420,7 +420,7 @@ export function paintParchment(x, W, H, spec) {
     }
     for (const r of L.rows) {
         x.font = (r.bold ? 'bold ' : '') + font + 'px serif';
-        x.fillStyle = r.bold ? S.ink : '#2b1d10';
+        x.fillStyle = r.bold ? '#17100a' : '#21180e';
         x.fillText(r.text, r.x, r.y);
     }
     // the picture, the seal, the footnote
@@ -430,8 +430,8 @@ export function paintParchment(x, W, H, spec) {
         seal(x, mx + 62, my + 108, 26, S);
     } else seal(x, W - 100, H - 78, 26, S);
     if (spec.note) {
-        x.font = 'italic 24px serif'; x.fillStyle = '#5a4526'; x.textAlign = 'center';
-        x.fillText(spec.note, pic ? tx : W / 2, H - 56);
+        x.font = '24px serif'; x.fillStyle = '#21180e'; x.textAlign = 'center';
+        x.fillText(spec.note, W / 2, H - 56, W - 120);
     }
     return S;
 }

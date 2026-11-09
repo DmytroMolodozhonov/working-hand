@@ -25,6 +25,8 @@ import { DANGERS } from './Danger.js';
 import { staffVillage, crowdVillage, villageTrip } from './WizVillages.js';
 import { reactLag, reactLagText, knowsFirefighting, canDome, SHIELD, HUNT, huntRole, huntStart, huntStep, huntLeash, seededRng, LONERS, npcSweeps, SMOKE, MAGIC_REACT, reaction, chooseShield, windShield, WIND_SHIELD } from './WizardMind.js';
 import { hashString } from '../core/math.js';
+import { WizardHome } from './WizardHome.js';
+import { knowsFlight } from './WizardMind.js';
 
 export { FX };
 export const isWizSite = (def) => !!def && (def.kind === 'tower' || def.kind === 'wander' || def.kind === 'wizvillage' || (def.kind === 'hamlet' && !!def.mage)); // (a wizards' hamlet: Hamlets.js)
@@ -72,6 +74,7 @@ export class WizardLife {
         this.game = life.game;
         this.fx = new WizardFx(this.game);
         this.fight = new WizardFight(this); // (a fight: duel spells, shields, the circle's plans)
+        this.home = new WizardHome(this);
         this._dayT = 0;
         this._practiceT = 0;
     }
@@ -93,6 +96,7 @@ export class WizardLife {
         // his own traits (WizardMind): how fast he reacts to trouble, whether he knows «Firefighting», whether he may raise the dome («Protection Maxima»)
         v.reactLag = reactLag(rank, seededRng(hashString(String(v.id) + ':react')));
         v.knowsFire = knowsFirefighting(v.id, rank);
+        v.knowsFlight = knowsFlight(v.id, rank, v.role);
         if (!W.dome && canDome(max, rank)) W.dome = { ...SHIELD.DOME }; // (a strong wizard's dome: not only the Master's)
         v.fx = 0; v.aimPitch = 0;
         v.title = e.elder ? 'Старейшина' : WIZ_ROLE_RU[v.role][v.entry.female ? 1 : 0]; // (a settlement's Elder: WizVillages.js)
@@ -230,9 +234,14 @@ export class WizardLife {
             if (isPlayer && by === L.state(cs.def.id).owner) continue;
             let seen = false, said = false;
             for (const v of cs.active.values()) {
-                if (v.dead || v.sleep || v.lev || v.servantOf != null || v.foe) continue;
+                if (v.dead || v.lev || v.servantOf != null) continue;
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
                 if (d > D.hear) continue;
+                if (cs.def.type === 'magehut') {
+                    this.home.alarm(v, pos, bp && L._knows(v, by, pos, via) ? by : null);
+                    continue;
+                }
+                if (v.sleep || v.foe) continue;
                 v.practice = null;
                 if (bp && !seen && L._knows(v, by, pos, via)) seen = true; // (only who saw him do it knows: no mind-reading — Blame.js)
                 if (L._fights(v)) {
@@ -331,6 +340,7 @@ export class WizardLife {
      */
     startHunt(v, at, level = 0, why = '') {
         if (!v.W || v.noWand || v.dead || v.hunt) return false;
+        if (this.home?.ward(v)) return this.home.alarm(v, at);
         v.hunt = huntStart(at, level, this.clock());
         v.huntLevel = level;
         v.huntHome = { x: v.x, z: v.z };
@@ -490,6 +500,7 @@ export class WizardLife {
             v.practice.t -= dt;
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;
         }
+        if (this.home?.step(v, dt)) return true;
         if (v.lostWand) return this._fetchWand(v, dt);
         // a reaction that waits for his wits (WizardMind.REACT_LAG): a beginner stands lost a few seconds, the Master at once
         if (v.later) { v.later.t -= dt; if (v.later.t <= 0) { const f = v.later.fn; v.later = null; f(); } else if (!v.foe && !(v.fleeT > 0)) { this._lost(v, dt); return true; } }
@@ -502,7 +513,12 @@ export class WizardLife {
         if (W && !v.foe && this.fight._prepTick(v, dt)) { this.life._ground(v); return true; } // (saying a spell at a creature / back at a charge)
         if (W && !v.foe && this.fight.holdStill(v, dt)) return true; // (he just cast at a creature: stands in his pose)
         if (W && v.threatAt && this.fight.pursueThreat(v, dt)) return true; // (turning to a creature that hurt him, to answer it)
-        if (v.foe && W) return this.fight.step(v, dt);
+        if (v.foe && W) {
+            const home = this.home?.ward(v), before = home ? { x: v.x, y: v.y, z: v.z } : null;
+            const result = this.fight.step(v, dt);
+            if (home) this.home.keep(v, before);
+            return result;
+        }
         return false;
     }
 
@@ -524,10 +540,11 @@ export class WizardLife {
         };
         if (lw.t > EXPELLIARMUS.FETCH_GIVE_UP) { L._say(v, 'Акцио!', 3); back(); return true; }
         if (!it.rest) { v.mode = 'idle'; v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(p.x - v.x), -(p.z - v.z)), dt * 6); return true; }
-        const d = L._steer(v, p.x, p.z, WALK * 1.8, dt, 0.8);
+        const goal = this.home?.spot(v, p) || p;
+        L._steer(v, goal.x, goal.z, WALK * 1.8, dt, 0.8);
         v.mode = v.speed > 0 ? 'walk' : 'idle';
         L._ground(v);
-        if (d <= 1.0 && Math.abs(p.y - v.y) < 2.5) back();
+        if (Math.hypot(p.x - v.x, p.z - v.z) <= 1.0 && Math.abs(p.y - v.y) < 2.5) back();
         return true;
     }
 

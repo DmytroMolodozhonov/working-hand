@@ -262,3 +262,26 @@ test('a scroll opens by the distance between the hands alone: sideways, up-down 
     const lost = opened(V(0, 1, 0), 1.6, true);
     assert.ok(Math.abs(lost.w - 1.6) < 0.03, 'a lost hand did not close it: ' + lost.w);
 });
+
+test('ordinary holding fist and noisy grip do not flap the book open and closed', () => {
+    const t = bookInRightHand();
+    t.H.right.curl = t.H.right.grip = 0.86;
+    t.run(0.3);
+    t.run(4, (i) => { t.H.right.curl = t.H.right.grip = i % 5 === 0 ? 1 : 0.86 + Math.sin(i) * 0.04; });
+    assert.ok(t.R.s.phi > 2.5, 'a grip spike never closes the book');
+    t.H.right.curl = t.H.right.grip = 1;
+    t.run(1.5);
+    assert.ok(t.R.s.phi < HOLD.CLOSED_PHI, 'a deliberate sustained squeeze still closes it');
+});
+
+test('a short swipe with a wand in the other hand turns the page', () => {
+    const t = bookInRightHand();
+    t.H.right.curl = t.H.right.grip = CALM;
+    t.g.items.held.left = { item: { kind: 'wand' } };
+    t.run(1);
+    const s = t.R.s;
+    t.run(0.3, i => { t.H.left.tip = t.m.localToWorld(V(0.3 - i * 0.005, 0, BOOK.T + 0.06)); });
+    assert.ok(s.sheet, 'wand hand may turn a page with its index finger');
+    t.H.left.tip = null; t.run(2);
+    assert.equal(s.spread, 1);
+});

@@ -37,6 +37,7 @@ import { logStackModel, logIconUrl } from './LogModel.js';
 import { ENCHANT_TIERS } from './Enchant.js';
 import { handLog } from './HandRelease.js';
 import { PACK_TEXT } from './MagicPack.js';
+import { backAllowed, BACK_HOLD } from './BackInteraction.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -683,8 +684,8 @@ export class Inventory {
             }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
             const b = this._back[side];
-            if (behindBack(local, ch.handVelocity[side].length())) b.t += dt; else b.t = 0;
-            if (b.t > 0.5 && now - b.at > 1200) { b.t = 0; b.at = now; this._backGesture(side); }
+            if (backAllowed(g) && behindBack(local, ch.handVelocity[side].length())) b.t += dt; else b.t = 0;
+            if (b.t >= BACK_HOLD && now - b.at > 1200) { b.t = 0; b.at = now; this._backGesture(side); }
         }
         this.belt.update(dt);
         this.purse.update(dt);
@@ -990,7 +991,7 @@ export class Inventory {
     }
 
     _backGesture(side) {
-        if (this.monsterShut()) return;
+        if (this.monsterShut() || !backAllowed(this.game)) return;
         const g = this.game;
         const t = this._backThing(side);
         if (t) {

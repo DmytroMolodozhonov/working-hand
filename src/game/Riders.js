@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import { wayFree } from './Carriages.js';
 import { crowdStep } from './CrowdSources.js';
+import { HillNav, RoutePlanner } from './HillWay.js';
 
 export const RIDE = {
     WALK: 3.6, // m/s: a steady walk on the road
@@ -69,6 +70,7 @@ export class Riders {
 
     /** (host, every frame) The party's horses: thrown riders, the way, the others after the leader. */
     update(P, dt) {
+        this.clock = (this.clock || 0) + dt;
         // (a rider gone — out of the world: his horse is a free horse now)
         if (P.horses?.length) P.horses = P.horses.filter((a) => { if (a.mount && !P.members.some((v) => v.horse === a)) { this._free(a); return false; } return !!a.mount; });
         const riders = P.members.filter((v) => v.horse);
@@ -93,13 +95,19 @@ export class Riders {
                     const left = Math.hypot(P.dest.x - v.x, P.dest.z - v.z);
                     if (left < P.dest.r) { this.trav._arrive(P); }
                     v.roadT = (v.roadT || 0) - dt;
-                    if (v.roadT <= 0 || v.roadAim === undefined) { v.roadT = RIDE.AIM_T; v.roadAim = this._way(a, Math.atan2(-(P.dest.x - v.x), -(P.dest.z - v.z)), RIDE.WALK, P.dest.into); }
+                    const route = this._route(a, P.dest, dt, left < P.dest.r);
+                    if (route || v.roadT <= 0 || v.roadAim === undefined) { v.roadT = RIDE.AIM_T; v.roadAim = route ? Math.atan2(-(route.x - v.x), -(route.z - v.z)) : this._way(a, Math.atan2(-(P.dest.x - v.x), -(P.dest.z - v.z)), RIDE.WALK, P.dest.into); }
                     if (v.roadAim != null) { aim = v.roadAim; speed = RIDE.WALK; }
                 } else if (lead) {
                     const k = riders.indexOf(v), fy = lead.horse.group.rotation.y;
                     const tx = lead.x + Math.sin(fy) * 5 * k + Math.cos(fy) * 1.6, tz = lead.z + Math.cos(fy) * 5 * k - Math.sin(fy) * 1.6;
                     const d = Math.hypot(tx - v.x, tz - v.z);
-                    if (d > 0.8) { aim = Math.atan2(-(tx - v.x), -(tz - v.z)); speed = Math.min(RIDE.RUN, RIDE.WALK * (d > 6 ? 1.8 : 1)); }
+                    const route = this._route(a, { x: tx, z: tz, into: P.dest.into }, dt, d < 3);
+                    if (d > 0.8) {
+                        const heading = Math.atan2(-((route?.x ?? tx) - v.x), -((route?.z ?? tz) - v.z));
+                        const free = route ? heading : this._way(a, heading, RIDE.WALK, P.dest.into);
+                        if (free != null) { aim = free; speed = Math.min(RIDE.RUN, RIDE.WALK * (d > 6 ? 1.8 : 1)); }
+                    }
                 }
             }
             this._move(a, aim, speed, dt);
@@ -108,12 +116,29 @@ export class Riders {
         P.fleeT = Math.max(0, (P.fleeT || 0) - dt);
     }
 
+    /** Stalled / circling at a bank: a bounded, sliced route search using the HORSE's clearance. */
+    _route(a, goal, dt, waiting) {
+        const p = a.group.position, nav = a.roadNav || (a.roadNav = new HillNav());
+        nav.tick(dt, this.clock, Math.hypot(goal.x - p.x, goal.z - p.z), p.x, p.z, waiting);
+        if (nav.wantPlan(this.clock)) {
+            const d = Math.hypot(goal.x - p.x, goal.z - p.z), k = Math.min(1, 80 / Math.max(1, d));
+            const env = { step: (x, z, y, nx, nz) => {
+                const len = Math.hypot(nx - x, nz - z);
+                if (wayFree(this.game, x, z, (nx - x) / len, (nz - z) / len, len, { half: 0.9, rise: 1.5, clear: 8, wade: true, avoidLand: true, into: goal.into }) < len) return null;
+                return this.game.collision?.groundAt?.(nx, nz, y + 1.5) ?? y;
+            } };
+            nav.begin(this.clock, new RoutePlanner(env, { x: p.x, z: p.z, y: p.y - 0.5 }, { x: p.x + (goal.x - p.x) * k, z: p.z + (goal.z - p.z) * k }, { near: 2 }), p);
+        }
+        nav.work(0.6);
+        return nav.aim();
+    }
+
     /** The way that is free ahead (the nearest to `aim`), or null. */
     _way(a, aim, speed, into) {
         const p = a.group.position, look = Math.max(8, speed * 2.2);
         for (const off of [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2]) {
             const y = aim + off;
-            if (wayFree(this.game, p.x, p.z, -Math.sin(y), -Math.cos(y), look, { half: 0.9, rise: 1.5, clear: 6, avoidLand: true, into }) >= look) return y;
+            if (wayFree(this.game, p.x, p.z, -Math.sin(y), -Math.cos(y), look, { half: 0.9, rise: 1.5, clear: 8, wade: true, avoidLand: true, into }) >= look) return y;
         }
         return null;
     }
@@ -126,6 +151,9 @@ export class Riders {
         if (speed > 0) {
             const s = crowdStep(g, a, p, ux, uz, speed * dt + 2, { r: 1.1, speed, dt, look: 3 + speed * 0.4 });
             if (!s) speed = 0; else { ux = s.x; uz = s.z; }
+            // Turning and crowd avoidance change the actual heading: check that step too.
+            const look = Math.max(1, speed * dt + 0.9);
+            if (wayFree(g, p.x, p.z, ux, uz, look, { half: 0.9, rise: 1.5, clear: 8, wade: true }) < look) speed = 0;
         }
         const step = speed * dt;
         p.x += ux * step; p.z += uz * step;
@@ -141,6 +169,7 @@ export class Riders {
         const a = v.horse, g = this.game;
         v.seated = false; v.job = 'road';
         if (a?.mount) a.mount.on = false;
+        if (a) { a.roadNav = null; a.spd = 0; }
         if (a && !a.dead) {
             const p = a.group.position, ry = a.group.rotation.y, side = v.idx % 2 ? 1 : -1;
             const x = p.x + Math.cos(ry) * RIDE.SIDE * side, z = p.z - Math.sin(ry) * RIDE.SIDE * side;

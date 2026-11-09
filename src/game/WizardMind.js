@@ -38,6 +38,12 @@ export const REACT_LAG = {
 
 export const reactLevel = (rank) => REACT_LEVEL[rank] || 2;
 
+/** Flight is personal, never rerolled on wake/load: strong wizards 50%, the head and Saviour always. */
+export function knowsFlight(id, rank, role = '') {
+    if (role === 'master' || role === 'savior' || rank === 'master' || rank === 'savior') return true;
+    return reactLevel(rank) === 3 && seededRng(hashString(String(id) + ':flight'))() < 0.5;
+}
+
 /** The delay of one wizard (rng 0..1). → {t, lost, level} */
 export function reactLag(rank, rng = Math.random) {
     const level = reactLevel(rank), R = REACT_LAG[level];
