@@ -198,3 +198,28 @@ test('a guest does not decide the world (the host does); the messages are checke
     n.onNet('x', null);
     assert.ok(true, 'bad messages are ignored');
 });
+
+test('the actual light cone destroys animated skeletons of both castles and mummies immediately', () => {
+    const { g } = stub(); const calls=[];
+    const cs=[{kind:'guard',id:'guard',hp:100},{kind:'mummy',id:'mummy',hp:200},{kind:'guard',id:'pguard',hp:300}];
+    const kinds=['V','H','H'];
+    g.duel._bodies=()=>cs.map((c,i)=>({kind:kinds[i],id:c.id,a:new THREE.Vector3(6+i,0,0),b:new THREE.Vector3(6+i,3,0),r:1}));
+    g.duel._creature=(k,id)=>cs.find(c=>c.id===id);
+    const hit=(c,n,spell)=>{calls.push([c.id,n,spell]);c.hp-=n;};
+    g.vampire={hit};g.pharaoh={hit};
+    new Nihilis(g).fire(aim().origin,aim().dir,'me');
+    assert.equal(calls.length,3);
+    assert.ok(cs.every(c=>c.hp<=0));
+    assert.ok(calls.every(x=>x[2]==='Nihilis'));
+});
+
+test('Nihilis scatters a sleeping or rising mummy rather than only waking it', async () => {
+    const { PharaohLife } = await import('../../src/game/PharaohLife.js');
+    for (const mode of ['sleep','rising']) {
+        const life = Object.create(PharaohLife.prototype);
+        life.game = { authority: true }; life.state = { mummiesDead: [], guardsDead: [] }; life.attacked = () => {};
+        const c = { id: 'm', i: 0, kind: 'mummy', mode, hp: 30, model: { group: { position: new THREE.Vector3() } } };
+        life.hit(c,9999,'Nihilis','me');
+        assert.ok(c.dead); assert.deepEqual(life.state.mummiesDead,[0]);
+    }
+});

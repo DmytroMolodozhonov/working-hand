@@ -6,6 +6,7 @@
  * infernal gargoyles, a monstrous form (the man inside lives), the black pentagrams and the marks on the ground, an «Империус» mind in a body. The
  * black mages (level 60+) it does NOT break — it hurts them badly (not a duel) and they FEAR it; lesser black mages take a lighter wound. A black
  * mage's «Protection Maxima» dome it shatters (a plain mage's — never). Everything else (people, animals, zombies, bosses, things) it does not touch.
+ * A won beam clash deals the defeated mage's true dark level in HP (0–100); beam strength separately gains that percentage.
  * The ghosts of the Castle of Ghosts it drives out for a long time: Ghosts.exorcise (the hook in Nihilis.js).
  *
  * ON WHOM / ON WHAT (CLAUDE.md): `NIHILIS_TARGETS` below says it for every creature and thing.
@@ -29,6 +30,9 @@ export const NIHIL = {
 export function nihilDuelPower(spell, level) {
     return spell === 'NihilisDuel' ? 1 + Math.min(100, Math.max(0, Number(level) || 0)) / 100 : 1;
 }
+
+/** A won beam clash deals the loser's true darkness in HP, independently of beam strength. */
+export const nihilDuelDamage = level => Math.min(100, Math.max(0, Number(level) || 0));
 
 /** A point in the cone from `o` along unit `d`, with a body of radius `r`: along-distance or -1. */
 export function inCone(o, d, p, r = 0, range = NIHIL.RANGE) {
@@ -63,9 +67,9 @@ export const NIHILIS_TARGETS = {
     livingTrees: { does: 'scatter', why: 'ожившие деревья («Alive» / «Alive Максима») и поднятые на кладбищах мертвецы (это тоже живые деревья) рассыпаются на части — их оживляла чёрная магия' },
     bookBirds: { does: 'none', why: 'книги-птицы — белая магия, не задевает' },
     iceCastle: { does: 'none', why: 'Ледяная Королева, снеговики и ледяные монстры — магия льда, не чёрная: не действует' },
-    vampire: { does: 'hurt', why: 'граф — порождение тьмы: «Nihilis Atra» ранит его вдвое сильнее (VampireRules.vampDamage); стражи-скелеты рассыпаются как скелеты чёрного корабля' },
+    vampire: { does: 'hurt', why: 'граф — порождение тьмы: «Nihilis Atra» ранит его вдвое сильнее (VampireRules.vampDamage); стражи-скелеты рассыпаются сразу' },
     titan: { does: 'none', why: 'титан — не чёрная магия, а сила богов: свет «Nihilis Atra» его не рассеивает' },
-    pharaoh: { does: 'hurt', why: 'фараон и мумии — порождения древней тьмы: «Nihilis Atra» ранит их вдвое сильнее (PharaohRules.pharaohDamage)' },
+    pharaoh: { does: 'hurt', why: 'живой фараон получает урон по PharaohRules.pharaohDamage; оживлённые мумии и стражи-скелеты рассеиваются сразу' },
     blackship: { does: 'none', why: 'сам корабль заклинаниями не повреждается (барьер проклятия, Ships.isCursed); но скелеты экипажа в конусе рассыпаются' },
     dragon: { does: 'none', why: 'дракон — не чёрная магия: не ранит и не злит, обиды не копит' },
     phoenix: { does: 'none', why: 'феникс — огонь жизни, не чёрная магия: не касается' },

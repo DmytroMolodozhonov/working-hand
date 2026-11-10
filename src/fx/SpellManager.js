@@ -27,7 +27,6 @@ import { IMPULSE, impulsePush } from '../game/WindImpulse.js';
 import { WIND_RING, isWindRing, windRingPush } from '../game/WindRing.js';
 import { iceMagicWords } from '../game/IceMagic.js';
 import { bridgeWords } from '../game/Bridge.js';
-import { groundprudWords } from '../game/GroundprudWords.js';
 import { visibleGodiWords } from '../game/VisibleGodiWords.js';
 import { nihilisWords } from '../game/NihilisWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
@@ -147,8 +146,6 @@ export function matchSpell(text) {
     if (iceMagic) return iceMagic;
     // «Create a Bridge» («криейт э бридж», «создай мост»): after «Ice Bridge», a word of its own (Bridge.js)
     if (bridgeWords(s)) return 'CreateBridge';
-    // «Groundprud» («граунтпруд»): one word, before the plain «Protection»
-    if (groundprudWords(s)) return 'Groundprud';
     // «Flourish» («флориш», «флариш», «флёриш»): one word of its own — the earth turns green (Flourish.js)
     if (/(?:^|[^а-яa-z])(?:флориш|флорищ|флариш|флёриш|флериш|флоуриш|флориж|flourish|florish|flurish)(?:$|[^а-яa-z])/.test(s)) return 'Flourish';
     // «Visible Godi» («визибл годи»): both words together, before «Invisible» and the short tokens (VisibleGodiWords.js)
@@ -604,7 +601,6 @@ export class SpellManager {
             case 'WaterPart': this.hooks.waterPart?.(o, direction.clone(), casterId, handSide); break; // (the water stands aside: o = the caster's feet, direction = the corridor's axis — WaterPart.js)
             case 'Caligo': this.hooks.caligo?.(o, direction.clone(), casterId, handSide); break; // (the dark fog: o = its middle, the direction = the way back to the wand — DarkFog.js)
             case 'Sectura': this.hooks.slash?.(o, direction.clone(), casterId, handSide); break; // (the cutting curse: the direction's LENGTH carries the swing's roll — Slash.js)
-            case 'Groundprud': this.hooks.groundprud?.(o, direction.clone(), casterId); break; // (Groundprud.js: o = the spot, direction = away from the caster)
             case 'CreateBridge': this.hooks.bridge?.(o, direction.clone(), casterId); break; // (Bridge.js: o = the feet, its length = to the far end)
             case 'WallRise': case 'WallRiseMaxima': this.castWallRise(o, d, casterId, name === 'WallRiseMaxima'); break; // (Breakthrough's wall)
             case 'Flight': return false; // handled by the game (it moves the caster)
@@ -1552,28 +1548,9 @@ export class SpellManager {
     }
 
     // ---------------------------------------------------- Breakthrough's wall
-    /** The wall shoots up out of the ground at `center` (across `dir`): whoever stands on it is thrown back. */
+    /** The earth-rise implementation owns both the real solid blocks and their temporary GPU picture. */
     castWallRise(center, dir, casterId, max) {
-        dir = dir.clone().setY(0);
-        if (dir.lengthSq() < 1e-6) return;
-        dir.normalize();
-        const side = new THREE.Vector3(-dir.z, 0, dir.x), width = max ? 9 : 5;
-        const push = (p) => {
-            const to = new THREE.Vector3(p.x - center.x, 0, p.z - center.z);
-            if (Math.abs(to.dot(side)) > width / 2 + 1 || Math.abs(to.dot(dir)) > 1.6) return null;
-            return dir.clone().multiplyScalar(max ? 12 : 8).setY(max ? 8 : 6);
-        };
-        const name = max ? 'WallRiseMaxima' : 'WallRise';
-        this._fx('fxStone', center, max ? 0.85 : 1);
-        if (this.auth && this.hooks.creatures) this.hooks.creatures(name, casterId, push);
-        else if (this.auth) {
-            for (const z of this.zombies) {
-                if (z.isDead) continue;
-                const v = push(z.group.position);
-                if (v) { z.windVel = (z.windVel || new THREE.Vector3()).add(v.clone().setY(0)); z.vy = Math.max(z.vy || 0, v.y); }
-            }
-        }
-        if (this.hooks.blowMe) this.hooks.blowMe(casterId, center, push, name);
+        this.hooks.earthWall?.(center, dir, casterId, max);
     }
 
     // -------------------------------------------------------------- Sapira

@@ -9,7 +9,7 @@
  * Imperius mind let go, a «слом защиты» mark taken off) — the caster is never hit by their own light.
  */
 import * as THREE from 'three';
-import { NIHIL, NIHILIS_TARGETS, inCone, blackWound, woundHp, scatters } from './NihilisRules.js';
+import { NIHIL, NIHILIS_TARGETS, inCone, blackWound, woundHp, nihilDuelDamage, scatters } from './NihilisRules.js';
 import { PENTAGRAMS as TABLE } from './Pentagrams.js';
 import { castingHand } from './WandAim.js';
 
@@ -125,7 +125,7 @@ export class Nihilis {
     }
 
     /** A duel hit affects only its recipient, without a cone through bystanders. */
-    hitMe(by) {
+    hitMe(by, clash = false) {
         const g = this.game;
         if (by === g.localId || by === 'local' || g.combat?.dead || g.isDeadLocal) return;
         g.combat?.center?.(_c);
@@ -139,21 +139,21 @@ export class Nihilis {
         if (!wound) return; // (a plain mage: white magic does him no harm)
         // a black mage's «Protection Maxima» (not the gods' dome) shatters
         if (c?.shield?.type === 2 && !c.shield.gods) c._shatter?.('✨ Чужой свет рассеял ваш купол «Protection Maxima»', true);
-        const hp = woundHp(wound, g.maxHP || c?.maxHp || 20);
+        const hp = clash ? nihilDuelDamage(lvl) : woundHp(wound, g.maxHP || c?.maxHp || 20);
         g.hud?.setVoice?.(wound === 'heavy' ? '✨ Свет «Nihilis Atra» жжёт вас: чёрная магия в вас горит!' : '✨ Свет «Nihilis Atra» обжёг вас', true);
         for (let i = 0; i < 24; i++) g.fx?.spark(_c, pick(LIGHT), 0.14, _w.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.8);
         if (c?.enabled) c.damage(hp, by, NIHIL.NAME);
         else g.damageLocalPlayer?.(hp);
     }
 
-    hitWizard(v, by, src) {
+    hitWizard(v, by, src, clash = false) {
         if (!v.wizard || v.dead) return;
         const wound = blackWound(v.dark || 0);
         if (!wound) return;
         const g = this.game;
         g.castleLife?.wizards?.fight?.breakDome?.(v);
         const dir = _q.set(v.x - src.x, 0, v.z - src.z).normalize();
-        g.castleLife?.hit?.(v, woundHp(wound, v.maxHp || 20), dir, by, { spell: true, magic: true, kind: NIHIL.NAME });
+        g.castleLife?.hit?.(v, clash ? nihilDuelDamage(v.dark) : woundHp(wound, v.maxHp || 20), dir, by, { spell: true, magic: true, kind: NIHIL.NAME });
         if (wound === 'heavy') this._scare(v, src);
     }
 
@@ -178,6 +178,13 @@ export class Nihilis {
                     g.ships?.crew?.hit?.(cr, woundHp('blackbeard', cr.maxHp || cr.hp || 30), dir, by, { spell: true, kind: NIHIL.NAME });
                     this._crumble(mid.clone(), 0.4);
                 }
+                continue;
+            }
+            if ((b.kind === 'V' || b.kind === 'H') && cr && !cr.dead) {
+                const life = b.kind === 'V' ? g.vampire : g.pharaoh;
+                const boss = cr.kind === 'count' || cr.kind === 'pharaoh';
+                life?.hit?.(cr, boss ? 9 : Math.max(NIHIL.BIG, cr.hp || 0), NIHIL.NAME, by);
+                this._crumble(mid.clone(), boss ? 0.5 : 1.1);
                 continue;
             }
             if (b.kind === 'v' && cr && !cr.dead) { // (castle people: only a black mage is touched)

@@ -60,7 +60,6 @@ export const FIRST_SPELL = {
     ChangeColor: 1, Unfurl: 1, Furl: 1, Alohomora: 1, Lock: 1, Waterball: 1, WaterForming: 1, AirBubble: 1, VortexBubble: 1,
     Cardilon: 2, Protection: 1, WardDispel: 1, Rescue: 1, Brainrot: 3, Firefighting: 1, Drawdown: 1, Stitching: 1, CreateBridge: 1, GroundVortex: 8, VisibleGodi: 5, WaterWalk: 2, WaterPart: 6, Nihilis: 5, Pentagranium: 6, // («Visible Godi»: the author — +5 cells at the first real look behind a wall; VisibleGodi.js)
     Flourish: 2, // («Flourish»: the first time the earth turns green — +2 cells)
-    Groundprud: 2, // (Groundprud: a wall of the ground — the author: +2 cells at the first cast; Groundprud.js)
     Fireworks: 3, // (the author: «за первое применение даётся 3 ячейки маны» — once, at the first real salvo)
     // medium: +2…+5
     LumosMaxima: 2, LumosFollowing: 3, AirBubbleMaxima: 2, AlohomoraMaxima: 2, Maxima: 2,
@@ -407,7 +406,7 @@ export class Mana {
 
     restore(s) {
         if (!s) return;
-        for (const k of [...(Array.isArray(s.spells) ? s.spells : []), ...(Array.isArray(s.strong) ? s.strong : [])]) this.spellsUsed.add(String(k)); // («strong»: an older save)
+        for (const k of [...(Array.isArray(s.spells) ? s.spells : []), ...(Array.isArray(s.strong) ? s.strong : [])]) this.spellsUsed.add(k === 'Groundprud' ? 'Breakthrough' : String(k)); // («strong»: an older save)
         if (Array.isArray(s.kills)) for (const k of s.kills) if (MAGIC_KILL[k]) this.killsMade.add(k);
         if (Array.isArray(s.found)) for (const k of s.found) this.found.add(String(k));
         this.mastery = Math.max(this.mastery, Math.max(0, Math.min(1e6, Math.floor(Number(s.mastery) || 0))));
@@ -436,7 +435,7 @@ const TITLES = {
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
     Axis: 'Axis', Kidarius: 'Кидариус', SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Reperio: 'Reperio', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', FireSerpent: 'Serpent', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
-    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Cardilon: 'Кардилон', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
+    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Cardilon: 'Кардилон', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima', ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', PlanetLiquidation: 'Planet Liquidation',
 };

@@ -654,7 +654,7 @@ export class PharaohLife {
             if (c.hp <= 0) this._pharaohDies(by);
             return;
         }
-        if (c.mode === 'sleep' || c.mode === 'rising') { if (c.kind === 'mummy') this._wakeMummy(c, by); return; }
+        if ((c.mode === 'sleep' || c.mode === 'rising') && !/^Nihilis/.test(spell || '')) { if (c.kind === 'mummy') this._wakeMummy(c, by); return; }
         const d = spell === 'blade' || spell == null ? dmg : pirateBoneDamage(spell, dmg, true);
         c.hp -= d;
         c.model.flashHit?.(0.15);

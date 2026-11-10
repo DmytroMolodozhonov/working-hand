@@ -31,7 +31,7 @@ test('each spell pushes by its strength: a stagger or off the feet', () => {
         ['Bombardo', 2, 'knockdown'], ['Bombardo', 5, 'stagger'], ['Bombardo', 6.5, 'none'], ['BombardoMaxima', 7, 'knockdown'],
         ['SapiraDuel', 0, 'knockdown'], ['Sapira', 0, 'knockdown'],
         ['Stupefy', 0, 'knockdown'], ['Earthquake', 0, 'knockdown'], ['EarthquakeMaxima', 0, 'knockdown'], ['Lightning', 0, 'knockdown'],
-        ['WallRise', 0, 'stagger'], ['WallRiseMaxima', 0, 'knockdown'],
+        ['WallRise', 0, 'none'], ['WallRiseMaxima', 0, 'none'],
     ];
     for (const [n, d, r] of want) assert.equal(spellOutcome(n, d), r, `${n} at ${d}`);
     assert.equal(spellOutcome('Stupefy', 0, { dome: true }), 'none', 'the dome stops even Stupefy');

@@ -59,7 +59,7 @@ export const BOOK_SPELLS = new Set(['CreateFloor', 'CreateWall', 'CreateCeiling'
 export const MANA_SPELLS = new Set(['FlyingMaxima']);
 
 /** The scroll / book key that teaches this spell. */
-export const teachKey = (name) => TAUGHT_BY[name] || name;
+export const teachKey = (name) => name === 'Groundprud' ? 'Breakthrough' : (TAUGHT_BY[name] || name);
 
 import { knownInCreative } from './HeroSetup.js';
 
@@ -76,7 +76,7 @@ export function knows(name, who = {}) {
     } else if (free(who.mode) || (START_SPELLS.has(name) && !(who.school && SCHOOL_UNKNOWN.has(name)))) return true;
     if (name === 'Flight') return who.mode !== 'freeworld' || !!who.flight || !!who.learned?.has?.('Flight');
     const k = teachKey(name);
-    return !!who.spells?.[k] || !!who.learned?.has?.(k);
+    return !!who.spells?.[k] || !!who.learned?.has?.(k) || (k === 'Breakthrough' && (!!who.spells?.Groundprud || !!who.learned?.has?.('Groundprud')));
 }
 
 /** How a spell is learned outside Creative: 'start' | 'book' | 'mana' | 'scroll' (the codex' badge). */
@@ -104,8 +104,8 @@ export function scrollKey(it) {
 /** The set of scroll keys a hero has already burnt or learnt: `who` { spells (bonus.spells), learned (books.learned), pent (the figures seen) }. */
 export function knownScrollKeys(who = {}) {
     const out = new Set();
-    for (const [k, v] of Object.entries(who.spells || {})) if (v) out.add('s:' + k);
-    for (const k of who.learned || []) out.add('s:' + k);
+    for (const [k, v] of Object.entries(who.spells || {})) if (v) out.add('s:' + (k === 'Groundprud' ? 'Breakthrough' : k));
+    for (const k of who.learned || []) out.add('s:' + (k === 'Groundprud' ? 'Breakthrough' : k));
     for (const k of who.pent || []) out.add('p:' + k);
     return out;
 }

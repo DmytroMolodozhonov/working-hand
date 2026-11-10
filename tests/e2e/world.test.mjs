@@ -889,7 +889,8 @@ test('«Breakthrough»: arms low, then up — a wall of earth and stone rises in
         g._bt.lowAt = performance.now() - 500;
         g._bt.riseAt = performance.now();
         const said = g.castLocalSpell('breakthrough maxima', true);
-        for (let i = 0; i < 40 && g._bt.rising; i++) await frames(1);
+        const rise = g.spells.spells.at(-1);
+        for (let i = 0; i < 240 && rise?.life > 0; i++) await frames(1);
         const ch = g.character;
         const yaw = ch.group.rotation.y;
         const x = Math.round(ch.group.position.x - Math.sin(yaw) * 4), z = Math.round(ch.group.position.z - Math.cos(yaw) * 4);

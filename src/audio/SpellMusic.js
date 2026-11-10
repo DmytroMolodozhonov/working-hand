@@ -1256,7 +1256,7 @@ export const SPELL_SOUND = {
     Imperius: { cast: 'fxImperius', theme: 'thImperius' }, ImperiusMaxima: { cast: 'fxImperiusMaxima', theme: 'thImperiusMaxima' }, // (the mind into another body — ImperiusControl.js)
     Brainrot: { own: ['fxBrainrot'] }, BrainrotMaxima: { cast: 'fxBrainrotMaxima', theme: 'thDragonCalm' }, WallRise: { own: ['fxStone'] }, WallRiseMaxima: { own: ['fxStone'] },
     Drawdown: { own: ['explosion', 'rumble'] }, DrawdownMaxima: { own: ['explosion', 'rumble'] },
-    Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] }, CreateBridge: { cast: 'fxCreate' }, Groundprud: { own: ['fxStone', 'rumble'] }, Flourish: { cast: 'fxCreate' }, // (the earth turns green: the creation chime)
+    Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] }, CreateBridge: { cast: 'fxCreate' }, Flourish: { cast: 'fxCreate' }, // (the earth turns green: the creation chime)
     Alohomora: { own: ['clang'] }, AlohomoraMaxima: { own: ['clang'] }, Lock: { own: ['clang'] },
     Unfurl: { own: ['sand'] }, Furl: { own: ['sand'] }, Up: { own: ['splash', 'sand'] },
     Accio: { own: ['fxAccio'] }, SuitUp: { own: ['fxSuitUp'] },
@@ -1267,7 +1267,7 @@ export const SPELL_SOUND = {
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
     Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, WaterPart: { cast: 'fxWaterPart', theme: 'thWaterPart' }, Helios: { cast: 'fxHelios', theme: 'thHelios' }, SunRay: { cast: 'fxSunRayCharge', theme: 'thSunRay' }, Kidarius: { cast: 'fxKidarius', theme: 'thKidarius' }, Axis: { cast: 'fxAxis', theme: 'thAxis' }, SunRayFire: { cast: 'fxSunRayFire' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
-    Breakthrough: { cast: 'fxStone' }, BreakthroughMaxima: { cast: 'fxStone', rate: 0.85 },
+    Breakthrough: { own: ['fxStone'] }, BreakthroughMaxima: { own: ['fxStone'] },
     Flight: { own: ['cast'] }, Pause: { cast: 'fxPause' },
     Attack: { cast: 'fxCommand' }, Maxima: { cast: 'fxMaxima' },
     CreateBed: { own: ['magic'] }, ChangeColor: { cast: 'fxColor' }, CreateBoard: { cast: 'fxCreate' },

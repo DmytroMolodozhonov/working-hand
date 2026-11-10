@@ -37,7 +37,7 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife', 'heka'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, 'earthrise'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 const ARENA_SET = new Set(ARENA_MODES);
@@ -1838,6 +1838,9 @@ export class VillagerModel {
                 T.aLX = 0.45; T.aRX = 1.4; T.aRZ = -0.9;
                 rate = 6;
                 break;
+            case 'earthrise':
+                T.aLX = T.aRX = Math.PI * 0.8; T.aLZ = -0.15; T.aRZ = 0.15; T.wrist = -Math.PI;
+                T.hx = -0.08; rate = 8; break;
             case 'cast': {
                 // the wand arm points where the spell goes; the wand continues the forearm
                 if (this.castNow) { this.castNow = false; this._flickT = 0.12; }

@@ -256,7 +256,7 @@ export const TARGETS = {
     Drawdown: { does: 'none', why: 'в воздухе не касается' },
     Stitching: { does: 'none', why: 'не касается' },
     CreateBridge: { does: 'none', why: 'не касается' },
-    Groundprud: { does: 'none', why: 'не касается' },
+    Breakthrough: { does: 'none', why: 'не касается' },
     GroundVortex: { does: 'hit', why: '«Ground Vortex»: летящие блоки бьют, залп −3 и толчок' },
     VisibleGodi: { does: 'none', why: 'тучка только на экране колдующего' },
     Nihilis: { does: 'kill', why: '«Nihilis Atra»: свет рассеивает чёрную магию — адская горгулья рассыпается в прах' },

@@ -306,8 +306,7 @@
 - `GroundVortex.js` — «Ground Vortex» (a scroll; held): the earth rises and circles round the hero. Rules, numbers and the «who / what» table — GroundVortexRules.js (read its header first); the blocks are drawn by src/fx/GroundVortexFx.js.
 - `GroundVortexRules.js` — «Ground Vortex» («Граунд Вортекс», a scroll): the rules, pure (no THREE) and node-testable. The spell itself is GroundVortex.js, the picture is src/fx/GroundVortexFx.js.
 - `GroundVortexWords.js` — how «Ground Vortex» and its «Shield» are said. «Ground Vortex» («граунд вортекс», «граунт вортекс»): both words together, "ground" before "vortex" — «вортекс» alone is the water's («Water Vortex»), «граунд» alone / «ground» in…
-- `Groundprud.js` — «Groundprud» (10 mana, +2 cells of mana at the first cast, a scroll): the ground rises into a wall. It belongs to the Protection group (the author: «сэкономить на Protection»): another wizard's spell hits the wall.
-- `GroundprudWords.js` — how «Groundprud» is said: the one word (the author: «граунтпруд»), or its two halves one right after the other («граунд пруд»), the way a Russian ear writes them. «Ground» alone is nothing, and the everyday «пруд» (a pond) alone…
+- `Breakthrough.js` — two-hand rising gesture: a solid wall smoothly rises from local ground in one second (10/20 mana). Shared by players and NPCs; replaces Groundprud, including old scroll/knowledge migration.
 - `HamletLife.js` — the life of the hamlets (src/world/Hamlets.js): the lone wizard's house, the hermit's hut, the small villages of wizards and of ordinary folk. A part of CastleLife: the people are castle people of the hamlet's site (blows,…
 - `HandBlocks.js` — hands never go into the world's blocks: a counter, a wall, a table, the ground.
 - `HandHold.js` — taking another creature by the hand, as in life (the maths: Handshake.js).

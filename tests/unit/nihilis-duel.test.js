@@ -96,3 +96,26 @@ test('duel hits affect one wizard, never scatter a cone or damage a plain person
     d.applyToMe('NihilisDuel', 'guest');
     assert.equal(hit, 2);
 });
+
+test('winning the real beam clash deals the loser darkness in HP, independently of max health and skin', () => {
+    const amounts = [];
+    const g = { localId: 'H', authority: true, dark: { level: 54, skin: 0 }, maxHP: 1000,
+        combat: { enabled: true, center: v => v.set(0,2,0), damage: n => amounts.push(n) },
+        castleLife: { hit: (v,n) => amounts.push(n), wizards: { fight: { breakDome() {} } } }, hud: { setVoice() {} } };
+    g.nihilis = new Nihilis(g);
+    const d = Object.create(Duel.prototype); d.game=g; d._note=()=>{};
+    const src = new THREE.Vector3();
+    d.applyToMe('NihilisDuel','enemy','right',{clash:true});
+    assert.deepEqual(amounts,[54]);
+    for (const level of [0,1,54,100,150]) {
+        const before=amounts.length;
+        d.applyToCreature('NihilisDuel',{wizard:true,dark:level,maxHp:1000,x:2,z:0},'H',src,null,{clash:true});
+        if (!level) assert.equal(amounts.length,before);
+        else assert.equal(amounts.at(-1),Math.min(100,level));
+    }
+    // Exercise the actual clash-resolution route, not just the hit helpers.
+    d.clashes=[]; d.bolts=new Map(); d._burst=()=>{}; d._referee=()=>false;
+    const a={id:'a',by:'enemy',spell:'NihilisDuel',front:src}, b={id:'b',by:'H',spell:'Stupefy',front:src};
+    d._finishClash({a,b},'H');
+    assert.equal(amounts.at(-1),54);
+});

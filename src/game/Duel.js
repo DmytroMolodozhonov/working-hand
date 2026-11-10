@@ -1336,7 +1336,7 @@ export class Duel {
     applyToCreature(spell, c, byId, from = null, part = null, opts = null) { // (opts.clash: it won a beam clash — a robe does not turn it away)
         const g = this.game;
         const src = from || this._casterAt(byId, c);
-        if (spell === 'NihilisDuel') { g.nihilis?.hitWizard(c, byId, src); return; }
+        if (spell === 'NihilisDuel') { g.nihilis?.hitWizard(c, byId, src, !!opts?.clash); return; }
         const p = this._creaturePoint(c, _v1);
         this._hitBurst(spell, p, 30);
         // a spell at a person is an attack, hurt or not (Остолбеней, Левиоса, Пески, a robe or a shield that took it…):
@@ -1453,7 +1453,7 @@ export class Duel {
     applyToMe(spell, byId, side = 'right', opts = null) { // (opts.clash: the charge WON a beam clash — it reaches the loser whatever he wears: no armour / robe turns it away)
         this._note({ ev: 'hitMe', spell, byId });
         const g = this.game;
-        if (spell === 'NihilisDuel') { g.nihilis?.hitMe(byId); return; }
+        if (spell === 'NihilisDuel') { g.nihilis?.hitMe(byId, !!opts?.clash); return; }
         const c = g.combat;
         const p = c.center(_v1);
         this._hitBurst(spell, p, 40);

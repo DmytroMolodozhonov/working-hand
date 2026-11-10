@@ -30,9 +30,9 @@ test('the defence of the year: a lesson a month; what the pupil casts is a spell
     const { matchSpell } = await import('../../src/fx/SpellManager.js');
     const def = LESSONS.filter((l) => l.subject === 'defence');
     assert.ok(def.length >= 12); assert.deepEqual([...new Set(def.map((l) => l.month))].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    const said = new Set(['Protection', 'Jolt', 'Sands', 'Expelliarmus', 'Ice', 'Frozen', 'Stupefy', 'Groundprud', 'Sapira', 'ProtectionMaxima', 'Nihilis', 'Electrum', 'Caligo', 'Maxima']);
+    const said = new Set(['Protection', 'Jolt', 'Sands', 'Expelliarmus', 'Ice', 'Frozen', 'Stupefy', 'Breakthrough', 'Sapira', 'ProtectionMaxima', 'Nihilis', 'Electrum', 'Caligo', 'Maxima']);
     for (const l of def) for (const sp of l.task.spells || [l.task.kind === 'block' ? 'Protection' : l.task.spell]) assert.ok(said.has(sp), l.id + ' ' + sp);
-    for (const w of ['джолт', 'даст', 'экспеллиармус', 'фрозен', 'остолбеней', 'граундпруд', 'сапира', 'протекшн максима', 'нихилис атра', 'электром', 'калиго']) assert.ok(said.has(matchSpell(w)), w);
+    for (const w of ['джолт', 'даст', 'экспеллиармус', 'фрозен', 'остолбеней', 'брейкфру', 'сапира', 'протекшн максима', 'нихилис атра', 'электром', 'калиго']) assert.ok(said.has(matchSpell(w)), w);
 });
 
 test('the year: a lesson a day in the order of the months; the record kept and read back; a broken one forgotten', async () => {

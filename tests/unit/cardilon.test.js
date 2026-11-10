@@ -164,3 +164,43 @@ test('stable projectile identity and actual NPC caster are carried in the existi
     sync.spell('Bombardo', new THREE.Vector3(), new THREE.Vector3(1, 0, 0), 'right', 'enemy');
     assert.equal(sent[0].bid, b.bomb.id); assert.equal(sent[0].by, 'enemy');
 });
+
+test('NPC Cardilon knowledge is stable: weak 50%, middle 80%, strong and higher always', async () => {
+    const { knowsCardilon } = await import('../../src/game/CardilonRules.js');
+    for (const [rank, chance] of [['novice', .5], ['adept', .8], ['teacher', 1], ['elder', 1], ['master', 1], ['savior', 1]]) {
+        let n = 0;
+        for (let i = 0; i < 5000; i++) { const v = { id: 'mage-' + i, rank }; const k = knowsCardilon(v); assert.equal(k, knowsCardilon(v)); n += k; }
+        assert.ok(Math.abs(n / 5000 - chance) < .025, rank + ': ' + n);
+    }
+});
+
+test('a mage without Cardilon raises real ground against Bombardo; a knowledgeable mage prefers capture', async () => {
+    const { knowsCardilon } = await import('../../src/game/CardilonRules.js');
+    const { Breakthrough } = await import('../../src/game/Breakthrough.js');
+    const { BLOCK } = await import('../../src/world/Terrain.js');
+    for (const know of [false, true]) {
+        const { g, card, bomb, sent } = fixture();
+        let i = 0; while (knowsCardilon({ id: 'weak-' + i, rank: 'novice' }) !== know) i++;
+        const v = { id: 'weak-' + i, wizard: true, rank: 'novice', x: 0, y: 0, z: 0, yaw: Math.PI / 2, mana: 100, fx: FX.SHIELD, W: {} };
+        const edits = new Map();
+        g.castleLife.byId.set(v.id, v);
+        g.terrain = { data: { get: (x,L,z) => edits.get(x+','+L+','+z) ?? (L <= 0 ? BLOCK.STONE : BLOCK.AIR), topLayer: () => 0,
+            set: (x,L,z,b) => edits.set(x+','+L+','+z,b) } };
+        g.fx.spark = () => {}; g.builder = { _sendEdits() {} }; g.breakthrough = new Breakthrough(g);
+        g.sync.spell = (...args) => sent.push({ spell: args[0], by: args[4] });
+        const s = bomb(1,-40); card._npc(v,s,2);
+        if (know) {
+            assert.ok(sent.some(m => m.t === 'cdl')); assert.equal(g.spells.spells.filter(x => !x.bomb).length,0);
+            assert.equal(v.mana,93);
+        } else {
+            assert.equal(s.life > 0,true,'wall does not magically erase the bomb');
+            assert.equal(v.mana,90); assert.equal(v.mode,'earthrise');
+            const rise = g.spells.spells.find(x => !x.bomb); assert.ok(rise);
+            for (let t=0;t<3;t+=.05) rise.onUpdate(rise,.05);
+            assert.ok(edits.size > 60,'host actually lays NPC terrain');
+            assert.ok(sent.some(m => m.spell === 'WallRise' && m.by === v.id));
+            assert.ok(v.castAtPlayers.has('enemy'));
+            card._npc(v,s,2); assert.equal(v.mana,90,'one wall, not one every scan');
+        }
+    }
+});

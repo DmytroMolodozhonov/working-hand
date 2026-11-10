@@ -20,7 +20,7 @@ test('the wall rises on the cave floor, under the roof', async () => {
         const STONE = 3; // (the world's stone block)
         for (let x = px - 12; x <= px + 12; x++) for (let z = pz - 12; z <= pz + 12; z++) d.set(x, heroL + 8, z, STONE); // (a roof: the column's top is above the floor now)
         const yaw = ch.group.rotation.y, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-        const cx = Math.round(px + fx * 3.5), cz = Math.round(pz + fz * 3.5);
+        const cx = Math.round(px + fx * 4), cz = Math.round(pz + fz * 4);
         g._bt = {};
         g._raiseWall(false);
         await new Promise((res) => setTimeout(res, 12000));

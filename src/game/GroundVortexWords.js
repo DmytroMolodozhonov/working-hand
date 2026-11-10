@@ -1,7 +1,7 @@
 /**
  * GroundVortexWords.js — how «Ground Vortex» and its «Shield» are said.
  *   «Ground Vortex» («граунд вортекс», «граунт вортекс»): both words together, "ground" before "vortex" — «вортекс» alone is the
- *   water's («Water Vortex»), «граунд» alone / «ground» in talk never casts. «Groundprud» is a different word (one token).
+ *   water's («Water Vortex»), «граунд» alone / «ground» in talk never casts.
  *   «Shield» (the word of the English, «шилд», «шиелд», «шильд»): only the word itself — a Russian «щит» stays «Protection».
  *   It does something only while the vortex circles (GroundVortex.sayShield); in talk it is just a word the game ignores otherwise.
  */

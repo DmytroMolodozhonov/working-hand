@@ -1,42 +1,21 @@
 /**
- * Groundprud.js — «Groundprud» (10 mana, +2 cells of mana at the first cast, a scroll): the ground rises into a wall.
- * It belongs to the Protection group (the author: «сэкономить на Protection»): another wizard's spell hits the wall.
- *
- * The wand points at the ground a few steps ahead (2.5–9 m, downwards). From that spot a wall grows across the way
- * «from me to the spot»: 7 blocks wide, 2 thick, 6 high — the hero is ~3.5 m (first 5, then the author wanted one more).
- * Each column of the wall is made of what the ground is under that very column (`wallMaterial`): stone → stone,
- * sand → sand, grass / earth → earth under a cap of grass, snow → snow, gravel → gravel, a planet's rock → its rock;
- * a column over wood, leaves, ice, a castle's block takes the earthy block under it. So on the seam of sand and
- * rock the wall is honestly patched.
- *
- * The top is not a board: every column is 6 high ±1 at the edges and now and then a block short inside (a toothed
- * crest, drawn from the cast's seed — the same on every computer), and a little scree of single blocks lies at the
- * foot. It grows from the middle to the edges and from the bottom up in `GROW` = 2 s: not at once, not slowly.
- *
- * It does not work on: the enchanted stone (arena floors, the wizards' tower walls) and the gifts of the gods
- * (`godGift`, the temple of the gods) — those columns are left out, and if the whole strip is such, the spell does not
- * work and costs nothing; water (the wall does not grow from the water); a ship's deck; a house's foreign ward;
- * space. On the planets it works with the planet's own rock.
- *
- * What it lays are ordinary blocks (Builder._sendEdits): solid at once — a spell or an arrow hits the wall, «Бомбардо»
- * breaks it as any wall, «Gather» takes it apart; saved with the world. Nothing hangs: a column grows from its own
- * ground, and when a cell has to be left out (a body stands in it for 1.5 s) the rest of the column above it is left out.
- * Instant spell (not held — Concentration.js).
- *
- * Who decides: the caster's computer finds the place and lays the blocks; the spell goes to everybody ('spell':
- * o = the spot, d = the way from the caster) so every computer sees the ground rise and plans the same wall.
+ * Breakthrough — a two-hand rising gesture lifts the local ground into a solid wall.
+ * Normal: 7×2 columns, about 6 blocks high with a ragged crest; Maxima: 9×2, about 8 high.
+ * Both grow in one second, middle outwards, from each column's own material. The GPU mesh
+ * rises smoothly while ordinary saved/networked voxels take over. Occupied columns wait,
+ * then skip the rest above the obstruction: nobody is buried, pushed or damaged.
+ * Water, ships, foreign wards, enchanted stone and god gifts refuse; caves use their own floor.
+ * Player casts require the gesture in Game. NPCs lacking Cardilon use this wall against bombs.
+ * The player owns their edits; the host owns NPC edits. Other peers draw the rise only.
  */
 
 import * as THREE from 'three';
 import { BLOCK, isLeaves, isWood, isPlanetBlock } from '../world/Terrain.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
-import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
 import { voxelGeometry, voxelMaterial } from './LevitationMaxima.js';
 
-export const GROUNDPRUD = {
-    REACH: 28, // m along the hand when looking for the ground
-    NEAR: 2, FAR: 18, // m from the caster to the spot (the author: twice as far as first)
+export const BREAKTHROUGH = {
     W: 7, T: 2, H: 6, // blocks: width, thickness, height (the hero is ~3.5 m; the author: one block higher than 5)
     GROW: 1, // s from the first block to the last (the author: twice as fast; the earth is seen to rise smoothly meanwhile)
     WAIT: 1.5, // s a block waits for a body to step aside
@@ -46,7 +25,7 @@ export const GROUNDPRUD = {
 };
 
 /** ON WHOM AND ON WHAT (CLAUDE.md). The wall is blocks laid on the ground; it never strikes. */
-export const GROUNDPRUD_TARGETS = {
+export const BREAKTHROUGH_TARGETS = {
     me: { does: 'none', why: 'колдующего не задевает: стена растёт на расстоянии от 2 м; если он стоит на её месте — блок ждёт' },
     players: { does: 'wait', why: 'блок не кладётся в игрока: ждёт 1,5 с, потом это место пропускается (и всё, что над ним в столбце); никого не толкает и не ранит' },
     zombies: { does: 'wait', why: 'в тело блок не кладётся; зомби упирается в стену и обходит её (коллизия блоков)' },
@@ -73,7 +52,7 @@ export const GROUNDPRUD_TARGETS = {
     blocks: { does: 'build', why: 'вырастает из материала земли под каждым столбцом (камень, песок, земля с травой, снег, гравий, порода планеты); обычные блоки мира: их ломают «Бомбардо», «Gather», Total Destruction и так далее' },
     items: { does: 'lift', why: 'вещи на земле под стеной поднимаются на её верх, а не остаются замурованными' },
     water: { does: 'none', why: 'из воды стена не растёт: столбцы над водой пропускаются, если вся полоса на воде — «там вода»' },
-    ground: { does: 'build', why: 'цель — земля перед игроком: палочка вниз-вперёд на 2–18 м; в стену, в небо или в дом — подсказка «направьте на землю»' },
+    ground: { does: 'build', why: 'стена растёт в четырёх метрах перед колдующим после поднятия обеих рук; нужна свободная земля' },
     trees: { does: 'none', why: 'деревья не трогает; из дерева не строит — столбец над стволом пропускается' },
     houses: { does: 'none', why: 'стены домов и замков не ломает и не задевает; столбцы, где занято, пропускаются' },
     ships: { does: 'none', why: 'палуба — не земля, корабль не блоки мира' },
@@ -106,10 +85,10 @@ export function columnMaterial(get, x, g, z) {
 }
 
 /** One column's height in blocks: 5, ±1 at the two edges, a block short here and there inside. Same seed → same crest. */
-export function columnHeight(seed, x, z, w) {
+export function columnHeight(seed, x, z, w, height = BREAKTHROUGH.H) {
     const r = hash(seed, x, z), edge = Math.abs(w) >= 3;
-    if (edge) return GROUNDPRUD.H + (r < 0.4 ? -1 : r > 0.8 ? 1 : 0);
-    return GROUNDPRUD.H - (r < 0.25 ? 1 : 0);
+    if (edge) return height + (r < 0.4 ? -1 : r > 0.8 ? 1 : 0);
+    return height - (r < 0.25 ? 1 : 0);
 }
 
 /**
@@ -118,8 +97,8 @@ export function columnHeight(seed, x, z, w) {
  * get(x, L, z) → block; top(x, z) → the highest solid layer; gift(x, L, z) → a gift of the gods.
  * t = the second (0…GROW) the cell appears; col = the column (`next` is the layer it needs next); k = its layer in it.
  */
-export function groundprudPlan(get, top, A, f, seed = 1, gift = null) {
-    const sx = -f.z, sz = f.x, G = GROUNDPRUD;
+export function breakthroughPlan(get, top, A, f, seed = 1, gift = null, max = false) {
+    const sx = -f.z, sz = f.x, G = max ? { ...BREAKTHROUGH, W: 9, H: 8 } : BREAKTHROUGH;
     const cols = new Map(); // "x,z" → column
     const half = (G.W - 1) / 2;
     const nw = Math.round(G.W / 0.35);
@@ -140,7 +119,7 @@ export function groundprudPlan(get, top, A, f, seed = 1, gift = null) {
         if (b === BLOCK.WATER || get(c.x, g + 1, c.z) === BLOCK.WATER) { wet++; continue; }
         if (Math.abs(g - A.L) > G.STEP || !free(get(c.x, g + 1, c.z))) continue;
         c.g = g; c.mat = columnMaterial(get, c.x, g, c.z);
-        c.h = columnHeight(seed, c.x, c.z, c.w);
+        c.h = columnHeight(seed, c.x, c.z, c.w, G.H);
         c.next = 0; c.dead = false;
         list.push(c);
     }
@@ -174,13 +153,13 @@ export function groundprudPlan(get, top, A, f, seed = 1, gift = null) {
 }
 
 /** Why it cannot grow — the hint for the player. */
-export function groundprudHint(why) {
-    if (why === 'holy') return '🧱 Заколдованный камень и дары богов не слушаются — «Groundprud» здесь не поднять';
+export function breakthroughHint(why) {
+    if (why === 'ward') return '🛡️ Здесь чужая защита дома — стену не поднять';
+    if (why === 'ship') return '⚓ Корабль — не земля: стена здесь не растёт';
+    if (why === 'holy') return '🧱 Заколдованный камень и дары богов не слушаются — «Breakthrough» здесь не поднять';
     if (why === 'water') return '🌊 Из воды стена не растёт — найдите сухую землю';
-    if (why === 'near') return '🧱 Покажите на землю чуть дальше от себя — стена вырастет перед вами';
-    if (why === 'far') return '🧱 Земля слишком далеко — подойдите ближе или покажите на землю поближе';
     if (why === 'unknown') return '🧱 Там земля ещё не готова — подождите секунду';
-    return '🧱 Направьте палочку на землю перед собой';
+    return '🧱 Здесь негде поднять стену — встаньте перед свободным участком земли';
 }
 
 /**
@@ -195,30 +174,6 @@ export function groundTopNear(data, L0) {
         if (c !== BLOCK.AIR && c !== BLOCK.WATER) return t; // (a hill, a cliff ahead: its top, as before)
         return data.floorBelow ? data.floorBelow(a, b, L0 + 3) : t;
     };
-}
-
-/**
- * Where the wand shows: the spot on the ground and the way from the caster.
- * get / top / gift as in groundprudPlan; origin, dir: the hand; me: the caster's feet (x, y, z). → {A, f, plan} | {why}
- */
-export function groundprudAim(data, origin, dir, me, known = null, gift = null) {
-    if (!data) return { why: 'none' };
-    if (dir.y > -0.04) return { why: 'none' }; // (not at the ground: level, up)
-    const hit = data.raycast(origin, dir, GROUNDPRUD.REACH);
-    if (!hit) return { why: 'none' };
-    const x = Math.round(hit.x), z = Math.round(hit.z);
-    if (known && !known(x, z)) return { why: 'unknown' };
-    const get = (a, L, b) => data.get(a, L, b), top = groundTopNear(data, Math.round(hit.y + 0.5));
-    const g = top(x, z);
-    if (Math.abs(hit.y - (g - 0.5)) > 2.2) return { why: 'none' }; // (high up the side of a cliff, a wall: not the ground; the foot of a slope is)
-    const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz);
-    if (d < GROUNDPRUD.NEAR) return { why: 'near' };
-    if (d > GROUNDPRUD.FAR) return { why: 'far' };
-    const f = { x: dx / d, z: dz / d };
-    const A = { x, z, L: g };
-    const seed = (x * 73856093) ^ (z * 19349663) ^ Math.round(f.x * 100) * 83492791;
-    const plan = groundprudPlan(get, top, A, f, seed, gift);
-    return plan.cells ? { A, f, plan, seed } : plan;
 }
 
 /**
@@ -239,7 +194,7 @@ function riseMaterial() {
             .replace('#include <common>', '#include <common>\nuniform float uRiseT;\nuniform float uRiseDur;\nattribute float riseDelay;\nattribute float riseDepth;')
             .replace('#include <project_vertex>', 'float rp = clamp((uRiseT - riseDelay) / uRiseDur, 0.0, 1.0);\ntransformed.y -= (1.0 - (1.0 - (1.0 - rp) * (1.0 - rp))) * riseDepth;\n#include <project_vertex>');
     };
-    mat.customProgramCacheKey = () => 'groundprud-rise';
+    mat.customProgramCacheKey = () => 'breakthrough-rise';
     mat.userData.rise = { T, DUR };
     return mat;
 }
@@ -272,7 +227,7 @@ function riseGeometry(cols, data) {
 const sparkColor = (b) => (b === BLOCK.SAND ? 0xe6d8a0 : b === BLOCK.SNOW ? 0xf4f8ff : b === BLOCK.GRASS ? 0x7fbf5a : b === BLOCK.DIRT ? 0x8a6a44 : 0xb8b4aa);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
-export class Groundprud {
+export class Breakthrough {
     constructor(game) {
         this.game = game;
         this._lastAt = -1e9;
@@ -280,36 +235,45 @@ export class Groundprud {
 
     get data() { return this.game.terrain?.data || null; }
 
-    /** Voice on my computer. `aim` ({origin, dir}) is for tests. */
-    cast(isFinal, aim = null) {
-        const g = this.game;
-        const now = performance.now();
+    /** A wall a few steps ahead, on the actual floor (including caves), never inside a foreign ward or ship. */
+    prepare(p, f, max = false) {
+        const g = this.game, data = this.data;
+        if (!data || g.space?.realm === 'space') return { why: 'none' };
+        const length = Math.hypot(f.x, f.z);
+        if (length < 0.01) return { why: 'none' };
+        f = { x: f.x / length, z: f.z / length };
+        const x = Math.round(p.x + f.x * 4), z = Math.round(p.z + f.z * 4);
+        if (data.landMade && !data.landMade(x, z)) return { why: 'unknown' };
+        const top = groundTopNear(data, Math.round(p.y));
+        const A = { x, z, L: top(x, z) }, o = new THREE.Vector3(x, A.L, z), d = new THREE.Vector3(f.x, 0, f.z);
+        if (g.wards?.forbids?.(p, o)) return { why: 'ward' };
+        if (g.ships?.footprintAt?.(x, A.L - 1, z)) return { why: 'ship' };
+        const seed = (x * 73856093) ^ (z * 19349663) ^ Math.round(f.x * 100) * 83492791;
+        const plan = breakthroughPlan((x, L, z) => data.get(x, L, z), top, A, f, seed, data.godGiftAt?.bind(data), max);
+        return plan.cells ? { o, d, plan } : plan;
+    }
+
+    /** Called only after Game has recognized the player's two-hand rising gesture. */
+    cast(max = false) {
+        const g = this.game, now = performance.now();
         if (now - this._lastAt < 1500) return null;
-        const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
-        const hand = aim ? { side: 'right', origin: aim.origin, dir: aim.dir } : castingHand(g);
-        if (!hand) return hint(groundprudHint('none'));
-        const data = this.data;
-        const p = g.character.group.position;
-        const at = groundprudAim(data, hand.origin, hand.dir, p, data?.landMade ? (x, z) => data.landMade(x, z) : null, data?.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
-        if (!at.plan) return hint(groundprudHint(at.why));
-        const mid = _v.set(at.A.x, at.A.L, at.A.z);
-        if (g.wards?.forbids?.(hand.origin, mid)) return hint('🛡️ Здесь чужая защита дома — стену не поднять');
-        if (g.ships?.footprintAt?.(at.A.x, at.A.L - 1, at.A.z)) return hint('⚓ Корабль — не земля: стена здесь не растёт');
-        const tired = g.combat.check('Groundprud');
+        const ch = g.character, yaw = ch.group.rotation.y;
+        const feet = ch.group.position.clone(); feet.y -= 1.5;
+        const at = this.prepare(feet, { x: -Math.sin(yaw), z: -Math.cos(yaw) }, max);
+        if (!at.plan) { g.hud.setVoice(breakthroughHint(at.why), true); return null; }
+        const name = max ? 'BreakthroughMaxima' : 'Breakthrough', tired = g.combat.check(name);
         if (tired) { g.hud.setVoice(tired, true); return null; }
-        g.combat.pay('Groundprud');
-        this._lastAt = now;
-        const o = new THREE.Vector3(at.A.x, at.A.L, at.A.z), d = new THREE.Vector3(at.f.x, 0, at.f.z);
-        this.grow(o, d, g.localId, at.plan);
-        g.sync?.spell('Groundprud', o, d, hand.side);
-        return 'Groundprud';
+        g.combat.pay(name); this._lastAt = now;
+        this.grow(at.o, at.d, g.localId, at.plan, max);
+        g.sync?.spell(max ? 'WallRiseMaxima' : 'WallRise', at.o, at.d, null);
+        return name;
     }
 
     /**
      * (every computer) The ground rises: block after block, from the middle to the edges and from the bottom up,
      * in dust and crumbs; the caster's computer lays the blocks. o: the spot (x, ground layer, z); d: the way from the caster.
      */
-    grow(o, d, casterId, plan = null) {
+    grow(o, d, casterId, plan = null, max = false) {
         const g = this.game;
         const data = this.data;
         if (!data) return;
@@ -317,10 +281,11 @@ export class Groundprud {
         const h = Math.hypot(d.x, d.z) || 1, f = { x: d.x / h, z: d.z / h };
         if (!plan) {
             const seed = (A.x * 73856093) ^ (A.z * 19349663) ^ Math.round(f.x * 100) * 83492791;
-            plan = groundprudPlan((x, L, z) => data.get(x, L, z), groundTopNear(data, A.L), A, f, seed, data.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
+            plan = breakthroughPlan((x, L, z) => data.get(x, L, z), groundTopNear(data, A.L), A, f, seed, data.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null, max);
         }
         if (!plan.cells) return;
-        const mine = casterId === g.localId || casterId === 'local';
+        g.sound?.playSpellFxAt?.('fxStone', o, max ? 0.85 : 1, 1, 28);
+        const mine = casterId === g.localId || casterId === 'local' || (g.authority && g.castleLife?.byId?.has(casterId));
         const cells = plan.cells.map((c) => ({ c, wait: 0, done: false }));
         const out = [];
         const flush = () => {
@@ -330,12 +295,12 @@ export class Groundprud {
         };
         // the earth itself rises, smoothly, out of the ground: the wall's own blocks with the world's textures (the blocks laid under it show when it goes)
         const cs = plan.cols, n = cs.length;
-        const rise = GROUNDPRUD.GROW * 0.62, HOLD = 1.2;
+        const rise = BREAKTHROUGH.GROW * 0.62, HOLD = 1.2;
         let mesh = null, mat = null;
         if (g.scene && n) {
             const byCol = new Map();
             for (const c of plan.cells) { if (!byCol.has(c[5])) byCol.set(c[5], []); byCol.get(c[5]).push(c); }
-            for (const [c] of byCol) if (c.delay == null) c.delay = GROUNDPRUD.GROW * 0.35; // (the foot's lumps of rubble)
+            for (const [c] of byCol) if (c.delay == null) c.delay = BREAKTHROUGH.GROW * 0.35; // (the foot's lumps of rubble)
             mat = riseMaterial();
             mat.userData.rise.DUR.value = rise;
             mesh = new THREE.Mesh(riseGeometry(byCol, data), mat);
@@ -355,7 +320,7 @@ export class Groundprud {
         const dropRise = () => { if (!mesh) return; g.scene.remove(mesh); mesh.geometry.dispose(); mat.dispose(); mesh = null; };
         let t = 0, sendT = 0, finished = false, first = true, doneAt = 0;
         g.spells.spells.push({
-            life: GROUNDPRUD.GROW + GROUNDPRUD.WAIT + HOLD + 1.5,
+            life: BREAKTHROUGH.GROW + BREAKTHROUGH.WAIT + HOLD + 1.5,
             onUpdate: (spell, dt) => {
                 t += dt;
                 let left = 0;
@@ -367,7 +332,7 @@ export class Groundprud {
                     if (col.next !== k) { left++; continue; } // (the one under it is still to come)
                     if (occupied(g, { x, L, z })) {
                         e.wait += dt;
-                        if (e.wait < GROUNDPRUD.WAIT) { left++; continue; }
+                        if (e.wait < BREAKTHROUGH.WAIT) { left++; continue; }
                         col.dead = true; e.done = true; continue;
                     }
                     e.done = true; col.next++;
@@ -375,12 +340,12 @@ export class Groundprud {
                     data.set(x, L, z, block);
                     out.push([x, L, z, block]);
                     this._liftThings(x, L, z, col.g + col.h);
-                    if (first) { first = false; g.mana?.success?.('Groundprud'); }
+                    if (first && (casterId === g.localId || casterId === 'local')) { first = false; g.mana?.success?.(max ? 'BreakthroughMaxima' : 'Breakthrough'); }
                 }
                 sendT += dt;
-                if (sendT >= GROUNDPRUD.SEND) { sendT = 0; flush(); }
+                if (sendT >= BREAKTHROUGH.SEND) { sendT = 0; flush(); }
                 if (mesh) { mat.userData.rise.T.value = t; dust(); }
-                if (!left && t >= GROUNDPRUD.GROW && !finished) {
+                if (!left && t >= BREAKTHROUGH.GROW && !finished) {
                     finished = true; doneAt = t;
                     flush();
                     g.sound?.playStep?.();

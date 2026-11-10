@@ -508,8 +508,8 @@ export class WizardLife {
         }
         if (this.seals?.think(v, dt)) return true;
         if (this.game.cardilon?.busy(v)) {
-            if (v.savior == null) { v.mana = Math.max(0, v.mana - PVP.SHIELD_DRAIN * dt); v.shieldT -= dt; }
-            v.speed = 0; v.path = null; v.mode = 'cast'; v.castT = 0.3; this.life._ground(v); return true;
+            if (v.savior == null && (v.fx & FX.SHIELD)) { v.mana = Math.max(0, v.mana - PVP.SHIELD_DRAIN * dt); v.shieldT -= dt; }
+            v.speed = 0; v.path = null; v.mode = v.cardilon.kind === 'wall' ? 'earthrise' : 'cast'; v.castT = 0.3; this.life._ground(v); return true;
         }
         if (this.home?.step(v, dt)) return true;
         if (v.lostWand) return this._fetchWand(v, dt);

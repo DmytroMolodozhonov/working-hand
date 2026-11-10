@@ -130,7 +130,7 @@ export const TARGETS = {
     Drawdown: { does: 'none', why: '«Drawdown»: в воздухе не касается; на земле — опускается с ней' },
     Stitching: { does: 'none', why: '«Stitching»: не касается' },
     CreateBridge: { does: 'none', why: '«Create a Bridge»: не касается' },
-    Groundprud: { does: 'none', why: '«Groundprud»: земля поднимается вдалеке от птицы — не касается' },
+    Breakthrough: { does: 'none', why: '«Breakthrough»: земля поднимается вдалеке от птицы — не касается' },
     GroundVortex: { does: 'none', why: '«Ground Vortex»: феникс уворачивается от блоков — не касается' },
     Pentagranium: { does: 'none', why: '«Пентаграниум»: рисунок на земле — феникс не касается' },
     Nihilis: { does: 'none', why: '«Nihilis Atra»: свет против чёрной магии — феникс огонь жизни, не чёрная магия: не касается' },

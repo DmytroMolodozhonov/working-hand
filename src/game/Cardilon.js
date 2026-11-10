@@ -1,6 +1,6 @@
 /** A host-confirmed interception; a guest reserves the price/shield until the reliable reply. */
 import * as THREE from 'three';
-import { CARDILON as C, cardilonCost, cardilonDelay, ordinaryShield, incomingBomb } from './CardilonRules.js';
+import { CARDILON as C, cardilonCost, cardilonDelay, ordinaryShield, incomingBomb, knowsCardilon } from './CardilonRules.js';
 import { CardilonLook } from '../fx/CardilonLook.js';
 import { FX } from '../fx/WizardFx.js';
 import { facesTarget, FACE } from './FaceTarget.js';
@@ -20,7 +20,7 @@ export class Cardilon {
     }
     _find(id) { for (const s of this.game.spells.spells) if (s.life > 0 && s.bomb?.id === id) return s; return null; }
     busy(v) {
-        if (!v.cardilon || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.lev || !(v.fx & FX.SHIELD)) return false;
+        if (!v.cardilon || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.lev || (v.cardilon.kind !== 'wall' && !(v.fx & FX.SHIELD))) return false;
         const s = this._find(v.cardilon.id);
         return !!s && incomingBomb(s.bomb, _center.set(v.x, v.y + 2.2, v.z));
     }
@@ -113,16 +113,36 @@ export class Cardilon {
         if (!v.wizard || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.lev || v.carriedBy || v.fx & FX.DOME || v.id === b.by || !incomingBomb(b, _center)) return;
         if (g.duel?.clashes?.some(c => c.a.by === v.id || c.b.by === v.id)) return;
         if (!g.castleLife._sees(v, b.p)) return;
-        g.castleLife.wizards.blasts.protect(v);
-        if (!(v.fx & FX.SHIELD) || v.fx & FX.DOME) return;
+        const wall = !knowsCardilon(v);
+        if (wall && (v.wallCd || 0) > performance.now()) { v.cardilon = null; return; }
+        if (!wall) {
+            g.castleLife.wizards.blasts.protect(v);
+            if (!(v.fx & FX.SHIELD) || v.fx & FX.DOME) return;
+        }
         let task = v.cardilon;
         if (!task || task.id !== b.id) {
-            task = v.cardilon = { id: b.id, t: cardilonDelay(v) };
+            task = v.cardilon = { id: b.id, t: cardilonDelay(v), kind: wall ? 'wall' : 'cardilon' };
             v.prep = null; // Stop preparing an attack to speak the defensive word.
         }
         task.t -= dt;
         fight?._turnTo(v, b.p, dt);
-        if (task.t > 0 || v.mana < cardilonCost(b.power) || !facesTarget(v.yaw, v.x, v.z, b.p.x, b.p.z, FACE.SPELL)) return;
+        if (task.t > 0 || !facesTarget(v.yaw, v.x, v.z, b.p.x, b.p.z, FACE.SPELL)) return;
+        if (wall) {
+            // All wizards know the earth wall. It is real terrain: a close bomb may arrive before it has grown.
+            if (v.mana < 10 || (v.wallCd || 0) > performance.now() || Math.hypot(b.p.x - v.x, b.p.z - v.z) < 5) return;
+            const dx = b.p.x - v.x, dz = b.p.z - v.z;
+            const at = g.breakthrough?.prepare({ x: v.x, y: v.y, z: v.z }, { x: dx, z: dz });
+            if (!at?.plan) { g.castleLife.wizards.blasts.protect(v); v.cardilon = null; return; }
+            v.mana -= 10; v.wallCd = performance.now() + 6000; v.cardilon = null;
+            g.breakthrough.grow(at.o, at.d, v.id, at.plan);
+            g.sync?.spell('WallRise', at.o, at.d, null, v.id);
+            if (g.castleLife._isPlayer?.(b.by)) (v.castAtPlayers || (v.castAtPlayers = new Set())).add(b.by);
+            v.mode = 'earthrise'; v.castT = 0.7;
+            g.castleLife._say(v, 'Breakthrough!', 2);
+
+            return;
+        }
+        if (v.mana < cardilonCost(b.power)) return;
         const hand = _hand.set(v.x - Math.sin(v.yaw) * 1.1, v.y + 2.7, v.z - Math.cos(v.yaw) * 1.1);
         if (!this._clear(hand, b.p)) return;
         if (this._capture(s, v.id, { h: hand.toArray() })) {

@@ -252,7 +252,7 @@ import { Dread } from './Dread.js';
 import { Skin } from './Skin.js';
 import { Whirl } from './Whirl.js';
 import { Bridge } from './Bridge.js';
-import { Groundprud } from './Groundprud.js';
+import { Breakthrough } from './Breakthrough.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { WaterWalk } from './WaterWalk.js';
@@ -308,7 +308,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Cardilon', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
+const MANA_LATER = new Set(['Cardilon', 'Breakthrough', 'BreakthroughMaxima', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -672,7 +672,7 @@ export class Game {
             axis: (o, d, casterId) => this.timeTurn?.start(o, d, casterId),
             sunRayFire: (o, d, casterId, side) => this.sunRay?.fire(o, d, casterId, side),
             bridge: (o, d, casterId) => this.bridge?.grow(o, d, casterId),
-            groundprud: (o, d, casterId) => this.groundprud?.grow(o, d, casterId),
+            earthWall: (o, d, casterId, max) => this.breakthrough?.grow(o, d, casterId, null, max),
             collision: this.collision,
             terrain: () => this.terrain,
             leavesAt: (x, y, z) => !!this.world.leavesAt?.(x, y, z), // (the start-area trees' crowns stop a «Бомбардо»)
@@ -742,7 +742,7 @@ export class Game {
         this.vigor = new Vigor(this); // «Зелье крепкого здоровья»: +10 к максимуму здоровья навсегда, один раз (Vigor.js)
         this.scars = new Scars(this); // the blade's marks on creatures, drops from them (Scars.js)
         this.slash = new Slash(this); // «Sectura»: the cutting curse of black magic — the wand arms, a swing lets the blade go (Slash.js)
-        this.groundprud = new Groundprud(this); // «Groundprud»: the ground rises into a wall (Groundprud.js)
+        this.breakthrough = new Breakthrough(this);
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
@@ -2303,7 +2303,6 @@ export class Game {
         if (name === 'Caligo') return this.darkFog.cast(isFinal); // (a jet of black smoke for 10 s — DarkFog.js)
         if (name === 'Sectura') return this.slash.cast(isFinal); // (the word arms the wand; the swing lets the blade go — Slash.js)
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
-        if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         if (name === 'Axis') return this.timeTurn.cast(isFinal); // (the turn of the planet: 2000 mana — TimeTurn.js)
@@ -2608,8 +2607,8 @@ export class Game {
         const B = this._bt || (this._bt = {});
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
-        if (now - (B.riseAt || 0) < 2000) { this.combat.pay(name); this._raiseWall(name === 'BreakthroughMaxima'); B.riseAt = 0; return name; }
-        if (now - (B.lowAt || 0) < 3000) {
+        if (now - (B.riseAt ?? -1e9) < 2000) { B.riseAt = 0; return this._raiseWall(name === 'BreakthroughMaxima'); }
+        if (now - (B.lowAt ?? -1e9) < 3000) {
             B.pending = { name, until: now + 3000 };
             this.hud.setVoice('🪨 Теперь поднимите обе руки вместе!', true);
             return name;
@@ -2631,87 +2630,20 @@ export class Game {
             const low = (h) => h.y < shoulder - 0.15 && h.y > shoulder - 1.1 && h.z < -0.5;
             const up = (h) => h.y > shoulder - 0.05;
             if (low(l) && low(r)) B.lowAt = now;
-            else if (up(l) && up(r) && now - (B.lowAt || 0) < 3000 && !B.upNow) { B.riseAt = now; B.upNow = true; }
+            else if (up(l) && up(r) && now - (B.lowAt ?? -1e9) < 3000 && !B.upNow) { B.riseAt = now; B.upNow = true; }
             if (!(up(l) && up(r))) B.upNow = false;
         }
         if (B.pending) {
-            if (now - (B.riseAt || 0) < 800) {
+            if (now - (B.riseAt ?? -1e9) < 800) {
                 const p = B.pending;
                 B.pending = null;
-                this.combat.pay(p.name);
-                this.mana?.success(p.name);
                 this._raiseWall(p.name === 'BreakthroughMaxima');
             } else if (now > B.pending.until) { B.pending = null; this.hud.setVoice('🪨 Не успели поднять руки', true); }
         }
-        // the wall rises row by row
-        const W = B.rising;
-        if (W) {
-            W.t += dt;
-            const rows = Math.min(W.height, Math.floor(W.t / (0.9 / W.height)) + 1);
-            while (W.done < rows) {
-                const L = W.done;
-                const edits = [];
-                for (const c of W.cols) {
-                    const type = L === W.height - 1 ? BLOCK.DIRT : BLOCK.STONE;
-                    const cur = this.builder.data?.get(c.x, c.base + L, c.z);
-                    if (cur !== undefined && cur !== BLOCK.AIR && cur !== BLOCK.WATER) continue; // (rock under a low ceiling stays: the wall stops there)
-                    edits.push([c.x, c.base + L, c.z, type]);
-                    this.builder.data?.set(c.x, c.base + L, c.z, type);
-                    if (Math.random() < 0.5) this.fx.spark(new THREE.Vector3(c.x, c.base + L - 1, c.z), 0x8a7a5a, 0.2, new THREE.Vector3((Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3), 0.9);
-                }
-                this.builder._sendEdits(edits);
-                W.done++;
-            }
-            if (W.done >= W.height) B.rising = null;
-        }
-    }
-
-    /**
-     * Where «Breakthrough»'s wall stands in this column: on the floor the hero stands on (a cave: the floor under the
-     * ceiling — it was the SURFACE above the cave, the author's «в пещере пыль есть, стены нет»); a step or a rock ahead
-     * — on what is up to 4 layers higher; a pit or a wall too high — no wall in that column (null).
-     */
-    _wallBase(x, z, heroL) {
-        const d = this.terrain.data;
-        const open = (L) => { const b = d.get(x, L, z); return b === BLOCK.AIR || b === BLOCK.WATER; };
-        const L = heroL + 1;
-        if (open(L)) { const f = d.floorBelow(x, z, L); return f < heroL - 3 ? null : f + 1; }
-        for (let k = 1; k <= 4; k++) if (open(L + k)) return L + k;
-        return null;
     }
 
     _raiseWall(max) {
-        const ch = this.character;
-        const yaw = ch.group.rotation.y;
-        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-        const sx = -fz, sz = fx; // sideways
-        const width = max ? 9 : 5, height = max ? 5 : 3;
-        const dist = max ? 4 : 3.5;
-        const cx = ch.group.position.x + fx * dist, cz = ch.group.position.z + fz * dist;
-        this.castleLife?.alarm({ x: cx, y: ch.group.position.y - 1.95, z: cz }, 'quake', this.localId, width / 2); // (earth rising out of the ground: the people near run)
-        const cols = [];
-        const seen = new Set();
-        const heroL = Math.round(ch.group.position.y - 1.5); // (the layer the hero's feet stand on — in a cave too: not the surface above it)
-        for (let i = 0; i < width; i++) {
-            const o = i - (width - 1) / 2;
-            for (const t of [0, 0.5]) { // two cells thick where it runs diagonally
-                const x = Math.round(cx + sx * o + fx * t), z = Math.round(cz + sz * o + fz * t);
-                const k = x + ',' + z;
-                if (seen.has(k)) continue;
-                seen.add(k);
-                const base = this._wallBase(x, z, heroL);
-                if (base != null) cols.push({ x, z, base });
-            }
-        }
-        if (!cols.length) { this.hud.setVoice('🪨 Здесь негде поднять стену', true); return; }
-        this._bt.rising = { cols, height, done: 0, t: 0 };
-        this.fx.explosion?.(new THREE.Vector3(cx, ch.group.position.y - 1.5, cz), 1.5, 0.4);
-        if (this.sound) this.sound.playExplosion?.(new THREE.Vector3(cx, ch.group.position.y, cz), ch.group.position, 0.3);
-        // whoever stands there (creatures, players) is thrown back — on every computer (WallRise)
-        const o = new THREE.Vector3(cx, ch.group.position.y - 1.5, cz), wd = new THREE.Vector3(fx, 0, fz), wn = max ? 'WallRiseMaxima' : 'WallRise';
-        this.spells.cast(wn, o, wd, null, this.localId);
-        if (this.sync) this.sync.spell(wn, o, wd, null);
-        this.hud.setVoice(max ? '🪨 BREAKTHROUGH МАКСИМА!' : '🪨 Breakthrough!', true);
+        return this.breakthrough.cast(max);
     }
 
     /** Is my charge in a duel right now? */
@@ -4110,7 +4042,7 @@ export class Game {
         for (const m of this.hellRealm?.sampleModels?.() || []) zoo.add(m); // (hell's sky dome — HellRealm.js)
         for (const m of this.pentagranium?.sampleModels?.() || []) zoo.add(m); // («Пентаграниум»: the trail's ribbons, the figure's and the glow's shaders)
         for (const m of this.groundVortex?.sampleModels?.() || []) zoo.add(m); // (the blocks of «Ground Vortex»)
-        for (const m of this.groundprud?.sampleModels?.() || []) zoo.add(m); // (the earth of «Groundprud» rising out of the ground)
+        for (const m of this.breakthrough?.sampleModels?.() || []) zoo.add(m); // (the earth of «Breakthrough» rising out of the ground)
         for (const m of this.levMax?.sampleModels?.() || []) zoo.add(m); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
         for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)

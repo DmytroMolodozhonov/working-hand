@@ -38,7 +38,7 @@ const SCHOOL_OF = {
     FirefightingMaxima: 'water', LetItRain: 'water', Tornado: 'water', Whirlpool: 'water', CreateBoat: 'water', CreateCauldron: 'fire', CreateFlask: 'water', Navigare: 'water', Waterball: 'water', WaterWalk: 'water', WaterPart: 'water', Helios: 'light', SunRay: 'light', Kidarius: 'light', Axis: 'light', AirBubble: 'water', WaveAttack: 'water', WaterVortex: 'water', WaterVortexSuperMaxima: 'water', CreateBoard: 'water',
     IceMaxima: 'ice', IceCastle: 'ice', IceBridge: 'ice', Snowman: 'ice', Pilbidrio: 'ice', Frozen: 'ice',
     LightningStrike: 'lightning', Thunderwave: 'lightning', Electrum: 'lightning', JoltMaxima: 'lightning', Jolt: 'lightning',
-    GroundVortex: 'earth', Groundprud: 'earth', Drawdown: 'earth', EarthquakeMaxima: 'earth', Earthquake: 'earth', LiquidationMaxima: 'earth', Breakthrough: 'earth', Unfurl: 'earth',
+    GroundVortex: 'earth', Drawdown: 'earth', EarthquakeMaxima: 'earth', Earthquake: 'earth', LiquidationMaxima: 'earth', Breakthrough: 'earth', Unfurl: 'earth',
     WindImpulse: 'wind', LevitationMaxima: 'wind', LevitationSuperMaxima: 'wind', Levitation: 'wind', Wind: 'wind', Flight: 'wind',
     Alive: 'life', Overgrown: 'life', OvergrownMaxima: 'life',
     AvadaKedavra: 'dark', Sectura: 'dark', Caligo: 'dark', Spiralis: 'lightning', Die: 'dark', TotalDestruction: 'dark', Accentric: 'dark', GiveMyPower: 'dark', Invisibility: 'dark', Pentagranium: 'dark',

@@ -1,6 +1,12 @@
-/** Cardilon is instant, known from birth, and spends an already raised ordinary hand shield. */
-import { REACT_LAG, reactLevel } from './WizardMind.js';
+/** Cardilon is instant, known to players from the start, and spends an already raised ordinary hand shield. */
+import { hashString } from '../core/math.js';
+import { REACT_LAG, reactLevel, seededRng } from './WizardMind.js';
 export const CARDILON = { COST: 7, MAX_COST: 15, RANGE: 48, MISS: 4, FX_TIME: 1.35 };
+export const CARDILON_KNOW = { 1: 0.5, 2: 0.8, 3: 1, 4: 1 };
+export function knowsCardilon(v) {
+    const level = v.savior != null || v.role === 'master' || v.role === 'savior' ? 4 : reactLevel(v.rank || v.role);
+    return seededRng(hashString(String(v.id) + ':cardilon'))() < CARDILON_KNOW[level];
+}
 export const cardilonCost = (power) => power > 1 ? CARDILON.MAX_COST : CARDILON.COST;
 export const ordinaryShield = (s) => !!s && s.type === 1 && s.left > 0 && !s.gods && !s.tent;
 export function cardilonDelay(v) {
@@ -18,7 +24,7 @@ export function incomingBomb(b, p) {
 }
 export const CARDILON_TARGETS = {
     players: 'Any player with ordinary Protection can capture an incoming Bombardo; host confirms the capture, the shield is consumed and mana is paid once.',
-    wizards: 'Every NPC wizard knows it; rank reaction and speaking time, facing, sight and mana determine whether the projectile reaches him first.',
+    wizards: 'NPC knowledge is stable by id: weak 50%, middle 80%, strong and higher 100%; rank reaction and speaking time, facing, sight and mana determine whether the projectile reaches him first.',
     Bombardo: 'Captured without any external explosion, damage, shove, terrain edits or success reward for an explosion that never happened.',
     BombardoMaxima: 'Same spell, automatically 15 mana instead of 7; a larger enclosing shell.',
     shields: 'Only an existing ordinary magical hand Protection. Maxima, gods, tentative gesture shields and physical shields cannot be spent.',

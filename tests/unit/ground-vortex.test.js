@@ -21,7 +21,7 @@ test('words: «Ground Vortex» both words together; «Shield» alone; never from
     for (const t of ['Ground Vortex', 'ground vortex', 'граунд вортекс', 'граунт вортекс', 'groundvortex']) assert.equal(matchSpell(t), 'GroundVortex', t);
     for (const t of ['Water Vortex', 'вотер вортекс']) assert.equal(matchSpell(t), 'WaterVortex', t);
     for (const t of ['ground', 'граунд', 'вортекс', 'на земле ground floor', 'вихрь']) assert.notEqual(matchSpell(t), 'GroundVortex', t);
-    assert.equal(matchSpell('Groundprud'), 'Groundprud');
+    assert.equal(matchSpell('Groundprud'), null);
     for (const t of ['Shield', 'shield', 'шилд']) assert.equal(matchSpell(t), 'GroundShield', t);
     for (const t of ['щит', 'протекшн', 'Protection Maxima']) assert.ok(!/GroundShield/.test(matchSpell(t) || ''), t);
     for (const t of ['мы взяли щит и пошли', 'where is the shield of the knight and the sword']) assert.notEqual(matchSpell(t), 'GroundShield', t);

@@ -44,7 +44,7 @@ export const NOT_A_REASON = [
  * Заклинания, которые дракона НЕ злят, даже если «задели» (по таблице ON_DRAGON: «не злит, обиды не копит» / «нечего делать»).
  */
 export const HARMLESS = new Set([
-    'Lumos', 'LumosMaxima', 'Nox', 'Accio', 'Lock', 'Alohomora', 'Stitching', 'CreateBridge', 'Groundprud', 'Drawdown', 'Levitation', 'Brainrot',
+    'Lumos', 'LumosMaxima', 'Nox', 'Accio', 'Lock', 'Alohomora', 'Stitching', 'CreateBridge', 'Drawdown', 'Levitation', 'Brainrot',
     'Pentagranium', 'Nihilis', 'VisibleGodi', 'Fireworks', 'Invisibility', 'Firefighting', 'FirefightingMaxima', 'WaterVortex', 'WaveAttack',
     'Wind', 'WindMaxima', 'WindImpulse', 'WindImpulseMaxima', 'Disarmor', 'Expelliarmus', 'Bounce',
 ]);

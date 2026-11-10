@@ -161,8 +161,8 @@ export const SPELL_PHYSICS = {
     Inspirius: { push: 25, always: true, down: 5, toss: 16, jolt: 5 },
     Boom: { push: 30, always: true, down: 6, toss: 18, jolt: 6 }, // («Бум»: Boom.boomThrow — the closer, the further)
     Lightning: { push: 8, always: true, down: 2, jolt: 2 }, LightningStrike: { push: 8, always: true, down: 2, jolt: 2 },
-    Breakthrough: { push: 8, toss: 6 }, BreakthroughMaxima: { push: 12, toss: 8 },
-    WallRise: { push: 8, toss: 6 }, WallRiseMaxima: { push: 12, toss: 8 },
+    Breakthrough: null, BreakthroughMaxima: null,
+    WallRise: null, WallRiseMaxima: null,
     Attack: { push: 6, jolt: 1.5 },
     // (the vortex pushes by its own volume — WaterVortex.pushOf — and throws off the feet when big)
     WaterVortex: { push: 0, own: true, wet: true }, WaterVortexSuperMaxima: { push: 0, own: true, wet: true }, VortexBubble: null, FireMaxima: { push: 0, jolt: 0.6 },
@@ -185,10 +185,10 @@ export const SPELL_PHYSICS = {
     Reperio: null, // («Reperio»: light for my own eyes — nobody is pushed: BodyFinder.js)
     Caligo: null, // («Caligo»: a fog, nobody is pushed — DarkFog.js)
     Sectura: null, // («Sectura»: a cut, not a push — an invisible blade: Slash.js; the body is cut or wounded, nothing is shoved)
-    Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, Groundprud: null, /* (the ground rises where nobody stands — Groundprud.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
+    Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
     GroundVortex: { push: 7, jolt: 0.3 }, GroundShield: null, /* (a flying block of the earth vortex: GroundVortex.js; the shield word pushes nobody) */
     Pentagranium: null, // («Pentagranium <Name>»: a drawing on the ground — pushes nobody, Pentagranium.js)
-    Nihilis: null, // («Nihilis Atra»: a cone of light against black magic — it pushes nobody, Nihilis.js)
+    Cardilon: null, NihilisDuel: null, Nihilis: null, // («Nihilis Atra»: a cone of light against black magic — it pushes nobody, Nihilis.js)
     VisibleGodi: null, // («Visible Godi»: a look through a wall — pushes nobody, VisibleGodi.js)
     Fireworks: null, // («Fireworks»: sparks high up — they push and hurt nobody, Fireworks.js)
     Liquidation: { push: 2, jolt: 1.5 }, LiquidationMaxima: { push: 2, jolt: 1.5 }, // (a splash: −3 HP, a little shove — Liquidation.js)
