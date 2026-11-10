@@ -735,7 +735,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/alive":
             return self._alive()
         if path == "/api/worlds":
-            return self._json(200, _worlds_get(parse_qs(parsed.query).get("id", [None])[0]))
+            return self._json(200, _worlds_get(parse_qs(urlparse(self.path).query).get("id", [None])[0]))
         if path == "/api/maps":
             maps = {}
             if os.path.isdir(MAPS_DIR):

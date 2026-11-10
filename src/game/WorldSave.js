@@ -121,11 +121,11 @@ export async function listWorlds() {
         if (typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) {
             try {
                 let disk = null;
-                const r = await fetch('/api/worlds', { cache: 'no-store' });
-                if (r.ok) disk = await r.json();
-                else if (!all.length) {
-                    const tr = await fetch('/api/profile/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-                    if (tr.ok) { const j = await tr.json(); if (Array.isArray(j?.data?.worlds)) disk = j.data.worlds; }
+                const r = await fetch('/api/worlds', { cache: 'no-store' }).catch(() => null);
+                if (r?.ok) disk = await r.json().catch(() => null);
+                if ((!Array.isArray(disk) || !disk.length) && !all.length) {
+                    const tr = await fetch('/api/profile/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null);
+                    if (tr?.ok) { const j = await tr.json().catch(() => null); if (Array.isArray(j?.data?.worlds)) disk = j.data.worlds; }
                 }
                 if (Array.isArray(disk)) {
                     const byId = new Map(all.map((w) => [w.id, w]));
@@ -137,7 +137,7 @@ export async function listWorlds() {
                             tx('readwrite', (st) => st.put(dw)).catch(() => {});
                         }
                     }
-                    if (r.ok) for (const w of all) if (!disk.some((d) => d?.id === w.id)) fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) }).catch(() => {});
+                    if (r?.ok) for (const w of all) if (!disk.some((d) => d?.id === w.id)) fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) }).catch(() => {});
                     all = [...byId.values()];
                 }
             } catch (e) { /* offline / unit test */ }
