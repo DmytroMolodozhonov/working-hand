@@ -984,11 +984,11 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 
 def _worlds_dir():
-    d = os.path.join(_browser.home_dir(), "worlds")
+    home = os.environ.get("ZNS_LAUNCHER_HOME") or (os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Volshebstvo") if sys.platform == "win32" else os.path.join(os.path.expanduser("~"), ".volshebstvo"))
+    d = os.path.join(home, "worlds")
     if not os.path.isdir(d):
         os.makedirs(d, exist_ok=True)
-        # Seed from profile-transfer.json if present so worlds survive IndexedDB resets
-        tf = os.path.join(_browser.home_dir(), "profile-transfer.json")
+        tf = os.path.join(home, "profile-transfer.json")
         if os.path.isfile(tf):
             try:
                 with open(tf, "r", encoding="utf-8") as f:

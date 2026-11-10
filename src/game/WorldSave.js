@@ -120,21 +120,25 @@ export async function listWorlds() {
         // Disk backup (/api/worlds): if IndexedDB was reset by Chrome, restore from disk; also back up IndexedDB worlds to disk
         if (typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) {
             try {
+                let disk = null;
                 const r = await fetch('/api/worlds', { cache: 'no-store' });
-                if (r.ok) {
-                    const disk = await r.json();
-                    if (Array.isArray(disk)) {
-                        const byId = new Map(all.map((w) => [w.id, w]));
-                        for (const dw of disk) {
-                            const cur = byId.get(dw.id);
-                            if (!cur || (dw.updated || 0) > (cur.updated || 0)) {
-                                byId.set(dw.id, dw);
-                                tx('readwrite', (st) => st.put(dw)).catch(() => {});
-                            }
+                if (r.ok) disk = await r.json();
+                else if (!all.length) {
+                    const tr = await fetch('/api/profile/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                    if (tr.ok) { const j = await tr.json(); if (Array.isArray(j?.data?.worlds)) disk = j.data.worlds; }
+                }
+                if (Array.isArray(disk)) {
+                    const byId = new Map(all.map((w) => [w.id, w]));
+                    for (const dw of disk) {
+                        if (!dw || !dw.id) continue;
+                        const cur = byId.get(dw.id);
+                        if (!cur || (dw.updated || 0) > (cur.updated || 0)) {
+                            byId.set(dw.id, dw);
+                            tx('readwrite', (st) => st.put(dw)).catch(() => {});
                         }
-                        for (const w of all) if (!disk.some((d) => d.id === w.id)) fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) }).catch(() => {});
-                        all = [...byId.values()];
                     }
+                    if (r.ok) for (const w of all) if (!disk.some((d) => d?.id === w.id)) fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) }).catch(() => {});
+                    all = [...byId.values()];
                 }
             } catch (e) { /* offline / unit test */ }
         }
