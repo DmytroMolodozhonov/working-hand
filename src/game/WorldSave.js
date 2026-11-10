@@ -123,7 +123,7 @@ export async function listWorlds() {
                 let disk = null;
                 const r = await fetch('/api/worlds', { cache: 'no-store' }).catch(() => null);
                 if (r?.ok) disk = await r.json().catch(() => null);
-                if ((!Array.isArray(disk) || !disk.length) && !all.length) {
+                if (!Array.isArray(disk) || !disk.length) {
                     const tr = await fetch('/api/profile/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null);
                     if (tr?.ok) { const j = await tr.json().catch(() => null); if (Array.isArray(j?.data?.worlds)) disk = j.data.worlds; }
                 }
@@ -150,8 +150,20 @@ export async function listWorlds() {
 export async function loadWorld(id) {
     let w = null;
     try { w = await tx('readonly', (st) => st.get(id)); } catch (e) { /* */ }
-    if (!w && typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) {
-        try { const r = await fetch('/api/worlds?id=' + encodeURIComponent(id), { cache: 'no-store' }); if (r.ok) w = await r.json(); } catch (e) { /* */ }
+    if (typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) {
+        try {
+            let dw = null;
+            const r = await fetch('/api/worlds?id=' + encodeURIComponent(id), { cache: 'no-store' }).catch(() => null);
+            if (r?.ok) dw = await r.json().catch(() => null);
+            if (!dw) {
+                const tr = await fetch('/api/profile/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null);
+                if (tr?.ok) { const j = await tr.json().catch(() => null); dw = (j?.data?.worlds || []).find((x) => x?.id === id) || null; }
+            }
+            if (dw && (!w || (dw.updated || 0) > (w.updated || 0))) {
+                w = dw;
+                tx('readwrite', (st) => st.put(dw)).catch(() => {});
+            }
+        } catch (e) { /* */ }
     }
     if (w) w.mode = legacyMode(w.mode);
     return w;
@@ -380,9 +392,15 @@ export class WorldKeeper {
         if (byId) return byId;
         const nk = WorldKeeper.key(null, name);
         const legacy = this.players[nk];
-        if (!legacy || (!self && nk === WorldKeeper.key(null, this.myName))) return null;
-        if (pid) delete this.players[nk];
-        return legacy;
+        if (legacy && (self || nk !== WorldKeeper.key(null, this.myName))) {
+            if (pid) delete this.players[nk];
+            return legacy;
+        }
+        if (self) {
+            const any = Object.values(this.players || {})[0];
+            if (any) return any;
+        }
+        return null;
     }
 
     snapshot() {
