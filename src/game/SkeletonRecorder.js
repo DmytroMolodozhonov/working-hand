@@ -23,7 +23,7 @@ export const SKEL = { BUFFER_S: 4, AFTER_S: 1.2, GAP_S: 15, MAX_AUTO: 15, LONG_S
 const r4 = (v) => Math.round(v * 1e4) / 1e4;
 const pts = (lm, n = 25) => (Array.isArray(lm) ? lm.slice(0, n).map((p) => [r4(p.x), r4(p.y), r4(p.z || 0)]) : null);
 const p3 = (p) => (p ? [r4(p.x), r4(p.y), r4(p.z || 0)] : null);
-const _q = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _h = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _h = new THREE.Vector3(), _u = new THREE.Vector3();
 
 export class SkeletonRecorder {
     constructor(game, poseService, { save = true } = {}) {
@@ -65,7 +65,7 @@ export class SkeletonRecorder {
     _push(list, row, key) {
         list.push(row);
         const keep = row.t - SKEL.BUFFER_S * 1000 - SKEL.AFTER_S * 1000;
-        while (list.length && list[0].t < keep) list.shift();
+        if (list.length > 240 && list[0].t < keep) { let k = 0; while (k < list.length && list[k].t < keep) k++; if (k > 0) list.splice(0, k); }
         if (this.long) {
             this.long[key].push(row);
             if (row.t - this.long.from > SKEL.LONG_S * 1000) this.stopLong();
@@ -75,6 +75,8 @@ export class SkeletonRecorder {
     _onFrame() {
         const g = this.game, ch = g?.character;
         if (!ch || !g.active) return;
+        // (in play: no per-frame allocations or matrix walks unless F10 is recording or a caught jerk is finishing its 1.2 s window)
+        if (this.save && !this.long && !this.pending) return;
         const t = this._now();
         const row = { t };
         try {
@@ -90,7 +92,7 @@ export class SkeletonRecorder {
             }
             if (g.poseSmoother) row.lead = Math.round((g.poseSmoother.lead || 0) * 1000);
             // the hero
-            ch.group.updateMatrixWorld(true);
+            if (!this.save) ch.group.updateMatrixWorld(true);
             ch.group.getWorldQuaternion(_q);
             _qi.copy(_q).invert();
             const pos = ch.group.position;
@@ -99,10 +101,10 @@ export class SkeletonRecorder {
                 const A = side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor, E = side === 'left' ? ch.leftElbowAnchor : ch.rightElbowAnchor;
                 A.getWorldPosition(_a); E.getWorldPosition(_b);
                 const hand = ch.getHandWorldPosition(side, _h);
-                const up = _b.clone().sub(_a).normalize().applyQuaternion(_qi);
-                const fo = hand.clone().sub(_b).normalize().applyQuaternion(_qi);
-                const hb = hand.clone().sub(pos).applyQuaternion(_qi);
-                row[side] = { up: p3(up), fore: p3(fo), hand: p3(hb) };
+                const up = p3(_u.subVectors(_b, _a).normalize().applyQuaternion(_qi));
+                const fo = p3(_u.subVectors(hand, _b).normalize().applyQuaternion(_qi));
+                const hb = p3(_u.subVectors(hand, pos).applyQuaternion(_qi));
+                row[side] = { up, fore: fo, hand: hb };
             }
             const so = ch._armOut;
             if (so) row.behind = [so.behindU ? 1 : 0, so.behindF ? 1 : 0];

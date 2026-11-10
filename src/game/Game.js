@@ -1698,18 +1698,23 @@ export class Game {
             this._caveChests = this._caveChests || new Set();
             this._caveSys = false; // (a cave system round the hero: the cave map may be wanted — _updateCaveMap)
             let built = false;
-            // (the host builds caves near EVERY player, not only his own hero: a guest in a far cave must find its chests too - the author 02.11)
-            const scan = this.authority ? this._playerPositions() : [p];
-            const seenCv = new Set(), caves = [];
-            for (const q of scan) for (const cv of t.cavesNear(q.x, q.z, 90, true).concat(t.lairsNear ? t.lairsNear(q.x, q.z, 90, true) : [], t.densNear ? t.densNear(q.x, q.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(q.x, q.z, 90, true) : [])) if (!seenCv.has(cv.id)) { seenCv.add(cv.id); caves.push(cv); }
+            // (the host builds caves near EVERY player, one player per tick, and only when that player moved > 12 m or a cave still waits)
+            const allP = this.authority ? this._playerPositions() : [p];
+            this._caveIdx = ((this._caveIdx || 0) + 1) % Math.max(1, allP.length);
+            const q = allP[this._caveIdx] || p;
+            const lastP = (this._caveScanAt ||= new Map()).get(this._caveIdx);
+            const moved = !lastP || Math.hypot(q.x - lastP.x, q.z - lastP.z) > 12 || this._cavePending;
+            if (moved) this._caveScanAt.set(this._caveIdx, { x: q.x, z: q.z });
+            const caves = moved ? t.cavesNear(q.x, q.z, 90, true).concat(t.lairsNear ? t.lairsNear(q.x, q.z, 90, true) : [], t.densNear ? t.densNear(q.x, q.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(q.x, q.z, 90, true) : []) : [];
+            this._cavePending = false;
             for (const cv of caves) {
                 if (cv.x0 != null ? ((cv.kind !== 'dungeon' && cv.kind !== 'ghostcastle') || cv.under) && p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
                 const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
                 // (its chambers' land must be made already: fitting a chest reads the blocks round it — not made here in a frame)
-                if (t.landMade && !spots.every((sp) => t.landMade(sp.x - 4, sp.z - 4) && t.landMade(sp.x + 4, sp.z + 4) && t.landMade(sp.x - 4, sp.z + 4) && t.landMade(sp.x + 4, sp.z - 4))) continue;
-                if (built) { this._caveT = 0.1; continue; } // (one cave's chests a frame: the next one at the next look)
+                if (t.landMade && !spots.every((sp) => t.landMade(sp.x - 4, sp.z - 4) && t.landMade(sp.x + 4, sp.z + 4) && t.landMade(sp.x - 4, sp.z + 4) && t.landMade(sp.x + 4, sp.z - 4))) { this._cavePending = true; continue; }
+                if (built) { this._cavePending = true; this._caveT = 0.1; continue; } // (one cave's chests a frame: the next one at the next look)
                 built = true;
                 this._caveChests.add(cv.id);
                 spots.forEach((sp0, k) => {
@@ -4602,10 +4607,13 @@ export class Game {
         // (the castles and towers ahead: made a little a frame before the minimap and the people want them)
         if (this.frameCount % 3 === 1 && !this.duelOnly) { // (the duel-only start: no far sites are planned, no minimap drawn — only the arena)
             const wp = this.character.group.position, vil = this.world.terrain?.data?.villages;
-            this.world.terrain?.warmSites?.(wp.x, wp.z, 900 + CASTLE_CELL, CASTLE_CELL);
-            // (a wizards' settlement may be further: look as far as the nearest known one — the workers make the cells)
-            const reach = vil ? Math.min(2200, vil.mapReach(wp)) : 0;
-            if (reach > 900 + CASTLE_CELL) this.world.terrain?.warmSites?.(wp.x, wp.z, reach, CASTLE_CELL);
+            const movedW = !this._warmPos || Math.hypot(wp.x - this._warmPos.x, wp.z - this._warmPos.z) > 20;
+            if (movedW || this.frameCount % 60 === 1) {
+                this._warmPos = { x: wp.x, z: wp.z };
+                this.world.terrain?.warmSites?.(wp.x, wp.z, 900 + CASTLE_CELL, CASTLE_CELL);
+                const reach = vil ? Math.min(2200, vil.mapReach(wp)) : 0;
+                if (reach > 900 + CASTLE_CELL) this.world.terrain?.warmSites?.(wp.x, wp.z, reach, CASTLE_CELL);
+            }
         }
         if (this.frameCount % 5 === 0 && this.space?.inSpace) this.space.drawMap(this.hud); // (the map of the Solar System)
         else if (this.frameCount % 5 === 0 && !this.duelOnly) {

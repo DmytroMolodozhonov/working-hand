@@ -219,8 +219,10 @@ function _same(shape) {
 function _why(shape) {
     if (!shape.on) return 'off';
     if (shape._slotsVer !== shape._ver) return 'built';
+    const e = shape.root.matrixWorld.elements, rx = e[12], rz = e[14], maxD2 = (FAR_BATCH.NEAR * 1.6) ** 2;
     for (const s of shape._slots) {
         const m = s.mesh, b = s.batch;
+        if (b.placed && (rx - b.cx) ** 2 + (rz - b.cz) ** 2 > maxD2) return 'far';
         if (m.material !== b.mat) return 'material';
         if (m.castShadow !== b.cs) return 'shadow';
         if (m.layers.mask !== b.lm) return 'layers';
