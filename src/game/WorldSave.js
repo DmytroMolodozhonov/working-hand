@@ -116,21 +116,50 @@ function tx(mode, fn) {
 /** All saved worlds, newest first: [{id, name, mode, seed, updated, players}] (without the heavy parts). */
 export async function listWorlds() {
     try {
-        const all = await tx('readonly', (st) => st.getAll());
+        let all = (await tx('readonly', (st) => st.getAll()).catch(() => [])) || [];
+        // Disk backup (/api/worlds): if IndexedDB was reset by Chrome, restore from disk; also back up IndexedDB worlds to disk
+        if (typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) {
+            try {
+                const r = await fetch('/api/worlds', { cache: 'no-store' });
+                if (r.ok) {
+                    const disk = await r.json();
+                    if (Array.isArray(disk)) {
+                        const byId = new Map(all.map((w) => [w.id, w]));
+                        for (const dw of disk) {
+                            const cur = byId.get(dw.id);
+                            if (!cur || (dw.updated || 0) > (cur.updated || 0)) {
+                                byId.set(dw.id, dw);
+                                tx('readwrite', (st) => st.put(dw)).catch(() => {});
+                            }
+                        }
+                        for (const w of all) if (!disk.some((d) => d.id === w.id)) fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) }).catch(() => {});
+                        all = [...byId.values()];
+                    }
+                }
+            } catch (e) { /* offline / unit test */ }
+        }
         return (all || []).map((w) => ({ id: w.id, name: w.name, mode: legacyMode(w.mode), seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, gen: Number.isFinite(w.gen) ? w.gen : null, hero: w.hero ? { spawn: w.hero.spawn, foe: w.hero.foe } : null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
             .sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || b.updated - a.updated); // (favourites first, then newest)
     } catch (e) { return []; }
 }
 
 export async function loadWorld(id) {
-    try { const w = await tx('readonly', (st) => st.get(id)); if (w) w.mode = legacyMode(w.mode); return w; } catch (e) { return null; }
+    let w = null;
+    try { w = await tx('readonly', (st) => st.get(id)); } catch (e) { /* */ }
+    if (!w && typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) {
+        try { const r = await fetch('/api/worlds?id=' + encodeURIComponent(id), { cache: 'no-store' }); if (r.ok) w = await r.json(); } catch (e) { /* */ }
+    }
+    if (w) w.mode = legacyMode(w.mode);
+    return w;
 }
 
 export async function deleteWorld(id) {
     try { await tx('readwrite', (st) => st.delete(id)); } catch (e) { /* ignore */ }
+    if (typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) fetch('/api/worlds?id=' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
 }
 
 export async function putWorld(w) {
+    if (typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) }).catch(() => {});
     await tx('readwrite', (st) => st.put(w));
 }
 
@@ -309,7 +338,12 @@ export class WorldKeeper {
         this.players = players || {}; // 'id:'+lasting id (or an old name) -> snapshot (guests and the host)
         this._t = 0;
         this._saving = false;
-        this._onHide = () => this.save();
+        // (pagehide: never start an async IndexedDB write while Chrome is closing/reloading — an interrupted LevelDB write
+        //  made Chrome recreate http_localhost_8000.indexeddb.leveldb empty at 14:27:07; sendBeacon writes to disk atomically)
+        this._onHide = () => {
+            if (!this.game.active || this.game.groundVortex?.busy) return;
+            try { navigator.sendBeacon?.('/api/worlds', new Blob([JSON.stringify(this.snapshot())], { type: 'application/json' })); } catch (e) { /* */ }
+        };
         if (typeof window !== 'undefined') window.addEventListener('pagehide', this._onHide);
     }
 

@@ -734,6 +734,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, {"logs": read_logs(), "launcher": bool(os.environ.get("ZNS_LAUNCHER"))})
         if path == "/api/alive":
             return self._alive()
+        if path == "/api/worlds":
+            return self._json(200, _worlds_get(parse_qs(parsed.query).get("id", [None])[0]))
         if path == "/api/maps":
             maps = {}
             if os.path.isdir(MAPS_DIR):
@@ -936,6 +938,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                     print("  [FPS] " + (short or line)[:300])
                 return self._json(200, {"status": "ok"})
 
+            if path == "/api/worlds":
+                w = self._read_json()
+                return self._json(200 if _worlds_put(w) else 400, {"status": "ok"})
             if path == "/api/maps":
                 map_data = self._read_json()
                 safe_name = safe_map_name(map_data.get("name"))
@@ -956,6 +961,10 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     # ---------- DELETE ----------
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/worlds":
+            wid = parse_qs(parsed.query).get("id", [None])[0]
+            _worlds_del(wid)
+            return self._json(200, {"status": "ok"})
         if parsed.path != "/api/maps":
             return self._json(404, {"status": "error", "message": "Not found"})
         try:
@@ -972,6 +981,80 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, {"status": "success", "message": f"Map '{safe_name}' deleted"})
         except Exception as e:  # noqa: BLE001
             return self._json(500, {"status": "error", "message": str(e)})
+
+
+def _worlds_dir():
+    d = os.path.join(_browser.home_dir(), "worlds")
+    if not os.path.isdir(d):
+        os.makedirs(d, exist_ok=True)
+        # Seed from profile-transfer.json if present so worlds survive IndexedDB resets
+        tf = os.path.join(_browser.home_dir(), "profile-transfer.json")
+        if os.path.isfile(tf):
+            try:
+                with open(tf, "r", encoding="utf-8") as f:
+                    for w in (json.load(f).get("worlds") or []):
+                        _worlds_put(w)
+            except Exception:
+                pass
+    return d
+
+
+def _safe_wid(wid):
+    s = "".join(c for c in str(wid or "") if c.isalnum() or c in "_-")
+    return s[:64] if s else None
+
+
+def _worlds_put(w):
+    if not isinstance(w, dict):
+        return False
+    wid = _safe_wid(w.get("id"))
+    if not wid:
+        return False
+    d = _worlds_dir()
+    p = os.path.join(d, wid + ".json")
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(w, f, ensure_ascii=False)
+    os.replace(tmp, p)
+    return True
+
+
+def _worlds_get(wid=None):
+    d = _worlds_dir()
+    if wid:
+        s = _safe_wid(wid)
+        p = os.path.join(d, (s or "") + ".json")
+        if s and os.path.isfile(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return None
+        return None
+    out = []
+    for fn in os.listdir(d):
+        if not fn.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(d, fn), "r", encoding="utf-8") as f:
+                w = json.load(f)
+                if isinstance(w, dict) and w.get("id"):
+                    out.append(w)
+        except Exception:
+            pass
+    return out
+
+
+def _worlds_del(wid):
+    s = _safe_wid(wid)
+    if not s:
+        return
+    p = os.path.join(_worlds_dir(), s + ".json")
+    try:
+        if os.path.isfile(p):
+            os.remove(p)
+    except OSError:
+        pass
 
 
 PROFILE_MAX = 400 * 1024 * 1024  # all the saved worlds of the old browser profile at once
