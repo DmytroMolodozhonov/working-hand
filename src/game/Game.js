@@ -1698,6 +1698,11 @@ export class Game {
             this._caveChests = this._caveChests || new Set();
             this._caveSys = false; // (a cave system round the hero: the cave map may be wanted — _updateCaveMap)
             let built = false;
+            // (a cave system round the hero: check every tick so the cave minimap never flickers/turns off when standing still)
+            const heroCaves = t.cavesNear(p.x, p.z, 90, true).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90, true) : [], t.densNear ? t.densNear(p.x, p.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(p.x, p.z, 90, true) : []);
+            for (const cv of heroCaves) {
+                if (cv.x0 != null ? ((cv.kind !== 'dungeon' && cv.kind !== 'ghostcastle') || cv.under) && p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
+            }
             // (the host builds caves near EVERY player, one player per tick, and only when that player moved > 12 m or a cave still waits)
             const allP = this.authority ? this._playerPositions() : [p];
             this._caveIdx = ((this._caveIdx || 0) + 1) % Math.max(1, allP.length);
@@ -1705,10 +1710,9 @@ export class Game {
             const lastP = (this._caveScanAt ||= new Map()).get(this._caveIdx);
             const moved = !lastP || Math.hypot(q.x - lastP.x, q.z - lastP.z) > 12 || this._cavePending;
             if (moved) this._caveScanAt.set(this._caveIdx, { x: q.x, z: q.z });
-            const caves = moved ? t.cavesNear(q.x, q.z, 90, true).concat(t.lairsNear ? t.lairsNear(q.x, q.z, 90, true) : [], t.densNear ? t.densNear(q.x, q.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(q.x, q.z, 90, true) : []) : [];
+            const caves = moved ? (q === p ? heroCaves : t.cavesNear(q.x, q.z, 90, true).concat(t.lairsNear ? t.lairsNear(q.x, q.z, 90, true) : [], t.densNear ? t.densNear(q.x, q.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(q.x, q.z, 90, true) : [])) : [];
             this._cavePending = false;
             for (const cv of caves) {
-                if (cv.x0 != null ? ((cv.kind !== 'dungeon' && cv.kind !== 'ghostcastle') || cv.under) && p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
                 const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
