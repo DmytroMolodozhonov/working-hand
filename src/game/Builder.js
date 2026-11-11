@@ -44,7 +44,7 @@ const BUILD_TIME = 14; // s at most per spell
 const ICE_LIFE = 24 * 60; // s: ice buildings melt within a game day
 const WOOD_PER_TREE = 20;
 /** The ground is never gathered; rock is rejected separately through resourceOf below. */
-const EARTH_BLOCKS = new Set(['DIRT', 'GRASS', 'SAND', 'SNOW', 'GRAVEL', 'FARMLAND', 'PATH', 'PLANET_GRASS', 'HELL_ASH'].map((k) => BLOCK[k]).filter((v) => v != null));
+const EARTH_BLOCKS = new Set(['DIRT', 'GRASS', 'SNOW', 'GRAVEL', 'FARMLAND', 'PATH', 'PLANET_GRASS', 'HELL_ASH'].map((k) => BLOCK[k]).filter((v) => v != null));
 const GATHER_RANGE = 20; // m: how far the hand may be from the tree / stone it gathers
 
 const _v1 = new THREE.Vector3();
@@ -120,7 +120,7 @@ export class Builder {
         if (!cell || cell.type === BLOCK.AIR || cell.type === BLOCK.BEDROCK || cell.type === BLOCK.WATER || cell.type === BLOCK.ICE_SHAPE) {
             return `🪄 Направьте руку на дерево или листву (не дальше ${GATHER_RANGE} м)`;
         }
-        // (the author 05.11: «Gather больше никогда не собирает землю» — the ground stays: dirt, grass, sand, snow, gravel, mud)
+        // (the author 05.11: «Gather больше никогда не собирает землю» — the ground stays: dirt, grass, snow, gravel, mud; sand is an exception)
         if (EARTH_BLOCKS.has(cell.type)) return '🌱 «Gather» не берёт землю — направьте руку на дерево или листву';
         if (resourceOf(cell.type) === BLOCK.STONE) return '🪨 «Gather» не берёт камень — направьте руку на дерево или листву';
         const data = this.data;

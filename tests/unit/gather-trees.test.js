@@ -65,7 +65,7 @@ test('Gather with no tree near the line: a clear hint (no crash)', () => {
 });
 
 test('Gather leaves stone and earth in place, with no resources credited', () => {
-    for (const type of [BLOCK.STONE, BLOCK.DEEPSTONE, BLOCK.PLANET_ROCK, BLOCK.PLANET_DARK, BLOCK.DIRT, BLOCK.GRASS, BLOCK.SAND, BLOCK.GRAVEL]) {
+    for (const type of [BLOCK.STONE, BLOCK.DEEPSTONE, BLOCK.PLANET_ROCK, BLOCK.PLANET_DARK, BLOCK.DIRT, BLOCK.GRASS, BLOCK.GRAVEL]) {
         const { g, data, added } = setup();
         data.set(8, G + 3, 0, type);
         aim(g.builder, [0, G + 1.5, 0], [1, 0, 0]);
@@ -76,4 +76,17 @@ test('Gather leaves stone and earth in place, with no resources credited', () =>
         assert.equal(data.get(8, G + 3, 0), type, 'no hole in the ground');
         assert.deepEqual(added, [], 'no resource credited');
     }
+});
+
+test('Gather on sand gathers sand as an allowed resource (sand is not earth)', () => {
+    const { g, data, added } = setup();
+    data.set(8, G + 3, 0, BLOCK.SAND);
+    aim(g.builder, [0, G + 1.5, 0], [1, 0, 0]);
+    g.builder._hitCell = () => ({ x: 8, L: G + 3, z: 0, type: BLOCK.SAND, point: new THREE.Vector3(8, G + 1.5, 0) });
+    g.builder._treeOnRay = () => null;
+    g.livingTrees._treeNearRay = () => null;
+    const res = g.builder.gather();
+    assert.equal(res, null, 'gathered successfully');
+    assert.deepEqual(added, [[BLOCK.SAND, 1]], 'sand resource credited');
+    assert.equal(data.get(8, G + 3, 0), BLOCK.AIR, 'sand block removed');
 });
