@@ -74,3 +74,22 @@ test('cave light (as in Minecraft): daylight comes in by the mouth and fades a s
     assert.ok(d.skyAt(deep.x, deep.F + 2, deep.z) < 0.06, 'the deepest hall: dark');
     assert.equal(d.skyAt(0, 2, 0), 1, 'the pedestals in the open: full daylight');
 });
+
+test('cave chests stand flush on the walkable cave floor (not floating above it)', async () => {
+    const d = new TerrainData();
+    d.generate({ seed: 12345, mountains: true, seas: true, test: true, deepCaves: true });
+    const caves = d.cavesNear(0, 0, 500);
+    let tested = 0;
+    for (const cv of caves) {
+        if (!cv.chests?.length) continue;
+        for (const sp0 of cv.chests) {
+            const sp = cv.segs && d.chestSpot ? d.chestSpot(sp0) : sp0;
+            if (!sp) continue;
+            const cy = d.floorAt ? d.floorAt(sp.x, sp.z, sp.y) : (d.floorBelow ? d.floorBelow(Math.round(sp.x), Math.round(sp.z), Math.floor(sp.y + 1.5)) - 0.5 : sp.y - 0.5);
+            const actualFloor = d.floorAt(sp.x, sp.z, cy);
+            assert.ok(Math.abs(cy - actualFloor) < 0.01, 'chest at (' + sp.x + ', ' + cy + ', ' + sp.z + ') rests flush on floor (' + actualFloor + ')');
+            tested++;
+        }
+    }
+    assert.ok(tested > 0, 'tested ' + tested + ' cave chests');
+});

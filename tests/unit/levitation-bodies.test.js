@@ -205,3 +205,45 @@ test('steadyDir: a one-moment jump of the hand\'s line (camera glitch) is not fo
     for (let t = 0; t < LEVITATE.GLITCH_T + 0.1; t += dt) got = steadyDir(st, d(a + 1.5), dt);
     assert.ok(got.angleTo(d(a + 1.5)) < 1e-6);
 });
+
+test('Leviosa on a dead zombie: picks it up, lifts it into the air, and drops as a corpse ragdoll', async () => {
+    const { Zombie } = await import('../../src/entities/Zombie.js');
+    const { CreatureImpact } = await import('../../src/game/CreatureImpact.js');
+    const scene = new THREE.Scene();
+    const ctx = { fx: { blood() {}, flyingPart() {} }, sound: { playDeath() {} } };
+    const z = new Zombie(scene, new THREE.Vector3(0.6, 0.5, -5), 101, ctx);
+    z.die();
+    for (let i = 0; i < 60; i++) z.update(1 / 60, null, null, { surfaceY: () => 0, groundY: () => 0 });
+    assert.equal(z.isDead, true);
+
+    const w = world();
+    w.g.animals.targets = () => [];
+    w.g.zombies.push(z);
+    w.g.zombieById.set(101, z);
+    w.g.creatureImpact = new CreatureImpact(w.g);
+
+    // Aim at dead zombie
+    w.aim.set(0, -0.1, -1);
+    const res = w.lev.cast();
+    assert.equal(res, null, 'picked up dead zombie');
+    assert.equal(w.lev.state?.kind, 'creature');
+    assert.equal(w.lev.state?.ck, 'z');
+    assert.equal(z.lev?.body, true, 'held as a dead body');
+
+    // Lift hand up
+    w.aim.set(0, 0.8, -1);
+    for (let i = 0; i < 60; i++) {
+        w.lev.update(1 / 60);
+        w.g.creatureImpact.update(1 / 60);
+    }
+    assert.ok(z.group.position.y > 1.2, 'zombie rose off ground: ' + z.group.position.y);
+
+    // Release
+    w.lev.release(false);
+    assert.equal(z.lev, null, 'let go');
+    for (let i = 0; i < 60; i++) {
+        w.lev.update(1 / 60);
+        w.g.creatureImpact.update(1 / 60);
+    }
+    assert.ok(z.group.position.y <= 1.0, 'corpse landed back on ground: ' + z.group.position.y);
+});

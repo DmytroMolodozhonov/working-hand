@@ -1721,7 +1721,8 @@ export class Game {
                     const sp = cv.segs && t.chestSpot ? t.chestSpot(sp0) : sp0; // (never stuck in the rock)
                     if (!sp) return;
                     const id = k ? cv.id + ':' + k : cv.id;
-                    const chest = new Chest(this.scene, new THREE.Vector3(sp.x, sp.y, sp.z), 'loot', sp.a, id, { style: sp0.look || (sp0.boss ? 'rich' : 'plain') });
+                    const cy = t.floorAt ? t.floorAt(sp.x, sp.z, sp.y) : (t.floorBelow ? t.floorBelow(Math.round(sp.x), Math.round(sp.z), Math.floor(sp.y + 1.5)) - 0.5 : sp.y - 0.5);
+                    const chest = new Chest(this.scene, new THREE.Vector3(sp.x, cy, sp.z), 'loot', sp.a, id, { style: sp0.look || (sp0.boss ? 'rich' : 'plain') });
                     if (sp0.boss) chest.room = sp0.boss; // (a dragon's chest: the hoard's treasure — Items.lootChest)
                     if (cv.kind === 'ghostcastle') chest.localOnly = true; // (the Castle of Ghosts exists only in a seer's land: each seer opens his own chest, for himself — GhostCastleLife.js)
                     if (sp0.flavor) { chest.dungeonFlavor = sp0.flavor; chest.dungeonSize = cv.size; } // (a ruin's chest: magical or plain things — ItemTypes.rollDungeonLoot)
@@ -1735,7 +1736,7 @@ export class Game {
                     if (this.authority && this.config.mode === 'freeworld' && !cv.lair && (cv.r + k) % 2 === 0 && t.skyAt &&
                         lightLevel(t.skyAt(sp.x, sp.y, sp.z), this.zombieSpawn?.night() ?? 0) <= ZSPAWN.DARK &&
                         !this.zombies.some((o) => !o.isDead && Math.hypot(o.group.position.x - sp.x, o.group.position.z - sp.z) < ZSPAWN.APART)) {
-                        const z = this._createZombie(new THREE.Vector3(sp.x + 2.5, sp.y - 0.5, sp.z));
+                        const z = this._createZombie(new THREE.Vector3(sp.x + 2.5, cy, sp.z));
                         z.caveGuard = cv.id; // (by its chest: put away with it)
                     }
                 });

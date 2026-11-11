@@ -801,7 +801,8 @@ export class CreatureImpact {
                 if (gone) { this.deadRags.delete(key); continue; }
                 if (doll.asleep || performance.now() < this._budget) doll.step(guardWorld(g), dt); // (asleep: only a cheap look under it — Ragdoll.step)
                 let dy = 0;
-                if (doll.asleep) { if (r.feet0 == null) r.feet0 = rig.feet(c); dy = Math.min(0, rig.feet(c) - r.feet0); } // (the corpse sinking at the end: the drawn body goes down with it)
+                if (doll.asleep) { if (r.feet0 == null) r.feet0 = rig.feet(c); dy = Math.min(0, rig.feet(c) - r.feet0); }
+                doll.at(12, _pt); rig.place(c, _pt[0], _pt[1] - 1.9, _pt[2]);
                 this._ragDraw(c, doll, rig, dy);
                 continue;
             }

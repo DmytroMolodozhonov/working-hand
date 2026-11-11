@@ -184,7 +184,7 @@ export class Levitation {
         // Дьяволос: «Левиоса» не поднимет — слишком велик и тяжёл (DEVIL_VS.push); попытка его злит
         for (const o of g.diabolos?.targets() || []) out.push({ kind: 'diabolos', obj: o, pos: g.diabolos._centre(new THREE.Vector3()), r: 25 });
         // living bodies (not wizards: a charge flies at them — see Game)
-        for (const z of g.zombies || []) if (!z.isDying && !z.isFrozen && !z.lev && (!z.isDead || (!z.removable && z.group.visible))) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 }); // (a zombie's body too)
+        for (const z of g.zombies || []) if (!z.isFrozen && !z.lev && (!z.isDead || (!z.removable && z.group?.visible !== false))) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: z.isDead ? 1.4 : 0.9 }); // (a zombie's body too)
         // the bodies of the dead (players, castle people — wizards too, knights…; Death.js): lifted like a thing
         for (const b of g.death?.bodies.values() || []) if (!b.lev && (b.model || b.bones)) out.push({ kind: 'corpse', obj: b, pos: new THREE.Vector3(b.x, b.y + 0.5, b.z), r: 1.2 });
         for (const a of g.animals?.targets() || []) if (!a.rider && !a.lev && g.animals.riding !== a) out.push({ kind: 'creature', ck: 'a', obj: a, pos: this._centreOf('a', a), r: g.duel?._animalBody(a).r || 1 });
@@ -618,10 +618,10 @@ export class Levitation {
 
     _creature(ck, id) {
         const g = this.game;
-        const c = ck === 'z' ? g.zombieById?.get(id) : ck === 'a' ? g.animals?.byId.get(id) : ck === 'v' ? g.castleLife?.byId.get(id) : null;
+        const c = ck === 'z' ? (g.zombieById?.get(id) || g.zombieById?.get(+id)) : ck === 'a' ? g.animals?.byId.get(id) : ck === 'v' ? g.castleLife?.byId.get(id) : null;
         if (!c) return null;
         // (a dead animal's body is a thing: it can be lifted — but one that died while held falls)
-        const body = (ck === 'a' && c.dead) || (ck === 'z' && c.isDead && !c.isDying && !c.removable);
+        const body = (ck === 'a' && c.dead) || (ck === 'z' && c.isDead && !c.removable);
         if ((c.dead || c.isDead || c.isDying) && !(body && (!c.lev || c.lev.body))) return null;
         return c;
     }
@@ -674,6 +674,7 @@ export class Levitation {
         //  flails in the air, its own animation — the author 05.11: «если существо не мёртвое — не как тряпичная кукла, для этого другая анимация»)
         const limp = c.lev.body || c.dead || c.isDead || !!g.creatureImpact?.isDown?.(c);
         if ((ck === 'v' || ck === 'z') && limp) {
+            if (ck === 'z' && c.group) c.group.rotation.x = 0; // (reset death anim tilt so the ragdoll hangs naturally by its chest)
             // (a humanoid hangs as a rag doll — CreatureImpact.levDoll; `dollOff`: its chest over the body's middle that the hold moves,
             //  measured now — the chest is then held exactly there, never chasing itself)
             const doll = g.creatureImpact?.levDoll?.(ck, c);
@@ -813,7 +814,7 @@ export class Levitation {
             vel.x *= 0.98; vel.z *= 0.98;
             p.addScaledVector(vel, dt);
             const rest = floorUnder(g.collision, p.x, p.z, p.y) + 0.8;
-            if (p.y <= rest) { p.y = rest; this.bodyDrops.splice(i, 1); }
+            if (p.y <= rest) { p.y = rest; c.group.rotation.x = -Math.PI / 2; this.bodyDrops.splice(i, 1); }
         }
     }
 

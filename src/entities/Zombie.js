@@ -284,6 +284,7 @@ export class Zombie {
         }
 
         if (this.isDead) {
+            if (this.lev) return; // (held up by «Вингардиум Левиоса»: Levitation carries it)
             // Corpse: lie for a while, then sink into the ground and get removed.
             if (!this.group.visible) { this.removable = this.corpseTimer > 6; this.corpseTimer += dt; return; }
             this.corpseTimer += dt;
