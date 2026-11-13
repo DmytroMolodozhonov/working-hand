@@ -1,3 +1,4 @@
+import { pentagramTablet } from './PentagramTablet.js';
 /**
  * ItemTypes.js — what can be found in chests (and what animals drop), their
  * properties and their 3D models. Pure data + THREE models, no game logic.
@@ -952,7 +953,7 @@ function describeItemBase(it) {
         case 'shield':
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
-            if (it.stat === 'pentagram') return { title: `📜 ${figureOf(it.pent)?.ru || 'Пентаграмма'}`, color: 0xc495ff, theme: 'pentagram', lines: [...pentagramTextLines(it.pent), 'Сожгите свиток, если хотите запомнить это заклинание'] };
+            if (it.stat === 'pentagram') return { title: `◉ ${figureOf(it.pent)?.ru || 'Пентаграмма'}`, color: 0xc495ff, theme: 'pentagram', lines: [...pentagramTextLines(it.pent), 'Сожгите табличку, если хотите запомнить это заклинание'] };
             if (it.stat === 'schedule') return { title: '📜 Расписание уроков — Акселдорф', color: 0xd9b45a, lines: scheduleLines(SCHEDULE.day, (k) => SPELL_LABEL[k] || k) }; // (the school's schedule: SchoolYear.js)
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Позволяет летать с помощью заклинания «Флайн»', 'Сожгите свиток, если хотите запомнить это заклинание'] };
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [kindLine(it), ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Нужны 3 шерсти и 10 песка (достаточно держать в ячейках) и 3 дерева неподалёку; палочку на землю и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы в ячейках (или рядом с домом), палочку на дом и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : []), 'Сожгите свиток, если хотите запомнить это заклинание'] };
@@ -1087,16 +1088,15 @@ function dragonEggModel(kind) {
 }
 
 function scrollModel(it) {
+    if (it?.stat === 'pentagram') return pentagramTablet(it);
     const g = new THREE.Group();
-    const pg = it?.stat === 'pentagram' ? figureOf(it.pent) || figureOf('devil') : null;
-    const paper = mat(pg ? pg.paper : 0xf3e2b3); // (a drawing-scroll: dark paper, a blood-red seal — not like the spells' scrolls)
+    const paper = mat(0xf3e2b3);
     const r = cyl(0.06, 0.06, 0.36, paper);
     r.rotation.z = Math.PI / 2;
     g.add(r);
-    const ribbon = cyl(0.064, 0.064, 0.05, mat(pg ? pg.seal : it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
+    const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
-    if (pg?.def?.dark) { const seal = cyl(0.028, 0.028, 0.018, mat(0x1a0608), 0, 0, 0.066, 10); seal.rotation.x = Math.PI / 2; g.add(seal); }
     for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }
     return g;
 }

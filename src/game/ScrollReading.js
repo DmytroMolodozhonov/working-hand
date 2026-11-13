@@ -56,7 +56,7 @@ function faceOf(item) {
         spec = {
             school, title: P.ru, compactPicture: true,
             lines: pentagramTextLines(P.id).map(text => [{ text, bold: false }]),
-            note: 'Сожгите свиток, если хотите запомнить это заклинание',
+            note: 'Сожгите табличку, если хотите запомнить это заклинание',
             custom: (x, { cx, cy, R }) => {
                 const g = x.createRadialGradient(cx, cy, R * 0.2, cx, cy, R);
                 g.addColorStop(0, 'rgba(255,248,226,0.95)'); g.addColorStop(1, 'rgba(228,205,150,0.85)');
@@ -107,6 +107,12 @@ function buildParchment(item) {
     const tex = drawParchment(item);
     const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }); // Legible ink even in shade; no additive glow washing it out.
     const parch = new THREE.Mesh(new THREE.PlaneGeometry(1, PARCH_H), mat);
+    if (item?.stat === 'pentagram') {
+        // The existing two-hand inspection opens its description; the rigid tablet stays in the fist.
+        const group = new THREE.Group(), rollA = new THREE.Group(), rollB = new THREE.Group();
+        group.add(parch);
+        return { group, parch, rollA, rollB, tex, mat, tablet: true };
+    }
     const rodMat = new THREE.MeshLambertMaterial({ color: 0xf3e2b3 });
     const knob = new THREE.MeshLambertMaterial({ color: 0x5a3a1e });
     const roller = () => {
@@ -122,6 +128,11 @@ function buildParchment(item) {
 }
 
 function unrollParts(R, w) {
+    if (R.tablet) {
+        R.parch.scale.set(w, w * 0.75 / PARCH_H, 1);
+        R.tex.repeat.x = 1; R.tex.offset.x = 0;
+        return;
+    }
     const seen = Math.max(0.05, Math.min(1, w / MAX_W));
     R.parch.scale.x = w;
     R.tex.repeat.x = seen;
@@ -137,7 +148,7 @@ function disposeParchment(R) {
     R.group.parent?.remove(R.group);
     R.group.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
     R.mat.dispose(); R.tex.dispose();
-    R.rollA.children[0].material.dispose(); R.rollA.children[1].material.dispose();
+    if (!R.tablet) { R.rollA.children[0].material.dispose(); R.rollA.children[1].material.dispose(); }
 }
 
 export class ScrollReading {
@@ -234,14 +245,14 @@ export class ScrollReading {
 
     _begin(s, other) {
         const g = this.game;
-        const { group, parch, rollA, rollB, tex, mat } = buildParchment(s.item);
+        const { group, parch, rollA, rollB, tex, mat, tablet = false } = buildParchment(s.item);
         g.scene.add(group);
-        s.model.visible = false; // (it is the open one now)
-        this.r = { side: s.side, other, item: s.item, model: s.model, open: 0, closeT: 0, w: 0.12, sSign: 1, group, parch, rollA, rollB, tex, mat, c: null };
+        s.model.visible = tablet; // (it is the open one now)
+        this.r = { side: s.side, other, item: s.item, model: s.model, open: 0, closeT: 0, w: 0.12, sSign: 1, group, parch, rollA, rollB, tex, mat, tablet, c: null };
         this.readingSide = s.side;
         const hand = g.character.getActiveHands?.()[other];
         if (hand?.setGrip) hand.setGrip(0.5);
-        g.hud.setVoice?.('📜 Разведите руки — свиток раскроется; разожмите вторую руку — свернётся', true);
+        g.hud.setVoice?.(tablet ? '◉ Разведите руки, чтобы прочитать описание таблички; разожмите вторую руку — описание закроется' : '📜 Разведите руки — свиток раскроется; разожмите вторую руку — свернётся', true);
     }
 
     /** The parchment between the hands, its face to the reader; the camera comes to it. */
@@ -375,7 +386,7 @@ export class ScrollReading {
             rr = u.remoteScroll = buildParchment(item);
             rr.w = d.w; rr.pf = { left: {}, right: {} };
             this.game.scene.add(rr.group);
-            model.visible = false;
+            model.visible = !!rr.tablet;
         }
         const w0 = this.game.weapons;
         const hs = _v1.copy(w0.palmFrame(side, rr.pf[side], ch).G);
@@ -400,7 +411,7 @@ export class ScrollReading {
         rr.group.quaternion.setFromRotationMatrix(_m4);
         rr.group.position.copy(centre);
         unrollParts(rr, rr.w);
-        return true;
+        return !rr.tablet; // The rigid tablet still follows the ordinary hand grip.
     }
 
     releaseRemote(model) {

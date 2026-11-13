@@ -37,3 +37,9 @@ test('герой в «Выживании» видит только заклин�
     assert.ok(only.filter((e) => e.kind === 'spell').length < E.filter((e) => e.kind === 'spell').length);
     assert.ok(only.some((e) => e.kind === 'potion'), 'зелья и лор — всегда');
 });
+
+test('unknown pentagrams have no search entries, even their names are hidden',()=>{
+ assert.equal(codexEntries({known:new Set()}).filter(e=>e.kind==='pent').length,0);
+ const entries=codexEntries({known:new Set(['life'])}).filter(e=>e.kind==='pent');
+ assert.equal(entries.length,1);assert.match(entries[0].title,/жизни/);
+});

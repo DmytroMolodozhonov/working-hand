@@ -4,3 +4,5 @@
 - Creative destination IDs preserve the existing city ID and resolve small wizard sites through the real hamlet index, so saved settings and terrain/NPC generation stay consistent.
 
 - Под «свитком» автор всегда понимает оба вида: свиток заклинания и свиток пентаграммы. Общие правила частоты находок, ношения и добычи относятся к обоим; при выборе вида они равноправны, если автор явно не задал исключение (09.11).
+
+- С 13.11 предметы знания пентаграмм внешне круглые таблички; старое общее слово «свиток» и равноправные правила добычи продолжают включать их. Внутренний тип scroll/pentagram не менять.

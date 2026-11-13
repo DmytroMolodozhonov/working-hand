@@ -47,6 +47,7 @@ import threading
 import webbrowser
 
 import log_upload
+from world_storage import WorldStorage, safe_id
 from urllib.parse import parse_qs, urlparse
 
 # (numpy's maths library starts a thread on every core for any sum of some size, and they spin on
@@ -87,6 +88,7 @@ LOG_TITLES = {
     ALL_LOG: "Общие логи (все журналы вместе)",
     WALK_LOG: "Ходьба (запись F8)",
 }
+WORLD_MAX = 64 * 1024 * 1024  # a long-lived world can outgrow a map
 MAX_BODY = 5 * 1024 * 1024  # 5 MB is plenty for a map
 
 # Windows often maps .js to text/plain in the registry, which breaks ES modules.
@@ -520,9 +522,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _read_json(self):
+    def _read_json(self, max_bytes=MAX_BODY):
         length = int(self.headers.get("Content-Length") or 0)
-        if length <= 0 or length > MAX_BODY:
+        if length <= 0 or length > max_bytes:
             raise ValueError("Bad request body size")
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
@@ -939,8 +941,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/worlds":
-                w = self._read_json()
-                return self._json(200 if _worlds_put(w) else 400, {"status": "ok"})
+                w = self._read_json(WORLD_MAX)
+                ok = _worlds_put(w)
+                return self._json(200 if ok else 400, {"status": "ok" if ok else "error"})
             if path == "/api/maps":
                 map_data = self._read_json()
                 safe_name = safe_map_name(map_data.get("name"))
@@ -1000,75 +1003,19 @@ def _worlds_dir():
 
 
 def _safe_wid(wid):
-    s = "".join(c for c in str(wid or "") if c.isalnum() or c in "_-")
-    return s[:64] if s else None
-
-
-_worlds_write_lock = threading.Lock()
+    return safe_id(wid)
 
 
 def _worlds_put(w):
-    if not isinstance(w, dict):
-        return False
-    wid = _safe_wid(w.get("id"))
-    if not wid:
-        return False
-    d = _worlds_dir()
-    p = os.path.join(d, wid + ".json")
-    # A delayed autosave must not overwrite the newer death checkpoint beacon.
-    # Serialise timestamp comparison and replacement, including the temp file.
-    with _worlds_write_lock:
-        try:
-            with open(p, encoding="utf-8") as f:
-                previous = json.load(f)
-            before, after = previous.get("updated"), w.get("updated")
-            if isinstance(before, (int, float)) and isinstance(after, (int, float)) and before > after:
-                return True
-        except (OSError, ValueError, AttributeError):
-            pass
-        tmp = p + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(w, f, ensure_ascii=False)
-        os.replace(tmp, p)
-    return True
+    return WorldStorage(_worlds_dir()).put(w)
 
 
 def _worlds_get(wid=None):
-    d = _worlds_dir()
-    if wid:
-        s = _safe_wid(wid)
-        p = os.path.join(d, (s or "") + ".json")
-        if s and os.path.isfile(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                return None
-        return None
-    out = []
-    for fn in os.listdir(d):
-        if not fn.endswith(".json"):
-            continue
-        try:
-            with open(os.path.join(d, fn), "r", encoding="utf-8") as f:
-                w = json.load(f)
-                if isinstance(w, dict) and w.get("id"):
-                    out.append(w)
-        except Exception:
-            pass
-    return out
+    return WorldStorage(_worlds_dir()).get(wid)
 
 
 def _worlds_del(wid):
-    s = _safe_wid(wid)
-    if not s:
-        return
-    p = os.path.join(_worlds_dir(), s + ".json")
-    try:
-        if os.path.isfile(p):
-            os.remove(p)
-    except OSError:
-        pass
+    WorldStorage(_worlds_dir()).delete(wid)
 
 
 PROFILE_MAX = 400 * 1024 * 1024  # all the saved worlds of the old browser profile at once

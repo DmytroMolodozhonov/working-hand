@@ -29,7 +29,7 @@
 | Космос и планеты | `src/game/Space.js`, `PlanetMagic.js`, `src/world/Planets.js` | `docs/rules/spells-creatures.md` | `tests/unit/space*.test.js` |
 | Прочность построек | `src/world/Structure.js`, `Collapse.js` | `CLAUDE.md` «Прочность зданий» | `tools/structbench.mjs --check` |
 | Сеть и мультиплеер | `src/net/Network.js`, `NetSync.js`, `RemoteAvatar.js`, `VoiceChat.js` | `docs/rules/voice-chat.md`, `docs/ideas-future.md` | `tests/e2e/voicechat.test.mjs` |
-| Сохранение | `src/game/WorldSave.js` (`playerSnapshot`/`applyPlayerSnapshot`) | — | `tests/unit/save*.test.js` |
+| Сохранение | `src/game/WorldSave.js` (`playerSnapshot`/`applyPlayerSnapshot`), `world_storage.py` | `docs/rules/misc-rules.md` | `tests/unit/save*.test.js` |
 | Загрузка и кеш | `src/core/BootCache.js`, `BootTimer.js`, `server.py` | `docs/rules/boot-cache.md` | `tools/entrybench.mjs` |
 | Модель героя | `src/entities/Character.js`, `src/game/CreativeMirror.js` | `CLAUDE.md` («Модель героя и зеркало») | — |
 | Звук | `src/audio/SoundManager.js`, `SpellMusic.js` | `CLAUDE.md` «Производительность» | `tests/unit/spell-sounds.test.js` |
@@ -864,3 +864,6 @@
 - `TimeTurn.js` — «Axis»: the planet turns, day ↔ night over ~10 s (Earth: Game.dayStart; planets: def.spinShift in Space.localSun); tests/unit/time-turn.test.js
 
 - `CavePlace.js` — pure cave-depth check against the original terrain surface; shared by cave-map detection and Stand Up after the ceiling is mined open.
+
+- `src/game/PentagramTablet.js` — общие модели круглых табличек пентаграмм, два атласа 512² с настоящими рисунками.
+- `world_storage.py` — атомарные файлы миров, ограниченная история, восстановление повреждённой записи и сохраняющее данные удаление.

@@ -322,3 +322,14 @@ button:not(:disabled), a[href], summary, label, select, [role="button"], [role="
 .item-card[data-pent], .boss-card { cursor: url("assets/cursors/wand-hover.svg") 7 7, pointer !important; }
 input[type="search"], input[type="text"], input[type="number"], input[type="password"], textarea { cursor: text !important; }
 button:disabled { cursor: url("assets/cursors/wand.svg") 6 6, default !important; }
+
+/* A pentagram picture is a square sign, not a full-width text row. */
+:is(#main-menu, #pause-menu) .items-grid .pent-card { grid-template-columns: 112px minmax(0, 1fr); }
+:is(#main-menu, #pause-menu) .items-grid .pent-card > .pent-pic {
+    grid-column: 1; grid-row: 1 / span 6;
+    width: 112px !important; height: 112px !important; aspect-ratio: 1;
+    flex: none; align-self: start;
+}
+/* Keep the scrolled contents out of the changing SVG path/mask compositing layer. */
+#pause-menu .pause-box.ar-shaped { clip-path: none !important; border-radius: var(--ar-shape-win) !important; background: var(--ar-nebula) !important; }
+#pause-menu .pause-pane { scrollbar-gutter: stable; }

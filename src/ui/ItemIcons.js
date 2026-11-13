@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { readyBootCache } from '../core/BootCache.js';
 
 /** The properties a thing's model is drawn by (all whole numbers, flags or names). */
-const LOOK = ['model', 'color', 'plain', 'dragon', 'type', 'magic', 'spell', 'stat', 'piece', 'named', 'archmage', 'of', 'rec', 'ward', 'swift', 'cooked'];
+const LOOK = ['model', 'color', 'plain', 'dragon', 'type', 'magic', 'spell', 'pent', 'stat', 'piece', 'named', 'archmage', 'of', 'rec', 'ward', 'swift', 'cooked'];
 
 /** At most this many pictures are kept (a look not seen for long is made again if it comes back). */
 export const ICON_CACHE_MAX = 160;
@@ -279,7 +279,8 @@ export class ItemIcons {
         const s = box.getSize(new THREE.Vector3());
         // a long thing (a wand, a sword, a scroll, a staff) lies aslant; the rest — a little turned, seen from above
         const long = Math.max(s.x, s.y, s.z), across = Math.max(1e-3, Math.min(s.x, s.y, s.z));
-        if (long / across > 2.6) {
+        if (m.userData.pentagram) pivot.rotation.set(0.08, -0.1, 0);
+        else if (long / across > 2.6) {
             if (s.y >= s.x && s.y >= s.z) pivot.rotation.set(0.2, 0.5, -0.78);
             else if (s.x >= s.z) pivot.rotation.set(0.35, 0.3, 0.6);
             else pivot.rotation.set(0.35, Math.PI / 2 + 0.3, 0.6);

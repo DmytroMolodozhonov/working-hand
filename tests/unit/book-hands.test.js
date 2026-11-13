@@ -285,3 +285,30 @@ test('a short swipe with a wand in the other hand turns the page', () => {
     t.H.left.tip = null; t.run(2);
     assert.equal(s.spread, 1);
 });
+
+test('pentagram inspection leaves the tablet round and visible, closes with the same hand gesture',async()=>{
+ const {makeItemModel}=await import('../../src/game/ItemTypes.js');
+ const item={kind:'scroll',stat:'pentagram',pent:'life'},model=makeItemModel(item);
+ model.position.set(.3,1.3,-.6);model.scale.setScalar(2);model.updateMatrixWorld(true);
+ const size=()=>new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+ const before=size(),g=fakeGame('scroll',model,item),S=new ScrollReading(g);
+ const H={right:{G:model.position.clone(),curl:.9,up:true},left:{G:V(-2,1.3,-.6),curl:.1,up:true}};
+ S.input=s=>H[s];const run=sec=>{for(let i=0;i<sec/DT;i++)S.update(DT);};
+ run(.1);H.left.G.copy(model.localToWorld(V(-.21,0,0)));run(.1);H.left.curl=.9;run(.4);
+ assert.ok(S.r?.tablet);assert.equal(model.visible,true);assert.ok(size().distanceTo(before)<1e-6);
+ H.left.G.copy(H.right.G).add(V(-1.5,0,0));run(.6);
+ assert.equal(S.r.group.children.length,1,'description has no scroll rollers');
+ assert.ok(Math.abs(S.r.parch.scale.x/(S.r.parch.scale.y*.95)-4/3)<1e-6);
+ H.left.curl=.05;run(1.2);assert.equal(S.r,null);assert.equal(model.visible,true);
+});
+
+test('remote tablet inspection keeps normal hand placement active and cleans up its description',async()=>{
+ const {makeItemModel}=await import('../../src/game/ItemTypes.js');
+ const item={kind:'scroll',stat:'pentagram',pent:'devil'},model=makeItemModel(item),g=fakeGame('scroll',model,item);
+ g.weapons.palmFrame=side=>({G:V(side==='right'?.6:-.6,1.3,-.7)});
+ const reader=new ScrollReading(g),scale=model.scale.clone();
+ assert.equal(reader.placeRemote(g.character,model,item,'right',[1,120]),false,'ordinary item code must still position the rigid tablet');
+ assert.equal(model.visible,true);assert.ok(model.scale.equals(scale));
+ const description=model.userData.remoteScroll.group;assert.equal(description.parent,g.scene);
+ reader.releaseRemote(model);assert.equal(description.parent,null);assert.equal(model.visible,true);
+});

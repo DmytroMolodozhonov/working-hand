@@ -98,8 +98,11 @@ function db() {
         if (typeof indexedDB === 'undefined') { reject(new Error('no IndexedDB')); return; }
         const req = indexedDB.open(DB_NAME, 1);
         req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'id' });
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        let expired = false;
+        const timer = setTimeout(() => { expired = true; reject(new Error('World database open timed out')); }, 10000);
+        req.onsuccess = () => { clearTimeout(timer); if (expired) req.result.close(); else resolve(req.result); };
+        req.onerror = () => { clearTimeout(timer); reject(req.error); };
+        req.onblocked = () => { expired = true; clearTimeout(timer); reject(new Error('World database is blocked by another window')); };
     });
     _db.catch(() => { _db = null; });
     return _db;
@@ -110,8 +113,9 @@ function tx(mode, fn) {
         const t = d.transaction(STORE, mode);
         const st = t.objectStore(STORE);
         const req = fn(st);
-        t.oncomplete = () => resolve(req?.result);
-        t.onerror = () => reject(t.error);
+        const timer = setTimeout(() => { try { t.abort(); } catch {} reject(new Error('World transaction timed out')); }, 10000);
+        t.oncomplete = () => { clearTimeout(timer); resolve(req?.result); };
+        t.onerror = t.onabort = () => { clearTimeout(timer); reject(t.error || new Error('World transaction aborted')); };
     }));
 }
 
@@ -177,8 +181,15 @@ export async function deleteWorld(id) {
 }
 
 export async function putWorld(w) {
-    if (typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__) fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) }).catch(() => {});
-    await tx('readwrite', (st) => st.put(w));
+    const diskEnabled = typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__;
+    const diskJob = diskEnabled ? (async () => {
+        const r = await fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w), signal: AbortSignal.timeout(15000) });
+        if (!r.ok) throw new Error(`World backup HTTP ${r.status}`);
+    })() : Promise.resolve();
+    const [browser, disk] = await Promise.allSettled([tx('readwrite', (st) => st.put(w)), diskJob]);
+    const state = { browser: browser.status === 'fulfilled', disk: diskEnabled ? disk.status === 'fulfilled' : null };
+    if (!state.browser && !state.disk) throw new AggregateError([browser.reason, disk.reason].filter(Boolean), 'Мир не удалось сохранить ни в браузере, ни на диске');
+    return state;
 }
 
 export const NAME_MAX = 40;
@@ -497,7 +508,18 @@ export class WorldKeeper {
         this._saveJob = (async () => {
             do {
                 this._saveAgain = false;
-                try { await putWorld(this.snapshot()); this.lastSaved = Date.now(); } catch(e) { console.warn('[WorldSave] not saved',e); }
+                try {
+                    const saved = await putWorld(this.snapshot());
+                    this.lastSaved = Date.now();
+                    const warning = saved.disk === false ? '⚠ Мир сохранён в браузере, но резервная копия на диске не записалась. Проверьте свободное место.' : !saved.browser ? '⚠ Мир сохранён на диске, но хранилище браузера недоступно.' : '';
+                    if (warning && warning !== this._saveWarning) { console.warn('[WorldSave]', warning); this.game.hud?.toast?.(warning, 7000); }
+                    if (!warning && this._saveWarning) this.game.hud?.toast?.('💾 Сохранение мира снова работает.', 3500);
+                    this._saveWarning = warning;
+                } catch(e) {
+                    const warning = '⚠ Не удалось сохранить мир. Проверьте свободное место; пока не закрывайте игру.';
+                    if (this._saveWarning !== warning) { console.warn('[WorldSave] not saved',e); this.game.hud?.toast?.(warning, 7000); }
+                    this._saveWarning = warning;
+                }
             } while(this._saveAgain && this.game.active);
         })().finally(() => { this._saving=false; });
         return this._saveJob;

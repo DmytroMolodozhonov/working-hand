@@ -52,11 +52,10 @@ test('«Магия»: the tab tree Магия → Заклинания / Зел�
     assert.equal(tree[0].name, '✨ Магия');
     assert.deepEqual(tree[0].children.map((c) => c.id), ['spells', 'potions', 'pentagrams']);
     const { isPentagramKnown, POTION_CATEGORIES, potionEntries } = await import('../../src/ui/Codex.js');
-    const nothing = pentagramCards(new Set()); // a Survival hero who learned nothing: no pictures, descriptions stay
-    assert.deepEqual(nothing.map((c) => c.id).sort(), Object.keys(PENTAGRAMS).sort());
-    assert.ok(nothing.every((c) => !c.svg && !c.learned && c.text), 'unlearned: no picture, but a description');
+    assert.deepEqual(pentagramCards(new Set()), [], 'unknown pentagrams have no cards');
     const some = pentagramCards(new Set(['devil']));
-    assert.ok(/<svg/.test(some.find((c) => c.id === 'devil').svg) && !some.find((c) => c.id === 'life').svg);
+    assert.deepEqual(some.map(c => c.id), ['devil']);
+    assert.match(some[0].svg, /<svg/);
     // no hero (the main menu) / Creative: every drawing is shown
     for (const c of pentagramCards(null)) assert.ok(c.learned && /<svg/.test(c.svg), `«${c.name}»: the menu shows the picture`);
     assert.equal(isPentagramKnown(null, 'devil'), true);
@@ -71,4 +70,11 @@ test('«Магия»: the tab tree Магия → Заклинания / Зел�
     assert.ok(ent.every((e) => ids.has(e.cat)));
     for (const c of POTION_CATEGORIES.slice(1)) assert.ok(ent.some((e) => e.cat === c.id), `the category «${c.name}» is empty`);
     assert.ok(potionCards().length >= 3 && potionCards().every((p) => p.ingredients.length));
+});
+
+test('known pentagram descriptions use their actual spell name and never a question card',async()=>{
+ const {pentagramCards,pentagramCardHtml}=await import('../../src/ui/Codex.js');
+ const card=pentagramCards(new Set(['life']))[0],html=pentagramCardHtml(card);
+ assert.match(html,/Pentagranium Vita/);assert.ok(!html.includes('${c.spell}'));
+ assert.equal(pentagramCardHtml({...card,learned:false}), '');
 });

@@ -262,11 +262,13 @@ export class ArcaneShapes {
         if (!it) return;
         const w = el.offsetWidth, h = el.offsetHeight;
         if (w < 40 || h < 40) return;
+        if (!it.stage && it.frameW === w && it.frameH === h) return;
+        it.frameW = w; it.frameH = h;
         const d = outline(w, h, { inset: 3, rad: Math.min(40, h * 0.07), amp: 1.1, seed: it.seed, step: 10 }); // (a calm living edge — no wobble)
         it.frame.setAttribute('viewBox', `0 0 ${w} ${h}`);
         it.frame.setAttribute('width', w); it.frame.setAttribute('height', h);
         for (const p of it.frame._paths) p.setAttribute('d', d);
-        el.style.clipPath = `path('${d}')`;
+        if (!el.matches('#pause-menu .pause-box')) el.style.clipPath = `path('${d}')`;
         const ring = el.querySelector(':scope > .mu-ring');
         if (ring) { const m = ringMask(w, h, d); ring.style.webkitMaskImage = ring.style.maskImage = m; ring.classList.add('ar-masked'); }
         // the figure (the author's drawing): the buttons fill the height on the left and their right ends ARE one arc; the section's

@@ -14,7 +14,7 @@ test('every pentagram scroll describes its purpose before use, then drawing and 
   assert.ok(!/^(Встаньте|Положите|Направьте|Чтобы)/.test(info.lines[0]),id);
   assert.deepEqual(info.lines.slice(0,3),pentagramTextLines(id));
   assert.ok(info.lines[1].startsWith('Использование:'));assert.ok(info.lines[2].startsWith('Начертание:'));
-  assert.ok(info.lines[2].includes('50 маны'));assert.ok(info.lines.at(-1).startsWith('Сожгите свиток'));
+  assert.ok(info.lines[2].includes('50 маны'));assert.ok(info.lines.at(-1).startsWith('Сожгите табличку'));
   assert.equal(info.theme,'pentagram');
  }
  assert.notEqual(describeItem({kind:'scroll',stat:'spell',spell:'Bombardo'}).theme,'pentagram');

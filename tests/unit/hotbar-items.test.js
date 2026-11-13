@@ -156,3 +156,9 @@ test('«Акцио» never stays busy: whatever it waits for, after a few second
     for (let t = 0; t < ACCIO_STUCK + 1; t += 0.5) ac.update(0.5);
     assert.equal(ac.active, false);
 });
+
+ test('pentagram icons distinguish figures and ignore instance IDs', () => {
+ const a={kind:'scroll',stat:'pentagram',pent:'life',uid:'a'};
+ assert.notEqual(iconKey(a),iconKey({...a,pent:'devil'}));
+ assert.equal(iconKey(a),iconKey({...a,uid:'b'}));
+ });

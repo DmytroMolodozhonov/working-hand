@@ -131,9 +131,9 @@ export class Pentagranium {
     // ------------------------------------------------------------ the figures the hero knows
     /** The drawing-scroll of figure `id` is burnt (Items.applyScroll): the figure is learnt for good (the author: looking at the scroll teaches nothing). */
     learnFigure(id) {
-        if (!this.seen.add(id)) { this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: «${figureOf(id)?.ru || id}» вы уже знали`, true); return false; }
+        if (!this.seen.add(id)) { this.game.hud.setVoice?.(`◉🔥 Табличка сгорела: «${figureOf(id)?.ru || id}» вы уже знали`, true); return false; }
         if (id === 'breakward') this.game.breakward?.learn?.(); // (their mark's own «known» flag: the drawing is learnt)
-        this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: теперь вы знаете «${figureOf(id).ru}»: направьте палочку на землю и скажите «${pentagramSpell(id)}»`, true);
+        this.game.hud.setVoice?.(`◉🔥 Табличка сгорела: теперь вы знаете «${figureOf(id).ru}»: направьте палочку на землю и скажите «${pentagramSpell(id)}»`, true);
         return true;
     }
 
@@ -187,7 +187,7 @@ export class Pentagranium {
         const name = pentagramSpell(id);
         if (aim) this.aim = aim;
         const hand = this.aim ? { side: 'right', origin: this.aim.origin, dir: this.aim.dir } : castingHand(g);
-        if (!this.known().includes(id)) return hint(`🩸 Вы не знаете «${figureOf(id).ru}» — найдите её свиток и сожгите («Инферно»): тогда её можно будет создать`);
+        if (!this.known().includes(id)) return hint(`🩸 Вы не знаете «${figureOf(id).ru}» — найдите её табличку и сожгите: тогда её можно будет создать`);
         if (id === 'breakward' && g.resist?.dark) return hint('🜏 ' + RESIST_HINT.breakRefused); // (the opposite of the dark ward: only one of the two marks — PentagramResist.js)
         if (id === 'bare' && this.bare && !this.creative) return hint('🙌 Вы уже умеете колдовать без палочки — пентаграмма второй раз не нужна');
         if (!hand) return hint(`🩸 Поднимите палочку (руку), направьте на землю и скажите «${name}»`);

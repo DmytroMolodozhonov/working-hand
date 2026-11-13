@@ -13,8 +13,8 @@ spec.loader.exec_module(server)
 class WorldSaveOrder(unittest.TestCase):
     def test_delayed_alive_save(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(server, "_worlds_dir", return_value=directory):
-            self.assertTrue(server._worlds_put({"id": "world", "updated": 20, "dead": True}))
-            self.assertTrue(server._worlds_put({"id": "world", "updated": 10, "dead": False}))
+            self.assertTrue(server._worlds_put({"id": "world", "seed": 17, "updated": 20, "dead": True}))
+            self.assertTrue(server._worlds_put({"id": "world", "seed": 17, "updated": 10, "dead": False}))
             self.assertTrue(server._worlds_get("world")["dead"])
-            self.assertTrue(server._worlds_put({"id": "world", "updated": 30, "dead": False}))
+            self.assertTrue(server._worlds_put({"id": "world", "seed": 17, "updated": 30, "dead": False}))
             self.assertFalse(server._worlds_get("world")["dead"])
