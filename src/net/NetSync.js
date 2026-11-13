@@ -197,8 +197,9 @@ export class NetSync {
             config: sanitizeConfig(g.config),
             explosions: g.explosions,
             chests: [...new Set([...g.chests.filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
+            airObjects: g.elementalMages?.objects.snapshot() || [],
             items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r3(L.model.position.x), r3(L.model.position.y), r3(L.model.position.z)], h: L.hover ? 1 : 0, r: L.rest ? 1 : 0 })) : [],
-            weapons: g.weapons.weapons.map((w) => ({ s: w.serialize(), owner: this.weaponOwners.get(w.id) || (w.holder ? this.me : null), hover: !!w.hover })),
+            weapons: g.weapons.weapons.map((w) => ({ s: w.serialize(), owner: this.weaponOwners.get(w.id) || (w.holder && !w.holder.airMage ? this.me : null), hover: !!w.hover })),
             zombies: g.zombies.map((z) => z.serialize()),
             ice: g.iceCells,
             players: this.net.playerList(),
@@ -244,6 +245,7 @@ export class NetSync {
         if (Array.isArray(msg.edits) && msg.edits.length) g.builder?.applyEdits(msg.edits.slice(-30000));
         for (const i of msg.treesGone || []) g.world.treeGoneById(i); // (one whose land is not here yet stays gone when it comes)
         g.world.restoreMovedTrees?.(msg.treesMoved);
+        if(Array.isArray(msg.airObjects))for(const s of msg.airObjects)g.elementalMages?.objects.onNet(s);
         if (msg.crystals) g.crystals?.restore(msg.crystals);
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
@@ -413,7 +415,7 @@ export class NetSync {
                 this.wTimer = 0;
                 const list = [];
                 for (const w of g.weapons.weapons) {
-                    if (this.weaponOwners.has(w.id) || w.holder) continue;
+                    if (this.weaponOwners.has(w.id) || (w.holder && !w.holder.airMage)) continue;
                     if (!w.sleeping || w.hover || !w._sentSleep) {
                         list.push(w.serialize());
                         w._sentSleep = w.sleeping && !w.hover;
@@ -1286,6 +1288,7 @@ export class NetSync {
             case 'an': if (!this.net.isHost) g.animals?.applyNet(rows(m.l)); break;
             case 'vil': if (!this.net.isHost) g.castleLife?.applyNet(rows(m.l, 4, (id) => typeof id === 'string')); break;
             case 'vhit': if (this.net.isHost && m.by !== this.me) { const v = g.castleLife?.byId.get(m.id); if (v) { const f = +m.mg || 0; g.castleLife.hit(v, Math.min(30, +m.dmg || 1), Array.isArray(m.d) ? new THREE.Vector3(m.d[0], 0, m.d[1]) : null, m.by, { magic: !!(f & 1), weapon: !!(f & 2), spell: !!(f & 4), pierce: !!(f & 8), hard: !!(f & 16) }); } } break;
+            case 'aobj': case 'aobjhit': if(!this.net.isHost) g.elementalMages?.objects.onNet(m); break;
             case 'vstr': if (m.to === this.me) g.castleLife?.struck(Math.min(10, +m.dmg || 1), +m.x || 0, +m.z || 0, String(m.who || 'Рыцарь').slice(0, 30)); break;
             case 'vsay': if (m.by !== this.me) g.castleLife?.heard(m.id, String(m.text || '').slice(0, 200)); break;
             case 'valarm': if (m.to === this.me) console.info('[NetSync] villagers turned on me:', m); break; // (no hint — the author: useless)

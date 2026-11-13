@@ -10,6 +10,7 @@ import { SPELL_COST } from './SpellCosts.js';
 import {FLIGHT} from './Flight.js';
 import { FEATHER } from './Featherfall.js';
 import { isImpulse } from './WindImpulse.js';
+import {AirMageObjects} from './AirMageObjects.js';
 import {stepAirMageWings} from './AirMageWings.js';
 import { FX } from '../fx/WizardFx.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -19,7 +20,7 @@ const TITLES={water:'Маг воды',air:'Маг воздуха',fire:'Маг �
 const _o=new T.Vector3(),_d=new T.Vector3();
 export function elementalGifts(entry){const r=createRng((entry.seed??1)^0x43b2ca19);return {hydro:{h:entry.element==='water'&&r()<.25?1:0},resist:{f:entry.element==='water'&&r()<.1?1:0}};}
 export class ElementalMages {
- constructor(game){this.game=game;this.seq=0;this.guard=game.scene?new WaterMageGuard(game):null;}
+ constructor(game){this.game=game;this.seq=0;this.objects=new AirMageObjects(game);this.guard=game.scene?new WaterMageGuard(game):null;}
  init(v){
   const element=v.entry?.element;if(!TITLES[element])return;
   v.element=element;v.title=TITLES[element];v.bareHand='advanced';v.bareMaster=true;v.noWand=true;v.rank='elemental';v.skillRole='mage';
@@ -137,11 +138,13 @@ export class ElementalMages {
     const sign=(v.entry.seed&1)?1:-1;L._steer(v,v.x-dx/dist*5-dz/dist*sign*4,v.z-dz/dist*5+dx/dist*sign*4,v.walk*1.3,dt,0);v.yaw=want;
    }
    if(a.phase==='rest')this.phase(v,'Coil');
+   a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
+   if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
    if(a.phase==='Coil'&&a.t>.7)this.phase(v,'Sweep');
    if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
     if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
     else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&a.cycle%2===0&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
-    else if(a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;
+    else if(!this.objects.active.has(v.id)&&a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;
     else this.cast(v,dist<9||Math.hypot(dist,foe.y-(v.y+2.7))>12?'WindMaxima':'Wind',foe);
    }}
    if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}
@@ -172,7 +175,7 @@ export class ElementalMages {
   if(!v.featherFall&&v.vy< -5&&this.pay(v,FEATHER.COST)){v.featherFall=true;this.game.sound?.spellCast?.('Featherfall',_o.set(v.x,v.y+2,v.z));}
   if(v.featherFall&&!this.pay(v,FEATHER.DRAIN*dt))v.featherFall=false;
  }
- update(dt){this.guard?.update(dt);}
- dispose(){this.guard?.dispose();}
+ update(dt){this.guard?.update(dt);this.objects.update(dt);}
+ dispose(){this.objects.dispose();this.guard?.dispose();}
  land(v,dt){if(v.elemental?.winged){stepAirMageWings(this.game,v,null,dt,true);return;}if(!this.pay(v,FLIGHT.HOVER_COST*dt)){v.fly=false;v.vy=Math.min(v.vy||0,-.5);return;}const gy=this.game.collision.groundAt(v.x,v.z,v.y+1);v.y=Math.max(gy,v.y-dt*2);if(v.y<=gy+.05){v.fly=false;v.vy=0;v.y=gy;}}
 }

@@ -672,12 +672,12 @@ export class Game {
             firefight: (sp, dt) => this.firefighting?.act(sp, dt), // («Firefighting»: the spray puts fire out — Firefighting.js)
             blockAt: (x, y, z) => this._flameBlock(x, y, z),
             // a house's sphere of protection (HouseWards.js): spells from outside stop at it
-            wardClip: (o,d,len) => { const w=this.wards?.clipRay(o,d,len)??len; return this.earthMages?.clipRay(o,d,w)??w; },
+            wardClip: (o,d,len) => { const w=this.wards?.clipRay(o,d,len)??len; const e=this.earthMages?.clipRay(o,d,w)??w;return this.elementalMages?.objects.clipRay(o,d,e)??e; },
             wardHit: (a, b) => this.wards?.segmentHit(a, b) || null,
         doorsOnWay: () => this.doors,
             airGust:(o,d,power,ring)=>this.airFx?.gust(o,d,power,ring),
-            earthOnWay: (a,b,by) => this.earthMages?.segmentHit(a,b,by),
-            earthTake: (hit,name) => this.earthMages?.take(hit,name), // (an orb's step is cut against the doors' leaves: Doors.segmentHit)
+            earthOnWay: (a,b,by) => {const e=this.earthMages?.segmentHit(a,b,by),o=this.elementalMages?.objects.segmentHit(a,b,by);return o&&(!e||o.t<e.t)?o:e;},
+            earthTake: (hit,name) => hit.airObject?this.elementalMages?.objects.take(hit,name):this.earthMages?.take(hit,name), // (an orb's step is cut against the doors' leaves: Doors.segmentHit)
             shielded: (from, to) => !!this.wards?.shields(from, to),
             drain: (casterId, mana, dt) => {
                 if(casterId === this.localId || casterId === 'local')return this.combat.drain(mana,dt);
@@ -1487,6 +1487,7 @@ export class Game {
         if (authoritative) { this.customCreatures?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.customPlants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.spencers?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.plants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.canaries?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.tarons?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.flora?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.gargoyles?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.diabolos?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.titans?.noise(pos); this.diabolos?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.pharaoh?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.vampire?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.titans?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
         this.ghosts?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); // (a ghost of the Castle of Ghosts: local to every seer's computer, so not only the host — GhostRules)
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
+        this.elementalMages?.objects.blast(pos,radius);
         this.earthMages?.blast(pos,radius); // real floating walls break after shielding this blast's actors
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);

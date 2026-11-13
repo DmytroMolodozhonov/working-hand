@@ -1184,6 +1184,8 @@ export class Duel {
         const wallS = this._wallOnWay(from, b.front);
         const hit = firstTouched(from, b.front, this._bodies(b.by, undefined, true));
         const earthHit=g.earthMages?.segmentHit(from,b.front,b.by);
+        const objectHit=g.elementalMages?.objects.segmentHit(from,b.front,b.by);
+        if(objectHit&&objectHit.t<=wallS&&(!earthHit||objectHit.t<=earthHit.t)&&(!hit||objectHit.t<=hit.s)&&g.elementalMages.objects.take(objectHit,b.spell)){b.front.copy(objectHit.point);b.obstacle='предмет мага воздуха';this._end(b,'blocked');return false;}
         if(earthHit && earthHit.t<=wallS && (!hit || earthHit.t<=hit.s) && g.earthMages.take(earthHit,b.spell)){b.front.copy(earthHit.point);b.obstacle='камень мага земли';this._end(b,'blocked');return false;}
         // (host) a player's charge flying close past people: a threat — they flinch, turn, look for who (Startle.js)
         if (g.authority && !b.npc) this._passBy(b, from, Math.min(1, wallS, hit ? hit.s : 1), hit?.body);
