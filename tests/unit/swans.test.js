@@ -107,7 +107,7 @@ test('where they live: still fresh water deep enough with open water round — n
     assert.equal(lakeAt(t, 50, 0), null, 'the land');
     assert.equal(lakeAt(t, 18, 0), null, 'too near the bank');
     assert.equal(lakeAt(t, 320, 0), null, 'the sea');
-    assert.equal(floatY(2.5), 2.5 + 0.5 - WATERLINE * SWAN.SIZE);
+    assert.equal(floatY(2.5)+WATERLINE*SWAN.SIZE,2.5,'the model waterline meets the actual water surface without an extra half-block');
 });
 
 test('partially loaded cells try loaded water candidates and defer incomplete shore checks',()=>{

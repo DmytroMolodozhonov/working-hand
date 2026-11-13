@@ -78,7 +78,7 @@ export function lakeAt(t, x, z) {
 }
 
 /** The height of a floating swan's origin over a water surface (the waterline of the model at the water's visible top). */
-export const floatY = (surface, size = SWAN.SIZE) => surface + 0.5 - WATERLINE * size;
+export const floatY = (surface, size = SWAN.SIZE) => surface - WATERLINE * size;
 
 const wrap = (d) => { while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
 const rr = (a, b) => a + Math.random() * (b - a);

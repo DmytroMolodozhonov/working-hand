@@ -66,8 +66,9 @@ try {
     await startFromMenu(page, arg('--mode', 'creative'));
     await waitHudVisible(page, 10 * 60 * 1000);
     console.log(`game on in ${Math.round((Date.now() - t0) / 1000)} s`);
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
         const g = window.__zns.game, THREE = window.__zns.THREE;
+        const {updateFarBatches}=await import('/src/core/FarBatch.js');
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((r) => setTimeout(r, 20)); };
         const until = async (ok, ms = 20000) => { const t = performance.now(); while (!ok() && performance.now() - t < ms) await frames(1); return !!ok(); };
         const orig = g._updateCamera.bind(g);
@@ -126,7 +127,10 @@ try {
                 await frames(settle);
                 const A = g.world.ambientLight, a0 = A?.intensity;
                 if (light && A) A.intensity = light;
-                g._updateCamera(0); g.renderer.render(g.scene, g.camera);
+                g._updateCamera(0);g.camera.updateMatrixWorld(true);
+                g.animals?._lookFar(g.character.group.position,0);
+                g.scene.updateMatrixWorld(true);updateFarBatches(g.scene,g.renderer,0);
+                g.renderer.render(g.scene, g.camera);
                 const url = g.renderer.domElement.toDataURL('image/png');
                 if (A) A.intensity = a0;
                 await window.__shotSave(n, url, to);

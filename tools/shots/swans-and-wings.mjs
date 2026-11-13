@@ -1,6 +1,9 @@
 export default async function(h){
  const g=h.g,T=h.THREE,{swanSiteAt}=await import('/src/game/SwanLife.js'),{hash01}=await import('/src/world/Castles.js');
  const render=g.renderer.render.bind(g.renderer);
+ const photo=async(name,cam,at)=>{
+  h.cam(cam,at);await h.shot(name,{settle:0});
+ };
  // Stream and simulate normally; render the distant forest only for the final
  // images, rather than hundreds of SwiftShader frames during the journey.
  g.renderer.render=()=>{g.scene.updateMatrixWorld(true);g.camera.updateMatrixWorld(true);};
@@ -22,7 +25,9 @@ export default async function(h){
  if(flock.length<2)throw Error('Natural flock not activated: '+JSON.stringify(g.animals.sites.get(lake.key)));
  if(flock.some(a=>a.color!==1||a.model.userData.magicSwan))throw Error('A magical swan remains');
  h.log('natural flock',flock.map(a=>({id:a.id,colour:a.color,pos:a.group.position.toArray()})));
- g.renderer.render=render;h.bare();const p=flock[0].group.position;h.cam([p.x+12,p.y+7,p.z+12],[p.x,p.y+.8,p.z]);await h.shot('natural-ordinary-swans',{settle:0});
+ g.renderer.render=render;h.bare();const p=flock[0].group.position;
+ await photo('natural-ordinary-swans',[p.x+8,p.y+4,p.z+8],[p.x,p.y+.8,p.z]);
+ await photo('swan-close',[p.x+3,p.y+1.7,p.z-3],[p.x,p.y+.8,p.z]);
  const victim=flock[0];g.animals.hit(victim,999,null,g.localId);
  if(flock.slice(1).some(a=>!a.fly&&a.state!=='flee'&&a.state!=='attack'))throw Error('Flock ignored its mate\'s death');
  const pig=g.animals._spawn('pig',p.clone().add(new T.Vector3(12,4,0)));g.animals.hit(pig,999,null,g.localId);
@@ -30,6 +35,6 @@ export default async function(h){
  for(const [i,kind] of ['swanWings','pigWings'].entries()){
   const m=makeItemModel({kind});m.scale.setScalar(9);m.position.set(p.x+i*4,p.y+1,p.z);g.scene.add(m);
  }
- h.cam([p.x+2,p.y+10,p.z+8],[p.x+2,p.y+1,p.z]);await h.shot('interchangeable-wing-pairs',{settle:0});
+ await photo('interchangeable-wing-pairs',[p.x+2,p.y+10,p.z+8],[p.x+2,p.y+1,p.z]);
  h.log('herd and drops',{survivors:flock.slice(1).map(a=>({state:a.state,fly:!!a.fly})),pigDead:pig.dead});
 }
