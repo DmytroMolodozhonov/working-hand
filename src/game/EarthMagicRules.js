@@ -1,6 +1,11 @@
 /** Earth is an elemental discipline, never an ordinary wizard strength rank. Pure layout/AI constants. */
-export const EARTH = { ID:'creative-earth', X:26, Z:-22, HP:32, MANA:220, REGEN:1, START:20, DRAIN:1, LIFT_RATE:12, MAX:60, BLADE_COST:12, WALL_COST:5, COCOON_COST:15, THROW_COST:3, RANGE:32, LEASH:70 };
-export const EARTH_PHASES = { lift:1.8, orbit:1.6, wall:2.4, cocoon:3.5, blade:1.25, throw:.9, rest:2 };
+export const EARTH = { ID:'creative-earth', X:26, Z:-22, HP:32, MANA:220, REGEN:1, START:20, DRAIN:1, LIFT_RATE:36, MAX:60, BLADE_COST:12, WALL_COST:5, COCOON_COST:15, THROW_COST:3, RANGE:32, LEASH:70 };
+export const EARTH_PHASES = { lift:1.15, orbit:.55, wall:2.4, cocoon:3.5, blade:1.25, throw:1.1, punch:1.1, kick:1.25, sweep:1.45, hammer:1.6, rest:2 };
+// Release times match the strike in EarthMagePose. Every event pays separately.
+export const EARTH_STRIKES = {
+ punch:[[.38,1],[.73,1]], kick:[[.61,2]], sweep:[[.56,2],[.91,2]], hammer:[[.95,4]], throw:[[.55,3]]
+};
+export const EARTH_ATTACKS=['punch','kick','sweep','hammer','throw'];
 export const EARTH_MODES = Object.keys(EARTH_PHASES).map(k=>'earth'+k[0].toUpperCase()+k.slice(1));
 export const ELEMENTAL_BARE_HAND = 'advanced';
 
@@ -19,7 +24,11 @@ export function earthSlot(i,form,angle,yaw,out={}){
  let x,y,z;
  if(form==='wall'&&i<WALL_COUNT){x=i%5-2;y=Math.floor(i/5)-1.9;z=-3.3;}
  else if(form==='cocoon'&&i<EARTH_SHELL.length){[x,y,z]=EARTH_SHELL[i];}
- else {const a=angle+i*2.39996323,r=3.7+(i%3)*.34;x=Math.cos(a)*r;y=-.2+(i%4)*.65+Math.sin(a*1.3)*.12;z=Math.sin(a)*r;}
+ else if(form==='punch'&&i<4){x=(i%2?1:-1)*2.6;y=.1+Math.floor(i/2)*.6;z=-2.5;}
+ else if(form==='kick'&&i<6){x=(i%2?1:-1)*1.1;y=-1.1+Math.floor(i/2)*.5;z=-2.9;}
+ else if(form==='sweep'&&i<8){const a=-1.3+i*.36;x=Math.sin(a)*4.5;y=.1+(i%2)*.4;z=-Math.cos(a)*4.5;}
+ else if(form==='hammer'&&i<8){x=(i%4-1.5)*1.05;y=3.5+Math.floor(i/4)*1.05;z=-1.4;}
+ else {const a=2.25*Math.sin(angle*.4+i*2.39996323),r=5.2+(i%3)*.7;x=Math.sin(a)*r;y=-.8+(i%5)*.85;z=Math.cos(a)*r;} // leave the casting stance and the forward strike lane visible
  const s=Math.sin(yaw),c=Math.cos(yaw);out.x=x*c+z*s;out.y=y;out.z=-x*s+z*c;return out;
 }
 

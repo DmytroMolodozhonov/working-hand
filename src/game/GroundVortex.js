@@ -446,11 +446,12 @@ export class GroundVortex {
         cand.sort((a, b) => a[1] - b[1]);
         for (let j = 0; j < Math.min(k, cand.length); j++) ids.push(cand[j][0]);
         const seed = ++this._seq * 977 + (this._t * 100 | 0);
+        const origins=sw.npc?ids.map(i=>sw.B[i].pos.toArray()):null;
         this._replayVolley(sw, ids, d, seed);
         this._mDirty = true;
-        this._send({ ...(sw.npc ? {npc:true,by:sw.by} : {}), ev: 'volley', ids, ...(sw.npc?{aim:sw.aim}:{}), d: [r2(d.x), r2(d.y), r2(d.z)], seed });
+        this._send({ ...(sw.npc ? {npc:true,by:sw.by} : {}), ev: 'volley', ids, ...(sw.npc?{aim:sw.aim,arc:sw.arc||1,origins}:{}), d: [r2(d.x), r2(d.y), r2(d.z)], seed });
         if (this.game.sound) this.game.sound.playStep?.();
-        this.game.castleLife?.alarm?.({ x: sw.body.x, y: sw.body.y, z: sw.body.z }, 'uproot', this.me, 8);
+        this.game.castleLife?.alarm?.({ x: sw.body.x, y: sw.body.y, z: sw.body.z }, 'uproot', sw.npc ? sw.by : this.me, 8);
     }
 
     /** The wand raised completely up + «Атак»: every block flies out of the hero in a ring (a circular burst; the hero himself is not hit). */
@@ -485,7 +486,7 @@ export class GroundVortex {
             if (!b) return;
             R.salvoVelocity(dir, seed, j, _o);
             if(sw.npc && sw.aim){
-                const dx=sw.aim[0]-b.pos.x,dz=sw.aim[2]-b.pos.z,time=Math.max(.1,Math.hypot(dx,dz)/GV.SPEED);
+                const dx=sw.aim[0]-b.pos.x,dz=sw.aim[2]-b.pos.z,time=Math.max(.1,Math.hypot(dx,dz)/GV.SPEED*(sw.arc||1));
                 _o.x=dx/time;_o.z=dz/time;_o.y=(sw.aim[1]-b.pos.y+.5*GV.GRAV*time*time)/time;
             }
             this.flights.push({ b, pos: b.pos.clone(), vel: new THREE.Vector3(_o.x, _o.y, _o.z), age: 0, by: sw.by, mine: sw.mine, last: b.pos.clone(), spin: b.tm });

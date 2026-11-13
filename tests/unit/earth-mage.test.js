@@ -101,3 +101,61 @@ test('earth volleys compensate gravity and can actually reach a standing player 
  const em=f.g.earthMages,s=em.swarms.get(f.v.id);em._phase(f.v,s,'throw');f.step(130);
  assert.ok(hits>0,'a volley must reach the body, not fall harmlessly short');
 });
+
+test('a shortage of stones never leaves the caster waiting forever for a full volley',()=>{
+ const f=fixture();f.step(90);const em=f.g.earthMages,s=em.swarms.get(f.v.id),keep=s.B.find(Boolean);
+ s.B=s.B.map(b=>b===keep?b:null);s.n=1;s.plan=[];
+ f.g.terrain.data.get=()=>BLOCK.BEDROCK;em._phase(f.v,s,'orbit');
+ f.step(100);assert.ok(f.sent.some(m=>m.ev==='volley'),'one remaining stone is enough to attack');
+});
+
+test('an exhausted mage actually recovers enough mana to restart instead of oscillating at the start cost',()=>{
+ const f=fixture();f.g.terrain.data.raycast=()=>null;f.v.mana=17;
+ f.step(2900);assert.ok(f.sent.some(m=>m.ev==='volley'),'rest must end with a real attack');
+ assert.ok(f.v.mana>=0&&f.v.mana<=f.v.maxMana);
+});
+
+test('blocked sight at short range requests collision steering right up to the obstruction',()=>{
+ const f=fixture();let moved=0,stop;
+ f.g.castleLife._sees=()=>false;f.g.castleLife._steer=(v,x,z,s,dt,r)=>{moved++;stop=r;};
+ f.step(150);assert.ok(moved>0);assert.equal(stop,0,'a ranged stop distance must not freeze the mage behind cover');
+});
+
+test('a sustained battle uses multiple strike patterns and keeps transient collections bounded',()=>{
+ const f=fixture();f.step(1800);
+ const phases=new Set(f.sent.filter(m=>m.ev==='earth').map(m=>m.phase));
+ for(const phase of ['punch','kick','sweep','hammer'])assert.ok(phases.has(phase),phase);
+ assert.ok(f.sent.filter(m=>m.ev==='volley').length>=8);
+ assert.ok(f.g.groundVortex.flights.length<60);assert.ok(f.g.groundVortex.falls.length<120);
+});
+
+test('each new attack has a different whole-body silhouette and movement through the strike',()=>{
+ const model=new VillagerModel(Object.assign(villagerLook(14,'mage',false),earthLook())),poses=[];
+ for(const mode of ['earthPunch','earthKick','earthSweep','earthHammer']){
+  const frame=u=>{model.earthPoseT=u;for(let i=0;i<20;i++)model.update(1/60,{mode,speed:0});return [model._p.hy,model._p.aLX,model._p.aRX,model._p.lR,model._p.kR];};
+  const a=frame(.15),b=frame(.65);assert.notDeepEqual(a,b);poses.push(JSON.stringify(b));
+ }
+ assert.equal(new Set(poses).size,4);model.dispose();
+});
+
+test('orbit leaves a visible open strike lane: the mage has no invisible blanket shield',()=>{
+ const f=fixture();f.step(100);const em=f.g.earthMages,s=em.swarms.get(f.v.id);em._phase(f.v,s,'orbit');
+ for(let i=0;i<120;i++){f.g.groundVortex._t+=1/60;em.update(1/60);}
+ assert.ok(!em.segmentHit(new T.Vector3(0,f.v.y+2.4,-30),new T.Vector3(0,f.v.y+2.4,0),'me'));
+});
+
+test('late guests reproduce overhead throws from the same actual launch points and velocities',()=>{
+ const f=fixture();f.step(100);const em=f.g.earthMages,s=em.swarms.get(f.v.id);em._phase(f.v,s,'hammer');
+ f.sent.length=0;em.think(f.v,.96);
+ const event=f.sent.find(m=>m.ev==='volley'),state=f.sent.find(m=>m.ev==='earth');assert.ok(event?.origins.length);
+ const guest=fixture();guest.g.authority=false;guest.g.earthMages.onNet(state);guest.g.earthMages.onNet(event);
+ const a=f.g.groundVortex.flights,b=guest.g.groundVortex.flights;assert.equal(b.length,a.length);
+ for(let i=0;i<a.length;i++){assert.ok(a[i].pos.distanceTo(b[i].pos)<1e-6);assert.ok(a[i].vel.distanceTo(b[i].vel)<1e-6);}
+});
+
+test('the rooted earth stance spreads the legs outward instead of crossing the knees',()=>{
+ const model=new VillagerModel(Object.assign(villagerLook(16,'mage',false),earthLook()));model.earthPoseT=.7;
+ for(let i=0;i<20;i++)model.update(1/60,{mode:'earthHammer',speed:0});model.group.updateMatrixWorld(true);
+ const left=model.leftKnee.getWorldPosition(new T.Vector3()),right=model.rightKnee.getWorldPosition(new T.Vector3());
+ assert.ok(left.x<-.3&&right.x>.3);model.dispose();
+});

@@ -39,7 +39,7 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife', 'heka'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthRest'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthPunch','earthKick','earthSweep','earthHammer','earthRest'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 const ARENA_SET = new Set(ARENA_MODES);
@@ -1739,6 +1739,7 @@ export class VillagerModel {
 
         // ---- upper body per mode (a wizard's own moves first — MoveStyle.wizardPose)
         T.eL=T.eR=T.earthSpread=0;
+        this._earthMoving=this.look.element&&loco;
         const own = (this.look.element ? earthMagePose(this,T,mode,dt,t) : 0) || (this._wiz ? wizardPose(this, T, mode, loco, dt, t) : 0);
         if (own) rate = own;
         else if (mode === 'idle' && !loco) idleShift(T, t, this.look.seed | 0);
@@ -2100,7 +2101,7 @@ export class VillagerModel {
         this.leftArm.rotation.set(P.aLX, 0, P.aLZ);
         this.rightArm.rotation.set(P.aRX, P.aRY, P.aRZ);
         if(this.leftElbow){this.leftElbow.rotation.x=P.eL||0;this.rightElbow.rotation.x=P.eR||0;}
-        if(this.look.element){this.leftLeg.rotation.z=P.earthSpread||0;this.rightLeg.rotation.z=-(P.earthSpread||0);}
+        if(this.look.element){this.leftLeg.rotation.z=-(P.earthSpread||0);this.rightLeg.rotation.z=P.earthSpread||0;}
         this.handSlot.rotation.x = P.wrist;
         this.leftLeg.rotation.x = P.lL;
         this.rightLeg.rotation.x = P.lR;
