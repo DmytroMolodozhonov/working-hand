@@ -3932,8 +3932,7 @@ export class Game {
         //  set the fog after it and the land's haze flashed through the water four times a second — the author 05.11: «сильно мигает»)
         this.swim?.applyFog?.();
         this.darkFog?.begin(); // (inside «Caligo»'s fog the world's fog is swapped for a black one for this picture only)
-        if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera);
-        this.airFx?.render();
+        if (!this.airFx?.render()) { if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera); }
         this.darkFog?.end();
         this.seeFx?.render(); // («Visible Godi»: the cloud over the picture — nothing when the spell is off)
         if (this.active && this.config.mode !== 'test' && (this._terrainProbeN || 0) < 2 && performance.now() >= (this._terrainProbeAt || 0)) {

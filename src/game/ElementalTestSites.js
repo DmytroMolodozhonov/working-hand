@@ -7,7 +7,7 @@ export const ELEMENTAL_TESTS = [
 const COLORS={water:[0x315f96,0xc4e5ee,0x203a60],air:[0xe7e4d9,0xb4c8c8,0x687e89],fire:[0x923b2d,0xe8aa49,0x362c32]};
 export function elementalLook(element,{tank=false,wings=false}={}){
  const [base,trim,dark]=COLORS[element];
- return {element,tank,wings,wizard:true,tool:'none',outfit:null,uniform:null,hat:'none',dress:false,dressColor:base,shirt:base,pants:dark,accent:trim,boots:dark,beard:'none',hairColor:dark,hair:'short',magicRobe:false};
+ return {element,tank,wings,wizard:true,tool:'none',outfit:null,uniform:null,hat:'none',dress:false,dressColor:base,shirt:base,pants:dark,accent:trim,boots:dark,magicRobe:false};
 }
 export function elementalTestSite(a,F){
  return {id:'creative-'+a.element,kind:'elemental',name:'Площадка мага '+({water:'воды',air:'воздуха',fire:'огня'}[a.element]),x:a.x,z:a.z,F,zone:18,gx:0,gz:0,knights:0,population:1,color:COLORS[a.element][0],

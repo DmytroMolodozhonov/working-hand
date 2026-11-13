@@ -1,3 +1,4 @@
+import { RagdollBudget } from './RagdollBudget.js';
 import { kickDeadDoll } from './DeathImpulse.js';
 /**
  * CreatureImpact.js — pushes, staggers, knockdowns and head jolts for EVERY creature that is not a
@@ -208,6 +209,7 @@ export class CreatureImpact {
         this.rnd = Math.random; // (tests: a fixed roll)
         this.deadRags = new Map(); // ck|id → {c, doll, ck} (a dead body still settling / lying as a rag doll)
         this._pose = [];
+        this.ragBudget=new RagdollBudget(RAG.BUDGET_MS);
     }
 
     /** How many rag dolls are moving now (alive and dead; a doll asleep costs nothing and is not counted). */
@@ -640,7 +642,7 @@ export class CreatureImpact {
     // =============================================================== frame
     update(dt) {
         const g = this.game;
-        this._budget = performance.now() + RAG.BUDGET_MS;
+        this.ragBudget.begin(this.active,this.deadRags);
         for (const [key, e] of this.active) {
             const { ck, c, s } = e;
             const K = KINDS[ck];
@@ -689,7 +691,7 @@ export class CreatureImpact {
         const g = this.game, doll = s.rag, rig = s.rig;
         s.vx = s.vz = 0; s.airT = 0; s.rest = 0;
         if (doll) {
-            if (doll.asleep || performance.now() < this._budget) doll.step(guardWorld(g), dt); // (asleep: only a cheap look under it — Ragdoll.step)
+            this.ragBudget.step(doll,guardWorld(g),dt);
             if (this.auth) {
                 // the body's place goes with its hips (the AI, the others' computers, the targets see it there)
                 doll.at(12, _pt);
@@ -807,7 +809,7 @@ export class CreatureImpact {
                 // a zombie / a Taron: until its body is gone (sunk, unloaded)
                 const gone = (r.ck === 'z' ? !c.group?.parent || c.removable || !c.group.visible : !c.model?.parent) || c.lev;
                 if (gone) { this.deadRags.delete(key); continue; }
-                if (doll.asleep || performance.now() < this._budget) doll.step(guardWorld(g), dt); // (asleep: only a cheap look under it — Ragdoll.step)
+                this.ragBudget.step(doll,guardWorld(g),dt);
                 let dy = 0;
                 if (doll.asleep) { if (r.feet0 == null) r.feet0 = rig.feet(c); dy = Math.min(0, rig.feet(c) - r.feet0); }
                 doll.at(12, _pt); rig.place(c, _pt[0], _pt[1] - 1.9, _pt[2]);
@@ -815,7 +817,7 @@ export class CreatureImpact {
                 continue;
             }
             if (!c.group || !c.group.parent || !c.model?.root || !c.dead || c.lev || c.bodyMoved) { this.deadRags.delete(key); if (!c.dead) c.rag = false; continue; } // (carried off by «Левиоса», gone from the world, raised: the doll is done)
-            if (doll.asleep || performance.now() < this._budget) doll.step(guardWorld(g), dt); // (asleep: only a cheap look under it — Ragdoll.step)
+            this.ragBudget.step(doll,guardWorld(g),dt);
             RagPose.toModel(doll, c.model);
             if (doll.asleep && c.model.isDeadDone) {
                 c.model.group.updateMatrixWorld(true);

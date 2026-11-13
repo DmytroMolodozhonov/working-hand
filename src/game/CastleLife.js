@@ -1548,6 +1548,7 @@ export class CastleLife {
         if (v.lev) { v.mode = v.lev.body ? 'dead' : 'flail'; v.speed = 0; return; } // (kicking in the air: VillagerModel 'flail')
         // stunned / frozen / thrown up by a spell
         if (v.stunT > 0 || v.vy) {
+            if(v.element==='earth')g.earthMages?.interrupt(v);
             v.stunT = (v.stunT || 0) - dt;
             if (v.vy) this._fallStep(v, dt);
             else this._ground(v); // (knocked back / lying: follows the ground, a slope too)

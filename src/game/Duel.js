@@ -80,7 +80,7 @@ export { segmentToSegment } from './SegmentContact.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
 /** Own charges that leave a reason in the spell journal (`_chargeStart/_chargeEnd`): hit, miss (angle), shield, range. */
-const LOGGED_CHARGES = new Set(['Ice', 'IceMaxima', 'Frozen', 'Disarmor', 'Expelliarmus', 'Stupefy']);
+const LOGGED_CHARGES = new Set(['Ice', 'IceMaxima', 'Frozen', 'Disarmor', 'Expelliarmus', 'Stupefy', 'Jolt', 'JoltMaxima', 'AvadaKedavra']);
 const DUEL_FX = { NihilisDuel: 'fxNihilis', Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor', LiquidationDuel: 'fxLiquidDuel', LiquidationMaximaDuel: 'fxLiquidDuelMax' };
 export { JERK, sharpJerk } from './Jerk.js';
 
@@ -1082,7 +1082,12 @@ export class Duel {
         const origin = b._origin || (b._origin = new THREE.Vector3());
         const hdir = b._hdir || (b._hdir = new THREE.Vector3());
         if (!this._handOf(b.by, b.side, origin, hdir)) origin.copy(b.o);
-        if (b.state === 'flying' && !this._fly(b, dt)) return;
+        if (b.state === 'flying' && !this._fly(b, dt)) {
+            // Even a charge stopped in this frame reached its impact point. Previously that
+            // whole final flight vanished, including a complete shot on a long frame.
+            this._drawBolt(b.spell, b.free ? this._tailOf(b, dt) : origin, b.front, b.by);
+            return;
+        }
         if (b.state === 'flying' && !b.free) this._detachCheck(b, dt, origin);
         this._drawBolt(b.spell, b.free ? this._tailOf(b, dt) : origin, b.front, b.by);
         if (b.state === 'arrived') this._arrive(b, dt);
@@ -1172,7 +1177,7 @@ export class Duel {
         const wallS = this._wallOnWay(from, b.front);
         const hit = firstTouched(from, b.front, this._bodies(b.by, undefined, true));
         const earthHit=g.earthMages?.segmentHit(from,b.front,b.by);
-        if(earthHit && earthHit.t<=wallS && (!hit || earthHit.t<=hit.s) && g.earthMages.take(earthHit,b.spell)){b.front.copy(earthHit.point);this._end(b,'blocked');return false;}
+        if(earthHit && earthHit.t<=wallS && (!hit || earthHit.t<=hit.s) && g.earthMages.take(earthHit,b.spell)){b.front.copy(earthHit.point);b.obstacle='камень мага земли';this._end(b,'blocked');return false;}
         // (host) a player's charge flying close past people: a threat — they flinch, turn, look for who (Startle.js)
         if (g.authority && !b.npc) this._passBy(b, from, Math.min(1, wallS, hit ? hit.s : 1), hit?.body);
         // the strong charges burst on a ship's hull, a mast, a sail (StrongSpells: «не действует» on ships); the black ship's barrier flares
@@ -1645,6 +1650,7 @@ export class Duel {
      * pointed at, and (if nobody) the nearest body in front and how many degrees off the line it was. The ending is in `_chargeEnd`.
      */
     _chargeStart(b, origin, dir, tk) {
+        if(!this.game.spellLog?.note)return;
         const KIND = { p: 'игрок', z: 'зомби', a: 'животное', v: 'житель/рыцарь/волшебник', c: 'моряк', t: 'дерево', b: 'книга-птица', o: 'паук', N: 'ледяное существо', C: 'сундук/вещь', f: 'дракон' };
         let near = null;
         for (const e of this._bodies(this.me, 60)) {
@@ -1656,6 +1662,7 @@ export class Duel {
             if (!near || ang < near.ang) near = { ang, d, kind: e.kind, id: e.id, r: e.r };
         }
         b.dbg = { tk, near, kinds: KIND, t0: performance.now() };
+        this.game.spellLog?.note?.(`🪄 ${DUEL_SPELLS[b.spell]?.name || b.spell}: заряд создан; цель ${tk}:${b.tid ?? '—'}, дальность ${Math.round(b.rng ?? legacyRange(b.spell))} м; начало ${origin.toArray().map(n=>n.toFixed(2)).join(',')}; направление ${dir.toArray().map(n=>n.toFixed(3)).join(',')}`);
     }
 
     _chargeEnd(b, res) {
@@ -1665,7 +1672,7 @@ export class Duel {
         const who = (k, id) => (d.kinds[k] || k) + (id != null && k !== 'p' ? ` #${id}` : '');
         let why;
         if (res === 'hit') why = `попал в «${who(b.tk, b.tid)}»; что с целью дальше (броня/мантия/устойчивость/иммунитет) — в строках «действие»`;
-        else if (res === 'blocked') why = `защита поглотила (Protection, сфера дома, купол арены или божественная защита цели)`;
+        else if (res === 'blocked') why = b.obstacle ? `заряд остановил ${b.obstacle} на ${b.traveled.toFixed(1)} м` : `защита поглотила (Protection, сфера дома, купол арены или божественная защита цели)`;
         else {
             const rng = b.rng ?? legacyRange(b.spell);
             if (b.traveled > rng) why = `вне дальности: пролетел ${Math.round(b.traveled)} м из ${Math.round(rng)} (дальность зависит от маны)`;

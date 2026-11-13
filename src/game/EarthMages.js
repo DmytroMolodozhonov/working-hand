@@ -32,6 +32,13 @@ export class EarthMages {
   s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;this.swarms.set(v.id,s);this._phase(v,s,'lift');return s;
  }
  _stop(id){const s=this.swarms.get(id);if(!s)return;this.game.groundVortex._releaseAll(s,!!this.game.authority);this.swarms.delete(id);if(this.game.authority)this.game.sync?.groundVortex({npc:true,by:id,ev:'end'});}
+ /** A hit cancels the gesture, not merely its stones. Resume from a fresh lift after recovery. */
+ interrupt(v){
+  const a=v.earth;if(!a||a.interrupted)return;a.interrupted=true;
+  this._stop(v.id);if(a.slab)this.game.levMax?.end?.(a.slab,false);
+  a.slab=null;a.stitchPose=0;a.wallPlan=null;a.phase='rest';a.t=0;a.fired=false;a.strike=0;
+  v.model.earthPoseT=undefined;v.castT=0;
+ }
  _pay(v,n){if(v.mana<n)return false;v.mana-=n;return true;}
  _threat(v){
   // Swept direction, not just the mere presence of a charge nearby.
@@ -48,6 +55,7 @@ export class EarthMages {
  }
  think(v,dt){
   const g=this.game,L=g.castleLife,a=v.earth;if(!a)return false;
+  a.interrupted=false;
   if(!a.slab&&!this.swarms.has(v.id)&&!(a.stitchPose>0))v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);
   a.t+=dt;a.wallCd=Math.max(0,a.wallCd-dt);a.stitchCd=Math.max(0,a.stitchCd-dt);a.scan-=dt;
   v.prep=null;v.cardilon=null;v.practice=null;v.fx=0;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;

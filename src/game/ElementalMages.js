@@ -113,7 +113,7 @@ export class ElementalMages {
    }
    if(a.phase==='rest')this.phase(v,'Coil');
    if(a.phase==='Coil'&&a.t>.7)this.phase(v,'Sweep');
-   if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;this.cast(v,dist<9?'WindMaxima':'Wind',foe);}}
+   if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;this.cast(v,dist<9||Math.hypot(dist,foe.y-(v.y+2.7))>12?'WindMaxima':'Wind',foe);}}
    if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    if(!v.fly){v.mode='air'+a.phase;if(!v.vy)L._ground(v);}
   }else{

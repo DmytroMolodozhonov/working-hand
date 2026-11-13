@@ -215,3 +215,11 @@ test('earth Maxima takes its slab beside the opponent, transfers above the origi
  for(let i=0;i<400&&slab.phase!=='fall';i++)LevitationMaxima.prototype._npcEarthStep.call(c,slab,1/60);
  assert.equal(slab.phase,'fall');assert.ok(slab.pos.distanceTo(new T.Vector3(20,9,0))<.01,'a player can evade after the target was chosen');assert.ok(v.mana<140);
 });
+
+test('blast interruption cancels the previous stance and wall plan; recovery starts a new lift',()=>{
+ const f=fixture();f.step(150);const em=f.g.earthMages,s=em.swarms.get(f.v.id);
+ em._phase(f.v,s,'wall');f.v.earth.wallPlan={plan:{cells:[]}};f.v.earth.slab='old-slab';let released=0;f.g.levMax={end(){released++;}};
+ f.v.stunT=1;em.interrupt(f.v);em.interrupt(f.v);
+ assert.equal(released,1);assert.equal(em.swarms.size,0);assert.equal(f.v.earth.wallPlan,null);assert.equal(f.v.earth.slab,null);assert.equal(f.v.model.earthPoseT,undefined);
+ f.v.stunT=0;em.think(f.v,1/60);assert.equal(f.v.earth.phase,'lift');assert.ok(em.swarms.has(f.v.id));
+});

@@ -52,4 +52,4 @@ export function earthSite(F){
  houses:[],stalls:[],fields:[],posts:[],beds:[],chests:[],pens:[],graves:[],graveyards:[],rooms:[],nodes:[],edges:[],
  people:[{idx:1,seed:971206,role:'mage',element:'earth',name:'Терран',female:false,mana:EARTH.MANA,robe:false,look:earthLook()}]};
 }
-export function earthLook(){return {element:'earth',wizard:true,tool:'none',outfit:null,uniform:null,hat:'none',dress:false,dressColor:0x637046,shirt:0x637046,pants:0x3b4230,accent:0xc39a55,boots:0x413629,beard:'short',hairColor:0x382d24,hair:'short',magicRobe:false};}
+export function earthLook(){return {element:'earth',wizard:true,tool:'none',outfit:null,uniform:null,hat:'none',dress:false,dressColor:0x637046,shirt:0x637046,pants:0x3b4230,accent:0xc39a55,boots:0x413629,magicRobe:false};}

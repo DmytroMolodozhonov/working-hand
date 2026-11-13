@@ -77,3 +77,13 @@ test('короткая мана — короткий выстрел: 5 маны 
     const b = d.cast('Stupefy', null, 'right', 5);
     assert.equal(b.rng, 5);
 });
+
+test('a charge stopped on its first long frame still renders its actual flight up to the wall',()=>{
+ for(const spell of ['Jolt','AvadaKedavra','Stupefy']){
+  const {d}=world({wall:[-3,-4]}),drawn=[];
+  d._drawBolt=(s,a,b)=>drawn.push([s,a.clone(),b.clone()]);
+  const bolt=d.cast(spell,null,'right',100);d.update(.2);
+  assert.equal(d.bolts.has(bolt.id),false);assert.equal(drawn.length,1,spell+' must not vanish on impact');
+  assert.ok(drawn[0][1].distanceTo(drawn[0][2])>.5);assert.ok(drawn[0][2].z>=-4,'never draw through the wall');
+ }
+});

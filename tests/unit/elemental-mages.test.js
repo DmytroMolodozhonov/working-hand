@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
 import {ElementalMages,elementalGifts} from '../../src/game/ElementalMages.js';
+import {earthLook} from '../../src/game/EarthMagicRules.js';
 import {EarthMages} from '../../src/game/EarthMages.js';
 import {ELEMENTAL_TESTS,elementalTestSite,elementalLook} from '../../src/game/ElementalTestSites.js';
 import {VillagerModel,villagerLook,MODES} from '../../src/entities/VillagerModel.js';
@@ -47,4 +48,19 @@ test('air lift uses a real paid Leviosa charge, drains the normal wizard hold co
 });
 test('a mana-empty air mage falls rather than receiving a free slow landing',()=>{
  const f=fixture('air');f.v.fly=true;f.v.y=10;f.v.mana=0;f.em.land(f.v,.1);assert.equal(f.v.fly,false);assert.ok(f.v.vy<0);assert.equal(f.v.y,10);
+});
+
+test('air mage at 17 metres uses a gust whose real reach can touch the opponent',()=>{
+ const f=fixture('air');f.g.castleLife._playerPos=()=>({x:0,y:2,z:-17});f.step(130);
+ assert.ok(f.casts.length>0);assert.ok(f.casts.every(([name])=>name==='WindMaxima'),'ordinary Wind only reaches 14 metres');
+});
+
+test('elemental costumes retain ordinary seeded faces, hair and beards instead of replacing everyone with a clone',()=>{
+ for(const element of ['earth','water','air','fire']){
+  const styles=new Set();for(let seed=1;seed<=60;seed++){
+   const base=villagerLook(seed,'mage',seed%2===0),look=element==='earth'?earthLook():elementalLook(element);
+   const merged={...base,...look};assert.equal(merged.hair,base.hair);assert.equal(merged.beard,base.beard);assert.equal(merged.skin,base.skin);
+   styles.add([merged.hair,merged.hairColor,merged.beard].join(':'));
+  }assert.ok(styles.size>10,element);
+ }
 });
