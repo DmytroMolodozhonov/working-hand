@@ -27,7 +27,7 @@ test('a chunk is the same whatever chunks were made before it, and so is its mes
         const ca = here.chunk(cx, cz), cb = worker.chunk(cx, cz);
         same(ca.blocks, cb.blocks, 'blocks');
         same(ca.top, cb.top, 'tops');
-        for (const k of ['ground', 'raised', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies', 'patterns']) same(a[k][f], b[k][f], `${k}.${f}`);
+        for (const k of ['ground', 'raised', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies', 'patterns', 'wet']) same(a[k][f], b[k][f], `${k}.${f}`);
         // the copy sent to the main thread is a plain object of typed arrays and numbers
         const copy = structuredClone({ ...cb });
         same(copy.blocks, ca.blocks, 'sent blocks');
@@ -71,7 +71,7 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     self.onmessage({ data: { type: 'rebuild', id: 1, key: 'k', cx, cz, chunks, hidden: null } });
     const got = sent.pop(), w = here.buildChunkArrays(cx, cz), want = { land: mergeBuffers(w.ground, w.raised), water: w.water };
     assert.equal(got.type, 'rebuilt');
-    for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies']) same(got.arrays[k][f], want[k][f], `rebuilt ${k}.${f}`);
+    for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies', 'wet']) same(got.arrays[k][f], want[k][f], `rebuilt ${k}.${f}`);
     // and the worker's own chunks are as generated again afterwards
     const fresh = make();
     self.onmessage({ data: { type: 'build', id: 2, key: 'k2', cx, cz, fcx: cx, fcz: cz, R: 4 } });
@@ -89,7 +89,7 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     const check = (what) => {
         const g2 = sent.pop(), w2 = here.buildChunkArrays(cx, cz);
         const want2 = { land: mergeBuffers(w2.ground, w2.raised), water: w2.water };
-        for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies']) same(g2.arrays[k][f], want2[k][f], `${what} ${k}.${f}`);
+        for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies', 'wet']) same(g2.arrays[k][f], want2[k][f], `${what} ${k}.${f}`);
     };
     self.onmessage({ data: { type: 'rebuild', id: 4, key: 'k', cx, cz, fresh: fresh1, use, drop: null, hidden: null } });
     check('sent');

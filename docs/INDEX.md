@@ -861,3 +861,5 @@
 - `SunRay.js` / `SunRayRules.js` — «Sun Ray»: the Sun's energy into the wand, then the burning beam at «Атак» (damage by the planet's place in the list; titans); tests/unit/sun-ray.test.js
 - Kidarius — a strong duel spell of the gods (StrongSpells.STRONG.Kidarius, Duel._divineBlast, StrongMagic): golden lightning that blows up, −500; tests/unit/kidarius.test.js; the gods' library check — tests/unit/gods-library.test.js
 - `TimeTurn.js` — «Axis»: the planet turns, day ↔ night over ~10 s (Earth: Game.dayStart; planets: def.spinShift in Space.localSun); tests/unit/time-turn.test.js
+
+- `CavePlace.js` — pure cave-depth check against the original terrain surface; shared by cave-map detection and Stand Up after the ceiling is mined open.

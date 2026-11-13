@@ -5,7 +5,7 @@
  *   swimming in deep water (lake, sea)  → the water throws me up and out: a real arc under
  *                                         gravity, towards where the raised hand points
  *                                         (its horizontal part; straight up = straight up).
- *   standing on anything (ground, a deck, a roof, a rock) → the same leap up from where I stand.
+ *   standing in a cave or genuinely boxed in → the same leap up from where I stand.
  *   in the air (already falling or flying) → nothing: the spell needs something to push from.
  * 7 mana (Combat.SPELL_COST). Not while stunned («Остолбеней») or frozen — Game checks that first.
  * «Up» is a short word: it counts only as the whole phrase and only with a hand raised up —
@@ -13,6 +13,7 @@
  */
 
 import * as THREE from 'three';
+import { belowCaveSurface } from './CavePlace.js';
 import { PLAYER_GROUND_OFFSET, HEAD_ROOM } from '../entities/Character.js';
 
 /** The words the recognizer writes for «Up» (a short word: often heard as «аб», «оп»…). */
@@ -148,7 +149,9 @@ export class UpSpell {
         if (what !== 'rise' && what !== 'leap') { if (what && isFinal) g.hud.setVoice(what, true); return null; }
         // (the author 05.11: «Stand Up — только в пещере, в воде или когда реально застрял; на пустой поляне не работает»)
         // (Creative: no terrain exceptions — the author 06.11: «Stand Up должен быть без исключений на местность для творческого режима»)
-        if (what === 'leap' && !swimming && !g.ships?.rigging?.climbing && !g._inCave && g.config?.mode !== 'creative' && !this.boxedIn()) {
+        const p = ch.group.position;
+        const cave = g._inCave || (!g.space?.offEarth && g._caveSys && belowCaveSurface(g.terrain?.data, p.x, p.z, p.y - PLAYER_GROUND_OFFSET));
+        if (what === 'leap' && !swimming && !g.ships?.rigging?.climbing && !cave && g.config?.mode !== 'creative' && !this.boxedIn()) {
             if (isFinal) g.hud.setVoice('⬆️ «Up» подбрасывает только в пещере, в воде или когда вы застряли — здесь можно просто идти', true);
             return null;
         }

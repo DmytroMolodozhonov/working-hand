@@ -843,6 +843,7 @@ export class Terrain {
         geo.setAttribute('color', new THREE.BufferAttribute(buf.colors, 3));
         // castle stone, planks, roof tiles... (always set: one shader for every chunk)
         geo.setAttribute('voxPat', new THREE.BufferAttribute(buf.patterns, 1));
+        geo.setAttribute('voxWet', new THREE.BufferAttribute(buf.wet || new Uint8Array(buf.positions.length / 3), 1, true));
         geo.setAttribute('voxSky', new THREE.BufferAttribute(buf.skies, 1)); // (daylight reaching it: a cave's dark)
         geo.setIndex(new THREE.BufferAttribute(buf.indices, 1));
         // (its box — worked out in the worker, or here in one pass — and a sphere round the box: three

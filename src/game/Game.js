@@ -218,6 +218,7 @@ import { Achievements } from './Achievements.js';
 import { BodyImpact } from './BodyImpact.js';
 import { thunderZone, clearWay, roofAbove } from './ThunderWave.js';
 import { Knockdown } from './Knockdown.js';
+import { belowCaveSurface } from './CavePlace.js';
 import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
 import { StrongMagic } from './StrongMagic.js';
@@ -1773,7 +1774,7 @@ export class Game {
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
         this.world.setIndoor?.(this._indoorK);
-        this._updateCaveMap(dt, p, !built && !!this._caveSys && (covered || sky < 0.9));
+        this._updateCaveMap(dt, p, !built && !!this._caveSys && (covered || sky < 0.9 || belowCaveSurface(t, p.x, p.z, p.y - PLAYER_GROUND_OFFSET)));
     }
 
     /**

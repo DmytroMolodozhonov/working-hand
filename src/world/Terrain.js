@@ -2819,6 +2819,7 @@ export class TerrainData {
             const su = sizes[u], sv = sizes[v];
             const mask = new Int32Array(su * sv);
             const maskKind = new Int8Array(su * sv); // 0 ground, 1 raised, 2 water
+            const maskWet = new Uint8Array(su * sv); // actual water touching the visible face, independent of daylight
             const maskDark = new Int8Array(su * sv); // 0 open sky … 15 deep in a cave
             const qx = d === 0 ? 1 : 0, qy = d === 1 ? 1 : 0, qz = d === 2 ? 1 : 0;
             const step = stride[d], ustep = stride[u], vstep = stride[v];
@@ -2880,6 +2881,7 @@ export class TerrainData {
                         }
                         mask[n] = key;
                         maskKind[n] = kind;
+                        maskWet[n] = kind !== 2 && (key > 0 ? bRaw : aRaw) === WATER ? 255 : 0;
                         // the air the face looks into (a's face looks at b, b's at a)
                         maskDark[n] = sky && key && kind !== 2 ? (key > 0 ? sky(x0 + ax + qx, lowest + ay + qy, z0 + az + qz) : sky(x0 + ax, lowest + ay, z0 + az)) : 0;
                     }
@@ -2891,14 +2893,14 @@ export class TerrainData {
                     for (let i = 0; i < su;) {
                         const col = mask[n];
                         if (col === 0) { i++; n++; continue; }
-                        const kindC = maskKind[n], darkC = maskDark[n];
+                        const kindC = maskKind[n], darkC = maskDark[n], wetC = maskWet[n];
                         let w = 1;
-                        while (i + w < su && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC) w++;
+                        while (i + w < su && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC && maskWet[n + w] === wetC) w++;
                         let h = 1, done = false;
                         for (; j + h < sv; h++) {
                             for (let k = 0; k < w; k++) {
                                 const m = n + k + h * su;
-                                if (mask[m] !== col || maskKind[m] !== kindC || maskDark[m] !== darkC) { done = true; break; }
+                                if (mask[m] !== col || maskKind[m] !== kindC || maskDark[m] !== darkC || maskWet[m] !== wetC) { done = true; break; }
                             }
                             if (done) break;
                         }
@@ -2909,7 +2911,7 @@ export class TerrainData {
                         // The water surface sits a little below the ground around it
                         const drop = kindC === 2 && d === 1 && col > 0 ? 0.12 : 0;
                         const code = Math.abs(col) - 1;
-                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC));
+                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC), wetC);
                         for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * su] = 0;
                         i += w; n += w;
                     }
@@ -2973,10 +2975,10 @@ export class TerrainData {
                 // one quad when both triangles lie in one plane (a slab, a ramp); corners 0 −x−z, 1 +x−z, 2 −x+z, 3 +x+z
                 if (h[0] + h[3] === h[1] + h[2]) {
                     corner(V, 0, X0, Y0, Z0, h, 0); corner(V, 1, X0, Y0, Z0, h, 1); corner(V, 2, X0, Y0, Z0, h, 3); corner(V, 3, X0, Y0, Z0, h, 2);
-                    pushPoly(target, V, 4, ceil ? -1 : 1, colTop, pat, k);
+                    pushPoly(target, V, 4, ceil ? -1 : 1, colTop, pat, k, pad[ceil ? o - PXZ : o + PXZ] === WATER ? 255 : 0);
                 } else for (let q = 0; q < 2; q++) {
                     for (let j = 0; j < 3; j++) corner(V, j, X0, Y0, Z0, h, tri[q * 3 + j]);
-                    pushPoly(target, V, 3, ceil ? -1 : 1, colTop, pat, k);
+                    pushPoly(target, V, 3, ceil ? -1 : 1, colTop, pat, k, pad[ceil ? o - PXZ : o + PXZ] === WATER ? 255 : 0);
                 }
             }
             // -- the flat face: the bottom of a floor shape, the top of a ceiling one (hidden by a whole face over it)
@@ -2987,7 +2989,7 @@ export class TerrainData {
                 if (!covered && !(dir === 3 && L === MIN_LAYER)) {
                     const yy = ceil ? Y0 + 1 : Y0;
                     V[0] = X0; V[1] = yy; V[2] = Z0; V[3] = X0 + 1; V[4] = yy; V[5] = Z0; V[6] = X0 + 1; V[7] = yy; V[8] = Z0 + 1; V[9] = X0; V[10] = yy; V[11] = Z0 + 1;
-                    pushPoly(target, V, 4, ceil ? 2 : -2, this.faceColor(t, wx, L, wz, ceil), pat, litOf(sky, wx, ceil ? L + 1 : L - 1, wz));
+                    pushPoly(target, V, 4, ceil ? 2 : -2, this.faceColor(t, wx, L, wz, ceil), pat, litOf(sky, wx, ceil ? L + 1 : L - 1, wz), nb === WATER ? 255 : 0);
                 }
             }
             // -- the four sides: under the slope (over it, upside down), down to the bottom (up to the top)
@@ -3014,7 +3016,7 @@ export class TerrainData {
                 }
                 // (a grass ramp's triangle side is the hill's own turf going on, green — not the earth of a cut bank)
                 const turf = t === BLOCK.GRASS && (ha === 0 || hb === 0);
-                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, turf), turf && pat === PATTERN.GRASS ? 0 : pat, litOf(sky, wx + dx, L, wz + dz));
+                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, turf), turf && pat === PATTERN.GRASS ? 0 : pat, litOf(sky, wx + dx, L, wz + dz), nb === WATER ? 255 : 0);
             }
         }
     }
@@ -3041,7 +3043,7 @@ _mesh.h = new Float32Array(4);
  * growing JS arrays); finishBuffers copies out exactly what was written.
  */
 function newBuffers(slot) {
-    const b = _quadBufs[slot] || (_quadBufs[slot] = { pos: new Float32Array(4096 * 12), nor: new Float32Array(4096 * 12), col: new Float32Array(4096 * 12), pat: new Float32Array(4096 * 4), sky: new Float32Array(4096 * 4), idx: new Uint32Array(4096 * 6), cap: 4096 });
+    const b = _quadBufs[slot] || (_quadBufs[slot] = { pos: new Float32Array(4096 * 12), nor: new Float32Array(4096 * 12), col: new Float32Array(4096 * 12), pat: new Float32Array(4096 * 4), sky: new Float32Array(4096 * 4), wet: new Uint8Array(4096 * 4), idx: new Uint32Array(4096 * 6), cap: 4096 });
     b.nv = 0; b.ni = 0; b.patterned = false;
     return b;
 }
@@ -3050,7 +3052,7 @@ const _quadBufs = [];
 function growBuffers(b) {
     const cap = b.cap * 2;
     const re = (a, n) => { const t = new a.constructor(cap * n); t.set(a); return t; };
-    b.pos = re(b.pos, 12); b.nor = re(b.nor, 12); b.col = re(b.col, 12); b.pat = re(b.pat, 4); b.sky = re(b.sky, 4); b.idx = re(b.idx, 6);
+    b.pos = re(b.pos, 12); b.nor = re(b.nor, 12); b.col = re(b.col, 12); b.pat = re(b.pat, 4); b.sky = re(b.sky, 4); b.wet = re(b.wet, 4); b.idx = re(b.idx, 6);
     b.cap = cap;
 }
 
@@ -3060,7 +3062,7 @@ function finishBuffers(b) {
     return {
         positions: b.pos.slice(0, nv * 3), normals: b.nor.slice(0, nv * 3), colors: b.col.slice(0, nv * 3),
         indices: nv <= 65535 ? Uint16Array.from(b.idx.subarray(0, b.ni)) : b.idx.slice(0, b.ni),
-        patterns: b.pat.slice(0, nv), skies: b.sky.slice(0, nv), patterned: b.patterned,
+        patterns: b.pat.slice(0, nv), skies: b.sky.slice(0, nv), wet: b.wet.slice(0, nv), patterned: b.patterned,
     };
 }
 
@@ -3079,7 +3081,7 @@ export function mergeBuffers(a, b) {
     for (let i = 0; i < b.indices.length; i++) idx[a.indices.length + i] = b.indices[i] + nv;
     return {
         positions: cat(a.positions, b.positions), normals: cat(a.normals, b.normals), colors: cat(a.colors, b.colors),
-        indices: idx, patterns: cat(a.patterns, b.patterns), skies: cat(a.skies, b.skies), patterned: a.patterned || b.patterned,
+        indices: idx, patterns: cat(a.patterns, b.patterns), skies: cat(a.skies, b.skies), wet: cat(a.wet || new Uint8Array(nv), b.wet || new Uint8Array(b.positions.length / 3)), patterned: a.patterned || b.patterned,
     };
 }
 
@@ -3090,7 +3092,7 @@ const _FACE_N = { 2: [0, 1, 0], [-2]: [0, -1, 0], 3: [1, 0, 0], 4: [-1, 0, 0], 5
  * Append a polygon (3 or 4 points in world space, `V` flat) of a slab or a ramp, turned to face its normal.
  * face: 1 / −1 a sloping face (its normal from its points, up / down), ±2 flat, 3…6 a side.
  */
-function pushPoly(buf, V, n, face, color, pattern, sky) {
+function pushPoly(buf, V, n, face, color, pattern, sky, wet = 0) {
     if (buf.nv + 4 > buf.cap * 4) growBuffers(buf);
     let nx, ny, nz;
     // the polygon's own normal (its first three points)
@@ -3113,6 +3115,7 @@ function pushPoly(buf, V, n, face, color, pattern, sky) {
         C[o] = r; C[o + 1] = g; C[o + 2] = b;
         buf.pat[base + k] = pattern;
         buf.sky[base + k] = sky;
+        buf.wet[base + k] = wet;
     }
     buf.nv += n;
     if (pattern) buf.patterned = true;
@@ -3125,7 +3128,7 @@ function pushPoly(buf, V, n, face, color, pattern, sky) {
 }
 
 /** Convert grid-space quad to world space and append it. */
-function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1) {
+function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1, wet = 0) {
     if (buf.nv + 4 > buf.cap * 4) growBuffers(buf);
     // grid -> world: x_w = gx - 0.5, y_w = gy - 1.5, z_w = gz - 0.5 (gx = origin + local)
     const base = buf.nv, P = buf.pos, N = buf.nor, C = buf.col;
@@ -3142,6 +3145,7 @@ function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, patter
         C[o] = r; C[o + 1] = g; C[o + 2] = b;
         buf.pat[base + k] = pattern;
         buf.sky[base + k] = sky;
+        buf.wet[base + k] = wet;
     }
     buf.nv += 4;
     if (pattern) buf.patterned = true;

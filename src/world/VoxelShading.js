@@ -129,6 +129,8 @@ if (uUltraOn > 0.5 && uUltraWet > 0.01) {
 #include <fog_fragment>`;
 
 export function applyVoxelDetail(material) {
+    // Lifted blocks, books and other users of this material are dry unless terrain explicitly says otherwise.
+    material.defaultAttributeValues = { ...material.defaultAttributeValues, voxWet: [0] };
     material.onBeforeCompile = (shader) => {
         shader.uniforms.uSkyComp = SKY_LIGHT.comp;
         shader.uniforms.uWardS = WARD_HIDE.s;
@@ -142,8 +144,8 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uSeaT = UNDERSEA.t;
         shader.uniforms.uSeaK = UNDERSEA.k;
         shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;\n' + BOOM_PARS)
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
+            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxWet;\nvarying float vVoxWet;\nattribute float voxSky;\nvarying float vVoxSky;\n' + BOOM_PARS)
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;\nvVoxWet = voxWet;');
         // a cave's dark: the sun and the sky's light (ambient, hemisphere) reach a face only as far as
         // the daylight gets in; a lamp, «Люмос», a fire light it fully
         const lightsBegin = THREE.ShaderChunk.lights_fragment_begin.replace(
@@ -177,6 +179,7 @@ float seaCaustic(vec2 p, float t) {
 float hellE = 0.0; // (hell's glowing blocks: how much and what colour they shine — set by the pattern, read by the emissive part)
 vec3 hellC = vec3(0.0);
 varying float vVoxSky;
+varying float vVoxWet;
 varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
 varying float vVoxPat;
@@ -279,7 +282,7 @@ float snowflakeAt(vec2 uv) {
     }
     float detail = pat > 0.5 ? 0.0 : (r - 0.5) * (snowy ? 0.02 : 0.08);
     if (pat < 0.5 && green && n.y > 0.5) detail += (r > 0.9 ? 0.07 : 0.0) - (r < 0.08 ? 0.06 : 0.0); // grass speckles
-    if (pat < 0.5 && vVoxPos.y < uSeaY - 0.1 && vVoxSky > 0.02) detail *= 0.15; // (the sea's bottom: no blocks' pixels)
+    if (pat < 0.5 && vVoxPos.y < uSeaY - 0.1 && vVoxWet > 0.5) detail *= 0.15; // (the sea's bottom: no blocks' pixels)
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides
     diffuseColor.rgb *= 1.0 + detail * kFine;
     if (pat == 1.0) {
@@ -492,7 +495,7 @@ float snowflakeAt(vec2 uv) {
     }
     // the sea's bottom: one continuous seabed, not blocks (UNDERSEA) — sand with ripples and shells, rock grown over with algae and
     // pink coralline; the sides of a step the same stuff, only a little in the shade
-    seaUnder = pat < 0.5 ? (1.0 - smoothstep(uSeaY - 0.7, uSeaY - 0.1, vVoxPos.y)) * smoothstep(0.02, 0.12, vVoxSky) : 0.0;
+    seaUnder = pat < 0.5 ? (1.0 - smoothstep(uSeaY - 0.7, uSeaY - 0.1, vVoxPos.y)) * vVoxWet : 0.0;
     if (seaUnder > 0.0) {
         vec2 wp = n.y > 0.5 ? vVoxPos.xz : vec2(vVoxPos.x + vVoxPos.z, vVoxPos.y * 1.3);
         float m1 = vnoise(wp / 6.0), m2 = vnoise(wp / 1.7 + 9.0), m3 = vnoise(wp / 19.0 - 4.0);
@@ -591,7 +594,7 @@ float snowflakeAt(vec2 uv) {
             .replace('#include <fog_fragment>', WET_FRAG);
     };
     material.extensions = { ...(material.extensions || {}), derivatives: true }; // (fwidth on WebGL1)
-    material.customProgramCacheKey = () => 'voxel-detail';
+    material.customProgramCacheKey = () => 'voxel-detail-wet1';
     return material;
 }
 

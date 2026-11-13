@@ -109,7 +109,7 @@ self.onmessage = (e) => {
         for (const k of ['land', 'water']) {
             const b = arrays[k];
             bounds(b);
-            for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
+            for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies, b.wet]) transfer.push(a.buffer);
         }
         self.postMessage({ type: 'rebuilt', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, sky, chunk }, transfer);
         return;
@@ -126,7 +126,7 @@ self.onmessage = (e) => {
     for (const k of ['land', 'water']) {
         const b = arrays[k];
         bounds(b);
-        for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
+        for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies, b.wet]) transfer.push(a.buffer);
     }
     self.postMessage({ type: 'built', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, chunk, ms: performance.now() - t0 }, transfer);
     // forget the chunks far from where the player is now, then the oldest
