@@ -1,3 +1,4 @@
+import {SPELL_COST} from './SpellCosts.js';
 /**
  * WaterVortex.js — «Water Vortex» (with «Bubble» and «Frozen») and «Fire Maxima».
  *
@@ -644,6 +645,7 @@ export class WaterVortex {
             src: o.clone(), // (the caster: the rings stay round them and unwind)
         };
         // the stream leaves the vortex from its outer ring; its head flies along the hand's line
+        f.npcMode=['freeze','throw','drown'].includes(m.npcMode)&&this.game.castleLife?.byId?.get(by)?.element==='water'?m.npcMode:null;
         f.side = m.s === 'left' || m.s === 'right' ? m.s : null;
         f.tail = this._peel(f, new THREE.Vector3());
         f.pos = Array.isArray(m.h) ? new THREE.Vector3(+m.h[0] || 0, +m.h[1] || 0, +m.h[2] || 0) : f.tail.clone();
@@ -799,7 +801,7 @@ export class WaterVortex {
             this._push(f, tk, tid);
         }
         // «Bubble» said a moment before the hit
-        if (f.by === this.me && f.bubbleAt) this._startBubble(f);
+        if ((f.by === this.me && f.bubbleAt)||(g.authority&&f.npcMode)) this._startBubble(f);
     }
 
     /** The push itself (on the computer that decides that creature). */
@@ -873,8 +875,8 @@ export class WaterVortex {
         f.bubbled = true;
         if (f.tk && !VORTEX_TARGETS[f.tk]?.bubble) { f.tk = null; f.tid = null; } // (the water can't wrap it: a free ball where it hit)
         f.phase = 'feed';
-        this._addBubble({ id: f.id, by: f.by, tk: f.tk, tid: f.tid, v: f.volume, p: f.pos });
-        if (f.by === this.me) this._send({ ev: 'bubble', id: f.id, tk: f.tk, tid: f.tid, v: r3(f.volume), p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
+        this._addBubble({ id: f.id, by: f.by, tk: f.tk, tid: f.tid, v: f.volume, p: f.pos,npcMode:f.npcMode });
+        if (f.by === this.me||(this.game.authority&&f.npcMode)) this._send({by:f.by,npcMode:f.npcMode, ev: 'bubble', id: f.id, tk: f.tk, tid: f.tid, v: r3(f.volume), p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
     }
 
     /** The stream flows into the bubble until the whole vortex is there (it grows as the water comes). */
@@ -905,7 +907,7 @@ export class WaterVortex {
         this._splash(f.pos, 1 + f.volume * 0.03, Math.min(60, 25 + f.volume));
         if (f.res > 0.5) this._collapse(this._srcOf(f), f.res); // (what had not unwound yet falls round the caster)
         if (this.game.sound) this.game.sound.playSplash?.();
-        if (broadcast && f.by === this.me && why !== 'block') this._send({ ev: 'end', id: f.id, why, p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
+        if (broadcast && (f.by === this.me||(f.npcMode&&this.game.authority)) && why !== 'block') this._send({by:f.by, ev: 'end', id: f.id, why, p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
     }
 
     // ============================================================= bubbles
@@ -913,7 +915,7 @@ export class WaterVortex {
         if (this.bubbles.has(m.id)) return this.bubbles.get(m.id);
         const p = m.p instanceof THREE.Vector3 ? m.p.clone() : new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
         const b = {
-            id: m.id, by: m.by, tk: m.tk, tid: m.tid, phase: 'liquid', t: 0, total: +m.v || 1,
+            id: m.id, by: m.by, tk: m.tk, tid: m.tid,npcMode:['freeze','throw','drown'].includes(m.npcMode)?m.npcMode:null, phase: 'liquid', t: 0, total: +m.v || 1,
             r: 0.5, R: this._fitR(m), pos: p, home: p.clone(), grow: 0, held: null, rest: null, net: null, sentP: null, sendT: 0, anchor: null, dmgT: 0, iceT: 0, meltT: 0, burstAsked: false,
         };
         if (this.scene) {
@@ -972,12 +974,12 @@ export class WaterVortex {
             this._collapse(b.pos, Math.max(4, b.total * (b.grow || 0))); // (the water rains down from where the ball hung)
         }
         if (this.game.sound) {
-            if (b.phase === 'ice') this.game.sound.playFrozenHit?.();
+            if (b.phase === 'ice') this.game.sound.playFrozenHit?.(b.pos);
             else if (this.game.sound.playBubblePop) this.game.sound.playBubblePop(b.pos);
             else this.game.sound.playSplash?.();
         }
         this._remove(b);
-        if (broadcast) this._send({ ev: 'burst', id: b.id, why });
+        if (broadcast) this._send({...(b.npcMode?{by:b.by}:{}), ev: 'burst', id: b.id, why,...(b.npcThrow?{throw:b.npcThrow.toArray()}: {}) });
     }
 
     /** «Fire Maxima» on the ice: it melts very fast in golden fire. */
@@ -1010,6 +1012,7 @@ export class WaterVortex {
             g.hud?.setFrozenOverlay?.(0);
             g.hud?.setStatus?.('');
             g.character.verticalVelocity = 0;
+            if(b.npcMode){g.levitation?.watchMyFall?.(b.by,0);if(b.npcThrow){g.knockback?.add?.(b.npcThrow);g.character.verticalVelocity=b.npcThrow.y;}}
         }
         if (b.tk && b.tk !== 'p' && g.authority) {
             const c = b.tk === 'z' ? g.zombieById?.get(b.tid) : g.duel?._creature?.(b.tk, b.tid);
@@ -1048,6 +1051,7 @@ export class WaterVortex {
             if (b.phase === 'liquid') {
                 if (Math.random() < 0.25) this._drop(_b.copy(b.pos).addScaledVector(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(), b.r), _d.set(0, -1, 0));
                 if (mine) this._hold(b, dt);
+                if(mine&&b.npcMode==='drown'&&b.grow>.9){b.dmgT+=dt;while(b.dmgT>=1){b.dmgT--;this._iceHurt(b,true);}}
                 // From inside: «Protection Maxima» (the dome) bursts it before it freezes
                 if (b.tk === 'p' && b.tid === this.me && g.combat.shield?.type === 2 && g.combat.shield.left > 0) {
                     g.hud?.setVoice?.('🛡️ Protection Maxima разорвала пузырь — вы свободны!', true);
@@ -1076,8 +1080,23 @@ export class WaterVortex {
      * it with the hand like «Левиоса» — point at it and move the hand (raise it: the ball rises); a hand
      * let down leaves it hanging where it is. The caster's computer moves it, the others follow ('bpos').
      */
+    /** Host-owned NPC concentration; victims still decide their own shield escape and damage. */
+    _npcBubble(b,dt){
+        const g=this.game,v=g.castleLife?.byId?.get(b.by);
+        if(!v||v.dead||v.stunT>0||v.lev||v.vy||!v.foe||v.mana<VORTEX.MANA_DRAIN*dt){this._burst(b,'caster',true);return;}
+        v.mana-=VORTEX.MANA_DRAIN*dt;
+        const target=_b.copy(b.home);target.y+=Math.min(8,b.t*2);this._liftStep(b,dt,target,true);
+        if(b.npcMode==='freeze'&&b.t>2.2&&b.grow>.9&&b.phase==='liquid'&&v.mana>=SPELL_COST.Frozen){v.mana-=SPELL_COST.Frozen;this._freeze(b);this._send({by:b.by,ev:'freeze',id:b.id});}
+        if(b.t>6){
+            if(b.npcMode==='throw')b.npcThrow=new THREE.Vector3(b.pos.x-v.x,0,b.pos.z-v.z).normalize().multiplyScalar(12).setY(3);
+            this._burst(b,'release',true);return;
+        }
+        b.sendT-=dt;if(b.sendT<=0){b.sendT=.1;this._send({by:b.by,ev:'bpos',id:b.id,p:b.pos.toArray()});}
+    }
+
     _moveBubble(b, dt) {
         const g = this.game;
+        if(b.npcMode&&g.authority){this._npcBubble(b,dt);return;}
         if (b.by !== this.me) {
             if (b.net) b.pos.lerp(b.net, Math.min(1, dt * 8));
             else this._liftStep(b, dt, null);
@@ -1174,7 +1193,7 @@ export class WaterVortex {
                 if (b.phase === 'ice') {
                     g.hud?.setStatus?.('🧊 Вы во льду! −1 ❤ холод, −1 ❤ нет воздуха каждую секунду. Скажите <b>«Fire Maxima»</b>');
                     g.hud?.setFrozenOverlay?.(1);
-                } else g.hud?.setStatus?.('🫧 Вы в водяном пузыре! Руки буквой <b>T</b> + «Protection Maxima», пока он не замёрз');
+                } else g.hud?.setStatus?.((b.npcMode==='drown'?'🫧 В пузыре не хватает воздуха! ':'🫧 Вы в водяном пузыре! ')+ ' Руки буквой <b>T</b> + «Protection Maxima», пока он не замёрз');
             }
             return;
         }
@@ -1198,14 +1217,14 @@ export class WaterVortex {
     }
 
     /** One second in the ice: −1 HP from the cold, −1 HP without air. */
-    _iceHurt(b) {
+    _iceHurt(b,onlyAir=false) {
         const g = this.game;
         if (!b.tk) return;
-        const dmg = iceDamagePerSecond();
+        const dmg = onlyAir?VORTEX.AIR_DPS:iceDamagePerSecond();
         this._note({ ev: 'iceHurt', id: b.id, dmg });
         if (b.tk === 'p') {
             if (b.tid !== this.me) return;
-            if (g.combat.enabled) { g.combat.damage(VORTEX.COLD_DPS, b.by, 'cold'); if (!g.combat.dead) g.combat.damage(VORTEX.AIR_DPS, b.by, 'air'); } else g.damageLocalPlayer?.(dmg);
+            if (g.combat.enabled) { if(!onlyAir)g.combat.damage(VORTEX.COLD_DPS, b.by, 'cold'); if (!g.combat.dead) g.combat.damage(VORTEX.AIR_DPS, b.by, 'air'); } else g.damageLocalPlayer?.(dmg);
             return;
         }
         if (b.tk === 'z') {
@@ -1462,12 +1481,12 @@ export class WaterVortex {
             }
             case 'bubble': {
                 const f = this.flights.get(m.id);
-                if (f) { if (m.tk) { f.tk = m.tk; f.tid = m.tid; } f.phase = 'cling'; this._startBubble(f); } else if (Array.isArray(m.p)) this._addBubble({ ...m, by });
+                if (f) { if(['freeze','throw','drown'].includes(m.npcMode))f.npcMode=m.npcMode;if (m.tk) { f.tk = m.tk; f.tid = m.tid; } f.phase = 'cling'; this._startBubble(f); } else if (Array.isArray(m.p)) this._addBubble({ ...m, by });
                 break;
             }
             case 'freeze': this._freeze(this.bubbles.get(m.id)); break;
             case 'bpos': { const b = this.bubbles.get(m.id); if (b && Array.isArray(m.p)) b.net = (b.net || new THREE.Vector3()).set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); break; }
-            case 'burst': this._burst(this.bubbles.get(m.id), m.why || 'burst', false); break;
+            case 'burst': {const b=this.bubbles.get(m.id);if(b?.npcMode&&Array.isArray(m.throw)&&m.throw.length===3&&m.throw.every(Number.isFinite))b.npcThrow=new THREE.Vector3(...m.throw).clampLength(0,20);this._burst(b,m.why||'burst',false);break;}
             case 'fire': if (Array.isArray(m.o) && Array.isArray(m.p)) this._fire(by, m); break;
         }
     }

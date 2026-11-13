@@ -556,3 +556,25 @@ test('a hanging ball still takes 1 mana a second; out of mana it bursts', () => 
     run(V, 1);
     assert.equal(V.bubbles.size, 0, 'no mana: the ball burst');
 });
+
+test('water NPC holds and lifts the same bubble, pays continuously, and pays Frozen only once',()=>{
+ const v={element:'water',mana:50,foe:'me'},sent=[];
+ const self={game:{castleLife:{byId:new Map([['water',v]])}},_liftStep(b,dt,p){b.pos.copy(p);},_freeze(b){b.phase='ice';},_send:m=>sent.push(m),_burst(){assert.fail('unexpected release');}};
+ const b={id:'capture',by:'water',npcMode:'freeze',phase:'liquid',grow:1,t:3,home:new THREE.Vector3(0,2,0),pos:new THREE.Vector3(),sendT:0};
+ WaterVortex.prototype._npcBubble.call(self,b,1);assert.equal(v.mana,44);assert.equal(b.phase,'ice');assert.equal(b.pos.y,8);assert.ok(sent.some(m=>m.ev==='freeze'&&m.by==='water'));
+ WaterVortex.prototype._npcBubble.call(self,b,1);assert.equal(v.mana,43,'Frozen not paid twice');
+});
+
+test('a water NPC cannot hold a victim while stunned, dead or out of mana; a thrown victim is actually released',()=>{
+ const v={element:'water',mana:50,foe:'me'},out=[];
+ const self={game:{castleLife:{byId:new Map([['water',v]])}},_liftStep(){},_send(){},_burst:(b,why)=>out.push(why)};
+ const b={by:'water',npcMode:'throw',phase:'liquid',grow:1,t:6.1,home:new THREE.Vector3(),pos:new THREE.Vector3(2,10,0),sendT:1};v.x=0;v.z=0;
+ WaterVortex.prototype._npcBubble.call(self,b,.1);assert.equal(out.pop(),'release');assert.equal(b.npcThrow.y,3);assert.ok(b.npcThrow.x>=11.9);
+ for(const state of [{dead:true},{stunT:1},{mana:0}]){Object.assign(v,{dead:false,stunT:0,mana:50},state);WaterVortex.prototype._npcBubble.call(self,b,.1);assert.equal(out.pop(),'caster');}
+});
+
+test('liquid drowning drains air only, while Frozen retains cold plus air damage',()=>{
+ const hits=[],self={me:'me',_note(){},game:{combat:{enabled:true,damage:(n,by,k)=>hits.push([n,k])}}},b={id:'capture',tk:'p',tid:'me',by:'water'};
+ WaterVortex.prototype._iceHurt.call(self,b,true);assert.deepEqual(hits,[[VORTEX.AIR_DPS,'air']]);hits.length=0;
+ WaterVortex.prototype._iceHurt.call(self,b);assert.deepEqual(hits,[[VORTEX.COLD_DPS,'cold'],[VORTEX.AIR_DPS,'air']]);
+});
