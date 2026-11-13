@@ -140,3 +140,19 @@ test('both ways: the people open it away from themselves; a body walking into an
     D._bodiesPush();
     assert.ok(d.a > 0.5, `pushed on, away from me (${d.a.toFixed(2)} from ${a0.toFixed(2)})`);
 });
+
+test('real Wind reaches the top of a door at point blank, for mirrored and rotated leaves', async () => {
+    const {SpellManager}=await import('../../src/fx/SpellManager.js');
+    for(const mirror of [false,true])for(const ry of [0,.7]) {
+        const D=fake(),d=door({x:0,y:0,z:0,a:0,ry,mirror,w:3,h:5});D.list.set('near',d);
+        const center=D._leafMiddle(d,new THREE.Vector3()),normal=D._leafNormal(d,new THREE.Vector3());
+        const origin=center.clone().addScaledVector(normal,-.12);origin.y=4.7;
+        const direction=normal.clone().add(new THREE.Vector3(0,.25,0)).normalize();
+        const gust={auth:true,zombies:[],fx:{spark(){}},_fx(){},hooks:{doors:(push,from)=>D.blow(push,from)}};
+        SpellManager.prototype.castWind.call(gust,origin,direction,'me');
+        assert.ok(d.spin>0,`wind touches the upper leaf: mirror=${mirror}, rotation=${ry}`);
+        D.game.locks={doorLocked:()=>true};d.spin=0;
+        SpellManager.prototype.castWind.call(gust,origin,direction,'me');
+        assert.equal(d.spin,0,'locked doors still hold');
+    }
+});

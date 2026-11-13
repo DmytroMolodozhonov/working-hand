@@ -190,3 +190,36 @@ test('«Пентаграниум» и ошибка во втором слове:
     assert.equal(p.cast(true, 'пентаграниум телепортис', AIM0()), 'Pentagranium');
     assert.equal([...p.marks.values()][0].pent, 'teleport');
 });
+
+test('pentagrams are cast, synced and supported on a cave floor rather than the roof above', async () => {
+    const {TerrainData,BLOCK}=await import('../../src/world/Terrain.js');
+    const data=new TerrainData();data.generate({seed:7});
+    for(let z=-6;z<=6;z++)for(let x=-6;x<=6;x++)for(let L=-10;L<=-3;L++)data.set(x,L,z,BLOCK.AIR);
+    const {g,p,sent}=stub();g.terrain.data=data;
+    const y=-11.5;
+    p.learnFigure('life');
+    const aim={origin:new THREE.Vector3(0,y+4,0),dir:new THREE.Vector3(0,-1,0)};
+    assert.equal(p.cast(true,'пентаграниум вита',aim),'Pentagranium');
+    const mark=[...p.marks.values()][0];
+    assert.equal(mark.y,y);assert.equal(sent.at(-1).y,y);assert.equal(g.combat.fatigue,50);
+    assert.ok(mark.floor.every(([x,z,height])=>height===y),'all floor samples stay underground');
+    data.set(0,0,0,BLOCK.AIR);
+    p.update(1.1);assert.equal(p.marks.size,1,'changing the distant roof does not erase the cave drawing');
+    data.set(0,-11,0,BLOCK.AIR);
+    p.update(1.1);assert.equal(p.marks.size,0,'destroying the actual supporting floor erases it');
+});
+
+test('cave floor casting still rejects a wall and passes the correct depth to enchanting circles', async () => {
+    const {TerrainData,BLOCK}=await import('../../src/world/Terrain.js');
+    const data=new TerrainData();data.generate({seed:7});
+    for(let z=-6;z<=6;z++)for(let x=-6;x<=6;x++)for(let L=-10;L<=-3;L++)data.set(x,L,z,BLOCK.AIR);
+    const {g,p}=stub();g.terrain.data=data;
+    for(let L=-10;L<=-3;L++)data.set(3,L,0,BLOCK.STONE);
+    p.aim={origin:new THREE.Vector3(0,-7,0),dir:new THREE.Vector3(1,-.1,0).normalize()};
+    assert.equal(p.groundAt(),null,'a wall is not a floor');
+    p.learnFigure('enchant');
+    let floor;
+    g.enchantCircles={add(x,y,z){floor=y;}};
+    assert.equal(p.cast(true,'пентаграниум энчантис',{origin:new THREE.Vector3(0,-7,0),dir:new THREE.Vector3(0,-1,0)}),'Pentagranium');
+    assert.equal(floor,-11.5);
+});

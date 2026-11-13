@@ -1,3 +1,4 @@
+import { kickDeadDoll } from './DeathImpulse.js';
 /**
  * CreatureImpact.js — pushes, staggers, knockdowns and head jolts for EVERY creature that is not a
  * player: zombies, villagers (farmers, knights, the king… and anybody else CastleLife runs), animals
@@ -762,11 +763,17 @@ export class CreatureImpact {
      * he flew as, or a new one from the pose he died in, toppling the way the last blow went (or backwards). A villager's settled pose goes to his
      * body (Death.reposeBody) — it lies so for good, and is sent and saved so; a zombie's / a Taron's lies so until the body is gone (sinking with it).
      */
+    _deathKick(c, doll) {
+        if (c.deathKick && !c._deathKickApplied) { kickDeadDoll(doll, c.deathKick); c._deathKickApplied = true; }
+    }
+
     ragDeath(c) {
         const ck = kindOf(c) || (c?.isVillager ? 'v' : null);
-        if (!c || !ck || this.deadRags.has(ck + '|' + c.id)) return;
+        if (!c || !ck) return;
+        const previous = this.deadRags.get(ck + '|' + c.id);
+        if (previous) { this._deathKick(c, previous.doll); return; }
         const e = this.active.get(ck + '|' + c.id);
-        if (e?.s.rag) { e.s.rag.tone = 0; e.s.rag.wake?.(); this.deadRags.set(ck + '|' + c.id, { c, doll: e.s.rag, ck, rig: e.s.rig }); e.s.rag = null; e.s.pose = null; e.s.rig = null; return; }
+        if (e?.s.rag) { e.s.rag.tone = 0; e.s.rag.wake?.(); this.deadRags.set(ck + '|' + c.id, { c, doll: e.s.rag, ck, rig: e.s.rig }); this._deathKick(c, e.s.rag); e.s.rag = null; e.s.pose = null; e.s.rig = null; return; }
         if (!this._ragOk(ck, c)) return;
         const tmp = { };
         const K = KINDS[ck];
@@ -777,6 +784,7 @@ export class CreatureImpact {
         let vy = 0;
         if (ck === 'a' && c.vel) { vx = c.vel.x; vy = c.vel.y; vz = c.vel.z; if (Math.hypot(vx, vz) < 0.5) { vx = Math.sin(yaw) * 0.8 * -K.faces; vz = Math.cos(yaw) * 0.8 * -K.faces; } } // (killed in the air / thrown: it goes on as it flew)
         this._ragStart(ck, c, tmp, vx, vy, vz, RAG.DEAD_TIP);
+        this._deathKick(c, tmp.rag);
         this.deadRags.set(ck + '|' + c.id, { c, doll: tmp.rag, ck, rig: tmp.rig });
     }
 

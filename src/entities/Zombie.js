@@ -688,7 +688,9 @@ export class Zombie {
         if (this.isThrall) flags |= 64;
         if (this.dummy) flags |= 128;
         if (this.burning > 0) flags |= 256;
-        return [this.id, r(p.x), r(p.y), r(p.z), r(this.group.rotation.y), flags, this.limbMask, r(this.freezeProgress), r(this.group.rotation.x)];
+        const state = [this.id, r(p.x), r(p.y), r(p.z), r(this.group.rotation.y), flags, this.limbMask, r(this.freezeProgress), r(this.group.rotation.x)];
+        if (this.isDead && this.deathKick) state.push(this.deathKick);
+        return state;
     }
 
     /** Client side: apply host snapshot (positions are interpolated by the caller). */
@@ -707,7 +709,8 @@ export class Zombie {
         if (frozen && !this.isFrozen) { this.freezeProgress = 1; this.freeze(); this._restoreColor(); }
         else if (!frozen && this.isFrozen) this.unfreeze();
         else if (!frozen && Math.abs(s[7] - this.freezeProgress) > 0.05) { this.freezeProgress = s[7]; this._restoreColor(); }
-        if (this.isDead && !wasDead) this.corpseTimer = 0;
+        if (this.isDead && !wasDead) { this.corpseTimer = 0; this.isDying = true; }
+        if (this.isDead && Array.isArray(s[9]) && s[9].length === 3 && s[9].every(Number.isFinite)) this.deathKick = s[9];
         this.netTarget = this.netTarget || new THREE.Vector3();
         this.netTarget.set(s[1], s[2], s[3]);
         this.netRotY = s[4];

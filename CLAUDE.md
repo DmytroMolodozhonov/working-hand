@@ -471,3 +471,4 @@
 
 - **Сухие освещённые пещеры и Stand Up после вскрытия потолка (13.11):** подводный стиль только при контакте грани с водой (`voxWet`); местонахождение в пещере независимо от освещённости/дыры в потолке → `docs/rules/texture-style.md`, `docs/rules/spells-creatures.md`, тест `cave-surface`.
 - **Опора деревьев у пещер, мир около гостей и необратимость сохранённой смерти (13.11):** `docs/rules/texture-style.md`, `docs/rules/misc-rules.md`; покрытие аудита и ограничения проверки зависаний — `docs/reports/2026-11-13-world-consistency.md`.
+- **Пентаграммы в пещерах, ложное обвинение после смерти от растения, смертельный толчок и заклинания/двери в упор (13.11):** `docs/rules/spells-creatures.md`, `docs/rules/home-defence.md`, `docs/rules/hands-body.md`; проверки `pentagranium`, `blame-unseen`, `death-impulse`, `corpse-ragdoll`, `close-cast`, `door-push`.

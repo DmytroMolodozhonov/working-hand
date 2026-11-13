@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { VoxelCharacter } from '../../src/entities/Character.js';
 import { VillagerModel } from '../../src/entities/VillagerModel.js';
 import { DeathSystem } from '../../src/game/Death.js';
-import { Ragdoll } from '../../src/game/Ragdoll.js';
+import { Ragdoll, DOLL } from '../../src/game/Ragdoll.js';
 
 function world(authority = true) {
     let floor = 0;
@@ -88,4 +88,22 @@ test('a long fall cannot hit the ragdoll time limit and freeze in open air', () 
     assert.equal(d.asleep, false);
     assert.ok(d.x[1] < 1980);
     assert.ok(d.o[1] - d.x[1] > 0.01, 'still falling after the simulation time limit');
+});
+
+
+test('a new player corpse carries its lethal impulse across the network, without restarting it on save restore', () => {
+    const a=world(),b=world(false),restored=world();
+    const velocity=d=>d.x.reduce((sum,x,i)=>sum+(i%3===0?(x-d.o[i])/(d.x.length/3*DOLL.DT):0),0);
+    try {
+        const body={id:'kicked',k:'p',who:'me',x:0,y:5,z:0,yaw:0,age:0,ki:[5,1.75,0]};
+        a.ch.group.position.set(0,5,0);a.death.addBody(body,a.ch.group);
+        assert.ok(velocity(body.doll.doll)>4.9);
+        const packet=a.death._wire(body);
+        b.g.remotes=new Map([['me',{character:b.ch}]]);b.death.onNetBody(packet);
+        const copy=b.death.bodies.get('kicked');assert.ok(velocity(copy.doll.doll)>4.9);
+        const old=Array.from(copy.doll.doll.o);b.death.onNetBody(packet);
+        assert.deepEqual(Array.from(copy.doll.doll.o),old,'duplicate message has no extra kick');
+        restored.g.remotes=new Map([['me',{character:restored.ch}]]);restored.death.onNetBody(packet,true);
+        assert.equal(velocity(restored.death.bodies.get('kicked').doll.doll),0,'restoring a saved corpse is not another death');
+    } finally {a.close();b.close();restored.close();}
 });

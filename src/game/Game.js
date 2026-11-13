@@ -2264,7 +2264,7 @@ export class Game {
             const reach = this._duelReach();
             const aim = this.duel.pickSide(false, reach);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || this.dom) ? (this.magicHand || this.lastMagicHand || this.dom) : (this.wandSide() || [this.dom, this.off].find((s) => this.character.isArmRaised(s))));
-            if (!side || !this.character.isArmRaised(side)) {
+            if (!side || !(this.duel.canCast?.(side) ?? this.character.isArmRaised(side))) {
                 if (isFinal) this.hud.setVoice('✋ Поднимите руку (палочку) — заклинание полетит туда, куда она указывает', true);
                 return null;
             }

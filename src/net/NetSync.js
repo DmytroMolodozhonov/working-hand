@@ -1516,6 +1516,7 @@ export class NetSync {
                 }
             }
             z.applySnapshot(s);
+            if (z.isDead && z.deathKick && !z._deathKickApplied) g.creatureImpact?.ragDeath?.(z);
         }
         for (const id of removed || []) {
             const z = g.zombieById.get(id);
@@ -1536,7 +1537,7 @@ export class NetSync {
             if (res.severed >= 0) z.severLimb(Math.random, res.severed);
             if (res.decap) z.decapitate();
             if (res.died) {
-                z.isDead = true;
+                z.isDead = true; z.isDying = true;
                 if (g.sound && !z.dummy) g.sound.playDeath(z.group.position);
             } else if (m.by !== this.me && g.sound) {
                 g.sound.playHit();

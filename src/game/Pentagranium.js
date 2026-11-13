@@ -41,12 +41,12 @@ export function surfaceNear(d, x, z, y) {
     const ix = Math.round(x), iz = Math.round(z), Lc = Math.round(y + 0.5); // (the top solid layer of the circle's own ground: y = L − 0.5)
     for (let k = 0; k <= PENT_DRAPE.DOWN; k++) { // (down from the circle's level first: the land it is drawn on, a step lower)
         const L = Lc - k;
-        if (d.solidIn(ix, iz, L, L) && !d.solidIn(ix, iz, L + 1, L + 1)) return L - 0.5;
+        if (d.solidIn(ix, iz, L, L) && !d.solidIn(ix, iz, L + 1, L + 1)) return d.floorAt?.(x, z, L - 0.4) ?? L - 0.5;
         if (k && d.solidIn(ix, iz, L, L)) break; // (solid with solid over it: a wall — no step down here)
     }
     for (let k = 1; k <= PENT_DRAPE.UP; k++) { // (a step or a bump a little higher)
         const L = Lc + k;
-        if (d.solidIn(ix, iz, L, L) && !d.solidIn(ix, iz, L + 1, L + 1)) return L - 0.5;
+        if (d.solidIn(ix, iz, L, L) && !d.solidIn(ix, iz, L + 1, L + 1)) return d.floorAt?.(x, z, L - 0.4) ?? L - 0.5;
     }
     return y;
 }
@@ -194,7 +194,7 @@ export class Pentagranium {
         if (g.swim?.underwater) return hint('🩸 Под водой пентаграмма не держится');
         const p = this.groundAt();
         if (!p) return hint('🩸 Направьте палочку на землю — пентаграмма ляжет туда, куда вы указываете');
-        const origin = _o.set(p.x, this._height(p.x, p.z), p.z);
+        const origin = _o.set(p.x, p.y, p.z);
         if (g.wards?.forbids?.(origin, origin)) return hint('🛡️ Здесь чужая защита дома — пентаграмма не держится');
         const offer = !this.creative && OFFERINGS[id] ? id : null; // (survival: the ritual of the gargoyles / the monster needs things on the circle — Offerings.js)
         const cost = CAST_COST[id], c = g.combat; // The same 50 for every drawing; use / offering pays its own price.
@@ -235,13 +235,14 @@ export class Pentagranium {
         if (dir.y > -0.03) return null;
         const hit = data.raycast(origin, dir, PENT.REACH);
         if (!hit) return null;
-        const x = Math.round(hit.x), z = Math.round(hit.z), L = data.topLayer(x, z);
-        if (Math.abs(hit.y - (L - 0.5)) > 1.6) return null; // (the side of a wall, a tree, a house: not the ground)
-        const under = data.get(x, L - 1, z);
+        const x = Math.round(hit.x), z = Math.round(hit.z);
+        const y = data.floorAt?.(hit.x, hit.z, hit.y + 0.15) ?? this._height(hit.x, hit.z, hit.y);
+        if (Math.abs(hit.y - y) > 0.2) return null; // hit must be on a floor, not the side of a wall
+        const L = Math.floor(y + 1.45), under = data.get(x, L, z);
         if (under === BLOCK.WATER || under === BLOCK.AIR) return null;
-        if (isEnchanted(under) || data.godGiftAt?.(x, L - 1, z)) return null; // (enchanted stone and the gods' gifts keep no black drawing)
-        if (g.ships?.footprintAt?.(x, L - 1, z)) return null;
-        return { x: hit.x, y: hit.y, z: hit.z };
+        if (isEnchanted(under) || isEnchanted(data.get(x, L - 1, z)) || data.godGiftAt?.(x, L, z) || data.godGiftAt?.(x, L - 1, z)) return null;
+        if (g.ships?.footprintAt?.(x, L, z)) return null;
+        return { x: hit.x, y, z: hit.z };
     }
 
     // ------------------------------------------------------------ per frame
@@ -577,6 +578,12 @@ export class Pentagranium {
         return nearY == null ? d.topLayer(Math.round(x), Math.round(z)) - 0.5 : surfaceNear(d, x, z, nearY);
     }
 
+    /** The actual supporting floor at the drawing's level, including under a ceiling. */
+    _floorHeight(x, z, y) {
+        const surface = this._height(x, z, y);
+        return this.data?.floorAt?.(x, z, surface + 0.1) ?? surface;
+    }
+
     /** (every computer) A pentagram is lit. */
     _place(id, by, pent, x, y, z, r, rot, anim = false) {
         if (this.marks.has(id) || !figureOf(pent)) return null;
@@ -587,9 +594,9 @@ export class Pentagranium {
         const floor = [];
         for (let i = 0; i < 12; i++) {
             const a = (i / 12) * Math.PI * 2, fx = x + Math.cos(a) * R, fz = z + Math.sin(a) * R;
-            floor.push([Math.round(fx), Math.round(fz), data ? data.topLayer(Math.round(fx), Math.round(fz)) : 0]);
+            floor.push([Math.round(fx), Math.round(fz), this._floorHeight(Math.round(fx), Math.round(fz), y)]);
         }
-        const cl = data ? data.topLayer(Math.round(x), Math.round(z)) : 0;
+        const cl = this._floorHeight(Math.round(x), Math.round(z), y);
         floor.push([Math.round(x), Math.round(z), cl]);
         const m = { id, by, pent, perm: false, pair: null, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0, drawT: anim ? PENT.DRAW_T : 0, anim: anim ? { t: 0, plan: null } : null };
         this.marks.set(id, m);
@@ -662,7 +669,7 @@ export class Pentagranium {
         if ((m._gT = (m._gT || 0) - dt) <= 0) {
             m._gT = 1;
             const data = this.data;
-            if (data) for (const [fx, fz, L] of m.floor) if (Math.abs(data.topLayer(fx, fz) - L) >= PENT.FLOOR_DIFF) { this._remove(m.id, 'ground'); return; }
+            if (data) for (const [fx, fz, height] of m.floor) if (Math.abs(this._floorHeight(fx, fz, m.y) - height) >= PENT.FLOOR_DIFF) { this._remove(m.id, 'ground'); return; }
         }
     }
 

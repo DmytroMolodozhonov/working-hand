@@ -580,6 +580,17 @@ export class Doors {
             if (door.lifted) continue;
             if (from && Math.abs(door.x - from.x) + Math.abs(door.z - from.z) > DOOR_PUSH.REACH * 1.5) continue;
             const p = this._leafMiddle(door, _q);
+            // At arm's length the middle may be below/aside the wind cone,
+            // although the gust hits the upper part of the same leaf.
+            if (from) {
+                const local = this._leafLocal(door, from, _n);
+                const m = door.mirror ? -1 : 1, w = door.w || W;
+                const along = Math.max(0, Math.min(w, local.x)) - w / 2;
+                const angle = door.ry + m * door.a;
+                p.x += m * Math.cos(angle) * along;
+                p.z -= m * Math.sin(angle) * along;
+                p.y = door.y + Math.max(0, Math.min(door.h || H, local.y));
+            }
             const v = vAt(p);
             if (v && this.impulse(door, v)) n++;
         }

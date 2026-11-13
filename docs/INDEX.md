@@ -250,6 +250,7 @@
 - `DarkLord.js` — «НАСТОЯЩИЙ ТЁМНЫЙ МАГ» (pure, no THREE, node-testable). Игровая часть — DarkLordLife.js.
 - `DarkLordLife.js` — the game side of DarkLord.js: the turning into a true dark mage, the outfit, the curse, the cure, the world's answer.
 - `DarkMagic.js` — чёрная магия (pure, no THREE, node-testable).
+- `DeathImpulse.js` — лёгкий физический толчок только при смерти от магии; четверть Jolt, сохранение более сильного движения, наклон корпуса и передача через состояние тела/зомби.
 - `Death.js` — what is left when somebody dies.
 - `Diabolos.js` — Дьяволос, огромный прикованный дьявол ада: игровая часть (правила и числа — DiabolosRules.js, модель — entities/DiabolosModel.js, звуки — audio/DiabolosSounds.js).
 - `DiabolosActs.js` — характер Дьяволоса: его поступки (анимации тела + мимика лица) и то, когда какой (чистые данные, без THREE).

@@ -165,3 +165,23 @@ test('a zombie right up against me but behind a wall the hand is pushed into: no
     run(d);
     assert.deepEqual(hits, []);
 });
+
+test('contact bending the rendered arm down still permits a tracked wand aimed into the nearby creature', () => {
+    const {g,d,hits}=world({dist:1.3});
+    g.character.isArmRaised=()=>false;
+    g.character.handLost=()=>false;
+    const aim=d.pickSide(false);
+    assert.equal(aim?.t.kind,'v');
+    d.cast('Stupefy',aim,'right');run(d);
+    assert.deepEqual(hits,[['Stupefy','k1']]);
+    g.character.handLost=()=>true;
+    assert.equal(d.pickSide(false),null,'lost tracking is not a raised hand');
+});
+
+test('the aim picker accepts a capsule enclosing the wand tip, but not a body behind it', async () => {
+    const {pickBody}=await import('../../src/game/Duel.js');
+    const body={kind:'v',id:'near',a:V(0,0,-.2),b:V(0,4,-.2),r:.6};
+    assert.equal(pickBody(V(0,2,0),DIR,[body])?.body.id,'near');
+    body.a.z=body.b.z=2;
+    assert.equal(pickBody(V(0,2,0),DIR,[body]),null);
+});

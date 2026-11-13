@@ -1,3 +1,4 @@
+import { deathImpulse, magicalImpactKind } from './DeathImpulse.js';
 /**
  * CastleLife.js — the people of the castles.
  *
@@ -2955,7 +2956,10 @@ export class CastleLife {
         if (dir && this._walkable(v.x + dir.x * (0.3 + BODY_R), v.z + dir.z * (0.3 + BODY_R), v.y)) { v.x += dir.x * 0.3; v.z += dir.z * 0.3; } // (never shoved into a wall)
         const killed = v.hp <= 0;
         const pos = { x: v.x, y: v.y, z: v.z };
-        if (killed) this._die(v, by);
+        if (killed) {
+            if (opts.spell || (!opts.weapon && (opts.magic || opts.fire || magicalImpactKind(opts.kind)))) v.deathKick = deathImpulse(this.game, v, by, dir);
+            this._die(v, by, opts);
+        }
         if (!killed && by != null && v.guest && this._guestCharge(v, by)) return; // (the Creative guest: he runs at whoever hit him)
         if (by != null && this.game.arenaDuels?.onHit(v, by, killed, opts)) return; // (a legal duel at the arena — nobody minds it; a foul is the arena's: ArenaDuels.js)
         // the hidden wanted level: a kill, or a real blow (not a bump in a crowd) — only what somebody saw (Blame.js)
@@ -3308,8 +3312,9 @@ export class CastleLife {
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.set(v.x, v.y + 2.6, v.z), v.armor > 0 ? 0xdddddd : 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.5);
     }
 
-    _die(v, by) {
+    _die(v, by, opts = {}) {
         if (v.entry?.dummy) { v.hp = v.maxHp || v.hp || 10; return; } // (the training dummy never dies: School.js)
+        v.naturalDeath = (by != null && !this._isPlayer(by)) || (by == null && (opts.kind === 'thorn' || opts.kind === 'bite'));
         // The NPC must have released a spell at the killer; noticing, anger and aiming alone do not count.
         const fought = !!v.castAtPlayers?.has(by);
         this.rel?.onHit(v, by, true); // (a killing: the town's opinion of the hero — Relations.js)
@@ -3373,7 +3378,7 @@ export class CastleLife {
             // (killed by no player — a zombie, a creature, a fall: they look at the body and search round it)
             if (o.foe) continue;
             o.flinchT = STARTLE.FLINCH; o.flinchFrom = { x: at.x, z: at.z };
-            if (this._fights(o) && !o.investigate) { o.investigate = { x: at.x, y: at.y, z: at.z, by: null, t: STARTLE.SEARCH_S }; o.path = null; o.lookT = 0; }
+            if (this._fights(o) && !o.investigate) { o.investigate = { x: at.x, y: at.y, z: at.z, by: null, accident: true, t: STARTLE.SEARCH_S }; o.path = null; o.lookT = 0; }
             if (!said) { said = true; this._say(o, pick(SHOUT.comrade), 3); }
         }
     }
@@ -3730,7 +3735,7 @@ export class CastleLife {
         if (I.t <= 0) { v.investigate = null; v.path = null; return false; }
         // who is about? the one who did it, seen near the place, is caught
         v.lookT = (v.lookT || 0) - dt;
-        if (v.lookT <= 0) {
+        if (v.lookT <= 0 && !I.accident) {
             v.lookT = 0.5;
             // (he looks for no one by name: a player he really SEES near the place — by his own sight, day or night — is the suspect)
             const g = this.game, night = !!g.isNight, R = sightRange(!!v.wizard, night);

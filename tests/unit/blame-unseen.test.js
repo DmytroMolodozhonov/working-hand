@@ -66,3 +66,39 @@ test('fright is not given the culprit (the frightened run from the thing itself)
     L.alarm({ x: 0, y: 0, z: 0 }, 'quake', 'me', 6);
     assert.ok(fright.length >= 2 && fright.every(([, , o]) => !o.by));
 });
+
+test('a companion who saw a non-player death checks the body without accusing a nearby player', () => {
+    const {L,add}=world({me:{x:0,z:2}});
+    const victim=add('c1:dead','farmer',0,0),friend=add('c1:friend','knight',2,0);
+    victim.dead=true;
+    let accused=null;L._catch=(cs,who)=>{accused=who;};
+    L._comradeDown(victim,null);
+    assert.equal(friend.investigate?.accident,true);
+    L._investigate(friend,.1);
+    assert.equal(accused,null);assert.equal(friend.foe,undefined);
+    friend.investigate={x:0,y:0,z:0,t:12,by:null};friend.lookT=0;
+    L._investigate(friend,.1);
+    assert.equal(accused,'me','an actual unexplained crime search retains its rules');
+});
+
+test('plant deaths retain their known cause; player-caused damage is never marked natural', () => {
+    for(const by of [null,'me']) {
+        const {L,add,cs}=world({me:{x:0,z:2}}),v=add('c1:dead','farmer',0,0);
+        const state={killed:new Set()};L.state=()=>state;L._news=()=>{};L._sendState=()=>{};L._achDied=()=>{};
+        L._die(v,by,{kind:'thorn'});
+        assert.equal(v.naturalDeath,by===null);
+    }
+});
+
+test('finding a known plant death cannot turn it into a murder alarm, including restored bodies', async () => {
+    const {BodyFound}=await import('../../src/game/BodyFound.js');
+    const {DeathSystem}=await import('../../src/game/Death.js');
+    const {L,add}=world({me:{x:0,z:2}});add('c1:friend','knight',2,0);
+    const body=DeathSystem.prototype._wire.call({}, {id:'body',k:'v',who:'c1:dead',x:0,y:0,z:0,natural:1});
+    assert.equal(body.natural,1);
+    L.game.death={bodies:new Map([['body',body]])};
+    const found=new BodyFound(L);let alarms=0;found._found=()=>alarms++;
+    found.update(1);assert.equal(alarms,0);assert.equal(found.seen.has('body'),true);
+    body.id='murder';delete body.natural;L.game.death.bodies=new Map([['murder',body]]);
+    found.update(1);assert.equal(alarms,1,'unexplained/player-caused deaths still raise alarm');
+});

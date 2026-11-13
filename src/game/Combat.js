@@ -1,3 +1,4 @@
+import { deathImpulse, magicalImpactKind } from './DeathImpulse.js';
 /**
  * Combat.js — the «Свободный мир» rules: players fight each other with spells.
  *
@@ -1256,6 +1257,7 @@ export class Combat {
         if (this.game.tutorial && !this.game.tutorial.done) { this.game._deathHow = null; this.hp = this.maxHp || 20; this.game.tutorial.intercept(); return; } // («Обучение»: no death — the stage again)
         if (this.game.godhood?.immortal) { this.game._deathHow = null; this.hp = Math.max(1, this.maxHp ? this.maxHp * 0.25 : 5); this.game.godhood.saved?.(how); return; } // (a god does not die — Godhood.js) // (a beheading, a shatter… tear the monster's body, not the man)
         this.dead = true;
+        this.game._deathKick = (!NOT_A_SPELL.has(how) && (Object.hasOwn(SPELL_COST, HIT_SPELL[how] || how) || magicalImpactKind(how) || how === 'avada')) ? deathImpulse(this.game, this.game.character, byId) : null;
         this.game.levitation?.dropMe?.(false);
         this.hp = 0;
         const name = byId ? this.game.playerName(byId) : null;

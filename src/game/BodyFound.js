@@ -44,6 +44,8 @@ export class BodyFound {
         if (!bodies?.size) return;
         for (const b of bodies.values()) {
             if (b.k !== 'v' || this.seen.has(b.id) || typeof b.who !== 'string') continue;
+            // A known plant/creature death is not evidence of a player's murder.
+            if (b.natural) { this.seen.add(b.id); continue; }
             if (this.life.byId.get(b.who)?.byOrder != null) { this.seen.add(b.id); continue; } // (killed on the king's order: no alarm, no search)
             const cid = b.who.slice(0, b.who.lastIndexOf(':'));
             const cs = L.castles.get(cid);

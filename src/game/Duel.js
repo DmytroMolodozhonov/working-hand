@@ -1,3 +1,4 @@
+import { deathImpulse } from './DeathImpulse.js';
 /**
  * Duel.js — duel magic: spells cast straight at a creature (a wizard or a zombie).
  *
@@ -321,7 +322,7 @@ export function pickBody(o, d, bodies, range = DUEL.RANGE) {
     const c = {};
     for (const body of bodies) {
         rayToSegment(o, d, body.a, body.b, c);
-        if (c.along < 0.5 || c.along > range) continue;
+        if (c.along > range || (c.along < 0.5 && c.dist > body.r)) continue;
         if (Math.atan2(c.dist, c.along) > AIM.CONE + Math.atan2(body.r, c.along)) continue;
         if (!best || c.along < best.along) best = { body, along: c.along, k: c.k, dist: c.dist, miss: Math.max(0, Math.atan2(c.dist - body.r, c.along)) };
     }
@@ -806,13 +807,23 @@ export class Duel {
         let best = null;
         const wand = g.wandSide?.(); // (a wand in a hand: only that hand casts)
         for (const side of wand ? [wand] : [pref, pref === 'right' ? 'left' : 'right']) {
-            if (ch.isArmRaised && !ch.isArmRaised(side)) continue;
+            if (!this.canCast(side)) continue;
             const t = this.findTarget(side, range);
             if (!t || (preferPlayers && t.kind !== 'p')) continue;
             // (the hand pointing more truly at its target)
             if (!best || t.miss < best.t.miss - 0.005) best = { side, t };
         }
         return best;
+    }
+
+    /** Contact may bend the rendered arm down while the tracked wand still points at the body. */
+    canCast(side) {
+        const ch = this.game.character;
+        if (ch.handLost?.(side)) return false;
+        if (!ch.isArmRaised || ch.isArmRaised(side)) return true;
+        if (!this.pointBlank(side)) return false;
+        const d = this._myRay(side, _v1, _v2);
+        return d.y > -0.7;
     }
 
     /** The creature a raised hand points at farther than the spell reaches: its distance (m), else null. */
@@ -1334,99 +1345,110 @@ export class Duel {
 
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
     applyToCreature(spell, c, byId, from = null, part = null, opts = null) { // (opts.clash: it won a beam clash — a robe does not turn it away)
-        const g = this.game;
-        const src = from || this._casterAt(byId, c);
-        if (spell === 'NihilisDuel') { g.nihilis?.hitWizard(c, byId, src, !!opts?.clash); return; }
-        const p = this._creaturePoint(c, _v1);
-        this._hitBurst(spell, p, 30);
-        // a spell at a person is an attack, hurt or not (Остолбеней, Левиоса, Пески, a robe or a shield that took it…):
-        // he turns to it and, seeing who, fights or runs; not seeing — he searches (Startle.js; a hurt one: hit → _offence too)
-        if (g.authority && c.isSailor) g.ships?.crew?.startle?.(c, byId, src, { hit: true });
-        else if (g.authority && c.isVillager) g.castleLife?.startle?.(c, byId, src, { hit: true });
-        // «Дай»: through any shield, dome or robe — dead at once (StrongMagic.annihilate)
-        if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
-        if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
-        // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
-        // (the player's rule: NpcArmor.npcGuard → ArmorTypes.spellGuard; the robe / the set pay their reserve, a spent reserve turns nothing)
-        const guard = !opts?.clash && c.isVillager ? npcGuard(c, spell, Math.max(1, shieldHitCost(COST_OF[spell] || spell) * 2)) : null;
-        if (guard?.block) {
-            this._burst(p, 0xc39bff, 20);
-            // («Disarmor»: the robe stays on, but the bolt still throws him back as a «Джолт» does)
-            if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._disarmorMiss(byId, guard.why === 'robe' ? 'robe' : 'set'); this._joltCreature(c, 'Jolt', src, byId); }
-            return;
-        }
-        // «Liquidation» (duel): −3 as the splash, and what a humanoid holds in his hand crumbles (HeldBreak.js) — before the
-        // early returns below (a skeleton of the black ship, a living tree: the splash takes a sabre from a skeleton)
-        if (isLiquidationDuel(spell)) { this._liquidationHit(spell, c, src, byId, p); return; }
-        // the strong charges and the ice (StrongMagic: Accentric, Pilbidrio, Electrum, «Айс» / «Frozen» and its Maxima)
-        if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src, ak: part?.ak, low: part?.low, point: part?.point })) return;
-        // a book-bird: any charge knocks it out of the air (it falls as a book)
-        // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
-        // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
-        if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
-        // a phoenix: each charge as Phoenixes.TARGETS says («Авада» −25, «Остолбеней» drops it, «Айс» melts…)
-        if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
-        // a swamp canary: «Авада» kills, a stun stuns, the others hurt and anger the camp (Canaries.boltHit)
-        if (c.isCanary) { g.canaries?.boltHit(c, spell, byId); return; }
-        // a Taron: «Авада» kills, a stun stuns, «Экспеллиармус» takes his axe, the rest hurt (Taron.boltHit)
-        if (c.isTaron) { g.tarons?.boltHit(c, spell, byId); return; }
-        // a creature of one's own: «Авада» kills, «Остолбеней» stuns, the rest hurt (CustomCreatures.boltHit)
-        if (c.isCustom) { g.customCreatures?.boltHit(c, spell, byId); return; }
-        // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)
-        if (c.isOwl) { g.owls?.boltHit(c, spell, byId); return; }
-        // the invisible bird of Spencer: a harmful charge kills it, a disarming / lifting one startles it (SpencerRules.DUEL_DEADLY)
-        if (c.isSpencer) { g.spencers?.boltHit(c, spell, byId); return; }
-        // a ghost of the Castle of Ghosts: only «Nihilis Atra», the scares and the gods' spells act on it; the rest does nothing (GhostRules.GHOST_SPELLS)
-        if (c.isGhost) { g.ghosts?.boltHit(c, spell, byId); return; }
-        // a plant creature: fire burns it, cold shatters a flower / freezes a head, «Авада» and the simplest charges do nothing (Plants.boltHit)
-        if (c.isPlantBody) { g.plants?.boltHit(c, spell, byId); return; }
-        // an infernal gargoyle: each charge as GargoyleRules.TARGETS says; «Джолт» shoves it too (a flier: it reels, never falls)
-        if (c.isGargoyle) { g.gargoyles?.boltHit(c, spell, byId); if (isJolt(spell)) this._joltCreature(c, spell, src, byId); return; }
-        // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
-        // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
-        // («Джолт»: no damage — a rooted tree only reels from the shove: below)
-        if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus' && spell !== 'Disarmor') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell, byId); return; }
-        if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
-        // a skeleton of the black ship: dead already — «Авада Кедавра» finds no life in it (Sailors.SKELETON_AVADA),
-        // and like a living tree no duel charge harms it (only fire, the mighty spells, what breaks bones — Sailors.pirateBoneDamage)
-        if (c.isSailor && c.role === 'skeleton' && spell !== 'Expelliarmus') { if (spell === 'AvadaKedavra' && (byId === 'local' || byId === g.localId)) g.hud?.setVoice?.('☠️ Авада Кедавра не действует на скелетов: они и так мертвы', true); this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
-        const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
-        if (spell === 'AvadaKedavra') {
-            hit(DAMAGE.AvadaKedavra, { pierce: true, dark: true }); // (dark: a body killed by it fits the rite of monstrous vitality — VitalityRules.js) // (not a killing curse: −25 HP at once, no armour stops it)
-            if (!c.dead) g.creatureImpact?.spellHit(c, 'AvadaKedavra', src, byId); // (thrown on its back)
-        } else if (spell === 'Stupefy') {
-            c.stunT = DUEL.STUN_TIME;
-            // falls stiff on its back and lies while the spell holds it (then gets up by itself)
-            g.creatureImpact?.spellHit(c, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
-        } else if (spell === 'LevitateDuel') {
-            if (c.isAnimal) g.animals.push(c, _v2.set(0, 13, 0), 2.5);
-            else { c.stunT = 3; c.vy = 11; }
-        } else if (spell === 'SapiraDuel') {
-            g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
-            hit(DAMAGE.Sapira);
-            if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
-        } else if (spell === 'SandsDuel') {
-            c.slowT = Math.max(c.slowT || 0, SLOW.TIME);
-            this._sand(p);
-            if (!c.dead) g.creatureImpact?.spellHit(c, 'SandsDuel', src, byId);
-        } else if (spell === 'Expelliarmus') {
-            // a wizard's wand / a knight's sword / a villager's tool (a farmer's pitchfork…) flies off; everybody else (animals,
-            // an unarmed one) is only jolted back a little
-            // (the crews' blades fly out too: the captain's rapier, a skeleton's cutlass — Sailors.disarm)
-            const out = c.isSailor ? g.ships.crew.disarm(c, src, byId) : !c.isAnimal ? disarmVillager(g, c, wizardWandOf) : null;
-            // knocking the wand / the sword out is an attack: he (and whoever saw it) fights the one who did it —
-            // a wizard runs for his wand first (WizardLife._fetchWand), then turns on him
-            if (out) hit(0, { kind: 'Expelliarmus' });
-            if (out === 'wand') this.game.castleLife?._say?.(c, 'Моя палочка!', 3);
-            else if (c.isSailor && !out) g.ships.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); // (nothing to knock out: it is still an attack)
-            g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
-        } else if (spell === 'Disarmor') {
-            // a knight's / the king's plates, a wizard's plain robe fly off as things (Armor.js); the others only reel
-            // …and the bolt throws the one it hit back off the feet, tumbling, as «Джолт» does (the author: «так реалистичнее»)
-            const r = c.isVillager && !c.isSailor ? g.armor?.stripVillager(c, byId) : 'none';
-            if (r === 'magic') this._disarmorMiss(byId, c.robe ? 'robe' : 'set');
-            if (!c.dead) this._joltCreature(c, 'Jolt', src, byId);
-        }
+        const wasDead = !!(c.dead || c.isDead);
+        try {
+            const g = this.game;
+            const src = from || this._casterAt(byId, c);
+            if (spell === 'NihilisDuel') { g.nihilis?.hitWizard(c, byId, src, !!opts?.clash); return; }
+            const p = this._creaturePoint(c, _v1);
+            this._hitBurst(spell, p, 30);
+            // a spell at a person is an attack, hurt or not (Остолбеней, Левиоса, Пески, a robe or a shield that took it…):
+            // he turns to it and, seeing who, fights or runs; not seeing — he searches (Startle.js; a hurt one: hit → _offence too)
+            if (g.authority && c.isSailor) g.ships?.crew?.startle?.(c, byId, src, { hit: true });
+            else if (g.authority && c.isVillager) g.castleLife?.startle?.(c, byId, src, { hit: true });
+            // «Дай»: through any shield, dome or robe — dead at once (StrongMagic.annihilate)
+            if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
+            if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
+            // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
+            // (the player's rule: NpcArmor.npcGuard → ArmorTypes.spellGuard; the robe / the set pay their reserve, a spent reserve turns nothing)
+            const guard = !opts?.clash && c.isVillager ? npcGuard(c, spell, Math.max(1, shieldHitCost(COST_OF[spell] || spell) * 2)) : null;
+            if (guard?.block) {
+                this._burst(p, 0xc39bff, 20);
+                // («Disarmor»: the robe stays on, but the bolt still throws him back as a «Джолт» does)
+                if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._disarmorMiss(byId, guard.why === 'robe' ? 'robe' : 'set'); this._joltCreature(c, 'Jolt', src, byId); }
+                return;
+            }
+            // «Liquidation» (duel): −3 as the splash, and what a humanoid holds in his hand crumbles (HeldBreak.js) — before the
+            // early returns below (a skeleton of the black ship, a living tree: the splash takes a sabre from a skeleton)
+            if (isLiquidationDuel(spell)) { this._liquidationHit(spell, c, src, byId, p); return; }
+            // the strong charges and the ice (StrongMagic: Accentric, Pilbidrio, Electrum, «Айс» / «Frozen» and its Maxima)
+            if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src, ak: part?.ak, low: part?.low, point: part?.point })) return;
+            // a book-bird: any charge knocks it out of the air (it falls as a book)
+            // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
+            // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
+            if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
+            // a phoenix: each charge as Phoenixes.TARGETS says («Авада» −25, «Остолбеней» drops it, «Айс» melts…)
+            if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
+            // a swamp canary: «Авада» kills, a stun stuns, the others hurt and anger the camp (Canaries.boltHit)
+            if (c.isCanary) { g.canaries?.boltHit(c, spell, byId); return; }
+            // a Taron: «Авада» kills, a stun stuns, «Экспеллиармус» takes his axe, the rest hurt (Taron.boltHit)
+            if (c.isTaron) { g.tarons?.boltHit(c, spell, byId); return; }
+            // a creature of one's own: «Авада» kills, «Остолбеней» stuns, the rest hurt (CustomCreatures.boltHit)
+            if (c.isCustom) { g.customCreatures?.boltHit(c, spell, byId); return; }
+            // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)
+            if (c.isOwl) { g.owls?.boltHit(c, spell, byId); return; }
+            // the invisible bird of Spencer: a harmful charge kills it, a disarming / lifting one startles it (SpencerRules.DUEL_DEADLY)
+            if (c.isSpencer) { g.spencers?.boltHit(c, spell, byId); return; }
+            // a ghost of the Castle of Ghosts: only «Nihilis Atra», the scares and the gods' spells act on it; the rest does nothing (GhostRules.GHOST_SPELLS)
+            if (c.isGhost) { g.ghosts?.boltHit(c, spell, byId); return; }
+            // a plant creature: fire burns it, cold shatters a flower / freezes a head, «Авада» and the simplest charges do nothing (Plants.boltHit)
+            if (c.isPlantBody) { g.plants?.boltHit(c, spell, byId); return; }
+            // an infernal gargoyle: each charge as GargoyleRules.TARGETS says; «Джолт» shoves it too (a flier: it reels, never falls)
+            if (c.isGargoyle) { g.gargoyles?.boltHit(c, spell, byId); if (isJolt(spell)) this._joltCreature(c, spell, src, byId); return; }
+            // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
+            // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
+            // («Джолт»: no damage — a rooted tree only reels from the shove: below)
+            if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus' && spell !== 'Disarmor') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell, byId); return; }
+            if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
+            // a skeleton of the black ship: dead already — «Авада Кедавра» finds no life in it (Sailors.SKELETON_AVADA),
+            // and like a living tree no duel charge harms it (only fire, the mighty spells, what breaks bones — Sailors.pirateBoneDamage)
+            if (c.isSailor && c.role === 'skeleton' && spell !== 'Expelliarmus') { if (spell === 'AvadaKedavra' && (byId === 'local' || byId === g.localId)) g.hud?.setVoice?.('☠️ Авада Кедавра не действует на скелетов: они и так мертвы', true); this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
+            const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
+            if (spell === 'AvadaKedavra') {
+                hit(DAMAGE.AvadaKedavra, { pierce: true, dark: true }); // (dark: a body killed by it fits the rite of monstrous vitality — VitalityRules.js) // (not a killing curse: −25 HP at once, no armour stops it)
+                if (!c.dead) g.creatureImpact?.spellHit(c, 'AvadaKedavra', src, byId); // (thrown on its back)
+            } else if (spell === 'Stupefy') {
+                c.stunT = DUEL.STUN_TIME;
+                // falls stiff on its back and lies while the spell holds it (then gets up by itself)
+                g.creatureImpact?.spellHit(c, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
+            } else if (spell === 'LevitateDuel') {
+                if (c.isAnimal) g.animals.push(c, _v2.set(0, 13, 0), 2.5);
+                else { c.stunT = 3; c.vy = 11; }
+            } else if (spell === 'SapiraDuel') {
+                g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
+                hit(DAMAGE.Sapira);
+                if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
+            } else if (spell === 'SandsDuel') {
+                c.slowT = Math.max(c.slowT || 0, SLOW.TIME);
+                this._sand(p);
+                if (!c.dead) g.creatureImpact?.spellHit(c, 'SandsDuel', src, byId);
+            } else if (spell === 'Expelliarmus') {
+                // a wizard's wand / a knight's sword / a villager's tool (a farmer's pitchfork…) flies off; everybody else (animals,
+                // an unarmed one) is only jolted back a little
+                // (the crews' blades fly out too: the captain's rapier, a skeleton's cutlass — Sailors.disarm)
+                const out = c.isSailor ? g.ships.crew.disarm(c, src, byId) : !c.isAnimal ? disarmVillager(g, c, wizardWandOf) : null;
+                // knocking the wand / the sword out is an attack: he (and whoever saw it) fights the one who did it —
+                // a wizard runs for his wand first (WizardLife._fetchWand), then turns on him
+                if (out) hit(0, { kind: 'Expelliarmus' });
+                if (out === 'wand') this.game.castleLife?._say?.(c, 'Моя палочка!', 3);
+                else if (c.isSailor && !out) g.ships.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); // (nothing to knock out: it is still an attack)
+                g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
+            } else if (spell === 'Disarmor') {
+                // a knight's / the king's plates, a wizard's plain robe fly off as things (Armor.js); the others only reel
+                // …and the bolt throws the one it hit back off the feet, tumbling, as «Джолт» does (the author: «так реалистичнее»)
+                const r = c.isVillager && !c.isSailor ? g.armor?.stripVillager(c, byId) : 'none';
+                if (r === 'magic') this._disarmorMiss(byId, c.robe ? 'robe' : 'set');
+                if (!c.dead) this._joltCreature(c, 'Jolt', src, byId);
+            }
+        } finally { this._finishLethal(c, wasDead, byId, spell, from); }
+    }
+
+    /** The kill is confirmed after armour/wards; a surviving hit gets no death impulse. */
+    _finishLethal(c, wasDead, by, spell, from = null) {
+        if (wasDead || c.arena || !(c.dead || c.isDead) || c.annihilated || c.burst || spell === 'Die' || spell === 'Pilbidrio') return;
+        const p = c.group?.position || c;
+        c.deathKick ||= deathImpulse(this.game, c, by, from ? { x: p.x - from.x, z: p.z - from.z } : null);
+        this.game.creatureImpact?.ragDeath?.(c);
     }
 
     /** My «Disarmor» hit a magic robe / magic plates: they stay — say so to me (the author: «попал в магическую вещь — подсказка «не сработало»»). */
@@ -1540,35 +1562,38 @@ export class Duel {
     }
 
     applyToZombie(spell, z, byId, from = null) {
-        const g = this.game;
-        const src = from || this._casterAt(byId, z);
-        const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
-        this._hitBurst(spell, p, 30);
-        if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature('z', z, spell, byId, { src })) return;
-        if (isLiquidationDuel(spell)) { g.liquidation?._hurt('z', z.id, p, src, _v3.copy(p).sub(src), byId, 'Liquidation'); return; } // (−3; nothing in a zombie's hands to crumble)
-        if (spell === 'AvadaKedavra') {
-            g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
-            if (!z.isDead) g.creatureImpact?.spellHit(z, 'AvadaKedavra', src, byId);
-        } else if (spell === 'Stupefy') {
-            z.stunTimer = DUEL.STUN_TIME;
-            g.creatureImpact?.spellHit(z, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
-        } else if (spell === 'LevitateDuel') {
-            z.vy = Math.max(z.vy || 0, 13);
-        } else if (spell === 'SapiraDuel') {
-            g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
-            g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
-            if (!z.isDead) g.creatureImpact?.spellHit(z, 'SapiraDuel', src, byId);
-        } else if (spell === 'SandsDuel') {
-            z.slowT = Math.max(z.slowT || 0, SLOW.TIME);
-            this._sand(p);
-            if (!z.isDead) g.creatureImpact?.spellHit(z, 'SandsDuel', src, byId);
-        } else if (spell === 'Expelliarmus') {
-            g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon: a small push)
-        } else if (spell === 'Disarmor') {
-            this._joltCreature(z, 'Jolt', src, byId); // (no armour to take: only thrown back as by «Джолт»)
-        } else if (isJolt(spell)) {
-            this._joltCreature(z, spell, src, byId);
-        }
+        const wasDead = !!(z.dead || z.isDead);
+        try {
+            const g = this.game;
+            const src = from || this._casterAt(byId, z);
+            const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
+            this._hitBurst(spell, p, 30);
+            if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature('z', z, spell, byId, { src })) return;
+            if (isLiquidationDuel(spell)) { g.liquidation?._hurt('z', z.id, p, src, _v3.copy(p).sub(src), byId, 'Liquidation'); return; } // (−3; nothing in a zombie's hands to crumble)
+            if (spell === 'AvadaKedavra') {
+                g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
+                if (!z.isDead) g.creatureImpact?.spellHit(z, 'AvadaKedavra', src, byId);
+            } else if (spell === 'Stupefy') {
+                z.stunTimer = DUEL.STUN_TIME;
+                g.creatureImpact?.spellHit(z, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
+            } else if (spell === 'LevitateDuel') {
+                z.vy = Math.max(z.vy || 0, 13);
+            } else if (spell === 'SapiraDuel') {
+                g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
+                g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
+                if (!z.isDead) g.creatureImpact?.spellHit(z, 'SapiraDuel', src, byId);
+            } else if (spell === 'SandsDuel') {
+                z.slowT = Math.max(z.slowT || 0, SLOW.TIME);
+                this._sand(p);
+                if (!z.isDead) g.creatureImpact?.spellHit(z, 'SandsDuel', src, byId);
+            } else if (spell === 'Expelliarmus') {
+                g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon: a small push)
+            } else if (spell === 'Disarmor') {
+                this._joltCreature(z, 'Jolt', src, byId); // (no armour to take: only thrown back as by «Джолт»)
+            } else if (isJolt(spell)) {
+                this._joltCreature(z, spell, src, byId);
+            }
+        } finally { this._finishLethal(z, wasDead, byId, spell, from); }
     }
 
     /**

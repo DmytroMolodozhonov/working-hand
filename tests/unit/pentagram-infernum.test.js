@@ -200,10 +200,11 @@ test('the head is never bought or sold (the author): no price, no fence, no pawn
     assert.equal(n, 100);
     for (let i = 0; i < 2000; i++) assert.equal(darkMageHead(false, i / 2000), false, 'a plain mage never');
     // a dead black wanderer: the head now and then; a plain one never
-    const seq = (vals) => { let i = 0; return () => vals[i++ % vals.length]; };
-    assert.ok(lootOfVillager('wanderer', { darkHead: true }, seq([0.5, 0.5, 0.001])).some((it) => it.kind === 'gargoyleHead'));
-    assert.ok(!lootOfVillager('wanderer', { darkHead: false }, seq([0.5, 0.5, 0.001])).some((it) => it.kind === 'gargoyleHead'));
-    assert.ok(!lootOfVillager('knight', { darkHead: true }, seq([0.001])).some((it) => it.kind === 'gargoyleHead'));
+    // Scroll rolls consume a variable number of draws; do not pin the head roll to an index.
+    assert.ok(lootOfVillager('wanderer', { darkHead: true }, () => 0.001).some((it) => it.kind === 'gargoyleHead'));
+    assert.ok(!lootOfVillager('wanderer', { darkHead: false }, () => 0.001).some((it) => it.kind === 'gargoyleHead'));
+    assert.ok(!lootOfVillager('wanderer', { darkHead: true }, () => 0.9).some((it) => it.kind === 'gargoyleHead'));
+    assert.ok(!lootOfVillager('knight', { darkHead: true }, () => 0.001).some((it) => it.kind === 'gargoyleHead'));
 });
 
 test('the map in hell: only hell\'s marks — the devil (≤ 1 km), the mark back, the Tarons\' camps; never a castle of the Earth', () => {
