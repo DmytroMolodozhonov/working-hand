@@ -201,6 +201,8 @@ export class ManaCrystals {
         this._dt = dt;
         this._t -= dt;
         if (this._t <= 0) { this._t = 1; this._ensureNear(); this._unsupported(); }
+        const eye = this.game.camera?.position || this.game.character.group.position;
+        for (const cl of this.clusters.values()) if (cl) cl.group.visible = Math.hypot(cl.data.x - eye.x, cl.data.z - eye.z) < CRYSTAL.FAR;
         this._nearMe();
         this._light();
         if (this.game.currentPose && !this.game.combat?.dead) {
@@ -215,20 +217,29 @@ export class ManaCrystals {
         const t = this.game.terrain?.data;
         if (!t?.cavesNear) return;
         const p = this.game.character.group.position;
+        const players = [p];
+        if (this.game.authority) for (const r of this.game.remotes?.values?.() || []) if (!r.dead && r.position) players.push(r.position);
         // (a cave's cluster far behind is put away — made again from the same seed when one comes back;
         // the broken ones stay broken: `taken`. A long flight otherwise left every cave's crystals.)
         for (const [id, cl] of this.clusters) {
-            const far = cl ? Math.abs(cl.data.x - p.x) > CRYSTAL.FAR || Math.abs(cl.data.z - p.z) > CRYSTAL.FAR : this.clusters.size > 400;
+            const far = cl ? !players.some(q => Math.abs(cl.data.x - q.x) <= CRYSTAL.FAR && Math.abs(cl.data.z - q.z) <= CRYSTAL.FAR) : this.clusters.size > 400;
             if (!far) continue;
             if (cl) this.game.scene?.remove(cl.group);
             this.clusters.delete(id);
         }
-        for (const cv of t.cavesNear(p.x, p.z, CRYSTAL.NEAR, true)) {
+        for (const q of players) for (const cv of t.cavesNear(q.x, q.z, CRYSTAL.NEAR, true)) {
             if (this.clusters.has(cv.id)) continue;
             this.addCluster(cv.id, crystalCluster(cv, t.seed, t.heightAt));
             this._t = 0.1; // (one cave's crystals a frame: the next one at the next look)
-            break;
+            return;
         }
+    }
+
+    /** Materialize missing deterministic clusters before a remote blast or hand request is resolved. */
+    ensureAt(p, radius = 25) {
+        const t = this.game.terrain?.data;
+        if (!this.game.authority || !t?.cavesNear || !p) return;
+        for (const cv of t.cavesNear(p.x, p.z, radius, true)) if (!this.clusters.has(cv.id)) this.addCluster(cv.id, crystalCluster(cv, t.seed, t.heightAt));
     }
 
     /** Make a cluster's crystals (null: that cave has none). */
@@ -382,6 +393,7 @@ export class ManaCrystals {
         const g = this.game;
         if (!this.enabled || !g.authority || !p) return 0;
         if (g.temple?.wards?.(p, r)) return 0; // (the gods' ward: nothing in it breaks)
+        this.ensureAt(p, r + 20);
         if (by === 'local') by = g.localId;
         let any = false; // (no crystals about — the usual case: nothing to remember, no garbage)
         for (const cl of this.clusters.values()) if (cl && Math.abs(cl.data.x - p.x) < r + 20 && Math.abs(cl.data.z - p.z) < r + 20) { any = true; break; }
@@ -398,6 +410,7 @@ export class ManaCrystals {
             }
         }
         if (ids.length) this.burst(ids, by, kind);
+        this._unsupported();
         return ids.length;
     }
 
@@ -420,7 +433,7 @@ export class ManaCrystals {
                 const t = data.get(ix, Math.floor(c.base.y + 1.5), iz);
                 const gone = t === BLOCK.AIR || t === BLOCK.WATER;
                 if (!gone) { c.rock = true; continue; }
-                if (c.rock) (lost || (lost = [])).push(c);
+                (lost || (lost = [])).push(c); // deterministic wall anchors must not float, including a blast before first observation
             }
         }
         if (!lost) return;
@@ -469,9 +482,9 @@ export class ManaCrystals {
     nearest(hand) {
         let near = null, nd = CRYSTAL.TOUCH;
         for (const cl of this.clusters.values()) {
-            if (!cl || Math.abs(cl.data.x - hand.x) > 3 || Math.abs(cl.data.z - hand.z) > 3) continue;
+            if (!cl) continue;
             for (const c of cl.list) {
-                if (this.taken.has(c.id) || c.center.distanceTo(hand) > 1.2) continue;
+                if (this.taken.has(c.id)) continue;
                 const d = segDist(hand, c.base, c.tip) - c.r;
                 if (d < nd) { nd = d; near = c; }
             }

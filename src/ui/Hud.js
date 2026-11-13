@@ -1173,7 +1173,7 @@ export class Hud {
         ctx.lineJoin = 'round';
         // the crystals seen: a blue diamond
         if (cave.crystals) for (const cl of cave.crystals.values()) {
-            if (!cl || !mem.has(cl.data.x, cl.data.z)) continue;
+            if (!cl || !mem.has(cl.data.x, cl.data.z) || !cl.list.some(c => !cave.crystalTaken?.has(c.id) && c.mesh?.visible !== false)) continue;
             const [x, y] = at(cl.data.x, cl.data.z);
             if (!inside(x, y, 4)) continue;
             ctx.fillStyle = '#5fd3ff'; ctx.strokeStyle = '#06324a'; ctx.lineWidth = 1.2;
@@ -1185,9 +1185,11 @@ export class Hud {
             if (!mem.has(p.x, p.z)) continue;
             const [x, y] = at(p.x, p.z);
             if (!inside(x, y, 5)) continue;
-            ctx.fillStyle = c.isOpen ? '#7d7466' : '#c88a2e'; ctx.strokeStyle = '#2b1a05'; ctx.lineWidth = 1.2;
+            const looted = c.isOpen || cave.opened?.has(c.id);
+            ctx.fillStyle = looted ? '#7d7466' : '#c88a2e'; ctx.strokeStyle = '#2b1a05'; ctx.lineWidth = 1.2;
             ctx.fillRect(x - 5, y - 3.5, 10, 7); ctx.strokeRect(x - 5, y - 3.5, 10, 7);
-            ctx.fillStyle = '#ffd76a'; ctx.fillRect(x - 1, y - 1.5, 2, 3);
+            if (looted) { ctx.strokeStyle = '#d4eee3'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x-3,y); ctx.lineTo(x-1,y+2); ctx.lineTo(x+4,y-3); ctx.stroke(); }
+            else { ctx.fillStyle = '#ffd76a'; ctx.fillRect(x - 1, y - 1.5, 2, 3); }
         }
         // zombies seen (their place opened)
         ctx.fillStyle = '#e74c3c'; ctx.strokeStyle = '#4a0000'; ctx.lineWidth = 1;

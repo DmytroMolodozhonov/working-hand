@@ -17221,8 +17221,12 @@ function WebGLProgram( renderer, cacheKey, parameters, bindingStates ) {
 
 	gl.linkProgram( program );
 
-	// check for link errors
-	if ( renderer.debug.checkShaderErrors ) {
+	// Local r128 backport: defer blocking diagnostics during parallel compilation.
+	let diagnosticsChecked = false;
+	let checkDiagnostics = () => {
+		if ( diagnosticsChecked ) return;
+		diagnosticsChecked = true;
+		if ( ! renderer.debug.checkShaderErrors ) return;
 
 		const programLog = gl.getProgramInfoLog( program ).trim();
 		const vertexLog = gl.getShaderInfoLog( glVertexShader ).trim();
@@ -17277,6 +17281,12 @@ function WebGLProgram( renderer, cacheKey, parameters, bindingStates ) {
 		}
 
 	}
+;
+	if ( ! renderer.debug.deferShaderCompletion ) {
+		checkDiagnostics();
+		checkDiagnostics = null;
+		prefixVertex = prefixFragment = '';
+	}
 
 	// Clean up
 
@@ -17292,6 +17302,12 @@ function WebGLProgram( renderer, cacheKey, parameters, bindingStates ) {
 	let cachedUniforms;
 
 	this.getUniforms = function () {
+
+		if ( checkDiagnostics ) {
+			checkDiagnostics();
+			checkDiagnostics = null;
+			prefixVertex = prefixFragment = '';
+		}
 
 		if ( cachedUniforms === undefined ) {
 
@@ -24194,6 +24210,26 @@ function WebGLRenderer( parameters ) {
 
 	};
 
+	// Local r128 backport. Keep the page responsive while drivers compile shaders.
+	this.compileAsync = async function ( scene, camera ) {
+
+		const ext = extensions.get( 'KHR_parallel_shader_compile' );
+		if ( ! ext ) { this.compile( scene, camera ); return; }
+		const old = this.debug.deferShaderCompletion;
+		this.debug.deferShaderCompletion = true;
+		try { this.compile( scene, camera ); }
+		finally { this.debug.deferShaderCompletion = old; }
+		const pending = programCache.programs.slice();
+		while ( pending.some( p => p.program && ! _gl.getProgramParameter( p.program, ext.COMPLETION_STATUS_KHR ) ) ) {
+
+			if ( _isContextLost ) throw new Error( 'WebGL context lost during shader warm-up' );
+			await new Promise( resolve => setTimeout( resolve, 8 ) );
+
+		}
+		this.compile( scene, camera );
+
+	};
+
 	// Animation Loop
 
 	let onAnimationFrameCallback = null;
@@ -24696,6 +24732,9 @@ function WebGLRenderer( parameters ) {
 			// TODO (abelnation): add area lights shadow info to uniforms
 
 		}
+
+		// Uniform queries force shader completion; finish these after KHR reports ready.
+		if ( _this.debug.deferShaderCompletion ) return program;
 
 		const progUniforms = program.getUniforms();
 		const uniformsList = WebGLUniforms.seqWithValue( progUniforms.seq, uniforms );

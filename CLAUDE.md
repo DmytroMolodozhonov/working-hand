@@ -470,3 +470,4 @@
 - **Breakthrough вместо Groundprud и урон Нихилис (10.11):** единая растущая стена с жестом, запасная защита NPC без Cardilon (знание 50/80/100%), урон после победы лучей по уровню тьмы проигравшего → `docs/rules/spells-creatures.md`, тесты `breakthrough`, `cardilon`, `nihilis-duel`.
 
 - **Сухие освещённые пещеры и Stand Up после вскрытия потолка (13.11):** подводный стиль только при контакте грани с водой (`voxWet`); местонахождение в пещере независимо от освещённости/дыры в потолке → `docs/rules/texture-style.md`, `docs/rules/spells-creatures.md`, тест `cave-surface`.
+- **Опора деревьев у пещер, мир около гостей и необратимость сохранённой смерти (13.11):** `docs/rules/texture-style.md`, `docs/rules/misc-rules.md`; покрытие аудита и ограничения проверки зависаний — `docs/reports/2026-11-13-world-consistency.md`.

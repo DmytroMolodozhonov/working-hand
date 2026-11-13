@@ -1004,6 +1004,9 @@ def _safe_wid(wid):
     return s[:64] if s else None
 
 
+_worlds_write_lock = threading.Lock()
+
+
 def _worlds_put(w):
     if not isinstance(w, dict):
         return False
@@ -1012,10 +1015,21 @@ def _worlds_put(w):
         return False
     d = _worlds_dir()
     p = os.path.join(d, wid + ".json")
-    tmp = p + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(w, f, ensure_ascii=False)
-    os.replace(tmp, p)
+    # A delayed autosave must not overwrite the newer death checkpoint beacon.
+    # Serialise timestamp comparison and replacement, including the temp file.
+    with _worlds_write_lock:
+        try:
+            with open(p, encoding="utf-8") as f:
+                previous = json.load(f)
+            before, after = previous.get("updated"), w.get("updated")
+            if isinstance(before, (int, float)) and isinstance(after, (int, float)) and before > after:
+                return True
+        except (OSError, ValueError, AttributeError):
+            pass
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(w, f, ensure_ascii=False)
+        os.replace(tmp, p)
     return True
 
 

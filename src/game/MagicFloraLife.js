@@ -1,3 +1,4 @@
+import { worldPlayers, nearWorldPlayer } from './WorldPlayers.js';
 /**
  * MagicFloraLife.js — the wild magic plants in the game (rules and tables: MagicFlora.js, the look: fx/FloraModels.js).
  *
@@ -77,19 +78,24 @@ export class MagicFloraLife {
 
     /** The cells round `p` that still need to be looked at, nearest first. */
     _plan(p) {
+        const players = worldPlayers(this.game);
         const C = FLORA.CELL, R = FLORA.LOAD;
-        const gx0 = Math.floor((p.x - R) / C), gx1 = Math.floor((p.x + R) / C), gz0 = Math.floor((p.z - R) / C), gz1 = Math.floor((p.z + R) / C);
-        const cx = p.x / C - 0.5, cz = p.z / C - 0.5, q = [];
-        for (let gz = gz0; gz <= gz1; gz++) for (let gx = gx0; gx <= gx1; gx++) {
-            for (const kind of FLORA_ORDER) { if ((FLORA_KINDS[kind].fromGen || 0) > (this.game.gen ?? 1)) continue; const key = kind + '|' + gx + ',' + gz; if (!this.groups.has(key)) q.push({ key, kind, gx, gz, d: (gx - cx) ** 2 + (gz - cz) ** 2 }); }
+        const q=[], seen=new Set();
+        for(const p of players) {
+            const gx0=Math.floor((p.x-R)/C),gx1=Math.floor((p.x+R)/C),gz0=Math.floor((p.z-R)/C),gz1=Math.floor((p.z+R)/C);
+            const cx=p.x/C-.5,cz=p.z/C-.5;
+            for(let gz=gz0;gz<=gz1;gz++)for(let gx=gx0;gx<=gx1;gx++)for(const kind of FLORA_ORDER){
+                if((FLORA_KINDS[kind].fromGen||0)>(this.game.gen??1))continue;
+                const key=kind+'|'+gx+','+gz;
+                if(!this.groups.has(key)&&!seen.has(key)){seen.add(key);q.push({key,kind,gx,gz,d:(gx-cx)**2+(gz-cz)**2});}
+            }
         }
         q.sort((a, b) => a.d - b.d);
         this._queue = q;
         // the far ones are put away
-        const FAR = Math.ceil((FLORA.KEEP - FLORA.LOAD) / C);
         for (const [key, grp] of this.groups) {
             const cell = key.split('|')[1].split(',').map(Number);
-            if (cell[0] >= gx0 - FAR && cell[0] <= gx1 + FAR && cell[1] >= gz0 - FAR && cell[1] <= gz1 + FAR) continue;
+            if (nearWorldPlayer(players,(cell[0]+.5)*C,(cell[1]+.5)*C,FLORA.KEEP+C)) continue;
             if (grp) this._unload(grp);
             this.groups.delete(key);
         }
@@ -155,6 +161,7 @@ export class MagicFloraLife {
         const M = this._ensureMeshes(), counts = new Array(FLORA_VARIANTS).fill(0);
         for (const pl of this.list[kind]) {
             if (pl.burn < 0) continue;
+            if (!nearWorldPlayer([this.game.character.group.position], pl.x, pl.z, FLORA.KEEP)) continue;
             const mesh = M.body[kind][pl.variant];
             if (counts[pl.variant] >= mesh.instanceMatrix.count) continue;
             _m.compose(_p.set(pl.x, pl.y, pl.z), _q.setFromAxisAngle(_up, pl.yaw), _s.setScalar(pl.scale * (pl.burn > 0 ? 1 - 0.4 * (1 - pl.burn / BURN_TIME) : 1)));
@@ -168,6 +175,7 @@ export class MagicFloraLife {
         let n = 0;
         for (const pl of this.list[kind]) {
             if (pl.burn < 0) continue;
+            if (!nearWorldPlayer([this.game.character.group.position], pl.x, pl.z, FLORA.KEEP)) continue;
             for (const pk of pl.picks) {
                 if (n >= mesh.instanceMatrix.count) break;
                 if (pk.until > now) { mesh.setMatrixAt(n++, ZERO); continue; }
@@ -212,6 +220,10 @@ export class MagicFloraLife {
         const g = this.game, now = performance.now();
         if (now - (this._pickAt || 0) < FLORA.PICK_COOL) return;
         const me = g.character.group.position;
+        if (!this._drawAt || Math.hypot(me.x - this._drawAt.x, me.z - this._drawAt.z) > 8) {
+            this._drawAt = { x: me.x, z: me.z };
+            for (const k of FLORA_ORDER) { this._dirty.add(k); this._pickDirty.add(k); }
+        }
         for (const side of ['right', 'left']) {
             if (g.items.held[side] || g.weapons.hands[side].held) continue;
             const hand = g.character.getHandWorldPosition(side, _v2);
@@ -353,8 +365,9 @@ export class MagicFloraLife {
         this._groundT = (this._groundT || 0) - dt;
         if (this.auth && this._groundT <= 0) {
             this._groundT = 0.5;
+            const players=worldPlayers(g);
             for (const kind of FLORA_ORDER) for (const pl of [...this.list[kind]]) {
-                if (pl.topL == null || Math.abs(pl.x - me.x) + Math.abs(pl.z - me.z) > 120) continue;
+                if (pl.topL == null || !nearWorldPlayer(players,pl.x,pl.z,120)) continue;
                 const b = t.get(Math.round(pl.x), pl.topL, Math.round(pl.z));
                 if (b === BLOCK.AIR || b === BLOCK.WATER) this.kill(pl, 'destroy');
             }

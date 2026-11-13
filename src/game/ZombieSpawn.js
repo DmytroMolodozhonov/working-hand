@@ -172,14 +172,18 @@ export class ZombieSpawn {
         const g = this.game, c = g.collision;
         if (!c?.lineOfSight) return false;
         const look = g.camera ? (this._look || (this._look = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(g.camera.quaternion) : null;
+        const halfV = Math.tan((g.camera?.fov || 60) * Math.PI / 360);
+        const corner = Math.atan(Math.hypot(halfV, halfV * (g.camera?.aspect || 1))) + 5 * Math.PI / 180;
+        const lookCos = Math.min(ZSPAWN.LOOK_COS, Math.cos(corner));
         const eyes = [];
         if (!g.isDeadLocal && g.character) eyes.push({ p: g.camera?.position || g.character.group.position, me: true });
-        for (const r of g.remotes?.values?.() || []) if (!r.dead && r.position) eyes.push({ p: r.position });
+        for (const r of g.remotes?.values?.() || []) if (!r.dead && r.position) eyes.push({ p: r.position, yaw: r.character?.group?.rotation?.y ?? r.yaw });
         for (const e of eyes) {
             const dx = x - e.p.x, dy = y + 1.5 - e.p.y, dz = z - e.p.z, d = Math.hypot(dx, dy, dz);
-            const ahead = e.me && look && d > 1e-3 && (dx * look.x + dy * look.y + dz * look.z) / d > ZSPAWN.LOOK_COS;
+            const ahead = e.me && look ? d > 1e-3 && (dx*look.x+dy*look.y+dz*look.z)/d > lookCos
+                : Number.isFinite(e.yaw) ? (-dx*Math.sin(e.yaw)-dz*Math.cos(e.yaw))/(Math.hypot(dx,dz)||1) > -0.2 : true;
             if (d > (ahead ? ZSPAWN.LOOK_D : ZSPAWN.SEEN_D)) continue;
-            if (c.lineOfSight(e.p.x, e.p.y, e.p.z, x, y + 1.5, z, 1.5)) return true;
+            for (const h of [0.5, 1.5, 2.8]) if (c.lineOfSight(e.p.x, e.p.y + (e.me ? 0 : 1.1), e.p.z, x, y+h, z, 0.2)) return true;
         }
         return false;
     }

@@ -1,3 +1,4 @@
+import { worldPlayers } from './WorldPlayers.js';
 /**
  * Cauldrons.js — the big black cauldrons in the world: moved by hands, filled with water,
  * brewing potions (what goes on inside: Potions.js).
@@ -591,9 +592,9 @@ export class Cauldrons {
     _caves() {
         const g = this.game, t = g.terrain?.data;
         if (!t?.cavesNear || g.config?.map || g.config?.mode === 'test') return;
-        const p = g.character.group.position;
-        for (const cv of t.cavesNear(p.x, p.z, 90, true)) {
+        for (const p of worldPlayers(g)) for (const cv of t.cavesNear(p.x, p.z, 90, true)) {
             if (this.caves.has(cv.id)) continue;
+            if (t.landMade && !t.landMade(cv.kx, cv.kz)) continue;
             this.caves.add(cv.id);
             const id = 'cave:' + cv.id;
             if (this.list.has(id) || g.liquidation?.isGone('cauldron', id)) continue; // (crumbled by «Liquidation Максима»: never again)

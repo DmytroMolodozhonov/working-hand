@@ -152,3 +152,27 @@ test('mana crystals: the hand lies on a crystal (never through it); a crystal he
     const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Items.js', import.meta.url), 'utf8');
     assert.match(src, /\n\s+crystal: \{ axis: 'body'/, 'held in the fingers (GRIPPED), its tip out of the hand');
 });
+
+test('a crystal whose wall vanished before first observation shatters; unloaded terrain stays untouched', () => {
+    const {mc,g,sent}=crystalGame();
+    let reads=0;
+    g.terrain={data:{hasChunk:()=>false,get(){reads++;return BLOCK.AIR;}}};
+    mc._unsupported();
+    assert.equal(reads,0);assert.equal(mc.taken.size,0);
+    g.terrain.data.hasChunk=()=>true;
+    const n=mc.growing().length;
+    assert.ok(mc.growing().every(c=>!c.rock));
+    mc._unsupported();
+    assert.equal(mc.growing().length,0);assert.equal(mc.taken.size,n);
+    const messages=sent.length;mc._unsupported();assert.equal(sent.length,messages,'remove once');
+});
+
+test('host retains authoritative crystal clusters near a distant guest', () => {
+    const {mc,g}=crystalGame();
+    g.character.group.position.set(2000,0,2000);
+    g.remotes.get('friend').position=new THREE.Vector3(0,0,0);
+    g.terrain={data:{cavesNear:()=>[]}};
+    const n=mc.growing().length;mc._ensureNear();
+    assert.equal(mc.growing().length,n);
+    g.remotes.clear();mc._ensureNear();assert.equal(mc.clusters.size,0,'unload when nobody remains nearby');
+});

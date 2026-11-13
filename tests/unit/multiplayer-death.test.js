@@ -82,3 +82,16 @@ test('the old knocked-down avatar hides immediately when its independent corpse 
     assert.equal(r.character.group.visible, false);
     assert.equal(r._hideT, undefined);
 });
+
+test('a late living state cannot overwrite the host death snapshot before respawn', () => {
+    const s=Object.create(NetSync.prototype),saved=[];
+    const remote={dead:true};
+    s.net={isHost:true,localId:'host',players:new Map([['guest',{pid:'stable',name:'Guest'}]])};
+    s.game={active:true,remotes:new Map([['guest',remote]]),keeper:{notePlayer:(pid,name,state)=>saved.push(state)}};
+    s._onMessage({t:'pstate',from:'guest',s:{hp:0,dead:true}});
+    s._onMessage({t:'pstate',from:'guest',s:{hp:20,mp:100}});
+    assert.equal(saved.length,1);assert.equal(s._states.get('guest').dead,true);
+    remote.dead=false;
+    s._onMessage({t:'pstate',from:'guest',s:{hp:20,mp:30}});
+    assert.equal(saved.length,2);assert.equal(s._states.get('guest').mp,30);
+});

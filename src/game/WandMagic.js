@@ -37,6 +37,7 @@ import * as THREE from 'three';
 import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
 import { wandPowerMul } from './Enchant.js';
 import { pickRevealTarget } from './RevealTarget.js';
+import { wrapText } from '../core/TextWrap.js';
 import { holoParts, holoWidth, holoPlain, withSpellDescription } from './HoloText.js';
 import { FIRE_SPELLS, DRAGON_WAND_FIRE } from './DragonKinds.js';
 
@@ -618,7 +619,7 @@ export class WandMagic {
             g.hud.setVoice(`🔮 Бегущая книга слишком далеко (${Math.round(pick.far)} м) — подойдите ближе`, true);
             return false;
         } else if (this.wand) { target = this.wand; at = tip.clone(); } // nothing near at all: the wand's own secrets
-        if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return false; }
+        if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты» или «Reveal»', true); return false; }
         // (a thing in my other hand: the card is right before the eyes — half the size, or it is too big to read: the author)
         this._showHologram(info || withSpellDescription(describeItem(target), target), at, !!pick.thing?.held);
         return true;
@@ -630,12 +631,17 @@ export class WandMagic {
         // Readable on any background (bright sky, a white wall, night): a dark, almost opaque plate
         // under the text, normal (not additive) blending, the letters outlined in black; the glow stays
         // on the frame and the letters' edges — the holographic look without washed-out text.
-        const W = 1024, PAD = 56, MAXX = W - PAD, LH = 52, GAP = 18, TOP = 150;
+        const W = 1024, PAD = 56, MAXX = W - PAD, LH = 52, GAP = 18;
         const c = document.createElement('canvas');
         const x = c.getContext('2d');
         const bodyFont = (bold) => (bold ? 'bold ' : '') + '40px sans-serif';
         // lay the words out first: the card is as tall as its text (long lists used to fall off the bottom)
         c.width = W; c.height = 64;
+        x.font = 'bold 58px sans-serif';
+        const titles = wrapText(holoPlain(info.title), W - PAD * 2, t => x.measureText(t).width);
+        const ruleY = 118 + (titles.length - 1) * 68, TOP = ruleY + 40;
+        const pent = info.theme === 'pentagram';
+        const glow = pent ? '#d4b0ff' : '#7fe3ff';
         const words = [];
         let y = 0;
         for (const line of info.lines) {
@@ -666,12 +672,12 @@ export class WandMagic {
         };
         // the plate: deep blue-black, nearly opaque, a little lighter at the top
         const bg = x.createLinearGradient(0, 0, 0, H);
-        bg.addColorStop(0, 'rgba(8, 34, 58, 0.93)'); bg.addColorStop(1, 'rgba(2, 10, 20, 0.93)');
+        bg.addColorStop(0, pent ? 'rgba(38, 18, 62, 0.96)' : 'rgba(8, 34, 58, 0.93)'); bg.addColorStop(1, pent ? 'rgba(12, 5, 26, 0.96)' : 'rgba(2, 10, 20, 0.93)');
         round(26, 6); x.fillStyle = bg; x.fill();
         for (let sy = 12; sy < H - 12; sy += 6) { x.fillStyle = 'rgba(127, 227, 255, 0.045)'; x.fillRect(12, sy, W - 24, 2); } // faint scan lines
         // glowing frames: the outer cyan, the inner in the item's colour
-        x.save(); x.shadowColor = '#7fe3ff'; x.shadowBlur = 18;
-        round(26, 6); x.strokeStyle = '#9ff0ff'; x.lineWidth = 7; x.stroke();
+        x.save(); x.shadowColor = glow; x.shadowBlur = 18;
+        round(26, 6); x.strokeStyle = pent ? '#dcc1ff' : '#9ff0ff'; x.lineWidth = 7; x.stroke();
         x.restore();
         round(18, 20); x.strokeStyle = col; x.lineWidth = 4; x.stroke();
         // every letter: a black outline, then the bright fill with a soft coloured glow
@@ -680,14 +686,12 @@ export class WandMagic {
             x.save(); x.shadowColor = glow; x.shadowBlur = 10; x.fillStyle = fill; x.fillText(t, px, py); x.restore();
         };
         x.textAlign = 'center'; x.font = 'bold 58px sans-serif';
-        let title = holoPlain(info.title);
-        while (title.length > 4 && x.measureText(title).width > W - PAD * 2) title = title.slice(0, -2) + '…';
-        text(title, W / 2, 96, '#ffffff', '#7fe3ff');
-        x.fillStyle = col; x.fillRect(PAD, 118, W - PAD * 2, 4); // a bright rule under the title
+        titles.forEach((title, i) => text(title, W / 2, 96 + i * 68, '#ffffff', glow));
+        x.fillStyle = col; x.fillRect(PAD, ruleY, W - PAD * 2, 4);
         x.textAlign = 'left';
         for (const t of words) {
             x.font = bodyFont(t.bold);
-            text(t.word, t.px, TOP + t.y, t.bold ? '#ffe14d' : '#eefaff', t.bold ? '#ffb000' : '#5fd0ff');
+            text(t.word, t.px, TOP + t.y, t.bold ? '#ffe14d' : '#eefaff', t.bold ? '#ffb000' : pent ? '#c99cff' : '#5fd0ff');
         }
         const tex = new THREE.CanvasTexture(c);
         tex.anisotropy = g.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
@@ -708,7 +712,7 @@ export class WandMagic {
         g.scene.add(mesh);
         this.holo = { mesh, until: performance.now() + 9000, t: 0, at: at.clone(), lift };
         g.ships?.pin(mesh, () => !!mesh.parent);
-        for (let i = 0; i < 20; i++) g.fx.spark(at, 0x7fe3ff, 0.06, _v2.set((Math.random() - 0.5), 1 + Math.random() * 1.5, (Math.random() - 0.5)), 0.8);
+        for (let i = 0; i < 20; i++) g.fx.spark(at, pent ? 0xc495ff : 0x7fe3ff, 0.06, _v2.set((Math.random() - 0.5), 1 + Math.random() * 1.5, (Math.random() - 0.5)), 0.8);
         g.hud.setVoice('🔮 Раскрой свои секреты…', true);
     }
 

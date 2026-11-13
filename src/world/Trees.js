@@ -4,7 +4,7 @@
  *
  * Where they stand comes with the land (`chunk.trees`, made in the terrain workers by the block trees' own rules —
  * Terrain._meshTree); what they look like is one of TreeBuild's shapes per kind (TREE_GEN.VARIANTS), turned, sized
- * and tinted for each tree. A chunk's trees join `world.trees` when its land is drawn and leave when it goes; what
+ * and tinted for each tree. A chunk's trees join `world.trees` when its land is drawn or is loaded near a guest, and leave when nobody needs it; what
  * happened to a tree (taken, burnt, carried) is kept by its id, so it is the same when its land comes back.
  *
  * Drawing: one instanced mesh per shape (its bark and leaves in one shape, one material), shared by every tree of it —
@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { TREE_GEN } from './TreeBuild.js';
 import { sharedTreeMaterials, treeGeometry } from './TreeMaterials.js';
+import { CHUNK, chunkKey, treeFitsChunk } from './Terrain.js';
 
 export const TREES = {
     NEAR: 52, // m: the detailed shape within this
@@ -226,9 +227,9 @@ export class WorldTrees {
      * Take the trees of the chunks just drawn in, let go of those whose land went away, and (when the player moved,
      * turned, or a tree changed) remake what is drawn.
      */
-    update(dt, focus, camera) {
+    update(dt, focus, camera, players = []) {
         const terrain = this.world.terrain;
-        if (terrain && focus) this._stream(terrain);
+        if (terrain && focus) this._stream(terrain, players);
         this._t += dt;
         if (!camera) return;
         camera.getWorldDirection(_dir);
@@ -241,22 +242,45 @@ export class WorldTrees {
         this._draw(camera);
     }
 
-    _stream(terrain) {
+    _stream(terrain, players = []) {
         const data = terrain.data, t0 = performance.now();
+        const wanted = new Set(terrain.meshes.keys());
+        // Collision and spell targets near guests must not depend on host rendering.
+        // Only already loaded chunks: no terrain generation in the frame.
+        for (const p of players) {
+            const cx = Math.floor(p.x / CHUNK), cz = Math.floor(p.z / CHUNK);
+            for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++) {
+                const key = chunkKey(cx + dx, cz + dz);
+                if (data.chunks.has(key)) wanted.add(key);
+            }
+        }
         // the land that went away: its trees go (a carried tree stays where it was put)
         for (const [key, list] of this.byChunk) {
-            if (terrain.meshes.has(key)) continue;
+            if (wanted.has(key)) continue;
             for (const t of list) if (!t.moved && this.byId.get(t.id) === t) this._remove(t);
             this.byChunk.delete(key);
         }
         // the land just drawn: its trees come (a few chunks a frame)
-        for (const [key, e] of terrain.meshes) {
+        for (const key of wanted) {
             if (this.byChunk.has(key)) continue;
             const c = data.chunks.get(key);
             if (!c) continue;
             const list = [];
             for (const it of c.trees || []) {
                 if (this.gone.has(it.id) || this.byId.has(it.id)) continue;
+                // Old saved chunks can contain trees placed before cave mouths
+                // were checked. Validate loaded blocks, preserving carried trees.
+                if (!this.moved.has(it.id)) {
+                    const x = Math.floor(it.x), z = Math.floor(it.z), h = Math.round(it.y + 0.5);
+                    let fits = true;
+                    for (const cx of new Set([Math.floor(x / CHUNK), Math.floor((x + 1) / CHUNK)])) {
+                        for (const cz of new Set([Math.floor(z / CHUNK), Math.floor((z + 1) / CHUNK)])) {
+                            const ground = data.chunks.get(chunkKey(cx, cz));
+                            if (ground && !treeFitsChunk(ground, x, z, h, it.kind)) fits = false;
+                        }
+                    }
+                    if (!fits) continue;
+                }
                 const t = this._make(it);
                 this._add(t);
                 list.push(t);

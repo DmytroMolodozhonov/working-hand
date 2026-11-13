@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTree, TREE_GEN, TREE_SIZES } from '../../src/world/TreeBuild.js';
-import { TerrainData, CHUNK, BLOCK } from '../../src/world/Terrain.js';
+import { TerrainData, CHUNK, BLOCK, MIN_LAYER, MAX_LAYER, treeFitsChunk } from '../../src/world/Terrain.js';
 
 const shapes = [];
 for (let k = 0; k < TREE_GEN.KINDS; k++) for (let v = 0; v < TREE_GEN.VARIANTS; v++) shapes.push([k, v]);
@@ -121,4 +121,56 @@ test('the trees are lit by the land\'s own rules: per pixel like the blocks, nig
     assert.match(shader.fragmentShader, /normal = normalize\( vNormal \);/, 'a leaf seen from behind is not black');
     assert.match(shader.fragmentShader, /vTreeBark/, 'the bark has its relief');
     assert.match(shader.vertexShader, /attribute float sway/);
+});
+
+
+test('cave-mouth trees need real soil, solid support and a clear trunk after carving', () => {
+    const c = { cx: 0, cz: 0, blocks: new Uint8Array((MAX_LAYER - MIN_LAYER + 1) * CHUNK * CHUNK) };
+    const put = (x, h, z, b) => { c.blocks[((h - MIN_LAYER) * CHUNK + z) * CHUNK + x] = b; };
+    const h = 12, x = 8, z = 9;
+    const data = { seed: 31, sites: null };
+    for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) {
+        put(x + dx, h, z + dz, BLOCK.GRASS);
+        put(x + dx, h - 1, z + dz, BLOCK.STONE);
+    }
+    const place = () => {
+        c.trees = [];
+        TerrainData.prototype._meshTree.call(data, c, x, z, h, 0, 123);
+        return c.trees.length;
+    };
+    assert.equal(place(), 1, 'healthy soil still grows a tree');
+    for (const bad of [BLOCK.AIR, BLOCK.STONE, BLOCK.WATER]) {
+        put(x, h, z, bad);
+        assert.equal(place(), 0, `root block ${bad} cannot grow a tree`);
+    }
+    put(x, h, z, BLOCK.GRASS);
+    put(x + 1, h, z + 1, BLOCK.AIR);
+    assert.equal(place(), 0, 'a broad trunk cannot hang over the carved mouth');
+    put(x + 1, h, z + 1, BLOCK.GRASS);
+    put(x, h - 1, z, BLOCK.AIR);
+    assert.equal(place(), 0, 'a floating soil block does not support a tree');
+    put(x, h - 1, z, BLOCK.STONE);
+    put(x, h + 3, z, BLOCK.STONE);
+    assert.equal(place(), 0, 'a rock wall cannot contain the trunk');
+    assert.equal(treeFitsChunk(c, x, z, h, 0), false, 'the same check rejects legacy chunk records');
+    put(x, h + 3, z, BLOCK.AIR);
+    assert.equal(place(), 1, 'clear ground remains usable');
+});
+
+test('trees near a guest stay interactive without a host terrain mesh; invalid legacy roots are skipped', async () => {
+    const {WorldTrees}=await import('../../src/world/Trees.js');
+    const {chunkKey}=await import('../../src/world/Terrain.js');
+    const x=320,z=320,h=8,c={cx:10,cz:10,blocks:new Uint8Array((MAX_LAYER-MIN_LAYER+1)*CHUNK*CHUNK),trees:[]};
+    const put=(L,b)=>{c.blocks[(L-MIN_LAYER)*CHUNK*CHUNK]=b;};
+    put(h,BLOCK.GRASS);put(h-1,BLOCK.STONE);
+    c.trees.push({id:'valid',x,z,y:h-.5,kind:1},{id:'floating',x:x+2,z,y:h-.5,kind:1});
+    const key=chunkKey(10,10), terrain={meshes:new Map(),data:{chunks:new Map([[key,c]])}};
+    const f=Object.create(WorldTrees.prototype);
+    Object.assign(f,{byId:new Map(),byChunk:new Map(),gone:new Set(),moved:new Map(),stats:{},
+        _make:e=>({...e}),_add(t){this.byId.set(t.id,t);},_remove(t){this.byId.delete(t.id);}});
+    f._stream(terrain,[{x,z}]);
+    assert.equal(f.byId.has('valid'),true,'guest-area collision/spell record exists');
+    assert.equal(f.byId.has('floating'),false,'legacy floating tree does not appear');
+    f._stream(terrain,[{x,z}]);assert.equal(f.byId.size,1,'no duplicate actors');
+    f._stream(terrain,[]);assert.equal(f.byId.size,0,'release guest area after leaving');
 });

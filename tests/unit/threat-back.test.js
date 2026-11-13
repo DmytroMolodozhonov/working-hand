@@ -19,7 +19,7 @@ test('only a sword or axe in the primary hand disables retreat (right- and left-
             character: { group: { position: { x: 0, y: 1.95, z: 0 }, rotation: { y: 0 } } },
             weapons: { hands: { left: { held: null }, right: { held: null } } },
             items: { held: { left: null, right: null } },
-            crowd: { update() {}, near: () => [{ id: 'attacker', kind: 'zombie', x: 0, z: -3, ref: {} }] },
+            crowd: { update() {}, near: () => [{ id: 'attacker', kind: 'zombie', x: 0, z: -3, ref: { isAttacking: true, yaw: Math.PI } }] },
         });
         assert.equal(g._threatBack(1 / 30), true, 'an attacker in front normally triggers retreat');
         for (const type of ['sword', 'axe', 'divine']) {
@@ -59,7 +59,7 @@ test('not a foe: one not after me (even running at me), a hostile one standing f
 test('a foe that came stays one while it stands at me and strikes (HOLD), then not', () => {
     const st = {};
     run(st, 2, (t) => ({ x: 0, z: Math.min(-2, -12 + t * 5) }));
-    assert.equal(run(st, 1, () => ({ x: 0, z: -2 }), 0, 2).back, true, 'striking at me');
+    assert.equal(run(st, 1, () => ({ x: 0, z: -2, attacking: true }), 0, 2).back, true, 'striking at me');
     assert.equal(run(st, THREAT_BACK.HOLD + 2, () => ({ x: 0, z: -12 }), 0, 3).back, false, 'went off and stands far: no more');
 });
 
@@ -89,6 +89,17 @@ test('a foe lying knocked down is no threat: one walks up to it forward (the aut
     for (let i = 30; i < 60; i++) r = threatStep(st, me, [{ id: 'v1', x: 0, z: -3, hostile: true, down: true }], 1 / 30, i / 30);
     assert.equal(r.back, false);
     // gets up, angry and right there: a threat again
-    for (let i = 60; i < 70; i++) r = threatStep(st, me, [{ id: 'v1', x: 0, z: -3, hostile: true, down: false }], 1 / 30, i / 30);
+    for (let i = 60; i < 70; i++) r = threatStep(st, me, [{ id: 'v1', x: 0, z: -3, hostile: true, down: false, attacking: true }], 1 / 30, i / 30);
     assert.equal(r.back, true);
+});
+
+
+test('a trapped or distracted hostile creature does not force retreat', () => {
+    for (const extra of [{ reachable: false }, { yaw: 0 }]) {
+        assert.equal(run({}, 2, t => ({ x: 0, z: -10 + t * 3, ...extra })).back, false);
+    }
+    assert.equal(run({}, 2, t => ({ x: 0, z: -10 + t * 3, yaw: Math.PI, reachable: true })).back, true);
+    const st = {};
+    run(st, 1, t => ({ x: 0, z: -8 + t * 3 }));
+    assert.equal(run(st, 2, () => ({ x: 0, z: -5 }), 0, 1).back, false, 'stuck without attacking');
 });

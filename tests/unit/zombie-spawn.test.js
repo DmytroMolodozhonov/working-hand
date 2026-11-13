@@ -146,3 +146,12 @@ test('never where a player has been (nor in the part of a cave the hero has seen
     }
     assert.ok(out >= 5, `behind his back they still come (${out})`);
 });
+
+test('a distant guest sees the whole zombie, including a head above cover', () => {
+    const g=fakeGame(new THREE.Vector3(2000,0,2000));
+    g.remotes.set('guest',{position:new THREE.Vector3(0,0,0),yaw:0});
+    g.collision={lineOfSight:(ox,oy,oz,x,y,z)=>y>2};
+    assert.equal(g.zombieSpawn.seenNow(0,0,-80),true,'visible head, well beyond the old 45m gate');
+    g.collision.lineOfSight=()=>false;
+    assert.equal(g.zombieSpawn.seenNow(0,0,-80),false,'solid cover hides every body point');
+});

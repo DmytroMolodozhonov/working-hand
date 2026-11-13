@@ -1,3 +1,4 @@
+import { worldPlayers } from './WorldPlayers.js';
 /**
  * Boats.js — small rowing boats for two (the sea update; the author 05.11: «заклинание, которое позволяет создавать лодки… максимум
  * 2 человека… нет руля… её можно найти в порту… навести на дерево… из дерева при помощи анимации создастся лодка. Потом лодку с
@@ -394,7 +395,7 @@ export class Boats {
         const g = this.game, idx = g.world?.terrain?.data?.castles || null; // (the castles' index — as Ships finds the ports)
         const me = g.character?.group?.position;
         if (!idx?.near || !me) return;
-        for (const def of idx.near(me.x, me.z, BOAT.PORT_R)) {
+        for (const p of worldPlayers(g)) for (const def of idx.near(p.x, p.z, BOAT.PORT_R)) {
             const port = def.port;
             if (!port || !Array.isArray(port.piers) || !Array.isArray(port.berths)) continue;
             port.piers.forEach((pr, k) => {

@@ -1212,7 +1212,7 @@ const ui = {
             btn.textContent = '✨ Возродиться';
         }, 1000);
         btn.onclick = () => { if (btn.disabled) return; screen.classList.add('hidden'); onRespawn?.(); };
-        $('death-menu-btn').onclick = () => { net.sayGoodbye(); net.leave(); location.reload(); };
+        $('death-menu-btn').onclick = async () => { $('death-menu-btn').disabled = true; await leaveToMenu(); };
     },
     isLoading: () => portal.on && portal.phase !== 'arrive', // (the passage into the world is on — PortalLoader)
     isMenuVoiceActive: () => isMenuVoiceActive,
@@ -1429,6 +1429,7 @@ async function startGameInner(config, welcome) {
         // every shader and picture sent to the video card in pieces (the page keeps answering; the bar moves)
         // (tools/shot.mjs --fast: pictures only — the shaders compile as they are seen; never in the real game)
         if (!window.__ZNS_SHOT_FAST__) await game.prewarmAsync((f) => updateProgress(90 + Math.round(f * 9), `Компиляция шейдеров... ${Math.round(f * 100)}%`));
+        else game._prewarmed = true; // screenshot mode also skips the synchronous fallback in start()
         B.end('шейдеры');
         game.revealed = false;
         B.begin('до «можно играть»');

@@ -1,3 +1,4 @@
+import { wrapText } from '../core/TextWrap.js';
 /**
  * ScrollArt.js — how a scroll looks inside (the author: «текст внутри свитка — контрастный, красивый, магический:
  * название красивым цветом по школе, буквицы, золотистые руны на краях, бумага с текстурой, потёртостями, печатью,
@@ -376,19 +377,17 @@ export function paintParchment(x, W, H, spec) {
     const pic = spec.picture !== false;
     const tx = pic ? (70 + (W - 300)) / 2 : W / 2; // (the middle of the text column)
     x.textAlign = 'center';
-    let tp = 44;
-    const maxW = pic ? W - 380 : W - 160;
+    const tp = 38, maxW = pic ? W - 380 : W - 160;
     x.font = `bold ${tp}px serif`;
-    while (tp > 30 && x.measureText(spec.title).width > maxW) { tp -= 2; x.font = `bold ${tp}px serif`; }
-    x.lineJoin = 'round'; x.lineWidth = 5; x.strokeStyle = 'rgba(255,248,226,0.9)'; x.strokeText(spec.title, tx, 88);
-    x.fillStyle = S.ink; x.fillText(spec.title, tx, 88);
+    const titles = wrapText(spec.title, maxW, t => x.measureText(t).width);
+    x.lineJoin = 'round'; x.lineWidth = 5; x.strokeStyle = 'rgba(255,248,226,0.9)';
+    for (let i=0;i<titles.length;i++) { x.strokeText(titles[i],tx,78+i*44); x.fillStyle=S.ink; x.fillText(titles[i],tx,78+i*44); }
+    const titleBottom = 78 + (titles.length-1)*44;
     x.strokeStyle = '#b8862a'; x.lineWidth = 2;
-    const fw = Math.min(maxW, x.measureText(spec.title).width) / 2 + 20;
-    x.beginPath(); x.moveTo(tx - fw, 102); x.quadraticCurveTo(tx - fw / 2, 96, tx, 102); x.quadraticCurveTo(tx + fw / 2, 108, tx + fw, 102); x.stroke();
-    x.fillStyle = '#b8862a'; x.beginPath(); x.moveTo(tx, 96); x.lineTo(tx + 6, 102); x.lineTo(tx, 108); x.lineTo(tx - 6, 102); x.closePath(); x.fill();
+    x.beginPath(); x.moveTo(tx-maxW/2,titleBottom+16); x.lineTo(tx+maxW/2,titleBottom+16); x.stroke();
     // the lines (a drop cap in the first), the text column shrinks if there is a picture
     x.textAlign = 'left';
-    const x0 = 78, x1 = pic ? W - 300 : W - 78;
+    const x0 = 78, x1 = pic && !spec.compactPicture ? W - 300 : W - 78;
     // (a short first line — the kind of the spell — is a subtitle; the first long paragraph gets the drop cap: its first
     // letter is taken out of the text and set in a frame at the left)
     const plainLen = (l) => l.reduce((n, p) => n + p.text.length, 0);
@@ -396,7 +395,7 @@ export function paintParchment(x, W, H, spec) {
     const bi = lines.findIndex((l) => plainLen(l) >= 45);
     const subs = bi > 0 ? lines.slice(0, bi) : [];
     if (bi > 0) lines = lines.slice(bi);
-    let y = 142;
+    let y = Math.max(spec.compactPicture ? 200 : 142,titleBottom+48);
     for (const l of subs) {
         x.font = 'italic 27px serif'; x.fillStyle = S.accent === '#e8a800' ? S.ink : S.ink; x.textAlign = 'center';
         x.fillText(l.map((p) => p.text).join(''), tx, y + 4); y += 34;
@@ -425,9 +424,9 @@ export function paintParchment(x, W, H, spec) {
     }
     // the picture, the seal, the footnote
     if (pic) {
-        const mx = W - 150, my = 215;
-        if (spec.custom) spec.custom(x, { cx: mx, cy: my, R: 100, S }); else medallion(x, mx, my, 100, S);
-        seal(x, mx + 62, my + 108, 26, S);
+        const mx = W - 150, my = spec.compactPicture ? 102 : 215, radius = spec.compactPicture ? 54 : 100;
+        if (spec.custom) spec.custom(x, { cx: mx, cy: my, R: radius, S }); else medallion(x, mx, my, radius, S);
+        seal(x, mx + (spec.compactPicture ? 40 : 62), my + (spec.compactPicture ? 58 : 108), spec.compactPicture ? 18 : 26, S);
     } else seal(x, W - 100, H - 78, 26, S);
     if (spec.note) {
         x.font = '24px serif'; x.fillStyle = '#21180e'; x.textAlign = 'center';

@@ -1,3 +1,5 @@
+import { worldPlayers } from './WorldPlayers.js';
+import { rememberDeath, forgetDeath } from './DeathCheckpoint.js';
 /**
  * Game.js — one play session (creative, survival, custom map or camera test).
  *
@@ -55,7 +57,7 @@ import { PerfLog } from '../core/PerfLog.js';
 import { HandsLog } from './HandsLog.js';
 import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID, WARD_PEDESTAL_ID } from './BookBirds.js';
 import { RunningBook } from './RunningBook.js';
-import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
+import { playerSnapshot, WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { startRespawn } from './RespawnSpot.js';
 import { Quake } from './Quake.js';
 import { Swimming } from './Swimming.js';
@@ -1200,28 +1202,20 @@ export class Game {
      * Creative slider) — never by a light (a campfire, a «Люмос»: ZombieSpawn.litAt).
      */
     spawnZombieWave() {
-        const ch = this.character;
-        const lights = worldLights(this);
-        let x, z;
-        for (let k = 0; k < 8; k++) {
-            const angle = ch.group.rotation.y + Math.PI + (Math.random() - 0.5) * (Math.PI / (k < 4 ? 2 : 1));
-            const dist = 50 + Math.random() * 30;
-            x = ch.group.position.x + Math.sin(angle) * dist;
-            z = ch.group.position.z + Math.cos(angle) * dist;
-            // Keep inside the small world of «Хардкор» and out of mountains (the endless worlds: anywhere)
-            if (this.config.mode === 'survival') {
-                x = Math.max(-115, Math.min(115, x));
-                z = Math.max(-115, Math.min(115, z));
-                if (this.terrain) {
-                    for (let i = 0; i < 12 && this.terrain.topLayer(Math.round(x), Math.round(z)) > 1; i++) {
-                        x *= 0.85; z *= 0.85;
-                    }
-                }
+        const ch = this.character, lights = worldLights(this);
+        for (let k=0;k<24;k++) {
+            // A wave approaches from outside view, rather than being created in front of the player's eyes.
+            const angle = ch.group.rotation.y + (Math.random()-.5)*Math.PI*2, dist=50+Math.random()*30;
+            let x=ch.group.position.x+Math.sin(angle)*dist,z=ch.group.position.z+Math.cos(angle)*dist;
+            if (this.config.mode==='survival') {
+                x=Math.max(-115,Math.min(115,x));z=Math.max(-115,Math.min(115,z));
+                for (let i=0;i<12 && this.terrain?.topLayer(Math.round(x),Math.round(z))>1;i++) { x*=.85;z*=.85; }
             }
-            if (!litAt(lights, x, ch.group.position.y, z)) break;
+            const y=this.config.mode==='survival'||!this.terrain?.surfaceY ? .5 : this.terrain.surfaceY(x,z)+.5;
+            if (litAt(lights,x,y,z) || this.zombieSpawn?.seenNow(x,y,z)) continue;
+            return this._createZombie(new THREE.Vector3(x,y,z));
         }
-        const y = this.config.mode === 'survival' || !this.terrain ? 0.5 : this.terrain.surfaceY(x, z) + 0.5;
-        return this._createZombie(new THREE.Vector3(x, y, z));
+        return null; // postpone the spawn when every candidate is visible
     }
 
     /**
@@ -1740,6 +1734,7 @@ export class Game {
                     // a lit chamber by day; it wanders by its chest, not asleep standing — _zombieTarget)
                     if (this.authority && this.config.mode === 'freeworld' && !cv.lair && (cv.r + k) % 2 === 0 && t.skyAt &&
                         lightLevel(t.skyAt(sp.x, sp.y, sp.z), this.zombieSpawn?.night() ?? 0) <= ZSPAWN.DARK &&
+                        !this.zombieSpawn?.seenNow(sp.x + 2.5, cy, sp.z) &&
                         !this.zombies.some((o) => !o.isDead && Math.hypot(o.group.position.x - sp.x, o.group.position.z - sp.z) < ZSPAWN.APART)) {
                         const z = this._createZombie(new THREE.Vector3(sp.x + 2.5, cy, sp.z));
                         z.caveGuard = cv.id; // (by its chest: put away with it)
@@ -3726,6 +3721,8 @@ export class Game {
         if (this.flight.busy) this.flight.land('dead');
         this.boards?.dropAll('dead');
         this.weapons.releaseAll?.();
+        rememberDeath(this, playerSnapshot(this));
+        this.keeper?.checkpoint?.();
         this.ui.died?.(text, () => this.respawn());
     }
 
@@ -3741,6 +3738,7 @@ export class Game {
     /** Back into the game: full health, a new place near the start. */
     respawn() {
         if (restartsCreative(this) && this.ui.restartCreative) return this.ui.restartCreative(this);
+        forgetDeath(this);
         const ch = this.character;
         this.bleeding?.clearCuts(ch);
         this.dismember?.resetLocal(); // (cut-off arms / legs / the head: whole again)
@@ -3916,15 +3914,19 @@ export class Game {
      */
     async prewarmAsync(progress = () => {}) {
         if (this._prewarmed) return;
-        const run = this._prewarmRun();
-        let steps = 0;
-        for (;;) {
-            const r = run.next();
-            if (r.done) break;
-            steps++;
-            progress(Math.min(0.99, steps / (r.value?.of || 40)));
-            await new Promise((res) => setTimeout(res, 0));
-        }
+        const run = this._prewarmRun(true);
+        let steps = 0, maxStep = 0;
+        try {
+            for (;;) {
+                const start = performance.now(), r = run.next();
+                maxStep = Math.max(maxStep, performance.now() - start);
+                if (r.done) break;
+                if (r.value?.wait) await r.value.wait;
+                progress(Math.min(0.99, ++steps / (r.value?.of || 40)));
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        } finally { run.return?.(); } // restore hidden models/camera if compilation fails
+        bootTimer.note(`прогрев: самый долгий шаг основного потока ${Math.round(maxStep)} мс`);
         progress(1);
     }
 
@@ -3956,7 +3958,7 @@ export class Game {
         return skip;
     }
 
-    *_prewarmRun() {
+    *_prewarmRun(asyncCompile = false) {
         if (this._prewarmed) return;
         this._prewarmed = true;
         const hidden = [];
@@ -4093,23 +4095,25 @@ export class Game {
         // compiled and drawn to each side, then the thread is given back; first the world itself (its hidden things made visible)
         const q = this.camera.quaternion.clone(), cp = this.camera.position.clone();
         const hideRest = [];
-        const sides = () => {
+        const sides = function* () {
             this.camera.position.copy(this.character.group.position).y += 1.7;
             for (let k = 0; k < 4; k++) {
                 this.camera.quaternion.setFromEuler(new THREE.Euler(-0.15, k * Math.PI / 2, 0, 'YXZ'));
                 this.camera.updateMatrixWorld(true);
                 this.renderer.render(this.scene, this.camera);
+                yield { of: this._pwOf };
             }
-        };
+        }.bind(this);
         const PER = 4; // (samples in a group)
         const parts = [...zoo.children];
-        const of = this._pwOf = 6 + Math.ceil(parts.length / PER); // (+ the world's own and the last few)
+        const of = this._pwOf = 12 + (asyncCompile ? 6 : 5)*Math.ceil(parts.length / PER); // (+ the world's own and the last few)
         if (typeof window !== 'undefined' && window.__ZNS_DEBUG_PW) window.__pwDesc = { of, per: PER, groups: parts.map((p, i) => { let v = 0, n = 0; const names = []; p.traverse?.((o) => { n++; v += o.geometry?.attributes?.position?.count || 0; if (o.name && names.length < 4) names.push(o.name); }); return `${i}: ${p.type}/${p.name || ''} objs ${n} verts ${v} [${names.join(',')}] ${p.userData?.kind || ''} ${this._pwDescribe([p])}`; }) }; // (a tool lists what each warm-up step builds)
         const skip = this._pwReadCrumb(parts);
         try {
             this._pwMark('мир');
-            this.renderer.compile(this.scene, this.camera);
-            sides(); // (the world: every chunk's and model's buffers and textures)
+            if (asyncCompile && this.renderer.compileAsync) yield {of, wait:this.renderer.compileAsync(this.scene,this.camera)};
+            else this.renderer.compile(this.scene,this.camera);
+            yield* sides(); // (the world: every chunk's and model's buffers and textures)
             yield { of };
             this.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isSprite || o.isLine) && o.visible) { o.visible = false; hideRest.push(o); } }); // (not the groups: a light inside one must stay on, or the shaders differ)
             this.scene.add(zoo);
@@ -4120,7 +4124,8 @@ export class Game {
                 this._pwMark('g:' + i);
                 zoo.add(...part);
                 const t0 = performance.now();
-                sides();
+                if (asyncCompile && this.renderer.compileAsync) yield {of, wait:this.renderer.compileAsync(this.scene,this.camera)};
+                yield* sides();
                 const ms = performance.now() - t0;
                 if (ms > 300) (this._pwSlow || (this._pwSlow = [])).push({ ms, i, what: this._pwDescribe(part) }); // (the journal: which samples made the loading stall — a friend's complaint 06.11)
                 zoo.remove(...part);
@@ -4584,7 +4589,7 @@ export class Game {
         // (…while the ground round the body stays known: the body, the ships and the creatures near it still stand on it — TerrainView.keepAt)
         if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost);
-        this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
+        this.world.forest?.update(dt, this.character.group.position, this.camera, worldPlayers(this)); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)
         if (!this.space?.offEarth && !this.hellGate?.inHell) {
@@ -4637,7 +4642,7 @@ export class Game {
             const hellNow = !!this.hellGate?.inHell;
             if (hellNow) castles = this.hellGate.mapMarks(); // (hell: never a mark of the Earth — only its own: the devil, the mark back, the Tarons' camps — HellGate.mapMarks)
             // (in a cave: the cave as far as the hero has seen it — CaveMap.js)
-            const cave = this._inCave ? { mem: this.caveMap, L: Math.floor(cp.y + 1.51), data: this.terrain.data, chests: this.chests.filter((c) => c.cave != null), crystals: this.crystals?.clusters } : null;
+            const cave = this._inCave ? { mem: this.caveMap, L: Math.floor(cp.y + 1.51), data: this.terrain.data, chests: this.chests.filter((c) => c.cave != null), crystals: this.crystals?.clusters, crystalTaken: this.crystals?.taken, opened: this._openedChests } : null;
             const hm = this.houseMagic, me = hm && !this.space?.offEarth && !hellNow ? hm._key('local') : null;
             const houses = me ? [...hm.list.values()].map((h) => ({ x: h.x, z: h.z, mine: h.owner === me })) : [];
             this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles, cave, houses);
@@ -4961,7 +4966,11 @@ export class Game {
             // (knocked down, lying, held up by «Левиоса», stunned or frozen: no threat — the author 05.11: «если он загрен, но лежит… тогда
             //  игрок может подойти к нему»; a player lying too)
             const down = !!r && (this.creatureImpact?.isDown?.(r) || r.rag === true || !!r.lev || !!r.stunned || !!r.knocked || !!r.down || !!r.ragdoll || r.frozen > 0 || !!r.petrified);
-            bodies.push({ id: b.id, x: b.x, z: b.z, down, hostile: !down && !!hostile && Math.hypot(b.x - p.x, b.z - p.z) < THREAT_BACK.R });
+            const yaw = r?.yaw ?? r?.group?.rotation?.y ?? r?.model?.group?.rotation?.y;
+            const close = Math.hypot(b.x-p.x,b.z-p.z) < THREAT_BACK.R;
+            const feet = (b.y ?? p.y-1.95) - (b.kind === 'zombie' ? (r?.gOff ?? 1) : 0);
+            const reachable = Math.abs(feet-(p.y-1.95)) <= 2.5 && (!this.collision?.lineOfSight || this.collision.lineOfSight(b.x,(b.y ?? p.y-1.95)+1.6,b.z,p.x,p.y,p.z,.15));
+            bodies.push({ id:b.id,x:b.x,z:b.z,y:b.y,yaw,reachable,down,attacking:!!(r?.isAttacking || r?.mode==='attack'),hostile:!down&&!!hostile&&close });
         }
         const res = threatStep(this._tb || (this._tb = {}), { x: p.x, z: p.z, yaw: ch.group.rotation.y }, bodies, dt, now);
         if (res.back && ch.isRunning && now - (this._tbSaid || 0) > 20) { this._tbSaid = now; this.hud?.setVoice?.('↩️ Отхожу назад — лицом к нападающему', true); }

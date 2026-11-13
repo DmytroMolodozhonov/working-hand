@@ -1,3 +1,4 @@
+import { worldPlayers, nearWorldPlayer } from './WorldPlayers.js';
 /**
  * CustomPlants.js — plants of one's own, made by «Да пусть создастся дерево / цветок / гриб …» (DivineCreation.js).
  *
@@ -241,9 +242,9 @@ export class CustomPlants {
         this._groundT = (this._groundT || 0) - dt;
         if (this.auth && me && this._groundT <= 0 && this.list.length) {
             this._groundT = 0.5;
-            const gone = [];
+            const gone = [], players=worldPlayers(g);
             for (const p of this.list) {
-                if (Math.abs(p.x - me.x) > 150 || Math.abs(p.z - me.z) > 150) continue;
+                if (!nearWorldPlayer(players,p.x,p.z,150)) continue;
                 const y = this._ground(p.x, p.z);
                 if (y != null && y < p.y - 0.8) gone.push(p);
             }

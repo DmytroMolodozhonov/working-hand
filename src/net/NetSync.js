@@ -768,7 +768,7 @@ export class NetSync {
     }
 
     died(killer, mm = null, how = null) {
-        this.net.send({ t: 'pdead', by: this.me, killer: killer || null, mm, ...(how === 'Hellfire' ? { k: 'Hellfire' } : null) }, true);
+        this.net.send({ t: 'pdead', s: playerSnapshot(this.game), by: this.me, killer: killer || null, mm, ...(how === 'Hellfire' ? { k: 'Hellfire' } : null) }, true);
     }
 
     /** (host) Mana for player `to`: his last blow killed a magical creature / a wizard he beat in a duel. */
@@ -1106,7 +1106,7 @@ export class NetSync {
             }
             case 'mcg': g.crystals?.applyGone((m.l || []).slice(0, 50)); break;
             case 'mcfx': if (Array.isArray(m.p)) g.crystals?.remoteFx(vec(m.p), m.by || m.from || null, m.n | 0); break;
-            case 'mcq': if (this.net.isHost && Array.isArray(m.l)) g.crystals?.burst(m.l.slice(0, 8).map(String), m.from || m.by, m.k || null); break; // (who broke it: the sender himself)
+            case 'mcq': if (this.net.isHost && Array.isArray(m.l)) { const p = g.remotes.get(m.from)?.position; if (p) g.crystals?.ensureAt(p, 90); g.crystals?.burst(m.l.slice(0, 8).map(String), m.from || m.by, m.k || null); } break; // (who broke it: the sender himself)
             case 'mcb': if (!this.net.isHost && Array.isArray(m.l)) { const l = m.l.slice(0, 50).map(String); g.crystals?.onBurst(l, m.by || null, l.map((_, i) => (Array.isArray(m.p?.[i]) ? vec(m.p[i]) : null)), null); } break;
             case 'tree': g.world.treeGoneById(m.i); break;
             case 'wgone': {
@@ -1121,8 +1121,14 @@ export class NetSync {
                 w.setRemoteTarget(m.s);
                 break;
             }
-            case 'pstate': if (this.net.isHost && m.s && typeof m.s === 'object') (this._states || (this._states = new Map())).set(m.from, m.s); // (their pocket, for _onLeave)
-                if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.pid, this.net.players.get(m.from)?.name || m.name, m.s); break;
+            case 'pstate': {
+                if (!this.net.isHost || !m.s || typeof m.s !== 'object') break;
+                // An old living snapshot can arrive after reliable pdead on a slow connection.
+                if (g.remotes.get(m.from)?.dead && !m.s.dead && m.s.hp > 0) break;
+                (this._states || (this._states = new Map())).set(m.from, m.s);
+                g.keeper?.notePlayer(this.net.players.get(m.from)?.pid, this.net.players.get(m.from)?.name || m.name, m.s);
+                break;
+            }
             case 'birds': if (!this.net.isHost && Array.isArray(m.l)) g.books?.applyNet(m.l.filter(Array.isArray), Array.isArray(m.b) ? m.b.filter(Array.isArray) : []); break;
             case 'rbcatch': case 'rbgot': case 'rbaccio': case 'rbtake': g.runner?.onNet(m); break; // (the running book)
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
@@ -1451,6 +1457,13 @@ export class NetSync {
             case 'bmv': if (typeof m.id === 'string') g.death?.onNetMove(m); break;
             case 'pdead': {
                 if (m.by === this.me) break;
+                if (this.net.isHost && m.s) {
+                    const state={...m.s,dead:true,hp:0};
+                    (this._states || (this._states=new Map())).set(m.by,state);
+                    const p=this.net.players.get(m.by);
+                    g.keeper?.notePlayer(p?.pid,p?.name||m.s.name,state);
+                    g.keeper?.checkpoint?.();
+                }
                 g.castleLife?.playerDied(m.by);
                 const r = g.remotes.get(m.by);
                 if (r) r.setDead(true);

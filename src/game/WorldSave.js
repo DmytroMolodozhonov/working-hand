@@ -1,3 +1,5 @@
+import { deathCheckpoint } from './DeathCheckpoint.js';
+import { wipeHero } from './Legacy.js';
 /**
  * WorldSave.js — worlds are saved by themselves, all the time.
  *
@@ -255,8 +257,21 @@ export function playerSnapshot(game) {
 
 /** Give a player their things back. */
 export function applyPlayerSnapshot(game, s) {
+    s = deathCheckpoint(game) || s;
     if (!s) return;
     const wasDead = !!s.dead || (Number.isFinite(s.hp) && s.hp <= 0);
+    if (wasDead) {
+        game._playerRestored = true;
+        if (Array.isArray(s.ld)) game.lastDeath = {x:s.ld[0],y:s.ld[1],z:s.ld[2],t:s.ld[3]||0};
+        else if (Array.isArray(s.pos)) game.lastDeath = {x:s.pos[0],y:s.pos[1],z:s.pos[2],t:0};
+        if (s.bed) game.beds?.setHome?.(s.bed);
+        game.mana?.onDeath?.(); game.achievements?.onDeath?.();
+        if (game.config?.mode !== 'creative') wipeHero(game);
+        if (game.inventory?.slots) game.inventory.slots.fill(null);
+        if (game.inventory?.back) game.inventory.back.fill(null);
+        if (game.active && game.respawn) game.respawn(); else game._respawnAfterRestore = true;
+        return; // never restore old mana, learned magic, equipment or corpse coordinates
+    }
     retireScrollsIn(s); // (the scrolls of health and of mana cells are gone from the game: an old one is an apple)
     game._playerRestored = true; // (a player of this world before: their own things, no starting gifts)
     if (s.look && typeof s.look === 'object' && game.character?.setLook) { // (the skin they began this world with — not the one picked in «Персонаж» since)
@@ -327,11 +342,6 @@ export function applyPlayerSnapshot(game, s) {
         if (Number.isFinite(s.mp) && s.mp >= 0) c.fatigue = Math.min(c.maxFatigue || s.mp, s.mp);
         c._hudKey = '';
     } else if (manaRules(game) && Number.isFinite(s.mp) && s.mp >= 0) c.fatigue = Math.min(c.maxFatigue || s.mp, s.mp); // (Creative with a finite mana: the mana left)
-    // Leaving/rejoining on the death screen must use the same bed/start respawn, never revive at the corpse's coordinates.
-    if (wasDead) {
-        if (game.active && game.respawn) game.respawn();
-        else game._respawnAfterRestore = true;
-    }
 }
 
 /**
@@ -395,10 +405,6 @@ export class WorldKeeper {
         if (legacy && (self || nk !== WorldKeeper.key(null, this.myName))) {
             if (pid) delete this.players[nk];
             return legacy;
-        }
-        if (self) {
-            const any = Object.values(this.players || {})[0];
-            if (any) return any;
         }
         return null;
     }
@@ -477,12 +483,24 @@ export class WorldKeeper {
         };
     }
 
-    async save() {
-        if (this._saving || !this.game.active) return;
-        if (this.game.groundVortex?.busy) return; // («Ground Vortex» holds blocks out of the ground: saved when it ends or, leaving, returnAll lays them back first)
+    /** Critical transitions also enqueue a page-safe disk write through the beacon. */
+    checkpoint() {
+        try { globalThis.navigator?.sendBeacon?.('/api/worlds', new Blob([JSON.stringify(this.snapshot())], {type:'application/json'})); } catch { /* normal save below */ }
+        return this.save();
+    }
+
+    save() {
+        if (!this.game.active || this.game.groundVortex?.busy) return Promise.resolve();
+        this._saveAgain = true;
+        if (this._saving) return this._saveJob;
         this._saving = true;
-        try { await putWorld(this.snapshot()); this.lastSaved = Date.now(); } catch (e) { console.warn('[WorldSave] not saved', e); }
-        this._saving = false;
+        this._saveJob = (async () => {
+            do {
+                this._saveAgain = false;
+                try { await putWorld(this.snapshot()); this.lastSaved = Date.now(); } catch(e) { console.warn('[WorldSave] not saved',e); }
+            } while(this._saveAgain && this.game.active);
+        })().finally(() => { this._saving=false; });
+        return this._saveJob;
     }
 
     update(dt) {

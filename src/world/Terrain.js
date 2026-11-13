@@ -520,6 +520,22 @@ export function chunkKey(cx, cz) {
     return (cx + 0x8000) * 0x10000 + (cz + 0x8000);
 }
 
+/** Check the actual carved blocks, without requesting/generating neighbour chunks. */
+export function treeFitsChunk(c, x, z, h, kind) {
+    const wide = kind === 0 || kind === 4 ? 2 : 1;
+    for (let dz = 0; dz < wide; dz++) for (let dx = 0; dx < wide; dx++) {
+        const lx = x + dx - c.cx * CHUNK, lz = z + dz - c.cz * CHUNK;
+        if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK) continue;
+        const block = (L) => c.blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx];
+        const soil = block(h);
+        if (soil !== BLOCK.GRASS && soil !== BLOCK.DIRT && soil !== BLOCK.SAND && soil !== BLOCK.SNOW) return false;
+        const below = block(h - 1);
+        if (below == null || below === BLOCK.AIR || below === BLOCK.WATER) return false;
+        for (let L = h + 1; L <= h + 6; L++) if (block(L) !== BLOCK.AIR) return false;
+    }
+    return true;
+}
+
 /**
  * Height field of the world (top solid layer of a column, before explosions).
  * Within ~130 m of spawn this is exactly the original creative world.
@@ -1310,6 +1326,9 @@ export class TerrainData {
      */
     _meshTree(c, tx, tz, h, kind, id) {
         if (tx >> SHIFT !== c.cx || tz >> SHIFT !== c.cz) return;
+        // Caves have already been carved. The height recipe alone can still
+        // describe a grassy surface whose actual blocks are now air or rock.
+        if (!treeFitsChunk(c, tx, tz, h, kind)) return;
         const S = this.sites;
         if (S) for (const [dx, dz] of TREE_CROWN_REACH) if (S.landAt(tx + dx, tz + dz)) return;
         const r = (k) => hashLand(tx * 7 + k, tz * 13 - k, this.seed + 71 + k);

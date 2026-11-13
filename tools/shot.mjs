@@ -32,9 +32,26 @@ const browser = await launch({ viewport: { width: W, height: H } });
 const killer = setTimeout(async () => { console.log('✖ timeout (40 min)'); await browser.close().catch(() => {}); srv.stop(); process.exit(2); }, 40 * 60 * 1000);
 const saved = [];
 let failed = false;
+let runPage, runErrors = [];
+const bootWatch = process.env.ZNS_SHOT_DEBUG ? setInterval(async () => {
+    if (!runPage) return;
+    console.log('boot:', await runPage.evaluate(async () => {
+        const { bootTimer: b } = await import('/src/core/BootTimer.js');
+        return { status: document.getElementById('loading-status')?.textContent, active: window.__zns?.game?.active, open: [...b.open.keys()], rows: b.table().rows };
+    }).catch(() => 'unresponsive'));
+}, 15000) : null;
 try {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: W, height: H } });
+    runPage = page; runErrors = errors;
     if (!slow) await page.addInitScript(() => { window.__ZNS_SHOT_FAST__ = true; });
+    // Audio synthesis is unrelated to pictures and can stall a headless OfflineAudioContext.
+    if (!slow) await page.evaluate(async () => {
+        window.__ZNS_SHOT_FAST__ = true; // addInitScript only applies on the next navigation
+        const { SoundManager } = await import('/src/audio/SoundManager.js');
+        SoundManager.prototype.warmAll = async () => {};
+        const { ItemIcons } = await import('/src/ui/ItemIcons.js');
+        ItemIcons.prototype.warmAsync = async () => {};
+    });
     await page.exposeFunction('__shotSave', (n, url, to) => {
         const dst = to ? path.resolve(to) : path.join(out, n + '.png');
         fs.mkdirSync(path.dirname(dst), { recursive: true });
@@ -123,7 +140,13 @@ try {
 } catch (e) {
     failed = true;
     console.log('✖', e.message.split('\n')[0]);
+    if (runErrors.length) console.log('page errors:', runErrors.slice(-15).join('\n'));
+    if (runPage) {
+        await runPage.screenshot({ path: path.join(out, 'failure.png'), timeout: 10000 }).catch(() => {});
+        console.log('loading state:', await runPage.evaluate(() => document.body.innerText.slice(-1800)).catch(() => 'page unresponsive'));
+    }
 } finally {
+    if (bootWatch) clearInterval(bootWatch);
     clearTimeout(killer);
     await browser.close().catch(() => {});
     srv.stop();

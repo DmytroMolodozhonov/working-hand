@@ -21,6 +21,7 @@ export const THREAT_BACK = {
     NEAR: 5, // m: this close, a foe that came stays one while it stands and strikes
     HOLD: 3, // s it stays a foe after it stopped coming
     FACE: 70, // ° between where the hero looks and the foe: in front
+    ENEMY_FACE: 65, // the attacker must actually face the player
     SMOOTH: 6, // 1/s: the closing speed smoothed
 };
 
@@ -51,8 +52,10 @@ export function threatStep(st, me, bodies, dt, now) {
         s.at = now;
         // only one that is AFTER me (angry at me, hunting me) and coming at me — or already at me, striking (the author 05.11: «включается
         // только если на меня какое-то существо заагрилось и идёт на меня»; walking up to a calm Тихон must never start it)
-        if (b.hostile && (s.v >= T.COME || d <= T.NEAR)) s.until = now + T.HOLD;
-        if (!b.hostile || b.down) s.until = -1; // (lying, knocked down: no threat while it is down — one may walk up to it; it counts again once it gets up and comes)
+        const facing = !Number.isFinite(b.yaw) || ((-Math.sin(b.yaw)*-dx - Math.cos(b.yaw)*-dz)/(d||1)) >= Math.cos(T.ENEMY_FACE*D2R);
+        const credible = b.reachable !== false && facing && !b.down;
+        if (b.hostile && credible && (s.v >= T.COME || (b.attacking && d <= T.NEAR))) s.until = now + T.HOLD;
+        if (!b.hostile || !credible || (s.v < T.COME && !b.attacking)) s.until = -1; // (lying, knocked down: no threat while it is down — one may walk up to it; it counts again once it gets up and comes)
         if (now > s.until) continue;
         const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx + dz * fz) / (d || 1e-6)))) / D2R;
         if (!best || d < best.d) best = { id: b.id, d, ang };

@@ -20,7 +20,7 @@ import { describeItem, ITEM_SCALE } from './ItemTypes.js';
 import { holoParts, holoPlain, withSpellDescription } from './HoloText.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
-import { pentagramSpell } from './PentagramWords.js';
+import { pentagramTextLines } from './PentagramText.js';
 import { encode, decode, Throttle } from './ScrollNet.js';
 import { paintParchment, schoolOf, artKey } from '../fx/ScrollArt.js';
 
@@ -43,7 +43,7 @@ const _qs = new THREE.Quaternion();
 
 /** Faces already drawn (a kind of scroll, not a frame: ~70 spells at most; the oldest go first). */
 const _faces = new Map();
-const FACES_MAX = 32; // 1024×640: the canvas cache stays below the old 48 × 1024×440 byte budget.
+const FACES_MAX = 26; // Up to 1024×768 each: no more pixels than the previous 32 × 1024×640 cache.
 
 /** The face of a scroll as a canvas: the school's colours, a drop cap, runes, a picture of the spell (ScrollArt.js). Cached by kind. */
 function faceOf(item) {
@@ -54,11 +54,8 @@ function faceOf(item) {
         const P = figureOf(item.pent) || figureOf('devil');
         const css = (n) => '#' + n.toString(16).padStart(6, '0');
         spec = {
-            school, title: P.ru,
-            lines: [
-                [{ text: 'Чтобы создать её, направьте палочку на землю и скажите: ', bold: false }, { text: pentagramSpell(P.id) || '', bold: true }],
-                [{ text: P.def?.effect || 'Позволяет получить силу убитого мага.', bold: false }],
-            ],
+            school, title: P.ru, compactPicture: true,
+            lines: pentagramTextLines(P.id).map(text => [{ text, bold: false }]),
             note: 'Сожгите свиток, если хотите запомнить это заклинание',
             custom: (x, { cx, cy, R }) => {
                 const g = x.createRadialGradient(cx, cy, R * 0.2, cx, cy, R);
@@ -90,7 +87,7 @@ function faceOf(item) {
     let c = _faces.get(key);
     if (!c) {
         c = document.createElement('canvas');
-        c.width = 1024; c.height = 640;
+        c.width = 1024; c.height = item.stat === 'pentagram' ? 768 : 640;
         paintParchment(c.getContext('2d'), c.width, c.height, spec);
         if (_faces.size >= FACES_MAX) _faces.delete(_faces.keys().next().value);
         _faces.set(key, c);

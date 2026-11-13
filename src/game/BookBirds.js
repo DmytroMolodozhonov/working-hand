@@ -1,3 +1,4 @@
+import { worldPlayers, nearWorldPlayer } from './WorldPlayers.js';
 /**
  * BookBirds.js — book-birds and their books of spells.
  *
@@ -312,14 +313,14 @@ export class BookBirds {
         return new THREE.Vector3(x, g.collision.groundY(x, z) + 0.2, z); // rarely: the ground
     }
 
-    _spawnBird(id = null, pos = null) {
+    _spawnBird(id = null, pos = null, origin = null) {
         const g = this.game;
         id = id ?? rollBirdId(this._nextId++);
         const model = bookModelFor(id);
         model.scale.setScalar(1.4);
         g.scene.add(model);
         const me = g.character.group.position;
-        const at = pos || this._perchNear(me, 25, 60);
+        const at = pos || this._perchNear(origin || me, 25, 60);
         model.position.copy(at);
         const b = { id, model, isBird: true, swift: isSwiftId(id), ward: isWardId(id), support: at.support || null, state: 'perch', t: Math.random() * 3, wait: 2 + Math.random() * 5, from: at.clone(), to: at.clone(), ctrl: at.clone(), hp: 2, vy: 0, flapT: Math.random() * 6 };
         this.birds.set(id, b);
@@ -640,10 +641,14 @@ export class BookBirds {
         const g = this.game;
         if (this.auth) {
             // keep a few birds around the player
-            const me = g.character.group.position;
-            for (const b of [...this.birds.values()]) if (b.state !== 'fall' && !b.imp && b.model.position.distanceTo(me) > 130) this._removeBird(b);
+            const players = worldPlayers(g);
+            for (const b of [...this.birds.values()]) if (b.state !== 'fall' && !b.imp && !nearWorldPlayer(players,b.model.position.x,b.model.position.z,130)) this._removeBird(b);
             this._spawnT -= dt;
-            if (this._spawnT <= 0 && this.birds.size < BIRDS && !g.duelOnly) { this._spawnT = 6; if (earthly(me)) this._spawnBird(); } // (none off the Earth: Planets.earthly)
+            if (this._spawnT <= 0 && !g.duelOnly) {
+                this._spawnT=6;
+                const p=players.length ? players[(this._spawnPlayer=(this._spawnPlayer||0)+1)%players.length] : null;
+                if (p && earthly(p) && this.birds.size < BIRDS*Math.min(8,players.length) && [...this.birds.values()].filter(b=>b.model.position.distanceTo(p)<100).length < BIRDS) this._spawnBird(null,null,p);
+            } // (none off the Earth: Planets.earthly)
         }
         for (const b of [...this.birds.values()]) {
             if (b.imp && b.state !== 'fall' && (this.auth || b.imp.mine) && g.imperius?.step('b', b, dt)) continue; // («Империус Максима»: a mind in it — ImperiusControl.step)
