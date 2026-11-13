@@ -42,10 +42,11 @@ for (const r of RECIPES) {
     });
 }
 
-test('крылья лебедя — любые: простые и магические варят зелье крыльев', () => {
-    assert.equal(INGREDIENT_ALIAS.swanWings, 'magicSwanWings');
+test('крылья лебедя и свиньи взаимозаменяемы; старые крылья тоже работают', () => {
+    assert.equal(INGREDIENT_ALIAS.pigWings, 'swanWings');
+    assert.equal(INGREDIENT_ALIAS.magicSwanWings, 'swanWings');
     const r = RECIPES.find((x) => x.id === 'wings');
-    for (const wings of ['swanWings', 'magicSwanWings']) {
+    for (const wings of ['swanWings', 'pigWings', 'magicSwanWings']) {
         const st = boilingCauldron();
         assert.equal(addIngredient(st, wings), 'in');
         assert.equal(addIngredient(st, 'apple'), 'in');

@@ -78,9 +78,9 @@ function footGeo() {
     });
 }
 
-/** A swan: color 1 — plain, 2 — magic. Body along −Z, the feet at y = 0, the named parts as the other animals' (AnimalModels.js). */
+/** An ordinary swan; legacy colour arguments remain accepted. Body along −Z, the feet at y = 0, the named parts as the other animals' (AnimalModels.js). */
 export function swanModel(color = 1) {
-    const magic = color === 2;
+    const magic = false; // Legacy colour 2 also renders as an ordinary swan.
     const g = new THREE.Group();
     g.name = magic ? 'swanMagic' : 'swan';
     const legs = [];

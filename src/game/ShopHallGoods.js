@@ -43,11 +43,11 @@ export const soldPotions = () => RECIPES.filter((r) => !NOT_SOLD.has(r.id));
 export const INGREDIENT_PRICE = {
     redApple: 100, bread: 100, cheese: 100, pie: 120, wool: 100, meat: 100, steak: 120, glass: 100,
     sun_herb: 120, fern_frond: 120, azure_berry: 150, glowcap_mushroom: 200, baksadi_pear: 300, telewilpinLeaf: 350, carnivoreHead: 450,
-    owlFeather: 250, web: 250, swanWings: 300, minotaurHorn: 450, glowfinTail: 500, spencerFeather: 550,
+    owlFeather: 250, web: 250, swanWings: 300, pigWings: 300, minotaurHorn: 450, glowfinTail: 500, spencerFeather: 550,
     crystal: 300, frost_shard: 350, magicPebble: 450,
     apple: 500, brightCore: 600, magicSwanWings: 650, phoenixFeather: 700,
 };
-export const INGREDIENT_NOT_SOLD = new Set(['dragonEgg', 'scroll', 'fish']);
+export const INGREDIENT_NOT_SOLD = new Set(['dragonEgg', 'scroll', 'fish', 'magicSwanWings']);
 /** Every ingredient the room sells (the potions' ingredients and every thing a cauldron takes), sorted by price. */
 export function hallIngredients() {
     const set = new Set([...Object.keys(INGREDIENT_RU), ...RECIPES.flatMap((r) => Object.keys(r.ingredients))]);

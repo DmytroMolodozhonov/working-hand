@@ -9,9 +9,9 @@ import { recipeById } from '../../src/game/Potions.js';
 import { VoxelCharacter } from '../../src/entities/Character.js';
 import { normalizeHero, DEFAULT_HERO } from '../../src/game/HeroSetup.js';
 
-test('the potion: magic swan wings + a golden apple (plain swan wings do not do), one flask a cauldron', () => {
+test('the potion: ordinary swan wings + a golden apple, one flask a cauldron', () => {
     const r = recipeById('wings');
-    assert.deepEqual(r.ingredients, { magicSwanWings: 1, apple: 1 });
+    assert.deepEqual(r.ingredients, { swanWings: 1, apple: 1 });
     assert.equal(r.portions, 1);
     assert.ok(r.effect.wings);
     assert.equal(DEFAULT_HERO.wings, false, 'the Creative start: without wings by default');

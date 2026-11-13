@@ -214,7 +214,7 @@ export function kindOf(sys, c = {}) {
             return c.role === 'knight' ? 'knight' : 'villager';
         case 'a':
             if (c.pegasus) return 'pegasus';
-            if (c.type === 'swan') return c.color === 2 ? 'magicSwan' : 'swan';
+            if (c.type === 'swan') return 'swan';
             if (c.type === 'runbook') return 'runbook';
             if (c.type === 'shark' || c.type === 'dolphin' || c.type === 'glowfin') return c.type; // (IMPERIUS_NO: not taken)
             if (c.form) return 'guardBeast';

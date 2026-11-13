@@ -11,6 +11,7 @@ import { WATERLINE } from '../../src/game/SwanModel.js';
 import { waterAt } from '../../src/game/CreatureSwim.js';
 import { BLOCK } from '../../src/world/Terrain.js';
 import { siteAt } from '../../src/game/HerdSites.js';
+import {hash01} from '../../src/world/Castles.js';
 import { ITEM_INFO, makeItemModel } from '../../src/game/ItemTypes.js';
 import { animalMagicKind } from '../../src/game/Mana.js';
 import { IMPERIUS_TARGETS, kindOf } from '../../src/game/Imperius.js';
@@ -60,7 +61,7 @@ function seeded(seed, fn) {
 }
 const run = (A, secs, each, dt = 1 / 30) => { for (let i = 0, n = Math.round(secs / dt); i < n; i++) { A.update(dt); if (each && each(i * dt) === false) return; } };
 
-test('the model: a mute swan by the world\'s measures — ~1.9 m body, the head ~1.4 m over the water, a ~4 m span; the magic one glows', () => {
+test('the model: a mute swan by the world\'s measures — ~1.9 m body, the head ~1.4 m over the water, a ~4 m span; old colours also remain ordinary', () => {
     for (const c of [1, 2]) {
         const m = animalModel('swan', c);
         m.scale.setScalar(SPECIES.swan.size);
@@ -75,17 +76,17 @@ test('the model: a mute swan by the world\'s measures — ~1.9 m body, the head 
         const w = m.userData.wings[0];
         assert.equal(m.userData.wings.length, 2);
         assert.ok(w.userData.mesh.morphTargetInfluences[0] === 1, 'the wings spread');
-        assert.equal(!!m.userData.magicSwan, c === 2);
+        assert.equal(!!m.userData.magicSwan, false);
         assert.ok(m.userData.legs.length === 2 && m.userData.neck && m.userData.head && m.userData.tail);
     }
     const plain = animalModel('swan', 1), magic = animalModel('swan', 2);
-    assert.ok(magic.userData.body.material.emissive.getHex() !== 0 && plain.userData.body.material.emissive.getHex() === 0, 'the magic swan has a faint light of its own');
+    assert.equal(magic.userData.body.material.emissive.getHex(),0);assert.equal(plain.userData.body.material.emissive.getHex(),0);
 });
 
-test('one in three is magic (the author: half as many as the plain ones); places of their own roll, mostly pairs', () => {
+test('all swans are ordinary; places keep their own roll and mostly pairs', () => {
     let m = 0;
     for (let id = 1; id <= 3000; id++) if (swanMagic(id, 7)) m++;
-    assert.ok(m / 3000 > 0.28 && m / 3000 < 0.39, `magic ${m}`);
+    assert.equal(m,0,'all swans are ordinary');
     let n = 0, pairs = 0, herds = 0;
     for (let gx = -30; gx < 30; gx++) for (let gz = -30; gz < 30; gz++) {
         const s = swanSiteAt(gx, gz, 7);
@@ -107,6 +108,34 @@ test('where they live: still fresh water deep enough with open water round — n
     assert.equal(lakeAt(t, 18, 0), null, 'too near the bank');
     assert.equal(lakeAt(t, 320, 0), null, 'the sea');
     assert.equal(floatY(2.5), 2.5 + 0.5 - WATERLINE * SWAN.SIZE);
+});
+
+test('partially loaded cells try loaded water candidates and defer incomplete shore checks',()=>{
+ const {A,t}=fakeGame(),seed=7;
+ const first={x:8+hash01(0,0,seed+9310)*64,z:8+hash01(0,0,seed+9311)*64};
+ t.get=(x,L)=>L<=0?BLOCK.STONE:L<=3?BLOCK.WATER:BLOCK.AIR;t.topLayer=()=>0;t.floorBelow=()=>0;
+ t.landMade=(x,z)=>Math.hypot(x-first.x,z-first.z)>1;
+ const r={gx:0,gz:0};assert.equal(A.swans.siteWater(r),true,'an unloaded first sample cannot hide the loaded lake');
+ t.landMade=()=>false;assert.equal(A.swans.siteWater({gx:0,gz:0}),null,'unknown shore is retried, not permanently rejected');
+ t.landMade=()=>true;assert.equal(A.swans.siteWater({gx:0,gz:0}),true);
+ const edge={x:Math.round(first.x+4),z:Math.round(first.z)};
+ t.get=(x,L,z)=>L<=0?BLOCK.STONE:L<=3&&Math.hypot(x-first.x,z-first.z)<7?BLOCK.WATER:BLOCK.AIR;
+ t.landMade=(x,z)=>x!==edge.x||z!==edge.z;
+ assert.equal(A.swans.siteWater({gx:0,gz:0}),null,'loaded centres with one unloaded shore must not be cached as no lake');
+});
+
+test('real generated freshwater reaches the ordinary automatic flock spawner',async()=>{
+ const {TerrainData}=await import('../../src/world/Terrain.js');const {g,A}=fakeGame();g.seed=20261015;
+ const t=new TerrainData();t.generate({seed:g.seed,mountains:true,seas:true,lush:true,slopes:true,wizHuts:true,furnish:true,bigHouses:true,buildings:true,earthSettlements:true,elementalSettlements:true});g.terrain.data=t;
+ const r=swanSiteAt(-19,1,g.seed);assert.ok(r);assert.equal(A.swans.siteWater(r),true);
+ g.character.group.position.set(r.x,4,r.z+130);
+ for(let i=0;i<30&&!A.list.some(a=>a.type==='swan');i++)A._scanSites(.5);
+ const flock=A.list.filter(a=>a.type==='swan');assert.ok(flock.length>=2,'real terrain, ordinary site scan, no manual spawn');assert.ok(flock.every(a=>a.color===1));
+ // A host visiting space must still simulate a guest's Earth lake.
+ for(const a of [...A.list])A._remove(a);A.sites.clear();A.emptied.clear();
+ g.remotes.set('guest',{position:new THREE.Vector3(r.x,4,r.z+130)});g.character.group.position.set(1e8,4,0);
+ for(let i=0;i<30&&!A.list.some(a=>a.type==='swan');i++)A._scanSites(.5);
+ assert.ok(A.list.some(a=>a.type==='swan'),'the guest, not only the host, wakes lake flocks');
 });
 
 test('a flock floats and keeps to the water; someone comes near — they run along the water and fly off, landing on water', () => seeded(5, () => {
@@ -160,18 +189,25 @@ test('the angry one hisses, raises its wings and bites (turned to the one it bit
     assert.ok(g.bitten > 0, 'it bit');
 }));
 
-test('killed: its wings fall off — the magic pair only off a magic swan; the carcass floats; mana for the magic one; «Империус»', () => {
+test('a swan unable to take off swims away instead of returning to idle',()=>{
+ const {A}=fakeGame(),s=A._spawn('swan',new THREE.Vector3(0,floatY(2.5),0));
+ A._floor=()=>20;s.state='flee';s.stateT=6;s.scareFrom={x:-10,z:0};
+ const before=s.group.position.clone();for(let i=0;i<60;i++)A._think(s,1/30);
+ assert.equal(s.state,'flee');assert.ok(s.group.position.distanceTo(before)>1,'blocked takeoff still produces escape movement');
+});
+
+test('killed swans drop ordinary wings and float, including legacy saved colours', () => {
     const { g, A } = fakeGame();
     const plain = A._spawn('swan', new THREE.Vector3(0, floatY(2.5), 0), { color: 1 });
     const magic = A._spawn('swan', new THREE.Vector3(6, floatY(2.5), 0), { color: 2 });
     assert.equal(animalMagicKind(plain), null);
-    assert.equal(animalMagicKind(magic), 'magicSwan');
+    assert.equal(animalMagicKind(magic), null);
     assert.equal(kindOf('a', plain), 'swan');
-    assert.equal(kindOf('a', magic), 'magicSwan');
+    assert.equal(kindOf('a', magic), 'swan');
     assert.ok(IMPERIUS_TARGETS.swan.plain && IMPERIUS_TARGETS.magicSwan.magic);
     A.hit(plain, 99, null, 'me');
     A.hit(magic, 99, null, 'me');
-    assert.deepEqual(g.dropped.map((d) => d.it.kind).sort(), ['magicSwanWings', 'swanWings']);
+    assert.deepEqual(g.dropped.map((d) => d.it.kind).sort(), ['swanWings', 'swanWings']);
     for (const k of ['swanWings', 'magicSwanWings']) { assert.ok(ITEM_INFO[k]?.name); assert.ok(makeItemModel({ kind: k })); }
     run(A, 3);
     for (const s of [plain, magic]) assert.ok(Math.abs(s.group.position.y - 2.5) < 0.6, `the carcass floats (${s.group.position.y.toFixed(2)})`);

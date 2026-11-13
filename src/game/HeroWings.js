@@ -3,7 +3,7 @@
  *   «Крылья не сразу отрастут полностью, а в течение 10 минут. И ты будешь страдать: минус 1 ХП в полминуты в течение 20 минут —
  *   можно умереть, если не поддерживаешь силу (не кушаешь). Тебе будет плохо, тошнить, всё замыленное, будет говориться, что крылья
  *   растут, и шкала внизу. Потом он сможет летать без заклинаний. Крылья довольно немаленькие, складываются, когда не летаешь, как у
- *   ангелов.» The potion: magic swan wings + a golden apple, one flask from a cauldron (Potions 'wings').
+ *   ангелов.» The potion: swan or flying-pig wings + a golden apple, one flask from a cauldron (Potions 'wings').
  *
  * Here: the growing (GROW_S), the pain (PAIN every PAIN_EVERY s for PAIN_S), the nausea (the head swims — Knockdown's dizziness: the
  * picture blurred, the head sways, in waves), the bar at the bottom and the words, the wings on the back (the kit's feathered wing ×SCALE,

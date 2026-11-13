@@ -74,7 +74,7 @@ export const RECIPES = [
     { id: 'luck', name: 'Зелье удачи', ingredients: { magicPebble: 1, glowcap_mushroom: 1, redApple: 1 }, window: 30, brew: [90, 140], effect: { timed: 'luck' }, desc: 'Выпейте: 12 игровых часов каждое заклинание сильнее — на сколько, решает удача' },
     { id: 'waterbreath', name: 'Зелье дыхания под водой', ingredients: { fern_frond: 1, frost_shard: 1, azure_berry: 1 }, window: 30, effect: { timed: 'waterbreath' }, desc: 'Выпейте: целый игровой день под водой не кончается воздух' },
     // (the author: «крылья лебедей и одно золотое яблоко — этого достаточно»; «одно зелье с казана, не 10»; HeroWings.js — they grow for good)
-    { id: 'wings', name: 'Зелье крыльев', ingredients: { magicSwanWings: 1, apple: 1 }, window: 30, brew: [120, 180], portions: 1, crumble: 6, effect: { wings: true }, desc: 'Выпейте: за 10 минут у вас вырастут крылья — навсегда, до смерти. Будет больно (−1 HP каждые полминуты, 20 минут) и мутить. Летать — взмахами рук' },
+    { id: 'wings', name: 'Зелье крыльев', ingredients: { swanWings: 1, apple: 1 }, window: 30, brew: [120, 180], portions: 1, crumble: 6, effect: { wings: true }, desc: 'В кипящий котёл положите пару крыльев лебедя или летающей свиньи и золотое яблоко. Выпейте: за 10 минут у вас вырастут крылья — навсегда, до смерти. Будет больно (−1 HP каждые полминуты, 20 минут) и мутить. Летать — взмахами рук' },
     // (the author: «превращение в дракона на 10 минут — не чёрная магия: яйцо дракона + перо феникса»; DragonForm.js)
     { id: 'dragonform', name: 'Зелье превращения в дракона', ingredients: { dragonEgg: 1, phoenixFeather: 1 }, window: 30, brew: [120, 180], effect: { timed: 'dragon' }, desc: 'Выпейте на открытом месте: на 10 минут вы — дракон (бег, взлёт взмахами рук, огонь долгим «У-у-у»), потом снова человек' },
     // (the author: «Русалка (12 мин): хвост магического водного существа + груша Баксади» — the glowfin's tail, SeaLife; Mermaid.js)
@@ -92,7 +92,7 @@ export const INGREDIENT_RU = {
     web: 'связка паутины', canaryHide: 'кожа канарика', bone: 'кость', bronzeHorn: 'бронзовый рог', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
     baksadi_pear: 'груша Баксади', spencerFeather: 'перо птички Спенсера', carnivoreHead: 'головка плотоядной', sun_herb: 'солнечница',
     brightCore: 'сердцевина Ярколета', azure_berry: 'лазурная ягода', magicPebble: 'волшебный камушек', glowcap_mushroom: 'светящийся гриб',
-    redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина', dragonEgg: 'яйцо дракона', magicSwanWings: 'магические крылья лебедя', swanWings: 'крылья лебедя', glowfinTail: 'хвост светлохвоста',
+    redApple: 'яблоко', fern_frond: 'лист папоротника', frost_shard: 'ледяная игла', telewilpinLeaf: 'листок телевильпина', dragonEgg: 'яйцо дракона', swanWings: 'крылья лебедя', pigWings: 'крылья летающей свиньи', glowfinTail: 'хвост светлохвоста',
 };
 
 export const recipeById = (id) => RECIPES.find((r) => r.id === id) || null;
@@ -110,6 +110,8 @@ export function newBrew() {
  * A recipe with `order` also wants them thrown in that order (`seq`: the kinds in the order they fell in; no `seq` given — the order is not checked).
  */
 export function matchRecipe(ings, seq) {
+    const normalized={};for(const [k,n] of Object.entries(ings||{})){const id=INGREDIENT_ALIAS[k]||k;normalized[id]=(normalized[id]||0)+n;}ings=normalized;
+    if(Array.isArray(seq))seq=seq.map(k=>INGREDIENT_ALIAS[k]||k);
     const kinds = Object.keys(ings || {}).filter((k) => ings[k] > 0);
     if (!kinds.length) return null;
     for (const r of RECIPES) {
@@ -157,8 +159,8 @@ export function addWater(st, vol) {
  *   'cold'  — the water does not boil: it sinks and counts for nothing;
  *   'in'    — it dissolved in the boiling water and counts (the first one starts the countdown).
  */
-/** Kinds that count as another in a recipe (the author: «крылья лебедей и одно золотое яблоко — этого достаточно»: ANY swan's wings brew the potion of wings, not only a magic swan's). */
-export const INGREDIENT_ALIAS = { swanWings: 'magicSwanWings' };
+/** Swan and flying-pig wings are interchangeable. Keep old saved wings/cauldrons usable. */
+export const INGREDIENT_ALIAS = { pigWings:'swanWings', magicSwanWings:'swanWings' };
 
 export function addIngredient(st, kind, n = 1) {
     kind = INGREDIENT_ALIAS[kind] || kind;

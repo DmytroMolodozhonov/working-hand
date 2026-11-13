@@ -53,7 +53,7 @@ import { earthly } from '../world/Planets.js';
 import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 import { appleTreeModel, baksadiTreeModel, pulseGolden } from './AppleTrees.js';
-import { SwanLife, SWAN, swanSiteAt, swanSitesNear, swanMagic, floatY as swanFloatY } from './SwanLife.js';
+import { SwanLife, SWAN, swanSiteAt, swanSitesNear, floatY as swanFloatY } from './SwanLife.js';
 import { SeaLife, seaSiteAt, seaSitesNear, isSeaType } from './SeaLife.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
 export const FAR = { DRAW: 600, LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1, NEAR_REAL: 12 }; // (NEAR_REAL m: a horse this near is drawn as its own parts)
@@ -229,7 +229,7 @@ export class Animals {
         if (this.byId.has(id)) return this.byId.get(id);
         const S = SPECIES[type];
         const color = type === 'horse' ? (opts.color ?? HORSE_COLORS[Math.floor(Math.random() * HORSE_COLORS.length)]) : type === 'runbook' ? (opts.color || runBookColor(id))
-            : type === 'pig' || type === 'cow' ? (opts.color || 1 + Math.floor(Math.random() * 4)) : type === 'swan' ? (opts.color === 2 ? 2 : 1) : null; // (a pig's / a cow's look 1…4; a swan: 1 plain, 2 magic)
+            : type === 'pig' || type === 'cow' ? (opts.color || 1 + Math.floor(Math.random() * 4)) : type === 'swan' ? 1 : null;
         const model = animalModel(type, color);
         model.scale.setScalar(S.size * (type === 'pig' ? pigSize(id) : 1));
         if (type === 'pig' || isPegasusColor(color) || isSeaType(type)) model.rotation.order = 'YXZ'; // (a fish pitches up and down as it swims) // (in flight: rolls into a turn, pitches, then faces its way)
@@ -257,10 +257,10 @@ export class Animals {
         return a;
     }
 
-    /** (host) A swan at (x, y, z) — magic or not by its id (the same on every computer). */
+    /** (host) An ordinary swan, including old saves and network colour variants. */
     _spawnSwan(x, y, z, opts = {}) {
         const id = ++_nextId;
-        return this._spawn('swan', new THREE.Vector3(x, y, z), { ...opts, id, color: swanMagic(id, this.game.seed || 1) ? 2 : 1 });
+        return this._spawn('swan', new THREE.Vector3(x, y, z), { ...opts, id, color: 1 });
     }
 
     /** Where the player looks (flat). */
@@ -327,8 +327,7 @@ export class Animals {
         const g = this.game, seed = g.seed || 1, H = HERDS;
         this.clock += dt;
         const people = this._herdPeople(this._ppl || (this._ppl = []));
-        const me = people[0];
-        if (!earthly(me)) return;
+        if (!people.some(p=>earthly(p))) return;
         // awake places: who of the herd is still there; an empty one is sleeping (put away) or emptied (killed, eaten, tamed)
         for (const [key, r] of this.sites) {
             if (r.awake) {
@@ -348,22 +347,28 @@ export class Animals {
         const look = this._look(this._lookV || (this._lookV = new THREE.Vector3()));
         const todo = this._todo; todo.length = 0;
         const eachSite = (x, z, fn) => { sitesNear(x, z, H.WAKE, seed, fn); swanSitesNear(x, z, H.WAKE, seed, fn); seaSitesNear(x, z, H.WAKE, seed, fn); }; // (and the sea's creatures: SeaLife.seaSiteAt) // (the swans' places too: their own roll — SwanLife.swanSiteAt)
-        for (const p of people) eachSite(p.x, p.z, (s) => {
+        for (const p of people) {
+            if(!earthly(p))continue;
+            eachSite(p.x, p.z, (s) => {
             if (this.emptied.has(s.key)) return;
             const r = this._site(s);
             if (r.awake || r.ok === false) return;
             let d = 1e9, seen = false;
             for (let i = 0; i < people.length; i++) {
-                const q = people[i], dd = Math.hypot(q.x - s.x, q.z - s.z);
+                const q = people[i], dd = Math.hypot(q.x - r.x, q.z - r.z);
                 if (dd < d) d = dd;
-                if (dd < H.SEE_D && (i > 0 || !outOfSight(q, look, s.x, s.z))) seen = true;
+                if (dd < H.SEE_D && (i > 0 || !outOfSight(q, look, r.x, r.z))) seen = true;
             }
-            if (!seen && !todo.some((o) => o.key === r.key)) { r.d = d; todo.push(r); }
-        });
+            if ((!seen||r.swans&&r.ok==null) && !todo.some((o) => o.key === r.key)) { r.d = d; todo.push(r); }
+            });
+        }
         if (!todo.length) return;
         todo.sort((a, b) => a.d - b.d);
         for (const r of todo) { // (one herd per look: the nearest first)
             if (r.ok == null) { const ok = this._siteLand(r); if (ok === null) continue; r.ok = ok; if (!ok) continue; }
+            // Water search moves the cell centre onto a real lake. Check that
+            // final point before spawning, without pre-scanning every far cell.
+            if(r.swans&&people.some((p,i)=>Math.hypot(p.x-r.x,p.z-r.z)<H.SEE_D&&(i>0||!outOfSight(p,look,r.x,r.z))))continue;
             r.awake = true; r.lost = 0; r.members.clear();
             for (const a of (r.swans ? this.swans.spawnFlock(r) : r.sea ? this.sea.spawnGroup(r) : this.spawnHerdAt(r.type, r.n, r.x, r.z))) { a.site = r; r.members.add(a.id); }
             break;
@@ -446,8 +451,10 @@ export class Animals {
     }
 
     _die(a, cooked, by = null) {
+        if(a.dead)return;
         const magic = animalMagicKind(a); // (before it lies down: the bull / the minotaur still in its form)
         a.dead = true;
+        if(this.auth)this._herdDeath(a,by);
         a.state = 'dead';
         a.spd = 0;
         if (a.mount?.on) {
@@ -465,7 +472,24 @@ export class Animals {
         if (a.type === 'sheep') this.game.beds?.dropWool(a.group.position); // wool for beds
         if (a.type === 'runbook' && this.auth) this.game.runner?.died(a, !!cooked); // (burnt to ash, or a plain book on the ground)
         if (a.type === 'swan' && this.auth) this.swans.died(a);
+        if(a.type==='pig'&&this.auth&&this.game.items?.spawnLoose)this.game.items.spawnLoose({kind:'pigWings',uid:newUid(),count:1},a.group.position.clone().add(new THREE.Vector3(0,1.2,0)),{});
         if (isSeaType(a.type) && this.auth) this.sea.died(a); // (the glowfin's tail falls — the potion of the mermaid) // (its white wings fall off it — a magic swan's for the potion of wings)
+    }
+
+    /** Nearby herd witnesses either keep their existing defence or flee the death. */
+    _herdDeath(a,by){
+        if(!a.herd)return;
+        const from=this._playerPos(by)||a.group.position;
+        for(const o of this.list){
+            if(o===a||o.dead||o.herd!==a.herd||o.group.position.distanceToSquared(a.group.position)>40*40)continue;
+            if(o.rider||o.mount?.on||o.cart||o.servantOf!=null)continue;
+            if(o.form||o.defend||o.state==='attack'||(o.foe!=null&&o.guard))continue;
+            o.state='flee';o.attacker=by;o.stateT=Math.max(o.stateT||0,10);
+            o.scareFrom={x:from.x,z:from.z};o.idleT=0;
+            if(o.type==='swan')this.swans.scare(o,from);
+            else if(isSeaType(o.type))this.sea.scare(o,from);
+            else if(o.type==='pig')this._scare(o,from);
+        }
     }
 
     /** Is this dead animal drawn / placed by its rag doll now (AnimalRagdoll.js)? Then nothing else moves it. */
@@ -1158,7 +1182,7 @@ export class Animals {
         } else if (a.state === 'attack' || a.state === 'flee') {
             a.stateT -= dt;
             a.pose = POSE.stand;
-            const tp = a.fireUntil > performance.now() ? a.fireFrom : this._playerPos(a.attacker); // (a great fire: away from it)
+            const tp = a.fireUntil > performance.now() ? a.fireFrom : this._playerPos(a.attacker)||(a.state==='flee'?a.scareFrom:null);
             if (!tp || a.stateT <= 0) { a.state = 'graze'; a.target.copy(p); this._setIdle(a, 'look'); }
             else if (a.state === 'flee') {
                 // away from the one who frightened it, together with the herd mates that run too

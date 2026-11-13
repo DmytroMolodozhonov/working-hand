@@ -4059,7 +4059,7 @@ export class Game {
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
         for (const k of [1, 2]) { zoo.add(animalModel('swan', k)); const m = animalModel('swan', k); new FarShape(m).set(true); zoo.add(m); } // (the swans of the lakes, plain and magic: as near and as the video card draws them far — SwanModel.js)
-        zoo.add(makeItemModel({ kind: 'swanWings' }), makeItemModel({ kind: 'magicSwanWings' })); // (their wings as a thing)
+        zoo.add(makeItemModel({ kind: 'swanWings' }), makeItemModel({ kind: 'pigWings' })); // (their wings as a thing)
         zoo.add(makeItemModel(newMagicBackpack()), makeItemModel({ kind: 'backpack', uid: 'prewarm', color: 0x7a4a24, slots: 3 })); // (the golden backpack: its own materials — a shader at start, not in play)
         if(this.airFx)zoo.add(this.airFx.sampleModel());
         if(this.waves)zoo.add(this.waves.sampleModel());

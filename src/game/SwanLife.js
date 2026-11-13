@@ -1,7 +1,5 @@
 /**
- * SwanLife.js — the swans of the lakes (the author 05.11: «лебеди, которые обитают возле озёр болотных. Красивые лебеди. Они плавают
- * красиво по озеру… если убить, то можно получить их крылья беленькие… магические — в два раза реже, чем обычные; обычные — примерно
- * так же часто, как овечки… для зелья нужны именно магические крылья»).
+ * SwanLife.js — ordinary swans on freshwater lakes; their wings are potion ingredients.
  *
  * A swan is an animal of Animals.js (type 'swan': every spell, blow, blast, Leviosa, «Империус», the carcass, the meat, the network
  * and the save already know the animals); this file is how it lives:
@@ -13,9 +11,8 @@
  *   - a person comes close: one in AGGRO hisses, raises its wings (flyCode 5) and goes at them — it bites (BITE); the others run along
  *     the water beating their wings and fly off to another part of the lake / another lake (PigFlight's flight, landing on the water);
  *   - hit: AGGRO.HIT fight back, the rest fly off (Animals.hit);
- *   - killed: its two white wings fall off it (the item 'swanWings'; a magic swan's — 'magicSwanWings', the one the potion of wings
- *     wants: Potions 'wings'), and the carcass floats (its meat as every animal's).
- * Magic (color 2): MAGIC of them — a pearly coat with a faint light (SwanModel.js); in everything else a swan.
+ *   - killed: ordinary wings fall off for the potion of wings; the carcass floats.
+ * Every swan is ordinary; old saved colours also use the ordinary model.
  * Cheap: a few block reads a step for the swans near; the lake found once per place (TerrainData.landMade first — never made in the frame).
  */
 import { waterAt } from './CreatureSwim.js';
@@ -28,7 +25,7 @@ import { slowFactor } from './Slow.js';
 
 export const SWAN = {
     SIZE: 2.0, // the model's scale (the body ~1.9 m long; the hero 3.5 m)
-    MAGIC: 1 / 3, // magic swans: half as many as plain ones (the author)
+    MAGIC: 0, // All swans are ordinary; the old colour remains readable in saves.
     SITE_CHANCE: 0.55, // of the herd cells: a swan place is tried (it stays only where a lake is)
     MIN: 2, MAX: 5, // swans in a flock (most often a pair)
     DEPTH: 2, // water layers at least (a lake, not a puddle)
@@ -47,6 +44,7 @@ export const SWAN = {
     LAND_R: 30, // m round a wanted spot where a water landing is looked for
     BOB: 0.03, // m of a gentle bob
 };
+const LAKE_OFFSETS=[[4,0],[-4,0],[0,4],[0,-4],[2.8,2.8],[-2.8,2.8],[2.8,-2.8],[-2.8,-2.8]];
 
 /**
  * The swan place of a herd cell (gx, gz) of a world (seed), or null — before the lake is checked (Animals._siteLand → SwanLife.siteWater).
@@ -61,18 +59,18 @@ export function swanSiteAt(gx, gz, seed, CELL = 80) {
     };
 }
 
-/** Is this swan magic (one in three; the same on every computer for its id)? */
-export function swanMagic(id, seed = 0) { return hash01(Number(id) | 0, 7717, seed + 9303) < SWAN.MAGIC; }
+/** Compatibility for old callers: there are no magical swans. */
+export function swanMagic() { return false; }
 
 /** Fresh still water at (x, z) deep enough with open water round: {surface, depth} | null. `t`: TerrainData. */
 export function lakeAt(t, x, z) {
     if (!t?.floorBelow) return null; // (a world without water lookups: no lakes)
     const ix = Math.round(x), iz = Math.round(z);
+    if(t.landMade&&!t.landMade(ix,iz))return null;
     if (t.isSeaColumn?.(ix, iz)) return null; // (the sea is no swans' lake)
     const w = waterAt(t, ix, iz, t.topLayer(ix, iz) + 30);
     if (!w || w.depth < SWAN.DEPTH) return null;
-    const R = SWAN.OPEN;
-    for (const [dx, dz] of [[R, 0], [-R, 0], [0, R], [0, -R], [R * 0.7, R * 0.7], [-R * 0.7, R * 0.7], [R * 0.7, -R * 0.7], [-R * 0.7, -R * 0.7]]) {
+    for (const [dx, dz] of LAKE_OFFSETS) {
         const o = waterAt(t, ix + dx, iz + dz, w.surface + 2);
         if (!o || Math.abs(o.surface - w.surface) > 0.6) return null;
     }
@@ -101,17 +99,19 @@ export class SwanLife {
     siteWater(r) {
         const t = this.t;
         if (!t) return false;
-        const seed = this.game.seed || 1, C = 80;
+        const seed = this.game.seed || 1, C = 80;let pending=false;
         for (let k = 0; k < 14; k++) {
             const x = r.gx * C + 8 + hash01(r.gx * 31 + k, r.gz, seed + 9310) * (C - 16), z = r.gz * C + 8 + hash01(r.gx, r.gz * 31 + k, seed + 9311) * (C - 16);
-            if (t.landMade && !t.landMade(Math.round(x), Math.round(z))) return null;
+            // A cell can be only partly loaded, especially round a guest. Try its
+            // loaded candidates and never cache incomplete lake data as "no lake".
+            if(t.landMade&&(!t.landMade(Math.round(x),Math.round(z))||LAKE_OFFSETS.some(([dx,dz])=>!t.landMade(Math.round(x+dx),Math.round(z+dz))))){pending=true;continue;}
             if ((t.sites || t.castles)?.landAt?.(Math.round(x), Math.round(z))) continue; // (a castle's moat, a village's pond: not theirs)
             if (lakeAt(t, x, z)) { r.x = x; r.z = z; return true; }
         }
-        return false;
+        return pending?null:false;
     }
 
-    /** (host) A flock on the water at its place (each a little apart; one in three magic). */
+    /** (host) An ordinary flock on the water at its place, each a little apart. */
     spawnFlock(r) {
         const A = this.A, t = this.t, out = [];
         const herd = { x: r.x, z: r.z, hx: r.x, hz: r.z, id: Math.floor(Math.random() * 1e9), leader: null, swans: true };
@@ -147,10 +147,14 @@ export class SwanLife {
         a.onWater = onWater;
         // a person near: hiss and come at them, or fly off
         if (a.state === 'graze' && a.servantOf == null) this._watch(a);
-        if (a.state === 'flee') { if (this._takeOff(a)) return; a.state = 'graze'; }
+        if (a.state === 'flee' && this._takeOff(a)) return;
         let speed = 0, tx = a.target.x, tz = a.target.z;
         a.flyCode = 0;
-        if (a.state === 'attack') {
+        if(a.state==='flee'){
+            a.stateT-=dt;const from=a.scareFrom||A._playerPos(a.attacker);
+            if(a.stateT<=0)a.state='graze';
+            else{const dx=p.x-(from?.x??p.x-1),dz=p.z-(from?.z??p.z),d=Math.hypot(dx,dz)||1;tx=p.x+dx/d*8;tz=p.z+dz/d*8;speed=SWAN.FAST;}
+        }else if (a.state === 'attack') {
             a.stateT -= dt;
             const tp = A._playerPos(a.attacker);
             if (!tp || a.stateT <= 0) { a.state = 'graze'; a.attacker = null; }
@@ -360,8 +364,7 @@ export class SwanLife {
         if (!g.items?.spawnLoose) return;
         const p = a.group.position.clone();
         p.y += 1.2;
-        const magic = a.color === 2;
-        g.items.spawnLoose({ kind: magic ? 'magicSwanWings' : 'swanWings', uid: newUid(), count: 1 }, p, {});
+        g.items.spawnLoose({ kind: 'swanWings', uid: newUid(), count: 1 }, p, {});
     }
 }
 
