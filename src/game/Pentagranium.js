@@ -370,6 +370,7 @@ export class Pentagranium {
     /** A wizards' settlement wakes: its partner is looked for (a cell a frame), then its teleportation pentagram is lit on the plaza. */
     worldWake(def) {
         const g = this.game, idx = this.data?.villages;
+        if(def?.ritual?.pent==='infernum'){if(!this._jobs.has(def.id))this._jobs.set(def.id,{def,ritual:def.ritual,made:false,t:0});return;}
         if (def?.kind !== 'wizvillage' || (g.gen ?? 1) < PENT_STAND_FROM_GEN || !idx?.tpSpot || this._jobs.has(def.id) || !figureOf('teleport')) return;
         this._jobs.set(def.id, { def, search: new PartnerSearch(idx, def.gx, def.gz), made: false, t: 0 });
     }
@@ -384,6 +385,13 @@ export class Pentagranium {
     _worldStep(dt) {
         if (!this._jobs.size) return;
         for (const J of this._jobs.values()) {
+            if(J.ritual){
+                if(J.made||this._worldGone.has(J.def.id))continue;
+                const p=J.ritual;if(!this.data?.landMade?.(Math.round(p.x),Math.round(p.z)))continue;
+                const m=this._place('w:'+J.def.id+':infernum','world','infernum',p.x,p.y,p.z,p.r,0);J.made=true;
+                if(m){m.world=J.def.id;m.perm=true;m.mine=true;m.life=Infinity;m.t=5;m.offer=this.creative?null:'fireInfernum';}
+                return;
+            }
             if (!J.search.done) { J.search.step(); return; } // (one cell a frame, for one settlement at a time)
             if (J.made || !J.search.partner || this._worldGone.has(J.def.id)) continue;
             J.t -= dt;

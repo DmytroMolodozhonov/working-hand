@@ -7,18 +7,18 @@ import { BLOCK, chunkKey } from '../../src/world/Terrain.js';
 let handle;
 async function initWorker(opts) {
     if (!handle) { await import('../../src/world/terrain.worker.js'); handle = self.onmessage; }
-    handle({ data: { type: 'init', opts } });
+    await handle({ data: { type: 'init', opts } });
 }
 test('loading restored edits waits for the real worker geometry, including a delayed reply', async () => {
     const opts = { seed: 123, viewDistance: 0 };
     const terrain = new Terrain(new THREE.Scene(), opts);
-    let waiting = null, worker;
+    let waiting = null, worker;const jobs=[];
     globalThis.self = { postMessage: m => { waiting = m; } };
     try {
         await initWorker(opts);
         worker = { load: 0, postMessage: m => {
             // Use the production worker; hold its answer until after the loader would have returned before the fix.
-            handle({ data: structuredClone(m) });
+            jobs.push(handle({ data: structuredClone(m) }));
         }, terminate() {} };
         terrain._workers = [worker];
         terrain.data.set(40, 1, 8, BLOCK.STONE); // A saved building edit makes this take the rebuild route.
@@ -40,8 +40,9 @@ test('loading restored edits waits for the real worker geometry, including a del
         assert.ok(ray.intersectObject(mesh).length, 'the restored surface stops a downward view');
         assert.equal(terrain.settled(), true);
     } finally {
-        delete globalThis.self;
         terrain.dispose();
+        await Promise.all(jobs);
+        delete globalThis.self;
     }
 });
 
@@ -51,10 +52,12 @@ for (const received of [false, true]) test(`a failed worker cannot leave a resto
     globalThis.self = { postMessage: m => { waiting = m; } };
     try {
         await initWorker({ seed: 123 });
-        const worker = { load: 0, postMessage: m => handle({ data: structuredClone(m) }), terminate() {} };
+        let job;
+        const worker = { load: 0, postMessage: m => {job=handle({ data: structuredClone(m) });}, terminate() {} };
         terrain._workers = [worker];
         terrain.data.set(40, 1, 8, BLOCK.STONE);
         const loading = terrain.flushAroundAsync(40, 8);
+        await job; // Real worker messages are serialized asynchronously since template caching.
         assert.equal(waiting.type, 'rebuilt');
         if (received) terrain._onBuilt(worker, waiting);
         terrain._stopWorkers();

@@ -289,8 +289,9 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 30;
+export const WORLD_GEN = 31;
 export const EARTH_SETTLEMENTS_FROM_GEN = 30;
+export const ELEMENTAL_SETTLEMENTS_FROM_GEN = 31;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -733,7 +734,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false } = {}) {
         this.seed = seed;
         this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
         this.schoolMode = !!school; // («Школа Акселдорф»: the world's own land, the school castle on a terrace near the start — SchoolLand.js)
@@ -811,7 +812,7 @@ export class TerrainData {
             this.den = this.apart ? new DenSite(seed, raw, near, lairNear) : null;
             void this.den?.spot; // (worked out now: finding it re-samples `raw`, which the height function reads in a certain order)
             const hnear = (x, z, r) => near(x, z, r) || (!!this.den?.spot && Math.hypot(x - this.den.spot.x, z - this.den.spot.z) < r + 100);
-            this.hamlets = new HamletIndex(seed, raw, hnear, this.wizHuts, this.buildings, !!earthSettlements);
+            this.hamlets = new HamletIndex(seed, raw, hnear, this.wizHuts, this.buildings, !!earthSettlements,!!elementalSettlements&&this.lush);
             // the dungeons of the wild (Dungeons.js; generation 15): ruins on the ground, halls under it — never on another site's land
             const dgNear = (x, z, r) => hnear(x, z, r) || this.hamlets.near(x, z, r).length > 0;
             this.dungeons = dungeons && this.lush ? new DungeonIndex(seed, raw, dgNear) : null;
@@ -1385,6 +1386,7 @@ export class TerrainData {
     islandsNear(x, z, r) {
         const out = [];
         if (!this.lush || offEarth(x + r)) return out;
+        for(const h of this.hamlets?.near(x,z,r+50)||[])if(h.island)out.push(h.island);
         const C = ISLE.CELL, R = r + ISLE.R_MAX * 2.6 + 6;
         for (let gz = Math.floor((z - R) / C); gz <= Math.floor((z + R) / C); gz++) {
             for (let gx = Math.floor((x - R) / C); gx <= Math.floor((x + R) / C); gx++) {

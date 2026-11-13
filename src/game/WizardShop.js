@@ -1,4 +1,4 @@
-import {isEarthSpell} from '../ui/SpellElements.js';
+import {ELEMENT_SPELLS} from '../ui/SpellElements.js';
 /**
  * WizardShop.js — what wizards keep and sell (pure, node-testable).
  *
@@ -42,7 +42,8 @@ export function rollHouseThing(r = Math.random) {
 export const isHouseThing = (it) => !!it && ((it.kind === 'scroll' && it.stat === 'spell' && HOUSE_THINGS.some(([k]) => k === it.spell)) || (it.kind === 'book' && !!it.ward));
 
 /** A chest in a wizards' house: 1–3 things (a rich house a little more). `lone`: a lone wizard's house (LONE_HOUSE). */
-export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lone = false, earth = false) {
+export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lone = false, element = false) {
+    if(element===true)element='earth';
     const out = [];
     const n = randInt(r, 1, rich ? 3 : 2) + (rich && r() < 0.3 ? 1 : 0);
     for (let i = 0; i < n; i++) {
@@ -59,7 +60,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
     // (the wizards keep magic armour more often than anybody — and now and then a magic robe: ArmorTypes)
     const arm = rollChestArmor(r, { wizard: true });
     if (arm) out.push(arm);
-    const things = count > 0 ? fitThings(out, count, r) : out;
+    const things = element ? fitThings(out,Math.min(3,count||3),r) : count > 0 ? fitThings(out, count, r) : out;
     if (lone && r() < LONE_HOUSE.CHANCE) {
         // (it takes the place of the plainest thing: food — else a random one; never an extra, the chest keeps its count)
         const plain = (it) => ['bread', 'cheese', 'apple', 'pie'].includes(it.kind) || false;
@@ -67,7 +68,8 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
         if (at < 0) at = Math.floor(r() * things.length) % Math.max(1, things.length);
         if (things.length) things[at] = rollHouseThing(r); else things.push(rollHouseThing(r));
     }
-    if(earth)for(let i=0;i<things.length;i++)if(things[i].kind==='scroll'&&things[i].stat==='spell')things[i]=rollEarthHouseScroll(r);
+    if(element)for(let i=0;i<things.length;i++)if(things[i].kind==='scroll'&&(things[i].stat==='spell'||things[i].stat==='pentagram'))things[i]=r()<.5?rollElementalHouseScroll(r,element):pentagramScroll(pick(r,figureIds()),newUid());
+    if(element==='fire'&&r()<.25){const head={kind:'gargoyleHead',uid:newUid()};let at=things.findIndex(it=>['bread','cheese','apple','pie'].includes(it.kind));if(at<0)at=things.length-1;if(at<0)things.push(head);else things[at]=head;}
     return things;
 }
 
@@ -110,10 +112,11 @@ export function scrollName(it) {
 export { itemValue };
 
 /** Relative weight +40% for every earth spell, preserving the other spells and their rarity. */
-export function rollEarthHouseScroll(r=Math.random){
+export function rollEarthHouseScroll(r=Math.random){return rollElementalHouseScroll(r,'earth');}
+export function rollElementalHouseScroll(r=Math.random,element='earth'){
  const pool=SCROLL_WEIGHTS.filter(([id])=>!id.startsWith('pent:'));
- const weight=([id,w])=>w*(isEarthSpell(id)?1.4:1);
- let pick=r()*pool.reduce((n,s)=>n+weight(s),0);
- for(const row of pool)if((pick-=weight(row))<0)return spellScroll(row[0]);
+ const associated=ELEMENT_SPELLS[element]||[],weight=([id,w])=>w*(associated.includes(id)?1.4:1);
+ let choice=r()*pool.reduce((n,s)=>n+weight(s),0);
+ for(const row of pool)if((choice-=weight(row))<0)return spellScroll(row[0]);
  return spellScroll(pool.at(-1)[0]);
 }

@@ -116,7 +116,7 @@ export class Offerings {
         } else if (m.offer === 'breakward') {
             if (g.breakward?.marked) return '🜏 Защита уже сломана — второй раз не нужно';
             if (g.resist?.dark) return '🜏 ' + RESIST_HINT.breakRefused; // (the opposite of the protection from the dark magic)
-        } else if (m.offer === 'infernum' || m.offer === 'hellBack') {
+        } else if (m.offer === 'infernum' || m.offer === 'hellBack' || m.offer === 'fireInfernum') {
             if (m.gateOpen > 0) return null; // (already open: nothing more is burnt — HellGate.js)
         }
         if (manaRules(g) && (c?.fatigue || 0) < need.mana) return '🜏 ' + OFFER_HINT.noMana(need.mana, c?.fatigue || 0);
@@ -201,7 +201,7 @@ export class Offerings {
     _commit() {
         const R = this.run, g = this.game, m = R.m, need = OFFERINGS[m.offer], c = g.combat;
         const center = { x: m.x, y: m.y, z: m.z };
-        if (m.offer === 'infernum' || m.offer === 'hellBack') {
+        if (m.offer === 'infernum' || m.offer === 'hellBack' || m.offer === 'fireInfernum') {
             g.hellGate?.opened?.(m, true); // (the gates of hell open: HellGate.js — every computer by 'pgm' k 'hell')
         } else if (m.offer === 'gargoyles') {
             const r = g.gargoyles?.startRitual?.(center, { by: g.localId, silent: true });

@@ -2,7 +2,7 @@ import {fireballBody} from './FireballRules.js';
 import {waveSource} from './WaveSource.js';
 import { ElementalMages } from './ElementalMages.js';
 import { ELEMENTAL_TESTS,elementalTestSite } from './ElementalTestSites.js';
-import {EARTH_SETTLEMENTS_FROM_GEN} from '../world/Terrain.js';
+import {EARTH_SETTLEMENTS_FROM_GEN,ELEMENTAL_SETTLEMENTS_FROM_GEN} from '../world/Terrain.js';
 import { EarthMages } from './EarthMages.js';
 import { earthSite,earthLook } from './EarthMagicRules.js';
 import { VillagerModel as EarthVillager, villagerLook as earthBaseLook } from '../entities/VillagerModel.js';
@@ -563,6 +563,7 @@ export class Game {
             knightCap: this.gen >= KNIGHT_CAP_FROM_GEN, // (10–15 knights a castle, each at a post — KnightPosts.js)
             arenaX2: this.gen >= ARENA_X2_FROM_GEN && !(config.mode === 'creative' && this.hero?.spawn === 'arena'), // (the real world's arenas twice as wide — DuelArenas.ARENA_X2; NOT the duel-only start: it keeps the former size)
             earthSettlements: this.gen >= EARTH_SETTLEMENTS_FROM_GEN,
+            elementalSettlements:this.gen >= ELEMENTAL_SETTLEMENTS_FROM_GEN,
             arenaFlat: this.gen >= ARENA_FLAT_FROM_GEN, // (an arena only where the land round it does not drop away — DuelArenas.arenaGround)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)

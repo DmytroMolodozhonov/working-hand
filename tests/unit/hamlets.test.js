@@ -16,7 +16,7 @@ const around = (d, n = 3) => { const out = []; for (let gx = -n; gx < n; gx++) f
 test('hamlets: every kind is found, the same on every computer', () => {
     const a = around(make()), b = around(make());
     assert.deepEqual(a.map((h) => [h.id, h.type, h.x, h.z, h.F, h.houses.length]), b.map((h) => [h.id, h.type, h.x, h.z, h.F, h.houses.length]));
-    for (const t of HAMLET_TYPES.filter(t=>t!=='earthvillage')) assert.ok(a.some((h) => h.type === t), `no ${t}`);
+    for (const t of HAMLET_TYPES.filter(t=>['magehut','hermit','village','magevillage'].includes(t))) assert.ok(a.some((h) => h.type === t), `no ${t}`);
     for (const h of a) {
         if (h.type === 'magevillage' || h.type === 'village') assert.ok(h.houses.length >= 4 && h.houses.length <= 9, `${h.id}: ${h.houses.length} houses`);
         if (h.type === 'magevillage') assert.ok(h.stalls.length >= 4 && h.stalls.length <= 5 && h.stalls.filter((s) => s.magic).length >= 3 && h.stalls.filter((s) => s.pawn).length === 1) // (3–4 sellers and the buyer);

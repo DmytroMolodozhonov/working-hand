@@ -125,3 +125,13 @@ test('the land of the partner not made yet: the hero waits (nothing paid); spoil
     run(p, 3);
     assert.equal(p.marks.size, 0, 'not made again');
 });
+
+test('fire settlement Infernum is dormant, head-gated, locally usable and unloaded with its site',()=>{
+ const g={scene:new THREE.Scene(),localId:'me',config:{mode:'survival'},terrain:{data:{landMade:()=>true}},hud:{setVoice(){}},character:{group:new THREE.Group()}};
+ const p=new Pentagranium(g);g.pentagranium=p;
+ p._place=(id,by,pent,x,y,z,r,rot)=>{const m={id,by,pent,x,y,z,r,rot,rites:[]};p.marks.set(id,m);return m;};p.fx.remove=()=>{};
+ const d={id:'fire-site',kind:'hamlet',element:'fire',ritual:{x:10,y:2,z:20,r:3,pent:'infernum'}};
+ p.worldWake(d);p._worldStep(.1);const m=p.marks.get('w:fire-site:infernum');
+ assert.ok(m);assert.equal(m.offer,'fireInfernum');assert.equal(m.mine,true);assert.equal(m.gateOpen,undefined);assert.equal(m.world,d.id);
+ p._worldStep(.1);assert.equal(p.marks.size,1);p.worldSleep(d);assert.equal(p.marks.size,0);assert.equal(p._jobs.size,0);
+});

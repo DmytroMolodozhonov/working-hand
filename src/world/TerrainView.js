@@ -66,10 +66,10 @@ export function prespawnTerrainWorkers() {
 }
 
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, seabed, hell, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements });
+        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, seabed, hell, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements });
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
@@ -90,7 +90,7 @@ export class Terrain {
         this._frame = 0;
         this.stats = { templateHits:0,templateMisses:0,built: 0, unloaded: 0, maxBuildMs: 0, byWorkers: 0, maxWorkerMs: 0, maxApplyMs: 0 };
         this.flushAround(0, 0);
-        this.opts = { seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, seabed, hell, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements }; // (the world's recipe: the terrain workers and space.worker.js (the Earth's globe) make the world by the SAME one as this thread — `apart`, `knightCap`, `queenMap` too)
+        this.opts = { seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, seabed, hell, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements }; // (the world's recipe: the terrain workers and space.worker.js (the Earth's globe) make the world by the SAME one as this thread — `apart`, `knightCap`, `queenMap` too)
         this._startWorkers(this.opts);
     }
 

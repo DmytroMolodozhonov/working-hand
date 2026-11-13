@@ -1,3 +1,4 @@
+import {SETTLEMENT_ELEMENT,ELEMENTAL_SITE_NAMES,buildElementalSettlement} from './ElementalSettlements.js';
 import { buildEarthSettlement } from './EarthSettlement.js';
 /**
  * Hamlets.js — the small places of the world between the castles (the author: «хочу сделать мир живым:
@@ -36,17 +37,17 @@ export const HAMLET = {
     // …and a spot left empty holds a lone wizard's house this often more (the author: lone wizards' houses 37 % more often —
     // 0.15 a spot → 0.2055). Laid after the others, in spots that were empty: the hamlets already in a world stay as they were.
     EXTRA_MAGEHUT: 0.0555,
-    WEIGHTS: { magehut: 0.3, hermit: 0.3, village: 0.25, magevillage: 0.15, earthvillage: 0 },
+    WEIGHTS: { magehut: 0.3, hermit: 0.3, village: 0.25, magevillage: 0.15, earthvillage: 0, watervillage: 0, airvillage: 0, firevillage: 0 },
     BLEND: 14, // m of slope from the levelled land into the wild
     MIN_SPAWN: 130, // m from the world's start
     MAP_R: 800, // m: on the minimap (a pointer on the edge when beyond it) only villages this near; the lone houses are never shown
     HI: 16, SPREAD: 5, // the ground: not higher, not rougher
 };
-const ZONE = { magehut: 17, hermit: 15, village: 38, magevillage: 38, earthvillage: 38 };
+const ZONE = { magehut: 17, hermit: 15, village: 38, magevillage: 38, earthvillage: 38, watervillage: 40, airvillage: 40, firevillage: 40 };
 export const HAMLET_TYPES = Object.keys(ZONE);
 const TRIES = 6;
 /** Wizards live there (their people are wizards: WizardLife, the wizards' loot, «Lumos» at night). */
-export const isMageHamlet = (def) => !!def && def.kind === 'hamlet' && (def.type === 'magehut' || def.type === 'magevillage' || def.type === 'earthvillage');
+export const isMageHamlet = (def) => !!def && def.kind === 'hamlet' && (def.type === 'magehut' || def.type === 'magevillage' || !!SETTLEMENT_ELEMENT[def.type]);
 
 const NAMES_A = ['Тихая', 'Лесная', 'Ясная', 'Медовая', 'Ольховая', 'Ручейная', 'Липовая', 'Полевая', 'Сосновая', 'Рябиновая'];
 const NAMES_B = ['Заводь', 'Поляна', 'Опушка', 'Балка', 'Горка', 'Падь', 'Лука', 'Роща'];
@@ -239,8 +240,10 @@ export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = fa
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], fields: [], stalls: [], posts: [] };
-    const mage = type === 'magehut' || type === 'magevillage' || type === 'earthvillage';
+    const element=SETTLEMENT_ELEMENT[type];
+    const mage = type === 'magehut' || type === 'magevillage' || !!element;
     if (type === 'earthvillage') buildEarthSettlement(p,rng,out);
+    else if(element)buildElementalSettlement(p,rng,out,element);
     else if (type === 'magehut') buildMageHut(p, rng, out, wizHuts);
     else if (type === 'hermit') buildHermitHut(p, rng, out);
     else buildVillage(p, rng, out, mage, type === 'magevillage', buildings);
@@ -249,7 +252,7 @@ export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = fa
     const houses = out.houses.map((h, i) => ({ ...h, id: id + '_h' + i }));
     const lone = type === 'magehut' || type === 'hermit';
     const name = type === 'magehut' ? 'Дом волшебника' : type === 'hermit' ? 'Хижина отшельника'
-        : type === 'earthvillage' ? 'Каменная обитель магов земли' : mage ? `Поселение магов «${MAGE_A[Math.floor(rng() * MAGE_A.length)]} ${MAGE_B[Math.floor(rng() * MAGE_B.length)]}»`
+        : element ? ELEMENTAL_SITE_NAMES[element] : mage ? `Поселение магов «${MAGE_A[Math.floor(rng() * MAGE_A.length)]} ${MAGE_B[Math.floor(rng() * MAGE_B.length)]}»`
             : `Деревушка «${NAMES_A[Math.floor(rng() * NAMES_A.length)]} ${NAMES_B[Math.floor(rng() * NAMES_B.length)]}»`;
     const S = out.stalls.length;
     // (the roster: 0 nobody, 1…knights the watchman, then the sellers, then the people of the houses — HamletLife.hamletRoster)
@@ -267,19 +270,21 @@ export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = fa
         const s = r();
         strangers = s < 0.5 ? 1 : s < 0.75 ? 2 : 0;
     }
-    const population = type==='earthvillage' ? houses.length+1 : lone ? 2 : homes ? 1 + homes.length + strangers : knights + 1 + S + houses.length * 2 + Math.floor(roll * 3);
+    const population = element ? houses.length+1 : lone ? 2 : homes ? 1 + homes.length + strangers : knights + 1 + S + houses.length * 2 + Math.floor(roll * 3);
     const zone = ZONE[type];
     const def = {
-        id, kind: 'hamlet', type, mage, ...(type==='earthvillage'?{element:'earth'}:{}), gx, gz, slot, x: X, z: Z, F, rot, name, king: '', population, knights, wseed: seed, homes, strangers,
+        id, kind: 'hamlet', type, mage, ...(element?{element}:{}), gx, gz, slot, x: X, z: Z, F, rot, name, king: '', population, knights, wseed: seed, homes, strangers,
         color: mage ? 0x6a2c91 : 0x7a5a3a, colorName: mage ? 'фиолетовые' : 'бурые', stone: mage ? BLOCK.ARCANE : BLOCK.COBBLE, zone,
         style: 'hamlet', styleName: name, walls: null, inner: null, keep: null,
         gate: p.pt(0, -zone + 2), gateIn: p.pt(0, -zone + 6), gateYaw: p.yaw(0),
         throne: null, throneFront: null, rooms: [], chests: [], houses, pens: (out.pens || []).map((q, i) => ({ ...q, id: id + '_p' + i })), fx: out.fx || [], wells: out.wells || [], buildings: out.buildings || [], stalls: out.stalls, fields: out.fields, market: null,
         graveyards: [], graves: [], posts: out.posts, beds: [], wallWalk: [], dummies: [], spots: [],
-        fire: lone ? null : p.pt(0, 0, 0), // (the round fire in the middle: a real campfire while somebody is near — HamletLife)
+        fire: lone || element==='air'||element==='water' ? null : out.fire || p.pt(0, 0, 0),
+        ritual:out.ritual||null, // (the round fire in the middle: a real campfire while somebody is near — HamletLife)
         nodes: p.nodes, edges: p.edges, parts: p.parts,
-        topL: F + 1 + 22,
+        topL: F + 1 + (element==='fire'?32:22),
     };
+    if(element==='air')def.island={id:'isle:'+id,x:X,z:Z,R:37,Y:F-4,parts:[{x:X,z:Z,r:37,Y:F-4}],x0:X-49,x1:X+49,z0:Z-49,z1:Z+49,tree:false};
     def._byChunk = new Map();
     return def;
 }
@@ -301,8 +306,8 @@ export function hamletGround(raw, X, Z, zone) {
 }
 
 /** Pick a type by the weights (x in 0..1). */
-export function pickType(x, earthSettlements = false) {
-    const weight=k=>k==='earthvillage'&&earthSettlements?HAMLET.WEIGHTS.magevillage:HAMLET.WEIGHTS[k];
+export function pickType(x, earthSettlements = false, elementalSettlements = false) {
+    const weight=k=>(k==='earthvillage'&&earthSettlements||elementalSettlements&&['watervillage','airvillage','firevillage'].includes(k))?HAMLET.WEIGHTS.magevillage:HAMLET.WEIGHTS[k];
     let s = 0;
     for (const k of HAMLET_TYPES) s += weight(k);
     let r = x * s;
@@ -313,8 +318,8 @@ export function pickType(x, earthSettlements = false) {
 /** Finds and remembers the hamlets (the same shape of answers as CastleIndex / TowerIndex). */
 export class HamletIndex {
     /** `busy(x, z, r)`: another site (a castle, a tower, the Ice Castle) is within `r` of a point. */
-    constructor(seed, raw, busy, wizHuts = false, buildings = false, earthSettlements = false) {
-        this.earthSettlements=earthSettlements;
+    constructor(seed, raw, busy, wizHuts = false, buildings = false, earthSettlements = false, elementalSettlements = false) {
+        this.earthSettlements=earthSettlements;this.elementalSettlements=elementalSettlements;
         this.seed = seed; this.raw = raw; this.busy = busy; this.wizHuts = wizHuts; this.buildings = buildings; // (generation 7: the lone wizards' houses roomy)
         this.cells = new Map(); // cell key → [defs]
         this._lastCell = null;
@@ -340,7 +345,9 @@ export class HamletIndex {
                 if (Math.hypot(X, Z) < HAMLET.MIN_SPAWN + zone) continue;
                 if (out.some((o) => Math.max(Math.abs(o.x - X), Math.abs(o.z - Z)) < o.zone + zone + 2 * HAMLET.BLEND + 8)) continue;
                 if (this.busy(X, Z, zone + HAMLET.BLEND + 12)) continue;
-                const F = hamletGround(this.raw, X, Z, zone);
+                let F;
+                if(type==='watervillage'){this.raw(X,Z);if(!this.raw.sea)continue;let sea=true;for(const [dx,dz] of [[-48,0],[48,0],[0,-48],[0,48]]){this.raw(X+dx,Z+dz);if(!this.raw.sea)sea=false;}if(!sea)continue;F=3;}
+                else{F=hamletGround(this.raw,X,Z,zone);if(F!=null&&type==='airvillage')F+=62;}
                 if (F == null) continue;
                 out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng, this.wizHuts, this.buildings));
                 break;
@@ -348,7 +355,7 @@ export class HamletIndex {
         };
         for (let s = 0; s < HAMLET.SLOTS; s++) {
             if (hash01(gx * 17 + s * 5 + 3, gz * 29 + s * 11 + 1, this.seed + 4242) > HAMLET.CHANCE) continue;
-            place(s, pickType(hash01(gx * 23 + s * 7 + 9, gz * 31 + s * 3 + 2, this.seed + 4343), this.earthSettlements));
+            place(s, pickType(hash01(gx * 23 + s * 7 + 9, gz * 31 + s * 3 + 2, this.seed + 4343), this.earthSettlements,this.elementalSettlements));
         }
         for (let s = 0; s < HAMLET.SLOTS; s++) { // (the extra lone wizards' houses, after all the others)
             const h = hash01(gx * 17 + s * 5 + 3, gz * 29 + s * 11 + 1, this.seed + 4242);
@@ -377,6 +384,7 @@ export class HamletIndex {
         let c = this._lastCell;
         if (!c || c.gx !== gx || c.gz !== gz) c = this._lastCell = { gx, gz, list: this.cellOf(gx, gz) };
         for (const k of c.list) {
+            if(k.element==='water'||k.element==='air')continue;
             const d = Math.max(Math.abs(ix - k.x), Math.abs(iz - k.z));
             if (d > k.zone + HAMLET.BLEND) continue;
             const w = d <= k.zone ? 1 : 1 - (d - k.zone) / HAMLET.BLEND;
@@ -405,7 +413,7 @@ export class HamletIndex {
         const now = Math.floor(p.x / 40) + ',' + Math.floor(p.z / 40);
         if (this._mapKey !== now) {
             this._mapKey = now;
-            this._mapList = this.near(p.x, p.z, r).filter((c) => (c.type === 'village' || c.type === 'magevillage' || c.type === 'earthvillage') && Math.hypot(c.x - p.x, c.z - p.z) <= r)
+            this._mapList = this.near(p.x, p.z, r).filter((c) => (c.type === 'village' || c.type === 'magevillage' || !!SETTLEMENT_ELEMENT[c.type]) && Math.hypot(c.x - p.x, c.z - p.z) <= r)
                 .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)).slice(0, 4);
         }
         return this._mapList;

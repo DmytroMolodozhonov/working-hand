@@ -66,6 +66,7 @@ export function anyBody(b) {
 
 /** Что лежит на круге для обряда (Offerings): вход — одно тело; возврат — голова горгульи. */
 export const HELL_OFFERINGS = {
+    fireInfernum: {id:'fireInfernum',bodies:0,things:[{kind:HEAD.KIND,name:'голова горгульи'}],mana:0,what:'голова горгульи'},
     infernum: { id: 'infernum', bodies: 1, any: true, things: [], mana: 0, what: 'тело' }, // (создание круга: 50; жертва без дополнительной платы)
     hellBack: { id: 'hellBack', bodies: 0, things: [{ kind: HEAD.KIND, name: 'голова горгульи' }], mana: 0, what: 'голова горгульи' },
 };
