@@ -111,7 +111,7 @@ test('a shortage of stones never leaves the caster waiting forever for a full vo
 
 test('an exhausted mage actually recovers enough mana to restart instead of oscillating at the start cost',()=>{
  const f=fixture();f.g.terrain.data.raycast=()=>null;f.v.mana=17;
- f.step(2900);assert.ok(f.sent.some(m=>m.ev==='volley'),'rest must end with a real attack');
+ f.step(1200);assert.ok(f.sent.some(m=>m.ev==='volley'),'rest must end with a real attack within twenty seconds');
  assert.ok(f.v.mana>=0&&f.v.mana<=f.v.maxMana);
 });
 
@@ -119,6 +119,28 @@ test('blocked sight at short range requests collision steering right up to the o
  const f=fixture();let moved=0,stop;
  f.g.castleLife._sees=()=>false;f.g.castleLife._steer=(v,x,z,s,dt,r)=>{moved++;stop=r;};
  f.step(150);assert.ok(moved>0);assert.equal(stop,0,'a ranged stop distance must not freeze the mage behind cover');
+});
+
+test('a minimum-capacity novice releases a paid stone and can repeat after recovery',()=>{
+ const f=fixture();f.v.mana=f.v.maxMana=25;f.g.terrain.data.raycast=()=>null;
+ f.step(150);assert.ok(f.sent.some(m=>m.ev==='volley'),'25 mana must fund an actual attack');
+ const first=f.sent.filter(m=>m.ev==='volley').length;
+ f.step(1800);assert.ok(f.sent.filter(m=>m.ev==='volley').length>first,'recovery must allow another paid attack');
+ assert.ok(f.v.mana>=0&&f.v.mana<=25);
+});
+
+test('recovering at range keeps moving through the collision pilot and changes side when blocked',()=>{
+ const f=fixture();f.v.mana=0;f.g.character.group.position.z=-25;
+ const requests=[];f.g.castleLife._steer=(v,x,z)=>{requests.push({x,z});v.foe=null;};
+ f.step(100);assert.equal(requests.length,100);assert.equal(f.v.foe,'me');
+ assert.ok(requests.some(p=>p.x>0)&&requests.some(p=>p.x<0),'a blocked riverbank sidestep must try the other side');
+ assert.ok(f.v.mana<2,'movement cannot bypass real mana regeneration');
+});
+
+test('an unthreatened orbit repositions but the release gesture remains rooted',()=>{
+ const f=fixture();f.step(100);const em=f.g.earthMages,s=em.swarms.get(f.v.id);let moves=0;
+ f.g.castleLife._steer=()=>moves++;em._phase(f.v,s,'orbit');em.think(f.v,.1);assert.equal(moves,1);
+ em._phase(f.v,s,'punch');em.think(f.v,.1);assert.equal(moves,1);
 });
 
 test('a sustained battle uses multiple strike patterns and keeps transient collections bounded',()=>{

@@ -55,6 +55,17 @@ test('air mage at 17 metres uses a gust whose real reach can touch the opponent'
  assert.ok(f.casts.length>0);assert.ok(f.casts.every(([name])=>name==='WindMaxima'),'ordinary Wind only reaches 14 metres');
 });
 
+test('air mage uses paid body-centred Wind Impulse to repel a nearby opponent',()=>{
+ for(const [distance,name,cost] of [[2,'WindImpulse',10],[7,'WindImpulseMaxima',40]]){
+  const f=fixture('air');f.g.castleLife._playerPos=()=>({x:0,y:2,z:-distance});
+  f.v.elemental.flightCd=99;f.em.phase(f.v,'Sweep');f.v.elemental.t=.46;
+  const mana=f.v.mana;f.em.think(f.v,.01);
+  const cast=f.casts.find(c=>c[0]===name);assert.ok(cast,name);assert.deepEqual(cast[1].toArray(),[0,1.5,0]);
+  assert.equal(mana-f.v.mana,cost);assert.ok(f.sent.some(c=>c[0]===name));
+ }
+ const f=fixture('air',9);assert.equal(f.em.cast(f.v,'WindImpulse',{x:0,y:2,z:-2}),false);assert.equal(f.casts.length,0);
+});
+
 test('elemental costumes retain ordinary seeded faces, hair and beards instead of replacing everyone with a clone',()=>{
  for(const element of ['earth','water','air','fire']){
   const styles=new Set();for(let seed=1;seed<=60;seed++){
@@ -63,4 +74,8 @@ test('elemental costumes retain ordinary seeded faces, hair and beards instead o
    styles.add([merged.hair,merged.hairColor,merged.beard].join(':'));
   }assert.ok(styles.size>10,element);
  }
+});
+
+test('peaceful elemental residents keep ordinary paths and can return to village day/night life',()=>{
+ for(const e of ['water','air','fire']){const f=fixture(e);f.v.foe=null;f.v.cs={def:{kind:'hamlet'}};const path=[1,2];f.v.path=path;f.v.job='wander';f.v.seated=true;assert.equal(f.em.think(f.v,.1),false);assert.equal(f.v.path,path);assert.equal(f.v.job,'wander');assert.equal(f.v.seated,true);}
 });

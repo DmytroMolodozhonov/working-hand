@@ -9,6 +9,7 @@ import { elementalEndurance } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import {FLIGHT} from './Flight.js';
 import { FEATHER } from './Featherfall.js';
+import { isImpulse } from './WindImpulse.js';
 import { FX } from '../fx/WizardFx.js';
 import { BLOCK } from '../world/Terrain.js';
 import { createRng } from '../core/math.js';
@@ -23,7 +24,7 @@ export class ElementalMages {
   v.element=element;v.title=TITLES[element];v.bareHand='advanced';v.bareMaster=true;v.noWand=true;v.rank='elemental';v.skillRole='mage';
   const endurance=elementalEndurance(v.entry);v.elementalTier=endurance.tier;v.mana=v.maxMana=endurance.mana;v.hp=v.maxHp=32;v.armor=v.maxArmor=0;
   v.W={...v.W,regen:1,dome:null};v.knowsFlight=element==='air';v.gifts=elementalGifts(v.entry);
-  v.job='elemental';v.elemental={t:0,phase:'rest',cycle:0,recover:false,scan:0,source:false,water:v.entry.look?.tank?36:0,guard:0,flight:0,flightCd:0};
+  if(v.cs?.def?.kind!=='hamlet')v.job='elemental';v.elemental={t:0,phase:'rest',cycle:0,recover:false,scan:0,source:false,water:v.entry.look?.tank?36:0,guard:0,flight:0,flightCd:0};
   v.model.setHeldTool('none');
  }
  pay(v,cost){if(v.mana<cost)return false;v.mana-=cost;return true;}
@@ -33,9 +34,9 @@ export class ElementalMages {
   const a=v.elemental,g=this.game;a.scan-=dt;
   if(a.scan<=0){
    a.scan=.75;a.source=false;a.sourcePoint=null;const data=g.terrain?.data;
-   if(data)for(let x=-6;x<=6&&!a.source;x+=2)for(let z=-6;z<=6&&!a.source;z+=2){
+   if(data)for(let x=-10;x<=10&&!a.source;x+=2)for(let z=-10;z<=10&&!a.source;z+=2){
     const X=Math.round(v.x+x),Z=Math.round(v.z+z);if(data.landMade&&!data.landMade(X,Z))continue;
-    for(let y=-3;y<=3;y++)if(data.get(X,Math.round(v.y)+y+1,Z)===BLOCK.WATER){a.source=true;a.sourcePoint={x:X,y:Math.round(v.y)+y,z:Z};break;}
+    for(let y=-5;y<=3;y++)if(data.get(X,Math.round(v.y)+y+1,Z)===BLOCK.WATER){a.source=true;a.sourcePoint={x:X,y:Math.round(v.y)+y,z:Z};break;}
    }
   }
   if(a.source&&v.entry.look?.tank)a.water=Math.min(36,a.water+dt*6);
@@ -45,8 +46,10 @@ export class ElementalMages {
  }
  cast(v,name,foe){
   const g=this.game;if(!g.spells?.cast)return false;
-  _o.set(v.x-Math.sin(v.yaw)*.9,v.y+2.7,v.z-Math.cos(v.yaw)*.9);_d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
-  if(!g.collision.lineOfSight?.(_o.x,_o.y,_o.z,foe.x,foe.y,foe.z,.2)&&g.collision.lineOfSight)return false;
+  if(isImpulse(name))_o.set(v.x,v.y+1.5,v.z);
+  else _o.set(v.x-Math.sin(v.yaw)*.9,v.y+2.7,v.z-Math.cos(v.yaw)*.9);
+  _d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
+  if(!isImpulse(name)&&!g.collision.lineOfSight?.(_o.x,_o.y,_o.z,foe.x,foe.y,foe.z,.2)&&g.collision.lineOfSight)return false;
   if(!this.pay(v,SPELL_COST[name]??10))return false;
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);g.sound?.spellCast?.(name,_o);
   v.aimPitch=Math.asin(_d.y);v.castT=.6;v.model.castNow=true;this.engaged(v);return true;
@@ -77,6 +80,9 @@ export class ElementalMages {
  endLift(v){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id);if(g.levitation?.lifted?.by===v.id)g.levitation.dropMe(false);this.phase(v,'Coil');}
  think(v,dt){
   const g=this.game,L=g.castleLife,a=v.elemental;if(!a)return false;
+  if(!v.foe&&v.cs?.def?.kind==='hamlet'){
+   v.mana=Math.min(v.maxMana,v.mana+dt);a.phase='rest';if(v.fly){this.land(v,dt);return true;}return false;
+  }
   a.t+=dt;a.flightCd=Math.max(0,a.flightCd-dt);v.prep=null;v.cardilon=null;v.practice=null;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
   const foe=v.foe?L._playerPos(v.foe):null;
   if(v.element==='water')this.waterSource(v,dt);
@@ -113,7 +119,12 @@ export class ElementalMages {
    }
    if(a.phase==='rest')this.phase(v,'Coil');
    if(a.phase==='Coil'&&a.t>.7)this.phase(v,'Sweep');
-   if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;this.cast(v,dist<9||Math.hypot(dist,foe.y-(v.y+2.7))>12?'WindMaxima':'Wind',foe);}}
+   if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
+    if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
+    else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&a.cycle%2===0&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
+    else if(a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;
+    else this.cast(v,dist<9||Math.hypot(dist,foe.y-(v.y+2.7))>12?'WindMaxima':'Wind',foe);
+   }}
    if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    if(!v.fly){v.mode='air'+a.phase;if(!v.vy)L._ground(v);}
   }else{

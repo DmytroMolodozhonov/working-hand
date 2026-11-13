@@ -18,7 +18,7 @@ export class EarthMages {
   v.element=v.entry.element;v.bareHand=ELEMENTAL_BARE_HAND;v.bareMaster=true;v.rank='elemental';v.skillRole='mage';
   v.title='Маг земли';v.hp=v.maxHp=E.HP;const endurance=elementalEndurance(v.entry,E.MANA);v.elementalTier=endurance.tier;v.mana=v.maxMana=endurance.mana;v.armor=v.maxArmor=0;
   v.W={...v.W,regen:E.REGEN,dome:null,spells:{GroundVortex:1}};v.knowsFlight=false;v.noWand=true;
-  v.job='elemental';v.earth={phase:'rest',t:0,cycle:0,wallCd:0,stitchCd:0,scan:0,empty:0,recover:false,source:0};
+  if(v.cs?.def?.kind!=='hamlet')v.job='elemental';v.earth={phase:'rest',t:0,cycle:0,wallCd:0,stitchCd:0,scan:0,empty:0,recover:false,source:0};
   v.model.setHeldTool('none');
  }
  _phase(v,s,phase){
@@ -27,7 +27,9 @@ export class EarthMages {
   this.game.sound?.playStep?.();
  }
  _start(v){
-  if(v.mana<E.START+18)return null;v.mana-=E.START;
+  // Even a 25-mana novice can lift and release one stone. Reserve the real
+  // lift drain and first throw, rather than requiring an unreachable 38 mana.
+  if(v.mana<E.START+E.THROW_COST+E.DRAIN*(EARTH_PHASES.lift+.55))return null;v.mana-=E.START;
   const s=newSwarm(v.id,true);s.npc=true;s.phase='lift';s.phaseT=0;s.form='orbit';s.blade=false;s.acc=0;s.plan=[];s.sendT=0;
   s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;this.swarms.set(v.id,s);this._phase(v,s,'lift');return s;
  }
@@ -40,6 +42,17 @@ export class EarthMages {
   v.model.earthPoseT=undefined;v.castT=0;
  }
  _pay(v,n){if(v.mana<n)return false;v.mana-=n;return true;}
+ _reposition(v,foe,dt,recover){
+  const L=this.game.castleLife,a=v.earth,dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz)||1;
+  const side=a.moveSide||(a.moveSide=1),radial=Math.max(-1,Math.min(1,(d-(recover?24:16))/4));
+  const x=v.x,z=v.z,foeId=v.foe;
+  L._steer(v,x+(dx/d*radial-dz/d*side)*6,z+(dz/d*radial+dx/d*side)*6,v.walk*(recover?.8:.65),dt,0);
+  // A blocked sidestep must not make the ordinary path pilot forget a live foe.
+  if(!v.foe&&foeId)v.foe=foeId;
+  a.moveBlocked=Math.hypot(v.x-x,v.z-z)<.001?(a.moveBlocked||0)+dt:0;
+  if(a.moveBlocked>.75){a.moveSide=-side;a.moveBlocked=0;}
+  v.yaw=Math.atan2(foe.x-v.x,foe.z-v.z)+Math.PI;
+ }
  _threat(v){
   // Swept direction, not just the mere presence of a charge nearby.
   let threat=null;
@@ -56,6 +69,7 @@ export class EarthMages {
  think(v,dt){
   const g=this.game,L=g.castleLife,a=v.earth;if(!a)return false;
   a.interrupted=false;
+  if(!v.foe&&v.cs?.def?.kind==='hamlet'){this._stop(v.id);a.phase='rest';v.model.earthPoseT=undefined;v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);return false;}
   if(!a.slab&&!this.swarms.has(v.id)&&!(a.stitchPose>0))v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);
   a.t+=dt;a.wallCd=Math.max(0,a.wallCd-dt);a.stitchCd=Math.max(0,a.stitchCd-dt);a.scan-=dt;
   v.prep=null;v.cardilon=null;v.practice=null;v.fx=0;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
@@ -73,8 +87,8 @@ export class EarthMages {
   }
   const dx=foe.x-v.x,dz=foe.z-v.z,dist=Math.hypot(dx,dz)||1;
   const want=Math.atan2(-dx,-dz);v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*4);
-  if(v.mana<18)a.recover=true;
-  if(a.recover&&v.mana>=Math.min(v.maxMana,E.START+40))a.recover=false;
+  if(v.mana<(s?E.THROW_COST+E.DRAIN*dt:E.START))a.recover=true;
+  if(a.recover&&v.mana>=Math.min(v.maxMana,E.START+12))a.recover=false;
   a.quiet=v.hp<(a.lastHp??v.hp)?0:(a.quiet||0)+dt;a.lastHp=v.hp;
   const weak=v.hp<v.maxHp*.3||a.recover;
   if(weak){
@@ -83,9 +97,9 @@ export class EarthMages {
    if(a.stitchCd<=0&&v.mana>=SPELL_COST.Stitching&&a.scan<=0){a.scan=.9;this._stitch(v,foe);}
    if(a.stitchPose>0){a.stitchPose-=dt;v.mode='earthWall';v.model.earthPoseT=1.3-a.stitchPose;L._ground(v);return true;}
    if(a.quiet>6&&v.hp<v.maxHp*.4)v.hp=Math.min(v.maxHp*.4,v.hp+.3*dt);
-   if(dist<22)L._steer(v,v.x-dx/dist*8,v.z-dz/dist*8,v.walk,dt,0);
+   this._reposition(v,foe,dt,true);
    // Recover while facing the opponent; do not abandon a live fight forever at low HP.
-   v.yaw=want;v.mode='earthRest';v.model.earthPoseT=a.t;L._ground(v);return true;
+   v.mode='earthRest';v.model.earthPoseT=a.t;L._ground(v);return true;
   }
   if(!s){s=this._start(v);if(!s){a.recover=true;v.mode='earthRest';L._ground(v);return true;}}
   s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;s.phaseT=a.t;v.model.earthPoseT=a.t;
@@ -98,11 +112,11 @@ export class EarthMages {
     const plan=g.breakthrough?.prepare({x:v.x,y:v.y,z:v.z},{x:dx,z:dz});
     if(plan?.plan){a.wallCd=8;this._phase(v,s,'wall');a.wallPlan=plan;}
    }else if(threat&&s.n>=WALL_COUNT&&this._pay(v,E.WALL_COST))this._phase(v,s,'wall');
-   else if(a.t>EARTH_PHASES.orbit&&s.n>=1&&dist<=E.RANGE){
+   else if(a.t>(v.mana<E.THROW_COST+E.DRAIN*(EARTH_PHASES.orbit+1.1)?0:EARTH_PHASES.orbit)&&s.n>=1&&dist<=E.RANGE){
     a.cycle++;
     if(a.cycle%6===0&&g.levMax?.npcEarth){const id=g.levMax.npcEarth(v,foe);if(id){a.slab=id;this._stop(v.id);this._engaged(v);return true;}}
-    if(!s.blade&&a.cycle%2===0&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
-    else if(L._sees(v,foe))this._phase(v,s,EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length]);
+    if(!s.blade&&a.cycle%2===0&&v.mana>=E.BLADE_COST+E.THROW_COST+3&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
+    else if(L._sees(v,foe))this._phase(v,s,v.mana<E.THROW_COST+2?'punch':EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length]);
    }
   }else if(a.phase==='wall'&&a.wallPlan&&a.t>.65&&!a.fired){
    const p=a.wallPlan;a.fired=true;a.wallPlan=null;
@@ -126,6 +140,7 @@ export class EarthMages {
   a.empty=s.n?0:a.empty+dt;
   if(a.empty>2.5){a.source++;s.plan.length=0;a.empty=0;}
   if((dist>E.RANGE||!L._sees(v,foe)||!s.n)&&a.phase==='orbit')L._steer(v,foe.x,foe.z,v.walk*1.3,dt,L._sees(v,foe)&&s.n?E.RANGE-3:0);
+  else if(a.phase==='orbit')this._reposition(v,foe,dt,false);
   v.mode=modeOf(a.phase);L._ground(v);return true;
  }
  _engaged(v){if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
