@@ -8,3 +8,6 @@
 18:29:44.418 · [Заклинания] === игра началась 13.11.2026, 18:29:44 — журнал заклинаний: что услышано и что из этого вышло
 ════════════════════════════════════════════════════════════════
 
+18:30:06.759 ‼ [Сеть] ❌ вход в мир (место «start», поколение 30): this.waves.sampleModel is not a function | TypeError: this.waves.sampleModel is not a function ←     at Game._prewarmRun (http://localhost:8000/src/game/Game.js:4047:42) ←     at _prewarmRun.next (<anonymous>) ←     at Game.prewarmAsync (http://localhost:8000/src/game/Game.js:3950:58)
+18:30:13.078 · [Игра] === игра открыта 13.11.2026, 18:30:13
+18:30:14.193 · [Сеть] список серверов: нет
