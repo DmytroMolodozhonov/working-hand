@@ -1,3 +1,4 @@
+import {spellElements,ELEMENT_CATEGORIES} from './SpellElements.js';
 /**
  * CodexSearch.js — «🔍 Поиск» (the author 07.11: «поиск по зельям, заклинаниям и лору — в начальном меню и через Escape»).
  * One search line over everything the codex knows: spells, potions (recipes, how to brew, ingredients), pentagrams, the lore
@@ -25,7 +26,7 @@ export function codexEntries(ctx = null) {
     const add = (kind, title, text, html) => out.push({ kind, title, text: plain(text), key: norm(title + ' ' + text), tkey: norm(title), html });
     for (const s of SPELLS) {
         if (can && !can(cardSpell(s))) continue;
-        add('spell', s.name, [s.desc, s.say, s.next, s.max, s.magic].filter(Boolean).join(' '), () => card(s, can, used).outerHTML);
+        add('spell', s.name, [s.desc, s.say, s.next, s.max, s.magic,...ELEMENT_CATEGORIES.filter(e=>spellElements(cardSpell(s)).includes(e.id)).map(e=>'Магия стихий '+e.name)].filter(Boolean).join(' '), () => card(s, can, used).outerHTML);
     }
     for (const e of potionEntries()) {
         if (e.html) { const title = (/item-name">([^<]*)/.exec(e.html) || [])[1] || 'Зелье'; add('potion', title, e.html, () => e.html); }

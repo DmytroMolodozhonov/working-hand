@@ -1,3 +1,4 @@
+import { EARTH_SETTLEMENTS_FROM_GEN } from '../world/Terrain.js';
 import { deathCheckpoint } from './DeathCheckpoint.js';
 import { wipeHero } from './Legacy.js';
 /**
@@ -55,6 +56,7 @@ export function worldHoverNote(w, cur = GAME_VERSION) {
     const ver = worldVersionLabel(w, cur);
     const gen = Number.isFinite(w?.gen) ? w.gen : 1;
     const lacks = [];
+    if(gen < EARTH_SETTLEMENTS_FROM_GEN)lacks.push('поселений магов земли');
     if (gen < 2) lacks.push('морей и морских замков');
     if (gen < 5) lacks.push('нового ландшафта (высокие горы, каньоны, парящие острова)');
     if (gen < 6) lacks.push('плавных склонов и скруглённых крыш');

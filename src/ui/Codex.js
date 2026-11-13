@@ -1,3 +1,4 @@
+import { ELEMENT_CATEGORIES,spellElements } from './SpellElements.js';
 /**
  * Codex.js — the menu's «Заклинания», «Предметы» and «Механика игры» tabs.
  *
@@ -468,6 +469,7 @@ export function card(item, can = null, used = null) {
 
 /** Category buttons over a grid (spells and items share the look). */
 function renderCats(catsId, gridId, cats, list, current, pick, can = null, used = null) {
+    const inCat=(s,id)=>s.elements ? s.elements.includes(id) : s.cat===id;
     const box = document.getElementById(catsId);
     const grid = document.getElementById(gridId);
     if (!box || !grid) return;
@@ -475,15 +477,16 @@ function renderCats(catsId, gridId, cats, list, current, pick, can = null, used 
     for (const c of cats) {
         const b = document.createElement('button');
         b.className = 'sub-tab' + (c.id === current ? ' active' : '');
-        b.textContent = `${c.name} (${c.id === 'all' ? list.length : list.filter((s) => s.cat === c.id).length})`;
+        b.textContent = `${c.name} (${c.id === 'all' ? list.length : list.filter((s) => inCat(s,c.id)).length})`;
         b.onclick = () => pick(c.id);
         box.appendChild(b);
     }
     grid.innerHTML = '';
-    for (const s of list.filter((x) => current === 'all' || x.cat === current)) grid.appendChild(card(s, can, used));
+    for (const s of list.filter((x) => current === 'all' || inCat(x,current))) grid.appendChild(card(s, can, used));
 }
 
 let currentCat = 'all';
+let elementCat = 'all';
 let currentItemCat = 'weapon';
 
 /**
@@ -495,6 +498,14 @@ export function renderSpellsTab(catsId = 'spell-cats', gridId = 'spells-grid', c
     const cats = [{ id: 'all', name: '✨ Все' }, ...(can ? SPELL_CATEGORIES.filter((c) => list.some((s) => s.cat === c.id)) : SPELL_CATEGORIES)];
     if (cats.length && !cats.some((c) => c.id === currentCat)) currentCat = cats[0].id;
     renderCats(catsId, gridId, cats, list, currentCat, (id) => { currentCat = id; renderSpellsTab(catsId, gridId, can, used); }, can, used);
+}
+
+/** The same spell cards, regrouped without changing their ordinary categories. */
+export function renderElementsTab(catsId,gridId,can=null,used=null){
+ const entries=SPELLS.filter(s=>(!can||can(cardSpell(s)))&&spellElements(cardSpell(s)).length);
+ const cats=[{id:'all',name:'✨ Все стихии'},...ELEMENT_CATEGORIES];
+ const list=entries.map(s=>({...s,elements:spellElements(cardSpell(s))}));
+ renderCats(catsId,gridId,cats,list,elementCat,id=>{elementCat=id;renderElementsTab(catsId,gridId,can,used);},can,used);
 }
 
 export function renderItemsTab(extra = []) {
@@ -608,6 +619,7 @@ export function codexTabs() {
     return [{
         id: 'magic', name: '✨ Магия', children: [
             { id: 'spells', name: '📖 Заклинания' },
+            { id: 'elements', name: '🌿 Магия стихий' },
             { id: 'potions', name: '🧪 Зелья' },
             { id: 'pentagrams', name: '🩸 Пентаграммы' },
         ],
@@ -774,7 +786,7 @@ export function renderPotionsTab(boxId = 'potions-grid', catsId = 'potion-cats')
 // ---- the tab itself
 let magicSection = 'spells';
 /**
- * «✨ Магия»: the sections «Заклинания / Зелья / Пентаграммы». `o`: ids of the elements, `can`/`used` — as in renderSpellsTab,
+ * «✨ Магия»: the sections «Заклинания / Магия стихий / Зелья / Пентаграммы». `o`: ids of the elements, `can`/`used` — as in renderSpellsTab,
  * `known` — Set of the pentagram figures a Survival hero knows (null: no hero / Creative — all are drawn). `section` opens a section (a link from a hint).
  */
 export function renderMagicTab(o = {}, can = null, used = null, known = null, section = null) {
@@ -792,8 +804,10 @@ export function renderMagicTab(o = {}, can = null, used = null, known = null, se
         bar.appendChild(b);
     }
     const show = { spells: ids.spells, potions: ids.potions, pentagrams: ids.pents };
-    for (const [k, id] of Object.entries(show)) { const el = document.getElementById(id); if (el) el.hidden = k !== magicSection; }
+    const visibleSection=magicSection==='elements'?'spells':magicSection;
+    for (const [k, id] of Object.entries(show)) { const el = document.getElementById(id); if (el) el.hidden = k !== visibleSection; }
     if (magicSection === 'spells') renderSpellsTab(ids.cats, ids.grid, can, used);
+    else if (magicSection === 'elements') renderElementsTab(ids.cats,ids.grid,can,used);
     else if (magicSection === 'potions') renderPotionsTab(ids.vgrid, ids.vcats);
     else renderPentagramsTab(ids.pgrid, known, ids.pcats);
 }

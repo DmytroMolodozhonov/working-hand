@@ -1,3 +1,4 @@
+import {isEarthSpell} from '../ui/SpellElements.js';
 /**
  * WizardShop.js — what wizards keep and sell (pure, node-testable).
  *
@@ -8,7 +9,7 @@
  *    pays for it (so nobody gets rich buying here and selling at the market).
  */
 
-import { newUid, itemValue, SPELL_RU, fitThings, freshShopScroll } from './ItemTypes.js';
+import { newUid, itemValue, SPELL_RU, fitThings, freshShopScroll,SCROLL_WEIGHTS,spellScroll } from './ItemTypes.js';
 import { bookSpells, WARD_ID } from './BookBirds.js';
 import { rollChestArmor } from './ArmorTypes.js';
 import { pentagramScroll, figureIds } from './PentagramRules.js';
@@ -41,7 +42,7 @@ export function rollHouseThing(r = Math.random) {
 export const isHouseThing = (it) => !!it && ((it.kind === 'scroll' && it.stat === 'spell' && HOUSE_THINGS.some(([k]) => k === it.spell)) || (it.kind === 'book' && !!it.ward));
 
 /** A chest in a wizards' house: 1–3 things (a rich house a little more). `lone`: a lone wizard's house (LONE_HOUSE). */
-export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lone = false) {
+export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lone = false, earth = false) {
     const out = [];
     const n = randInt(r, 1, rich ? 3 : 2) + (rich && r() < 0.3 ? 1 : 0);
     for (let i = 0; i < n; i++) {
@@ -66,6 +67,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
         if (at < 0) at = Math.floor(r() * things.length) % Math.max(1, things.length);
         if (things.length) things[at] = rollHouseThing(r); else things.push(rollHouseThing(r));
     }
+    if(earth)for(let i=0;i<things.length;i++)if(things[i].kind==='scroll'&&things[i].stat==='spell')things[i]=rollEarthHouseScroll(r);
     return things;
 }
 
@@ -106,3 +108,12 @@ export function scrollName(it) {
 }
 
 export { itemValue };
+
+/** Relative weight +40% for every earth spell, preserving the other spells and their rarity. */
+export function rollEarthHouseScroll(r=Math.random){
+ const pool=SCROLL_WEIGHTS.filter(([id])=>!id.startsWith('pent:'));
+ const weight=([id,w])=>w*(isEarthSpell(id)?1.4:1);
+ let pick=r()*pool.reduce((n,s)=>n+weight(s),0);
+ for(const row of pool)if((pick-=weight(row))<0)return spellScroll(row[0]);
+ return spellScroll(pool.at(-1)[0]);
+}

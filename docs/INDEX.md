@@ -869,3 +869,5 @@
 - `world_storage.py` — атомарные файлы миров, ограниченная история, восстановление повреждённой записи и сохраняющее данные удаление.
 
 - `src/game/EarthMages.js`, `EarthMagicRules.js` — NPC мага земли, реальные блоки Ground Vortex, стена/кокон/лезвия, отступление с Stitching и Breakthrough; `src/entities/EarthMagePose.js`, `EarthMageLook.js` — суставы, стойки и костюм. Правила: `docs/rules/elemental-magic.md`; проверка: `tests/unit/earth-mage.test.js`.
+
+- `src/world/EarthSettlement.js` — скальное поселение магов земли (генерация 30), `src/ui/SpellElements.js` — дополнительные категории стихий и веса земляной добычи; `tests/unit/earth-settlement.test.js`.

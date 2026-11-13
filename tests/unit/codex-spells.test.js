@@ -50,7 +50,7 @@ test('«Магия»: the tab tree Магия → Заклинания / Зел�
     const tree = codexTabs();
     assert.equal(tree.length, 1);
     assert.equal(tree[0].name, '✨ Магия');
-    assert.deepEqual(tree[0].children.map((c) => c.id), ['spells', 'potions', 'pentagrams']);
+    assert.deepEqual(tree[0].children.map((c) => c.id), ['spells', 'elements', 'potions', 'pentagrams']);
     const { isPentagramKnown, POTION_CATEGORIES, potionEntries } = await import('../../src/ui/Codex.js');
     assert.deepEqual(pentagramCards(new Set()), [], 'unknown pentagrams have no cards');
     const some = pentagramCards(new Set(['devil']));

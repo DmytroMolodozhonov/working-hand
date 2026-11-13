@@ -43,3 +43,8 @@ test('unknown pentagrams have no search entries, even their names are hidden',()
  const entries=codexEntries({known:new Set(['life'])}).filter(e=>e.kind==='pent');
  assert.equal(entries.length,1);assert.match(entries[0].title,/жизни/);
 });
+
+test('element names find existing spell entries without duplicating cards or exposing unknown spells',()=>{
+ const entries=codexEntries({can:s=>s==='Flourish',known:new Set()});
+ const earth=searchCodex(entries,'магия земли','spell').map(r=>r.e);assert.equal(earth.length,1);assert.equal(earth[0].title,'Flourish');
+});

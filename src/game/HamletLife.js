@@ -1,3 +1,4 @@
+import {earthLook} from './EarthMagicRules.js';
 /**
  * HamletLife.js — the life of the hamlets (src/world/Hamlets.js): the lone wizard's house, the hermit's
  * hut, the small villages of wizards and of ordinary folk. A part of CastleLife: the people are castle
@@ -60,6 +61,7 @@ function strHash(s) {
 export function hamletRoster(def, idx) {
     const seed = (strHash(def.id) ^ Math.imul(idx + 1, 2654435761)) >>> 0;
     const rng = createRng(seed);
+    if(def.element==='earth')return {idx,seed,role:'mage',female:rng()<.45,name:MALE[seed%MALE.length],home:(idx-1)%def.houses.length,stall:-1,element:'earth',robe:false,look:earthLook(),wizard:true,brave:1};
     const S = def.stalls.length, K = def.knights | 0, H = def.houses.length;
     const first = K + 1 + S;
     const female = rng() < (idx >= 1 && idx <= K ? 0.1 : 0.45);

@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { BLOCK,BASE_COLORS, patternOf } from '../world/Terrain.js';
 import { applyVoxelDetail } from '../world/VoxelShading.js';
 
-const CAP = 512; // blocks of one kind at once (the caster's 160, the thrown, a few friends' vortexes)
+const CAP = 2048; // bounded capacity for nearby elemental settlements plus players; upload only the used prefix
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
@@ -113,6 +113,9 @@ export class BlockSwarmFx {
             k.mesh.count = k.n;
             k.mesh.visible = k.n > 0;
             if (!k.n) continue;
+            k.mesh.instanceMatrix.updateRange.offset=0;k.mesh.instanceMatrix.updateRange.count=k.n*16;
+            k.cell.updateRange.offset=k.side.updateRange.offset=k.top.updateRange.offset=0;
+            k.cell.updateRange.count=k.side.updateRange.count=k.top.updateRange.count=k.n*3;
             k.mesh.instanceMatrix.needsUpdate = true;
             k.cell.needsUpdate = true; k.side.needsUpdate = true; k.top.needsUpdate = true;
         }
