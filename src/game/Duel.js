@@ -595,13 +595,13 @@ export class Duel {
             if (a.type === 'horse' && a.dims && a.model?.userData?.neck && a.model.userData.head) {
                 // Its raised neck/head and individual legs stay hittable without a rider-sized sphere.
                 const u = a.model.userData, neck = put('a', a.id);
-                u.neck.getWorldPosition(neck.a); u.head.localToWorld(neck.b.set(0, -0.1, -0.2));
+                u.neck.getWorldPosition(neck.a); u.head.updateWorldMatrix(true,false);u.head.localToWorld(neck.b.set(0, -0.1, -0.2));
                 neck.r = Math.max(0.2, a.dims.wid * 0.25);
                 for (const leg of u.legs || []) {
                     const dims = leg.userData.legDims, lower = leg.userData.lower;
                     if (!dims || !lower) continue;
                     const e = put('a', a.id);
-                    leg.getWorldPosition(e.a); lower.localToWorld(e.b.set(0, -dims[2], dims[3]));
+                    leg.getWorldPosition(e.a); lower.updateWorldMatrix(true,false);lower.localToWorld(e.b.set(0, -dims[2], dims[3]));
                     e.r = Math.max(0.12, a.dims.wid * 0.1);
                 }
             }
