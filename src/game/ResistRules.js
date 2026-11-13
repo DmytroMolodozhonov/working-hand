@@ -34,7 +34,7 @@ export const RESIST = {
 export const FLOWER_NAME = { sun_herb: 'солнечница', glowcap_mushroom: 'светлошляпка', azure_berry: 'лазурница' };
 
 /** Ordinary fire: nothing of it gets through the fire ward (kinds as Combat.damage gets them). */
-export const FIRE_OK = new Set(['Inferno', 'InfernoMaxima', 'Fire', 'FireMaxima', 'fire', 'campfire', 'burn', 'burning', 'Burning', 'flame', 'DragonFire']);
+export const FIRE_OK = new Set(['Fireball','Inferno', 'InfernoMaxima', 'Fire', 'FireMaxima', 'fire', 'campfire', 'burn', 'burning', 'Burning', 'flame', 'DragonFire']);
 /** The hell's fire: it still takes the hero (full), only it can no more set him alight. */
 export const HELL_FIRE = new Set(['Hellfire', 'LetTheHellfireCome', 'lava', 'Lava']);
 /** Protection from blasts («Pentagranium Murus»): «Bombardo» / «Bombardo Maxima» do no harm at all (the push and the fall stay — they are not the damage). */

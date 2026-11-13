@@ -119,7 +119,7 @@ export const SPELL_COST = {
     SunRay: 500, // «Sun Ray»: the Sun's energy into the wand, then the burning beam at «Атак» — 500 once (a scroll of the gods — SunRay.js)
     Helios: 500, // «Helios»: the gods' Sun over the caster on a planet — 500 at once, then 3 a second (Helios.js)
     WaterPart: 300, // «Aquadivide»: the water stands aside like the sea for Moses — 300 at once, then 3 a second (a scroll only — WaterPart.js)
-    Featherfall: 10,
+    Fireball:7, Featherfall: 10,
     WaterWalk: 50, // «Aquambula»: walking on the water — 50 at once, then 1 a second (a scroll only — WaterWalk.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
     FireSerpent: 60, // «Serpent» out of my Hellfire: one must have 350 mana; then the Hellfire's drain ×2 while it lives (FireSerpent.js)

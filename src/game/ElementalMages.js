@@ -120,7 +120,7 @@ export class ElementalMages {
    v.fx=0; // Fire has no shield/dome and never delegates to the ordinary wizard's defence.
    if(a.phase==='rest')this.phase(v,'Chamber');
    if(a.phase==='Chamber'&&a.t>.45)this.phase(v,a.cycle%3===2?'Kick':'Punch');
-   if((a.phase==='Punch'||a.phase==='Kick')&&a.t>.43&&!a.fired){a.fired=true;if(L._sees(v,foe))this.cast(v,dist<11?'Inferno':a.cycle%4===3&&v.mana>=SPELL_COST.BombardoMaxima?'BombardoMaxima':'Bombardo',foe);}
+   if((a.phase==='Punch'||a.phase==='Kick')&&a.t>.43&&!a.fired){a.fired=true;if(L._sees(v,foe))this.cast(v,a.cycle%3===1?'Fireball':dist<11?'Inferno':a.cycle%4===3&&v.mana>=SPELL_COST.BombardoMaxima?'BombardoMaxima':'Bombardo',foe);}
    if((a.phase==='Punch'||a.phase==='Kick')&&a.t>1.1){a.fired=false;a.cycle++;this.phase(v,'Chamber');}
    if(dist>20)L._steer(v,foe.x,foe.z,v.walk*1.6,dt,16);else if(dist<7)L._steer(v,v.x-dx/dist*5,v.z-dz/dist*5,v.walk,dt,0);
    v.mode='fire'+a.phase;L._ground(v);

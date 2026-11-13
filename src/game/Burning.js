@@ -409,7 +409,7 @@ export class Burning {
     /** Does any fire burn near enough to matter (a campfire, a burning block or tree)? Without one the check is rare and cheap. */
     _anyFire() {
         const g = this.game;
-        if (g.fire?.burningBlocks?.size || g.fire?.burningTrees?.length) return true;
+        if (g.fire?.burningBlocks?.size || g.fire?.burningTrees?.length || g.spells?._fireballEmbers?.size) return true;
         const cf = g.campfires?.list;
         if (cf) for (const f of cf.values()) if (f.left > 0) return true;
         return false;
@@ -420,16 +420,17 @@ export class Burning {
         const g = this.game;
         const inFire = (x, y, z, r) => {
             _b.set(x, y, z);
-            return !!(g.campfires?._fireAt?.(_b, r, 1.2, true) || g.fire?.burningAt?.(_b, 0.4));
+            return (g.campfires?._fireAt?.(_b, r, 1.2, true) || g.fire?.burningAt?.(_b, 0.4)) || g.spells?.fireballGroundAt?.(x,y,z,r) || false;
         };
         const seen = new Set();
         const consider = (kind, id, x, y, z, r) => {
             const k = key(kind, id);
             if (!BURNS.has(kind)) return;
-            if (inFire(x, y, z, r + BURN.EDGE)) {
+            const fire=inFire(x,y,z,r+BURN.EDGE);
+            if (fire) {
                 seen.add(k);
                 const t = (this.stand.get(k) || 0) + s;
-                if (t >= BURN.STAND) { this.stand.delete(k); this.ignite(kind, id, null); } else this.stand.set(k, t);
+                if (t >= BURN.STAND) { this.stand.delete(k); this.ignite(kind, id,typeof fire==='object'?fire.by:null); } else this.stand.set(k, t);
             }
         };
         const myFeet = g.character.group.position;

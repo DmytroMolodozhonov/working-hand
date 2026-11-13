@@ -1,3 +1,4 @@
+import {fireballBody} from './FireballRules.js';
 import {waveSource} from './WaveSource.js';
 import { ElementalMages } from './ElementalMages.js';
 import { ELEMENTAL_TESTS,elementalTestSite } from './ElementalTestSites.js';
@@ -598,7 +599,16 @@ export class Game {
             wave: (name, o, d, ph, by) => this.waves.onNet(name, o, d, ph, by), // («Wave Attack»: WaveAttack.js)
             success: (casterId, name) => { if (casterId === this.localId || casterId === 'local') this.mana?.success(name); }, // (mana: my spell worked)
             handPose: (casterId, side) => this.handPose(casterId, side),
-            players: (casterId) => this._spellPlayers(casterId),
+            players: (casterId,physical=false) => this._spellPlayers(casterId,physical),
+            fireballGround:p=>{
+                const floor=this.collision.groundAt(p.x,p.z,p.y+.8);if(!Number.isFinite(floor)||Math.abs(floor-p.y)>1.3)return null;
+                const at=_v3.set(p.x,floor+.03,p.z);if(this._flameBlock?.(at.x,at.y+.1,at.z)==='water')return null;
+                for(const w of this._flameWaters?.()||[])if(Math.hypot(at.x-w.x,at.y-w.y,at.z-w.z)<w.r)return null;
+                return at;
+            },
+            fireballBody:(p,from,by)=>this._fireballBody(p,from,by),
+            fireballPlayer:(id,by,from)=>{if(id!==this.localId||this.combat.shieldFactor(from)>=1&&this.combat._blocked(from,'Fireball'))return false;return this.burning?.ignite('p',id,by);},
+            fireballWood:(p,d,by)=>this.fire?.igniteAlong(_v1.copy(p).addScaledVector(d,-.3),d,.6),
             weapons: () => this.weapons.weapons,
             blowMe: (casterId, origin, pushAt, name) => this._blowMe(casterId, origin, pushAt, name),
             creatures: (name, casterId, pushAt, opts) => this.creatureImpact.spellArea(name, casterId, pushAt, opts),
@@ -3522,6 +3532,14 @@ export class Game {
 
     /** Targets for spells cast by `casterId` (players hit each other only in the free world). */
     /** «Инферно»: the stream burns what it reaches. True if something burnt. */
+    _fireballBody(p,from,by){
+        if(!this.authority)return false;
+        const b=fireballBody(this.duel?._bodies(by)||[],p);if(!b)return false;
+        if(b.kind==='v'){const v=this.castleLife.byId.get(b.id);if(v){this.castleLife.startle(v,by,from,{hit:true});if(this.castleLife.wardOff(v,from,'Fireball'))return false;}}
+        if(b.kind==='t'){const d=_v2.subVectors(p,from).normalize();return !!this.livingTrees?.burnAlong(_v1.copy(p).addScaledVector(d,-.4),d,.8,by);}
+        return !!this.burning?.ignite(b.kind,b.id,by);
+    }
+
     _burnRay(o, d, len, casterId) {
         let hit = false;
         if (this.fire?.igniteAlong(o, d, len)) hit = true; // trees, dry blocks
@@ -3677,9 +3695,9 @@ export class Game {
         return null;
     }
 
-    _spellPlayers(casterId) {
+    _spellPlayers(casterId,physical=false) {
         const c = this.combat;
-        if (!c.enabled) return [];
+        if (!c.enabled&&!physical) return [];
         const out = [];
         const me = this.localId;
         // (in a protected house: a spell from outside doesn't reach me — nor the others inside)

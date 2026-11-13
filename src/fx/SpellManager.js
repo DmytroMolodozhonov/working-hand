@@ -1,3 +1,4 @@
+import {BLOCK} from '../world/Terrain.js';
 /**
  * SpellManager.js — voice spells.
  *
@@ -330,6 +331,8 @@ export function matchSpell(text) {
     // («вин-» is also the start of «Вингардиум»: «виндгардиум», «вайнгардиум» — a «гар/гад» after it is the levitation's, never the wind —
     //  the author 05.11: «Вингардиум Левиоса путается с заклинанием Wind»; SpellPhrase.VINGARDIUM_HEARD does the same for the spotter)
     if (!/га[рдт]|нгад|гад[иы]/.test(s) && has('вайнд', 'вайнт', 'ваинт', 'винд', 'вайн', 'уинд', 'уайнд', 'wind', 'wine', 'whined', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
+    if (/^(fireball|fire ball|фаербол|файербол|файрбол|фаер бол|файер бол)$/.test(s)) return 'Fireball';
+    if(/fire\s*ball|фаер\s*бол|файер\s*бол|файрбол/.test(s))return null;
     if (/^(featherfall|feather fall|фезерфол|фезерфолл|фезер фол|федерфол|фэзэрфол)$/.test(s)) return 'Featherfall';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
     // «Fire Maxima» (before the lone «Максима» and the campfire «Fire»)
@@ -589,6 +592,7 @@ export class SpellManager {
             case 'Firefighting': case 'FirefightingMaxima': this.castFirefighting(name === 'FirefightingMaxima', o, d, casterId, handSide || 'right'); break;
             case 'Sands': this.castSands(o, d, casterId); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
+            case 'Fireball': this.castBombardo(o,d,casterId,1,castId,true);break;
             case 'Bombardo': this.castBombardo(o, d, casterId, 1, castId); break;
             case 'BombardoMaxima': this.castBombardo(o, d, casterId, MAXIMA_POWER, castId); break;
             case 'WindImpulse': case 'WindImpulseMaxima': this.castImpulse(name, o, casterId); break;
@@ -642,8 +646,8 @@ export class SpellManager {
     }
 
     /** Players a spell from `casterId` can hit (never the caster). */
-    _players(casterId) {
-        return this.hooks.players ? this.hooks.players(casterId) : [];
+    _players(casterId,physical=false) {
+        return this.hooks.players ? this.hooks.players(casterId,physical) : [];
     }
 
     _damage(z, amount, isWeapon, dir) {
@@ -1558,12 +1562,29 @@ export class SpellManager {
     }
 
     // ------------------------------------------------------------ Bombardo
-    castBombardo(origin, direction, casterId, power = 1, castId = null) {
-        this.hooks.blastCast?.(casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo', origin, direction);
+    /** The spent orb burns briefly on its actual support; all particles come from shared pools. */
+    _fireballEmber(p,by){
+        const ground=this.hooks.fireballGround?.(p);if(!ground)return;
+        const fires=this._fireballEmbers||(this._fireballEmbers=new Map());
+        if(fires.size>=24){const old=fires.values().next().value;old.life=0;fires.delete(old.id);}
+        const at=ground.clone(),id=(this._emberSeq=(this._emberSeq||0)+1);
+        let acc=0,smoke=0,probe=0;
+        const task={id,by,pos:at,life:3.2,kind:'fireballGround',onUpdate:(s,dt)=>{
+            probe-=dt;if(probe<=0){probe=.15;const support=this.hooks.fireballGround?.(at);if(!support||Math.abs(support.y-at.y)>.35){s.life=Math.min(s.life,.35);}}
+            const k=Math.min(1,s.life/.9);acc+=dt*34*k;smoke+=dt*5*k;
+            for(let n=Math.min(5,Math.floor(acc));n>0;n--){acc--;const r=Math.random()*.42,a=Math.random()*Math.PI*2;this.fx.glow.spawn(at.x+Math.cos(a)*r,at.y+.08,at.z+Math.sin(a)*r,(Math.random()-.5)*.5,1.4+Math.random()*1.4,(Math.random()-.5)*.5,r<.18?0xffe09a:0xff6a18,(.32+Math.random()*.28)*k,.4+Math.random()*.3,{shrink:1.7,spin:3});}
+            if(smoke>=1){smoke--;this.fx.smoke?.spawn?.(at.x,at.y+.7,at.z,.12,1.1,.08,0x625c58,.3*k,.8,{shrink:-.25,spin:.5});}
+        },onEnd:()=>fires.delete(id)};
+        fires.set(id,task);this.spells.push(task);
+    }
+    fireballGroundAt(x,y,z,r=0){for(const f of this._fireballEmbers?.values()||[]){if(f.life>0&&Math.abs(y-f.pos.y)<1.3&&Math.hypot(x-f.pos.x,z-f.pos.z)<.65+r)return f;}return null;}
+
+    castBombardo(origin, direction, casterId, power = 1, castId = null, incendiary = false) {
+        if(!incendiary)this.hooks.blastCast?.(casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo', origin, direction);
         const maxima = power > 1;
-        this._sound('playBombardoCast');
+        if(incendiary)this._fx('fxFireball',origin,1,'playInferno');else this._sound('playBombardoCast');
         const orb = this._takeBall(this.orbs);
-        const size = maxima ? 2.3 : 1;
+        const size = incendiary?.7:maxima ? 2.3 : 1;
         orb.scale.setScalar(size);
         orb.position.copy(origin).addScaledVector(direction, 0.8 * size);
         // (the orb shows a little ahead of the hand — whatever stands in that gap is touched first: below)
@@ -1576,20 +1597,28 @@ export class SpellManager {
         const collision = this.hooks.collision;
         if (maxima) this.fx.castBurst(origin, direction);
         const handOrigin = origin.clone();
-        const players = this._players(casterId);
+        const players = this._players(casterId,incendiary);
         let age = 0;
         let exploded = false;
-        const explodeAt = (p) => {
+        const explodeAt = (p,kind='world') => {
             if (exploded) return;
             exploded = true;
+            if(incendiary){
+                let worked=false;
+                if(kind==='body')worked=!!this.hooks.fireballBody?.(p,origin,casterId);
+                else if(kind==='world'){worked=!!this.hooks.fireballWood?.(p,direction,casterId);this._fireballEmber(p,casterId);}
+                if(worked)this.hooks.success?.(casterId,'Fireball');
+                this.fx.lightFlash(p,0xff8a26,1.2,.12,5);return;
+            }
             this.hooks.success?.(casterId, maxima ? 'BombardoMaxima' : 'Bombardo'); // (mana: it went off)
             if (this.auth && this.hooks.explode) this.hooks.explode(p.clone(), radius, casterId, power);
             else this.fx.lightFlash(p, 0xffaa55, 2 * size, 0.15, 20 * size); // client: real blast arrives from the host
         };
-        const bomb = this.lastBomb = { id: castId || casterId + ':bomb:' + Date.now().toString(36) + ':' + (this._bombSeq = (this._bombSeq || 0) + 1), by: casterId, power, p: orb.position, v: vel, age: 0 };
+        const bomb = { id: castId || casterId + ':bomb:' + Date.now().toString(36) + ':' + (this._bombSeq = (this._bombSeq || 0) + 1), by: casterId, power, p: orb.position, v: vel, age: 0 };
+        if(!incendiary)this.lastBomb=bomb;
         const task = {
-            bomb,
-            capture: () => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
+            bomb:incendiary?null:bomb,
+            capture: incendiary?null:() => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
             life: maxima ? 3.2 : 2.6,
             onUpdate: (spell, dt) => {
                 // first frame: the way from the hand to where the orb appeared (a wall or a knight right before the hand)
@@ -1620,13 +1649,14 @@ export class SpellManager {
                 const terrain = this.hooks.terrain ? this.hooks.terrain() : null;
                 const step = _a.subVectors(orb.position, prev);
                 const stepLen = step.length();
+                if(incendiary&&terrain?.get){const n=Math.max(1,Math.ceil(stepLen/.3));for(let i=1;i<=n;i++){_b.lerpVectors(prev,orb.position,i/n);if(terrain.get(Math.round(_b.x),Math.floor(_b.y+1.5),Math.round(_b.z))===BLOCK.WATER){explodeAt(_b,'wet');spell.life=0;return;}}}
                 // boxes (a door, a lifted house's walls, tables…) and a door's leaf along the WHOLE step: the first one hit
                 const way = bombardoWayStop(collision, this.hooks.doorsOnWay?.() || null, prev, orb.position);
                 const earth = this.hooks.earthOnWay?.(prev, orb.position, casterId);
                 const terrainHit = terrain && stepLen > 0 ? terrain.raycast(prev, step.clone().divideScalar(stepLen), stepLen) : null;
                 if(earth && (!way || earth.t<=way.s) && (!terrainHit || earth.t*stepLen<=terrainHit.dist)) {
                     // Keep the struck rock present while blast shielding is evaluated; then chip it away.
-                    explodeAt(earth.point); this.hooks.earthTake?.(earth,maxima?'BombardoMaxima':'Bombardo');spell.life=0;return;
+                    explodeAt(earth.point,'blocked'); if(!incendiary)this.hooks.earthTake?.(earth,maxima?'BombardoMaxima':'Bombardo');spell.life=0;return;
                 }
                 if (terrainHit && !(way && way.s * stepLen < terrainHit.dist)) { explodeAt(_b.set(terrainHit.x, terrainHit.y, terrainHit.z)); spell.life = 0; return; }
                 // a house's sphere: the orb bursts on it, outside
@@ -1641,13 +1671,14 @@ export class SpellManager {
                 // every creature on this step's way (knights, villagers, animals, sailors, trees, the spider…:
                 // Duel.touchOnWay) — not only zombies; and touched along the whole move, not only where it ended
                 const bh = this.hooks.bodyOnWay?.(prev, orb.position, casterId);
-                if (bh) { explodeAt(bh); spell.life = 0; return; }
+                if (bh) { explodeAt(bh,'body'); spell.life = 0; return; }
                 // Players: a shield sends the orb back, otherwise it blows up on them
                 for (const p of players) {
                     const hit = playerOnWay(p, prev, orb.position, size * 0.45, 1.2 + size * 0.45);
                     if (!hit) continue;
                     const pc = p.center();
                     if (p.blocks(origin)) {
+                        if(incendiary){p.hit('Fireball',origin);explodeAt(orb.position,'blocked');spell.life=0;return;}
                         // Reflect from the incoming side even when a slow frame crossed the entire body.
                         _a.subVectors(prev, pc);
                         if (_a.lengthSq() < 1e-9) _a.copy(vel).negate();
@@ -1657,7 +1688,8 @@ export class SpellManager {
                         p.hit('Bounce', origin);
                         return;
                     }
-                    explodeAt(_b.lerpVectors(prev, orb.position, hit.s)); spell.life = 0; return;
+                    if(incendiary&&p.local&&this.hooks.fireballPlayer?.(p.id,casterId,origin))this.hooks.success?.(casterId,'Fireball');
+                    explodeAt(_b.lerpVectors(prev, orb.position, hit.s),'player'); spell.life = 0; return;
                 }
                 // Zombies
                 for (const z of this.zombies) {
@@ -1665,12 +1697,12 @@ export class SpellManager {
                     const zp = z.group.position;
                     const dx = orb.position.x - zp.x, dz = orb.position.z - zp.z;
                     if (dx * dx + dz * dz < hitR2 && orb.position.y > zp.y - 1 - size && orb.position.y < zp.y + 3 + size) {
-                        explodeAt(orb.position); spell.life = 0; return;
+                        explodeAt(orb.position,'body'); spell.life = 0; return;
                     }
                 }
             },
             onEnd: (spell) => {
-                if (!exploded) explodeAt(orb.position); // fizzles out with a bang at max range
+                if (!exploded) explodeAt(orb.position,incendiary?'fizzle':'world'); // fizzles out with a bang at max range
                 this._freeBall(orb);
             },
         };

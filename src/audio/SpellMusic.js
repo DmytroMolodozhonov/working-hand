@@ -795,6 +795,7 @@ const FX = {
         return finish(o, sr, { peak: 0.6 });
     },
     /** «Aquambula»: the water goes still and glassy — a soft rising ripple, glass-clear bells falling like drops, a low watery pad that settles. */
+    fxFireball(sr){const o=buf(sr,.7),r=rng(513);noise(o,sr,0,.7,.25,u=>.18+.7*u,swell(.02,.3),r);glide(o,sr,0,.6,.12,u=>170+650*u,swell(.02,.2),2);return finish(o,sr,{peak:.75});},
     fxFeatherfall(sr){const o=buf(sr,1.6),r=rng(411);noise(o,sr,0,1.6,.14,u=>.12+.2*(1-u),swell(.15,.75),r);glide(o,sr,.05,1.3,.08,u=>750-500*u,swell(.2,.7),1);pad(o,sr,['D4','A4'],.2,1.4,.1,{att:.3,rel:.8,harm:1});return finish(o,sr,{peak:.5});},
     fxWaterWalk(sr) {
         const o = buf(sr, 1.9), r = rng(88);
@@ -1201,7 +1202,7 @@ export const TUNE_KEYS = Object.keys(TUNES);
  * like 'house_block') — played when the spell works, from the caster's place, heard by everyone near.
  */
 export const SPELL_SOUND = {
-    Featherfall:{cast:'fxFeatherfall'},
+    Fireball:{cast:'fxFireball'}, Featherfall:{cast:'fxFeatherfall'},
     // the great spells: their own tunes
     CreateHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] }, ImproveHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] },
     CreateCastle: { own: ['castleTheme', 'houseHum', 'rumble'] },
