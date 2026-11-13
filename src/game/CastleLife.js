@@ -1543,6 +1543,7 @@ export class CastleLife {
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; this._deadFall(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
         if (v.savior != null) g.savior?.manaStep(v, dt); // (including stun / flight: exactly one mana update)
         if (v.sleep && this.night?.step(v, dt)) return; // (going to bed, asleep, getting up — NightLife.js)
+        if(v.element==='fire'&&(v.carriedBy||v.lev||v.stunT>0||v.vy))g.elementalMages?.interrupt?.(v);
         // held up by «Вингардиум Левиоса»: Levitation carries the body
         if (v.carriedBy) { v.mode = 'flail'; v.speed = 0; return; } // (in a gargoyle's claws: hanging, kicking — Gargoyles._carry holds the place)
         if (v.lev) { v.mode = v.lev.body ? 'dead' : 'flail'; v.speed = 0; return; } // (kicking in the air: VillagerModel 'flail')

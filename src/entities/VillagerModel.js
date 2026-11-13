@@ -1143,7 +1143,7 @@ const HANGING = new Set(['basket', 'pouch', 'bucket']);
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const lerp = (a, b2, t) => a + (b2 - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
-const POSE_KEYS = ['hx', 'hy', 'hz', 'headX', 'headY', 'headZ', 'aLX', 'aLZ', 'aRX', 'aRY', 'aRZ', 'wrist', 'lL', 'lR', 'kL', 'kR', 'block', 'cape', 'bounce','eL','eR','earthSpread'];
+const POSE_KEYS = ['hx', 'hy', 'hz', 'headX', 'headY', 'headZ', 'aLX', 'aLZ', 'aRX', 'aRY', 'aRZ', 'wrist', 'lL', 'lR', 'kL', 'kR', 'block', 'cape', 'bounce','eL','eR','earthSpread','pelvisZ'];
 const _v = new THREE.Vector3();
 const _mA = new THREE.Matrix4();
 const _mB = new THREE.Matrix4();
@@ -1674,6 +1674,8 @@ export class VillagerModel {
     _enterMode(mode) {
         const prev = this.mode;
         this.mode = mode;
+        this._acroActive=mode==='fireVault';
+        if(!this._acroActive)this.pelvis.rotation.z=0;
         if (mode === 'attack') { this._atkT = 0; this.attackPhase = 0; }
         if (mode === 'work') this._workT = 0;
         if (mode === 'dead') { this._deadT = 0; this._deadDone = false; }
@@ -1741,7 +1743,7 @@ export class VillagerModel {
         }
 
         // ---- upper body per mode (a wizard's own moves first — MoveStyle.wizardPose)
-        T.eL=T.eR=T.earthSpread=0;
+        T.eL=T.eR=T.earthSpread=T.pelvisZ=0;
         this._earthMoving=this.look.element&&loco;
         const own = (this.look.element ? (this.look.element==='earth'?earthMagePose:elementalMagePose)(this,T,mode,dt,t) : 0) || (this._wiz ? wizardPose(this, T, mode, loco, dt, t) : 0);
         if (own) rate = own;
@@ -2122,6 +2124,17 @@ export class VillagerModel {
             y = Math.max(dl, dr);
         }
         this.pelvis.position.y = y + P.bounce;
+        this.pelvis.rotation.z=this._acroActive?P.pelvisZ:0;
+        if(this._acroActive){
+            // Only the active acrobat: hands/feet keep real contact with the
+            // ground through the turn, without moving the NPC's physics body.
+            this.pelvis.position.y=0;let bottom=Infinity;
+            const probe=(node,x,y,z)=>{node.updateWorldMatrix(true,false);node.localToWorld(_pA.set(x,y,z));this.root.worldToLocal(_pA);bottom=Math.min(bottom,_pA.y-.1);};
+            probe(this.leftElbow,0,-.6,0);probe(this.rightElbow,0,-.6,0);
+            probe(this.leftKnee,0,-LEG_LOW,0);probe(this.rightKnee,0,-LEG_LOW,0);
+            probe(this.head,-.55,.6,0);probe(this.head,.55,.6,0);
+            this.pelvis.position.y=-bottom;
+        }
     }
 
     _placeShield(k) {

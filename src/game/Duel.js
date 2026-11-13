@@ -750,6 +750,13 @@ export class Duel {
     }
 
     _villagerBody(v, e) {
+        if(v.element==='fire'&&v.mode==='fireVault'&&v.model?.pelvis){
+            // Keep the visible inverted body hittable. Both ends use the same
+            // current pivot, never a mixture of old and new limb matrices.
+            const pivot=v.model.pelvis;pivot.updateWorldMatrix(true,false);
+            e.a.set(0,-1.5,0).applyMatrix4(pivot.matrixWorld);e.b.set(0,1.6,0).applyMatrix4(pivot.matrixWorld);e.r=BODY.VILLAGER.R;
+            return e;
+        }
         // (the model's origin is the hip, as the player's: the feet 1.95 below it)
         const p = v.group ? v.group.position : _sb.set(v.x, v.y + 1.95, v.z);
         e.a.set(p.x, p.y - BODY.VILLAGER.DOWN, p.z);

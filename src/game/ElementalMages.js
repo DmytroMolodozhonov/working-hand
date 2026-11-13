@@ -28,7 +28,16 @@ export class ElementalMages {
   v.model.setHeldTool('none');
  }
  pay(v,cost){if(v.mana<cost)return false;v.mana-=cost;return true;}
- phase(v,p){v.elemental.phase=p;v.elemental.t=0;v.elemental.fired=false;v.mode=v.element+p;}
+ phase(v,p){v.elemental.phase=p;v.elemental.t=0;v.elemental.fired=false;v.elemental.shots=0;v.model.elementPoseT=0;v.mode=v.element+p;}
+ interrupt(v){if(v.element==='fire'&&v.elemental?.phase==='Vault'){this.phase(v,'Chamber');v.castT=0;}}
+ reposition(v,foe,dt,radius=14){
+  const a=v.elemental,dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz)||1;
+  const side=a.moveSide||(a.moveSide=(v.entry.seed&1)?1:-1),radial=Math.max(-1,Math.min(1,(d-radius)/4)),x=v.x,z=v.z,foeId=v.foe;
+  this.game.castleLife._steer(v,x+(dx/d*radial-dz/d*side)*6,z+(dz/d*radial+dx/d*side)*6,v.walk*1.3,dt,0);
+  if(!v.foe&&foeId)v.foe=foeId;
+  a.blocked=Math.hypot(v.x-x,v.z-z)<.001?(a.blocked||0)+dt:0;if(a.blocked>.75){a.moveSide=-side;a.blocked=0;}
+  v.yaw=Math.atan2(foe.x-v.x,foe.z-v.z)+Math.PI;
+ }
  /** A resident needs nearby real water; only a traveller has a finite portable reservoir. */
  waterSource(v,dt){
   const a=v.elemental,g=this.game;a.scan-=dt;
@@ -44,9 +53,10 @@ export class ElementalMages {
   const humid=!!v.gifts.hydro.h&&!airWet({offEarth:!!g.space?.offEarth,hell:!!g.hellGate?.inHell,desert});
   a.humid=humid;return a.source||humid||a.water>=6;
  }
- cast(v,name,foe){
+ cast(v,name,foe,origin=null){
   const g=this.game;if(!g.spells?.cast)return false;
-  if(isImpulse(name))_o.set(v.x,v.y+1.5,v.z);
+  if(origin)_o.copy(origin);
+  else if(isImpulse(name))_o.set(v.x,v.y+1.5,v.z);
   else _o.set(v.x-Math.sin(v.yaw)*.9,v.y+2.7,v.z-Math.cos(v.yaw)*.9);
   _d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
   if(!isImpulse(name)&&!g.collision.lineOfSight?.(_o.x,_o.y,_o.z,foe.x,foe.y,foe.z,.2)&&g.collision.lineOfSight)return false;
@@ -55,6 +65,12 @@ export class ElementalMages {
   v.aimPitch=Math.asin(_d.y);v.castT=.6;v.model.castNow=true;this.engaged(v);return true;
  }
  engaged(v){if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
+ fireFoot(v,side){
+  const foot=side?v.model.leftKnee:v.model.rightKnee;
+  if(!foot)return null;
+  // Like horse hit capsules, this descendant must be current before localToWorld.
+  foot.updateWorldMatrix(true,false);return foot.localToWorld(new T.Vector3(0,-.95,0)).add(new T.Vector3(-Math.sin(v.yaw)*.35,0,-Math.cos(v.yaw)*.35));
+ }
  waterAttack(v,foe){
   const g=this.game,a=v.elemental;
   if(a.cycle%3===0&&a.sourcePoint&&g.waves&&waveSource(g.world?.terrain?.data,a.sourcePoint)){
@@ -83,7 +99,7 @@ export class ElementalMages {
   if(!v.foe&&v.cs?.def?.kind==='hamlet'){
    v.mana=Math.min(v.maxMana,v.mana+dt);a.phase='rest';if(v.fly){this.land(v,dt);return true;}return false;
   }
-  a.t+=dt;a.flightCd=Math.max(0,a.flightCd-dt);v.prep=null;v.cardilon=null;v.practice=null;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
+  a.t+=dt;v.model.elementPoseT=a.t;a.flightCd=Math.max(0,a.flightCd-dt);v.prep=null;v.cardilon=null;v.practice=null;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
   const foe=v.foe?L._playerPos(v.foe):null;
   if(v.element==='water')this.waterSource(v,dt);
   if(!foe||Math.hypot(foe.x-v.x,foe.z-v.z)>75){if(a.liftT>0)this.endLift(v);v.foe=null;v.fx=0;v.mana=Math.min(v.maxMana,v.mana+dt);if(v.fly)this.land(v,dt);else L._ground(v);v.mode='idle';a.phase='rest';return true;}
@@ -91,7 +107,7 @@ export class ElementalMages {
   v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*5);
   const threat=g.earthMages?._threat(v);
   if(v.mana<10)a.recover=true;if(a.recover&&v.mana>=Math.max(v.element==='air'?SPELL_COST.Wind:v.element==='water'?SPELL_COST.WaterVortex:SPELL_COST.Inferno,Math.min(v.maxMana,45)))a.recover=false;
-  if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);if(dist<22)L._steer(v,v.x-dx/dist*9,v.z-dz/dist*9,v.walk*1.5,dt,0);v.yaw=want;v.mode=v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
+  if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);this.reposition(v,foe,dt,24);v.mode=v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
   if(v.element==='water'){
    if(a.capture){const b=g.vortex?.bubbles?.get(a.capture),f=g.vortex?.flights?.get(a.capture);if(b||f){v.mode=b?.phase==='ice'?'waterPush':'waterGather';if(f&&!b&&!this.pay(v,dt)){g.vortex._endFlight(f,'mana',true);}L._ground(v);return true;}a.capture=null;}
    if(a.guard>0){a.guard-=dt;if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';}
@@ -104,7 +120,7 @@ export class ElementalMages {
     if(a.phase==='Push'&&a.t>1.3){a.fired=false;a.cycle++;this.phase(v,'Gather');}
     v.mode='water'+a.phase;
    }
-   if(dist>26)L._steer(v,foe.x,foe.z,v.walk,dt,22);else if(dist<9)L._steer(v,v.x-dx/dist*6,v.z-dz/dist*6,v.walk,dt,0);
+   if(dist>26)L._steer(v,foe.x,foe.z,v.walk,dt,22);else if(dist<9)L._steer(v,v.x-dx/dist*6,v.z-dz/dist*6,v.walk,dt,0);else if(a.phase==='Gather'&&!a.capture&&!a.wave&&!a.guard)this.reposition(v,foe,dt,18);
    L._ground(v);
   }else if(v.element==='air'){
    v.fx=0;
@@ -129,11 +145,18 @@ export class ElementalMages {
    if(!v.fly){v.mode='air'+a.phase;if(!v.vy)L._ground(v);}
   }else{
    v.fx=0; // Fire has no shield/dome and never delegates to the ordinary wizard's defence.
+   const visible=L._sees(v,foe);
    if(a.phase==='rest')this.phase(v,'Chamber');
-   if(a.phase==='Chamber'&&a.t>.45)this.phase(v,a.cycle%3===2?'Kick':'Punch');
+   if(a.phase==='Chamber'&&a.t>.45&&visible)this.phase(v,a.cycle%4===3&&v.mana>=2*SPELL_COST.Fireball?'Vault':a.cycle%3===2?'Kick':'Punch');
+   if(a.phase==='Vault'){
+    while((a.shots||0)<2&&a.t>=.64+(a.shots||0)*.24){const side=a.shots||0;a.shots=side+1;if(L._sees(v,foe))this.cast(v,'Fireball',foe,this.fireFoot(v,side));}
+    if(a.t>1.6){a.cycle++;this.phase(v,'Chamber');}
+   }
    if((a.phase==='Punch'||a.phase==='Kick')&&a.t>.43&&!a.fired){a.fired=true;if(L._sees(v,foe))this.cast(v,a.cycle%3===1?'Fireball':dist<11?'Inferno':a.cycle%4===3&&v.mana>=SPELL_COST.BombardoMaxima?'BombardoMaxima':'Bombardo',foe);}
    if((a.phase==='Punch'||a.phase==='Kick')&&a.t>1.1){a.fired=false;a.cycle++;this.phase(v,'Chamber');}
-   if(dist>20)L._steer(v,foe.x,foe.z,v.walk*1.6,dt,16);else if(dist<7)L._steer(v,v.x-dx/dist*5,v.z-dz/dist*5,v.walk,dt,0);
+   if(a.phase==='Chamber'||a.phase!=='Vault'&&a.t>.85){
+    if(dist>20||!visible){const foeId=v.foe;L._steer(v,foe.x,foe.z,v.walk*1.6,dt,visible?16:0);if(!v.foe)v.foe=foeId;}else this.reposition(v,foe,dt,12);
+   }
    v.mode='fire'+a.phase;L._ground(v);
   }
   return true;
