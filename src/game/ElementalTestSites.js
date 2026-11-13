@@ -12,5 +12,5 @@ export function elementalLook(element,{tank=false,wings=false}={}){
 export function elementalTestSite(a,F){
  return {id:'creative-'+a.element,kind:'elemental',name:'Площадка мага '+({water:'воды',air:'воздуха',fire:'огня'}[a.element]),x:a.x,z:a.z,F,zone:18,gx:0,gz:0,knights:0,population:1,color:COLORS[a.element][0],
  houses:[],stalls:[],fields:[],posts:[],beds:[],chests:[],pens:[],graves:[],graveyards:[],rooms:[],nodes:[],edges:[],
- people:[{idx:1,seed:a.seed,role:'mage',element:a.element,name:a.name,female:a.element==='water',mana:220,robe:false,look:elementalLook(a.element,{tank:a.element==='water'})}]};
+ people:[{idx:1,seed:a.seed,role:'mage',element:a.element,name:a.name,female:a.element==='water',mana:a.element==='fire'?400:220,robe:false,look:elementalLook(a.element,{tank:a.element==='water'})}]};
 }

@@ -152,8 +152,10 @@ export class ElementalMages {
   }else{
    v.fx=0; // Fire has no shield/dome and never delegates to the ordinary wizard's defence.
    const visible=L._sees(v,foe);
+   if(g.hellfire?.npcs?.has(v.id)){v.mode='firePunch';L._ground(v);return true;}
+   if(a.phase==='Chamber'&&a.t>.8&&a.cycle%6===4&&visible&&dist<22&&g.hellfire?.npcStart?.(v)){a.cycle++;this.engaged(v);v.mode='firePunch';L._ground(v);return true;}
    if(a.phase==='rest')this.phase(v,'Chamber');
-   if(a.phase==='Chamber'&&a.t>.45&&visible)this.phase(v,a.cycle%4===3&&v.mana>=2*SPELL_COST.Fireball?'Vault':a.cycle%3===2?'Kick':'Punch');
+   if(a.phase==='Chamber'&&a.t>.45&&visible&&!(a.cycle%6===4&&g.hellfire?.npcStart&&v.mana>=260&&a.t<=.8))this.phase(v,a.cycle%4===3&&v.mana>=2*SPELL_COST.Fireball?'Vault':a.cycle%3===2?'Kick':'Punch');
    if(a.phase==='Vault'){
     while((a.shots||0)<2&&a.t>=.64+(a.shots||0)*.24){const side=a.shots||0;a.shots=side+1;if(L._sees(v,foe))this.cast(v,'Fireball',foe,this.fireFoot(v,side));}
     if(a.t>1.6){a.cycle++;this.phase(v,'Chamber');}

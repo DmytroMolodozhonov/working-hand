@@ -195,6 +195,7 @@ export class Hellfire {
         this.game = game;
         this.state = null; // my fire: {side, t, c, R, k (0 blaze … 1 ring), ang, spin, ...}
         this.remote = new Map(); // by -> another computer's fire
+        this.npcs = new Map(); // host-owned casters use the very same fire, water and damage pipeline
         this.meter = new SwingMeter();
         this.left = []; // fires left on the ground (everyone's): {by, c, R0, R, k: 0, t, wet, burnT, meT}
         this.log = []; // events (tests / debugging)
@@ -338,6 +339,7 @@ export class Hellfire {
     update(dt) {
         if (!(dt > 0)) return;
         this._t += dt;
+        if(this.game.authority)this._updateNpcs(dt);
         if (this.state) this._updateMine(dt);
         for (const [by, f] of this.remote) {
             if (this._t - f.at > HELLFIRE.STALE) { this._leave(by, f, f.body); this.remote.delete(by); continue; }
@@ -345,6 +347,37 @@ export class Hellfire {
         }
         if (this.left.length) this._updateLeft(dt);
         this.pool?.update(dt);
+    }
+
+    /** An advanced wandless fire mage pays the player's full price; no free NPC fire. */
+    npcStart(v){
+        if(!this.game.authority||this.npcs.size>=8||this.npcs.has(v.id)||v.mana<HELLFIRE.COST+10||v.maxMana<HELLFIRE.MIN_MAX_MANA)return false;
+        v.mana-=HELLFIRE.COST;this.npcs.set(v.id,{v,t:0,send:0});return true;
+    }
+    npcStop(by,why='stop'){
+        if(!this.npcs.delete(by))return;
+        this.onNet({by,s:null,w:why});this.game.net?.send?.({t:'hf',by,s:null,w:why},true);
+    }
+    _updateNpcs(dt){
+        const g=this.game;
+        for(const [by,n] of this.npcs){
+            const v=n.v,foe=v.foe&&g.castleLife?._playerPos(v.foe);n.t+=dt;n.send-=dt;
+            if(g.castleLife?.byId?.get(by)!==v||v.dead||v.stunT>0||v.lev||v.carriedBy||v.vy||!foe||n.t>7||Math.hypot(foe.x-v.x,foe.z-v.z)>35||v.mana<hellfireDrain(dt)){this.npcStop(by);continue;}
+            v.mana-=hellfireDrain(dt);
+            const f=this.remote.get(by);
+            if(f&&n.t>.6&&f.R<HELLFIRE.R_MIN){this.npcStop(by,'water');continue;}
+            const origin=new THREE.Vector3(v.x-Math.sin(v.yaw),v.y+2.7,v.z-Math.cos(v.yaw));
+            const dir=new THREE.Vector3(foe.x,foe.y,foe.z).sub(origin).normalize(),target=new THREE.Vector3();
+            this._aim(origin,dir,Math.min(HELLFIRE.REACH_MAX,origin.distanceTo(new THREE.Vector3(foe.x,foe.y,foe.z))),f?.R||HELLFIRE.R0,target);
+            let R=f?.tR??HELLFIRE.R0;
+            const wet=f?this._wet(f.c,f.R):0;
+            if(wet)R=Math.max(0,R-HELLFIRE.QUENCH*wet*dt);
+            else if(!(f?.dousedT>0))R+=(blazeRadius(n.t,.5)-R)*Math.min(1,dt*1.6);
+            if(f?.dousedT>0)f.dousedT-=dt;
+            // Keep the existing remote fire alive locally every frame. Network updates remain 10 Hz.
+            const s=[target.x,target.y,target.z,R,0,n.t*1.5,1.5,ringRadius(R),origin.x,origin.y,origin.z,v.x,v.y+1.95,v.z,HELLFIRE.RING_W,HELLFIRE.RING_H,5];
+            this.onNet({by,s});if(n.send<=0){n.send=.1;g.net?.send?.({t:'hf',by,s},true);}
+        }
     }
 
     _updateMine(dt) {
@@ -526,7 +559,16 @@ export class Hellfire {
                 if (s.R < HELLFIRE.R_MIN) this.stop('water');
             }
         }
-        for (const f of this.remote.values()) if ((1 - f.k > 0.2 && hit(f.c, f.R)) || (f.k > 0.2 && hit(f.body, f.rr + 1))) any = true;
+        for (const f of this.remote.values()) if ((1 - f.k > 0.2 && hit(f.c, f.R)) || (f.k > 0.2 && hit(f.body, f.rr + 1))) {
+            any = true;
+            if(this.npcs.has(f.by)){
+                if(wind&&wind.npcHellfire===f)continue;
+                if(wind)wind.npcHellfire=f;
+                f.R=f.tR=Math.max(0,f.R-(burst?HELLFIRE.DOUSE_KNOCK:HELLFIRE.DOUSE_RATE*dt));
+                f.dousedT=Math.max(f.dousedT||0,burst?HELLFIRE.DOUSE_HOLD:.3);
+                if(f.R<HELLFIRE.R_MIN)this.npcStop(f.by,wind?'wind':'water');
+            }
+        }
         for (let i = this.left.length - 1; i >= 0; i--) {
             const f = this.left[i];
             if (!hit(f.c, f.R)) continue;
@@ -589,7 +631,8 @@ export class Hellfire {
         if (pushNow) f.pushT = HELLFIRE.PUSH_EVERY;
         const surge = (f.vel ? Math.hypot(f.vel.x, f.vel.z) : 0) > HELLFIRE.SURGE_SPEED || f.surgeT > 0;
         for (const b of bodies) {
-            if (b.kind === 'p' || b.kind === 'b' || b.kind === 'F') continue; // (the fire serpent is this fire itself)
+            if (b.kind === 'p' || b.kind === 'b' || b.kind === 'F') continue;
+            if(b.kind==='v'&&g.castleLife?.byId?.get(b.id)?.element==='fire')continue; // innate immunity includes fear and heat push // (the fire serpent is this fire itself)
             const mid = _c.copy(b.a).add(b.b).multiplyScalar(0.5);
             // how far the body is from the fire's edge (≤ 0: in it), and where the fire is for it
             let gap = Infinity, fx = 0, fz = 0;
@@ -898,6 +941,7 @@ export class Hellfire {
 
     /** Everything ends (the game ends, a new world). */
     clear() {
+        this.npcs.clear();
         this.state = null;
         this.remote.clear();
         this.left.length = 0;
