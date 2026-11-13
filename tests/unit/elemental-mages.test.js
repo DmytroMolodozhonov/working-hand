@@ -40,3 +40,11 @@ test('fire immunity rejects ordinary and infernal fire before damage or armour s
  const v={element:'fire',hp:32};for(const opts of [{fire:true,kind:'Inferno'},{hell:true,kind:'Hellfire'},{fire:true,hell:true,pierce:true,kind:'Lava'}])CastleLife.prototype.hit.call({game:{}},v,100,null,'other',opts);
  assert.equal(v.hp,32);
 });
+test('air lift uses a real paid Leviosa charge, drains the normal wizard hold cost, and releases instead of repeating one pose',()=>{
+ const f=fixture('air'),bolts=[],releases=[];f.g.duel={_addBolt:b=>(bolts.push(b),b)};f.g.sync.duelCast=()=>{};f.g.sync.lev=(...m)=>releases.push(m);
+ f.v.elemental.cycle=3;assert.equal(f.em.airLift(f.v,{x:0,y:2,z:-12}),true);assert.equal(bolts[0].spell,'LevitateDuel');assert.equal(bolts[0].tid,'me');assert.equal(f.v.mode,'airLift');
+ const mana=f.v.mana;f.em.think(f.v,1);assert.equal(mana-f.v.mana,4);f.em.liftedBy(f.v.id,false);f.em.think(f.v,.1);assert.equal(f.v.elemental.liftT,0);assert.ok(releases.some(m=>m[4]===false&&m[6]===f.v.id));assert.equal(f.v.elemental.cycle,4);assert.equal(f.v.elemental.fired,false);
+});
+test('a mana-empty air mage falls rather than receiving a free slow landing',()=>{
+ const f=fixture('air');f.v.fly=true;f.v.y=10;f.v.mana=0;f.em.land(f.v,.1);assert.equal(f.v.fly,false);assert.ok(f.v.vy<0);assert.equal(f.v.y,10);
+});

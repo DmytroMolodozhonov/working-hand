@@ -834,6 +834,19 @@ export class LevitationMaxima {
 
     // ================================================================ host
     /** Existing earth-piece Maxima, driven by a wandless NPC's deliberate lift/transfer/release. */
+    /** An air caster uses the existing Maxima player lift; no earth or new mind-control mechanic. */
+    npcPlayer(v,to){
+        const g=this.game,fp=g.castleLife?._playerPos(to);
+        if(!this.auth||!fp||v.dead||v.mana<LEV_MAX.COST+LEV_MAX.DRAIN*6||Math.hypot(fp.x-v.x,fp.z-v.z)>LEV_MAX.RANGE)return false;
+        if(g.collision?.lineOfSight&&!g.collision.lineOfSight(v.x,v.y+2.7,v.z,fp.x,fp.y,fp.z,.2))return false;
+        v.mana-=LEV_MAX.COST;v.mode='airLift';
+        if(to===g.localId)g.levitation?.liftMe?.(v.id,'right',{mx:true});
+        g.sync?.levMax?.({a:'p',by:v.id,from:v.id,to,side:'right'});
+        g.sound?.spellCast?.('LevitationMaxima',_v1.set(v.x,v.y+2.7,v.z));
+        g.airFx?.gust?.(_v1,_v2.set(fp.x-v.x,fp.y-v.y-2.7,fp.z-v.z).normalize(),1);
+        return true;
+    }
+
     npcEarth(v,foe){
         if(!this.auth||v.mana<LEV_MAX.COST+LEV_MAX.DRAIN*7)return null;
         const data=this.game.terrain?.data;if(!data)return null;

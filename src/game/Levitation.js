@@ -632,7 +632,17 @@ export class Levitation {
      */
     holdPoint(by, side, hold, up, out, off = null, steady = null, dt = 0) {
         const g = this.game;
-        if (by !== g.localId) {
+        const npc=g.castleLife?.byId?.get(by);
+        if(npc){
+            if(npc.dead||npc.stunT>0||npc.lev||npc.vy)return null;
+            if(npc.element==='air'&&this.lifted?.by===by){
+                if(npc.mode!=='airLift')return null;
+                const L=this.lifted,anchor=L.npcAnchor||(L.npcAnchor=L.target.clone());out.copy(anchor);out.y+=Math.min(15,L.age*2.8);
+                const length=out.y-anchor.y+2,hit=g.terrain?.data?.raycast?.(anchor,_h4.set(0,1,0),length);
+                if(hit)out.y=anchor.y+Math.max(0,hit.dist-2);
+                return out;
+            }
+        }else if (by !== g.localId) {
             const r = g.remotes?.get(by);
             if (!r || r.dead || performance.now() - (r.lastUpdate || 0) > LEVITATE.STALE * 1000) return null;
         }
@@ -1029,6 +1039,7 @@ export class Levitation {
         const hold = Math.min(LEVITATE.MAX_HOLD, Math.max(LEVITATE.MIN_HOLD + 0.5, c.distanceTo(_h1)));
         this.lifted = { by, side, hold, target: c.clone(), vel: new THREE.Vector3(), top: g.character.group.position.y, age: 0, mx, off: mx ? aimOffset(_h2, _h3.subVectors(c, _h1)) : null };
         this.fallTop = null;
+        g.elementalMages?.liftedBy?.(by,true);
         g.sync?.lift?.(by, side, hold, true, false, null, mx);
         g.hud.setVoice(`🪶 ${g.playerName?.(by) || 'Волшебник'} поднял вас в воздух! Направьте на него «Protection», чтобы вырваться`, true);
     }
@@ -1063,6 +1074,7 @@ export class Levitation {
         if (!L) return;
         this.lifted = null;
         const g = this.game;
+        g.elementalMages?.liftedBy?.(L.by,false);
         const ch = g.character;
         ch.verticalVelocity = gentle ? 0 : Math.max(-20, L.vel.y * 1.5);
         if (gentle && g.impact) g.impact.gentleUntil = performance.now() + 3000; // (set down: no falling over)
@@ -1151,6 +1163,7 @@ export class Levitation {
     /** A wizard tells everyone: «I am held up by `by`» (or let go / broke free; `r`: why not lifted). */
     onNetLift(m) {
         const g = this.game;
+        if(g.authority&&g.castleLife?.byId?.get(m.by)?.element==='air'){g.elementalMages?.liftedBy?.(m.by,m.on&&!m.r);return;}
         if (m.by !== g.localId || m.mx) return; // («Левиоса Максима» keeps its own count — LevitationMaxima.js)
         if (m.r) { if (m.r === 'levHeld') { this.missed(m.to, 'levHeld'); if (this.miss) this.miss.at = 0; } return; } // (he is held by another already)
         if (m.on) {

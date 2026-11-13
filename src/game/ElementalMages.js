@@ -1,3 +1,6 @@
+import {LEV_MAX} from './LevitationMaxima.js';
+import {HOLD_FATIGUE} from './Levitation.js';
+import {duelRange} from './DuelRange.js';
 import {waveSource} from './WaveSource.js';
 /** Host-owned elemental combat on ordinary CastleLife bodies: shared spell collisions, armour and death. */
 import * as T from 'three';
@@ -24,7 +27,7 @@ export class ElementalMages {
   v.model.setHeldTool('none');
  }
  pay(v,cost){if(v.mana<cost)return false;v.mana-=cost;return true;}
- phase(v,p){v.elemental.phase=p;v.elemental.t=0;v.mode=v.element+p;}
+ phase(v,p){v.elemental.phase=p;v.elemental.t=0;v.elemental.fired=false;v.mode=v.element+p;}
  /** A resident needs nearby real water; only a traveller has a finite portable reservoir. */
  waterSource(v,dt){
   const a=v.elemental,g=this.game;a.scan-=dt;
@@ -61,17 +64,28 @@ export class ElementalMages {
   const m={by:v.id,ev:'launch',id:v.id+':water:'+(++this.seq),o:_o.toArray(),d:_d.toArray(),h:_o.clone().addScaledVector(_d,1.5).toArray(),v:6,a:0,pw:1,tk:'p',tid:v.foe,s:null,npcMode:['','freeze','throw','drown'][a.cycle%4]};
   if(m.npcMode)a.capture=m.id;g.vortex._addFlight(v.id,m);g.sync?.vortex?.(m);g.sound?.spellCast?.('WaterVortex',_o);this.engaged(v);return true;
  }
+ airLift(v,foe){
+  const g=this.game,a=v.elemental;
+  a.liftAck=false;a.liftHeld=false;
+  if(g.levMax?.npcPlayer?.(v,v.foe)){a.liftT=6;a.liftMax=true;v.mode='airLift';this.engaged(v);return true;}
+  a.liftMax=false;if(!g.duel?._addBolt||!this.pay(v,SPELL_COST.Levitation))return false;
+  _o.set(v.x,v.y+2.7,v.z);_d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
+  const b=g.duel._addBolt({id:v.id+':air:'+(++this.seq),by:v.id,spell:'LevitateDuel',side:'right',tk:'p',tid:v.foe,ak:.55,o:_o.clone(),d:_d.clone(),npc:true,rng:duelRange(v.mana+SPELL_COST.Levitation)});
+  g.sync?.duelCast?.(b);g.sound?.spellCast?.('Levitation',_o);v.elemental.liftT=6;v.elemental.liftAck=false;v.elemental.liftHeld=false;v.mode='airLift';this.engaged(v);return true;
+ }
+ liftedBy(by,on){if(!this.game.authority)return;const v=this.game.castleLife?.byId?.get(by);if(v?.element==='air'&&v.elemental){v.elemental.liftAck=true;v.elemental.liftHeld=!!on;}}
+ endLift(v){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id);if(g.levitation?.lifted?.by===v.id)g.levitation.dropMe(false);this.phase(v,'Coil');}
  think(v,dt){
   const g=this.game,L=g.castleLife,a=v.elemental;if(!a)return false;
   a.t+=dt;a.flightCd=Math.max(0,a.flightCd-dt);v.prep=null;v.cardilon=null;v.practice=null;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
   const foe=v.foe?L._playerPos(v.foe):null;
   if(v.element==='water')this.waterSource(v,dt);
-  if(!foe||Math.hypot(foe.x-v.x,foe.z-v.z)>75){v.foe=null;v.fx=0;v.mana=Math.min(v.maxMana,v.mana+dt);if(v.fly)this.land(v,dt);else L._ground(v);v.mode='idle';a.phase='rest';return true;}
+  if(!foe||Math.hypot(foe.x-v.x,foe.z-v.z)>75){if(a.liftT>0)this.endLift(v);v.foe=null;v.fx=0;v.mana=Math.min(v.maxMana,v.mana+dt);if(v.fly)this.land(v,dt);else L._ground(v);v.mode='idle';a.phase='rest';return true;}
   const dx=foe.x-v.x,dz=foe.z-v.z,dist=Math.hypot(dx,dz)||1,want=Math.atan2(-dx,-dz);
   v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*5);
   const threat=g.earthMages?._threat(v);
   if(v.mana<10)a.recover=true;if(a.recover&&v.mana>=Math.max(v.element==='air'?SPELL_COST.Wind:v.element==='water'?SPELL_COST.WaterVortex:SPELL_COST.Inferno,Math.min(v.maxMana,45)))a.recover=false;
-  if(a.recover){v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);if(dist<22)L._steer(v,v.x-dx/dist*9,v.z-dz/dist*9,v.walk*1.5,dt,0);v.yaw=want;v.mode=v.element+'Rest';if(!v.fly)L._ground(v);return true;}
+  if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);if(dist<22)L._steer(v,v.x-dx/dist*9,v.z-dz/dist*9,v.walk*1.5,dt,0);v.yaw=want;v.mode=v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
   if(v.element==='water'){
    if(a.capture){const b=g.vortex?.bubbles?.get(a.capture),f=g.vortex?.flights?.get(a.capture);if(b||f){v.mode=b?.phase==='ice'?'waterPush':'waterGather';if(f&&!b&&!this.pay(v,dt)){g.vortex._endFlight(f,'mana',true);}L._ground(v);return true;}a.capture=null;}
    if(a.guard>0){a.guard-=dt;if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';}
@@ -88,6 +102,7 @@ export class ElementalMages {
    L._ground(v);
   }else if(v.element==='air'){
    v.fx=0;
+   if(a.liftT>0){a.liftT-=dt;const cost=(a.liftMax?LEV_MAX.DRAIN:HOLD_FATIGUE.wizard)+(v.fly?FLIGHT.HOVER_COST:0);if(a.liftT<=0||(a.liftAck&&!a.liftHeld)||!this.pay(v,cost*dt)){this.endLift(v);}else{v.mode='airLift';if(!v.fly&&!v.vy)L._ground(v);return true;}}
    if(!v.fly&&a.flightCd<=0&&(dist<14||threat)&&this.pay(v,SPELL_COST.Flight)){v.fly=true;a.flight=7;a.flightCd=15;}
    if(v.fly){
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
@@ -98,9 +113,9 @@ export class ElementalMages {
    }
    if(a.phase==='rest')this.phase(v,'Coil');
    if(a.phase==='Coil'&&a.t>.7)this.phase(v,'Sweep');
-   if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe))this.cast(v,dist<9?'WindMaxima':'Wind',foe);}
-   if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;this.phase(v,'Coil');}
-   if(!v.fly){v.mode='air'+a.phase;L._ground(v);}
+   if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;this.cast(v,dist<9?'WindMaxima':'Wind',foe);}}
+   if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   if(!v.fly){v.mode='air'+a.phase;if(!v.vy)L._ground(v);}
   }else{
    v.fx=0; // Fire has no shield/dome and never delegates to the ordinary wizard's defence.
    if(a.phase==='rest')this.phase(v,'Chamber');
@@ -121,5 +136,5 @@ export class ElementalMages {
  }
  update(dt){this.guard?.update(dt);}
  dispose(){this.guard?.dispose();}
- land(v,dt){const gy=this.game.collision.groundAt(v.x,v.z,v.y+1);v.y=Math.max(gy,v.y-dt*2);if(v.y<=gy+.05){v.fly=false;v.vy=0;v.y=gy;}}
+ land(v,dt){if(!this.pay(v,FLIGHT.HOVER_COST*dt)){v.fly=false;v.vy=Math.min(v.vy||0,-.5);return;}const gy=this.game.collision.groundAt(v.x,v.z,v.y+1);v.y=Math.max(gy,v.y-dt*2);if(v.y<=gy+.05){v.fly=false;v.vy=0;v.y=gy;}}
 }

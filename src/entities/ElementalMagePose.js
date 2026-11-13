@@ -1,5 +1,5 @@
 /** Original procedural martial choreography: water yields/coils, air turns, fire strikes. */
-export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest'];
+export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest'];
 const S=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
 export function elementalMagePose(m,T,mode,dt,t){
  const e=m.look.element;if(e==='earth'||!mode.startsWith(e))return 0;
@@ -18,6 +18,7 @@ export function elementalMagePose(m,T,mode,dt,t){
   T.aLZ=-1.15;T.aRZ=1.1;T.eL=.5+Math.cos(a)*.3;T.eR=.5-Math.cos(a)*.3;T.earthSpread=.12;
   T.lL=.35+Math.sin(a)*.35;T.lR=-.2-Math.sin(a)*.35;
   if(mode==='airSweep'){const p=S((u-.25)/.4);T.hy=.9-1.8*p;T.aLX=.65+p;T.aRX=1.65-p;T.aLZ=-1.2+.9*p;T.aRZ=.3+1.0*p;T.lR=1.0*Math.sin(Math.min(1,u/1.1)*Math.PI);T.kR=-.3;}
+  if(mode==='airLift'){T.aLX=T.aRX=1.6+Math.sin(Math.min(1,u/2)*Math.PI/2)*1.1;T.eL=T.eR=.4;T.aLZ=-.65;T.aRZ=.65;T.headX=-.25;T.hy=Math.sin(a)*.16;}
   if(mode==='airFlight'){T.hx=-.18;T.aLX=T.aRX=.55;T.aLZ=-1.2;T.aRZ=1.2;T.eL=T.eR=.2;T.lL=.15;T.lR=-.4;T.kL=-.8;T.kR=-.55;}
  }else{
   const kick=mode==='fireKick',p=S((u-.23)/.19)*(1-S((u-.65)/.3));

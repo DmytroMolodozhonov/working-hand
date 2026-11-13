@@ -600,8 +600,8 @@ export class NetSync {
     }
 
     /** «Вингардиум Левиоса» on a living body (k 'z' / 'a' / 'v') or on a wizard (k 'p'): held / let go. */
-    lev(k, id, side, hold, on, gentle = false) {
-        this.net.send({ t: 'lev', by: this.me, k, id, side, h: r3(hold), on: on ? 1 : 0, g: gentle ? 1 : 0 }, true);
+    lev(k, id, side, hold, on, gentle = false, casterId = this.me) {
+        this.net.send({ t: 'lev', by: casterId, k, id, side, h: r3(hold), on: on ? 1 : 0, g: gentle ? 1 : 0 }, true);
     }
 
     /** My body is held up by `by` (or let go / I broke free). */
