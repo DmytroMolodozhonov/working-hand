@@ -22,6 +22,7 @@ import { sharpJerk } from './Jerk.js';
 import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
 import { fallDir } from './Impact.js';
+import { shieldsNow,bounceOffShields } from './ShieldBounce.js';
 import { BlockSwarmFx, swarmColor } from '../fx/GroundVortexFx.js';
 import * as R from './GroundVortexRules.js';
 
@@ -33,6 +34,7 @@ const ease = (u) => u * u * (3 - 2 * u);
 const ARRIVE = 0.8; // s a lifted block takes to fly from its hole into the funnel
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3();
+const _oldP=new THREE.Vector3(),_oldV=new THREE.Vector3(),_sweep=new THREE.Vector3();
 const _o = {}, _t1 = {}, _t2 = {}, _cc = {};
 const _col = new THREE.Color();
 
@@ -496,13 +498,30 @@ export class GroundVortex {
 
     _updateFlights(dt) {
         const g = this.game, data = this.data;
+        const shields=this.flights.length?shieldsNow(g):[];
         for (let i = this.flights.length - 1; i >= 0; i--) {
             const f = this.flights[i];
             f.age += dt;
             f.last.copy(f.pos);
             f.vel.y -= GV.GRAV * dt;
             f.pos.addScaledVector(f.vel, dt);
+            // Intercept at the visible shield surface, before the stone is already inside it.
+            _oldP.copy(f.pos);_oldV.copy(f.vel);
+            const shield=bounceOffShields(shields,f.last,f.pos,f.vel,f.by);
+            if(shield){
+                const npc=g.castleLife?.byId.get(shield.by);
+                const held=shield.by===this.me ? g.combat?._blocked?.(f.last,GV.NAME)!==false : npc&&g.authority ? g.castleLife.wardOff(npc,f.last,GV.NAME,0,true) : true;
+                if(held){f.by=shield.by;f.last.copy(f.pos);}else{f.pos.copy(_oldP);f.vel.copy(_oldV);}
+            }
             let end = null;
+            // A thin water layer / wall must not be skipped at a slow frame rate.
+            const steps=Math.min(128,Math.max(1,Math.ceil(f.last.distanceTo(f.pos)/.3)));
+            for(let j=1;j<=steps&&!end;j++){
+                _sweep.lerpVectors(f.last,f.pos,j/steps);
+                if(data?.get(Math.round(_sweep.x),Math.floor(_sweep.y+1.5),Math.round(_sweep.z))===BLOCK.WATER)end='water';
+                else if(data?.isSolidAt?.(_sweep.x,_sweep.y,_sweep.z))end='wall';
+                if(end)f.pos.copy(_sweep);
+            }
             if (f.age > GV.FLIGHT_LIFE) end = 'time';
             else if (data && data.isSolidAt?.(f.pos.x, f.pos.y, f.pos.z)) end = 'wall';
             else if (data && data.get(Math.round(f.pos.x), Math.floor(f.pos.y + 1.5), Math.round(f.pos.z)) === BLOCK.WATER) end = 'water';

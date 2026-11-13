@@ -1,3 +1,5 @@
+import {waveSurface} from '../fx/WaveSurface.js';
+import {waveSource} from './WaveSource.js';
 /**
  * WaveAttack.js — «Wave Attack» (and «Wave Attack Максима»): a real wave made of the water.
  *
@@ -183,7 +185,7 @@ export function stepWave(w, dt, env) {
             // it swells as it sets off, then curls more and more
             const grow = Math.min(1.15, 0.9 + w.s / 8 * 0.25);
             w.h = F.height * grow * clamp(w.energy, 0, 1);
-            w.curl = Math.PI * (0.25 + 0.5 * Math.min(1, w.s / w.dist));
+            w.curl = Math.PI * (0.32 + 0.55 * Math.min(1, w.s / (w.dist * .65)));
             // a wall or a hill in front: it breaks there
             const fx = w.x + w.dx * 0.9, fz = w.z + w.dz * 0.9;
             const ahead = env.surface(fx, fz);
@@ -289,27 +291,8 @@ export function profile(u, H, curl, out = { s: 0, y: 0, part: 0, k: 0 }) {
 class WaveLook {
     constructor(scene) {
         this.scene = scene;
-        const geo = new THREE.BufferGeometry();
-        this.pos = new Float32Array(NU * NX * 3);
-        this.col = new Float32Array(NU * NX * 3);
-        geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
-        geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
-        const idx = [];
-        for (let j = 0; j < NX - 1; j++) for (let i = 0; i < NU - 1; i++) {
-            const a = j * NU + i, b = a + 1, c = a + NU, d = c + 1;
-            idx.push(a, c, b, b, c, d);
-        }
-        geo.setIndex(idx);
-        this.geo = geo;
-        const mat = createWaterMaterial({ blocks: true });
-        mat.vertexColors = true;
-        mat.color.set(0xffffff);
-        mat.emissive.set(0x05313d);
-        mat.opacity = 0.86;
-        mat.depthWrite = true;
-        mat.side = THREE.DoubleSide;
-        mat.customProgramCacheKey = () => 'water-wave';
-        this.mat = mat;
+        const surface=waveSurface(),geo=surface.geometry,mat=surface.material;
+        this.geo=geo;this.mat=mat;this.waveUniforms=surface.uniforms;
         this.mesh = new THREE.Mesh(geo, mat);
         this.mesh.frustumCulled = false;
         this.mesh.renderOrder = 2;
@@ -336,45 +319,14 @@ class WaveLook {
     /** Draw wave w now. bases[j]: the ground / water top under column j. */
     draw(w, bases, time) {
         const F = w.F, half = F.width / 2;
-        const sx = -w.dz, sz = w.dx; // (to the side)
-        const pr = { s: 0, y: 0, part: 0, k: 0 };
         const breaking = w.phase === 'break' ? clamp(w.t / WAVE.BREAK, 0, 1) : w.phase === 'fall' ? clamp(w.t / WAVE.FALL, 0, 1) : 0;
         const show = w.h > 0.02 && w.phase !== 'drain' && w.phase !== 'gone';
         this.mesh.visible = show;
         if (show) {
-            for (let j = 0; j < NX; j++) {
-                const a = -1 + 2 * j / (NX - 1);
-                const taper = Math.sqrt(Math.max(0, 1 - Math.pow(Math.abs(a), 5)));
-                const wob = 1 + 0.07 * Math.sin(3.1 * a + time * 2.1) + 0.04 * Math.sin(7.3 * a - time * 3.3);
-                const H = Math.max(0.02, w.h * (0.18 + 0.82 * taper) * wob);
-                const curl = w.curl * (0.35 + 0.65 * taper);
-                const lag = -0.22 * half * a * a; // (the ends lag behind the middle)
-                const cx = w.x + sx * a * half + w.dx * lag, cz = w.z + sz * a * half + w.dz * lag;
-                const by = bases[j] - (w.phase === 'rise' || w.phase === 'aim' ? 0.35 : 0.15); // (it comes out of the water)
-                for (let i = 0; i < NU; i++) {
-                    profile(i / (NU - 1), H, curl, pr);
-                    const n = (j * NU + i) * 3;
-                    this.pos[n] = cx + w.dx * pr.s;
-                    this.pos[n + 1] = by + pr.y;
-                    this.pos[n + 2] = cz + w.dz * pr.s;
-                    // the colour: deep and dark low down, clearer up the face, foam on the crest and the lip
-                    const v = clamp(pr.y / H, 0, 1);
-                    if (v < 0.6) _c.copy(DEEP).lerp(BODY, v / 0.6); else _c.copy(BODY).lerp(LIGHT, (v - 0.6) / 0.4);
-                    const noise = 0.5 + 0.5 * Math.sin(a * 23.0 + i * 1.7 + time * 4.0) * Math.sin(a * 11.0 - time * 2.6 + i * 0.6);
-                    let foam = 0;
-                    if (pr.part === 1) foam = clamp((pr.k - 0.15) * 1.6, 0, 1) * (0.55 + 0.45 * noise) * clamp(curl / (0.3 * Math.PI), 0.25, 1);
-                    else if (pr.part === 2) foam = (pr.k < 0.35 ? 0.85 : pr.k > 0.8 ? 0.7 : 0.25) * (0.6 + 0.4 * noise) * clamp(curl / (0.4 * Math.PI), 0, 1);
-                    else if (pr.k > 0.85) foam = 0.35 * noise;
-                    foam = Math.max(foam, breaking * (0.5 + 0.5 * noise));
-                    _c.lerp(FOAM, clamp(foam, 0, 1));
-                    this.col[n] = _c.r; this.col[n + 1] = _c.g; this.col[n + 2] = _c.b;
-                }
-            }
-            this.geo.attributes.position.needsUpdate = true;
-            this.geo.attributes.color.needsUpdate = true;
-            this.geo.computeVertexNormals();
-            this.mat.opacity = 0.86 * (w.phase === 'fall' ? 1 - 0.5 * breaking : 1);
-            this.mat.userData.uniforms.uTime.value = time;
+            const u=this.waveUniforms;u.uWave.value.set(w.h,w.curl,time,breaking);u.uWidth.value=F.width;u.uPlace.value.set(w.x,w.z,w.dx,w.dz);
+            const dip=w.phase==='rise'||w.phase==='aim'?.35:.15;
+            for(let j=0;j<NX;j++)u.uBases.value[j]=bases[j]-dip;
+            this.mat.opacity=.9*(w.phase==='fall'?1-.5*breaking:1);
         }
         // the river drawn into the wave while it rises and stands
         const pull = w.phase === 'rise' ? clamp(w.t / WAVE.RISE, 0, 1) : w.phase === 'aim' ? 1 : w.phase === 'roll' ? Math.max(0, 1 - w.t * 1.5) : w.phase === 'fall' ? 1 - breaking : 0;
@@ -396,7 +348,7 @@ class WaveLook {
 
     dispose() {
         this.scene.remove(this.mesh, this.dip, ...this.rings);
-        this.geo.dispose(); this.mat.dispose();
+        this.mat.dispose();
         this.dipGeo.dispose(); this.dipMat.dispose();
         this.ringGeo.dispose();
         for (const m of this.rings) m.material.dispose();
@@ -504,6 +456,8 @@ class Spray {
         this.dropMat.userData.uniforms.uTime.value += dt;
     }
 
+    sampleModel(){const s=waveSurface();const m=new THREE.Mesh(s.geometry,s.material);m.userData.shared=true;return m;}
+
     get busy() { return this.d.length + this.f.length + this.p.length > 0; }
 
     dispose() {
@@ -548,6 +502,7 @@ export class WaveAttacks {
      */
     raise(name, side, src, look, handDir = null) {
         const g = this.game;
+        if(!waveSource(g.world?.terrain?.data,src))return null;
         const s = this.surface(src.x, src.z);
         const o = { x: src.x, y: s.water ? s.y : src.y, z: src.z };
         const w = newWave(name, g.localId, o, look.x, look.z);
@@ -562,6 +517,15 @@ export class WaveAttacks {
         return w;
     }
 
+    npcRaise(v,name,source,foe){
+        const g=this.game,water=waveSource(g.world?.terrain?.data,source);
+        if(!g.authority||!water)return null;
+        const w=newWave(name,v.id,water,foe.x-water.x,foe.z-water.z);
+        w.npc=true;w.npcAim={x:foe.x,z:foe.z};this._add(w);
+        g.sync?.spell?.(name,new THREE.Vector3(w.o.x,w.o.y,w.o.z),new THREE.Vector3(w.dx,0,w.dz),{w:'r'},v.id);
+        g.sound?.playWaterRise?.();return w;
+    }
+
     /**
      * A wave step from the network (or the old one-shot cast: no `ph` — it rolls at once from o
      * along d, as far as d is long).
@@ -570,6 +534,7 @@ export class WaveAttacks {
         const step = ph && typeof ph === 'object' ? ph.w : null;
         let w = this.list.find((x) => x.by === by && !x.mine && (x.phase === 'rise' || x.phase === 'aim'));
         if (step === 'r') {
+            if(this.game.authority&&!waveSource(this.game.world?.terrain?.data,o))return;
             if (w) this._remove(w);
             this._add(newWave(name, by, o, d.x, d.z));
             return;
@@ -578,6 +543,7 @@ export class WaveAttacks {
         if (step === 'x') { if (w) this._fall(w); return; }
         // 'g' (or the old one-shot): it rolls now
         if (!w) {
+            if(this.game.authority&&!waveSource(this.game.world?.terrain?.data,o))return;
             w = newWave(name, by, o, d.x, d.z, 'aim');
             w.h = w.F.height;
             if (!step) w.dist = Math.max(4, Math.min(40, Math.hypot(d.x, d.z)));
@@ -646,6 +612,11 @@ export class WaveAttacks {
         if (!this.list.length && !this.spray?.busy) return;
         dt = Math.min(dt, 0.05);
         this.time += dt;
+        if(this.game.authority)for(const w of this.list)if(w.npc&&(w.phase==='rise'||w.phase==='aim')){
+            const v=this.game.castleLife?.byId.get(w.by);
+            if(!v||v.dead||v.stunT>0||v.lev||!v.foe){this._fall(w);this.game.sync?.spell?.(w.name,new THREE.Vector3(w.o.x,w.o.y,w.o.z),new THREE.Vector3(w.dx,0,w.dz),{w:'x'},w.by);}
+            else if(w.phase==='aim'&&w.t>.7){const o=new THREE.Vector3(w.x,w.base,w.z),d=new THREE.Vector3(w.dx,0,w.dz);this._go(w,o,d);this.game.sync?.spell?.(w.name,o,d,{w:'g'},w.by);}
+        }
         const g = this.game;
         this.spray?.flow.begin(dt);
         for (const w of [...this.list]) {

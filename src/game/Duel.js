@@ -112,8 +112,8 @@ export const DUEL_SPELLS = {
     LiquidationMaximaDuel: { color: 0xb68cff, name: 'Liquidation Maxima (дуэльный)', speed: 15, core: 0.06, glow: 0.27, coreColor: 0xffffff, jag: 1.5 },
     // «Джолт»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
     //  (as fast as the other duel charges: there must be time to answer it — or it to answer — and meet: a duel)
-    Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 15.5, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
-    JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 15.5, core: 0.026, glow: 0.11, coreColor: 0xffffff },
+    Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 15.5, core: 0.03, glow: 0.12, coreColor: 0xeaf6ff },
+    JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 15.5, core: 0.045, glow: 0.18, coreColor: 0xffffff },
     // «Айс Максима» (= «Frozen Maxima», «Ice Maxima»): a thicker, brighter frosty beam (StrongMagic.iceCreature)
     IceDuelMaxima: { color: 0x6fc8ff, name: 'Айс Максима', speed: 17, core: 0.05, glow: 0.22, coreColor: 0xffffff },
     // the strong duel spells (StrongSpells.js): the same flying charge — another light, another sound, another harm

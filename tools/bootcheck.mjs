@@ -11,8 +11,7 @@
  *   - звуки: every synthesized sound's length, channels, rate — in all three the same; the warm start's samples ARE the cold
  *     start's (bit for bit: what was written is what is read);
  *   - иконки: the pixels of every slot picture made on the loading screen — warm = cold;
- *   - мир: the blocks of the chunks round the start and the hero's place, the inventory — all three the same (the cache never
- *     holds the land, a save or the network: this proves it is untouched).
+ *   - мир: the blocks of the chunks round the start and the hero's place, the inventory — all three the same (the Creative template holds only pristine chunks and their mesh, never a save or the network: this proves the result is identical).
  * A difference in a kind → take it out of BOOT.KINDS (src/core/BootCache.js) until it is fixed; --check fails.
  */
 import fs from 'node:fs';

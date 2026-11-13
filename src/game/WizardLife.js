@@ -502,7 +502,7 @@ export class WizardLife {
             if (v.savior == null && !v.element) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
             v.castCd -= dt; v.domeCd -= dt; v.windCd -= dt; v.blinkCd -= dt;
         }
-        if (v.element) return this.game.earthMages?.think(v,dt) ?? true;
+        if (v.element) return (v.element==='earth'?this.game.earthMages?.think(v,dt):this.game.elementalMages?.think(v,dt)) ?? true;
         if (v.practice) {
             v.practice.t -= dt;
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;

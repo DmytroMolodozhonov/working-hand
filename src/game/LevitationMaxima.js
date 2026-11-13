@@ -833,6 +833,36 @@ export class LevitationMaxima {
     }
 
     // ================================================================ host
+    /** Existing earth-piece Maxima, driven by a wandless NPC's deliberate lift/transfer/release. */
+    npcEarth(v,foe){
+        if(!this.auth||v.mana<LEV_MAX.COST+LEV_MAX.DRAIN*7)return null;
+        const data=this.game.terrain?.data;if(!data)return null;
+        const dx=foe.x-v.x,dz=foe.z-v.z,len=Math.hypot(dx,dz)||1;
+        for(const side of [1,-1]){
+            const x=Math.round(foe.x+dz/len*4*side),z=Math.round(foe.z-dx/len*4*side);
+            if(data.landMade&&!data.landMade(x,z))continue;
+            const Lc=data.floorBelow(x,z,Math.floor(foe.y+2));
+            if(this.game.wards?.forbids?.({x:v.x,y:v.y+2,z:v.z},{x,y:Lc-1,z}))continue;
+            const id=v.id+':slab:'+(this._npcSeq=(this._npcSeq||0)+1);
+            if(!this.begin(id,v.id,'right',{k:'earth',c:[x,Lc,z]}))continue;
+            const L=this.lifts.get(id);L.npc={caster:v.id,aim:new THREE.Vector3(foe.x,foe.y+9,foe.z),time:0};
+            v.mana-=LEV_MAX.COST;return id;
+        }return null;
+    }
+    _npcEarthStep(L,dt){
+        const n=L.npc,v=this.game.castleLife?.byId.get(n.caster);
+        if(!v||v.dead||v.stunT>0||v.lev||v.vy||v.mana<LEV_MAX.DRAIN*dt){this.end(L.id,false);return;}
+        v.mana-=LEV_MAX.DRAIN*dt;n.time+=dt;
+        if(L.phase==='loosen'){
+            L.loose=Math.min(1,n.time/2.3);L.sway.x=Math.sin(n.time*9)*.04;L.pos.y=L.base.y+L.loose*.35;
+            if(n.time>=2.3){this._tearOut(L);n.time=0;}return;
+        }
+        const up=Math.min(1,n.time/1.2),across=Math.max(0,Math.min(1,(n.time-1.2)/1.5)),k=across*across*(3-2*across);
+        L.pos.set(L.base.x+(n.aim.x-L.base.x)*k,L.base.y+(n.aim.y-L.base.y)*(up*up*(3-2*up)),L.base.z+(n.aim.z-L.base.z)*k);
+        L.top=Math.max(L.top||L.pos.y,L.pos.y);
+        if(n.time>=3.2)this.end(L.id,false);
+    }
+
     /** (host) A caster's Maxima begins: lift what it is pointed at (or say no). */
     begin(id, by, side, desc) {
         const g = this.game;
@@ -1286,6 +1316,7 @@ export class LevitationMaxima {
     _carryBig(L, dt) {
         const g = this.game;
         const data = g.world?.terrain?.data || g.terrain?.data;
+        if(L.npc&&(L.phase==='loosen'||L.phase==='carry')){this._npcEarthStep(L,dt);return;}
         if (L.phase === 'loosen') {
             // only the wand works it loose: rocked to and fro and pulled up, like a tooth
             const now = this._handRise(L);
@@ -1631,8 +1662,11 @@ export class LevitationMaxima {
         const me = g.character?.group?.position;
         // (on the ship's own deck one is not under it)
         if (me && !g.isDeadLocal && !(ship && g.ships?.me?.ship === ship) && under({ x: me.x, y: me.y - 1.95, z: me.z })) {
+            if(g.combat?.blastProof?.())g.hud?.setVoice?.('🛡️ Купол выдержал падающую глыбу',true);
+            else {
             if (g.combat?.enabled) g.combat.damage(dmg, by, 'crush'); else g.damageLocalPlayer?.(dmg);
             g.hud?.setVoice?.(`${kind === 'tree' ? '🌳 На вас упало дерево' : kind === 'ship' ? '⛵ На вас упал корабль' : kind === 'wall' ? '🧱 На вас рухнул кусок стены' : kind === 'earth' ? '🪨 На вас упала глыба земли' : '🏚️ На вас рухнул дом'}: −${dmg}`, true);
+            }
         }
         if (!this.auth) return;
         const c = new THREE.Vector3((b.x0 + b.x1) / 2, b.y0 - 1, (b.z0 + b.z1) / 2);
@@ -1819,7 +1853,7 @@ export class LevitationMaxima {
                 if (L.bodies.length) this._carryBodies(L, dt);
                 if (L.members.length) for (let i = L.members.length - 1; i >= 0; i--) if (L.members[i].c.lev?.mx !== L.id) L.members.splice(i, 1);
                 // the caster gone: what it held falls
-                if (L.by !== g.localId && !g.remotes?.has(L.by) && L.phase !== 'fall' && L.phase !== 'lower' && L.phase !== 'settle') this.end(L.id, false);
+                if (L.by !== g.localId && !g.remotes?.has(L.by) && !L.npc && L.phase !== 'fall' && L.phase !== 'lower' && L.phase !== 'settle') this.end(L.id, false);
                 if (L.kind === 'ship') this._carryShip(L, dt);
                 else if (L.kind === 'group') { if (!L.members.length && !L.bodies.length && !(L.desc.np > 0) && L.t > 0.5) this._finish(L); }
                 else if (!L.gone) this._carryBig(L, dt);

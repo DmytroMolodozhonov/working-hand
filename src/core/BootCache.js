@@ -3,7 +3,7 @@
  * (the author: «игра запускается постоянно, у меня SSD — почему бы не хранить готовое между запусками»).
  *
  * Only for results that are expensive AND fully decided by their inputs (the synthesized sounds, the detailed hero's
- * shapes, the slots' pictures…). Never for anything of the world's state, a save, the network or the land.
+ * shapes, the slots' pictures…). Never for a save, the network or live world state. Creative may keep pristine generated chunk templates only.
  *
  * Safety (the author: «НЕ СЛОМАТЬ ИГРУ»):
  *   - the key: the kind + a hash of every input + the game's build (BUILD: a hash of all the game's files, from the server)
@@ -29,7 +29,7 @@ export const BOOT = {
     MAGIC: 0x424e535a, // ('ZNSB')
     // (what may be kept: a kind not here is never read nor written — a kind that tools/bootcheck.mjs finds different with the
     // cache and without is taken out of this list until it is fixed)
-    KINDS: ['sound', 'icon'],
+    KINDS: ['sound', 'icon', 'terrain'],
 };
 
 // ------------------------------------------------------------------ hashes

@@ -19,7 +19,7 @@
  */
 
 import { createRng } from '../core/math.js';
-import { SPELL_COST } from './Combat.js';
+import { SPELL_COST } from './SpellCosts.js';
 
 export const SAVIOR = {
     COOLDOWN_S: 600, // s: a player is not visited again so soon (and only one Saviour in the world at a time)

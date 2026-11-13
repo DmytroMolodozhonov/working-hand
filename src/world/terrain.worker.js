@@ -1,3 +1,4 @@
+import {BootCache,CacheStore,cacheKey} from '../core/BootCache.js';
 /**
  * terrain.worker.js — makes terrain chunks away from the drawing (TerrainView.js).
  *
@@ -36,12 +37,17 @@ const takeShared = (m) => {
     return (m.use || []).map((k) => shared.get(k)).filter(Boolean);
 };
 
-self.onmessage = (e) => {
+let templateCache=null,templateRecipe=null,templatePlanets=null;
+let messageTail=Promise.resolve();
+self.onmessage=e=>{const job=messageTail.then(()=>handleMessage(e));messageTail=job.catch(error=>{setTimeout(()=>{throw error;},0);});return job;};
+async function handleMessage(e){
     const m = e.data;
     if (m.type === 'init') {
         data = new TerrainData();
         data.generate(m.opts);
         data.skipSeaTop = !!m.skipSeaTop;
+        templateRecipe={opts:m.opts,skipSeaTop:!!m.skipSeaTop};templatePlanets=null;
+        templateCache=m.cache&&m.opts.test&&CacheStore.available()?new BootCache({store:new CacheStore('f'+m.cache.format),build:m.cache.build,kinds:m.cache.kinds}):null;
         return;
     }
     if (m.type === 'ghostOn' && data?.ghost) {
@@ -63,7 +69,7 @@ self.onmessage = (e) => {
     }
     if (m.type === 'planets' && data) {
         // the planets changed (made, terraformed…: Planets.js) — their ground is made by the new recipe
-        data.setPlanets(m.s);
+        data.setPlanets(m.s);templatePlanets=m.s;
         return;
     }
     if (m.type === 'site' && data && data.castles) {
@@ -116,6 +122,19 @@ self.onmessage = (e) => {
     }
     if (m.type !== 'build' || !data) return;
     const t0 = performance.now();
+    const ownData=data;
+    const templateKey=templateCache&&Math.abs(m.cx)<=8&&Math.abs(m.cz)<=8?cacheKey('terrain',{...templateRecipe,cx:m.cx,cz:m.cz,planets:templatePlanets,ghost:!!data.ghost?.on}):null;
+    const kept=templateKey?await templateCache.getTree('terrain',templateKey):null;
+    if(data!==ownData)return;
+    if(kept?.chunk&&kept?.arrays?.land&&kept?.arrays?.water){
+        // Decoded views share one record buffer. Give simulation and transferable mesh independent buffers.
+        const copyViews=o=>{const c={...o};for(const k of Object.keys(c))if(ArrayBuffer.isView(c[k]))c[k]=c[k].slice();return c;};
+        const chunk=copyViews(kept.chunk),arrays={land:copyViews(kept.arrays.land),water:copyViews(kept.arrays.water)};
+        data.chunks.set(chunkKey(m.cx,m.cz),chunk);data._last=null;
+        const transfer=[];for(const k of ['land','water'])for(const a of [arrays[k].positions,arrays[k].normals,arrays[k].colors,arrays[k].indices,arrays[k].patterns,arrays[k].skies,arrays[k].wet])transfer.push(a.buffer);
+        self.postMessage({type:'built',id:m.id,key:m.key,cx:m.cx,cz:m.cz,arrays,chunk,ms:performance.now()-t0,template:true},transfer);
+        pruneChunks(m);return;
+    }
     const arrays = data.buildChunkArrays(m.cx, m.cz);
     const c = data.chunk(m.cx, m.cz);
     const chunk = { ...c }; // (its typed arrays are copied by postMessage: this copy keeps its own for the neighbours)
@@ -128,14 +147,15 @@ self.onmessage = (e) => {
         bounds(b);
         for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies, b.wet]) transfer.push(a.buffer);
     }
+    if(templateKey)void templateCache.putTree('terrain',templateKey,{arrays,chunk});
     self.postMessage({ type: 'built', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, chunk, ms: performance.now() - t0 }, transfer);
-    // forget the chunks far from where the player is now, then the oldest
-    if (data.chunks.size > KEEP) {
-        data.evictFar(m.fcx, m.fcz, m.R + 2);
-        for (const key of data.chunks.keys()) {
-            if (data.chunks.size <= KEEP) break;
-            data.chunks.delete(key);
-        }
-        data._last = null;
+    pruneChunks(m);
+}
+function pruneChunks(m){
+    // Same bound on both cached and generated chunks.
+    if(data.chunks.size>KEEP){
+        data.evictFar(m.fcx,m.fcz,m.R+2);
+        for(const key of data.chunks.keys()){if(data.chunks.size<=KEEP)break;data.chunks.delete(key);}
+        data._last=null;
     }
-};
+}

@@ -1,3 +1,5 @@
+import { featherSpeed } from './Featherfall.js';
+import { fireFactor,FIRE_OK,SERPENT_KINDS } from './ResistRules.js';
 import { deathImpulse, magicalImpactKind } from './DeathImpulse.js';
 /**
  * CastleLife.js — the people of the castles.
@@ -490,6 +492,7 @@ export class CastleLife {
         if (look.unarmored || (e.role === 'advisor' && !look.magicChest)) { v.armor = 0; v.maxArmor = 0; v.magicPieces = null; v.magicSet = false; v.stripped = true; } // (a wizard's ward is no steel: it stays)
         if (WIZ[e.role]) this.wizards.init(v);
         this.game.earthMages?.init(v);
+        this.game.elementalMages?.init(v);
         npcWorn(v); // (real pieces by his role — the player's armour; bars = their points)
         v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
         v.group.rotation.y = v.yaw;
@@ -1364,6 +1367,7 @@ export class CastleLife {
     _ground(v) {
         const c = this.game.collision;
         const gy = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY(v.x, v.z);
+        if(v.fly&&v.element==='air')return; // Elemental flight owns altitude and pays its own continuous cost.
         if (v.fly && (v.savior != null || v.knowsFlight)) { v.y += (gy + SAVIOR_FLY_H - v.y) * 0.1; return; } // Only wizards who know flight may hover.
         if (v.fly) { v.fly = false; v.vy = -0.01; return; }
         v.y += (gy - v.y) * (gy > v.y ? 1 : 0.5);
@@ -1433,7 +1437,8 @@ export class CastleLife {
     /** Thrown up / let go in the air: flies on with its swing and falls. */
     _fallStep(v, dt) {
         const g = this.game;
-        v.y += v.vy * dt; v.vy -= 22 * dt;
+        this.game.elementalMages?.brake(v,dt);
+        v.y += v.vy * dt; v.vy=v.featherFall?featherSpeed(v.vy,dt):v.vy-22*dt;
         if (v.vx || v.vz) {
             // a wall (or a bed, a chest, a cupboard) stops a flying body (it does not go through: it strikes it — Levitation counts the blow);
             // in steps of a third of a metre: at 60 m/s one frame is two metres — a single test at the end would skip a wall
@@ -1456,12 +1461,12 @@ export class CastleLife {
             const fy = v.dead ? w.surface - 0.3 : w.surface - SWIMMERS.person.float;
             if (v.y <= fy) {
                 if (v.vy < -3) this._splash(v, w.surface, true);
-                v.y = fy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false;
+                v.y = fy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false; v.featherFall=false;
                 return;
             }
         }
         const gy = g.collision.standAt ? g.collision.standAt(v.x, v.z, v.y + 1.1) : g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z); // (a bed, a chest under it: it lands ON it)
-        if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false; }
+        if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false; v.featherFall=false; }
     }
 
     /** Deep water where the body is (off its feet), or null. */
@@ -2910,6 +2915,9 @@ export class CastleLife {
     /** Someone hit a villager (weapons, fists, spells). */
     hit(v, dmg, dir, by, opts = {}) {
         if (!v || v.dead) return;
+        const fire=opts.fire||opts.hell||FIRE_OK.has(opts.kind)||SERPENT_KINDS.has(opts.kind)||opts.kind==='Hellfire'||opts.kind==='Lava';
+        if(fire&&v.element==='fire')return;
+        if(fire&&v.gifts?.resist?.f){dmg*=fireFactor(opts.kind||(opts.hell?'Hellfire':'fire'));if(!(dmg>0))return;}
         if (v.entry?.dummy || v.schoolSafe || (v.cs?.def?.school && this.game.school?.calm)) { this._flash(v); this.game.school?.onHit?.(v, by); return; } // (the school's training dummy — a magic construct; a pupil in a lesson's duel: no harm, nobody minds — School.js)
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
@@ -3933,7 +3941,7 @@ export class CastleLife {
         if (this.auth && by) this.startleAround(p, radius, by); // (the ones near: startled — Startle.js)
     }
 
-    hitRay(o, d, len, width, dmg, by) {
+    hitRay(o, d, len, width, dmg, by, opts = {}) {
         let any = false;
         const near = this.auth && this._isPlayer(by);
         for (const v of [...this.byId.values()]) {
@@ -3942,7 +3950,7 @@ export class CastleLife {
             const along = to.dot(d);
             if (along < 0 || along > len) continue;
             const off = to.addScaledVector(d, -along).length();
-            if (off < width + 1.2) { this.hit(v, dmg, d.clone(), by, { spell: true }); any = true; }
+            if (off < width + 1.2) { this.hit(v, dmg, d.clone(), by, { spell: true, ...opts }); any = true; }
             else if (near && off < width + 1.2 + STARTLE.RAY_R) this.startle(v, by, o); // (the ray went right by him)
         }
         return any;

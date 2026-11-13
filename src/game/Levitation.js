@@ -979,7 +979,7 @@ export class Levitation {
         const g = this.game, ch = g.character, W = this.myWatch, L = ch.landing, now = performance.now();
         if (L && L.at > W.since) {
             this.myWatch = null;
-            if (ch.swimY != null || now < (g.impact?.gentleUntil || 0)) return;
+            if (L.soft || ch.swimY != null || now < (g.impact?.gentleUntil || 0)) return;
             const d = fallDamage(L.drop - (W.slack || 0));
             if (!d) return;
             if (g.combat.enabled) g.combat.damage(d, W.by, 'fall');
@@ -1090,6 +1090,7 @@ export class Levitation {
         const hWas = Math.hypot(was.x, was.z), hNow = Math.hypot(vel.x, vel.z);
         const wall = F.t > 0.1 && hWas >= THROW.WALL_MIN && hNow < hWas * THROW.WALL_DROP && !ch.onGround;
         if (!wall && !(F.t > 0.1 && ch.onGround)) { F.vel.copy(vel); return; }
+        if(!wall&&ch.landing?.soft){this.myFly=null;return;}
         const speed = wall ? hWas : Math.max(was.length(), vel.length());
         this.myFly = null;
         if (speed < THROW.KNOCK_V) return;
@@ -1108,7 +1109,7 @@ export class Levitation {
         const ch = g.character;
         if (ch.swimY != null) { this.fallTop = null; return; }
         if (!ch.onGround) return;
-        const d = fallDamage(this.fallTop - ch.group.position.y);
+        const d = ch.landing?.soft?0:fallDamage(this.fallTop - ch.group.position.y);
         this.fallTop = null;
         if (!d) return;
         if (g.combat.enabled) g.combat.damage(d, this.fallBy, 'fall');

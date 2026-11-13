@@ -37,6 +37,7 @@ const _qId = new THREE.Quaternion();
 import { DetailedHand } from './DetailedHand.js';
 import { stumpEnd } from './LimbSurgery.js';
 import { KD } from '../game/Impact.js';
+import { featherSpeed, FEATHER } from '../game/Featherfall.js';
 import { G, JUMP_ASSIST, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
 import { ArmPump } from '../game/ArmPump.js';
 import { setEyes } from './ImperiusEyes.js';
@@ -963,7 +964,8 @@ export class VoxelCharacter {
             } else if (inAir(y, targetY, this.isCrouching, this.jumpAir, this.verticalVelocity)) {
                 // Falling into a crater / off a ledge (or up in a jump, or thrown up: «Up», a vortex) — the hero's gravity
                 this.airTop = Math.max(this.airTop ?? y, y);
-                this.verticalVelocity -= G * this.gravityK * dt;
+                if(this.slowFall&&this.verticalVelocity<0)this.verticalVelocity=featherSpeed(this.verticalVelocity,dt);
+                else this.verticalVelocity -= G * this.gravityK * dt;
                 let ny = y + this.verticalVelocity * dt;
                 // (thrown up under a cave roof / a ceiling: the head stops at the rock, never in it)
                 if (collision?.ceilingAt) {
@@ -975,14 +977,15 @@ export class VoxelCharacter {
                 if (this.onGround) {
                     // (how far it fell and how fast it hit the ground: a high fall knocks over — Knockdown.js)
                     // (the drop as it would hurt on Earth: a long slow fall on the Moon is a soft one)
-                    this.landing = { drop: (this.airTop - this.group.position.y) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(), jump: this.jumpAir };
+                    const soft=!!this.slowFall&&-this.verticalVelocity<=FEATHER.SAFE;
+                    this.landing = { drop: soft?0:(this.airTop - this.group.position.y) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(), jump: this.jumpAir, ...(soft?{soft:true}:{}) };
                     this.jumpAir = false;
                     this.airTop = null;
                     this.verticalVelocity = 0;
                 }
             } else {
                 // (the last bit of a fall is eased onto the ground here: it lands now)
-                if (this.airTop != null) this.landing = { drop: (this.airTop - targetY) * this.gravityK, speed: -this.verticalVelocity, at: performance.now() };
+                if (this.airTop != null) {const soft=!!this.slowFall&&-this.verticalVelocity<=FEATHER.SAFE;this.landing = { drop: soft?0:(this.airTop - targetY) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(),...(soft?{soft:true}:{}) };}
                 this.verticalVelocity = 0;
                 this.airTop = null;
                 this.onGround = true;

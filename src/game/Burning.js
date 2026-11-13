@@ -149,6 +149,8 @@ export class Burning {
         if (!BURNS.has(kind)) return false;
         if (kind === 'p') { if (id !== g.localId && id !== 'local') return false; return this._igniteMe(by, time, lava); }
         if (!g.authority) return false;
+        const npc=kind==='v'?g.castleLife?.byId?.get(id):null;
+        if(npc&&(npc.element==='fire'||npc.gifts?.resist?.f))return false;
         const k = key(kind, id);
         let b = this.list.get(k);
         if (!b) {

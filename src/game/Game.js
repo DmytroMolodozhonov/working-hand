@@ -1,3 +1,6 @@
+import {waveSource} from './WaveSource.js';
+import { ElementalMages } from './ElementalMages.js';
+import { ELEMENTAL_TESTS,elementalTestSite } from './ElementalTestSites.js';
 import {EARTH_SETTLEMENTS_FROM_GEN} from '../world/Terrain.js';
 import { EarthMages } from './EarthMages.js';
 import { earthSite,earthLook } from './EarthMagicRules.js';
@@ -262,6 +265,8 @@ import { Bridge } from './Bridge.js';
 import { Breakthrough } from './Breakthrough.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
+import { AirDistortion } from '../fx/AirDistortion.js';
+import { Featherfall } from './Featherfall.js';
 import { WaterWalk } from './WaterWalk.js';
 import { WaterPart } from './WaterPart.js';
 import { Fishing } from './Fishing.js';
@@ -659,10 +664,16 @@ export class Game {
             wardClip: (o,d,len) => { const w=this.wards?.clipRay(o,d,len)??len; return this.earthMages?.clipRay(o,d,w)??w; },
             wardHit: (a, b) => this.wards?.segmentHit(a, b) || null,
         doorsOnWay: () => this.doors,
+            airGust:(o,d,power,ring)=>this.airFx?.gust(o,d,power,ring),
             earthOnWay: (a,b,by) => this.earthMages?.segmentHit(a,b,by),
             earthTake: (hit,name) => this.earthMages?.take(hit,name), // (an orb's step is cut against the doors' leaves: Doors.segmentHit)
             shielded: (from, to) => !!this.wards?.shields(from, to),
-            drain: (casterId, mana, dt) => (casterId === this.localId || casterId === 'local' ? this.combat.drain(mana, dt) : true),
+            drain: (casterId, mana, dt) => {
+                if(casterId === this.localId || casterId === 'local')return this.combat.drain(mana,dt);
+                const v=this.castleLife?.byId.get(casterId);
+                if(this.authority&&v?.wizard){if(v.dead||v.mana<mana)return false;v.mana-=mana;}
+                return true;
+            },
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
             doors: (vAt, from) => this.doors?.blow(vAt, from), // (a gust / a burst swings the doors' leaves: Doors.blow)
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
@@ -756,6 +767,7 @@ export class Game {
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this);
+        this.elementalMages = new ElementalMages(this);
         this.earthMages = new EarthMages(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
         this.hellGate = new HellGate(this); // the gates of hell: «Pentagranium Infernum», the passage down and back (HellGate.js; rules — HellRules.js, the map — HellMap.js)
         this.hellRealm = new HellRealm(this); // hell's sky, fog, light, lava, sparks and sound — where the hero is (HellRealm.js)
@@ -772,6 +784,8 @@ export class Game {
         this.fishing = new Fishing(this); // the fishing rod in the hand: the cast, the bite, the fight (Fishing.js)
         this.bodyFinder = new BodyFinder(this); // «Reperio»: the way to my own last body — beads of light, the map's line, a pillar over it (BodyFinder.js)
         this.fishPier = new FishPier(this); // the fishermen's mini-pier of the Creative test ground and its free rods (FishPier.js)
+        this.airFx=new AirDistortion(this);
+        this.featherfall=new Featherfall(this);
         this.waterWalk = new WaterWalk(this); // «Aquambula»: the water holds the feet, the hero walks on it (WaterWalk.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
@@ -1054,6 +1068,7 @@ export class Game {
                 buildMarketStall(this, mdef);
                 this.castleLife.addSite(mdef);
                 this.castleLife.addSite(earthSite(this.collision.groundY(26,-22)));
+                for(const a of ELEMENTAL_TESTS)this.castleLife.addSite(elementalTestSite(a,this.collision.groundY(a.x,a.z)));
                 // a plain villager to talk to near the start: the quick talk, orders, the net (CreativeGuest.js)
                 this.castleLife.addSite(guestDef(this.collision.groundY(-8, 6)));
                 this.castleLife.addSite(lairDef()); // (the Potion-maker's lair: his place in the sky; he is seated when the hall stands — PotionLair)
@@ -1461,6 +1476,7 @@ export class Game {
         if (authoritative) { this.customCreatures?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.customPlants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.spencers?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.plants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.canaries?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.tarons?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.flora?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.gargoyles?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.diabolos?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.titans?.noise(pos); this.diabolos?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.pharaoh?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.vampire?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.titans?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
         this.ghosts?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); // (a ghost of the Castle of Ghosts: local to every seer's computer, so not only the host — GhostRules)
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
+        this.earthMages?.blast(pos,radius); // real floating walls break after shielding this blast's actors
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
 
@@ -2324,6 +2340,7 @@ export class Game {
         if (name === 'SunRay') return this.sunRay.cast(isFinal); // (the Sun's energy into the wand: 500 mana — SunRay.js)
         if (name === 'Helios') return this.helios.cast(isFinal); // (the gods' Sun: 500 mana, then 3 a second — Helios.js)
         if (name === 'WaterPart') return this.waterPart.cast(isFinal); // (the water stands aside: 300 mana, then 3 a second — WaterPart.js)
+        if (name === 'Featherfall') return this.featherfall.cast(isFinal);
         if (name === 'WaterWalk') return this.waterWalk.cast(isFinal); // (walking on the water: 50 mana, then 1 a second — WaterWalk.js)
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
         if (name === 'Pentagranium') return this.pentagranium.cast(isFinal, text); // («Pentagranium <Name>»: the pentagram named in the phrase, laid where the wand points — Pentagranium.js)
@@ -2520,6 +2537,7 @@ export class Game {
         if (this.darkFog?.stopMine()) done.push('тёмный туман');
         if (this.whirl?.stopMine()) done.push('вихрь дуэли');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
+        if(this.featherfall?.stop())done.push('Featherfall');
         if (this.waterWalk?.stop('stop')) done.push('Aquambula');
         if (this.waterPart?.stop('stop')) done.push('Aquadivide');
         if (this.helios?.stop('stop')) done.push('Helios');
@@ -2707,8 +2725,8 @@ export class Game {
             if (t.get(Math.round(x), Math.floor(y + 1.5), Math.round(z)) === BLOCK.WATER) { src = new THREE.Vector3(x, y, z); break; }
             if (t.isSolidAt?.(x, y, z)) break;
         }
-        if (!src) src = this.hydro?.point(o, d); // (the water power: the air's moisture — PentagramHydro.js)
-        if (!src) { if (isFinal) this.hud.setVoice('🌊 Встаньте у воды и покажите рукой прямо НА воду — тогда скажите «Wave Attack»', true); return null; }
+        if(src&&!waveSource(t,src))src=null; // A wave always needs a substantial real body of water, even with the humidity gift.
+        if (!src) { if (isFinal) this.hud.setVoice('🌊 Покажите на реку, озеро или океан рядом: для волны нужно много настоящей воды', true); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay(name);
@@ -3529,7 +3547,7 @@ export class Game {
             this.pharaoh?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); this.pharaoh?.fireBeam(o, d, len); // (mummies burn as any; the pyramids' put-out torches light)
             this.vampire?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); // (the count and his bats burn as any)
             if (this.iceCastle?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId)) hit = true; // (the Ice Castle's creatures: fire is what they fear — ×2)
-            if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId)) hit = true; // villagers, knights, wizards
+            if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId, {fire:true,kind:'Inferno'})) hit = true; // villagers, knights, wizards
             if (this.livingTrees?.burnAlong(o, d, len, casterId)) hit = true; // (fire is what kills a living tree)
             if (this.carriages?.burnAlong(o, d, len, casterId)) hit = true; // (a cart on the road catches fire)
         }
@@ -3751,6 +3769,7 @@ export class Game {
         const ch = this.character;
         this.bleeding?.clearCuts(ch);
         this.dismember?.resetLocal(); // (cut-off arms / legs / the head: whole again)
+        this.featherfall?.stop();
         this.strong?.reset(); // (no haze, no ice, no lightning held)
         this.combat.revive();
         this.heroApply?.respawn(); // (Creative: the hero's settings again)
@@ -3896,6 +3915,7 @@ export class Game {
         this.swim?.applyFog?.();
         this.darkFog?.begin(); // (inside «Caligo»'s fog the world's fog is swapped for a black one for this picture only)
         if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera);
+        this.airFx?.render();
         this.darkFog?.end();
         this.seeFx?.render(); // («Visible Godi»: the cloud over the picture — nothing when the spell is off)
         if (this.active && this.config.mode !== 'test' && (this._terrainProbeN || 0) < 2 && performance.now() >= (this._terrainProbeAt || 0)) {
@@ -4023,6 +4043,9 @@ export class Game {
         for (const k of [1, 2]) { zoo.add(animalModel('swan', k)); const m = animalModel('swan', k); new FarShape(m).set(true); zoo.add(m); } // (the swans of the lakes, plain and magic: as near and as the video card draws them far — SwanModel.js)
         zoo.add(makeItemModel({ kind: 'swanWings' }), makeItemModel({ kind: 'magicSwanWings' })); // (their wings as a thing)
         zoo.add(makeItemModel(newMagicBackpack()), makeItemModel({ kind: 'backpack', uid: 'prewarm', color: 0x7a4a24, slots: 3 })); // (the golden backpack: its own materials — a shader at start, not in play)
+        if(this.airFx)zoo.add(this.airFx.sampleModel());
+        if(this.waves)zoo.add(this.waves.sampleModel());
+        if(this.elementalMages?.guard)zoo.add(this.elementalMages.guard.sampleModel());
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), (() => { const m = spiderModel(); new FarShape(m, { cache: false }).set(true); return m; })(), ...(this.diabolos?.sampleModels() || []), (() => { const m = phoenixModel(); new FarShape(m, { cache: false }).set(true); return m; })(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of VampireLife.samples()) zoo.add(m);
         // (the titans are NOT warmed here: they live on the planets only, and painting their textures made the loading screen stall — a friend's
@@ -4514,7 +4537,10 @@ export class Game {
         this.firm?.update(dt);
         this.ghostCastle?.update(dt);
         this.earthMages?.update(dt);
+        this.elementalMages?.update(dt);
         this.groundVortex?.update(dt);
+        this.airFx?.update(dt);
+        this.featherfall?.update(dt);
         this.waterWalk?.update(dt);
         this.waterPart?.update(dt);
         this.helios?.update(dt);
@@ -5645,7 +5671,10 @@ export class Game {
         this.rainFx?.dispose();
         this.seaSurface?.dispose();
         this.steam?.dispose();
+        this.airFx?.dispose();
+        this.featherfall?.dispose();
         this.earthMages?.dispose();
+        this.elementalMages?.dispose();
         this.groundVortex?.dispose();
         this.seeFx?.dispose();
         this.ultra?.dispose();

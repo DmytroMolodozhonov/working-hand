@@ -162,6 +162,7 @@ _BUILD = {"id": "", "at": 0.0}
 # makeItemModel / buildWeapon). The library three.js is in every kind.
 KIND_ROOTS = {
     "sound": ("src/audio/SoundManager.js",),
+    "terrain": ("src/world/terrain.worker.js",),
     "icon": ("src/ui/ItemIcons.js", "src/game/ItemTypes.js", "src/entities/WeaponModels.js"),
 }
 _KINDS = {"v": None, "at": 0.0}

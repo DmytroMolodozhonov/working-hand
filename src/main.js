@@ -1444,7 +1444,7 @@ async function startGameInner(config, welcome) {
             B.end('до «можно играть»');
             try { netLog(B.line(`загрузка (${config.mode}${config.saved ? ', сохранение' : ''}${net.isClient ? ', гость' : ''})`) + ` | страница до меню ${(PAGE_READY_MS / 1000).toFixed(1)} с`); } catch (e) { /* (only the journal) */ }
             window.__zns.boot = { ...B.table(), pageMs: PAGE_READY_MS, cache: bootCache.line() };
-            try { netLog(bootCache.line()); } catch (e) { /* (only the journal) */ }
+            try { const t=game.world?.terrain;if(t?.opts?.test)netLog(`⚡ Творческая основа: ${t.stats.templateHits||0} чанков из кеша, ${t.stats.templateMisses||0} построено заново`);netLog(bootCache.line()); } catch (e) { /* (only the journal) */ }
             setTimeout(() => bootCache.trim(), 20000); // (over the limit: the oldest records go — later, when the game runs)
             game.revealed = true; // (the frames before it are behind the loading screen: PerfLog says so of their hitches)
             loadingScreen.classList.add('hidden');

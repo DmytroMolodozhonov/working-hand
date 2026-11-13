@@ -147,3 +147,13 @@ test('a hole dug beside the river fills with water all the way through (not only
     assert.equal(filled.length, 12, 'the whole ditch');
     for (let z = 3; z <= 8; z++) for (const L of [0, -1]) assert.equal(d.get(0, L, z), BLOCK.WATER, `${z},${L}`);
 });
+
+test('a wave requires a large connected real water source, never a puddle or airborne water',async()=>{
+ const {waveSource}=await import('../../src/game/WaveSource.js');
+ const data=(wet,depth=3)=>({landMade:()=>true,topLayer:()=>0,get:(x,L,z)=>wet(x,z)&&L>=1&&L<=depth?BLOCK.WATER:BLOCK.AIR});
+ assert.equal(waveSource(data(()=>false),{x:0,z:0}),null);
+ assert.equal(waveSource(data((x,z)=>Math.abs(x)<=1&&Math.abs(z)<=1),{x:0,z:0}),null);
+ assert.ok(waveSource(data((x,z)=>Math.abs(x)<=1&&Math.abs(z)<30),{x:0,z:0}),'long narrow river');
+ assert.ok(waveSource(data(()=>true),{x:0,z:0}),'lake/ocean');
+ assert.equal(waveSource({...data(()=>true),landMade:()=>false},{x:0,z:0}),null,'never synchronously generate unloaded terrain');
+});

@@ -1,3 +1,4 @@
+import {bootCache,BOOT} from '../core/BootCache.js';
 /**
  * TerrainView.js — the THREE meshes of the endless terrain (TerrainData in Terrain.js).
  *
@@ -87,7 +88,7 @@ export class Terrain {
         this._center = null;
         this._queue = [];
         this._frame = 0;
-        this.stats = { built: 0, unloaded: 0, maxBuildMs: 0, byWorkers: 0, maxWorkerMs: 0, maxApplyMs: 0 };
+        this.stats = { templateHits:0,templateMisses:0,built: 0, unloaded: 0, maxBuildMs: 0, byWorkers: 0, maxWorkerMs: 0, maxApplyMs: 0 };
         this.flushAround(0, 0);
         this.opts = { seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, seabed, hell, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements }; // (the world's recipe: the terrain workers and space.worker.js (the Earth's globe) make the world by the SAME one as this thread — `apart`, `knightCap`, `queenMap` too)
         this._startWorkers(this.opts);
@@ -199,7 +200,7 @@ export class Terrain {
                 w.load = 0;
                 w.onmessage = (e) => this._onBuilt(w, e.data);
                 w.onerror = (e) => { e.preventDefault?.(); this._stopWorkers(); };
-                w.postMessage({ type: 'init', opts, skipSeaTop: this.data.skipSeaTop });
+                w.postMessage({ type: 'init', opts, skipSeaTop: this.data.skipSeaTop, cache:opts.test&&bootCache.enabled?{build:bootCache.build,kinds:bootCache.kinds,format:BOOT.FORMAT}:null });
                 ws.push(w);
             }
             this._workers = ws;
@@ -347,6 +348,7 @@ export class Terrain {
             return;
         }
         if (m.type !== 'built') return;
+        if(m.template)this.stats.templateHits++;else this.stats.templateMisses++;
         w.load--;
         if (this._remakeFlight?.get(m.key) === m.id) { this._remakeFlight.delete(m.key); this._remade.push(m); return; } // (a planet's ground made again)
         if (this._preFlight?.get(m.key) === m.id) { // (made ahead of time — prefetch)

@@ -14,7 +14,7 @@ const alive=v=>v&&!v.dead&&!v.sleep&&!v.lev&&!v.carriedBy&&!(v.stunT>0)&&!v.vy;
 export class EarthMages {
  constructor(game){this.game=game;this.swarms=new Map();this.clock=0;}
  init(v){
-  if(!v.entry?.element)return;
+  if(v.entry?.element!=='earth')return;
   v.element=v.entry.element;v.bareHand=ELEMENTAL_BARE_HAND;v.bareMaster=true;v.rank='elemental';v.skillRole='mage';
   v.title='Маг земли';v.hp=v.maxHp=E.HP;const endurance=elementalEndurance(v.entry,E.MANA);v.elementalTier=endurance.tier;v.mana=v.maxMana=endurance.mana;v.armor=v.maxArmor=0;
   v.W={...v.W,regen:E.REGEN,dome:null,spells:{GroundVortex:1}};v.knowsFlight=false;v.noWand=true;
@@ -48,12 +48,17 @@ export class EarthMages {
  }
  think(v,dt){
   const g=this.game,L=g.castleLife,a=v.earth;if(!a)return false;
-  if(!this.swarms.has(v.id)&&!(a.stitchPose>0))v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);
+  if(!a.slab&&!this.swarms.has(v.id)&&!(a.stitchPose>0))v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);
   a.t+=dt;a.wallCd=Math.max(0,a.wallCd-dt);a.stitchCd=Math.max(0,a.stitchCd-dt);a.scan-=dt;
   v.prep=null;v.cardilon=null;v.practice=null;v.fx=0;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
   let foe=v.foe?L._playerPos(v.foe):null;
   const threat=this._threat(v);
   if(!foe&&threat&&L._isPlayer(threat.by)){v.foe=threat.by;foe=L._playerPos(v.foe);}
+  if(a.slab){
+   const slab=g.levMax?.lifts.get(a.slab);
+   if(slab&&(slab.phase==='loosen'||slab.phase==='carry')){v.mode=slab.phase==='loosen'?'earthLift':'earthHammer';v.model.earthPoseT=(slab.npc?.time||0)%1.1;L._ground(v);return true;}
+   a.slab=null;
+  }
   let s=this.swarms.get(v.id);
   if(!foe||Math.hypot(foe.x-v.x,foe.z-v.z)>E.LEASH){
    if(s)this._stop(v.id);v.foe=null;v.mode='idle';v.model.earthPoseT=undefined;L._ground(v);return true;
@@ -87,6 +92,7 @@ export class EarthMages {
    }else if(threat&&s.n>=WALL_COUNT&&this._pay(v,E.WALL_COST))this._phase(v,s,'wall');
    else if(a.t>EARTH_PHASES.orbit&&s.n>=1&&dist<=E.RANGE){
     a.cycle++;
+    if(a.cycle%6===0&&g.levMax?.npcEarth){const id=g.levMax.npcEarth(v,foe);if(id){a.slab=id;this._stop(v.id);this._engaged(v);return true;}}
     if(!s.blade&&a.cycle%2===0&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
     else if(L._sees(v,foe))this._phase(v,s,EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length]);
    }
@@ -158,6 +164,8 @@ export class EarthMages {
    s.angle+=dt*1.1;
    let rank=0;
    for(const b of s.B)if(b){
+    b.guardK=Math.max(0,Math.min(1,(b.guardK||0)+(s.form==='wall'||s.form==='cocoon'?1:-1)*dt*2.5));
+    b.sharp=b.blade?1-b.guardK:0;
     earthSlot(rank++,s.form,s.angle,s.yaw,_slot);
     _at.set(s.body.x+_slot.x,s.body.y+_slot.y,s.body.z+_slot.z);
     const age=(this.game.groundVortex._t-b.born)/.38;
@@ -203,12 +211,21 @@ export class EarthMages {
  }
  take(hit,spell){
   if(!hit)return false;
-  const s=hit.s;
+  const s=hit.s;if(!s.B[hit.i])return true;
   if(!this.game.authority)return !sweepsShield(spell);
   if(sweepsShield(spell)){this._stop(s.by);return false;}
   const ids=[hit.i],want=Math.max(1,Math.min(20,hitBlocks(spell)));
   for(let i=0;i<s.B.length&&ids.length<want;i++)if(i!==hit.i&&s.B[i]&&s.B[i].pos.distanceToSquared(hit.point)<9)ids.push(i);
   this.game.groundVortex._breakBlocks(s,ids,true);this.game.sync?.groundVortex({npc:true,by:s.by,ev:'hit',ids});return true;
+ }
+ /** Explosion pressure breaks every real stone in its radius, after actors were shielded by them. */
+ blast(p,r){
+  if(!this.game.authority)return;
+  const r2=(r+.75)**2;
+  for(const s of this.swarms.values()){
+   const ids=[];for(let i=0;i<s.B.length;i++)if(s.B[i]?.pos.distanceToSquared(p)<=r2)ids.push(i);
+   if(ids.length){this.game.groundVortex._breakBlocks(s,ids,true);this.game.sync?.groundVortex({npc:true,by:s.by,ev:'hit',ids});}
+  }
  }
  clipRay(o,d,len){const end=_hit.copy(o).addScaledVector(d,len),hit=this.segmentHit(o,end);return hit?len*hit.t:len;}
  blocksBlast(from,to,by){return !!this.segmentHit(from,to,by);}

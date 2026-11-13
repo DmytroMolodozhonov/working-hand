@@ -6,7 +6,7 @@
  * Все водяные заклинания больше не требуют указывать на воду. Белая пентаграмма, ничего плохого.»
  *
  *   make the circle (50 mana, at the stand) while a LIQUID water spell is held (the water ball of «Waterbollow», the storm, a wave, the vortex — never ice) →
- *   the gift for good (until death; «Give Me My Power» brings it back): «Waterbollow», «Wave Attack», «Water Vortex», «Water Vortex Super Maxima» take their water from the
+ *   the gift for good (until death; «Give Me My Power» brings it back): «Waterbollow», «Water Vortex», «Water Vortex Super Maxima» take their water from the
  *   air's moisture where no water is near. Not in a desert (the pyramids' sand), not off the Earth (the water spells have their own rules there), not in hell (steam).
  *
  * «Кто/что»: the gift is the hero's (saved, taken by death); a guest's gift counts on his computer (his spells run there) — the world sees the water as any water spell's.

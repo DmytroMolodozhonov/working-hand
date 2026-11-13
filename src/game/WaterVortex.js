@@ -654,7 +654,7 @@ export class WaterVortex {
     _srcOf(f) {
         const g = this.game;
         if (f.by === this.me) f.src.copy(g.character.group.position).add(_d.set(0, 0.3, 0));
-        else { const r = g.remotes?.get(f.by); if (r?.position) f.src.copy(r.position).add(_d.set(0, 0.3, 0)); }
+        else { const r = g.remotes?.get(f.by); if (r?.position) f.src.copy(r.position).add(_d.set(0, 0.3, 0)); else {const v=g.castleLife?.byId.get(f.by);if(v&&!v.dead)f.src.set(v.x,v.y+2.6,v.z);} }
         return f.src;
     }
 

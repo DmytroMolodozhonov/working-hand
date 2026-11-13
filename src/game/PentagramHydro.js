@@ -4,7 +4,7 @@
  *
  * With the gift every water spell takes its water from the moisture of the air when no water is near (not in a desert, not off the Earth, not in hell):
  *   `spring(x, z, y)`  → a stand-in water surface {x, y, z, dist, humid: true} under the hand's spot (Waterbollow: start, «Максима», the second hand's feed)
- *   `point(o, d)`      → a stand-in water point ahead where the hand points (Wave Attack, Water Vortex, the storm's aim)
+ *   `point(o, d)`      → a stand-in water point ahead where the hand points (Water Vortex, the storm's aim)
  *   `stormWater()`     → a stand-in list of the storm's "water blocks": only the count matters (entries are null: nothing is taken from the world, nothing is given back)
  * and a cloud of mist gathers to the hand (`_mist`).
  *

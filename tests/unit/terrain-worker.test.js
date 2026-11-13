@@ -56,7 +56,7 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     globalThis.self = { postMessage: (m) => sent.push(m) };
     await import('../../src/world/terrain.worker.js');
     const { buildFlora } = await import('../../src/world/FloraBuild.js');
-    self.onmessage({ data: { type: 'init', opts: OPTS, skipSeaTop: true } });
+    await self.onmessage({ data: { type: 'init', opts: OPTS, skipSeaTop: true } });
     const here = make();
     // a wall of planks across a chunk border and a pit dug, here
     const cx = 5, cz = -3, x0 = cx * 32, z0 = cz * 32;
@@ -68,17 +68,17 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
         if (c.modified) { const { rev, ...copy } = c; chunks.push(structuredClone(copy)); } // eslint-disable-line no-unused-vars
     }
     assert.ok(chunks.length >= 2, 'the changed chunks go along');
-    self.onmessage({ data: { type: 'rebuild', id: 1, key: 'k', cx, cz, chunks, hidden: null } });
+    await self.onmessage({ data: { type: 'rebuild', id: 1, key: 'k', cx, cz, chunks, hidden: null } });
     const got = sent.pop(), w = here.buildChunkArrays(cx, cz), want = { land: mergeBuffers(w.ground, w.raised), water: w.water };
     assert.equal(got.type, 'rebuilt');
     for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies', 'wet']) same(got.arrays[k][f], want[k][f], `rebuilt ${k}.${f}`);
     // and the worker's own chunks are as generated again afterwards
     const fresh = make();
-    self.onmessage({ data: { type: 'build', id: 2, key: 'k2', cx, cz, fcx: cx, fcz: cz, R: 4 } });
+    await self.onmessage({ data: { type: 'build', id: 2, key: 'k2', cx, cz, fcx: cx, fcz: cz, R: 4 } });
     same(sent.pop().chunk.blocks, fresh.chunk(cx, cz).blocks, 'the worker forgot the changed copy');
     // the grass of the changed chunk
     const { rev, ...copy } = here.chunk(cx, cz); // eslint-disable-line no-unused-vars
-    self.onmessage({ data: { type: 'flora', id: 3, key: 'k', cx, cz, chunk: structuredClone(copy), hidden: null, rev: 7 } });
+    await self.onmessage({ data: { type: 'flora', id: 3, key: 'k', cx, cz, chunk: structuredClone(copy), hidden: null, rev: 7 } });
     const fl = sent.pop(), mine = buildFlora(here, here.chunk(cx, cz));
     assert.equal(fl.rev, 7);
     same(fl.out.pos, mine.pos, 'grass');
@@ -91,16 +91,16 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
         const want2 = { land: mergeBuffers(w2.ground, w2.raised), water: w2.water };
         for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies', 'wet']) same(g2.arrays[k][f], want2[k][f], `${what} ${k}.${f}`);
     };
-    self.onmessage({ data: { type: 'rebuild', id: 4, key: 'k', cx, cz, fresh: fresh1, use, drop: null, hidden: null } });
+    await self.onmessage({ data: { type: 'rebuild', id: 4, key: 'k', cx, cz, fresh: fresh1, use, drop: null, hidden: null } });
     check('sent');
-    self.onmessage({ data: { type: 'rebuild', id: 5, key: 'k', cx, cz, fresh: [], use, drop: null, hidden: null } });
+    await self.onmessage({ data: { type: 'rebuild', id: 5, key: 'k', cx, cz, fresh: [], use, drop: null, hidden: null } });
     check('kept there');
     here.set(x0 + 10, here.topLayer(x0 + 10, z0 + 20) + 1, z0 + 20, 27);
     const { rev: r2, sky: s2, ...again } = here.chunk(cx, cz); // eslint-disable-line no-unused-vars
-    self.onmessage({ data: { type: 'rebuild', id: 6, key: 'k', cx, cz, fresh: [structuredClone(again)], use, drop: null, hidden: null } });
+    await self.onmessage({ data: { type: 'rebuild', id: 6, key: 'k', cx, cz, fresh: [structuredClone(again)], use, drop: null, hidden: null } });
     check('changed again');
     // a chunk next to a changed one that this computer has not got yet: it comes along
-    self.onmessage({ data: { type: 'rebuild', id: 7, key: 'k3', cx: cx + 3, cz, fresh: [], use, drop: use, hidden: null, wantChunk: true } });
+    await self.onmessage({ data: { type: 'rebuild', id: 7, key: 'k3', cx: cx + 3, cz, fresh: [], use, drop: use, hidden: null, wantChunk: true } });
     same(sent.pop().chunk.blocks, fresh.chunk(cx + 3, cz).blocks, 'the chunk itself');
     delete globalThis.self;
 });
@@ -112,4 +112,39 @@ test('one mesh for a chunk\'s land: the ground and the raised faces together, no
     assert.equal(m.indices.length, a.ground.indices.length + a.raised.indices.length);
     const nv = a.ground.positions.length / 3;
     for (let i = 0; i < a.raised.indices.length; i += 97) assert.equal(m.indices[a.ground.indices.length + i], a.raised.indices[i] + nv);
+});
+
+test('Creative template cache restores pristine blocks and mesh, survives player edits and misses after recipe/code changes',async()=>{
+ const sent=[],records=new Map();let complete=()=>{};
+ const storage={
+  async match(k){const v=records.get(typeof k==='string'?k:new URL(k.url).pathname);return v?new Response(v.b.slice(0),{headers:v.h}):undefined;},
+  async put(k,r){records.set(k,{b:await r.arrayBuffer(),h:Object.fromEntries(r.headers.entries())});complete();},
+  async delete(k){records.delete(typeof k==='string'?k:new URL(k.url).pathname);},
+  async keys(){return [...records.keys()].map(k=>({url:'http://localhost'+k}));},
+ };
+ globalThis.caches={async open(){return storage;},async keys(){return ['zns-boot-f3'];},async delete(){}};
+ globalThis.self={postMessage:(m,transfer=[])=>sent.push(structuredClone(m,{transfer}))};
+ try{
+  await import('../../src/world/terrain.worker.js?template-cache-regression');
+  const init=async(opts=OPTS,version='a')=>self.onmessage({data:{type:'init',opts,skipSeaTop:true,cache:{format:3,build:'test',kinds:{terrain:version}}}});
+  const build=async()=>{await self.onmessage({data:{type:'build',id:sent.length,key:'0,0',cx:0,cz:0,fcx:0,fcz:0,R:4}});return sent.at(-1);};
+  await init();let written=new Promise(r=>complete=r);const cold=await build();await written;
+  assert.equal(cold.template,undefined);const blocks=cold.chunk.blocks.slice(),land=cold.arrays.land.positions.slice();
+  cold.chunk.blocks.fill(0); // Destruction in a live session must never become the restart template.
+  await init();const warm=await build();assert.equal(warm.template,true);same(warm.chunk.blocks,blocks,'pristine blocks');same(warm.arrays.land.positions,land,'pristine mesh');
+  await init(OPTS,'b');written=new Promise(r=>complete=r);assert.equal((await build()).template,undefined);await written;
+  await init({...OPTS,seed:OPTS.seed+1});written=new Promise(r=>complete=r);assert.equal((await build()).template,undefined);await written;
+  await init({...OPTS,test:false});assert.equal((await build()).template,undefined,'ordinary worlds never use the Creative template');
+ }finally{delete globalThis.caches;delete globalThis.self;}
+});
+
+test('terrain worker dependency graph remains worker-safe: no bare renderer import hidden behind world rules',async()=>{
+ const fs=await import('node:fs'),path=await import('node:path'),{fileURLToPath}=await import('node:url');
+ const root=fileURLToPath(new URL('../../',import.meta.url)),queue=['src/world/terrain.worker.js'],seen=new Set();
+ while(queue.length){const file=queue.pop();if(seen.has(file))continue;seen.add(file);const text=fs.readFileSync(path.join(root,file),'utf8');
+  for(const m of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)['"]([^'"]+)['"]/gm)){
+   const spec=m[1];assert.ok(spec.startsWith('.'),`${file} imports ${spec}: module workers have no document import map`);
+   const next=path.normalize(path.join(path.dirname(file),spec));if(fs.existsSync(path.join(root,next)))queue.push(next);
+  }
+ }assert.ok(seen.has('src/game/SaviorRules.js'));assert.ok(seen.has('src/game/SpellCosts.js'));assert.ok(!seen.has('src/game/Combat.js'));
 });

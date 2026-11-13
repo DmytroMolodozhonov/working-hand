@@ -26,19 +26,19 @@ export function blockSwarmMaterial() {
     mat.onBeforeCompile = (shader, r) => {
         base(shader, r);
         shader.vertexShader = shader.vertexShader
-            .replace('varying vec3 vVoxPos;', 'varying vec3 vVoxPos;\nattribute vec3 aCell;\nattribute vec3 aSide;\nattribute vec3 aTopC;\nattribute float gTop;')
+            .replace('varying vec3 vVoxPos;', 'varying vec3 vVoxPos;\nattribute vec3 aCell;\nattribute vec3 aSide;\nattribute vec3 aTopC;\nattribute float gTop;\nattribute float aSharp;')
             .replace('vVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;', 'vVoxPos = transformed + aCell;')
             .replace('vVoxNormal = normalize(mat3(modelMatrix) * normal);', 'vVoxNormal = normal;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nfloat tip=step(position.z,-.49)*aSharp; transformed.xy*=1.-tip; transformed.z-=.45*tip;')
             .replace('#include <color_vertex>', '#include <color_vertex>\n\tvColor.xyz = mix(aSide, aTopC, gTop);');
     };
-    mat.customProgramCacheKey = () => 'gvortex-voxel';
+    mat.customProgramCacheKey = () => 'gvortex-voxel-morph-1';
     return mat;
 }
 
 /** A unit cube for a kind of block: the terrain's pattern id, full daylight, the top face marked. */
 function blockGeometry(type, lush, blade = false) {
-    const g = blade ? new THREE.ConeGeometry(.64, 1.45, 4, 1) : new THREE.BoxGeometry(1, 1, 1);
-    if (blade) g.rotateX(-Math.PI/2);
+    const g = new THREE.BoxGeometry(1, 1, 1);
     const n = g.attributes.position.count;
     const col = new Float32Array(n * 3).fill(1), pat = new Float32Array(n).fill(patternOf(type, lush)), sky = new Float32Array(n).fill(1), top = new Float32Array(n);
     const nor = g.attributes.normal;
@@ -75,6 +75,8 @@ export class BlockSwarmFx {
         const cell = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
         const side = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
         const top = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
+        const sharp=new THREE.InstancedBufferAttribute(new Float32Array(CAP),1).setUsage(THREE.DynamicDrawUsage);
+        geo.setAttribute('aSharp',sharp);
         geo.setAttribute('aCell', cell); geo.setAttribute('aSide', side); geo.setAttribute('aTopC', top);
         const mesh = new THREE.InstancedMesh(geo, this.mat, CAP);
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -83,7 +85,7 @@ export class BlockSwarmFx {
         mesh.count = 0;
         mesh.visible = false;
         this.scene.add(mesh);
-        k = { mesh, cell, side, top, n: 0 };
+        k = { mesh, cell, side, top, sharp, n: 0 };
         this.kinds.set(key, k);
         return k;
     }
@@ -104,6 +106,7 @@ export class BlockSwarmFx {
         _m.compose(_p.set(pos.x, pos.y, pos.z), _q.set(quat.x, quat.y, quat.z, quat.w), _s.set(scale, scale, scale));
         k.mesh.setMatrixAt(i, _m);
         k.cell.setXYZ(i, b.cx, b.cy, b.cz);
+        k.sharp.setX(i,b.blade?(b.sharp??1):0);
         k.side.setXYZ(i, b.blade ? .52 : b.side[0], b.blade ? .48 : b.side[1], b.blade ? .4 : b.side[2]);
         k.top.setXYZ(i, b.blade ? .52 : b.top[0], b.blade ? .48 : b.top[1], b.blade ? .4 : b.top[2]);
     }
@@ -117,6 +120,7 @@ export class BlockSwarmFx {
             k.cell.updateRange.offset=k.side.updateRange.offset=k.top.updateRange.offset=0;
             k.cell.updateRange.count=k.side.updateRange.count=k.top.updateRange.count=k.n*3;
             k.mesh.instanceMatrix.needsUpdate = true;
+            k.sharp.updateRange.offset=0;k.sharp.updateRange.count=k.n;k.sharp.needsUpdate=true;
             k.cell.needsUpdate = true; k.side.needsUpdate = true; k.top.needsUpdate = true;
         }
     }

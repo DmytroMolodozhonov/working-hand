@@ -73,11 +73,12 @@ export function bounceOffShields(shields, was, p, vel, by = null, keep = 0.75) {
             return s;
         }
         // the dome: from outside in (what is inside — its owner's own — goes out freely)
-        if (was.distanceTo(s.c) < s.r || p.distanceTo(s.c) >= s.r) continue;
+        if (was.distanceToSquared(s.c) < s.r*s.r) continue;
         const d = _a.subVectors(p, was), f = _b.subVectors(was, s.c);
         const A = d.dot(d), B = 2 * f.dot(d), C = f.dot(f) - s.r * s.r;
         const disc = B * B - 4 * A * C;
-        const t = disc < 0 || A < 1e-9 ? 0 : Math.max(0, Math.min(1, (-B - Math.sqrt(disc)) / (2 * A)));
+        if(disc<0||A<1e-9)continue;
+        const t=(-B-Math.sqrt(disc))/(2*A);if(t<0||t>1)continue;
         _q.copy(was).addScaledVector(d, t);
         _n.subVectors(_q, s.c).normalize();
         reflect(vel, _n, keep);

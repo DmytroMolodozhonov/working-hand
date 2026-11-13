@@ -180,3 +180,38 @@ test('formal tiers vary mana, never the repertoire, and a novice can recover to 
  const f=fixture();f.v.maxMana=45;f.v.mana=17;f.g.terrain.data.raycast=()=>null;f.step(2000);
  assert.ok(f.sent.some(m=>m.ev==='volley'),'a low-capacity mage must not wait for an unreachable 60 mana');
 });
+
+test('an explosion destroys the floating wall even when its stones shield the mage from that blast',()=>{
+ const f=fixture();f.step(100);const em=f.g.earthMages,s=em.swarms.get(f.v.id);em._phase(f.v,s,'wall');
+ for(let i=0;i<120;i++)em.update(1/60);
+ const p=new T.Vector3(0,f.v.y+2.4,-3.8);assert.ok(em.blocksBlast(p,new T.Vector3(0,f.v.y+2.4,0),'me'));
+ const n=s.n;em.blast(p,4);assert.ok(s.n<n-10);assert.ok(f.sent.some(m=>m.ev==='hit'));
+});
+
+test('flying stones reflect at ordinary, maximal and divine Protection surfaces before reaching the body',()=>{
+ for(const type of [1,2])for(const gods of [false,true]){
+  const f=fixture(),g=f.g;let paid=0,hurt=0;
+  g.combat={dead:false,shield:{type,left:5,gods,side:'right'},center:o=>o.set(0,3,-18),shieldAt:(side,o)=>o.set(0,3,-20),shieldDir:(side,o)=>o.set(0,0,-1),_blocked:()=>{paid++;return true;},hitBySpell:()=>hurt++};
+  const rock={t:BLOCK.STONE,tm:{s:1}},flight={b:rock,pos:new T.Vector3(0,3,-25),last:new T.Vector3(),vel:new T.Vector3(0,0,600),age:0,by:f.v.id,mine:false};
+  g.groundVortex.flights.push(flight);g.groundVortex._updateFlights(.02);
+  assert.ok(flight.vel.z<0,`type ${type}, gods ${gods}`);assert.equal(paid,1);assert.equal(hurt,0);
+ }
+});
+
+test('a fast stone cannot skip a single water layer at low frame rate',()=>{
+ const f=fixture(),g=f.g;g.terrain.data.get=(x,L,z)=>z===-20?BLOCK.WATER:BLOCK.AIR;
+ g.groundVortex.flights.push({b:{t:BLOCK.STONE,tm:{s:1}},pos:new T.Vector3(0,3,-25),last:new T.Vector3(),vel:new T.Vector3(0,0,600),age:0,by:f.v.id,mine:false});
+ g.groundVortex._updateFlights(.02);assert.equal(g.groundVortex.flights.length,0);
+});
+
+test('earth Maxima takes its slab beside the opponent, transfers above the original target and releases after preparation',async()=>{
+ const {LevitationMaxima}=await import('../../src/game/LevitationMaxima.js');
+ const v={id:'earth',x:0,y:0,z:0,mana:200},foe={x:20,y:0,z:0},lifts=new Map();let source;
+ const c={auth:true,_npcSeq:0,lifts,game:{terrain:{data:{landMade:()=>true,floorBelow:()=>1}},castleLife:{byId:new Map([[v.id,v]])}},
+  begin(id,by,side,desc){source=desc.c;this.lifts.set(id,{id,by,phase:'loosen',base:new T.Vector3(source[0],0,source[2]),pos:new T.Vector3(),sway:new T.Vector3(),members:[],bodies:[]});return true;},
+  end(id){lifts.get(id).phase='fall';},_tearOut(L){L.phase='carry';}};
+ const id=LevitationMaxima.prototype.npcEarth.call(c,v,foe);assert.ok(id);assert.ok(Math.hypot(source[0]-foe.x,source[2]-foe.z)<=4.1);assert.equal(v.mana,150);
+ const slab=lifts.get(id);foe.x=50;
+ for(let i=0;i<400&&slab.phase!=='fall';i++)LevitationMaxima.prototype._npcEarthStep.call(c,slab,1/60);
+ assert.equal(slab.phase,'fall');assert.ok(slab.pos.distanceTo(new T.Vector3(20,9,0))<.01,'a player can evade after the target was chosen');assert.ok(v.mana<140);
+});

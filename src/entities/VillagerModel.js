@@ -1,3 +1,6 @@
+import { elementalLook } from '../game/ElementalTestSites.js';
+import { ELEMENTAL_MODES,elementalMagePose } from './ElementalMagePose.js';
+import { elementalBodyBoxes,elementalArmBoxes } from './ElementalMageLook.js';
 import { earthMagePose } from './EarthMagePose.js';
 import { earthBodyBoxes,earthArmBoxes,earthHeadBoxes } from './EarthMageLook.js';
 /**
@@ -39,7 +42,7 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife', 'heka'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthPunch','earthKick','earthSweep','earthHammer','earthRest'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, ...ELEMENTAL_MODES, 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthPunch','earthKick','earthSweep','earthHammer','earthRest'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 const ARENA_SET = new Set(ARENA_MODES);
@@ -774,7 +777,7 @@ function bodyBoxes(L) {
             b(B, 1.22, 0.45, 0.82, 0, -0.55, 0, p); // the overalls' waist
             b(B, 0.22, 0.22, 0.03, -0.32, -0.55, -0.42, shade(p, 1.3)); // patch
         }
-    } else if (L.element === 'earth') { earthBodyBoxes(L,B);
+    } else if (L.element) { if(L.element==='earth')earthBodyBoxes(L,B);else elementalBodyBoxes(L,B);
     } else if (L.wizard && L.uniform) { // (a preview of the tower's uniforms)
         uniformBody(L, B);
     } else if (L.wizard && L.outfit) { // one of the five costumes of a wanderer / a town or village wizard
@@ -1236,12 +1239,12 @@ export class VillagerModel {
         this.leftArm = new THREE.Group();
         this.leftArm.position.set(-0.8, 0.55, 0);
         this.torso.add(this.leftArm);
-        if(look.element){this._mesh(this.leftArm,earthArmBoxes(look,false));this.leftElbow=new THREE.Group();this.leftElbow.position.y=-.58;this.leftArm.add(this.leftElbow);this._mesh(this.leftElbow,earthArmBoxes(look,true));}
+        if(look.element){this._mesh(this.leftArm,(look.element==='earth'?earthArmBoxes:elementalArmBoxes)(look,false));this.leftElbow=new THREE.Group();this.leftElbow.position.y=-.58;this.leftArm.add(this.leftElbow);this._mesh(this.leftElbow,(look.element==='earth'?earthArmBoxes:elementalArmBoxes)(look,true));}
         else this._mesh(this.leftArm, armBoxes(look, -1));
         this.rightArm = new THREE.Group();
         this.rightArm.position.set(0.8, 0.55, 0);
         this.torso.add(this.rightArm);
-        if(look.element){this._mesh(this.rightArm,earthArmBoxes(look,false));this.rightElbow=new THREE.Group();this.rightElbow.position.y=-.58;this.rightArm.add(this.rightElbow);this._mesh(this.rightElbow,earthArmBoxes(look,true));}
+        if(look.element){this._mesh(this.rightArm,(look.element==='earth'?earthArmBoxes:elementalArmBoxes)(look,false));this.rightElbow=new THREE.Group();this.rightElbow.position.y=-.58;this.rightArm.add(this.rightElbow);this._mesh(this.rightElbow,(look.element==='earth'?earthArmBoxes:elementalArmBoxes)(look,true));}
         else this._mesh(this.rightArm, armBoxes(look, 1));
         this.handSlot = new THREE.Object3D();
         this.handSlot.position.set(0, look.element ? -.6 : -1.18, 0);
@@ -1740,7 +1743,7 @@ export class VillagerModel {
         // ---- upper body per mode (a wizard's own moves first — MoveStyle.wizardPose)
         T.eL=T.eR=T.earthSpread=0;
         this._earthMoving=this.look.element&&loco;
-        const own = (this.look.element ? earthMagePose(this,T,mode,dt,t) : 0) || (this._wiz ? wizardPose(this, T, mode, loco, dt, t) : 0);
+        const own = (this.look.element ? (this.look.element==='earth'?earthMagePose:elementalMagePose)(this,T,mode,dt,t) : 0) || (this._wiz ? wizardPose(this, T, mode, loco, dt, t) : 0);
         if (own) rate = own;
         else if (mode === 'idle' && !loco) idleShift(T, t, this.look.seed | 0);
         if (!own) switch (mode) {
@@ -2180,6 +2183,7 @@ export function villagerMaterials() { return [MAT, HIT_MAT, HL_MAT]; }
 export function prewarmVillagers() {
     const out = [];
     const add = (v) => { out.push(v.group); return v; };
+    for(const element of ['water','air','fire'])add(new VillagerModel(Object.assign(villagerLook(15,'mage',false),elementalLook(element,{tank:element==='water'}))));
     ROLES.forEach((role, i) => add(new VillagerModel(villagerLook(i + 1, role, false), { shield: role === 'knight' })));
     add(new VillagerModel(villagerLook(11, 'farmer', true), { tool: 'pitchfork' }));
     add(new VillagerModel(villagerLook(12, 'farmer', true), { tool: 'basket' })).flashHit(1e9);

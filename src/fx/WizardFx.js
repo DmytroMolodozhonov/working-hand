@@ -167,7 +167,7 @@ export class WizardFx {
                 _w.y -= 1.8;
                 fx.spark(_w, Math.random() < 0.5 ? 0x5dff8a : 0xb6ffcb, 0.12, _u.set((Math.random() - 0.5) * 0.4, 1.2 + Math.random(), (Math.random() - 0.5) * 0.4), 0.8);
             }
-            if (f & (FX.SHIELD | FX.DOME)) {
+            if (v.element!=='water' && (f & (FX.SHIELD | FX.DOME))) {
                 // (the same picture as a player's: the dome wins when both are up; the hand shield is before the free left hand — ShieldBounce.NPC_SHIELD)
                 const cv = this.vis[si] || this._vis();
                 si++;

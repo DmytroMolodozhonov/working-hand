@@ -330,6 +330,7 @@ export function matchSpell(text) {
     // («вин-» is also the start of «Вингардиум»: «виндгардиум», «вайнгардиум» — a «гар/гад» after it is the levitation's, never the wind —
     //  the author 05.11: «Вингардиум Левиоса путается с заклинанием Wind»; SpellPhrase.VINGARDIUM_HEARD does the same for the spotter)
     if (!/га[рдт]|нгад|гад[иы]/.test(s) && has('вайнд', 'вайнт', 'ваинт', 'винд', 'вайн', 'уинд', 'уайнд', 'wind', 'wine', 'whined', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
+    if (/^(featherfall|feather fall|фезерфол|фезерфолл|фезер фол|федерфол|фэзэрфол)$/.test(s)) return 'Featherfall';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
     // «Fire Maxima» (before the lone «Максима» and the campfire «Fire»)
     if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер') && has('макс', 'max', 'мах', 'maks')) return 'FireMaxima';
@@ -1156,14 +1157,7 @@ export class SpellManager {
         // creatures and players get twice that (the author: twice as strong on everyone it blows at) —
         // along the ground; the lift only a little more, so nobody is thrown up into the sky
         const body = (v) => v && v.clone().multiplyScalar(WIND_BODY_K).setY(v.y * 1.25);
-        // Visible gust: pale swirling streaks flying out in a cone
-        const n = power > 1 ? 70 : 35;
-        for (let i = 0; i < n; i++) {
-            const spread = _b.set((Math.random() - 0.5) * cone * 1.6, (Math.random() - 0.5) * cone * 1.2, (Math.random() - 0.5) * cone * 1.6);
-            const v = _a.copy(direction).add(spread).normalize().multiplyScalar(range * (0.9 + Math.random() * 0.8));
-            const start = _c.copy(origin).addScaledVector(direction, Math.random() * 1.5);
-            this.fx.spark(start, Math.random() < 0.5 ? 0xe8f6ff : 0xbfe3ff, 0.18 + Math.random() * 0.25 * power, v, 0.7 + Math.random() * 0.3);
-        }
+        this.hooks.airGust?.(origin,direction,power,false);
         const push = (pos) => {
             const to = _a.subVectors(pos, origin);
             const dist = to.length();
@@ -1212,25 +1206,9 @@ export class SpellManager {
      * outward at WIND_RING.SPEED and puts out each fire as it reaches it (hooks.windRing). `origin`: the caster's body.
      */
     castWindRing(origin, casterId) {
+        this.hooks.airGust?.(origin,new THREE.Vector3(0,1,0),3,true);
         const R = WIND_RING.R;
         this._fx('fxWind', origin, 0.8);
-        // the wave seen: a pale shell and a ring on the ground rushing out, streaks of air at chest height
-        if (!this._impGeo) { this._impGeo = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true); this._impRing = new THREE.RingGeometry(0.86, 1, 48); }
-        const shellMat = new THREE.MeshBasicMaterial({ color: 0xe4f4ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-        const ringMat = new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-        const shell = new THREE.Mesh(this._impGeo, shellMat);
-        const ring = new THREE.Mesh(this._impRing, ringMat);
-        ring.rotation.x = -Math.PI / 2;
-        const ground = this.hooks.collision ? this.hooks.collision.surfaceY(origin.x, origin.z) : origin.y - 1.5;
-        const H = Math.max(2.4, origin.y - ground + 1.4);
-        shell.position.set(origin.x, ground + H / 2, origin.z);
-        ring.position.set(origin.x, ground + 0.06, origin.z);
-        this.scene.add(shell); this.scene.add(ring);
-        for (let i = 0; i < 80; i++) {
-            const a = (i / 80) * Math.PI * 2 + Math.random() * 0.1;
-            const v = _a.set(Math.cos(a), (Math.random() - 0.5) * 0.15, Math.sin(a)).multiplyScalar(WIND_RING.SPEED * (0.85 + Math.random() * 0.3));
-            this.fx.spark(_c.set(origin.x, origin.y + (Math.random() - 0.4) * 1.2, origin.z), Math.random() < 0.5 ? 0xe8f6ff : 0xbfe3ff, 0.14 + Math.random() * 0.2, v, 0.5);
-        }
         const push = (pos) => windRingPush(origin, pos);
         // (twice on bodies, as «Вайнд Максима» ahead; the lift only a little more)
         const body = (pos) => { const v = push(pos); return v && v.multiplyScalar(WIND_BODY_K).setY(v.y * 1.25); };
@@ -1265,14 +1243,8 @@ export class SpellManager {
             life: T + 0.2,
             onUpdate: (spell, dt) => {
                 t += dt;
-                const k = Math.min(1, t / T), r = 0.5 + R * k;
-                shell.scale.set(r, H, r);
-                ring.scale.setScalar(r);
-                shellMat.opacity = 0.3 * (1 - k * k);
-                ringMat.opacity = 0.5 * (1 - k * k);
                 if (wave) this.hooks.windRingStep?.(wave, dt);
             },
-            onEnd: () => { this.scene.remove(shell); this.scene.remove(ring); shellMat.dispose(); ringMat.dispose(); },
         });
     }
 
@@ -1321,7 +1293,6 @@ export class SpellManager {
                 shellMat.opacity = 0.32 * (1 - k);
                 ringMat.opacity = 0.55 * (1 - k);
             },
-            onEnd: () => { this.scene.remove(shell); this.scene.remove(ring); shellMat.dispose(); ringMat.dispose(); },
         });
         const push = (pos) => impulsePush(name, origin, pos);
         // creatures (where they are simulated): pushed away; whoever flies off a ledge is watched till it lands
