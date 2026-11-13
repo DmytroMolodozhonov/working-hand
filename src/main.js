@@ -1,3 +1,4 @@
+import {rememberStartupFailure,readStartupFailure,clearStartupFailure,showStartupFailure} from './ui/StartupFailure.js';
 /**
  * main.js — entry point: menu, settings, loading screen, game start,
  * multiplayer lobby. The menu behaves exactly like the original.
@@ -113,12 +114,13 @@ let _lastShader = null;
 // the window as it was; at most twice in 2 minutes, then the words on the screen say what to do. 02.11: a second game on the same
 // card - a test left running in the background - made it drop at the world's shaders and the player was left on a dead screen)
 const glReload = (why) => {
-    if (window.__glReloading) return;
+    if (window.__glReloading || window.__startupFailed) return;
     let tries = [];
     try { tries = JSON.parse(sessionStorage.getItem('zns-gl-retry') || '[]').filter((t) => Date.now() - t < 120000); } catch (e) { /* no storage */ }
     if (tries.length >= 2) return;
     window.__glReloading = true;
     try { sessionStorage.setItem('zns-gl-retry', JSON.stringify([...tries, Date.now()])); } catch (e) { /* no storage */ }
+    rememberStartupFailure(localStorage,new Error('Видеокарта сбросила графику: '+why),window.__zns?.game?.config||{});
     netLog(`🎮 графика сброшена видеокартой — перезапускаю страницу (${why})`);
     try { updateProgress(100, 'Видеокарта сбросила графику — перезапускаю игру…'); } catch (err) { /* not built yet */ }
     try { rememberWindowSize(); } catch (err) { /* */ }
@@ -213,6 +215,8 @@ function updateProgress(percent, text) {
 // Loading screen starts visible in the HTML: hide it, show the menu.
 loadingScreen.classList.add('hidden');
 loadingScreen.style.display = 'none';
+const previousStartupFailure=readStartupFailure(localStorage);
+if(previousStartupFailure){showStartupFailure(mainMenu,previousStartupFailure,{compact:true});netLog('❌ предыдущий вход: '+previousStartupFailure.message);}
 
 // ------------------------------------------------------------------ tabs
 const tabBtns = document.querySelectorAll('.tab-btn');
@@ -1440,6 +1444,7 @@ async function startGameInner(config, welcome) {
         updateProgress(100, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...');
 
         const reveal = () => {
+            clearStartupFailure(localStorage);document.getElementById('startup-failure')?.remove();window.__startupFailed=false;
             try { localStorage.removeItem('zns-gl-at'); } catch (e) { /* no storage */ }
             B.end('до «можно играть»');
             try { netLog(B.line(`загрузка (${config.mode}${config.saved ? ', сохранение' : ''}${net.isClient ? ', гость' : ''})`) + ` | страница до меню ${(PAGE_READY_MS / 1000).toFixed(1)} с`); } catch (e) { /* (only the journal) */ }
@@ -1482,7 +1487,12 @@ async function startGameInner(config, welcome) {
         console.error('INIT ERROR:', error, error?.stack);
         netLog(`❌ вход в мир (место «${config?.hero?.spawn || 'start'}», поколение ${config?.gen ?? '—'}): ${error?.message || error}${window.__glLost ? ' [контекст WebGL потерян]' : ''} | ${String(error?.stack || '').split('\n').slice(0, 4).join(' ← ')}`);
         updateProgress(100, window.__glLost ? 'Видеокарта сбросила графику (драйвер перезапустился). Закройте другие тяжёлые программы, обновите драйвер видеокарты и запустите снова.' : 'Ошибка: ' + (error?.message || error));
-        setTimeout(() => location.reload(), 4000);
+        window.__startupFailed=true;
+        const failure=rememberStartupFailure(localStorage,error,config);
+        window.__zns.lastStartupError=failure;
+        if(game)game.active=false;
+        try{game?.keeper?.dispose?.();game?.sound?.stopAll?.();document.exitPointerLock?.();}catch{}
+        showStartupFailure(portal.el,failure,{back:()=>location.reload()});
     }
 }
 

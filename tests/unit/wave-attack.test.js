@@ -157,3 +157,7 @@ test('a wave requires a large connected real water source, never a puddle or air
  assert.ok(waveSource(data(()=>true),{x:0,z:0}),'lake/ocean');
  assert.equal(waveSource({...data(()=>true),landMade:()=>false},{x:0,z:0}),null,'never synchronously generate unloaded terrain');
 });
+
+test('the wave system exposes its actual prewarm sample before any live wave exists',async()=>{
+ const {WaveAttacks}=await import('../../src/game/WaveAttack.js');const waves=new WaveAttacks({});const m=waves.sampleModel();assert.equal(m.isMesh,true);assert.ok(m.geometry.attributes.position.count>0);assert.equal(m.geometry.userData.shared,true);assert.equal(typeof m.material.onBeforeCompile,'function');m.material.dispose();
+});

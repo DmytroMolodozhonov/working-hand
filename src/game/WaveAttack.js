@@ -456,8 +456,6 @@ class Spray {
         this.dropMat.userData.uniforms.uTime.value += dt;
     }
 
-    sampleModel(){const s=waveSurface();const m=new THREE.Mesh(s.geometry,s.material);m.userData.shared=true;return m;}
-
     get busy() { return this.d.length + this.f.length + this.p.length > 0; }
 
     dispose() {
@@ -481,6 +479,8 @@ export class WaveAttacks {
             solid: (x, y, z) => !!this.game.world?.terrain?.data?.isSolidAt?.(x, y, z),
         };
     }
+
+    sampleModel(){const s=waveSurface();const m=new THREE.Mesh(s.geometry,s.material);m.userData.shared=true;return m;}
 
     get busy() { return !!this.mine; }
 
