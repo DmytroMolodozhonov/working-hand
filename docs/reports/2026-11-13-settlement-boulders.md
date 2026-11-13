@@ -1,0 +1,5 @@
+# Earth settlement garden stones
+
+Six deterministic rounded irregular stones, in varied sizes, decorate the entrance and indoor garden of each earth settlement without changing voxel generation. The shared geometry has layered mineral colour and fine grain; one 128-instance mesh covers all loaded sites. Four homes share one set. Each stone has rotated world collision bounds, follows terrain support downward, and can be destroyed by a blast. Broken IDs persist through the ordinary Houses snapshot and a reliable host event; unloaded sites remove their instances and collision boxes.
+
+Three direct tests check detailed geometry/colour, deterministic rotations, size variation, one shared lifecycle, actual CollisionWorld blockage, falling after removal of support, persistent blast destruction and cleanup. The existing elemental settlement suite also passes. Actual generated site hm-5_-3_2 produced six instances and six collision boxes. Both entrance and cave garden screenshots were inspected under /tmp/earth-settlement-stones; no page errors.

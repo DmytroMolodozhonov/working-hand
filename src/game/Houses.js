@@ -25,6 +25,7 @@
  */
 
 import * as THREE from 'three';
+import {SettlementBoulders} from './SettlementBoulders.js';
 import { Chest } from '../entities/Chest.js';
 import { doorHeld, floorUnder } from './Wreck.js';
 import { setNearShadow } from '../core/Shadows.js';
@@ -59,6 +60,7 @@ export class Houses {
     constructor(game) {
         this.game = game;
         this.enabled = !game.config.map && game.config.mode !== 'test';
+        this.boulders = new SettlementBoulders(game);
         this.active = new Map(); // house id -> {def, i, h, doorId, bedIds, chests, panes, family, ...}
         this.activePens = new Map(); // pen id -> {def, pen}
         this.pens = new Map(); // pen id -> animals still to come
@@ -389,6 +391,7 @@ export class Houses {
     // ------------------------------------------------------------------- frame
     update(dt) {
         if (!this.enabled) return;
+        this.boulders.update(dt,this.active);
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 0.5; this._scan(); }
         if (!this.active.size && !this.panes.length) { if (this._dirty) this._rebuildGlass(); return; }
@@ -401,11 +404,12 @@ export class Houses {
     applyGlass(id) { this.breakPane(id, null, false); }
 
     snapshot() {
-        return { broken: [...this.broken], beds: [...this.bedColors] };
+        return { stones: [...this.boulders.broken], broken: [...this.broken], beds: [...this.bedColors] };
     }
 
     restore(s) {
         if (!s) return;
+        for(const id of s.stones || [])this.boulders.break(id,false);
         for (const id of s.broken || []) this.broken.add(id);
         for (const [id, c] of s.beds || []) this.bedColors.set(id, c);
         this.panes = this.panes.filter((p) => !this.broken.has(p.id));
@@ -413,6 +417,7 @@ export class Houses {
     }
 
     dispose() {
+        this.boulders.dispose();
         for (const rec of [...this.active.values()]) this._deactivate(rec);
         this.game.scene.remove(this.glass);
         this.glass.geometry.dispose();
