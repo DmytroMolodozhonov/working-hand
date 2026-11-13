@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { BASE_COLORS, patternOf } from '../world/Terrain.js';
+import { BLOCK,BASE_COLORS, patternOf } from '../world/Terrain.js';
 import { applyVoxelDetail } from '../world/VoxelShading.js';
 
 const CAP = 512; // blocks of one kind at once (the caster's 160, the thrown, a few friends' vortexes)
@@ -36,8 +36,9 @@ export function blockSwarmMaterial() {
 }
 
 /** A unit cube for a kind of block: the terrain's pattern id, full daylight, the top face marked. */
-function blockGeometry(type, lush) {
-    const g = new THREE.BoxGeometry(1, 1, 1);
+function blockGeometry(type, lush, blade = false) {
+    const g = blade ? new THREE.ConeGeometry(.64, 1.45, 4, 1) : new THREE.BoxGeometry(1, 1, 1);
+    if (blade) g.rotateX(-Math.PI/2);
     const n = g.attributes.position.count;
     const col = new Float32Array(n * 3).fill(1), pat = new Float32Array(n).fill(patternOf(type, lush)), sky = new Float32Array(n).fill(1), top = new Float32Array(n);
     const nor = g.attributes.normal;
@@ -66,10 +67,11 @@ export class BlockSwarmFx {
         this.touched = [];
     }
 
-    _kind(type) {
-        let k = this.kinds.get(type);
+    _kind(type, blade = false) {
+        const key=type+(blade?':blade':':block');
+        let k = this.kinds.get(key);
         if (k) return k;
-        const geo = blockGeometry(type, this.lush);
+        const geo = blockGeometry(type, this.lush, blade);
         const cell = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
         const side = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
         const top = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
@@ -82,7 +84,7 @@ export class BlockSwarmFx {
         mesh.visible = false;
         this.scene.add(mesh);
         k = { mesh, cell, side, top, n: 0 };
-        this.kinds.set(type, k);
+        this.kinds.set(key, k);
         return k;
     }
 
@@ -96,14 +98,14 @@ export class BlockSwarmFx {
      * pos {x, y, z}, quat {x, y, z, w}, scale (1 = a whole block).
      */
     add(b, pos, quat, scale = 1) {
-        const k = this._kind(b.t);
+        const k = this._kind(b.blade ? BLOCK.STONE : b.t, !!b.blade);
         if (k.n >= CAP) return;
         const i = k.n++;
         _m.compose(_p.set(pos.x, pos.y, pos.z), _q.set(quat.x, quat.y, quat.z, quat.w), _s.set(scale, scale, scale));
         k.mesh.setMatrixAt(i, _m);
         k.cell.setXYZ(i, b.cx, b.cy, b.cz);
-        k.side.setXYZ(i, b.side[0], b.side[1], b.side[2]);
-        k.top.setXYZ(i, b.top[0], b.top[1], b.top[2]);
+        k.side.setXYZ(i, b.blade ? .52 : b.side[0], b.blade ? .48 : b.side[1], b.blade ? .4 : b.side[2]);
+        k.top.setXYZ(i, b.blade ? .52 : b.top[0], b.blade ? .48 : b.top[1], b.blade ? .4 : b.top[2]);
     }
 
     end() {
@@ -117,8 +119,8 @@ export class BlockSwarmFx {
     }
 
     /** One block drawn out of sight so that the shader is compiled on the loading screen (Game.prewarm). */
-    sample() {
-        const k = this._kind(1);
+    sample(blade = false) {
+        const k = this._kind(1, blade);
         const im = new THREE.InstancedMesh(k.mesh.geometry, this.mat, 1); // (a copy for the prewarm zoo: the real one stays in the scene)
         _m.makeTranslation(0, -1000, 0);
         im.setMatrixAt(0, _m);

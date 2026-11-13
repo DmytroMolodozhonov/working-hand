@@ -124,3 +124,15 @@ test('Cardilon spends the shield after older queued NPC/player poses, so congest
         assert.equal(sent[1].c[0], 1); assert.equal(sent[3].c[0], 0);
     } finally { conn._outbox?.dispose(); }
 });
+
+test('earth mage states coalesce per NPC and flush before its stone volley',()=>{
+ const {net,conn,sent,drain}=link();
+ try{
+  for(let i=0;i<10000;i++)for(const by of ['earth-a','earth-b'])net._sendConn(conn,{t:'gv',npc:true,by,ev:'earth',pt:i});
+  assert.equal(conn._outbox.states.size,2);assert.equal(conn._outbox.events.length,0);
+  net._sendConn(conn,{t:'gv',npc:true,by:'earth-a',ev:'volley',ids:[1]});
+  drain();
+  assert.equal(sent[0].ev,'earth');assert.equal(sent[0].by,'earth-a');assert.equal(sent[0].pt,9999);
+  assert.equal(sent[1].ev,'volley');assert.equal(sent.at(-1).by,'earth-b');
+ }finally{conn._outbox?.dispose();}
+});

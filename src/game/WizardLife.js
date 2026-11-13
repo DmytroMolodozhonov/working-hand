@@ -499,9 +499,10 @@ export class WizardLife {
     think(v, dt) {
         const W = v.W;
         if (W) {
-            if (v.savior == null) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
+            if (v.savior == null && !v.element) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
             v.castCd -= dt; v.domeCd -= dt; v.windCd -= dt; v.blinkCd -= dt;
         }
+        if (v.element) return this.game.earthMages?.think(v,dt) ?? true;
         if (v.practice) {
             v.practice.t -= dt;
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;
@@ -647,7 +648,7 @@ export class WizardLife {
         const busy = new Map();
         for (const v of wizards) if (v.practice) busy.set(v.cs, (busy.get(v.cs) || 0) + 1);
         for (const v of wizards) {
-            if (v.practice || v.arena || v.dead || v.noWand || v.foe || v.fleeT > 0 || v.talking > 0 || v.speed > 0.3 || v.seated) continue;
+            if (v.element || v.practice || v.arena || v.dead || v.noWand || v.foe || v.fleeT > 0 || v.talking > 0 || v.speed > 0.3 || v.seated) continue;
             if (v.cs.hostile?.size) continue;
             if (!players.some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < PRACTICE_NEAR)) continue;
             if ((busy.get(v.cs) || 0) >= PRACTICE_MAX) continue;

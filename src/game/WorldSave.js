@@ -480,6 +480,7 @@ export class WorldKeeper {
             rebuild: g.castleLife?.rebuild.snapshot() || null, // what the builders put back (Rebuild.js)
             bodies: g.death?.snapshot() || [],
             crystals: g.crystals?.snapshot() || [],
+            earthHeld: g.earthMages?.snapshot() || [],
             spiders: g.spiders?.snapshot() || [], // the giant spider's lairs whose spider was killed (she never comes back there: Spider.js)
             diabolos: g.diabolos?.snapshot() || null, // Дьяволос: будили ли (после загрузки он спит — Diabolos.js)
             dragons: g.dragons?.snapshot() || {}, // dragons' lairs: the gold left, their dragons' health (Dragons.js)
@@ -586,6 +587,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.gargoyleScorch) g.gargoyles?.restore(save.gargoyleScorch);
     if (save.bodies) g.death?.restore(save.bodies);
     if (save.crystals) g.crystals?.restore(save.crystals);
+    if (save.earthHeld) g.earthMages?.restore(save.earthHeld);
     if (save.spiders) g.spiders?.restore(save.spiders);
     if (save.dragons) g.dragons?.restore(save.dragons);
     if (save.diabolos) g.diabolos?.restore(save.diabolos);

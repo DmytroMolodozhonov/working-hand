@@ -1,3 +1,6 @@
+import { EarthMages } from './EarthMages.js';
+import { earthSite,earthLook } from './EarthMagicRules.js';
+import { VillagerModel as EarthVillager, villagerLook as earthBaseLook } from '../entities/VillagerModel.js';
 import { worldPlayers } from './WorldPlayers.js';
 import { rememberDeath, forgetDeath } from './DeathCheckpoint.js';
 /**
@@ -651,9 +654,11 @@ export class Game {
             firefight: (sp, dt) => this.firefighting?.act(sp, dt), // («Firefighting»: the spray puts fire out — Firefighting.js)
             blockAt: (x, y, z) => this._flameBlock(x, y, z),
             // a house's sphere of protection (HouseWards.js): spells from outside stop at it
-            wardClip: (o, d, len) => this.wards?.clipRay(o, d, len) ?? len,
+            wardClip: (o,d,len) => { const w=this.wards?.clipRay(o,d,len)??len; return this.earthMages?.clipRay(o,d,w)??w; },
             wardHit: (a, b) => this.wards?.segmentHit(a, b) || null,
-        doorsOnWay: () => this.doors, // (an orb's step is cut against the doors' leaves: Doors.segmentHit)
+        doorsOnWay: () => this.doors,
+            earthOnWay: (a,b,by) => this.earthMages?.segmentHit(a,b,by),
+            earthTake: (hit,name) => this.earthMages?.take(hit,name), // (an orb's step is cut against the doors' leaves: Doors.segmentHit)
             shielded: (from, to) => !!this.wards?.shields(from, to),
             drain: (casterId, mana, dt) => (casterId === this.localId || casterId === 'local' ? this.combat.drain(mana, dt) : true),
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
@@ -748,7 +753,8 @@ export class Game {
         this.breakthrough = new Breakthrough(this);
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
-        this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
+        this.groundVortex = new GroundVortex(this);
+        this.earthMages = new EarthMages(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
         this.hellGate = new HellGate(this); // the gates of hell: «Pentagranium Infernum», the passage down and back (HellGate.js; rules — HellRules.js, the map — HellMap.js)
         this.hellRealm = new HellRealm(this); // hell's sky, fog, light, lava, sparks and sound — where the hero is (HellRealm.js)
         this.firm = new Firmitas(this); // the gift of the white pentagram of absolute steadiness: the rite's picture (Firmitas.js; the flag is Steadiness.absolute)
@@ -1045,6 +1051,7 @@ export class Game {
                 const mdef = marketDef(this.collision.groundY(0, 13));
                 buildMarketStall(this, mdef);
                 this.castleLife.addSite(mdef);
+                this.castleLife.addSite(earthSite(this.collision.groundY(26,-22)));
                 // a plain villager to talk to near the start: the quick talk, orders, the net (CreativeGuest.js)
                 this.castleLife.addSite(guestDef(this.collision.groundY(-8, 6)));
                 this.castleLife.addSite(lairDef()); // (the Potion-maker's lair: his place in the sky; he is seated when the hall stands — PotionLair)
@@ -3970,6 +3977,8 @@ export class Game {
         const zoo = new THREE.Group();
         zoo.position.copy(this.character.group.position);
         zoo.add(makeBookModel(0x8e2b2b));
+        const earthSample=new EarthVillager(Object.assign(earthBaseLook(971206,'mage',false),earthLook()));
+        zoo.add(earthSample.group);
         const glow = new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
         zoo.add(new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 8), glow));
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
@@ -4502,6 +4511,7 @@ export class Game {
         this.hellRealm?.update(dt);
         this.firm?.update(dt);
         this.ghostCastle?.update(dt);
+        this.earthMages?.update(dt);
         this.groundVortex?.update(dt);
         this.waterWalk?.update(dt);
         this.waterPart?.update(dt);
@@ -5631,6 +5641,7 @@ export class Game {
         this.rainFx?.dispose();
         this.seaSurface?.dispose();
         this.steam?.dispose();
+        this.earthMages?.dispose();
         this.groundVortex?.dispose();
         this.seeFx?.dispose();
         this.ultra?.dispose();

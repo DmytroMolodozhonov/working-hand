@@ -1171,6 +1171,8 @@ export class Duel {
         // a wall or a floor on this step's way (looked at every 0.3 m): nothing behind it is touched
         const wallS = this._wallOnWay(from, b.front);
         const hit = firstTouched(from, b.front, this._bodies(b.by, undefined, true));
+        const earthHit=g.earthMages?.segmentHit(from,b.front,b.by);
+        if(earthHit && earthHit.t<=wallS && (!hit || earthHit.t<=hit.s) && g.earthMages.take(earthHit,b.spell)){b.front.copy(earthHit.point);this._end(b,'blocked');return false;}
         // (host) a player's charge flying close past people: a threat — they flinch, turn, look for who (Startle.js)
         if (g.authority && !b.npc) this._passBy(b, from, Math.min(1, wallS, hit ? hit.s : 1), hit?.body);
         // the strong charges burst on a ship's hull, a mast, a sail (StrongSpells: «не действует» on ships); the black ship's barrier flares

@@ -7,7 +7,7 @@ export class WizardBlast {
     constructor(wizards) { this.wizards = wizards; }
 
     protect(v) {
-        if (v.dead || v.noWand || v.stunT > 0 || v.lev || v.sleep) return false;
+        if (v.element || v.dead || v.noWand || v.stunT > 0 || v.lev || v.sleep) return false;
         if (v.fx & FX.DOME) { v.domeT = Math.max(v.domeT || 0, 4); return true; }
         if (v.W?.dome && (v.domeCd || 0) <= 0 && v.mana >= NPC_COST.ProtectionMaxima) {
             this.wizards.fight._dome(v);

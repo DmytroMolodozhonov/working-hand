@@ -1651,10 +1651,13 @@ export class SpellManager {
                 const stepLen = step.length();
                 // boxes (a door, a lifted house's walls, tables…) and a door's leaf along the WHOLE step: the first one hit
                 const way = bombardoWayStop(collision, this.hooks.doorsOnWay?.() || null, prev, orb.position);
-                if (terrain && stepLen > 0) {
-                    const hit = terrain.raycast(prev, step.clone().divideScalar(stepLen), stepLen);
-                    if (hit && !(way && way.s * stepLen < hit.dist)) { explodeAt(_b.set(hit.x, hit.y, hit.z)); spell.life = 0; return; }
+                const earth = this.hooks.earthOnWay?.(prev, orb.position, casterId);
+                const terrainHit = terrain && stepLen > 0 ? terrain.raycast(prev, step.clone().divideScalar(stepLen), stepLen) : null;
+                if(earth && (!way || earth.t<=way.s) && (!terrainHit || earth.t*stepLen<=terrainHit.dist)) {
+                    // Keep the struck rock present while blast shielding is evaluated; then chip it away.
+                    explodeAt(earth.point); this.hooks.earthTake?.(earth,maxima?'BombardoMaxima':'Bombardo');spell.life=0;return;
                 }
+                if (terrainHit && !(way && way.s * stepLen < terrainHit.dist)) { explodeAt(_b.set(terrainHit.x, terrainHit.y, terrainHit.z)); spell.life = 0; return; }
                 // a house's sphere: the orb bursts on it, outside
                 const wh = this.hooks.wardHit?.(prev, orb.position);
                 if (wh) { explodeAt(wh); spell.life = 0; return; }

@@ -343,7 +343,7 @@ export class Stitching {
         if (!get) return;
         const found = findPassage(get, origin, dir.clone().normalize());
         if (!found.cells) return;
-        const mine = casterId === g.localId || casterId === 'local';
+        const mine = casterId === g.localId || casterId === 'local' || (!!g.authority && !!g.castleLife?.byId.get(casterId)?.element);
         const color = BASE_COLORS[found.block] ?? 0x8a8a8a;
         const iris = irisOrder(get, found.cells, found.plane);
         const n = iris.stones.length;

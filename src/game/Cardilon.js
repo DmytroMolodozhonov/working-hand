@@ -110,7 +110,7 @@ export class Cardilon {
     _npc(v, s, dt) {
         const g = this.game, b = s.bomb, fight = g.castleLife?.wizards?.fight;
         _center.set(v.x, v.y + 2.2, v.z);
-        if (!v.wizard || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.lev || v.carriedBy || v.fx & FX.DOME || v.id === b.by || !incomingBomb(b, _center)) return;
+        if (v.element || !v.wizard || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.lev || v.carriedBy || v.fx & FX.DOME || v.id === b.by || !incomingBomb(b, _center)) return;
         if (g.duel?.clashes?.some(c => c.a.by === v.id || c.b.by === v.id)) return;
         if (!g.castleLife._sees(v, b.p)) return;
         const wall = !knowsCardilon(v);
@@ -165,7 +165,7 @@ export class Cardilon {
         this.hadBomb = active;
         for (const v of this.game.castleLife?.byId.values() || []) {
             if (!active) { v.cardilon = null; continue; }
-            if (!v.wizard || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.fx & FX.DOME) { v.cardilon = null; continue; }
+            if (v.element || !v.wizard || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.fx & FX.DOME) { v.cardilon = null; continue; }
             _center.set(v.x, v.y + 2.2, v.z); _hand.set(v.x, v.y + 2.7, v.z);
             const s = this._pick(_center, _hand, v.id);
             if (s) this._npc(v, s, dt);

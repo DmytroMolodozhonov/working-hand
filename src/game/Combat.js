@@ -1094,7 +1094,7 @@ export class Combat {
      * A spell hits me. kind: Inferno | Thunderwave | Sapira | Sands | IceBall
      * @returns {boolean} false when the shield stopped it
      */
-    hitBySpell(kind, from, byId, push = null) {
+    hitBySpell(kind, from, byId, push = null, damageScale = 1) {
         if (!this.enabled || this.dead) return false;
         // «Thunderwave» comes from ABOVE: an ordinary «Protection» (and a shield in the hand) does not stop it — only the dome (Protection Maxima) and the gods' shield
         const s0 = this.shield, fromAbove = kind === 'Thunderwave' && !(s0 && s0.left > 0 && (s0.type === 2 || s0.gods));
@@ -1110,7 +1110,7 @@ export class Combat {
             this.infernoCooldown = PVP.INFERNO_TICK;
         }
         // (fire from a wizard holding the dragon's wand burns 60% harder: Game.fireBoost)
-        this.damage((HIT_DAMAGE[kind] ?? 2) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind);
+        this.damage((HIT_DAMAGE[kind] ?? 2) * Math.max(1, Math.min(3, damageScale)) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind);
         if (kind === 'Inferno' && !this.dead) this.game.burning?.ignite('p', this.game.localId, byId); // (the stream sets me alight)
         // its physical effect: a push, a stagger, off the feet (BodyImpact; SPELL_PHYSICS when no push is given)
         if (this.game.impact) this.game.impact.spellHit(kind, from, byId, push);
@@ -1164,6 +1164,7 @@ export class Combat {
     /** Bombardo next to me: damage by distance, the shield takes part of it. */
     explosion(pos, radius, power, byId) {
         if (!this.enabled || this.dead) return;
+        if (this.game.earthMages?.blocksBlast(pos, this.center(_v4), byId)) return;
         if (byId === 'diabolos') return; // (взрывы Дьяволоса — шар, кулак — по игроку считает его компьютер сам: Diabolos._hitMe, щит ломается — breakShield)
         if (byId && byId === this.game.localId) return; // your own blast doesn't hurt you
         const d = this.center(_v1).distanceTo(pos);

@@ -1,7 +1,7 @@
 /** A slow reliable channel must not collect seconds of obsolete poses ahead of a spell. */
 export const OUTBOX = { HIGH: 16384, STATE: 4096, POLL: 25, MAX_EVENTS: 4096, BUDGET_MS: 2 };
 const SNAPSHOTS = new Set(['p', 'pstate', 'z', 'w', 'vil', 'an', 'ipos', 'bmv']);
-const stateKey = msg => msg.t + ':' + (msg.from || msg.id || '') + (msg.t === 'bmv' ? ':' + msg.id : '');
+const stateKey = msg => msg.t==='gv'&&msg.npc ? 'earth:'+msg.by : msg.t + ':' + (msg.from || msg.id || '') + (msg.t === 'bmv' ? ':' + msg.id : '');
 const ITEM_EVENTS = new Set(['igone', 'inew']);
 const WEAPON_EVENTS = new Set(['wgone', 'wnew', 'wspawn', 'grant', 'drop']);
 
@@ -38,7 +38,8 @@ export class NetOutbox {
             this.flushState('p:' + (msg.by || msg.from || ''));
         }
         if (msg.t === 'ahit') this.flushState('an:' + (msg.from || ''));
-        if (SNAPSHOTS.has(msg.t)) this.states.set(stateKey(msg), { msg, packets });
+        if(msg.t==='gv'&&msg.npc&&msg.ev!=='earth')this.flushState('earth:'+msg.by);
+        if (SNAPSHOTS.has(msg.t) || msg.t==='gv'&&msg.npc&&msg.ev==='earth') this.states.set(stateKey(msg), { msg, packets });
         else {
             if (this.events.length >= OUTBOX.MAX_EVENTS) { this.report?.('связь не успевает передавать игровые действия — соединение закрыто'); this.conn.close(); this.dispose(); return; }
             this.events.push({ packets, i: 0 });

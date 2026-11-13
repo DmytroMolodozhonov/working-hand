@@ -39,7 +39,7 @@ const _col = new THREE.Color();
 /** Which game mode counts as «free»: Creative and the test mode need no wand and pay no mana. */
 const freeMode = (g) => g.config?.mode === 'creative' || g.config?.mode === 'test';
 
-function newSwarm(by, mine) {
+export function newSwarm(by, mine) {
     return {
         by, mine, B: [], n: 0, angle: 0, spin: GV.SPIN_MIN, yaw: 0, yawT: 0, k: 0, tk: 0, rk: 0, rtk: 0, sk: 0, shield: false, cloud: new THREE.Vector3(), cloudInit: false,
         body: new THREE.Vector3(), head: new THREE.Vector3(), hist: [], spot: null, t: 0, at: 0, lush: false,
@@ -289,6 +289,7 @@ export class GroundVortex {
             if (this._t - sw.at > GV.STALE) { this._releaseAll(sw, false); this.remote.delete(by); continue; }
             this._updateRemote(sw, dt);
         }
+        if (this.game.earthMages?.swarms.size) this._flushEdits(false, dt);
         this._updateFlights(dt);
         this._updateFalls(dt);
         this._draw(dt);
@@ -447,7 +448,7 @@ export class GroundVortex {
         const seed = ++this._seq * 977 + (this._t * 100 | 0);
         this._replayVolley(sw, ids, d, seed);
         this._mDirty = true;
-        this._send({ ev: 'volley', ids, d: [r2(d.x), r2(d.y), r2(d.z)], seed });
+        this._send({ ...(sw.npc ? {npc:true,by:sw.by} : {}), ev: 'volley', ids, ...(sw.npc?{aim:sw.aim}:{}), d: [r2(d.x), r2(d.y), r2(d.z)], seed });
         if (this.game.sound) this.game.sound.playStep?.();
         this.game.castleLife?.alarm?.({ x: sw.body.x, y: sw.body.y, z: sw.body.z }, 'uproot', this.me, 8);
     }
@@ -472,7 +473,7 @@ export class GroundVortex {
             const b = sw.B[i];
             if (!b) return;
             R.burstVelocity(b.pos.x - sw.body.x, b.pos.z - sw.body.z, seed, j, _o);
-            this.flights.push({ b, pos: b.pos.clone(), vel: new THREE.Vector3(_o.x, _o.y, _o.z), age: 0, by: sw.by, mine: sw.by === this.me, last: b.pos.clone(), spin: b.tm, burst: true });
+            this.flights.push({ b, pos: b.pos.clone(), vel: new THREE.Vector3(_o.x, _o.y, _o.z), age: 0, by: sw.by, mine: sw.mine, last: b.pos.clone(), spin: b.tm, burst: true });
             sw.B[i] = null; sw.n--;
         });
     }
@@ -483,7 +484,11 @@ export class GroundVortex {
             const b = sw.B[i];
             if (!b) return;
             R.salvoVelocity(dir, seed, j, _o);
-            this.flights.push({ b, pos: b.pos.clone(), vel: new THREE.Vector3(_o.x, _o.y, _o.z), age: 0, by: sw.by, mine: sw.by === this.me, last: b.pos.clone(), spin: b.tm });
+            if(sw.npc && sw.aim){
+                const dx=sw.aim[0]-b.pos.x,dz=sw.aim[2]-b.pos.z,time=Math.max(.1,Math.hypot(dx,dz)/GV.SPEED);
+                _o.x=dx/time;_o.z=dz/time;_o.y=(sw.aim[1]-b.pos.y+.5*GV.GRAV*time*time)/time;
+            }
+            this.flights.push({ b, pos: b.pos.clone(), vel: new THREE.Vector3(_o.x, _o.y, _o.z), age: 0, by: sw.by, mine: sw.mine, last: b.pos.clone(), spin: b.tm });
             sw.B[i] = null; sw.n--;
         });
     }
@@ -515,7 +520,7 @@ export class GroundVortex {
             const cp = c.center(_b);
             if (cp.distanceTo(f.pos) < 0.95 || cp.distanceTo(_c) < 0.95) {
                 if (this._cool('me')) {
-                    if (c.hitBySpell(GV.NAME, f.last, f.by, null) !== false) {
+                    if (c.hitBySpell(GV.NAME, f.last, f.by, null, f.b.blade ? 3 : 1) !== false) {
                         const n = this._recent('me');
                         if (n >= 3 && g.knock && !g.flight?.active) g.knock.knock({ dir: fallDir(f.vel.x, f.vel.z, g.character.group.rotation.y), down: 1.2, by: f.by, kind: 'GroundVortex', strength: 0.6 });
                     }
@@ -525,7 +530,7 @@ export class GroundVortex {
         }
         if (!g.authority || !duel) return null;
         for (const b of duel._bodies(null)) {
-            if (b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 'f' || b.kind === 'o' || b.kind === 'G') continue; // (a ghost: the blocks fly through it)
+            if ((b.kind === 'v' && b.id === f.by) || b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 'f' || b.kind === 'o' || b.kind === 'G') continue; // (a ghost: the blocks fly through it)
             if (b.kind === 'D') { if (this._near(b, f, _c)) { g.dragons?.hit?.(duel._creature('D', b.id), 0, GV.NAME, f.by); return 'hit'; } continue; }
             if (!this._near(b, f, _c)) continue;
             const key = b.kind + ':' + b.id;
@@ -551,7 +556,7 @@ export class GroundVortex {
     _recent(key) { return this._hitAt.get(key)?.n || 1; }
 
     _hitBody(b, f) {
-        const g = this.game, by = f.by, dmg = GV.BLOCK_DMG;
+        const g = this.game, by = f.by, dmg = GV.BLOCK_DMG * (f.b.blade ? 3 : 1);
         const dir = _a.copy(f.vel).setY(0);
         if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
         dir.normalize();
@@ -735,6 +740,7 @@ export class GroundVortex {
     // ================================================================ network
     onNet(m) {
         if (!m || !m.by || m.by === this.me) return;
+        if (m.npc) { this.game.earthMages?.onNet(m); return; }
         let sw = this.remote.get(m.by);
         if (m.ev === 'end') { if (sw) { this._releaseAll(sw, false); this.remote.delete(m.by); } return; }
         if (m.ev === 'st') {
@@ -803,7 +809,7 @@ export class GroundVortex {
         const fx = this.fx;
         if (!fx) return;
         fx.begin(this.data?.lush);
-        const put = (b, p, spinT, scale, sw = null) => {
+        const put = (b, p, spinT, scale, sw = null, velocity = null) => {
             // the cloud turns about the vertical axis only (neighbours never touch); wound into the funnel / the train a block tumbles
             const tum = sw ? Math.max(ease(sw.rk), ease(sw.k)) : 1;
             _ax.set(0, 1, 0);
@@ -815,12 +821,15 @@ export class GroundVortex {
                 _q.slerp(domeQuaternion(b.slot, sw.yaw, _q2), sk);
                 scale += (1 - scale) * sk;
             }
+            if (sw?.npc) _q.setFromAxisAngle(_ax.set(0,1,0),sw.yaw);
+            if (velocity && b.blade) _q.setFromUnitVectors(_ax.set(0,0,-1), _d.copy(velocity).normalize());
             fx.add(b, p, _q, scale);
         };
         const t = this._t;
         if (this.state) for (const b of this.state.B) if (b) put(b, b.pos, t, b.tm.s, this.state);
         for (const sw of this.remote.values()) for (const b of sw.B) if (b) put(b, b.pos, t, b.tm.s, sw);
-        for (const f of this.flights) put(f.b, f.pos, t + f.age * 2, 0.96);
+        for (const sw of this.game.earthMages?.swarms.values() || []) if(sw.body.distanceToSquared(this.game.character.group.position)<40000) for (const b of sw.B) if(b)put(b,b.pos,t,1,sw);
+        for (const f of this.flights) put(f.b, f.pos, t + f.age * 2, 0.96, null, f.vel);
         for (const f of this.falls) put(f.b, f.pos, t + f.age * 3, f.b.tm.s);
         fx.end();
         // dust off the funnel
@@ -832,7 +841,7 @@ export class GroundVortex {
     }
 
     /** For Game.prewarm: the blocks' shader is made on the loading screen. */
-    sampleModels() { return this.fx ? [this.fx.sample()] : []; }
+    sampleModels() { return this.fx ? [this.fx.sample(), this.fx.sample(true)] : []; }
 
     clear() {
         this.returnAll();

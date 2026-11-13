@@ -489,6 +489,7 @@ export class CastleLife {
         if (look.unarmored || look.robeOff) v.stripped = true;
         if (look.unarmored || (e.role === 'advisor' && !look.magicChest)) { v.armor = 0; v.maxArmor = 0; v.magicPieces = null; v.magicSet = false; v.stripped = true; } // (a wizard's ward is no steel: it stays)
         if (WIZ[e.role]) this.wizards.init(v);
+        this.game.earthMages?.init(v);
         npcWorn(v); // (real pieces by his role — the player's armour; bars = their points)
         v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
         v.group.rotation.y = v.yaw;
@@ -610,6 +611,7 @@ export class CastleLife {
         const def = cs.def;
         if (isGuestSite(def) && def.lair) return; // (the Potion-maker's lair: PotionLair / PotionMasterLife.ensure seat him when the hall stands)
         if (isGuestSite(def)) { const v = this._activate(cs, 1, def.spot, 'stall', { post: def.spot }); if (v) { v.guest = true; v.hp = v.maxHp = 50; } return; } // (50 HP: a spell or two angers him before it kills him — the author 05.11) // (the Creative guest: just him — CreativeGuest.js)
+        if (def.kind === 'elemental') { this._activate(cs, 1, {x:def.x,y:def.F,z:def.z}, 'elemental'); return; }
         if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
         if (def.kind === 'hamlet') { this.hamlets.wake(cs); return; } // (the lone houses and the small villages: HamletLife.js)
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
@@ -3500,6 +3502,7 @@ export class CastleLife {
      */
     wardOff(v, from, spell, dt = 0) {
         if (v.dead) return false;
+        if(v.element && from){const hit=this.game.earthMages?.segmentHit(from, _v.set(v.x,v.y+2,v.z));if(hit&&this.game.earthMages.take(hit,spell))return true;}
         // a wizard's «Protection» / the Master's dome: any charge — «Авада Кедавра» too — for half its mana (WizardFight.shieldPays)
         if (v.wizard && (v.fx & FX.DOME)) return this.wizards.fight.shieldPays(v, spell, true, dt);
         const front = !!from && (from.x - v.x) * -Math.sin(v.yaw) + (from.z - v.z) * -Math.cos(v.yaw) > 0;
@@ -3926,7 +3929,7 @@ export class CastleLife {
     }
 
     hitAt(p, radius, dmg, by, kind = null) { // (kind: 'Bombardo' / 'BombardoMaxima' … — a wizard with the ward against blasts: BlastWardNpc.js)
-        for (const v of [...this.byId.values()]) if (!v.dead && Math.hypot(v.x - p.x, v.z - p.z) < radius + 1 && Math.abs(v.y + 2 - p.y) < radius + 3 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 2, z: v.z })) this.hit(v, dmg, _v.set(v.x - p.x, 0, v.z - p.z).normalize().clone(), by, kind ? { spell: true, kind } : { spell: true });
+        for (const v of [...this.byId.values()]) if (!v.dead && Math.hypot(v.x - p.x, v.z - p.z) < radius + 1 && Math.abs(v.y + 2 - p.y) < radius + 3 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 2, z: v.z }) && !this.game.earthMages?.blocksBlast(p, {x:v.x,y:v.y+2,z:v.z},by)) this.hit(v, dmg, _v.set(v.x - p.x, 0, v.z - p.z).normalize().clone(), by, kind ? { spell: true, kind } : { spell: true });
         if (this.auth && by) this.startleAround(p, radius, by); // (the ones near: startled — Startle.js)
     }
 
@@ -4061,7 +4064,7 @@ export class CastleLife {
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
-            for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def) && !isGuestSite(cs.def)) { if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
+            for (const cs of this.castles.values()) if (cs.awake && cs.def.kind !== 'elemental' && !isStallSite(cs.def) && !isGuestSite(cs.def)) { if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
             this.hamlets.update(dt);
             this.fright.update(dt);
             this.home.update(dt);

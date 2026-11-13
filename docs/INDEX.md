@@ -867,3 +867,5 @@
 
 - `src/game/PentagramTablet.js` — общие модели круглых табличек пентаграмм, два атласа 512² с настоящими рисунками.
 - `world_storage.py` — атомарные файлы миров, ограниченная история, восстановление повреждённой записи и сохраняющее данные удаление.
+
+- `src/game/EarthMages.js`, `EarthMagicRules.js` — NPC мага земли, реальные блоки Ground Vortex, стена/кокон/лезвия, отступление с Stitching и Breakthrough; `src/entities/EarthMagePose.js`, `EarthMageLook.js` — суставы, стойки и костюм. Правила: `docs/rules/elemental-magic.md`; проверка: `tests/unit/earth-mage.test.js`.
