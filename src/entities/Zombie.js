@@ -646,7 +646,7 @@ export class Zombie {
         this.group.visible = false;
         this.corpseTimer = 0;
         if (this.ctx.fx) this.ctx.fx.iceShatter(this.group.position);
-        if (this.ctx.sound) this.ctx.sound.playFrozenHit();
+        if (this.ctx.sound) this.ctx.sound.playFrozenHit(this.group.position);
     }
 
     // ------------------------------------------------------------- «Брейнрот»

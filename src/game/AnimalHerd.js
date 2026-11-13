@@ -152,7 +152,7 @@ export function animatePose(a, dt, pose) {
     const wantLie = pose === POSE.rest ? 1 : 0;
     a.lie = (a.lie || 0) + (wantLie - (a.lie || 0)) * Math.min(1, dt * 1.2);
     // (grazing: the muzzle down to the grass — a horse's long neck goes down further)
-    const wantPitch = pose === POSE.graze ? (a.model?.userData?.grazePitch ?? -1.05) : pose === POSE.look ? 0.18 : pose === POSE.rest ? -0.25 : 0;
+    const wantPitch = pose === POSE.graze ? (a.grazeLimit ?? a.model?.userData?.grazePitch ?? -1.05) : pose === POSE.look ? 0.18 : pose === POSE.rest ? -0.25 : 0;
     a.headP = (a.headP || 0) + (wantPitch - (a.headP || 0)) * k;
     a.lookT = (a.lookT || 0) + dt;
     const wantYaw = pose === POSE.look ? Math.sin(a.lookT * 0.9 + a.id) * 0.7 : pose === POSE.graze ? Math.sin(a.lookT * 0.5 + a.id) * 0.15 : 0;
@@ -218,4 +218,22 @@ export function rayToSpan(o, d, len, x, bot, top, z, out = {}) {
     out.dist = Math.sqrt(ex * ex + ey * ey + ez * ez);
     out.along = s;
     return out;
+}
+
+const _grazePoint=new THREE.Vector3(),_grazeEuler=new THREE.Euler();
+/** Limit the actual head's descent against the terrain in front of its forefeet (a slope is not the floor under its belly). */
+export function horseGrazePitch(a,data){
+ const m=a.model,u=m.userData,n=u.neck,h=u.head,full=u.grazePitch;
+ if(!n||!h||!full||!data?.isSolidAt)return full;
+ m.updateWorldMatrix(true,false);
+ const rest=u.rest||{nx:n.rotation.x,hx:h.rotation.x};
+ const clear=pitch=>{
+  for(const z of [-.05,-.35,-.66]){
+   _grazePoint.set(0,-.12,z).applyEuler(_grazeEuler.set(rest.hx+u.grazeHead*pitch/full,h.rotation.y,0)).add(h.position)
+    .applyEuler(_grazeEuler.set(rest.nx+pitch,n.rotation.y,n.rotation.z)).add(n.position).applyMatrix4(m.matrixWorld);
+   if(data.landMade&&!data.landMade(_grazePoint.x,_grazePoint.z)||data.isSolidAt(_grazePoint.x,_grazePoint.y,_grazePoint.z))return false;
+  }return true;
+ };
+ // Stop at the first obstruction on the descent; never test only the end and swing through a bank.
+ let safe=0;for(let i=1;i<=12;i++){const p=full*i/12;if(!clear(p))break;safe=p;}return safe;
 }

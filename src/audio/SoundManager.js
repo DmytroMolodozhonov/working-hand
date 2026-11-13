@@ -58,6 +58,7 @@ function finish(gen) { let r; do { r = gen.next(); } while (!r.done); return r.v
 
 /** m: a zombie this near is heard growling (Звук зомби.wav, from its start, from where it stands). */
 export const ZOMBIE_HEAR = 8;
+const _crackEar=new THREE.Vector3();
 
 /** The effects' loudness while the player speaks (−10.5 dB): a spell's word must reach the microphone over the fight's noise. */
 export const DUCK_LEVEL = 0.3;
@@ -628,8 +629,10 @@ export class SoundManager {
         this._play(this._twangBuf, 0.35 + 0.6 * Math.min(1, power), 0.95 + Math.random() * 0.1);
     }
 
-    playFrozenHit() {
-        if (this.sounds.shatter) this._play(this.sounds.shatter, 1.2);
+    playFrozenHit(position = null) {
+        if(position&&this.camera?.getWorldPosition&&this.camera.getWorldPosition(_crackEar).distanceToSquared(position)>80*80)return;
+        if (this.sounds.shatter && position) this._playAt(this.sounds.shatter, position, 1.2, 5);
+        else if (this.sounds.shatter) this._play(this.sounds.shatter, 1.2);
         else this.playHit();
     }
 

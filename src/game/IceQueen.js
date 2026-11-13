@@ -579,7 +579,7 @@ export class IceCastleLife {
         const big = !small(c.type);
         if (c.type === 'friend' && (FIRE_K[c.lastKind] || c.melting)) { c.melting = true; this._puddle(c); } // (melted: a puddle with its coal and carrot)
         for (let i = 0; i < (big ? 70 : 24); i++) g.fx?.spark?.(p, i % 3 ? 0xe8fbff : 0x8fd6ff, (big ? 0.3 : 0.18), _v2.set((Math.random() - 0.5) * (big ? 12 : 6), Math.random() * (big ? 9 : 5), (Math.random() - 0.5) * (big ? 12 : 6)), big ? 1.4 : 0.9);
-        g.sound?.playFrozenHit?.();
+        g.sound?.playFrozenHit?.(p);
         // killed by a blast: it does not sink — it FLIES APART (the lumps and blocks of what it was made of)
         if (c.type !== 'queen' && !FIRE_K[c.lastKind] && (c.shattered || (c.breaksT != null && this._t - c.breaksT < 0.6))) { c.shattered = true; this._shatterFx(c, p); }
         if (c.type === 'queen') {
@@ -1587,7 +1587,7 @@ export class IceCastleLife {
         this.game.scene.remove(b.mesh);
         this.bolts.splice(i, 1);
         this._burst(p, hit ? 18 : 10);
-        this.game.sound?.playFrozenHit?.();
+        this.game.sound?.playFrozenHit?.(p);
     }
 
     _updateBolts(dt) {
@@ -1737,7 +1737,7 @@ export class IceCastleLife {
             const o = vec(m.o), t = vec(m.t);
             for (let i = 0; i <= 22; i++) { const k = i / 22, a = k * Math.PI; g.fx?.spark?.(_v.set(o.x + (t.x - o.x) * k, o.y + (t.y - o.y) * k + Math.sin(a) * 2.2, o.z + (t.z - o.z) * k), i % 2 ? 0xffffff : 0x9fe3ff, 0.22, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.6); }
             g.sound?.playIce?.('iceCrack', t, 1.2, 1.1);
-            g.sound?.playFrozenHit?.();
+            g.sound?.playFrozenHit?.(t);
         } else if (m.k === 'ishield') {
             // a plate of ice rises before her (a ring of glittering ice standing up), takes the spell, bursts into pieces
             if (Array.isArray(m.o) && m.o.every(Number.isFinite) && Array.isArray(m.d)) this.fxs.push({ k: 'ishield', p: vec(m.o), dx: +m.d[0] || 0, dz: +m.d[1] || 0, t: 0, burst: false });
@@ -1774,7 +1774,7 @@ export class IceCastleLife {
                         g.scene.add(m);
                         f.meshes.push({ m, h: k ? 2 + Math.random() * 1.5 : 3.6 });
                     }
-                    g.sound?.playFrozenHit?.();
+                    g.sound?.playFrozenHit?.(f.p);
                 }
                 const k = Math.min(1, (f.t - 0.8) / 0.15);
                 for (const s of f.meshes) s.m.scale.y = s.h * (f.t < 2.6 ? k : Math.max(0.01, 1 - (f.t - 2.6) / 0.6));
@@ -1796,7 +1796,7 @@ export class IceCastleLife {
                         g.fx?.debris?.spawn(f.p.x + sx * Math.cos(a) * r * 0.9, f.p.y + Math.sin(a) * r * 0.9, f.p.z + sz * Math.cos(a) * r * 0.9, f.dx * (4 + Math.random() * 7) + (Math.random() - 0.5) * 4, 2 + Math.random() * 5, f.dz * (4 + Math.random() * 7) + (Math.random() - 0.5) * 4, [0xe9fbff, 0xcdeffd, 0xa8ddf7][k % 3], 0.25 + Math.random() * 0.4, 1.6 + Math.random(), { shrink: 0.1, fade: false, spin: 9 });
                     }
                     g.sound?.playIce?.('iceCrack', f.p, 1.2, 1.3);
-                    g.sound?.playFrozenHit?.();
+                    g.sound?.playFrozenHit?.(f.p);
                 }
                 if (f.t > 0.5) this.fxs.splice(i, 1);
             } else if (f.k === 'gust') {
@@ -2248,7 +2248,7 @@ export class IceCastleLife {
         for (let i = 0; i < 24; i++) g.fx?.spark?.(_v.set(c0.x + (Math.random() - 0.5) * R * 2, c0.L - 1 + (Math.random() - 0.5), c0.z + (Math.random() - 0.5) * R * 2), i % 2 ? 0xffffff : 0xbfefff, 0.15, _v2.set(0, 1.5, 0), 0.6);
         const n0 = Math.round(aim.o.distanceTo(_v.set(c0.x, c0.L - 1, c0.z)));
         for (let i = 0; i <= n0; i += 1) g.fx?.spark?.(_v.copy(aim.o).addScaledVector(aim.d, i), 0xe8fbff, 0.1, _v2.set(0, 0, 0), 0.35);
-        g.sound?.playFrozenHit?.();
+        g.sound?.playFrozenHit?.(_v.set(c0.x,c0.L-1,c0.z));
         return true;
     }
 

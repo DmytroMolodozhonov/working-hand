@@ -33,7 +33,7 @@ const SLIDE = 1.2; // m/s: one hand alone can't hold — the body slides down
 const HIPS = 2.0; // m above the feet (the hips): the palms pressed down to here — the knee goes up onto the edge
 const UNEVEN = 1.05; // m: the two palms on edges this far apart in height (a broken edge) still hold together
 const WATER_LIFT = 1.0; // m: afloat, the water carries the body this much higher towards the bank
-const OVER_TIME = 0.5; // s: from the hands on the edge onto the top
+const OVER_TIME = 0.85; // s: from the hands on the edge onto the top
 const SQUAT = 0.08; // torso lengths: the person's hips this far under its standing height (JumpReader.rise) — a squat
 const PRESS = 0.12; // m: the palms pushed down this far from where they took the edge — a real press (not hands resting)
 const HINT_EVERY = 25000; // ms
@@ -104,6 +104,7 @@ export class LedgeClimb {
         if (!this._can()) { this.letGo(); return; }
         const p = ch.group.position;
         const c = this.climb;
+        if(ch.jumpAir&&!c?.over&&!(c?.lift>.01)){this.letGo();return;} // hands must not cancel an ordinary jump
         if (c?.over) { this._over(dt); return; }
         const feet = c ? c.base + c.lift : p.y - PLAYER_GROUND_OFFSET + (ch.lowK || 0);
         const max = LEDGE_MAX + (ch.swimY != null ? WATER_LIFT : 0);
@@ -157,6 +158,7 @@ export class LedgeClimb {
             cl.lift += Math.max(-RATE * dt, Math.min(RATE * dt, -err));
             // (a low ledge: the palms really pressed down on it — hands just resting there, or hanging by the
             // body at the edge's height, climb nothing: no accidental climbing)
+            cl.pull=Math.max(cl.pull||0,-err);
             cl.press = err < -PRESS ? (cl.press || 0) + dt : 0;
         } else if (one) {
             cl.lift -= SLIDE * dt; // (one hand can't hold the body up)
@@ -175,7 +177,7 @@ export class LedgeClimb {
         ch.airTop = null;
         if (cl.lift > 0.01) ch.setCrouching(false);
         // the palms pressed down to the hips on the edge (a low ledge: just leant on): over it, onto the top
-        if (both && cl.base + cl.lift >= cl.T - HIPS && (cl.lift > PRESS || cl.press > 0.2)) this._startOver();
+        if (both && ((cl.base + cl.lift >= cl.T - HIPS && (cl.lift > PRESS || cl.press > 0.2)) || (cl.T-cl.base>=2.8&&cl.T-cl.base<=3.2&&cl.pull>=.3&&cl.lift>.12))) this._startOver();
         this._drawHands();
     }
 
@@ -218,15 +220,17 @@ export class LedgeClimb {
         o.t = Math.min(1, o.t + dt / OVER_TIME);
         const k = o.t * o.t * (3 - 2 * o.t);
         // up first, then forward onto the top (the knees over the edge, not through it)
-        const ky = Math.min(1, k * 1.6);
-        p.set(o.x0 + (o.x1 - o.x0) * k, o.y0 + (o.y1 - o.y0) * ky, o.z0 + (o.z1 - o.z0) * k);
+        const up=Math.min(1,o.t/.6),ky=up*up*(3-2*up);
+        const forward=Math.max(0,(o.t-.6)/.4),kf=forward*forward*(3-2*forward);
+        ch.climbPose=Math.sin(Math.PI*o.t);
+        p.set(o.x0 + (o.x1 - o.x0) * kf, o.y0 + (o.y1 - o.y0) * ky, o.z0 + (o.z1 - o.z0) * kf);
         ch.verticalVelocity = 0;
         this._drawHands();
         if (o.t >= 1) {
             ch.groundY = o.T;
             ch.onGround = true;
             ch.airTop = null;
-            this.climb = null;
+            this.climb = null;ch.climbPose=0;
             g.hud?.setVoice?.('🧗 Вы выбрались наверх', true);
         }
     }
@@ -248,7 +252,7 @@ export class LedgeClimb {
         this.game.hud?.setVoice?.(text, true);
     }
 
-    letGo() { this.climb = null; }
+    letGo() { this.climb = null;if(this.game.character)this.game.character.climbPose=0; }
 }
 
 const _p = new THREE.Vector3();

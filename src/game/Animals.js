@@ -45,7 +45,7 @@ import { FlapReader, flyStep, FLYERS, armsOf } from './ImperiusFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
 import { hasDoll } from './AnimalRagdoll.js';
-import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
+import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, horseGrazePitch, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
 import { slowFactor, tickSlow } from './Slow.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
@@ -1871,6 +1871,11 @@ export class Animals {
         if (dt && a.animStep) { a.animAcc = (a.animAcc || 0) + dt; if (a.animAcc < a.animStep) return; dt = Math.min(a.animAcc, 1); }
         a.animAcc = 0;
         if (a.model.userData.sea) { if (!this.auth && !a.dead && !a.leap) a.group.rotation.x = a.pitch || 0; this.sea.pose(a, dt); return; } // (a fish: its tail, not legs — SeaLife.pose)
+        if(dt&&a.type==='horse'){
+            a.grazeCheck=(a.grazeCheck||0)-dt;
+            if(a.pose===POSE.graze&&a.grazeCheck<=0){a.grazeCheck=.15;a.grazeLimit=horseGrazePitch(a,this.game.terrain?.data||this.game.world?.terrain?.data);}
+            else if(a.pose!==POSE.graze){a.grazeLimit=undefined;a.grazeCheck=0;}
+        }
         if (dt) animatePose(a, dt, a.pose ?? POSE.stand); // (the head down to the grass / looking about)
         animateLegs(a.model, a.walkT, k * (1 - (a.lie || 0)), a.gallop || 0);
         if (a.gallop > 0.02 && this.riding === a) this._gallopBody(a); // (the body rocks with the stride, the neck pumps)

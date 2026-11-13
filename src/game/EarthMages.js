@@ -1,5 +1,6 @@
 /** Host-driven earth discipline. Real terrain, shared Ground Vortex stones/flights, ordinary NPC bodies/armour/death. */
 import * as THREE from 'three';
+import { elementalEndurance } from './ElementalRules.js';
 import { EARTH as E, EARTH_PHASES, EARTH_STRIKES, EARTH_ATTACKS, EARTH_SHELL, WALL_COUNT, ELEMENTAL_BARE_HAND, earthSlot, earthBlockHit } from './EarthMagicRules.js';
 import { newSwarm } from './GroundVortex.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -15,7 +16,7 @@ export class EarthMages {
  init(v){
   if(!v.entry?.element)return;
   v.element=v.entry.element;v.bareHand=ELEMENTAL_BARE_HAND;v.bareMaster=true;v.rank='elemental';v.skillRole='mage';
-  v.title='Маг земли';v.hp=v.maxHp=E.HP;v.mana=v.maxMana=E.MANA;v.armor=v.maxArmor=0;
+  v.title='Маг земли';v.hp=v.maxHp=E.HP;const endurance=elementalEndurance(v.entry,E.MANA);v.elementalTier=endurance.tier;v.mana=v.maxMana=endurance.mana;v.armor=v.maxArmor=0;
   v.W={...v.W,regen:E.REGEN,dome:null,spells:{GroundVortex:1}};v.knowsFlight=false;v.noWand=true;
   v.job='elemental';v.earth={phase:'rest',t:0,cycle:0,wallCd:0,stitchCd:0,scan:0,empty:0,recover:false,source:0};
   v.model.setHeldTool('none');
@@ -60,14 +61,18 @@ export class EarthMages {
   const dx=foe.x-v.x,dz=foe.z-v.z,dist=Math.hypot(dx,dz)||1;
   const want=Math.atan2(-dx,-dz);v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*4);
   if(v.mana<18)a.recover=true;
-  if(a.recover&&v.mana>=E.START+40)a.recover=false;
+  if(a.recover&&v.mana>=Math.min(v.maxMana,E.START+40))a.recover=false;
+  a.quiet=v.hp<(a.lastHp??v.hp)?0:(a.quiet||0)+dt;a.lastHp=v.hp;
   const weak=v.hp<v.maxHp*.3||a.recover;
   if(weak){
    if(s)this._stop(v.id);
    if(a.phase!=='rest')this._phase(v,null,'rest');
    if(a.stitchCd<=0&&v.mana>=SPELL_COST.Stitching&&a.scan<=0){a.scan=.9;this._stitch(v,foe);}
    if(a.stitchPose>0){a.stitchPose-=dt;v.mode='earthWall';v.model.earthPoseT=1.3-a.stitchPose;L._ground(v);return true;}
-   L._steer(v,v.x-dx/dist*8,v.z-dz/dist*8,v.walk*1.25,dt,0);v.mode=v.speed>.2?'run':'earthRest';L._ground(v);return true;
+   if(a.quiet>6&&v.hp<v.maxHp*.4)v.hp=Math.min(v.maxHp*.4,v.hp+.3*dt);
+   if(dist<22)L._steer(v,v.x-dx/dist*8,v.z-dz/dist*8,v.walk,dt,0);
+   // Recover while facing the opponent; do not abandon a live fight forever at low HP.
+   v.yaw=want;v.mode='earthRest';v.model.earthPoseT=a.t;L._ground(v);return true;
   }
   if(!s){s=this._start(v);if(!s){a.recover=true;v.mode='earthRest';L._ground(v);return true;}}
   s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;s.phaseT=a.t;v.model.earthPoseT=a.t;

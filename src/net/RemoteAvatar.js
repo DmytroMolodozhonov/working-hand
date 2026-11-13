@@ -249,6 +249,7 @@ export class RemoteAvatar {
         const cr = crouchOk(+s.s.cr || 0, this.position, this.collision);
         ch.setCrouching(cr >= 0.95);
         ch.setStoop(cr);
+        ch.climbPose=Number.isFinite(s.s.cp)?Math.max(0,Math.min(1,s.s.cp)):0;
         ch.jumpAir = !!s.s.jp; ch.verticalVelocity = s.s.jp === 2 ? 1 : 0; // (in a jump: the legs tucked, as on its own screen)
         ch.leftSimplifiedHand.applyState(s.s.lh);
         ch.rightSimplifiedHand.applyState(s.s.rh);

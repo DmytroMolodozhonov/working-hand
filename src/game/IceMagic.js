@@ -848,7 +848,7 @@ export class IceMagic {
     _chandelierCrash(L, p) {
         const g = this.game, me = g.character?.group?.position;
         if (g.sound?.playExplosion && me) g.sound.playExplosion(p, me, 0.35);
-        g.sound?.playFrozenHit?.();
+        g.sound?.playFrozenHit?.(p);
         const debris = [];
         for (let i = 0; i < 30; i++) debris.push({ x: p.x + (Math.random() - 0.5) * 6, y: p.y + Math.random() * 1.5, z: p.z + (Math.random() - 0.5) * 6, color: i % 3 ? 0xcdeffd : 0xe8fbff, size: 0.5 });
         g.fx?.debrisFrom?.(debris, p, 40);

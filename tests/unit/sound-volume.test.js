@@ -59,3 +59,9 @@ test('playing positional effects schedule finite panner times using the real lis
     times.length = 0; s.audioListener.timeDelta = 0.02; v.updateMatrixWorld(true);
     assert.ok(times.every(t => t === 1.02)); assert.equal(times.length, 6);
 });
+test('ice breaking in the world is positional and remote cracks never sound at the spawn',()=>{
+ const calls=[],s={sounds:{shatter:{}},camera:{getWorldPosition:o=>o.set(0,0,0)},_playAt:(...args)=>calls.push(['world',...args]),_play:()=>calls.push(['local'])};
+ SoundManager.prototype.playFrozenHit.call(s,new THREE.Vector3(500,0,0));assert.equal(calls.length,0);
+ SoundManager.prototype.playFrozenHit.call(s,new THREE.Vector3(8,0,0));assert.equal(calls[0][0],'world');
+ SoundManager.prototype.playFrozenHit.call(s);assert.equal(calls[1][0],'local','the player\'s own broken shield is still heard');
+});

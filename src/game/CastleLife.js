@@ -3500,9 +3500,9 @@ export class CastleLife {
      * front (Sapira's blow on a knight's shield: hit() weakens it; Avada passes a knight's shield).
      * A wizard's shield pays half of the charge's mana for it — out of mana it shatters.
      */
-    wardOff(v, from, spell, dt = 0) {
+    wardOff(v, from, spell, dt = 0, earthChecked = false) {
         if (v.dead) return false;
-        if(v.element && from){const hit=this.game.earthMages?.segmentHit(from, _v.set(v.x,v.y+2,v.z));if(hit&&this.game.earthMages.take(hit,spell))return true;}
+        if(v.element && from && !earthChecked){const hit=this.game.earthMages?.segmentHit(from, _v.set(v.x,v.y+2,v.z));if(hit&&this.game.earthMages.take(hit,spell))return true;}
         // a wizard's «Protection» / the Master's dome: any charge — «Авада Кедавра» too — for half its mana (WizardFight.shieldPays)
         if (v.wizard && (v.fx & FX.DOME)) return this.wizards.fight.shieldPays(v, spell, true, dt);
         const front = !!from && (from.x - v.x) * -Math.sin(v.yaw) + (from.z - v.z) * -Math.cos(v.yaw) > 0;

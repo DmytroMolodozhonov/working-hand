@@ -286,7 +286,7 @@ export class Houses {
                 g.fx.spark(_v.set(p.x + c * a, p.y + b, p.z - s * a), i % 3 ? 0xdff3ff : 0xffffff, 0.07 + Math.random() * 0.06,
                     _v2.set(s * (Math.random() - 0.5) * 6, Math.random() * 2, c * (Math.random() - 0.5) * 6), 0.9);
             }
-            g.sound?.playFrozenHit?.();
+            g.sound?.playFrozenHit?.(_v.set(p.x,p.y,p.z));
             // its glass falls out under the window: a piece to pick up (an ingredient of the invisibility potion)
             if (g.authority && g.items) g.items.spawnLoose({ kind: 'glass', uid: newUid(), count: 1 }, _v.set(p.x + s * 0.6, p.y - p.h / 2, p.z + c * 0.6), { vel: _v2.set(s * 1.5, 1, c * 1.5) });
         }

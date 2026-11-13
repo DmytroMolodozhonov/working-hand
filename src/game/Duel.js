@@ -1199,6 +1199,7 @@ export class Duel {
             }
         }
         if (hit) {
+            b.earthChecked=true; // this exact projectile segment already tested every actual earth block
             b.front.lerpVectors(from, b.front, hit.s);
             b.prev.copy(b.front);
             b.state = 'arrived';
@@ -1306,7 +1307,7 @@ export class Duel {
         // Captain Black Moustache: his rapier up before him — he may beat the charge aside (Sailors.parryBolt)
         if (c?.isSailor && c.role === 'blackbeard' && b.spell !== 'Die' && this.game.ships?.crew.parryBolt(c, _v3.copy(b.front).addScaledVector(b.dir, -6))) { this._deflect(b, c); return; } // (where it comes from: along its own way)
         this._end(b, 'hit');
-        if (c) this.applyToCreature(b.spell, c, b.by, b.o, this._partOf(b, c));
+        if (c) this.applyToCreature(b.spell, c, b.by, b.o, this._partOf(b, c), { earthChecked:!!b.earthChecked });
     }
 
     /** Where on the body a charge hit: {ak (0…1 from the head end), low (below the body's middle), point}. */
@@ -1360,7 +1361,7 @@ export class Duel {
             else if (g.authority && c.isVillager) g.castleLife?.startle?.(c, byId, src, { hit: true });
             // «Дай»: through any shield, dome or robe — dead at once (StrongMagic.annihilate)
             if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
-            if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
+            if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell, 0, !!opts?.earthChecked)) return; // (a raised shield / the Master's dome took it)
             // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
             // (the player's rule: NpcArmor.npcGuard → ArmorTypes.spellGuard; the robe / the set pay their reserve, a spent reserve turns nothing)
             const guard = !opts?.clash && c.isVillager ? npcGuard(c, spell, Math.max(1, shieldHitCost(COST_OF[spell] || spell) * 2)) : null;

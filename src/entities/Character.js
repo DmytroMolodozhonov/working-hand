@@ -1017,6 +1017,10 @@ export class VoxelCharacter {
             const flutter = Math.sin(this.runCycle) * 0.05;
             this.leftLegPivot.rotation.x += (flutter - this.leftLegPivot.rotation.x) * k;
             this.rightLegPivot.rotation.x += (-flutter - this.rightLegPivot.rotation.x) * k;
+        } else if (this.climbPose>0) {
+            const k=Math.min(1,dt*14),lift=this.climbPose;
+            this.leftLegPivot.rotation.x+=(-1.15*lift-this.leftLegPivot.rotation.x)*k;
+            this.rightLegPivot.rotation.x+=(-.35*lift-this.rightLegPivot.rotation.x)*k;
         } else if (this.jumpAir) {
             // in a jump: the knees come up a little, both legs together
             const k = Math.min(1, 10 * dt);
@@ -1272,6 +1276,7 @@ export class VoxelCharacter {
             gl: [r3(this.leftArmAnchor.position.y - 0.5), r3(this.leftArmAnchor.position.z), r3(this.rightArmAnchor.position.y - 0.5), r3(this.rightArmAnchor.position.z)],
             run: this.isRunning || this.stepping > 0 ? r2(this.isRunning ? this.runIntensity : 0.6) : -1,
             cr: this.lowK > 0.01 ? r2(this.lowK) : 0, // (how much lower: a squat is 1)
+            cp: this.climbPose>0 ? r2(this.climbPose) : undefined,
             jp: this.jumpAir ? (this.verticalVelocity > 0 ? 2 : 1) : undefined, // (up in a jump: the legs tucked)
             kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
             tb: this.knockedDown && this.tumbleAng ? r3(this.tumbleAng) : undefined, // (flipping over in the air: «Джолт»)

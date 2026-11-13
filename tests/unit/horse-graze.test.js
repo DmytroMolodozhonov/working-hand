@@ -17,3 +17,15 @@ test('grazing horse: the muzzle is near the ground and ahead of the chest', () =
     m.updateMatrixWorld(true);
     assert.ok(m.userData.head.localToWorld(tip.clone()).y > 1.5, 'head up again when standing');
 });
+
+test('grazing stops before the head enters an uphill bank, in world coordinates',async()=>{
+ const {horseGrazePitch}=await import('../../src/game/AnimalHerd.js');
+ for(const color of [0,0x4a3022,0xFE0000]){
+  const m=horseModel(color),root=new THREE.Group();root.position.set(120,-.5,80);root.add(m);m.scale.setScalar(1.955);
+  const a={model:m,id:1};animatePose(a,.01,POSE.stand);
+  const data={isSolidAt:(x,y,z)=>y<(z<77.8?1.3:-.5)};
+  const limit=horseGrazePitch(a,data);assert.ok(limit>m.userData.grazePitch,'a raised bank limits the bend');a.grazeLimit=limit;
+  for(let i=0;i<400;i++)animatePose(a,.05,POSE.graze);m.updateWorldMatrix(true,true);
+  const nose=m.userData.head.localToWorld(new THREE.Vector3(0,-.12,-.66));assert.ok(!data.isSolidAt(nose.x,nose.y,nose.z),'the real rendered muzzle remains above the bank');
+ }
+});

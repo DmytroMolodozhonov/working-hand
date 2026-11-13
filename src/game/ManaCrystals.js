@@ -654,7 +654,7 @@ export class ManaCrystals {
         const g = this.game;
         this._sparks(p, 60, 6);
         g.fx?.lightFlash?.(p, 0x4fa8ff, 3, 0.4, 12);
-        if (g.sound) { g.sound.playFrozenHit?.(); g.sound.playIce?.(); }
+        if (g.sound) { g.sound.playFrozenHit?.(p); g.sound.playIce?.(); }
     }
 
     _sparks(p, n, speed = 3) {

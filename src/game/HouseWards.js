@@ -1199,7 +1199,7 @@ export class HouseWards {
             g.fx?.spark?.(_v3.copy(c).addScaledVector(dir, w.r), i % 3 ? (dispelled ? 0xdfe8f2 : 0x8fc8ff) : 0xffffff, 0.16, dir.multiplyScalar(2 + Math.random() * 3).setY(-1 - Math.random() * 3), 1.4);
         }
         g.fx?.lightFlash?.(c, 0x8fc8ff, 3, 0.4, w.r * 3);
-        g.sound?.playFrozenHit?.();
+        g.sound?.playFrozenHit?.(c);
         if (!dispelled) g.sound?.playExplosion?.(c, g.character?.group.position || c, 0.4);
         if (w.owner === this.myKey || (!dispelled && by != null && (by === g.localId || by === 'local'))) g.hud?.setVoice?.(refusal(dispelled ? 'wardDispelled' : 'wardBroken'), true);
         this.log.push({ ev: dispelled ? 'dispelled' : 'broken', id, by });

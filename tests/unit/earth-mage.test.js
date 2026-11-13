@@ -159,3 +159,24 @@ test('the rooted earth stance spreads the legs outward instead of crossing the k
  const left=model.leftKnee.getWorldPosition(new T.Vector3()),right=model.rightKnee.getWorldPosition(new T.Vector3());
  assert.ok(left.x<-.3&&right.x>.3);model.dispose();
 });
+
+test('a physically checked projectile does not re-test another line through a chest rock',async()=>{
+ const {CastleLife}=await import('../../src/game/CastleLife.js'),{Duel}=await import('../../src/game/Duel.js');
+ let queries=0;const v={element:'earth',dead:false,fx:0,wizard:true},L={game:{earthMages:{segmentHit:()=>{queries++;return {};},take:()=>true}}};
+ assert.equal(CastleLife.prototype.wardOff.call(L,v,new T.Vector3(), 'AvadaKedavra',0,true),false);assert.equal(queries,0);
+ assert.equal(CastleLife.prototype.wardOff.call(L,v,new T.Vector3(), 'AvadaKedavra'),true,'non-projectile rays still query real stones');
+ let options;const d={_creature:()=>v,_end(){},_partOf:()=>null,applyToCreature:(s,c,by,o,p,opts)=>options=opts};
+ Duel.prototype._arriveAtCreature.call(d,{tk:'v',tid:'earth',spell:'AvadaKedavra',by:'me',earthChecked:true});assert.equal(options.earthChecked,true);
+});
+
+test('low-health earth mage eventually returns to fighting and always faces the foe during retreat',()=>{
+ const f=fixture();f.g.terrain.data.raycast=()=>null;f.v.hp=5;
+ f.step(2600);assert.ok(f.sent.some(m=>m.ev==='volley'),'low health cannot lock him into fleeing forever');
+});
+
+test('formal tiers vary mana, never the repertoire, and a novice can recover to his own maximum',async()=>{
+ const {elementalEndurance}=await import('../../src/game/ElementalRules.js');
+ const novice=elementalEndurance({rank:'novice',seed:14}),strong=elementalEndurance({rank:'teacher',seed:14});assert.ok(novice.mana<strong.mana);
+ const f=fixture();f.v.maxMana=45;f.v.mana=17;f.g.terrain.data.raycast=()=>null;f.step(2000);
+ assert.ok(f.sent.some(m=>m.ev==='volley'),'a low-capacity mage must not wait for an unreachable 60 mana');
+});

@@ -5507,6 +5507,8 @@ export class Game {
         if (J && J.jumps !== this._jumpSeen) {
             const first = this._jumpSeen == null;
             this._jumpSeen = J.jumps;
+            // Resting palms on a low edge must not consume a real standing jump.
+            if(!first&&ch.onGround&&this.ledge?.climb&&!this.ledge.climb.over&&this.ledge.climb.lift<=.01)this.ledge.letGo();
             const busy = this.flight.busy || ch.swimY != null || ch.swimming || this.knock.down || this.knock.flyT > 0
                 || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.() || this.dragonRide?.busy || this.dragonRide?.mountable?.()
                 || this.spiders?.held || this.diabolos?.holding || this.fireSerpent?.holding || this.levitation.lifted || (this.boards?.mounted || this.boats?.riding) || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy || this.imperius?.puppet

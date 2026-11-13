@@ -149,3 +149,17 @@ test('afloat in a deep pit of water: the palms on the bank, the same pull — ou
     assert.ok(pullOut(L, rel, 4.7), 'pulled out onto the bank');
     assert.ok(Math.abs(p.y - (4.5 + 2)) < 1e-6, 'standing on it: ' + p.y);
 });
+
+test('three blocks: one deliberate downward press starts a smooth knee-up mantle; resting hands do not',()=>{
+ const {L,p,rel,g}=pitGame({high:3});rel.left.y=rel.right.y=1.05;
+ for(let i=0;i<30;i++)L.update(1/60);assert.ok(!L.climb?.over);
+ rel.left.y-=.4;rel.right.y-=.4;
+ for(let i=0;i<25&&!L.climb?.over;i++)L.update(1/60);assert.ok(L.climb?.over,'a short two-handed press starts the mantle');
+ const start=p.clone();L.update(.25);assert.ok(p.y>start.y);assert.equal(p.x,start.x,'lift before moving through the wall');assert.ok(g.character.climbPose>0);
+ for(let i=0;i<90&&L.climb;i++)L.update(1/60);
+ assert.ok(!L.active);assert.ok(p.x>1.5);assert.equal(g.character.climbPose,0);
+});
+
+test('hands near a wall never seize gravity during an ordinary physical jump',()=>{
+ const {L,g}=pitGame();g.character.jumpAir=true;L.update(1/60);assert.equal(L.active,false);assert.equal(L.climb,null);
+});

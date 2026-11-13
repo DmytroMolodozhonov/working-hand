@@ -311,7 +311,7 @@ export class IceFixtures {
         const g = this.game;
         const me = g.character?.group.position;
         if (g.sound?.playExplosion && me) g.sound.playExplosion(p, me, 0.35);
-        g.sound?.playFrozenHit?.();
+        g.sound?.playFrozenHit?.(p);
         const debris = [];
         for (let i = 0; i < 30; i++) debris.push({ x: p.x + (Math.random() - 0.5) * 6, y: p.y + Math.random() * 1.5, z: p.z + (Math.random() - 0.5) * 6, color: i % 3 ? 0xcdeffd : 0xe8fbff, size: 0.5 });
         g.fx?.debrisFrom?.(debris, p, 40);
@@ -402,7 +402,7 @@ export class IceFixtures {
             g.doors.remove(id);
         }
         if (!was) {
-            g.sound?.playFrozenHit?.();
+            g.sound?.playFrozenHit?.(this.plan.gate);
             if (why === 'fire') for (let i = 0; i < 20; i++) g.fx?.spark?.(_v.set(this.plan.gate.x, this.plan.gate.y + Math.random() * 5, this.plan.gate.z), 0xd8f4ff, 0.3, new THREE.Vector3((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), 1.2); // (steam)
         }
     }
@@ -421,7 +421,7 @@ export class IceFixtures {
         IceFixtures.initState(st);
         st.gateHp = Math.min(st.gateHp, GATE.WEAK_HP);
         if (!this.leaves || st.gateBroken) return;
-        g.sound?.playFrozenHit?.();
+        g.sound?.playFrozenHit?.(this.plan.gate);
         if (!this.auth) return;
         for (const id of this.leaves) {
             const d = g.doors?.list.get(id);
