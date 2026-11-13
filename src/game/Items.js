@@ -1059,10 +1059,10 @@ export class ItemSystem {
             // (food or a potion at the mouth — or just taken from it: the hand over the mouth looks open to the camera, and
             // the author's apple fell out while eating — the mouth never lets go)
             const atMouth = this._nearMouth(side, h, ch, gt);
-            if (atMouth || holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && (g.gear?.nock || ch.isRunning || (this._runAt != null && gt - this._runAt < 600))) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            if (kind === 'fishingRod' || atMouth || holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && (g.gear?.nock || ch.isRunning || (this._runAt != null && gt - this._runAt < 600))) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 // (the journal «Предметы»: the fingers open, but something forbids letting go — what)
                 if (ch.isHandTracked?.(side) && (ch.getGripCurl?.(side) ?? 1) < DROP.CLOSED) {
-                    this._dropTry(side, kind, (atMouth ? 'еда у рта — не выпадает' : null) || holdsWhy(ch, now)
+                    this._dropTry(side, kind, (kind === 'fishingRod' ? 'заброс выпускает леску, а не удочку — остаётся в руке' : null) || (atMouth ? 'еда у рта — не выпадает' : null) || holdsWhy(ch, now)
                         || (g.inventory?.pocketCycling?.(side) ? 'листаете ячейки карманов' : null)
                         || (kind === 'wand' && this._touching(side, h, now) ? 'палочка касается земли/стены' : null)
                         || (kind === 'wand' && g.spellBusy?.() ? 'идёт заклинание — палочку не бросить' : null)

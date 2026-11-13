@@ -169,3 +169,37 @@ test('a rod put away winds the float in at once (nothing is left half done)', ()
 test('the targets table names every case', () => {
     for (const k of ['water', 'land', 'players', 'creatures', 'ships', 'cast', 'bite', 'fight', 'drop', 'network']) assert.ok(FISHING_TARGETS[k]?.why, k);
 });
+
+test('a sharp stop below the casting threshold still releases the saved forward swing',()=>{
+ for(const side of ['left','right'])for(const fps of [20,30,60,120]){
+  const {g,rod}=world(),F=new Fishing(g),dt=1/fps;
+  g.items.heldOf=()=>({side,model:rod,item:{kind:'fishingRod'}});
+  F.update(dt);F.tipV.set(0,1,-6);F._rig(dt,new THREE.Vector3(0,0,-1));
+  assert.equal(F.state,'rig');F.tipV.set(0,0,0);F._rig(dt,new THREE.Vector3(0,0,-1));
+  assert.equal(F.state,'cast',`${side}, ${fps} FPS: stop must release tackle`);
+ }
+});
+
+test('no free line before casting; retrieves hide tackle and tracking loss cannot trigger a cast',()=>{
+ const {g,rod}=world(),F=new Fishing(g),dt=1/60;
+ F.update(dt);assert.equal(F.line.visible,false);assert.equal(F.floatM.visible,false);
+ F.tipV.set(0,0,-6);F._rig(dt,new THREE.Vector3(0,0,-1));
+ g.character.isHandTracked=()=>false;F.update(dt);assert.equal(F.state,'rig');
+ assert.equal(F.swing.peak,0);
+ g.character.isHandTracked=()=>true;
+ F.tipV.set(0,0,-6);F._rig(dt,new THREE.Vector3(0,0,-1));F.tipV.set(0,0,0);F._rig(dt,new THREE.Vector3(0,0,-1));
+ F._draw({model:rod},dt);assert.equal(F.line.visible,true);assert.equal(F.floatM.visible,true);
+ F.reset();F.update(dt);assert.equal(F.line.visible,false);assert.equal(F.floatM.visible,false);
+});
+
+test('backswing, sideways motion, expired swing and swimming do not release the tackle',()=>{
+ for(const velocity of [[0,0,8],[8,0,0]]){
+  const {g}=world(),F=new Fishing(g);F.update(1/60);
+  F.tipV.set(...velocity);F._rig(.02,new THREE.Vector3(0,0,-1));F.tipV.set(0,0,0);F._rig(.02,new THREE.Vector3(0,0,-1));assert.equal(F.state,'rig');
+ }
+ for(const swimming of [false,true]){
+  const {g}=world(),F=new Fishing(g);F.update(1/60);
+  F.tipV.set(0,0,-7);F._rig(.02,new THREE.Vector3(0,0,-1));
+  g.swim={swimming};F.tipV.set(0,0,0);F._rig(.7,new THREE.Vector3(0,0,-1));assert.equal(F.state,'rig');
+ }
+});

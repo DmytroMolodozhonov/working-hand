@@ -44,7 +44,7 @@ export const FISHING = {
     },
 };
 
-/** Where the float is: 'rig' hanging on the rod, 'cast' in the air, 'float' on the water, 'ground' on dry land, 'bite' dipped under, 'fight' a fish on the line, 'back' winding in. */
+/** Where the float is: 'rig' stowed before a cast, 'cast' in the air, 'float' on the water, 'ground' on dry land, 'bite' dipped under, 'fight' a fish on the line, 'back' winding in. */
 export const STATES = ['rig', 'cast', 'float', 'ground', 'bite', 'fight', 'back'];
 
 /** The velocity (m/s) the float leaves with: from the tip's velocity at the top of the swing and the way the hero faces. null — not a cast (a slow wave). Pure. */

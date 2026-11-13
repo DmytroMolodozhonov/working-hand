@@ -3,7 +3,7 @@
  * FishingRules.js (pure, tested); the rod and the fish as things — FishingRodModel.js. The author 07.11: «технология удочки… протестировать».
  *
  * Everything goes by the HAND (the game's principle — nothing is a button):
- *   rig     the float hangs on a short line under the rod's tip and swings with it (a real pendulum on the tip).
+ *   rig     the tackle is stowed: no free line/float until the cast.
  *   cast    the rod is swung forward and stopped: at the top of the swing the float leaves with the tip's speed (FishingRules.castVelocity), flies, falls.
  *   float   on the water (the sea's wave under it), the line lies out; the rod pulled away fast with nothing on the hook winds the line in (`back`).
  *   bite    a nibble, then the float dips and rings spread: a jerk of the rod UP / BACK in the window sets the hook (FishingRules.isStrike).
@@ -22,6 +22,7 @@ import { waterAt } from './CreatureSwim.js';
 import { newUid } from './ItemTypes.js';
 
 const _tip = new THREE.Vector3(), _raw = new THREE.Vector3(), _d = new THREE.Vector3(), _v = new THREE.Vector3(), _w = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+const _linePoint = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _p = new THREE.Vector3();
 const LINE_SEGS = 30;
 const RINGS = 8;
@@ -104,7 +105,7 @@ export class Fishing {
         if (this.fishMesh) { this.fishMesh.parent?.remove(this.fishMesh); this.fishMesh = null; }
         if (this.group) this.group.visible = false;
         for (const r of this.rings) r.visible = false;
-        this._bendRod(null, 0);
+        this._bendRod({ model: this._heldModel }, 0);
     }
 
     _say(text) { this.game.hud?.setVoice?.(text, true); }
@@ -137,7 +138,11 @@ export class Fishing {
         if (!(dt > 0)) return;
         const h = g.items?.heldOf?.('fishingRod');
         const dead = g.isDeadLocal || g.combat?.dead;
-        if (!h || dead || !h.model?.userData?.tip) { if (this._lastHold || this.state !== 'rig') this.reset(); this._lastHold = false; return; }
+        if (!h || dead || !h.model?.userData?.tip) { if (this._lastHold || this.state !== 'rig') this.reset(); this._lastHold = false; this._heldModel = null; return; }
+        if (this._heldModel !== h.model) {
+            this.reset(); this._heldModel = h.model;
+            this._say('🎣 Взмахните удочкой вперёд и остановите её. Кисть можно раскрывать — удочка останется в руке.');
+        }
         this._lastHold = true;
         this._ensure();
         this.t += dt; this.stateT += dt;
@@ -148,12 +153,16 @@ export class Fishing {
         const hero = g.character.group.position;
         if (!this.havePrev) { this.tipPrev.copy(_tip); this.heroPrev.copy(hero); this.tipV.set(0, 0, 0); this.havePrev = true; this.b.copy(_tip).add(_d.set(0, -FISHING.HANG, 0)); this.bv.set(0, 0, 0); }
         _raw.subVectors(_tip, this.tipPrev).divideScalar(dt).sub(_d.subVectors(hero, this.heroPrev).divideScalar(dt));
-        if (_raw.length() < 70) this.tipV.lerp(_raw, 0.55); // (a jump — a teleport, a frame lost — is not a swing)
+        if (_raw.length() < 70) this.tipV.lerp(_raw, 1 - Math.exp(-dt / 0.035));
+        else { this.tipV.set(0, 0, 0); this.swing.peak = 0; } // (a jump — a teleport, a frame lost — is not a swing)
         this.tipPrev.copy(_tip); this.heroPrev.copy(hero);
         const yaw = g.character.group.rotation.y;
         const face = _w.set(-Math.sin(yaw), 0, -Math.cos(yaw));
         switch (this.state) {
-            case 'rig': this._rig(dt, face); break;
+            case 'rig':
+                if (g.character.isHandTracked && !g.character.isHandTracked(h.side)) { this.swing.peak = 0; this.tipV.set(0, 0, 0); }
+                else this._rig(dt, face);
+                break;
             case 'cast': this._cast(dt); break;
             case 'float': this._float(dt); break;
             case 'ground': this._ground2(dt); break;
@@ -176,14 +185,18 @@ export class Fishing {
         if (L > K.HANG) { _d.multiplyScalar(1 / L); this.b.copy(_tip).addScaledVector(_d, K.HANG); const out = this.bv.dot(_d); if (out > 0) this.bv.addScaledVector(_d, -out); }
         // the swing: the tip fast and forward; at the top of it (the speed falls) the line is let go
         const sp = this.tipV.length(), S = this.swing;
-        if (sp > K.CAST_V) {
-            if (sp > S.peak) { S.peak = sp; S.v.copy(this.tipV); }
-            else if (sp < S.peak * K.CAST_END && !this.game.swim?.swimming) {
-                const c = castVelocity(S.v, face);
-                S.peak = 0;
-                if (c) this._launch(c);
-            }
-        } else if (sp < K.CAST_V * 0.45) S.peak = 0;
+        if (this.game.swim?.swimming) { S.peak = 0; return; }
+        S.t += dt;
+        if (S.t > 0.65) S.peak = 0; // Never reuse an old swing after a tracking pause.
+        if (sp > S.peak && sp >= K.CAST_V && this.tipV.dot(face) >= sp * 0.25) {
+            S.peak = sp; S.v.copy(this.tipV); S.t = 0;
+        } else if (S.peak && sp < S.peak * K.CAST_END) {
+            // A sharp stop often falls BELOW CAST_V in one camera sample.
+            // The saved forward peak qualifies the cast; the stop need not be fast.
+            const c = castVelocity(S.v, face);
+            S.peak = 0;
+            if (c) this._launch(c);
+        }
     }
     _launch(c) {
         this.bv.set(c.x, c.y, c.z);
@@ -384,6 +397,10 @@ export class Fishing {
         this._bendRod(h, this.state === 'fight' ? this.tension || 0 : 0);
         h.model.updateWorldMatrix(true, true);
         h.model.userData.tip.getWorldPosition(_tip); // (the tip after the bend)
+        // No dangling tackle before the first cast or after it is fully retrieved.
+        const deployed = this.state !== 'rig';
+        this.floatM.visible = this.line.visible = deployed;
+        if (!deployed) return;
         // the float
         this.floatM.position.copy(this.b);
         this.floatM.scale.setScalar(1);
@@ -401,7 +418,7 @@ export class Fishing {
         void top;
         const A = _a.copy(_tip), Bp = _b.copy(this.b).add(_v.set(0, FISHING.FLOAT_R * 2.65 * 0 - FISHING.FLOAT_R * 1.0, 0)); // (the line ties at the foot's ring)
         let prev = _p.copy(A), n = 0;
-        const out = new THREE.Vector3();
+        const out = _linePoint;
         for (let i = 1; i <= LINE_SEGS; i++) {
             const s = i / LINE_SEGS;
             out.lerpVectors(A, Bp, s); out.y -= sag * 4 * s * (1 - s);
