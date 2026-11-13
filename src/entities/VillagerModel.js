@@ -1,4 +1,5 @@
 import { elementalLook } from '../game/ElementalTestSites.js';
+import {attachWings} from '../game/HeroWings.js';
 import { ELEMENTAL_MODES,elementalMagePose } from './ElementalMagePose.js';
 import { elementalBodyBoxes,elementalArmBoxes } from './ElementalMageLook.js';
 import { earthMagePose } from './EarthMagePose.js';
@@ -1285,6 +1286,8 @@ export class VillagerModel {
         this.tool = null;
         this.toolKind = 'none';
         this.setHeldTool(opts.tool ?? look.tool ?? 'none');
+        this._airWings=look.element==='air'&&look.wings?attachWings(this,false):null;
+        this._airWings?.set(1,0);
 
         // animation state
         this.mode = 'idle';
@@ -1676,6 +1679,7 @@ export class VillagerModel {
         this.mode = mode;
         this._acroActive=mode==='fireVault';
         if(!this._acroActive)this.pelvis.rotation.z=0;
+        if(mode==='dead'||SLEEP_MODES.has(mode))this._airWings?.set(1,0);
         if (mode === 'attack') { this._atkT = 0; this.attackPhase = 0; }
         if (mode === 'work') this._workT = 0;
         if (mode === 'dead') { this._deadT = 0; this._deadDone = false; }
@@ -2022,6 +2026,7 @@ export class VillagerModel {
         for (const key of POSE_KEYS) P[key] += (T[key] - P[key]) * (key === 'headY' ? kh : k);
         const choreSit = mode === 'chore' && SIT_CHORES.has(this.chore);
         this._apply(t, breathe, mode === 'sit' || mode === 'situp' || mode === 'ride' || mode === 'sitCheer' || choreSit);
+        if(this._airWings){const flight=mode==='airFlight'||mode==='airLift'&&speed>.05;this._airWings.set(1,flight?1:mode==='airRun'?.5:.1,flight||mode==='airRun'?Math.sin(t*Math.PI*2/.6):0,.15);}
         if (this.chore) this._choreAfter(t, dt, mode === 'chore');
     }
 
@@ -2178,6 +2183,7 @@ export class VillagerModel {
 
     /** Removes the model from its parent. Shared geometry / materials stay alive. */
     dispose() {
+        this._airWings?.dispose();
         this.group.parent?.remove(this.group);
         if (this._lod) { this._lod.geometry.dispose(); this._lod = null; }
         this._one?.dispose();
@@ -2196,7 +2202,7 @@ export function villagerMaterials() { return [MAT, HIT_MAT, HL_MAT]; }
 export function prewarmVillagers() {
     const out = [];
     const add = (v) => { out.push(v.group); return v; };
-    for(const element of ['water','air','fire'])add(new VillagerModel(Object.assign(villagerLook(15,'mage',false),elementalLook(element,{tank:element==='water'}))));
+    for(const element of ['water','air','fire'])add(new VillagerModel(Object.assign(villagerLook(15,'mage',false),elementalLook(element,{tank:element==='water',wings:element==='air'}))));
     ROLES.forEach((role, i) => add(new VillagerModel(villagerLook(i + 1, role, false), { shield: role === 'knight' })));
     add(new VillagerModel(villagerLook(11, 'farmer', true), { tool: 'pitchfork' }));
     add(new VillagerModel(villagerLook(12, 'farmer', true), { tool: 'basket' })).flashHit(1e9);

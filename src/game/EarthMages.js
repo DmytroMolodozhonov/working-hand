@@ -18,7 +18,7 @@ export class EarthMages {
   v.element=v.entry.element;v.bareHand=ELEMENTAL_BARE_HAND;v.bareMaster=true;v.rank='elemental';v.skillRole='mage';
   v.title='Маг земли';v.hp=v.maxHp=E.HP;const endurance=elementalEndurance(v.entry,E.MANA);v.elementalTier=endurance.tier;v.mana=v.maxMana=endurance.mana;v.armor=v.maxArmor=0;
   v.W={...v.W,regen:E.REGEN,dome:null,spells:{GroundVortex:1}};v.knowsFlight=false;v.noWand=true;
-  if(v.cs?.def?.kind!=='hamlet')v.job='elemental';v.earth={phase:'rest',t:0,cycle:0,wallCd:0,stitchCd:0,scan:0,empty:0,recover:false,source:0};
+  if(!v.cs?.def||v.cs.def.kind==='elemental')v.job='elemental';v.earth={phase:'rest',t:0,cycle:0,wallCd:0,stitchCd:0,scan:0,empty:0,recover:false,source:0};
   v.model.setHeldTool('none');
  }
  _phase(v,s,phase){
@@ -69,7 +69,7 @@ export class EarthMages {
  think(v,dt){
   const g=this.game,L=g.castleLife,a=v.earth;if(!a)return false;
   a.interrupted=false;
-  if(!v.foe&&v.cs?.def?.kind==='hamlet'){this._stop(v.id);a.phase='rest';v.model.earthPoseT=undefined;v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);return false;}
+  if(!v.foe&&v.cs?.def&&v.cs.def.kind!=='elemental'){this._stop(v.id);a.phase='rest';v.model.earthPoseT=undefined;v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);return false;}
   if(!a.slab&&!this.swarms.has(v.id)&&!(a.stitchPose>0))v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);
   a.t+=dt;a.wallCd=Math.max(0,a.wallCd-dt);a.stitchCd=Math.max(0,a.stitchCd-dt);a.scan-=dt;
   v.prep=null;v.cardilon=null;v.practice=null;v.fx=0;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;

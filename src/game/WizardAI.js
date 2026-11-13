@@ -13,6 +13,8 @@
  */
 
 import { createRng } from '../core/math.js';
+import {elementalLook} from './ElementalTestSites.js';
+import {earthLook} from './EarthMagicRules.js';
 
 export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage', 'savior'];
 
@@ -208,7 +210,12 @@ export function wizardRoster(def, idx) {
     const rr = createRng((seed ^ strHash('rank:' + String(def.wseed ?? ''))) >>> 0);
     const rank = rollRank(role, rr);
     const mana = rollMana(rank, rr);
-    return { idx, role, female, name, home, stall, seed, brave, wizard: true, robe, rank, mana };
+    const entry={ idx, role, female, name, home, stall, seed, brave, wizard: true, robe, rank, mana };
+    if(role==='wanderer'){
+        const er=createRng(seed^0x31ec79a5);
+        if(er()<1/3){const element=['earth','water','air','fire'][Math.floor(er()*4)];entry.element=element;entry.robe=false;entry.look=element==='earth'?earthLook():elementalLook(element,{tank:element==='water',wings:element==='air'&&er()<1/3});}
+    }
+    return entry;
 }
 
 /**

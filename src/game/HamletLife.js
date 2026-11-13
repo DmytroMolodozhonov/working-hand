@@ -63,7 +63,7 @@ export function hamletRoster(def, idx) {
     const seed = (strHash(def.id) ^ Math.imul(idx + 1, 2654435761)) >>> 0;
     const rng = createRng(seed);
     if(def.element==='earth')return {idx,seed,role:'mage',female:rng()<.45,name:MALE[seed%MALE.length],home:(idx-1)%def.houses.length,stall:-1,element:'earth',robe:false,look:earthLook(),wizard:true,brave:1};
-    if(def.element){const female=rng()<.45,names=female?FEMALE:MALE;return {idx,seed,role:'mage',female,name:names[seed%names.length],home:(idx-1)%def.houses.length,stall:-1,element:def.element,robe:false,look:elementalLook(def.element),wizard:true,brave:1};}
+    if(def.element){const female=rng()<.45,names=female?FEMALE:MALE;return {idx,seed,role:'mage',female,name:names[seed%names.length],home:(idx-1)%def.houses.length,stall:-1,element:def.element,robe:false,look:elementalLook(def.element,{wings:def.element==='air'&&rng()<1/3}),wizard:true,brave:1};}
     const S = def.stalls.length, K = def.knights | 0, H = def.houses.length;
     const first = K + 1 + S;
     const female = rng() < (idx >= 1 && idx <= K ? 0.1 : 0.45);
