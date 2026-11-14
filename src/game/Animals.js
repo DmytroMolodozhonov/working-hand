@@ -45,7 +45,7 @@ import { FlapReader, flyStep, FLYERS, armsOf } from './ImperiusFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
 import { hasDoll } from './AnimalRagdoll.js';
-import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, horseGrazePitch, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
+import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, idNum, animatePose, horseGrazePitch, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
 import { slowFactor, tickSlow } from './Slow.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
@@ -2060,7 +2060,7 @@ export class Animals {
                 // start were ~30 animals thinking every frame: 1.5 ms)
                 if (a.thinkEvery > 1) {
                     a.thinkAcc = (a.thinkAcc || 0) + dt;
-                    if ((this._tick + a.id) % a.thinkEvery !== 0) continue;
+                    if ((this._tick + idNum(a.id)) % a.thinkEvery !== 0) continue;
                     const t = Math.min(a.thinkAcc, 0.1);
                     a.thinkAcc = 0;
                     this._think(a, t);

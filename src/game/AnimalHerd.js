@@ -13,6 +13,7 @@
  */
 
 import * as THREE from 'three';
+import { hashString } from '../core/math.js';
 
 /** Calm personal space between centres, × the body length (sheep closest, horses widest). */
 export const ROOM = { sheep: 0.95, pig: 1.1, cow: 1.3, horse: 1.4 }; // (no swan: its neck and head are its own — SwanModel; SwanLife keeps the flock apart)
@@ -136,6 +137,12 @@ export function pickSpot(cx, cz, r, room, others, rnd = Math.random) {
     return best;
 }
 
+/**
+ * A number from an animal's id (the author 14.11: «заклинания не летят у старта Творческого» — the stable horses have ids 'cH1', 'cH2', 'cPeg': `lookT * 0.9 + 'cH1'` is a
+ * string, its sine NaN, the head's rotation NaN, its matrix NaN, and a NaN body in the spells' targets made every ray miss).
+ */
+export function idNum(id) { return typeof id === 'number' && Number.isFinite(id) ? id : hashString(String(id)) % 1000; }
+
 /** Turn an angle difference into −π..π. */
 export function wrapAngle(d) {
     while (d > Math.PI) d -= Math.PI * 2;
@@ -155,8 +162,9 @@ export function animatePose(a, dt, pose) {
     const wantPitch = pose === POSE.graze ? (a.grazeLimit ?? a.model?.userData?.grazePitch ?? -1.05) : pose === POSE.look ? 0.18 : pose === POSE.rest ? -0.25 : 0;
     a.headP = (a.headP || 0) + (wantPitch - (a.headP || 0)) * k;
     a.lookT = (a.lookT || 0) + dt;
-    const wantYaw = pose === POSE.look ? Math.sin(a.lookT * 0.9 + a.id) * 0.7 : pose === POSE.graze ? Math.sin(a.lookT * 0.5 + a.id) * 0.15 : 0;
-    a.headY = (a.headY || 0) + (wantYaw - (a.headY || 0)) * k;
+    const wantYaw = pose === POSE.look ? Math.sin(a.lookT * 0.9 + idNum(a.id)) * 0.7 : pose === POSE.graze ? Math.sin(a.lookT * 0.5 + idNum(a.id)) * 0.15 : 0;
+    a.headY = (a.headY || 0) + ((Number.isFinite(wantYaw) ? wantYaw : 0) - (a.headY || 0)) * k;
+    if (!Number.isFinite(a.headY)) a.headY = 0; // (never a NaN in the neck: it would stay for good)
     // (the neck lowers / raises the head when the model has one; the head turns; both from their own rest angles)
     const ud = a.model.userData;
     const neck = ud.neck || ud.head, head = ud.head || ud.neck;
