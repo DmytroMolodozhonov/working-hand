@@ -597,6 +597,9 @@ export class Duel {
                 const u = a.model.userData, neck = put('a', a.id);
                 u.neck.getWorldPosition(neck.a); u.head.updateWorldMatrix(true,false);u.head.localToWorld(neck.b.set(0, -0.1, -0.2));
                 neck.r = Math.max(0.2, a.dims.wid * 0.25);
+                // (the author 14.11: «заклинания не летят, кони растягиваются» — a head with a broken matrix gave this body NaN ends, and one NaN body made every ray miss;
+                // a body that is not a number is not a body: left out, the horse keeps its torso and legs)
+                if (!Number.isFinite(neck.a.x + neck.a.y + neck.a.z + neck.b.x + neck.b.y + neck.b.z)) out.pop(); // (the legs below are kept)
                 for (const leg of u.legs || []) {
                     const dims = leg.userData.legDims, lower = leg.userData.lower;
                     if (!dims || !lower) continue;
