@@ -840,8 +840,8 @@ export class LevitationMaxima {
         if(!this.auth||!fp||v.dead||v.mana<LEV_MAX.COST+LEV_MAX.DRAIN*6||Math.hypot(fp.x-v.x,fp.z-v.z)>LEV_MAX.RANGE)return false;
         if(g.collision?.lineOfSight&&!g.collision.lineOfSight(v.x,v.y+2.7,v.z,fp.x,fp.y,fp.z,.2))return false;
         v.mana-=LEV_MAX.COST;v.mode='airLift';
-        if(to===g.localId)g.levitation?.liftMe?.(v.id,'right',{mx:true});
-        g.sync?.levMax?.({a:'p',by:v.id,from:v.id,to,side:'right'});
+        if(to===g.localId)g.levitation?.liftMe?.(v.id,'right',{mx:true,air:true});
+        g.sync?.levMax?.({a:'p',by:v.id,from:v.id,to,side:'right',air:1});
         g.sound?.spellCast?.('LevitationMaxima',_v1.set(v.x,v.y+2.7,v.z));
         g.airFx?.gust?.(_v1,_v2.set(fp.x-v.x,fp.y-v.y-2.7,fp.z-v.z).normalize(),1);
         return true;
@@ -1935,7 +1935,7 @@ export class LevitationMaxima {
         switch (m.a) {
             case 'on': if (isHost && m.d && typeof m.id === 'string' && m.id.startsWith(String(from) + ':')) this.begin(m.id, from, m.side === 'left' ? 'left' : 'right', m.d); return;
             case 'off': if (isHost) { const L = this.lifts.get(m.id); if (L && L.by === from) this.end(m.id, !!m.g); } return;
-            case 'p': if (m.to === g.localId) g.levitation?.liftMe?.(from, m.side === 'left' ? 'left' : 'right', { mx: true }); return;
+            case 'p': if (m.to === g.localId) g.levitation?.liftMe?.(from, m.side === 'left' ? 'left' : 'right', { mx: true, air: !!m.air }); return;
             case 'no': if (m.to === g.localId && this.mine?.id === m.id) { this._over(m.id); g.hud?.setVoice?.('🪶 Это уже поднято или до него не дотянуться', true); } return;
             case 'big': {
                 if (isHost || this.lifts.has(m.id)) return;

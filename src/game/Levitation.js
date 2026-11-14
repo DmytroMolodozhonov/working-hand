@@ -52,6 +52,8 @@ export function floorUnder(collision, x, z, y) {
 }
 
 /** Magic armour stops the plain «Левиоса», never «Левиоса Максима» (`maxima`). */
+/** The fastest a body can be thrown by a mage (m/s): a throw is a throw, not a cannon. */
+export const THROW_MAX = 20;
 export function levBlocked(o, maxima = false) {
     return !maxima && !!(o && (o.magicArmor || o.armor?.magic));
 }
@@ -1024,7 +1026,7 @@ export class Levitation {
      * `mx`: «Левиоса Максима» (LevitationMaxima.js) — it goes through magic armour, holds as long as
      * its caster's mana lasts, and I hang where I was against the caster's hand line (one of a group).
      */
-    liftMe(by, side = 'right', { mx = false } = {}) {
+    liftMe(by, side = 'right', { mx = false, air = false } = {}) { // (`air`: an air mage's lift — 14.11: only «Protection Maxima» keeps it off or breaks it, the ordinary «Protection» cannot)
         const g = this.game;
         if (this.lifted?.by === by || g.combat.dead) return;
         if (this.lifted) { g.sync?.lift?.(by, side, 0, false, false, 'levHeld'); return; } // (another holds me: tell the caster why)
@@ -1033,11 +1035,13 @@ export class Levitation {
         if (!g.duel?._handOf(by, side, _h1, _h2)) return;
         // the gods' shield (ProtectionGods.js): the dome, or the hand shield facing the caster — no «Левиоса» lifts me (no mana)
         if (g.combat.shield?.gods && g.combat.shieldFactor(_h1) >= 1) { g.combat.godsHit(mx ? 'LevitationMaxima' : 'Levitation', _h1); g.sync?.lift?.(by, side, 0, false, false, 'levShield'); return; }
+        // an air mage's lift is a lift of the great kind: the ordinary shield does not stop it; the dome of «Protection Maxima» (type 2) turns it away
+        if (air && g.combat.shield?.type === 2 && g.combat.shieldFactor(_h1) >= 1 && g.combat._blocked(_h1, 'LevitationMaxima')) { g.sync?.lift?.(by, side, 0, false, false, 'levShield'); return; }
         if (this.state) this.release(false);
         if (g.flight?.busy) g.flight.land('levitate');
         if (g.animals?.riding) g.animals.dismount();
         const hold = Math.min(LEVITATE.MAX_HOLD, Math.max(LEVITATE.MIN_HOLD + 0.5, c.distanceTo(_h1)));
-        this.lifted = { by, side, hold, target: c.clone(), vel: new THREE.Vector3(), top: g.character.group.position.y, age: 0, mx, off: mx ? aimOffset(_h2, _h3.subVectors(c, _h1)) : null };
+        this.lifted = { by, side, hold, target: c.clone(), vel: new THREE.Vector3(), top: g.character.group.position.y, age: 0, mx, air, off: mx ? aimOffset(_h2, _h3.subVectors(c, _h1)) : null };
         this.fallTop = null;
         g.elementalMages?.liftedBy?.(by,true);
         g.sync?.lift?.(by, side, hold, true, false, null, mx);
@@ -1054,7 +1058,8 @@ export class Levitation {
         const want = this.holdPoint(L.by, L.side, L.hold, up, _h2, L.off);
         if (!want || g.combat.dead || (!L.mx && !g.combat.enabled && L.age > LEVITATE.WIZARD_T + 3)) { this.dropMe(false); return; }
         // «Protection» towards the caster: the magic breaks on it
-        if (g.duel._handOf(L.by, L.side, _h3, _h4) && g.combat.shield && g.combat.shieldFactor(_h3) >= 1 && g.combat._blocked(_h3, 'Levitation')) {
+        // (an air mage's lift: only the Maxima dome breaks it — `L.air`; any other lift: any shield facing the caster, as before)
+        if (g.duel._handOf(L.by, L.side, _h3, _h4) && g.combat.shield && (!L.air || g.combat.shield.type === 2) && g.combat.shieldFactor(_h3) >= 1 && g.combat._blocked(_h3, L.air ? 'LevitationMaxima' : 'Levitation')) {
             this.dropMe(false, true);
             return;
         }
@@ -1066,6 +1071,19 @@ export class Levitation {
         ch.verticalVelocity = 0;
         ch.onGround = false;
         g.knockback.set(0, 0, 0);
+    }
+
+    /**
+     * An air mage THROWS me (14.11: «маг воздуха сможет поднять другого игрока и кинуть куда-то»): `vel` (m/s) is my flight when he lets go — I fly by my own weight, the blow
+     * I strike counts (_myFlight), the fall from up high hurts (_myLanding). Nothing thrown unless he holds me now.
+     */
+    throwMe(by, vel) {
+        const L = this.lifted;
+        if (!L || L.by !== by || !vel || !Number.isFinite(vel.x + vel.y + vel.z)) return false;
+        L.vel.set(vel.x, vel.y, vel.z).clampLength(0, THROW_MAX);
+        this.game.hud?.setVoice?.('🌪️ Маг воздуха бросил вас!', true);
+        this.dropMe(false);
+        return true;
     }
 
     /** I am let go (gently: set down, no hurt), or I broke free (`free`). */
@@ -1133,7 +1151,10 @@ export class Levitation {
     onNetLev(m) {
         const g = this.game;
         if (m.k === 'p') {
-            if (m.id === g.localId && !m.on && this.lifted?.by === m.by) this.dropMe(!!m.g);
+            if (m.id === g.localId && !m.on && this.lifted?.by === m.by) {
+                if (Array.isArray(m.thr) && m.thr.length === 3 && m.thr.every(Number.isFinite)) this.throwMe(m.by, { x: m.thr[0], y: m.thr[1], z: m.thr[2] }); // (thrown: the mage's own swing)
+                else this.dropMe(!!m.g);
+            }
             return;
         }
         if (!g.authority) return;

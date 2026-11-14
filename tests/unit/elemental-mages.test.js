@@ -41,10 +41,21 @@ test('fire immunity rejects ordinary and infernal fire before damage or armour s
  const v={element:'fire',hp:32};for(const opts of [{fire:true,kind:'Inferno'},{hell:true,kind:'Hellfire'},{fire:true,hell:true,pierce:true,kind:'Lava'}])CastleLife.prototype.hit.call({game:{}},v,100,null,'other',opts);
  assert.equal(v.hp,32);
 });
-test('air lift uses a real paid Leviosa charge, drains the normal wizard hold cost, and releases instead of repeating one pose',()=>{
- const f=fixture('air'),bolts=[],releases=[];f.g.duel={_addBolt:b=>(bolts.push(b),b)};f.g.sync.duelCast=()=>{};f.g.sync.lev=(...m)=>releases.push(m);
- f.v.elemental.cycle=3;assert.equal(f.em.airLift(f.v,{x:0,y:2,z:-12}),true);assert.equal(bolts[0].spell,'LevitateDuel');assert.equal(bolts[0].tid,'me');assert.equal(f.v.mode,'airLift');
- const mana=f.v.mana;f.em.think(f.v,1);assert.equal(mana-f.v.mana,4);f.em.liftedBy(f.v.id,false);f.em.think(f.v,.1);assert.equal(f.v.elemental.liftT,0);assert.ok(releases.some(m=>m[4]===false&&m[6]===f.v.id));assert.equal(f.v.elemental.cycle,4);assert.equal(f.v.elemental.fired,false);
+test('air lift is the great kind (14.11: only «Protection Maxima» keeps it off): paid by the drain, ends in a THROW if he still holds, else a plain drop',()=>{
+ const f=fixture('air'),lifts=[],releases=[],thrown=[];
+ f.g.levMax={npcPlayer:(v,to)=>(lifts.push([v.id,to]),true)};f.g.sync.lev=(...m)=>releases.push(m);
+ f.g.levitation={lifted:{by:f.v.id},throwMe:(by,vel)=>thrown.push([by,vel]),dropMe(){thrown.push('drop');}};
+ f.v.elemental.cycle=3;assert.equal(f.em.airLift(f.v,{x:0,y:2,z:-12}),true);assert.equal(lifts.length,1);assert.equal(f.v.mode,'airLift');assert.equal(f.v.elemental.liftMax,true);
+ const mana=f.v.mana;f.em.think(f.v,1);assert.ok(mana-f.v.mana>0&&mana-f.v.mana<4,'the Maxima drain, not the plain hold cost');
+ f.em.liftedBy(f.v.id,true);f.v.elemental.liftT=.01;f.em.think(f.v,.1);
+ assert.equal(thrown.length,1);assert.equal(thrown[0][0],f.v.id);assert.ok(Math.hypot(thrown[0][1].x,thrown[0][1].z)>10,'thrown hard');assert.ok(thrown[0][1].y>0,'and up');
+ assert.ok(releases.some(m=>m[4]===false&&m[6]===f.v.id&&m[7]&&Number.isFinite(m[7].x)),'the guests get the throw in the release');
+ assert.equal(f.v.elemental.cycle,4);assert.equal(f.v.elemental.phase,'Sweep');
+ // the foe broke free (the dome): a plain drop, no throw
+ const g=fixture('air');g.g.levMax={npcPlayer:()=>true};g.g.sync.lev=()=>{};const t2=[];g.g.levitation={lifted:{by:g.v.id},throwMe:()=>t2.push('throw'),dropMe:()=>t2.push('drop')};
+ g.em.airLift(g.v,{x:0,y:2,z:-12});g.em.liftedBy(g.v.id,false);g.em.think(g.v,.1);assert.deepEqual(t2,['drop']);
+ // no great lift available (no mana / out of sight): no lift at all — never the ordinary Leviosa bolt the ordinary Protection could stop
+ const h=fixture('air');h.g.levMax={npcPlayer:()=>false};assert.equal(h.em.airLift(h.v,{x:0,y:2,z:-12}),false);
 });
 test('a mana-empty air mage falls rather than receiving a free slow landing',()=>{
  const f=fixture('air');f.v.fly=true;f.v.y=10;f.v.mana=0;f.em.land(f.v,.1);assert.equal(f.v.fly,false);assert.ok(f.v.vy<0);assert.equal(f.v.y,10);

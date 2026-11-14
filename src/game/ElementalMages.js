@@ -8,7 +8,7 @@ import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat } from './
 import { findWater } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
-import { elementalEndurance } from './ElementalRules.js';
+import { elementalEndurance, AIR_THROW, throwVector } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import {FLIGHT} from './Flight.js';
 import { FEATHER } from './Featherfall.js';
@@ -130,17 +130,18 @@ export class ElementalMages {
   const m={by:v.id,ev:'launch',id:v.id+':water:'+(++this.seq),o:_o.toArray(),d:_d.toArray(),h:_o.clone().addScaledVector(_d,1.5).toArray(),v:6,a:0,pw:1,tk:'p',tid:v.foe,s:null,npcMode:['','freeze','throw','drown'][a.cycle%4]};
   if(m.npcMode)a.capture=m.id;g.vortex._addFlight(v.id,m);g.sync?.vortex?.(m);g.sound?.spellCast?.('WaterVortex',_o);this.engaged(v);return true;
  }
- airLift(v,foe){
+ airLift(v,foe){ // (14.11: always the great kind — only the dome of «Protection Maxima» keeps it off; then the throw: endLift(v, thr))
   const g=this.game,a=v.elemental;
   a.liftAck=false;a.liftHeld=false;
-  if(g.levMax?.npcPlayer?.(v,v.foe)){a.liftT=6;a.liftMax=true;v.mode='airLift';this.engaged(v);return true;}
-  a.liftMax=false;if(!g.duel?._addBolt||!this.pay(v,SPELL_COST.Levitation))return false;
-  _o.set(v.x,v.y+2.7,v.z);_d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
-  const b=g.duel._addBolt({id:v.id+':air:'+(++this.seq),by:v.id,spell:'LevitateDuel',side:'right',tk:'p',tid:v.foe,ak:.55,o:_o.clone(),d:_d.clone(),npc:true,rng:duelRange(v.mana+SPELL_COST.Levitation)});
-  g.sync?.duelCast?.(b);g.sound?.spellCast?.('Levitation',_o);v.elemental.liftT=6;v.elemental.liftAck=false;v.elemental.liftHeld=false;v.mode='airLift';this.engaged(v);return true;
+  if(g.levMax?.npcPlayer?.(v,v.foe)){a.liftT=AIR_THROW.HOLD;a.liftMax=true;v.mode='airLift';this.engaged(v);return true;}
+  return false;
  }
+ /** The velocity of the throw: away from the mage over the foe, aside by his die. */
+ throwOf(v,foe){const t=throwVector(v.x,v.z,foe.x,foe.z,Math.random());return {x:t.x,y:t.y,z:t.z};}
  liftedBy(by,on){if(!this.game.authority)return;const v=this.game.castleLife?.byId?.get(by);if(v?.element==='air'&&v.elemental){v.elemental.liftAck=true;v.elemental.liftHeld=!!on;}}
- endLift(v){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id);if(g.levitation?.lifted?.by===v.id)g.levitation.dropMe(false);this.phase(v,'Coil');}
+ /** The lift ends: dropped, or (`thr`: a velocity) THROWN — the swing, the body flies; the net message carries the throw to a guest. */
+ endLift(v,thr=null){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id,thr);if(g.levitation?.lifted?.by===v.id){if(thr)g.levitation.throwMe(v.id,thr);else g.levitation.dropMe(false);}
+  if(thr){this.phase(v,'Sweep');a.fired=true;a.t=.2;v.castT=.5;g.sound?.spellCast?.('WindImpulseMaxima',_o.set(v.x,v.y+2,v.z));}else this.phase(v,'Coil');}
  think(v,dt){
   const g=this.game,L=g.castleLife,a=v.elemental;if(!a)return false;
   if(!v.foe&&v.cs?.def&&v.cs.def.kind!=='elemental'){
@@ -175,7 +176,7 @@ export class ElementalMages {
    v.fx=0;
    if(this.parry(v,foe,dt))return true;
    if(a.winged)stepAirMageWings(g,v,foe,dt);
-   if(a.liftT>0){a.liftT-=dt;const cost=(a.liftMax?LEV_MAX.DRAIN:HOLD_FATIGUE.wizard)+(v.fly&&!a.winged?FLIGHT.HOVER_COST:0);if(a.liftT<=0||(a.liftAck&&!a.liftHeld)||!this.pay(v,cost*dt)){this.endLift(v);}else{v.mode='airLift';if(!v.fly&&!v.vy)L._ground(v);return true;}}
+   if(a.liftT>0){a.liftT-=dt;const cost=(a.liftMax?LEV_MAX.DRAIN:HOLD_FATIGUE.wizard)+(v.fly&&!a.winged?FLIGHT.HOVER_COST:0);if(a.liftT<=0||(a.liftAck&&!a.liftHeld)||!this.pay(v,cost*dt)){this.endLift(v,a.liftT<=0&&a.liftMax&&a.liftHeld?this.throwOf(v,foe):null);}else{v.mode='airLift';if(!v.fly&&!v.vy)L._ground(v);return true;}}
    if(!a.winged&&!v.fly&&a.flightCd<=0&&(dist<14||threat)&&this.pay(v,SPELL_COST.Flight)){v.fly=true;a.flight=7;a.flightCd=15;}
    if(v.fly&&!a.winged){
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
