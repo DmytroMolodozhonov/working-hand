@@ -20,12 +20,14 @@ export const SWAT = {
     HIT_MAX: 0.34, // s: the longest wait for the orb to be within reach
     T: 0.66, // s: the whole move
     CD: 1.9, // s between two parries
-    CHANCE: { fire: 0.8, air: 0.7 },
-    COST: { fire: 6, air: 8 },
+    CHANCE: { fire: 0.8, air: 0.7, water: 0.8 },
+    COST: { fire: 6, air: 8, water: 7 },
+    // the water mage DOUSES the orb from afar (the author 14.11: «направлять воду на неё и тушить ещё до того, как она долетит») — a stream at it, a cloud of steam, no orb comes back
+    REACH_BY: { water: 15 }, TAKE_BY: { water: 12.5 },
     SCATTER: 0.07, // rad of the way back (a little aside)
     TAKE_R: 3.4, // m: the orb is struck when it comes this near
 };
-export const SWAT_MODES = { fire: 'fireSwat', air: 'airSwat' };
+export const SWAT_MODES = { fire: 'fireSwat', air: 'airSwat', water: 'waterSwat' };
 
 /** The spell an orb is: 'Fireball' | 'BombardoMaxima' | 'Bombardo'. */
 export function swatSpell(orb) { return orb.fire ? 'Fireball' : orb.maxima ? 'BombardoMaxima' : 'Bombardo'; }
@@ -48,12 +50,12 @@ export function incoming(orb, chest) {
 /**
  * The best orb to parry among `orbs` ([{ p, v, by, fire, maxima, mine }]): the nearest that is coming, in reach, with time left, not his own.
  */
-export function pickOrb(orbs, chest, selfId) {
+export function pickOrb(orbs, chest, selfId, reach = SWAT.REACH) {
     let best = null;
     for (const o of orbs) {
         if (!o || o.by === selfId) continue;
         const h = incoming(o, chest);
-        if (!h || h.dist > SWAT.REACH || h.dist < SWAT.MIN) continue;
+        if (!h || h.dist > reach || h.dist < SWAT.MIN) continue;
         if (!best || h.dist < best.h.dist) best = { o, h };
     }
     return best;
@@ -75,5 +77,5 @@ export function canSwat(v, a, mana) {
     if (a.liftT > 0 || a.capture || a.wave || a.guard > 0 || a.recover) return false;
     if (v.element === 'fire' && (a.phase === 'Vault' || a.phase === 'Punch' || a.phase === 'Kick')) return false;
     if (v.element === 'air' && a.phase === 'Sweep') return false;
-    return mana >= SWAT.COST[v.element];
+    return !!SWAT.COST[v.element] && mana >= SWAT.COST[v.element];
 }

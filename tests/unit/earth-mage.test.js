@@ -131,11 +131,11 @@ test('a minimum-capacity novice releases a paid stone and can repeat after recov
 
 test('recovering at range keeps moving through the collision pilot and changes side when blocked',()=>{
  const f=fixture();f.v.mana=0;f.g.character.group.position.z=-25;
- const requests=[];f.g.castleLife._steer=(v,x,z)=>{requests.push({x,z});v.foe=null;};
+ const requests=[];f.g.castleLife._steer=(v,x,z)=>{requests.push({x,z});v.foe=null;};f.g.terrain.data.raycast=()=>null;
  // (14.11: the mage moves in hops with pauses between them — ElementalMove.js — not a step request every frame)
  f.step(100);assert.ok(requests.length>25&&requests.length<100,'hops and pauses: '+requests.length);assert.equal(f.v.foe,'me');
  assert.ok(requests.some(p=>p.x>0)&&requests.some(p=>p.x<0),'a blocked riverbank sidestep must try the other side');
- assert.ok(f.v.mana<2,'movement cannot bypass real mana regeneration');
+ assert.ok(f.v.mana<12,'movement cannot bypass real mana regeneration (14.11: resting gives it back at REGEN.REST a second, not 1 — about 8 in this time)');
 });
 
 test('an unthreatened orbit repositions but the release gesture remains rooted',()=>{

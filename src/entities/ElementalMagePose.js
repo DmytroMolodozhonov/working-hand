@@ -1,5 +1,5 @@
 /** Original procedural martial choreography: water yields/coils, air turns, fire strikes. */
-export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat'];
+export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat','waterSwat'];
 const S=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
 export function elementalMagePose(m,T,mode,dt,t){
  m._acroActive=mode==='fireVault';
@@ -13,6 +13,9 @@ export function elementalMagePose(m,T,mode,dt,t){
   T.aLZ=-.65-turn*.4;T.aRZ=.65-turn*.4;T.eL=.8+turn*.45;T.eR=.8-turn*.45;
   T.lL=.3+wave*.16;T.kL=-.5-wave*.15;T.lR=-.25+wave*.15;T.kR=-.4+wave*.12;
   if(mode==='waterPush'){const p=S((u-.25)/.4);T.aLX=T.aRX=.7+p*.9;T.eL=T.eR=1.4*(1-p)+.08;T.hy=.45*(1-p);T.hx=.2*p;T.aLZ=-.2;T.aRZ=.2;}
+  if(mode==='waterSwat'){ // both hands thrust at the orb and flick the water out
+   const p=S(u/.15)*(1-S((u-.3)/.3));T.aLX=T.aRX=1.0+.9*p;T.eL=T.eR=1.2*(1-p)+.1;T.hy=.0;T.hx=.12*p;T.aLZ=-.25;T.aRZ=.25;T.lL=.45;T.kL=-.7;
+  }
   if(mode==='waterGuard'){T.aLX=1.4+wave*.2;T.aRX=1.6-wave*.2;T.aLZ=-.8;T.aRZ=.8;T.kL=-.65;}
  }else if(e==='air'){
   T.hy=Math.sin(a)*.7;T.hz=Math.cos(a)*.12;T.aLX=1.2+Math.sin(a)*.5;T.aRX=1.2+Math.cos(a)*.5;

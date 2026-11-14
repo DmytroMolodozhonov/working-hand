@@ -57,6 +57,19 @@ test('the watchdog does not count: moving, a new phase, no foe, stunned / lifted
     const w3 = newWatch();
     for (let i = 0; i < 400; i++) assert.ok(!stuckStep(w3, u, false, 'a', 0.1));
     const w4 = newWatch();
-    for (let i = 0; i < 400; i++) assert.ok(!stuckStep(w4, u, true, 'a', 0.1, true), 'a stunned / lifted mage is not «stuck»');
+    for (let i = 0; i < 150; i++) assert.ok(!stuckStep(w4, u, true, 'a', 0.1, true), 'a stunned / lifted mage is not «stuck» (for a while)');
+    let fired = 0; for (let i = 0; i < 400; i++) if (stuckStep(w4, u, true, 'a', 0.1, true)) fired++;
+    assert.ok(fired >= 1, 'but an excuse that never ends is no excuse: the watch fires after STILL_CAP + T');
 });
 test('constants are sane', () => { assert.ok(HOP.LEN[0] > 2 && HOP.LEN[1] < 8 && HOP.PAUSE[0] > 0.2 && STUCK.T > 3); });
+
+import { lowMana, readyMana, ELEMENT_LOW, REGEN } from '../../src/game/ElementalRules.js';
+test('rest and ready lines: a mage whose mana sits between «rest» and «one attack» cannot exist (the water mage stuck at 12 mana, 14.11)', () => {
+    // the cheapest attack of each (SpellCosts): air Wind 8, water WaterVortex 20 / WaveAttack 8, fire Fireball 7
+    assert.ok(lowMana('water', 200) >= 20, 'water: rests below a vortex\'s price');
+    assert.ok(lowMana('air', 200) >= 8 && lowMana('fire', 200) >= 7);
+    for (const e of Object.keys(ELEMENT_LOW)) { assert.ok(readyMana(e, 200) >= lowMana(e, 200) * 2, e); assert.ok(readyMana(e, 200) <= 200, e); }
+    assert.ok(readyMana('water', 25) <= 25, 'a small pool still reaches ready');
+    // time to be ready again from the empty: seconds, not minutes
+    for (const e of Object.keys(ELEMENT_LOW)) assert.ok(readyMana(e, 200) / REGEN.REST < 12, e + ' rests ' + (readyMana(e, 200) / REGEN.REST).toFixed(1) + ' s');
+});

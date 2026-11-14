@@ -22,7 +22,7 @@ export default async function (h, args) {
             if (v.dead) { h.log(el, 'DIED at', t.toFixed(0), 's'); break; }
             if (!v.foe) v.foe = g.localId; // (only to keep the test going: the real game has its own losing of a foe)
             if (f % 600 === 0) place();
-            L._think(v, 1 / 60); g.spells.update(1 / 60); g.vortex?.update?.(1 / 60); g.waves?.update?.(1 / 60); g.elementalMages?.update?.(1 / 60); g.earthMages?.update?.(1 / 60); g.groundVortex?.update?.(1 / 60);
+            L._think(v, 1 / 60); g.spells.update(1 / 60); g.vortex?.update?.(1 / 60); g.waves?.update?.(1 / 60); g.elementalMages?.update?.(1 / 60); g.earthMages?.update?.(1 / 60); g.groundVortex?.update?.(1 / 60); g.levMax?.update?.(1 / 60); g.hellfire?.update?.(1 / 60);
             const key = v.mode + '|' + (v.elemental?.phase || v.earth?.phase) + '|' + Math.round(v.x) + ',' + Math.round(v.z);
             if (casts !== lastCasts || key !== lastKey) { if (casts !== lastCasts) quiet = 0; lastCasts = casts; }
             if (casts === lastCasts) quiet += 1 / 60;

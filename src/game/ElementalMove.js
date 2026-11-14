@@ -22,7 +22,7 @@ export const HOP = {
     TRIES: 8,
 };
 /** The watch: no progress (not a step, not a new phase) for this long while a foe lives → set going again. */
-export const STUCK = { T: 5.5, STEP: 0.06, COOL: 4 };
+export const STUCK = { T: 5.5, STEP: 0.06, COOL: 4, STILL_CAP: 16 }; // STILL_CAP s: a state that excuses a mage (stunned, lifted, a lift / hellfire / wave going) excuses him this long at most — a system that never lets go must not freeze him for good
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -93,6 +93,8 @@ export function stepHop(h, foe, band, speed, dt, io) {
 export function newWatch() { return { t: 0, x: NaN, z: NaN, key: '', cool: 0 }; }
 export function stuckStep(w, v, foeNear, key, dt, still = false) {
     w.cool = Math.max(0, w.cool - dt);
+    if (still) w.stillT = (w.stillT || 0) + dt; else w.stillT = 0;
+    if (still && w.stillT > STUCK.STILL_CAP) still = false; // (excused long enough: he counts as stuck now)
     const moved = !(Math.hypot(v.x - w.x, v.z - w.z) < STUCK.STEP);
     if (moved || key !== w.key || !foeNear || still) { w.t = 0; w.x = v.x; w.z = v.z; w.key = key; return false; }
     w.t += dt;

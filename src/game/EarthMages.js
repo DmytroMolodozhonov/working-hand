@@ -1,6 +1,6 @@
 /** Host-driven earth discipline. Real terrain, shared Ground Vortex stones/flights, ordinary NPC bodies/armour/death. */
 import * as THREE from 'three';
-import { elementalEndurance } from './ElementalRules.js';
+import { elementalEndurance, REGEN } from './ElementalRules.js';
 import { EARTH as E, EARTH_PHASES, EARTH_STRIKES, EARTH_ATTACKS, EARTH_SHELL, WALL_COUNT, ELEMENTAL_BARE_HAND, earthSlot, earthBlockHit } from './EarthMagicRules.js';
 import { newSwarm } from './GroundVortex.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -76,7 +76,7 @@ export class EarthMages {
   const g=this.game,L=g.castleLife,a=v.earth;if(!a)return false;
   a.interrupted=false;
   if(!v.foe&&v.cs?.def&&v.cs.def.kind!=='elemental'){this._stop(v.id);a.phase='rest';v.model.earthPoseT=undefined;v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);return false;}
-  if(!a.slab&&!this.swarms.has(v.id)&&!(a.stitchPose>0))v.mana=Math.min(v.maxMana,v.mana+E.REGEN*dt);
+  if(!a.slab&&!this.swarms.has(v.id)&&!(a.stitchPose>0))v.mana=Math.min(v.maxMana,v.mana+(a.recover?REGEN.REST:E.REGEN)*dt); // (14.11: resting gives mana back fast — the long fight showed minutes of «recovering» at 1 a second)
   a.t+=dt;a.wallCd=Math.max(0,a.wallCd-dt);a.stitchCd=Math.max(0,a.stitchCd-dt);a.scan-=dt;
   v.prep=null;v.cardilon=null;v.practice=null;v.fx=0;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
   let foe=v.foe?L._playerPos(v.foe):null;

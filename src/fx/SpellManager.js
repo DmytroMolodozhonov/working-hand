@@ -1682,7 +1682,10 @@ export class SpellManager {
                     if (!hit) continue;
                     const pc = p.center();
                     if (p.blocks(origin)) {
-                        if(incendiary){p.hit('Fireball',origin);explodeAt(orb.position,'blocked');spell.life=0;return;}
+                        // (14.11, the author: «Protection должен отталкивать — можно оттолкнуть фактически этот огонь»: a Fireball met by a shield is thrown back like a Bombardo, in a flare;
+                        // it burns out on the way back (it is only worth `bounces` rebounds: a shield may turn it, not make it fly for ever))
+                        if(incendiary&&(spell.bounces=(spell.bounces||0)+1)>2){p.hit('Fireball',origin);explodeAt(orb.position,'blocked');spell.life=0;return;}
+                        if(incendiary)this.fx.lightFlash(orb.position,0xff8a26,1.6,.14,8);
                         // Reflect from the incoming side even when a slow frame crossed the entire body.
                         _a.subVectors(prev, pc);
                         if (_a.lengthSq() < 1e-9) _a.copy(vel).negate();

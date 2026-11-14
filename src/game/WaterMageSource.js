@@ -7,8 +7,9 @@
  */
 export const WATER_REACH = { XZ: 10, STEP: 2, DOWN: 5, UP: 3 };
 /** The nearest water block round (x, y, z): {x, y, z} or null. `get(x, y, z)` → block id; `isWater(id)`; `made(x, z)` — false for land not made yet. */
-export function findWater(get, isWater, x, y, z, made = null) {
-    const R = WATER_REACH;
+export const WIDE_WATER = { XZ: 40, STEP: 4, DOWN: 5, UP: 3 }; // (a wider look, when none is near)
+export function findWater(get, isWater, x, y, z, made = null, reach = WATER_REACH) {
+    const R = reach;
     let best = null, bd = Infinity;
     for (let dx = -R.XZ; dx <= R.XZ; dx += R.STEP) for (let dz = -R.XZ; dz <= R.XZ; dz += R.STEP) {
         const X = Math.round(x + dx), Z = Math.round(z + dz);

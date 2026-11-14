@@ -98,7 +98,8 @@ test('no parry: broke, mid-attack, the orb passes wide, or it is his own', () =>
         const f2 = fixture('fire'); f2.v.elemental.phase = 'Vault'; const t2 = f2.task(orb(0, -8, 0, 32)); f2.step(5); assert.ok(t2.life > 0 && f2.casts.length === 0, 'upside down, firing');
         const f3 = fixture('air'); const t3 = f3.task(orb(9, -8, 0, 32)); f3.step(30); assert.ok(t3.life > 0, 'passes wide');
         const f4 = fixture('air'); const t4 = f4.task(orb(0, -8, 0, 32, { by: f4.v.id })); f4.step(30); assert.ok(t4.life > 0, 'his own');
-        const f5 = fixture('water'); const t5 = f5.task(orb(0, -8, 0, 32)); f5.step(30); assert.ok(t5.life > 0, 'the water mage does not parry');
+        // (the earth mage has his own controller: never a parry)
+        assert.equal(canSwat({ element: 'earth', stunT: 0 }, { phase: 'rest', parryCd: 0 }, 50), false, 'the earth mage does not parry');
     } finally { Math.random = origRandom; }
 });
 test('the orb bursts before the blow lands: the swing finds nothing and no orb comes back', () => {
@@ -117,4 +118,22 @@ test('cool-down: a second orb right after is not parried', () => {
         const o2 = orb(0, -9, 0, 32); const t2 = f.task(o2); f.step(8);
         assert.ok(t2.life > 0, 'the second one, inside the cool-down, flies on');
     } finally { Math.random = origRandom; }
+});
+
+test('the water mage DOUSES a thrown orb from afar: a jet, steam — no orb comes back, the water is paid', () => {
+    const f = fixture('water'); f.g.terrain.data.get = () => BLOCK.WATER; f.v.elemental.scan = 0; // (water near him)
+    const o = orb(0, -14, 0, 32, { fire: true }); const t = f.task(o); const mana = f.v.mana;
+    const steam = []; f.g.fx.glow = { spawn: (...a) => steam.push(a) };
+    const origRandom = Math.random; Math.random = () => 0.1;
+    try { for (let i = 0; i < 90 && t.life > 0; i++) { o.p.z += 32 / 60; f.step(1); } f.step(50); } finally { Math.random = origRandom; }
+    assert.equal(t.life, 0, 'the orb is out');
+    assert.equal(f.casts.length, 0, 'nothing thrown back');
+    assert.ok(steam.length > 30, 'a stream and a cloud of steam');
+    assert.ok(Math.hypot(o.p.x - f.v.x, o.p.z - f.v.z) > 3.5, 'put out well before it arrived');
+    assert.ok(f.v.mana < mana + 1, 'paid');
+    // no water about, no tank, no gift: he cannot douse (his water is the water he has)
+    const d = fixture('water'); d.v.entry.look.tank = false; d.v.gifts.hydro.h = 0; d.v.elemental.water = 0; d.v.elemental.scan = 0;
+    const o2 = orb(0, -14, 0, 32); const t2 = d.task(o2);
+    Math.random = () => 0.1; try { for (let i = 0; i < 30; i++) { o2.p.z += 32 / 60; d.step(1); } } finally { Math.random = origRandom; }
+    assert.ok(t2.life > 0, 'dry: no douse');
 });

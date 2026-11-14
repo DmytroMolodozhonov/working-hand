@@ -368,6 +368,28 @@ class WaveLook {
  * Water droplets (round, the water material, falling), bits of foam (white, floating) and wet
  * patches on the ground (they dry from the edges): shared by all the waves.
  */
+const WET_STEP = 0.7; // m of the wave's way between two rows of wet strips (each strip is twice as long: they overlap)
+const _up = new THREE.Vector3(0, 1, 0);
+let _wetTex = null;
+/** The wet band's alpha: soft across (the edges feathered, a little uneven) and a triangle along (rows overlap by half: they add up to an even band). One texture for all waves. */
+function wetStripTexture() {
+    if (_wetTex) return _wetTex;
+    const W = 64, H = 32, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d'), img = ctx.createImageData(W, H);
+    const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const u = Math.abs((x + 0.5) / W * 2 - 1), v = (y + 0.5) / H;
+        const edge = 1 - sm(0.45 + 0.12 * Math.sin(y * 0.9 + x * 0.05), 1, u); // (the edges ragged a little)
+        const tri = 1 - Math.abs(v * 2 - 1);
+        const blot = 0.82 + 0.18 * Math.sin(x * 0.55 + y * 1.3) * Math.sin(x * 0.21 - y * 0.8);
+        const g = Math.max(0, Math.min(255, Math.round(255 * edge * tri * blot)));
+        const i = (y * W + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = g; img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    _wetTex = new THREE.CanvasTexture(c);
+    return _wetTex;
+}
+
 class Spray {
     constructor(scene) {
         this.scene = scene;
@@ -385,9 +407,13 @@ class Spray {
         this.foamMat = new THREE.MeshBasicMaterial({ color: 0xf4fbff, transparent: true, opacity: 0.8, depthWrite: false }); // (white, never shaded grey like a stone)
         this.foam = make(new THREE.IcosahedronGeometry(1, 1), this.foamMat, 600);
         this.wetMat = new THREE.MeshBasicMaterial({ color: 0x0e1a12, transparent: true, opacity: 0.22, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-        const wetGeo = new THREE.CircleGeometry(0.5, 10);
+        // (the author 14.11: the wet trail looked like «очень много капель» — dots. Now a continuous band: soft overlapping strips along the wave's way,
+        // feathered at the edges and the ends so they merge into one wet stripe that dries from its edges)
+        this.wetMat.alphaMap = wetStripTexture();
+        this.wetMat.opacity = 0.3;
+        const wetGeo = new THREE.PlaneGeometry(1, 1);
         wetGeo.rotateX(-Math.PI / 2);
-        this.wet = make(wetGeo, this.wetMat, 500);
+        this.wet = make(wetGeo, this.wetMat, 1600);
         this.d = []; this.f = []; this.p = [];
         this.flow = new WaterFlow(scene, { maxVerts: 8000, radial: 10 }); // (the streams the wall rises from)
     }
@@ -403,9 +429,12 @@ class Spray {
         this.f.push({ x, y, z, vx, vy, vz, size, life, max: life, flat, floor });
     }
 
-    wetAt(x, y, z, size, life) {
+    wetAt(x, y, z, size, life) { this.wetStrip(x, y, z, 0, 1, size, size, life); }
+
+    /** A strip of wet ground centred on (x, y, z), `len` m along (dx, dz) and `width` m across. */
+    wetStrip(x, y, z, dx, dz, width, len, life) {
         if (this.p.length >= this.wet.instanceMatrix.count) this.p.shift();
-        this.p.push({ x, y, z, size, life, max: life });
+        this.p.push({ x, y, z, yaw: Math.atan2(dx, dz), w: width, l: len, life, max: life });
     }
 
     update(dt) {
@@ -456,8 +485,9 @@ class Spray {
             if (p.life <= 0) { this.p.splice(i, 1); continue; }
         }
         for (const p of this.p) {
-            const k = Math.min(1, p.life / (p.max * 0.7)); // (it dries from the edges)
-            _m.compose(_p.set(p.x, p.y, p.z), _quat, _s.set(p.size * k, 1, p.size * k));
+            const k = Math.min(1, p.life / (p.max * 0.7)); // (it dries from the edges: the band narrows)
+            _quat.setFromAxisAngle(_up, p.yaw);
+            _m.compose(_p.set(p.x, p.y, p.z), _quat, _s.set(p.w * k, 1, p.l));
             this.wet.setMatrixAt(n++, _m);
         }
         this.wet.count = n;
@@ -727,13 +757,14 @@ export class WaveAttacks {
                 else S.froth(x + w.dx * 0.6, y0 + 0.05, z + w.dz * 0.6, w.dx * F.speed * 0.6, 0, w.dz * F.speed * 0.6, 0.18 + rnd() * 0.25, 1.6 + rnd(), true);
             }
             w.wet += F.speed * dt;
-            while (w.wet > 0.8) {
-                w.wet -= 0.8;
+            while (w.wet > WET_STEP) {
+                w.wet -= WET_STEP;
+                const colW = (2 * half / (NX - 1)) * 2 * 1.35; // (every second column, a third wider: the neighbours overlap into one band)
                 for (let j = 0; j < NX; j += 2) {
                     const a = -1 + 2 * j / (NX - 1);
                     const x = w.x - w.dx * 1.2 + sx * a * half, z = w.z - w.dz * 1.2 + sz * a * half;
                     const s = this.surface(x, z);
-                    if (!s.water) S.wetAt(x, s.y + 0.02, z, 1.3 + rnd() * 0.5, 6 + rnd() * 3);
+                    if (!s.water) S.wetStrip(x, s.y + 0.02, z, w.dx, w.dz, colW, WET_STEP * 2, 7 + rnd() * 2);
                 }
             }
         } else if (w.phase === 'break' || w.phase === 'fall') {

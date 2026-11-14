@@ -20,3 +20,14 @@ export function throwVector(mx, mz, fx, fz, roll) {
     const a = (roll * 2 - 1) * AIR_THROW.SPREAD, c = Math.cos(a), s = Math.sin(a);
     return { x: (dx * c - dz * s) * AIR_THROW.SPEED, y: AIR_THROW.UP, z: (dx * s + dz * c) * AIR_THROW.SPEED };
 }
+
+/**
+ * When an elemental mage must rest, and when he is ready again (the author 14.11: «через какое-то время битвы они резко перестают атаковать и просто стоят на месте»).
+ * A long fight of each mage showed it: the water mage's mana stopped at 12 — above the old «rest below 10» line and below the 20 a vortex costs — and in a fight nothing
+ * gave mana back: he stood «gathering» for 250 s. Now: he rests below the price of his cheapest attack (+ a margin), mana comes back all the time (`REGEN`, faster while resting),
+ * and he is ready again at about two such attacks — never a long wait.
+ */
+export const ELEMENT_LOW = { air: 12, water: 22, fire: 12 };
+export const REGEN = { FIGHT: 1.5, REST: 5 };
+export function lowMana(element, maxMana) { return Math.min(ELEMENT_LOW[element] ?? 12, maxMana || 30); }
+export function readyMana(element, maxMana) { return Math.min(maxMana || 30, Math.max(lowMana(element, maxMana) * 2.2, 30)); }

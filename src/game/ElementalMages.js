@@ -5,10 +5,10 @@ import {waveSource} from './WaveSource.js';
 /** Host-owned elemental combat on ordinary CastleLife bodies: shared spell collisions, armour and death. */
 import * as T from 'three';
 import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat } from './ElementalParry.js';
-import { findWater } from './WaterMageSource.js';
+import { findWater, WIDE_WATER } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
-import { elementalEndurance, AIR_THROW, throwVector } from './ElementalRules.js';
+import { elementalEndurance, AIR_THROW, throwVector, lowMana, readyMana, REGEN } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import {FLIGHT} from './Flight.js';
 import { FEATHER } from './Featherfall.js';
@@ -50,24 +50,26 @@ export class ElementalMages {
    const S=a.swat;S.t+=dt;v.mode=SWAT_MODES[v.element];v.model.elementPoseT=S.t;a.hopping=false;v.speed=0;
    if(!S.done&&S.t>=SWAT.HIT){
     const t=S.task,o=t.orb;
-    if(t.life>0&&Math.hypot(o.p.x-v.x,o.p.y-(v.y+2.6),o.p.z-v.z)<=SWAT.TAKE_R){S.done=true;this.swatHit(v,t,foe);}
+    if(t.life>0&&Math.hypot(o.p.x-v.x,o.p.y-(v.y+2.6),o.p.z-v.z)<=(SWAT.TAKE_BY[v.element]||SWAT.TAKE_R)){S.done=true;this.swatHit(v,t,foe);}
     else if(S.t>=SWAT.HIT_MAX)S.done=true; // (it burst or flew wide: the swing found nothing)
    }
-   if(S.t>=SWAT.T){a.swat=null;a.parryCd=SWAT.CD;this.phase(v,v.element==='fire'?'Chamber':'Coil');}
+   if(S.t>=SWAT.T){a.swat=null;a.parryCd=SWAT.CD;this.phase(v,v.element==='fire'?'Chamber':v.element==='water'?'Gather':'Coil');}
    L._ground(v);return true;
   }
   if(!g.spells?.spells||!canSwat(v,a,v.mana)||!L._sees(v,foe))return false;
+  if(v.element==='water'&&!this.waterSource(v,0))return false; // (the water he douses with is the water he has)
   const chest={x:v.x,y:v.y+2.6,z:v.z},orbs=this._orbs||(this._orbs=[]);orbs.length=0;
   for(const t of g.spells.spells)if(t.orb&&t.life>0&&t.parry)orbs.push(t.orb);
-  const pick=pickOrb(orbs,chest,v.id);if(!pick)return false;
+  const pick=pickOrb(orbs,chest,v.id,SWAT.REACH_BY[v.element]||SWAT.REACH);if(!pick)return false;
   a.parryCd=SWAT.CD*.5;if(Math.random()>=SWAT.CHANCE[v.element])return false; // (his die: he did not see it in time)
   if(!this.pay(v,SWAT.COST[v.element]))return false;
-  a.swat={t:0,task:pick.o.task,done:false,variant:Math.random()<.5?0:1};v.model.elementVariant=a.swat.variant;this.phase(v,'Swat');v.mode=SWAT_MODES[v.element];return true;
+  a.swat={t:0,task:pick.o.task,done:false,variant:Math.random()<.5?0:1};v.model.elementVariant=a.swat.variant;if(v.element==='water'&&!a.source&&!a.humid)a.water=Math.max(0,a.water-3);this.phase(v,'Swat');v.mode=SWAT_MODES[v.element];return true;
  }
  /** The blow lands: the orb is taken out of its flight (no blast at the mage) and a new one of the same spell goes back from his hand at whoever threw it. */
  swatHit(v,task,foe){
   const g=this.game,L=g.castleLife,o=task.orb,at=o.p,name=swatSpell(o);
   if(!task.parry?.())return;
+  if(v.element==='water'){this.douse(v,o,at);return;} // (water puts it out: no orb comes back)
   const from=L._playerPos?.(o.by)||foe;
   g.fx?.lightFlash?.(at,v.element==='fire'?0xff8a26:0xcfefff,2.2,.18,10);
   for(let i=0;i<10;i++)g.fx?.spark?.(at,v.element==='fire'?0xffa040:0xe6f6ff,.1,_d.set((Math.random()-.5)*5,Math.random()*3,(Math.random()-.5)*5),.45);
@@ -77,6 +79,27 @@ export class ElementalMages {
   _d.set(d.x,d.y,d.z);
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);
   v.castT=.4;this.engaged(v);
+ }
+ /**
+  * A water mage with no water about (he wandered off in the fight, or the stream is out of reach) goes BACK to the water he knows — he does not stand «gathering» for ever (the long fight
+  * of 14.11: 188 s without one cast, mana full). No water known: he looks wider round him (every 3 s), else he hops about as a fighter does. → true while he is walking to it.
+  */
+ seekWater(v,foe,dt){
+  const a=v.elemental,L=this.game.castleLife;
+  if(a.source||a.humid||a.water>=6||a.capture||a.wave||a.guard>0){a.seeking=false;return false;}
+  a.seekT=(a.seekT||0)-dt;
+  if(!a.lastSource&&a.seekT<=0){a.seekT=3;const d=this.game.terrain?.data;const w=d?findWater((x,y,z)=>d.get(x,y,z),id=>id===BLOCK.WATER,v.x,v.y,v.z,d.landMade?(x,z)=>d.landMade(x,z):null,WIDE_WATER):null;if(w)a.lastSource=w;}
+  if(!a.lastSource)return false;
+  const w=a.lastSource,d=Math.hypot(w.x-v.x,w.z-v.z);
+  if(d<=5){a.scan=0;return false;} // (near enough: the next scan finds it)
+  a.seeking=true;L._steer(v,w.x,w.z,v.walk*1.3,dt,4);a.hopping=true;v.mode='waterGather';L._ground(v);return true;
+ }
+ /** The water mage douses a thrown orb: a stream flies from his hands to it, it goes out in a cloud of steam. */
+ douse(v,o,at){
+  const g=this.game,glow=g.fx?.glow;
+  if(glow){const sx=v.x-Math.sin(v.yaw)*.8,sy=v.y+2.7,sz=v.z-Math.cos(v.yaw)*.8;for(let i=0;i<28;i++){const u=Math.random();glow.spawn(sx+(at.x-sx)*u,sy+(at.y-sy)*u+Math.sin(u*Math.PI)*.5,sz+(at.z-sz)*u,(at.x-sx)*3,0,(at.z-sz)*3,[0x6ec6ff,0x9fdcff,0xd8f2ff][i%3],.2+Math.random()*.2,.3,{shrink:1.5});}
+   for(let i=0;i<22;i++)glow.spawn(at.x,at.y,at.z,(Math.random()-.5)*5,Math.random()*3,(Math.random()-.5)*5,i%2?0xf2f6fa:0xc9d4de,.5+Math.random()*.6,.7,{shrink:.6});}
+  g.fx?.lightFlash?.(at,0xcfe8ff,2.4,.2,12);g.sound?.playSplash?.();this.engaged(v);
  }
  /** The watchdog (a mage that makes no progress for a few seconds is set going again): the way, the stuck flags, the phase. */
  unstick(v,foe){
@@ -93,7 +116,7 @@ export class ElementalMages {
   if(a.scan<=0){
    a.scan=.75;a.source=false;a.sourcePoint=null;const data=g.terrain?.data;
    const w=data?findWater((x,y,z)=>data.get(x,y,z),id=>id===BLOCK.WATER,v.x,v.y,v.z,data.landMade?(x,z)=>data.landMade(x,z):null):null; // (the nearest real water: WaterMageSource.js — the picture uses the same)
-   if(w){a.source=true;a.sourcePoint=w;}
+   if(w){a.source=true;a.sourcePoint=w;a.lastSource=w;}
   }
   if(a.source&&v.entry.look?.tank)a.water=Math.min(36,a.water+dt*6);
   const desert=!!g.terrain?.data?.pyr?.sandy?.(Math.round(v.x),Math.round(v.z));
@@ -156,9 +179,12 @@ export class ElementalMages {
   a.hopping=false;
   if(stuckStep(a.watch||(a.watch=newWatch()),v,true,a.phase+':'+a.cycle,dt,!!(v.vy||v.stunT>0||v.lev||v.carriedBy||v.fly||a.liftT>0||a.capture||a.wave||a.guard>0||g.hellfire?.npcs?.has(v.id)))){this.unstick(v,foe);return true;}
   const threat=g.earthMages?._threat(v);
-  if(v.mana<10)a.recover=true;if(a.recover&&v.mana>=Math.max(v.element==='air'?SPELL_COST.Wind:v.element==='water'?SPELL_COST.WaterVortex:SPELL_COST.Inferno,Math.min(v.maxMana,45)))a.recover=false;
+  v.mana=Math.min(v.maxMana,v.mana+(a.recover?REGEN.REST:REGEN.FIGHT)*dt); // (mana comes back all the time — a mage at 12 mana must not wait for ever)
+  if(v.mana<=lowMana(v.element,v.maxMana))a.recover=true;else if(a.recover&&v.mana>=readyMana(v.element,v.maxMana))a.recover=false;
   if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);if(!v.fly)this.reposition(v,foe,dt,24);v.mode=v.fly?'airFlight':v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
   if(v.element==='water'){
+   if(this.parry(v,foe,dt))return true; // (puts out a thrown fireball / bombardo with a jet of water before it arrives)
+   if(this.seekWater(v,foe,dt))return true;
    if(a.capture){const b=g.vortex?.bubbles?.get(a.capture),f=g.vortex?.flights?.get(a.capture);if(b||f){v.mode=b?.phase==='ice'?'waterPush':'waterGather';if(f&&!b&&!this.pay(v,dt)){g.vortex._endFlight(f,'mana',true);}L._ground(v);return true;}a.capture=null;}
    if(a.guard>0){a.guard-=dt;if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';}
    else{v.fx=0;if(threat&&this.waterSource(v,0)&&this.pay(v,threat.bomb?20:5)){a.guard=threat.bomb?3:1.8;v.fx=threat.bomb?FX.DOME:FX.SHIELD;this.phase(v,'Guard');}}
@@ -210,7 +236,10 @@ export class ElementalMages {
    if((a.phase==='Punch'||a.phase==='Kick')&&a.t>.43&&!a.fired){a.fired=true;if(L._sees(v,foe))this.cast(v,a.cycle%3===1?'Fireball':dist<11?'Inferno':a.cycle%4===3&&v.mana>=SPELL_COST.BombardoMaxima?'BombardoMaxima':'Bombardo',foe);}
    if((a.phase==='Punch'||a.phase==='Kick')&&a.t>1.1){a.fired=false;a.cycle++;this.phase(v,'Chamber');}
    if(a.phase==='Chamber'||a.phase!=='Vault'&&a.t>.85){
-    if(dist>20||!visible){const foeId=v.foe;L._steer(v,foe.x,foe.z,v.walk*1.6,dt,visible?16:0);if(!v.foe)v.foe=foeId;a.hopping=true;}else this.reposition(v,foe,dt,12);
+    a.blindT=visible?0:(a.blindT||0)+dt;
+    // (no line of sight for a while — the foe behind a hill or a wall: straight at it only pushed him into the rock (the long fight of 14.11: 184 s without a cast); now he hops about it: aside, back, round)
+    if(!visible&&a.blindT>1.2)this.reposition(v,foe,dt,12);
+    else if(dist>20||!visible){const foeId=v.foe;L._steer(v,foe.x,foe.z,v.walk*1.6,dt,visible?16:0);if(!v.foe)v.foe=foeId;a.hopping=true;}else this.reposition(v,foe,dt,12);
    }
    v.mode='fire'+a.phase;L._ground(v);
   }
