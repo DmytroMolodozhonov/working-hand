@@ -226,6 +226,7 @@ export class ElementalMages {
   if(!a.hopping)v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*5);
   a.hopping=false;
   a.blindT=L._sees(v,foe)?0:(a.blindT||0)+dt;
+  if(a.blindT>12){a.blindT=0;if(a.liftT>0)this.endLift(v);v.foe=null;v.fx=0;v.mode='idle';a.phase='rest';L._ground(v);return true;} // (the foe has been out of sight for twelve seconds: he gives up the chase — he does not hop round a hill for ever; the ordinary aggro finds the player again)
   if(stuckStep(a.watch||(a.watch=newWatch()),v,true,a.phase+':'+a.cycle,dt,!!(v.vy||v.stunT>0||v.lev||v.carriedBy||v.fly||a.liftT>0||a.capture||a.wave||a.guard>0||g.hellfire?.npcs?.has(v.id)))){this.unstick(v,foe);return true;}
   const threat=g.earthMages?._threat(v);
   v.mana=Math.min(v.maxMana,v.mana+(a.recover?REGEN.REST:REGEN.FIGHT)*dt); // (mana comes back all the time — a mage at 12 mana must not wait for ever)

@@ -99,6 +99,7 @@ export class EarthMages {
   const want=Math.atan2(-dx,-dz);if(!a.hopping)v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*4);
   a.hopping=false;
   a.blindT=L._sees(v,foe)?0:(a.blindT||0)+dt; // (hidden foe: he comes closer to see him)
+  if(a.blindT>12){a.blindT=0;if(s)this._stop(v.id);v.foe=null;v.mode='idle';v.model.earthPoseT=undefined;L._ground(v);return true;} // (out of sight for twelve seconds: he gives up the chase)
   if(stuckStep(a.watch||(a.watch=newWatch()),v,true,a.phase+':'+a.cycle+':'+(s?s.n:0),dt,!!(v.vy||v.stunT>0||v.lev||v.carriedBy||a.slab||a.stitchPose>0))){this._unstick(v);return true;}
   if(v.mana<(s?E.THROW_COST+E.DRAIN*dt:E.START))a.recover=true;
   if(a.recover&&v.mana>=Math.min(v.maxMana,E.START+12))a.recover=false;
