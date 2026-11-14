@@ -12,7 +12,8 @@ export default async function (h, args) {
             let bursts = [], fromMage = 0;
             const ex = g.explode; g.explode = function (p, r, by, power) { bursts.push({ p: p.clone ? p.clone() : p, by }); return ex.apply(this, arguments); };
             const sc = g.spells.cast.bind(g.spells); const castsOfMage = []; g.spells.cast = function (name, o, d, side, by) { if (by === v.id) castsOfMage.push(name); return sc(name, o, d, side, by); };
-            const step = (n) => { for (let i = 0; i < n; i++) { L._think(v, 1 / 60); g.spells.update(1 / 60); g.elementalMages.update(1 / 60); g.earthMages?.update?.(1 / 60); g.groundVortex?.update?.(1 / 60); } };
+            const step = (n) => { for (let i = 0; i < n; i++) { L._think(v, 1 / 60); v.group.position.set(v.x, v.y + 1.95, v.z); v.group.rotation.y = v.yaw; // (the game moves the model after the think: the bodies are the model's)
+ g.spells.update(1 / 60); g.elementalMages.update(1 / 60); g.earthMages?.update?.(1 / 60); g.groundVortex?.update?.(1 / 60); } };
             step(30 + trial * 17); // (a different moment of his cycle each time)
             const o = new T.Vector3(me.x, me.y + 0.6, me.z), tgt = new T.Vector3(v.x, v.y + 2.2, v.z), d = tgt.clone().sub(o).normalize();
             const phase = (v.elemental || v.earth || {}).phase, fly = !!v.fly;
