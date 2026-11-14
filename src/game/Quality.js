@@ -18,7 +18,7 @@ export const QUALITY_LEVELS = [
     { name: 'очень низкая', pixelRatio: 0.6, shadowSize: 512, shadowEvery: 3, shadowFly: 45, view: 0.65, shadows: false, soft: false, clouds: false },
     { name: 'низкая', pixelRatio: 0.8, shadowSize: 1024, shadowEvery: 2, shadowFly: 45, view: 0.8, shadows: true, soft: false, clouds: false },
     { name: 'средняя', pixelRatio: 1.0, shadowSize: 1024, shadowEvery: 1, shadowFly: 70, view: 1.0, shadows: true, soft: false, clouds: true },
-    { name: 'высокая', pixelRatio: 1.5, shadowSize: 2048, shadowEvery: 1, shadowFly: 110, view: 1.0, shadows: true, soft: true, clouds: true },
+    { name: 'высокая', pixelRatio: 1.5, shadowSize: 2048, shadowEvery: 1, shadowFly: 85, view: 1.0, shadows: true, soft: true, clouds: true },
 ];
 
 /**

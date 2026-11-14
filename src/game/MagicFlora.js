@@ -18,7 +18,7 @@
  */
 
 /** The cells (like the apple trees' cells, but small: wild plants are much commoner), how far they are loaded / kept. */
-export const FLORA = { CELL: 48, LOAD: 130, KEEP: 190, REGROW_MS: 6 * 60 * 1000, HAND: 0.62, PICK_COOL: 450, MAX_PER_KIND: 90, PER_FRAME: 2 };
+export const FLORA = { CELL: 48, LOAD: 100, KEEP: 145, REGROW_MS: 6 * 60 * 1000, HAND: 0.62, PICK_COOL: 450, MAX_PER_KIND: 90, PER_FRAME: 2 };
 
 export const FLORA_KINDS = {
     glowcap: {

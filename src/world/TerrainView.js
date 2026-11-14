@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { TerrainData, CHUNK, chunkKey, mergeBuffers } from './Terrain.js';
 import { slotAt } from './Planets.js';
 import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
+import { TerrainClusters } from './TerrainClusters.js';
 import { applyUltraWater } from '../fx/UltraWater.js';
 
 /** ms a frame for sending changed chunks to the workers (and as much again for putting their meshes in). */
@@ -81,6 +82,7 @@ export class Terrain {
         this.group.name = 'terrain';
         this.meshes = new Map(); // chunk key -> {ground (= raised: one mesh for its land), water, cx, cz}
         this.pool = []; // unloaded mesh pairs, reused
+        this.clusters = new TerrainClusters(this, { CHUNK, keyOf: chunkKey }); // (the far chunks in big pieces: fewer draws — TerrainClusters.js)
         scene.add(this.group);
         this.viewDistance = viewDistance; // m
         this.budgetMs = 4; // per frame for building new chunks
@@ -708,6 +710,10 @@ export class Terrain {
 
         // 3) Forget far, untouched chunk data now and then (it regenerates identically)
         // (`keepAt`: the hero's body while the land streams round another place — «Империус»: its ground stays, see evictFar)
+        // (the far land in big pieces: let go what changed or came near — every frame, before the picture — and merge one more now and then)
+        this.clusters.enabled = !(typeof window !== 'undefined' && window.__ZNS_NO_TERRAIN_CLUSTERS__);
+        this.clusters.step(fx, fz);
+
         const k = this.keepAt;
         if (this._frame % 120 === 0) this.data.evictFar(Math.floor(fx / CHUNK), Math.floor(fz / CHUNK), this.radiusChunks + 4, k ? (this._keepC || (this._keepC = { cx: 0, cz: 0 }), this._keepC.cx = Math.floor(k.x / CHUNK), this._keepC.cz = Math.floor(k.z / CHUNK), this._keepC) : null);
     }
@@ -873,6 +879,7 @@ export class Terrain {
     removeSphere(x, y, z, r, keep = null) { return this.data.removeSphere(x, y, z, r, keep); }
 
     dispose() {
+        this.clusters?.clear();
         if (this._workers) for (const w of this._workers) w.terminate();
         this._workers = null;
         this.flora?.dispose();

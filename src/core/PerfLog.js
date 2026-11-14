@@ -20,6 +20,7 @@ export class PerfLog {
         this.game = game;
         this.gaps = [];
         this.parts = {}; // name -> [sum, max]
+        this.sys = {}; // the game's systems (the update calls of Game.frame) name -> [sum, max]
         this.events = [];
         this.lines = [];
         this._t0 = performance.now();
@@ -49,8 +50,9 @@ export class PerfLog {
     }
 
     /** Every frame: the gap since the last one and the parts of this frame. */
-    frame(gapMs, parts) {
+    frame(gapMs, parts, sys) {
         this.gaps.push(gapMs);
+        if (sys) for (const k in sys) { const p = this.sys[k] || (this.sys[k] = [0, 0]); p[0] += sys[k]; if (sys[k] > p[1]) p[1] = sys[k]; sys[k] = 0; } // (the systems of the frame: sum and worst)
         for (const k in parts) {
             const v = parts[k];
             const p = this.parts[k] || (this.parts[k] = [0, 0]);
@@ -124,6 +126,7 @@ export class PerfLog {
             .sort((a, b) => b[1][0] - a[1][0])
             .map(([k, [sum, max]]) => `${k} ${(sum / n).toFixed(1)}/${Math.round(max)}`)
             .join(', ');
+        const sysTop = Object.entries(this.sys).filter(([, [sum]]) => sum / n >= 0.08).sort((a, b) => b[1][0] - a[1][0]).slice(0, 7).map(([k, [sum, max]]) => `${k} ${(sum / n).toFixed(2)}/${Math.round(max)}`).join(', ');
         const ps = g.poseService;
         const st = ps?.stats || {};
         const ai = ps ? `ИИ ${st.mode === 'native' ? `отдельная программа (${st.backend || '…'})` : st.mode === 'holistic' ? (st.thread === 'process' ? 'Holistic, отдельный процесс' : 'Holistic, ПОТОК ИГРЫ') : st.mode || '—'} ${st.results != null && this._aiPrev != null && st.results >= this._aiPrev ? `${((st.results - this._aiPrev) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.thread === 'process' && st.latency ? ` (задержка ${st.latency} мс)` : ''}${st.handHelper ? ', помощник рук' : ''}${st.handsEngine === 'v5' ? (st.v5Engine === 'gpu' ? ', кисти V5 (видеокарта)' : ', кисти V5 (процессор)') : ''}${st.delegate ? ', ' + st.delegate : ''}${st.thread === 'main' && st.nativeWhy ? ` (программа-нейросеть: ${st.nativeWhy})` : ''}` : 'ИИ —';
@@ -146,9 +149,10 @@ export class PerfLog {
         if (g.net?.isHost) for (const c of g.net.conns?.values() || []) inspect(c);
         else inspect(g.net?.hostConn);
         const connection = queues.length ? ' | сеть: ' + queues.join('; ') : '';
-        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${ai}${voice ? ' | ' + voice : ''} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${connection}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
+        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${sysTop ? 'системы ' + sysTop + ' | ' : ''}${ai}${voice ? ' | ' + voice : ''} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${connection}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
         this.gaps.length = 0;
         this.parts = {};
+        this.sys = {};
         this.events.length = 0;
         this._push(line);
     }

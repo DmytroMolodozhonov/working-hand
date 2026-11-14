@@ -267,15 +267,16 @@ try {
         Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
     });
     const P = PRESETS[LEVEL];
-    await page.evaluate(({ P, SEED, MODE, OLDMAT, NOBATCH }) => {
+    await page.evaluate(({ P, SEED, MODE, OLDMAT, NOBATCH, NOCLUST }) => {
         if (OLDMAT) window.__ZNS_ALL_MATRICES__ = true;
+        if (NOCLUST) window.__ZNS_NO_TERRAIN_CLUSTERS__ = true; // (--noclusters: the far chunks drawn one by one — to compare)
         if (NOBATCH) window.__ZNS_NO_FAR_BATCH__ = true; // (--nobatch: every one-shape drawn by itself — to compare) // (--oldmat: every object's matrix each frame, as three.js does — to compare)
         for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance], ['ultra-quality', P.ultra || 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
         const seen = window.__compiled = []; // (each material's first compile: who needed a shader after the start)
         z.THREE.Material.prototype.onBeforeCompile = function () { seen.push(this); };
         z.startGame({ ...z.readConfig(), mode: MODE, map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on' });
-    }, { P, SEED, MODE, OLDMAT: args.includes('--oldmat'), NOBATCH: args.includes('--nobatch') });
+    }, { P, SEED, MODE, OLDMAT: args.includes('--oldmat'), NOBATCH: args.includes('--nobatch'), NOCLUST: args.includes('--noclusters') });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     // the start's land and its people: wait until the land around is made (the workers) and things settle
@@ -426,6 +427,8 @@ try {
     if (SHOT) { await sleep(2500); await page.screenshot({ path: SHOT }); console.log('снимок: ' + SHOT); }
     if (KEYS) await page.evaluate(() => { window.__KEYS = true; });
     const r = await page.evaluate(scene, FRAMES);
+    const clu = await page.evaluate(() => { const t = window.__zns.game.world?.terrain || window.__zns.game.terrain; return t?.clusters ? { ...t.clusters.stats, squares: t.clusters.map.size, chunks: t.meshes.size } : null; });
+    if (clu) console.log('  далёкая земля кусками:', JSON.stringify(clu));
     if (KEYS) console.log('\nпрогретые ключи (Lambert/Phong):\n' + (await page.evaluate(() => window.__zns.game.renderer.info.programs.filter((p) => /Lambert|Phong/.test(p.name)).map((p) => p.name + ' ' + String(p.cacheKey).slice(0, 600)).join('\n'))));
     if (ABLATE) {
         const ab = await page.evaluate(ablate, { names: ABLATE.split(','), FRAMES });

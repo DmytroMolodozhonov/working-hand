@@ -4387,6 +4387,14 @@ export class Game {
         if (log.length > 30) log.shift();
     }
 
+    /** One system took a heavy slice of one frame (> 40 ms): a line in the diary (at most one in 2 s per system), so the spike has a name. */
+    _heavySys(name, ms) {
+        const now = performance.now(), last = this._heavyAt || (this._heavyAt = {});
+        if (now - (last[name] || -1e9) < 2000) return;
+        last[name] = now;
+        this.perf?.note?.(`🐢 тяжёлый кадр: система «${name}» ${Math.round(ms)} мс`);
+    }
+
     frame() {
         const t0 = performance.now();
         const deltaTime = (t0 - this.lastTime) / 1000;
@@ -4399,6 +4407,10 @@ export class Game {
         const parts = this._parts || (this._parts = {});
         let tm = t0;
         const mark = (name) => { const n = performance.now(); parts[name] = n - tm; tm = n; };
+        // (every system's own time inside the frame — PerfLog «системы:», and a line when ONE system takes a heavy slice: the spikes get a name)
+        const sys = this._sys || (this._sys = {});
+        let st = performance.now();
+        const sysMark = (name) => { const n = performance.now(), d = n - st; st = n; sys[name] = (sys[name] || 0) + d; if (d > 40) this._heavySys(name, d); };
 
         // FPS counter (rolling)
         this.fpsAccum += deltaTime;
@@ -4430,116 +4442,116 @@ export class Game {
         // for other players still there (the host): then it goes on, without me in it (_playerPositions)
         const earth = !this.space?.offEarth || this._earthNeeded();
         if (earth && !this.duelOnly) {
-            this.ships?.update(dt); // ships move first and carry everyone standing on them
-            this.fleet?.update(dt);
-            this.blackbeard?.update(dt); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
+            this.ships?.update(dt); sysMark('ships'); // ships move first and carry everyone standing on them
+            this.fleet?.update(dt); sysMark('fleet');
+            this.blackbeard?.update(dt); sysMark('blackbeard'); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
         }
         this._updatePlayer(dt);
         this.imperius?.afterPlayer(dt); // («Империус»: the body asked for a walk — the creature walks; the body stays)
-        this.ledge.update(dt); // (palms on a ledge's edge, pulled down: the body up — before the hands are stopped at the rock)
-        this.handBlocks.update(dt); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
+        this.ledge.update(dt); sysMark('ledge'); // (palms on a ledge's edge, pulled down: the body up — before the hands are stopped at the rock)
+        this.handBlocks.update(dt); sysMark('handBlocks'); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
         this._updateChests(dt);
         if (!isTest) this._checkVictory();
         mark('игрок');
 
-        this.darkLord.update(dt); // (the turning into a true dark mage: the rite holds the body in the air — before the character moves)
-        this.levitation.update(dt);
-        this.monsterGrab.update(dt); // (тела в лапах монстров — хост; я сам в лапе — мой компьютер: MonsterGrab.js)
+        this.darkLord.update(dt); sysMark('darkLord'); // (the turning into a true dark mage: the rite holds the body in the air — before the character moves)
+        this.levitation.update(dt); sysMark('levitation');
+        this.monsterGrab.update(dt); sysMark('monsterGrab'); // (тела в лапах монстров — хост; я сам в лапе — мой компьютер: MonsterGrab.js)
         if (earth) this.levMax?.update(dt);
         else if (this.levMax?.swarm?.active) { this.levMax.swarm.release(false); this.levMax.mine = null; } // (off the Earth the things are let go)
-        this.accio.update(dt);
-        this.inventory.update(dt);
-        this.coinDeal.update(dt);
-        this.itemIcons?.update(1.5); // (a new look's picture: one by one, ~1.5 ms a frame at most)
-        this.builder.update(dt);
-        this.swim.update(dt);
-        this.mermaid?.update(dt); // («Зелье русалки»: the tail, the drag on the land — after the swimming set its pace)
-        if (earth) this.boats?.update(dt, this.currentPose); // (the boats: before the boards — a boat's seat holds the body)
-        if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
-        this.items.update(dt);
+        this.accio.update(dt); sysMark('accio');
+        this.inventory.update(dt); sysMark('inventory');
+        this.coinDeal.update(dt); sysMark('coinDeal');
+        this.itemIcons?.update(1.5); sysMark('itemIcons'); // (a new look's picture: one by one, ~1.5 ms a frame at most)
+        this.builder.update(dt); sysMark('builder');
+        this.swim.update(dt); sysMark('swim');
+        this.mermaid?.update(dt); sysMark('mermaid'); // («Зелье русалки»: the tail, the drag on the land — after the swimming set its pace)
+        if (earth) this.boats?.update(dt, this.currentPose); sysMark('boats'); // (the boats: before the boards — a boat's seat holds the body)
+        if (earth) this.boards?.update(dt); sysMark('boards'); // (before the items and the weapons: a hand on a board holds nothing else)
+        this.items.update(dt); sysMark('items');
         this.items.updateRemote();
-        this.bodyFinder?.update(dt);
-        this.fishPier?.update(dt);
-        this.fishing?.update(dt); // (after the items set the rod in the hand: the tip is where the hand put it)
-        this.armor.update(dt);
-        this.achievements.update();
-        this.death.update(dt);
-        this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
-        this.loreLibrary?.update(dt); // (the books on the reading stands: their pages turned by a finger)
-        if (earth) this.wards?.update(dt);
-        this.houseMagic?.update(dt);
-        this.castleMagic?.update(dt);
-        this.divine?.update(dt);
-        this.iceMagic?.update(dt);
+        this.bodyFinder?.update(dt); sysMark('bodyFinder');
+        this.fishPier?.update(dt); sysMark('fishPier');
+        this.fishing?.update(dt); sysMark('fishing'); // (after the items set the rod in the hand: the tip is where the hand put it)
+        this.armor.update(dt); sysMark('armor');
+        this.achievements.update(); sysMark('achievements');
+        this.death.update(dt); sysMark('death');
+        this.books?.update(dt); sysMark('books'); // (after the items: an open book leaves the fist for both hands)
+        this.loreLibrary?.update(dt); sysMark('loreLibrary'); // (the books on the reading stands: their pages turned by a finger)
+        if (earth) this.wards?.update(dt); sysMark('wards');
+        this.houseMagic?.update(dt); sysMark('houseMagic');
+        this.castleMagic?.update(dt); sysMark('castleMagic');
+        this.divine?.update(dt); sysMark('divine');
+        this.iceMagic?.update(dt); sysMark('iceMagic');
         if (earth) this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
         if (earth) this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
-        this.scrolls.update(dt);
-        this.wandMagic.update(dt);
-        this.gear.update(dt);
-        this.bleeding.update(dt);
-        this.slash?.update(dt);
-        this.scars?.update(dt);
-        this.darkFog?.update(dt);
-        this.whirl?.update(dt);
+        this.scrolls.update(dt); sysMark('scrolls');
+        this.wandMagic.update(dt); sysMark('wandMagic');
+        this.gear.update(dt); sysMark('gear');
+        this.bleeding.update(dt); sysMark('bleeding');
+        this.slash?.update(dt); sysMark('slash');
+        this.scars?.update(dt); sysMark('scars');
+        this.darkFog?.update(dt); sysMark('darkFog');
+        this.whirl?.update(dt); sysMark('whirl');
         const duelOnly = this.duelOnly; // (the duel-only start: no animals, no roads' people, no zombies, no bosses — only the arena)
-        if (earth && !duelOnly) this.animals.update(dt);
-        if (earth) this.runner.update(dt);
-        if (earth && !duelOnly) this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
-        if (earth && !duelOnly) this.carriages?.update(dt);
-        if (earth) this.castleLife.update(dt);
-        if (earth) this.arenaDuels?.update(dt); // (the duel arenas: after the people moved)
-        if (earth) this.doors.update(dt);
-        if (earth) this.locks.update(dt);
-        if (earth && !duelOnly) this.campfires.update(dt);
-        if (earth && !duelOnly) this.lanterns?.update(dt);
-        if (earth && !duelOnly) this.cauldrons?.update(dt);
-        this.cauldronForge?.update(dt);
-        this.glassBlowing?.update(dt);
-        this.potionLair?.update(dt);
-        this.potionMaster?.update(dt);
-        this.shopHalls?.update(dt);
-        this.bounty?.update(dt);
-        this.savior?.update(dt);
-        if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
+        if (earth && !duelOnly) this.animals.update(dt); sysMark('animals');
+        if (earth) this.runner.update(dt); sysMark('runner');
+        if (earth && !duelOnly) this.travelers?.update(dt); sysMark('travelers'); // (the people of the roads: before the people move — the riders sit where their cart is)
+        if (earth && !duelOnly) this.carriages?.update(dt); sysMark('carriages');
+        if (earth) this.castleLife.update(dt); sysMark('castleLife');
+        if (earth) this.arenaDuels?.update(dt); sysMark('arenaDuels'); // (the duel arenas: after the people moved)
+        if (earth) this.doors.update(dt); sysMark('doors');
+        if (earth) this.locks.update(dt); sysMark('locks');
+        if (earth && !duelOnly) this.campfires.update(dt); sysMark('campfires');
+        if (earth && !duelOnly) this.lanterns?.update(dt); sysMark('lanterns');
+        if (earth && !duelOnly) this.cauldrons?.update(dt); sysMark('cauldrons');
+        this.cauldronForge?.update(dt); sysMark('cauldronForge');
+        this.glassBlowing?.update(dt); sysMark('glassBlowing');
+        this.potionLair?.update(dt); sysMark('potionLair');
+        this.potionMaster?.update(dt); sysMark('potionMaster');
+        this.shopHalls?.update(dt); sysMark('shopHalls');
+        this.bounty?.update(dt); sysMark('bounty');
+        this.savior?.update(dt); sysMark('savior');
+        if (earth) this.liquidation?.update(dt); sysMark('liquidation'); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
-        if (earth && !duelOnly) this.crystals?.update(dt);
-        if (earth) this.beds.update(dt);
+        if (earth && !duelOnly) this.crystals?.update(dt); sysMark('crystals');
+        if (earth) this.beds.update(dt); sysMark('beds');
         if (earth) { this.houses.update(dt); this.buildingFx?.update(dt); }
-        if (earth && !duelOnly) this.wizVillages?.update(dt);
-        if (earth && !duelOnly) this.spiders.update(dt);
-        if (!duelOnly) this.diabolos?.update(dt); // (в аду — вне «Земли»: сам ничего не делает, пока нет места из плана ада)
-        if (earth && !duelOnly) this.dragons.update(dt);
-        this.dragonRide.update(dt, earth);
-        this.imperius.update(dt); // (after the creatures moved: the link, the mana, the passage of the mind)
-        this.dragonForm.update(dt); // (the dragon form: the body carried inside the dragon, hidden)
+        if (earth && !duelOnly) this.wizVillages?.update(dt); sysMark('wizVillages');
+        if (earth && !duelOnly) this.spiders.update(dt); sysMark('spiders');
+        if (!duelOnly) this.diabolos?.update(dt); sysMark('diabolos'); // (в аду — вне «Земли»: сам ничего не делает, пока нет места из плана ада)
+        if (earth && !duelOnly) this.dragons.update(dt); sysMark('dragons');
+        this.dragonRide.update(dt, earth); sysMark('dragonRide');
+        this.imperius.update(dt); sysMark('imperius'); // (after the creatures moved: the link, the mana, the passage of the mind)
+        this.dragonForm.update(dt); sysMark('dragonForm'); // (the dragon form: the body carried inside the dragon, hidden)
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
-        if (earth && !duelOnly) this.iceCastle.update(dt);
-        if (earth && !duelOnly) this.pharaoh?.update(dt);
-        if (earth && !duelOnly) this.vampire?.update(dt);
-        if (!duelOnly) this.titans?.update(dt);
-        this.godhood?.update(dt);
-        this.tutorial?.update(dt); // (on the planets — it knows itself where the hero is)
-        this.tutorialNudge?.update(dt); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
-        this.school?.update(dt); // («Школа Акселдорф»: School.js)
-        this.temple?.update(dt); // (the Gods' temple: on Venus)
-        if (earth && !duelOnly) this.phoenixes.update(dt);
-        if (earth && !duelOnly) this.owls.update(dt);
-        if (earth && !duelOnly) this.canaries.update(dt);
+        if (earth && !duelOnly) this.iceCastle.update(dt); sysMark('iceCastle');
+        if (earth && !duelOnly) this.pharaoh?.update(dt); sysMark('pharaoh');
+        if (earth && !duelOnly) this.vampire?.update(dt); sysMark('vampire');
+        if (!duelOnly) this.titans?.update(dt); sysMark('titans');
+        this.godhood?.update(dt); sysMark('godhood');
+        this.tutorial?.update(dt); sysMark('tutorial'); // (on the planets — it knows itself where the hero is)
+        this.tutorialNudge?.update(dt); sysMark('tutorialNudge'); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
+        this.school?.update(dt); sysMark('school'); // («Школа Акселдорф»: School.js)
+        this.temple?.update(dt); sysMark('temple'); // (the Gods' temple: on Venus)
+        if (earth && !duelOnly) this.phoenixes.update(dt); sysMark('phoenixes');
+        if (earth && !duelOnly) this.owls.update(dt); sysMark('owls');
+        if (earth && !duelOnly) this.canaries.update(dt); sysMark('canaries');
         if (!duelOnly) { this.tarons.update(dt); this.hellPatrol.update(dt); }
         if (earth && !duelOnly) { this.spencers.update(dt); this.beslan.update(dt); }
-        this.ghosts?.update(dt); // (everywhere: off the Earth / in the duel-only start it puts its ghosts away by itself)
+        this.ghosts?.update(dt); sysMark('ghosts'); // (everywhere: off the Earth / in the duel-only start it puts its ghosts away by itself)
         if (!duelOnly) { this.customCreatures?.update(dt); this.customPlants?.update(dt); } // (creatures of one's own: on the Earth and the planets with air)
-        if (earth && !duelOnly) this.plants.update(dt);
-        if (earth && !duelOnly) this.flora?.update(dt);
+        if (earth && !duelOnly) this.plants.update(dt); sysMark('plants');
+        if (earth && !duelOnly) this.flora?.update(dt); sysMark('flora');
         if (earth && !duelOnly) { // (one system's fault must not end the game: the full stack goes to the console, the game goes on)
             try { this.gargoyles.update(dt); } catch (e) { if ((this._gargErr = (this._gargErr || 0) + 1) <= 5) console.error('[Gargoyles] update error', e); }
         }
-        if (earth && !duelOnly) this.livingTrees.update(dt);
-        this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
+        if (earth && !duelOnly) this.livingTrees.update(dt); sysMark('livingTrees');
+        this.focus.update(); sysMark('focus'); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._brainrotUpkeep(dt);
-        this.potionFx?.update(dt);
-        this.wings?.update(dt); // (they grow, they hurt, they fold or spread)
-        this.flourish?.update(dt);
+        this.potionFx?.update(dt); sysMark('potionFx');
+        this.wings?.update(dt); sysMark('wings'); // (they grow, they hurt, they fold or spread)
+        this.flourish?.update(dt); sysMark('flourish');
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
         // (and the arena duel itself: the author's duel with the tower's head — «Бомбардо», «Фрозен» waited 0.4–0.6 s for a «Максима»)
@@ -4550,82 +4562,82 @@ export class Game {
             this.voice.native.setFight?.(this.voice.native.duelHot, this.voice.native.friends);
         }
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
-        if (earth && !duelOnly) this.servants.update(dt);
-        this.invis?.update(dt);
-        this.resist?.update(dt);
-        this.hydro?.update(dt);
-        this.sight?.update(dt);
-        this.hellGate?.update(dt);
-        this.hellRealm?.update(dt);
-        this.firm?.update(dt);
-        this.ghostCastle?.update(dt);
-        this.earthMages?.update(dt);
-        this.elementalMages?.update(dt);
-        this.groundVortex?.update(dt);
-        this.airFx?.update(dt);
-        this.featherfall?.update(dt);
-        this.waterWalk?.update(dt);
-        this.waterPart?.update(dt);
-        this.helios?.update(dt);
-        this.sunRay?.update(dt);
-        this.timeTurn?.update(dt);
-        this.visibleGodi?.update(dt);
-        this.pentagranium?.update(dt);
-        this.steam?.update(dt);
-        this.fireworks?.update(dt);
-        this.enchantCircles?.update(dt);
-        this.united?.update(dt);
-        this.offerings?.update(dt);
-        this.vitality?.update(dt);
+        if (earth && !duelOnly) this.servants.update(dt); sysMark('servants');
+        this.invis?.update(dt); sysMark('invis');
+        this.resist?.update(dt); sysMark('resist');
+        this.hydro?.update(dt); sysMark('hydro');
+        this.sight?.update(dt); sysMark('sight');
+        this.hellGate?.update(dt); sysMark('hellGate');
+        this.hellRealm?.update(dt); sysMark('hellRealm');
+        this.firm?.update(dt); sysMark('firm');
+        this.ghostCastle?.update(dt); sysMark('ghostCastle');
+        this.earthMages?.update(dt); sysMark('earthMages');
+        this.elementalMages?.update(dt); sysMark('elementalMages');
+        this.groundVortex?.update(dt); sysMark('groundVortex');
+        this.airFx?.update(dt); sysMark('airFx');
+        this.featherfall?.update(dt); sysMark('featherfall');
+        this.waterWalk?.update(dt); sysMark('waterWalk');
+        this.waterPart?.update(dt); sysMark('waterPart');
+        this.helios?.update(dt); sysMark('helios');
+        this.sunRay?.update(dt); sysMark('sunRay');
+        this.timeTurn?.update(dt); sysMark('timeTurn');
+        this.visibleGodi?.update(dt); sysMark('visibleGodi');
+        this.pentagranium?.update(dt); sysMark('pentagranium');
+        this.steam?.update(dt); sysMark('steam');
+        this.fireworks?.update(dt); sysMark('fireworks');
+        this.enchantCircles?.update(dt); sysMark('enchantCircles');
+        this.united?.update(dt); sysMark('united');
+        this.offerings?.update(dt); sysMark('offerings');
+        this.vitality?.update(dt); sysMark('vitality');
         if (earth && !duelOnly) this._updateCaves(dt);
-        this.keeper?.update(dt);
+        this.keeper?.update(dt); sysMark('keeper');
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
         this._updateWind();
-        this.oceanStorm?.update(dt);
-        this.landTornado?.update(dt);
-        this.whirlpool?.update(dt);
-        this.sunken?.update(dt);
-        this.seaFloor?.update(dt);
-        this.storm.update(dt);
-        this.sun.update(dt);
-        this.rainFx?.update(dt);
-        this.rainDouse?.update(dt);
-        this.sunContest?.update(dt);
+        this.oceanStorm?.update(dt); sysMark('oceanStorm');
+        this.landTornado?.update(dt); sysMark('landTornado');
+        this.whirlpool?.update(dt); sysMark('whirlpool');
+        this.sunken?.update(dt); sysMark('sunken');
+        this.seaFloor?.update(dt); sysMark('seaFloor');
+        this.storm.update(dt); sysMark('storm');
+        this.sun.update(dt); sysMark('sun');
+        this.rainFx?.update(dt); sysMark('rainFx');
+        this.rainDouse?.update(dt); sysMark('rainDouse');
+        this.sunContest?.update(dt); sysMark('sunContest');
         this._updateLightning(dt);
-        this.waves.update(dt);
+        this.waves.update(dt); sysMark('waves');
         this._updateBreakthrough(dt);
-        this.duel.update(dt);
-        this.strong.update(dt); // (after the duel: the held «Электром» is drawn with the charges' pools)
+        this.duel.update(dt); sysMark('duel');
+        this.strong.update(dt); sysMark('strong'); // (after the duel: the held «Электром» is drawn with the charges' pools)
         this.duel.updateVisuals(dt);
-        this.fire.update(dt);
-        this.fireLights?.update(dt); // (after every fire asked for its light this frame)
-        if (earth) this.burnWreck?.update(dt);
-        this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal || this.imperius?.busy || this.imperius?.puppet) }); // (the dead don't take things; nor a body whose mind is elsewhere / held by another's — «Империус»)
-        this.water.update(dt);
-        this.shieldAlert.update(dt);
-        this.crossedShield.update(dt);
-        this.combat.update(dt);
+        this.fire.update(dt); sysMark('fire');
+        this.fireLights?.update(dt); sysMark('fireLights'); // (after every fire asked for its light this frame)
+        if (earth) this.burnWreck?.update(dt); sysMark('burnWreck');
+        this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal || this.imperius?.busy || this.imperius?.puppet) }); sysMark('weapons'); // (the dead don't take things; nor a body whose mind is elsewhere / held by another's — «Империус»)
+        this.water.update(dt); sysMark('water');
+        this.shieldAlert.update(dt); sysMark('shieldAlert');
+        this.crossedShield.update(dt); sysMark('crossedShield');
+        this.combat.update(dt); sysMark('combat');
         this.ghosts?.afterCombat(); // (a ghost's chill slows the legs: after Combat set their speed for this frame)
-        this.vortex.update(dt);
-        this.hellfire?.update(dt);
-        this.fireSerpent?.update(dt);
-        this.smokeSwipe?.update(dt);
-        this.burning?.update(dt);
-        this.waterStorm?.update(dt);
-        this.planetMagic?.update(dt); // (a planet held by «Wingardium Leviosa Super Maxima» follows the hand)
-        this.planetDestroy?.update(dt); // («Planet Liquidation»: the warnings, the blast, the host taking the planet away)
-        this.strikes.update(dt); // fists, slaps, pushes, shoves: real contact only
+        this.vortex.update(dt); sysMark('vortex');
+        this.hellfire?.update(dt); sysMark('hellfire');
+        this.fireSerpent?.update(dt); sysMark('fireSerpent');
+        this.smokeSwipe?.update(dt); sysMark('smokeSwipe');
+        this.burning?.update(dt); sysMark('burning');
+        this.waterStorm?.update(dt); sysMark('waterStorm');
+        this.planetMagic?.update(dt); sysMark('planetMagic'); // (a planet held by «Wingardium Leviosa Super Maxima» follows the hand)
+        this.planetDestroy?.update(dt); sysMark('planetDestroy'); // («Planet Liquidation»: the warnings, the blast, the host taking the planet away)
+        this.strikes.update(dt); sysMark('strikes'); // fists, slaps, pushes, shoves: real contact only
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         if (earth) this._updateZombies(dt);
-        this.creatureImpact.update(dt); // (after every creature moved: their falls and staggers are drawn on top)
+        this.creatureImpact.update(dt); sysMark('creatureImpact'); // (after every creature moved: their falls and staggers are drawn on top)
         this.weapons.checkHits(this.zombies.concat(this.plants.targets(), this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.diabolos.targets(), this.dragons.targets(), this.phoenixes.targets(), this.castleLife.targets(), this.spencers.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : [], this.owls.targets(), this.iceCastle.targets(), this.gargoyles.targets(), this.canaries.targets(), this.tarons.targets(), this.customCreatures.targets(), this.vampire.targets(), this.titans.targets(), this.pharaoh.targets()), dt);
-        this.dismember.update(dt);
-        this.hurtFlash?.update(dt); // (a creature that lost HP glows red a moment — every computer sees it)
+        this.dismember.update(dt); sysMark('dismember');
+        this.hurtFlash?.update(dt); sysMark('hurtFlash'); // (a creature that lost HP glows red a moment — every computer sees it)
         mark('зомби');
 
-        this.cardilon.update(dt);
-        this.spells.update(dt);
+        this.cardilon.update(dt); sysMark('cardilon');
+        this.spells.update(dt); sysMark('spells');
         this._updateMagicGesture();
         this._updatePendingSpell();
         if (!isTest && earth && !duelOnly) this._spawnWaves(dt);
@@ -4633,14 +4645,14 @@ export class Game {
         for (const r of this.remotes.values()) r.update(dt, this.ships, this.space);
         this.voiceChat?.frame(dt); // (the players' voice chat: where each friend is heard, the «говорит» marks — VoiceChat.js)
         this.handBlocks.updateRemotes(dt); // (their hands neither go into the walls here)
-        this.handHold.update(dt); // (hands holding hands: after the others' arms are set)
+        this.handHold.update(dt); sysMark('handHold'); // (hands holding hands: after the others' arms are set)
         this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
         this.ships?.attach(); // (who stands on which ship now)
-        if (this.sync) this.sync.update(dt);
+        if (this.sync) this.sync.update(dt); sysMark('sync');
         mark('мультиплеер');
 
-        this.fx.update(dt);
-        this.mana?.update(dt); // (the beaten wizard's power flying to me)
+        this.fx.update(dt); sysMark('fx');
+        this.mana?.update(dt); sysMark('mana'); // (the beaten wizard's power flying to me)
         mark('эффекты'); // (sparks, smoke, flashes — apart from «мир», the land and its pieces)
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active || this.cine?.active ? 1 : this.monster?.viewBoost || 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8); // (a 24 m monster sees further too)
@@ -4649,7 +4661,7 @@ export class Game {
         const focus = this.imperius?.focusPos?.(this._focusV || (this._focusV = new THREE.Vector3())) || this.character.group.position;
         // (…while the ground round the body stays known: the body, the ships and the creatures near it still stand on it — TerrainView.keepAt)
         if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
-        if (!this.space?.inSpace) this.world.update(focus, this._viewBoost);
+        if (!this.space?.inSpace) this.world.update(focus, this._viewBoost); sysMark('world');
         this.world.forest?.update(dt, this.character.group.position, this.camera, worldPlayers(this)); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)
@@ -4657,17 +4669,17 @@ export class Game {
             const me = this.character.group.position, L = this.helios?.active ? this.helios.lightAt(me.x, me.y, me.z, this._heliosL || (this._heliosL = { k: 0, dir: new THREE.Vector3() })) : null;
             if (L || this._heliosOn) { this.world.setHelios(L); this._heliosOn = !!L; if (this.frameCount % 3 === 0 || !L) this.world.setDayPhase(this.dayPhase()); }
         }
-        this.underwaterLight?.update(dt); // (the depth of the eyes, the shafts, the caustics — before the haze takes its colour)
+        this.underwaterLight?.update(dt); sysMark('underwaterLight'); // (the depth of the eyes, the shafts, the caustics — before the haze takes its colour)
         this.swim.applyFog(); // (under the water: murky and blue)
         this.underwaterLight?.afterFog?.(); // (the background past the surface's edge: the water's own colour, set just now)
         this.world.terrain?.data?.settling?.step(SETTLE_MS); // (what the last changes left too weak gives way: Structure.js)
-        this.falling?.update(Math.min(0.05, dt));
-        this.destruction?.update(Math.min(0.05, dt));
-        this.circleAttack?.update(dt);
-        this.inspirius?.update(dt);
-        this.boom?.update(dt);
+        this.falling?.update(Math.min(0.05, dt)); sysMark('falling');
+        this.destruction?.update(Math.min(0.05, dt)); sysMark('destruction');
+        this.circleAttack?.update(dt); sysMark('circleAttack');
+        this.inspirius?.update(dt); sysMark('inspirius');
+        this.boom?.update(dt); sysMark('boom');
         this.world.followShadow(focus, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
-        this.seaSurface?.update(dt, focus);
+        this.seaSurface?.update(dt, focus); sysMark('seaSurface');
         this.space?.afterWorld(dt); // (the sky, the light and the air of space / another planet; the breathing; the Sun's heat)
         this.space?.uploadStep(); // (a planet's map from the worker: one a frame to the video card)
         if (this.frameCount % 60 === 7) { this.space?.checkUnlock(); if (this.frameCount > 900 && this.space?.knows()) this.space.prepare(); }
@@ -4687,6 +4699,7 @@ export class Game {
                 if (reach > 900 + CASTLE_CELL) this.world.terrain?.warmSites?.(wp.x, wp.z, reach, CASTLE_CELL);
             }
         }
+        sysMark('warmSites');
         if (this.frameCount % 5 === 0 && this.space?.inSpace) this.space.drawMap(this.hud); // (the map of the Solar System)
         else if (this.frameCount % 5 === 0 && !this.duelOnly) {
             const cp = this.character.group.position;
@@ -4711,8 +4724,10 @@ export class Game {
             if (this.sound?.musicDirector) this._musicPlace = musicPlace(this); // (where the hero is for the music: battle, hell, cave, the towns… — MusicDirector)
         }
 
+        sysMark('minimap+ambient');
         this.quality.update(deltaTime);
         if (this.sound?.loaded) this.sound.musicDirector?.update(dt, this._musicPlace ?? null); // (the game's own music: the place → the tune, crossfaded — MusicDirector)
+        sysMark('quality+music');
         const logic = performance.now() - t0;
         this.stats.logicMs = (this.stats.logicMs || logic) * 0.95 + logic * 0.05;
         if (logic > (this.stats.worstLogicMs || 0)) this.stats.worstLogicMs = logic;
@@ -4725,7 +4740,7 @@ export class Game {
         if (!this.space?.render()) this._draw(); // (space: its own picture first — Space.render)
         mark('графика');
         this._frameEnd = performance.now();
-        this.perf?.frame(deltaTime * 1000, parts);
+        this.perf?.frame(deltaTime * 1000, parts, this._sys);
         this.handsLog?.update(deltaTime);
 
         const ms = performance.now() - t0;
