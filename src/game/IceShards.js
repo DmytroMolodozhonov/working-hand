@@ -21,8 +21,8 @@ export class IceShards {
     constructor(game) {
         this.game = game; this.time = 0; this.flying = []; this.grow = new Map(); this.ot = new Map(); this.seq = 0; this.hits = new Set(); // (ot: each mage's own orbit clock, from the moment his flag came on — the host and the guests agree to within the net's delay)
         if (!game.scene) { this.mesh = null; return; }
-        this.geo = new T.ConeGeometry(0.11, 0.95, 5); // (a long thin crystal: tip along +Y)
-        this.mat = new T.MeshPhongMaterial({ color: 0xcfeeff, emissive: 0x2f6fa0, shininess: 90, flatShading: true, transparent: true, opacity: 0.88, specular: 0xffffff });
+        this.geo = new T.ConeGeometry(0.17, 1.3, 5); // (a long thin crystal: tip along +Y)
+        this.mat = new T.MeshPhongMaterial({ color: 0xcfeeff, emissive: 0x4a9fd0, shininess: 90, flatShading: true, transparent: true, opacity: 0.88, specular: 0xffffff });
         this.mesh = new T.InstancedMesh(this.geo, this.mat, SHARDS.MAX_LIVE);
         this.mesh.frustumCulled = false; this.mesh.count = 0; this.mesh.instanceMatrix.setUsage(T.DynamicDrawUsage); this.mesh.castShadow = false;
         game.scene.add(this.mesh);
