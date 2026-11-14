@@ -10,9 +10,9 @@ import { FX } from './WizardFx.js';
 
 const NEAR = 50; // m: farther mages' swirls are not drawn
 const LOOK = {
-    air: { cols: [0xffffff, 0xdff3ff, 0xbfe6ff], r: 1.3, up: 0.9, spin: 3.4, size: [0.1, 0.2], life: 0.75, n: 2 },
-    fire: { cols: [0xff6a00, 0xffd27a, 0xff2a00, 0xffb030], r: 1.05, up: 1.9, spin: 3.0, size: [0.14, 0.28], life: 0.7, n: 2 },
-    water: { cols: [0x6ec6ff, 0x9fdcff, 0xd8f2ff, 0x4aa8e8], r: 1.15, up: 0.5, spin: 3.8, size: [0.1, 0.2], life: 0.8, n: 2 },
+    air: { cols: [0xffffff, 0xdff3ff, 0xbfe6ff], r: 1.6, up: 1.5, spin: 3.6, size: [0.16, 0.32], life: 0.85, n: 4 },
+    fire: { cols: [0xff6a00, 0xffd27a, 0xff2a00, 0xffb030], r: 1.25, up: 2.2, spin: 3.2, size: [0.2, 0.4], life: 0.85, n: 4 },
+    water: { cols: [0x6ec6ff, 0x9fdcff, 0xd8f2ff, 0x4aa8e8], r: 1.4, up: 0.9, spin: 4.0, size: [0.15, 0.3], life: 0.9, n: 4 },
 };
 export class ElementalSwirl {
     constructor(game) { this.game = game; this.t = 0; }
@@ -29,7 +29,7 @@ export class ElementalSwirl {
             for (let i = 0; i < n; i++) {
                 const k = (this.t * 0.9 + i / n) % 1; // (a turn of the helix: the spawn point climbs and goes round)
                 const a = this.t * K.spin * fast + i * (6.2832 / n) + Math.random() * 0.4;
-                const h = 0.3 + k * 3.0, r = K.r * (1 + 0.25 * Math.sin(k * 6.2832 + this.t));
+                const h = 0.2 + k * 3.6, r = K.r * (1 + 0.25 * Math.sin(k * 6.2832 + this.t));
                 const x = v.x + Math.cos(a) * r, z = v.z + Math.sin(a) * r, y = v.y + h;
                 const tang = K.spin * fast * r * 0.9;
                 glow.spawn(x, y, z, -Math.sin(a) * tang, K.up * (0.6 + Math.random() * 0.8), Math.cos(a) * tang, K.cols[(Math.random() * K.cols.length) | 0],
