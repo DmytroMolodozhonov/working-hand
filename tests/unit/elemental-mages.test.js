@@ -28,7 +28,7 @@ test('water portable supply is finite; residents need water or the existing humi
 });
 test('water gifts use stable independent 25% / 10% rolls; fire never raises a shield',()=>{
  let h=0,f=0,both=0;for(let seed=0;seed<10000;seed++){const g=elementalGifts({element:'water',seed});h+=g.hydro.h;f+=g.resist.f;both+=g.hydro.h*g.resist.f;}assert.ok(h>2300&&h<2700);assert.ok(f>850&&f<1150);assert.ok(both>180&&both<330);
- const a=fixture('fire');a.g.earthMages={_threat:()=>({bomb:true})};a.step(300);assert.equal(a.v.fx,0);
+ const a=fixture('fire');a.g.earthMages={_threat:()=>({bomb:true})};a.step(300);assert.equal(a.v.fx&(6),0,'no shield (2) and no dome (4) — the swirl bit (8192) is his element going round him, not a shield');
 });
 test('all elemental poses are network modes, bend elbows/legs and remain finite',()=>{
  const signatures=[];for(const element of ['water','air','fire']){const m=new VillagerModel(Object.assign(villagerLook(13,'mage',false),elementalLook(element)));assert.ok(m.leftElbow&&m.rightElbow);assert.equal(m.toolKind,'none');for(const mode of ELEMENTAL_MODES.filter(x=>x.startsWith(element))){assert.ok(MODES.includes(mode));for(let i=0;i<40;i++)m.update(1/60,{mode});assert.ok(Number.isFinite(m.leftArm.rotation.x));}signatures.push([m.leftArm.rotation.x,m.rightArm.rotation.x,m.leftLeg.rotation.x].join(','));m.dispose();}assert.equal(new Set(signatures).size,3);

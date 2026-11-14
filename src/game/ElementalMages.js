@@ -8,7 +8,8 @@ import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat } from './
 import { findWater, WIDE_WATER } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
-import { elementalEndurance, AIR_THROW, throwVector, lowMana, readyMana, REGEN } from './ElementalRules.js';
+import { ElementalSwirl } from '../fx/ElementalSwirl.js';
+import { elementalEndurance, AIR_THROW, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import {FLIGHT} from './Flight.js';
 import { FEATHER } from './Featherfall.js';
@@ -23,7 +24,7 @@ const TITLES={water:'Маг воды',air:'Маг воздуха',fire:'Маг �
 const _o=new T.Vector3(),_d=new T.Vector3();
 export function elementalGifts(entry){const r=createRng((entry.seed??1)^0x43b2ca19);return {hydro:{h:entry.element==='water'&&r()<.25?1:0},resist:{f:entry.element==='water'&&r()<.1?1:0}};}
 export class ElementalMages {
- constructor(game){this.game=game;this.seq=0;this.objects=new AirMageObjects(game);this.guard=game.scene?new WaterMageGuard(game):null;}
+ constructor(game){this.game=game;this.seq=0;this.objects=new AirMageObjects(game);this.guard=game.scene?new WaterMageGuard(game):null;this.swirl=game.scene?new ElementalSwirl(game):null;}
  init(v){
   const element=v.entry?.element;if(!TITLES[element])return;
   v.element=element;v.title=TITLES[element];v.bareHand='advanced';v.bareMaster=true;v.noWand=true;v.rank='elemental';v.skillRole='mage';
@@ -39,6 +40,7 @@ export class ElementalMages {
  /** Hops (ElementalMove.js): a few steps to a free place, a pause, the body turned the way he goes — never a slide round the foe. → 'hop' | 'wait' | 'stuck' */
  reposition(v,foe,dt,radius=14){
   const L=this.game.castleLife,a=v.elemental,foeId=v.foe,h=v.hop||(v.hop=newHop());
+  if(a.blindT>1.2&&!a.recover)radius=Math.min(radius,7); // (the foe is hidden — behind a hill, a wall, trees: he comes closer to see him, not stays at a distance for ever: 14.11, 81 s of «Coil» without a cast)
   const r=stepHop(h,foe,radius,v.walk*1.1,dt,{pos:v,steer:(tx,tz,sp,d)=>L._steer(v,tx,tz,sp,d,0),free:(x,z)=>L._walkable?L._walkable(x,z,v.y):true,rng:Math.random});
   if(!v.foe&&foeId)v.foe=foeId; // (a blocked step must not make the pilot forget a live foe)
   a.hopping=r==='hop';return r;
@@ -165,7 +167,14 @@ export class ElementalMages {
  /** The lift ends: dropped, or (`thr`: a velocity) THROWN — the swing, the body flies; the net message carries the throw to a guest. */
  endLift(v,thr=null){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id,thr);if(g.levitation?.lifted?.by===v.id){if(thr)g.levitation.throwMe(v.id,thr);else g.levitation.dropMe(false);}
   if(thr){this.phase(v,'Sweep');a.fired=true;a.t=.2;v.castT=.5;g.sound?.spellCast?.('WindImpulseMaxima',_o.set(v.x,v.y+2,v.z));}else this.phase(v,'Coil');}
+ /** The controller: `_think`, and the swirl bit on top — the mage winds his element round himself while he rests, coils, gathers or whirls (ElementalSwirl.js). */
  think(v,dt){
+  const r=this._think(v,dt);
+  if(r&&v.elemental&&!v.dead&&!(v.fx&(FX.DOME|FX.SHIELD))&&this.swirling(v))v.fx=(v.fx|0)|FX.SWIRL;
+  return r;
+ }
+ swirling(v){const a=v.elemental,p=a.phase;return !!(a.recover||p==='Coil'||p==='Chamber'||p==='Gather'||p==='rest'||p==='Spin');}
+ _think(v,dt){
   const g=this.game,L=g.castleLife,a=v.elemental;if(!a)return false;
   if(!v.foe&&v.cs?.def&&v.cs.def.kind!=='elemental'){
    v.mana=Math.min(v.maxMana,v.mana+dt);a.phase='rest';if(v.fly){this.land(v,dt);return true;}return false;
@@ -177,6 +186,7 @@ export class ElementalMages {
   const dx=foe.x-v.x,dz=foe.z-v.z,dist=Math.hypot(dx,dz)||1,want=Math.atan2(-dx,-dz);
   if(!a.hopping)v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*5);
   a.hopping=false;
+  a.blindT=L._sees(v,foe)?0:(a.blindT||0)+dt;
   if(stuckStep(a.watch||(a.watch=newWatch()),v,true,a.phase+':'+a.cycle,dt,!!(v.vy||v.stunT>0||v.lev||v.carriedBy||v.fly||a.liftT>0||a.capture||a.wave||a.guard>0||g.hellfire?.npcs?.has(v.id)))){this.unstick(v,foe);return true;}
   const threat=g.earthMages?._threat(v);
   v.mana=Math.min(v.maxMana,v.mana+(a.recover?REGEN.REST:REGEN.FIGHT)*dt); // (mana comes back all the time — a mage at 12 mana must not wait for ever)
@@ -212,7 +222,16 @@ export class ElementalMages {
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
-   if(a.phase==='Coil'&&a.t>.7)this.phase(v,'Sweep');
+   if(a.phase==='Coil'&&a.t>.7){const mv=nextAirMove(a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Spin'){
+    if(a.t<AIR_SPIN.SPIN_T)v.yaw+=AIR_SPIN.RATE*dt;a.hopping=a.t<AIR_SPIN.SPIN_T; // (two turns on the spot: the body is his own to turn while he whirls)
+    if(a.t>AIR_SPIN.FIRE_T&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(dist<11&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);else this.cast(v,'WindMaxima',foe);}}
+    if(a.t>AIR_SPIN.END_T){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   }
+   if(a.phase==='Lash'){
+    if(a.t>.38&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,'Wind',foe,_o.clone());}}
+    if(a.t>1.0){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   }
    if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
     if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
     else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&a.cycle%2===0&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
@@ -253,7 +272,7 @@ export class ElementalMages {
   if(!v.featherFall&&v.vy< -5&&this.pay(v,FEATHER.COST)){v.featherFall=true;this.game.sound?.spellCast?.('Featherfall',_o.set(v.x,v.y+2,v.z));}
   if(v.featherFall&&!this.pay(v,FEATHER.DRAIN*dt))v.featherFall=false;
  }
- update(dt){this.guard?.update(dt);this.objects.update(dt);}
+ update(dt){this.guard?.update(dt);this.swirl?.update(dt);this.objects.update(dt);}
  dispose(){this.objects.dispose();this.guard?.dispose();}
  land(v,dt){if(v.elemental?.winged){stepAirMageWings(this.game,v,null,dt,true);return;}if(!this.pay(v,FLIGHT.HOVER_COST*dt)){v.fly=false;v.vy=Math.min(v.vy||0,-.5);return;}const gy=this.game.collision.groundAt(v.x,v.z,v.y+1);v.y=Math.max(gy,v.y-dt*2);if(v.y<=gy+.05){v.fly=false;v.vy=0;v.y=gy;}}
 }

@@ -46,7 +46,7 @@ export class EarthMages {
  /** Hops (ElementalMove.js), not a slide round the foe: a few steps to a free place, a pause, the body turned the way he goes; a blocked way → the other one. */
  _reposition(v,foe,dt,recover){
   const L=this.game.castleLife,a=v.earth,foeId=v.foe,h=v.hop||(v.hop=newHop());
-  const r=stepHop(h,foe,recover?24:16,v.walk*(recover?.8:.65),dt,{pos:v,steer:(tx,tz,sp,d)=>L._steer(v,tx,tz,sp,d,0),free:(x,z)=>L._walkable?L._walkable(x,z,v.y):true,rng:Math.random});
+  const r=stepHop(h,foe,recover?24:(a.blindT>1.2?7:16),v.walk*(recover?.8:.65),dt,{pos:v,steer:(tx,tz,sp,d)=>L._steer(v,tx,tz,sp,d,0),free:(x,z)=>L._walkable?L._walkable(x,z,v.y):true,rng:Math.random});
   if(!v.foe&&foeId)v.foe=foeId; // (a blocked step must not make the ordinary path pilot forget a live foe)
   a.hopping=r==='hop';return r;
  }
@@ -94,6 +94,7 @@ export class EarthMages {
   const dx=foe.x-v.x,dz=foe.z-v.z,dist=Math.hypot(dx,dz)||1;
   const want=Math.atan2(-dx,-dz);if(!a.hopping)v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*4);
   a.hopping=false;
+  a.blindT=L._sees(v,foe)?0:(a.blindT||0)+dt; // (hidden foe: he comes closer to see him)
   if(stuckStep(a.watch||(a.watch=newWatch()),v,true,a.phase+':'+a.cycle+':'+(s?s.n:0),dt,!!(v.vy||v.stunT>0||v.lev||v.carriedBy||a.slab||a.stitchPose>0))){this._unstick(v);return true;}
   if(v.mana<(s?E.THROW_COST+E.DRAIN*dt:E.START))a.recover=true;
   if(a.recover&&v.mana>=Math.min(v.maxMana,E.START+12))a.recover=false;

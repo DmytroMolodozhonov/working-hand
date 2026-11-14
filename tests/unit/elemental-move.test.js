@@ -73,3 +73,16 @@ test('rest and ready lines: a mage whose mana sits between «rest» and «one at
     // time to be ready again from the empty: seconds, not minutes
     for (const e of Object.keys(ELEMENT_LOW)) assert.ok(readyMana(e, 200) / REGEN.REST < 12, e + ' rests ' + (readyMana(e, 200) / REGEN.REST).toFixed(1) + ' s');
 });
+
+import { nextAirMove, AIR_MOVES, AIR_SPIN } from '../../src/game/ElementalRules.js';
+import { ELEMENTAL_MODES } from '../../src/entities/ElementalMagePose.js';
+import { FX } from '../../src/fx/WizardFx.js';
+test('the air mage varies his moves: never the same twice in a row, all three used', () => {
+    let last = null; const seen = new Set();
+    for (let i = 0; i < 300; i++) { const r = (i * 0.37 + 0.11) % 1; const m = nextAirMove(last, r); assert.notEqual(m, last); assert.ok(AIR_MOVES.includes(m)); seen.add(m); last = m; }
+    assert.equal(seen.size, AIR_MOVES.length);
+    assert.ok(AIR_SPIN.RATE * AIR_SPIN.SPIN_T > 4 * Math.PI - 0.1 && AIR_SPIN.RATE * AIR_SPIN.SPIN_T < 4 * Math.PI + 0.1, 'two whole turns: he ends facing the foe he began facing');
+    assert.ok(AIR_SPIN.FIRE_T >= AIR_SPIN.SPIN_T, 'the release comes after the whirl, facing the foe');
+    for (const mode of ['airSpin', 'airLash', 'fireSwat', 'airSwat', 'waterSwat']) assert.ok(ELEMENTAL_MODES.includes(mode), mode + ' is a network pose mode');
+    assert.ok(FX.SWIRL === 8192 && Object.values(FX).filter((v) => v === 8192).length === 1, 'the swirl bit is its own');
+});

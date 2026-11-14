@@ -1,5 +1,5 @@
 /** Original procedural martial choreography: water yields/coils, air turns, fire strikes. */
-export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat','waterSwat'];
+export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat','waterSwat','airSpin','airLash'];
 const S=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
 export function elementalMagePose(m,T,mode,dt,t){
  m._acroActive=mode==='fireVault';
@@ -24,6 +24,12 @@ export function elementalMagePose(m,T,mode,dt,t){
   if(mode==='airSweep'){const p=S((u-.25)/.4);T.hy=.9-1.8*p;T.aLX=.65+p;T.aRX=1.65-p;T.aLZ=-1.2+.9*p;T.aRZ=.3+1.0*p;T.lR=1.0*Math.sin(Math.min(1,u/1.1)*Math.PI);T.kR=-.3;}
   if(mode==='airLift'){T.aLX=T.aRX=1.6+Math.sin(Math.min(1,u/2)*Math.PI/2)*1.1;T.eL=T.eR=.4;T.aLZ=-.65;T.aRZ=.65;T.headX=-.25;T.hy=Math.sin(a)*.16;}
   if(mode==='airFlight'){T.hx=-.18;T.aLX=T.aRX=.55;T.aLZ=-1.2;T.aRZ=1.2;T.eL=T.eR=.2;T.lL=.15;T.lR=-.4;T.kL=-.8;T.kR=-.55;}
+  if(mode==='airSpin'){ // arms out wide, the body whirls (the yaw itself is turned by the controller), the air flies off at the end
+   const p=S((u-.7)/.2);T.aLX=T.aRX=1.55-.4*p;T.aLZ=-1.25;T.aRZ=1.25;T.eL=T.eR=.15;T.hx=.08;T.hy=0;T.lL=.5;T.lR=-.4;T.kL=-.8;T.kR=-.6;T.earthSpread=.35;
+  }
+  if(mode==='airLash'){ // crouched, the arm lashes low and long along the ground
+   const p=S((u-.2)/.2)*(1-S((u-.55)/.3));T.hx=.35*p;T.hy=.9-1.8*p;T.aRX=.5+.9*p;T.aRZ=.4+1.1*p;T.eR=.1;T.aLX=.7;T.aLZ=-.6;T.eL=1.0;T.lL=.55;T.kL=-1.0;T.lR=-.5;T.kR=-.9;
+  }
   if(mode==='airSwat'){ // both palms sweep across: a gust turns the orb (variant 1: the other way)
    const p=S(u/.17)*(1-S((u-.32)/.3)),sd=m.elementVariant?-1:1;
    T.hy=sd*(.85-1.9*p);T.hx=.1;T.aLX=T.aRX=1.45+.25*p;T.aLZ=-1.0+sd*.9*p;T.aRZ=1.0+sd*.9*p;T.eL=T.eR=.2+.5*(1-p);T.lL=.4;T.lR=-.35;T.kL=-.7;T.kR=-.5;T.earthSpread=.3;

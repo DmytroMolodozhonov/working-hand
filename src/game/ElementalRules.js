@@ -31,3 +31,15 @@ export const ELEMENT_LOW = { air: 12, water: 22, fire: 12 };
 export const REGEN = { FIGHT: 1.5, REST: 5 };
 export function lowMana(element, maxMana) { return Math.min(ELEMENT_LOW[element] ?? 12, maxMana || 30); }
 export function readyMana(element, maxMana) { return Math.min(maxMana || 30, Math.max(lowMana(element, maxMana) * 2.2, 30)); }
+
+/**
+ * The air mage's moves (the author 14.11: «у него как будто только два движения. Он должен быть разнообразным, должен закручиваться. Разные виды отталкивания»):
+ * `Sweep` — the sweep of both arms (a gust, or a heavy one); `Spin` — he whirls on the spot, two turns, and the air flies off him in a ring (the pushing blow at a near foe, a heavy
+ * gust at a far one); `Lash` — a low lash of the arm along the ground (a gust that sweeps the foe's feet). Never the same move twice in a row.
+ */
+export const AIR_MOVES = ['Sweep', 'Spin', 'Lash'];
+export const AIR_SPIN = { RATE: 18, SPIN_T: 0.7, FIRE_T: 0.78, END_T: 1.25 }; // rad/s (two turns: 12.6 rad ≈ 4π), s
+export function nextAirMove(last, roll) {
+    const rest = AIR_MOVES.filter((m) => m !== last);
+    return rest[Math.min(rest.length - 1, Math.floor(roll * rest.length))];
+}
