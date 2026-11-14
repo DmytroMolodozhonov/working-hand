@@ -40,7 +40,7 @@ export function earthMagePose(m,T,mode,dt,t){
   T.earthSpread=.34;T.lL=.3;T.lR=.3;T.kL=T.kR=-.3-.65*slam+.25*recover;break;
  }
  case 'earthThrow':{const push=smooth((u-.32)/.25);T.hy=mix(.5,-.24,push);T.hx=.16*push;T.aRX=mix(.5,1.65,push);T.aRY=mix(-.6,.15,push);T.aRZ=mix(.75,.05,push);T.eR=mix(1.4,.04,push);T.aLX=mix(1.5,.65,push);T.eL=.9;T.lL=mix(.12,.65,push);T.kL=-.65;T.lR=-.4;break;}
- case 'earthRest':T.hx=.3;T.aLX=T.aRX=.2;T.eL=T.eR=.15;T.headX=.2;break;
+ case 'earthRest':T.hx=0;T.headX=0;T.aLX=T.aRX=.55;T.aLZ=-.35;T.aRZ=.35;T.eL=T.eR=.9;T.kL=-.35;T.kR=-.25;T.lL=.2;T.lR=-.15;T.earthSpread=.2;break; // (14.11: upright, ready, hands up — it was a hunch leaning back, «он просто стоит и не знает, что делать»)
  }
  if((mode==='earthOrbit'||mode==='earthRest')&&m._earthMoving){const step=Math.sin(t*7);T.lL+=step*.4;T.lR-=step*.4;T.kL-=Math.max(0,-step)*.4;T.kR-=Math.max(0,step)*.4;}
  return 20;

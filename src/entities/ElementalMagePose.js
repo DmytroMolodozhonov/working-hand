@@ -65,7 +65,7 @@ export function elementalMagePose(m,T,mode,dt,t){
    T.hx=-.05*(kR.swing+kL.swing)*hold;T.bounce=0;
   }
  }
- if(mode.endsWith('Rest')){T.aLX=T.aRX=.2;T.eL=T.eR=.15;T.hx=.15;}
+ if(mode.endsWith('Rest')){T.aLX=T.aRX=.55;T.aLZ=-.35;T.aRZ=.35;T.eL=T.eR=.9;T.hx=0;T.headX=0;T.kL=-.35;T.kR=-.25;} // (14.11: upright and ready, not a hunch)
  if(m._earthMoving&&!mode.endsWith('Flight')&&mode!=='fireVault'){const step=Math.sin(t*7);T.lL+=step*.35;T.lR-=step*.35;T.kL-=Math.max(0,-step)*.3;T.kR-=Math.max(0,step)*.3;}
  return 20;
 }
