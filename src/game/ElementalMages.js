@@ -229,7 +229,7 @@ export class ElementalMages {
     if(a.t>AIR_SPIN.END_T){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    }
    if(a.phase==='Lash'){
-    if(a.t>.38&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,'Wind',foe,_o.clone());}}
+    if(a.t>.38&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,dist<12?'Wind':'WindMaxima',foe,_o.clone());}} // (an ordinary gust reaches 14 m only: a far foe gets the heavy one)
     if(a.t>1.0){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    }
    if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
