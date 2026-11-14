@@ -1113,8 +1113,23 @@ class Launcher:
             import tkinter as tk
             from tkinter import filedialog
             root = tk.Tk()
-            root.withdraw()
+            # (the players' report: «окно есть в панели задач, а самого окна нет» — the picker opened off the screen, because its owner was a
+            # withdrawn window with no place: the dialog took a place of its own, remembered from a monitor that was gone. The owner is now a 1×1
+            # invisible window in the MIDDLE of the screen that has the mouse, with no taskbar button: the picker opens round it, on the screen)
+            try:
+                root.overrideredirect(True)
+                sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+                root.geometry(f"1x1+{max(0, sw // 2)}+{max(0, sh // 2)}")
+                root.attributes("-alpha", 0.0)
+            except Exception:  # noqa: BLE001
+                root.withdraw()
             root.attributes("-topmost", True)
+            try:
+                root.update()
+                root.lift()
+                root.focus_force()
+            except Exception:  # noqa: BLE001
+                pass
             p = filedialog.askdirectory(initialdir=start if os.path.isdir(start) else os.path.expanduser("~"),
                                         title="Куда установить игру?", mustexist=False, parent=root)
             root.destroy()
