@@ -1619,6 +1619,10 @@ export class SpellManager {
         const task = {
             bomb:incendiary?null:bomb,
             capture: incendiary?null:() => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
+            // (14.11: a thrown orb — «Bombardo», «Bombardo Maxima», «Fireball» — seen by the fire and the air mage, who beat it back: ElementalParry.js; `parry` takes it out
+            // of the flight without a blast, as `capture` does, for the fireball too)
+            orb: { p: orb.position, v: vel, by: casterId, fire: !!incendiary, maxima: !!maxima },
+            parry: () => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
             life: maxima ? 3.2 : 2.6,
             onUpdate: (spell, dt) => {
                 // first frame: the way from the hand to where the orb appeared (a wall or a knight right before the hand)
@@ -1706,6 +1710,6 @@ export class SpellManager {
                 this._freeBall(orb);
             },
         };
-        this.spells.push(task);
+        task.orb.task = task; this.spells.push(task);
     }
 }

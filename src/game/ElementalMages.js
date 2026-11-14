@@ -4,6 +4,7 @@ import {duelRange} from './DuelRange.js';
 import {waveSource} from './WaveSource.js';
 /** Host-owned elemental combat on ordinary CastleLife bodies: shared spell collisions, armour and death. */
 import * as T from 'three';
+import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat } from './ElementalParry.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
 import { elementalEndurance } from './ElementalRules.js';
@@ -41,6 +42,41 @@ export class ElementalMages {
   if(!v.foe&&foeId)v.foe=foeId; // (a blocked step must not make the pilot forget a live foe)
   a.hopping=r==='hop';return r;
  }
+ /** Beating a thrown orb back (ElementalParry.js): see it, swing, take it out of the flight, throw it back at the thrower. → true while the swing goes on. */
+ parry(v,foe,dt){
+  const a=v.elemental,g=this.game,L=g.castleLife;a.parryCd=Math.max(0,(a.parryCd||0)-dt);
+  if(a.swat){
+   const S=a.swat;S.t+=dt;v.mode=SWAT_MODES[v.element];v.model.elementPoseT=S.t;a.hopping=false;v.speed=0;
+   if(!S.done&&S.t>=SWAT.HIT){
+    const t=S.task,o=t.orb;
+    if(t.life>0&&Math.hypot(o.p.x-v.x,o.p.y-(v.y+2.6),o.p.z-v.z)<=SWAT.TAKE_R){S.done=true;this.swatHit(v,t,foe);}
+    else if(S.t>=SWAT.HIT_MAX)S.done=true; // (it burst or flew wide: the swing found nothing)
+   }
+   if(S.t>=SWAT.T){a.swat=null;a.parryCd=SWAT.CD;this.phase(v,v.element==='fire'?'Chamber':'Coil');}
+   L._ground(v);return true;
+  }
+  if(!g.spells?.spells||!canSwat(v,a,v.mana)||!L._sees(v,foe))return false;
+  const chest={x:v.x,y:v.y+2.6,z:v.z},orbs=this._orbs||(this._orbs=[]);orbs.length=0;
+  for(const t of g.spells.spells)if(t.orb&&t.life>0&&t.parry)orbs.push(t.orb);
+  const pick=pickOrb(orbs,chest,v.id);if(!pick)return false;
+  a.parryCd=SWAT.CD*.5;if(Math.random()>=SWAT.CHANCE[v.element])return false; // (his die: he did not see it in time)
+  if(!this.pay(v,SWAT.COST[v.element]))return false;
+  a.swat={t:0,task:pick.o.task,done:false,variant:Math.random()<.5?0:1};v.model.elementVariant=a.swat.variant;this.phase(v,'Swat');v.mode=SWAT_MODES[v.element];return true;
+ }
+ /** The blow lands: the orb is taken out of its flight (no blast at the mage) and a new one of the same spell goes back from his hand at whoever threw it. */
+ swatHit(v,task,foe){
+  const g=this.game,L=g.castleLife,o=task.orb,at=o.p,name=swatSpell(o);
+  if(!task.parry?.())return;
+  const from=L._playerPos?.(o.by)||foe;
+  g.fx?.lightFlash?.(at,v.element==='fire'?0xff8a26:0xcfefff,2.2,.18,10);
+  for(let i=0;i<10;i++)g.fx?.spark?.(at,v.element==='fire'?0xffa040:0xe6f6ff,.1,_d.set((Math.random()-.5)*5,Math.random()*3,(Math.random()-.5)*5),.45);
+  g.sound?.playClang?.(.5);
+  _o.set(v.x-Math.sin(v.yaw)*1.0,v.y+2.7,v.z-Math.cos(v.yaw)*1.0);
+  const d=backDirection(_o,{x:from.x,y:from.y+1.0,z:from.z},Math.random());
+  _d.set(d.x,d.y,d.z);
+  g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);
+  v.castT=.4;this.engaged(v);
+ }
  /** The watchdog (a mage that makes no progress for a few seconds is set going again): the way, the stuck flags, the phase. */
  unstick(v,foe){
   const a=v.elemental,g=this.game;
@@ -48,7 +84,7 @@ export class ElementalMages {
   if(a.liftT>0)this.endLift(v);a.capture=null;a.wave=null;a.guard=0;v.fx=0;
   if(v.mana>=12)a.recover=false;
   v.hop=newHop();v.hop.side=-(a.moveSide||1);a.moveSide=v.hop.side;v.hop.wait=0;a.hopping=false;
-  this.phase(v,'rest');v.castT=0;
+  this.phase(v,'rest');a.swat=null;v.castT=0;
  }
  /** A resident needs nearby real water; only a traveller has a finite portable reservoir. */
  waterSource(v,dt){
@@ -138,6 +174,7 @@ export class ElementalMages {
    L._ground(v);
   }else if(v.element==='air'){
    v.fx=0;
+   if(this.parry(v,foe,dt))return true;
    if(a.winged)stepAirMageWings(g,v,foe,dt);
    if(a.liftT>0){a.liftT-=dt;const cost=(a.liftMax?LEV_MAX.DRAIN:HOLD_FATIGUE.wizard)+(v.fly&&!a.winged?FLIGHT.HOVER_COST:0);if(a.liftT<=0||(a.liftAck&&!a.liftHeld)||!this.pay(v,cost*dt)){this.endLift(v);}else{v.mode='airLift';if(!v.fly&&!v.vy)L._ground(v);return true;}}
    if(!a.winged&&!v.fly&&a.flightCd<=0&&(dist<14||threat)&&this.pay(v,SPELL_COST.Flight)){v.fly=true;a.flight=7;a.flightCd=15;}
@@ -160,6 +197,7 @@ export class ElementalMages {
    if(!v.fly){v.mode=a.wings?.launch?'airRun':'air'+a.phase;if(!v.vy)L._ground(v);}
   }else{
    v.fx=0; // Fire has no shield/dome and never delegates to the ordinary wizard's defence.
+   if(this.parry(v,foe,dt))return true;
    const visible=L._sees(v,foe);
    if(g.hellfire?.npcs?.has(v.id)){v.mode='firePunch';L._ground(v);return true;}
    if(a.phase==='Chamber'&&a.t>.8&&a.cycle%6===4&&visible&&dist<22&&g.hellfire?.npcStart?.(v)){a.cycle++;this.engaged(v);v.mode='firePunch';L._ground(v);return true;}
