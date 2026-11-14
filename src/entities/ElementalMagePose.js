@@ -38,10 +38,16 @@ export function elementalMagePose(m,T,mode,dt,t){
   if(mode==='fireChamber'){T.aLX=T.aRX=.7;T.eL=T.eR=1.5;T.hy=Math.sin(a)*.22;T.kL=-.65;T.kR=-.5;}
   if(mode==='fireVault'){
    // Plant the hands, invert, fire with alternating raised feet, then land.
-   const up=S(u/.44),down=S((u-1.05)/.5),hold=up*(1-down),scissor=Math.sin((u-.64)*Math.PI/.24)*.35;
-   T.pelvisZ=Math.PI*hold;T.hx=T.hy=T.hz=0;T.headX=-.1;T.earthSpread=.12;
+   // (the author 14.11: the ball thrown with a foot looked wrong — a small scissors of straight legs. A foot throws like a kick: the leg is drawn back with the knee bent,
+   // then it WHIPS forward through the vertical, the knee opening at the end, and comes back; the other leg stands steady, the hips lean to the swing)
+   const up=S(u/.44),down=S((u-1.05)/.5),hold=up*(1-down);
+   const kick=(R)=>{const wind=S((u-(R-.34))/.26),hit=S((u-(R-.08))/.12),back=S((u-(R+.1))/.3);
+    return {hip:.1+(-.55*wind*(1-hit)+.98*hit*(1-back)),knee:-.12+(-1.3*wind*(1-hit))+(-.1*hit*(1-back)),swing:wind*(1-hit)*-1+hit*(1-back)};};
+   const kR=kick(.64),kL=kick(.88);
+   T.pelvisZ=Math.PI*hold;T.hx=T.hy=T.hz=0;T.headX=-.1;T.earthSpread=.1;
    T.aLX=T.aRX=Math.PI*hold;T.aLZ=-.06;T.aRZ=.06;T.eL=T.eR=.06;
-   T.lL=.15+scissor*hold;T.lR=.15-scissor*hold;T.kL=T.kR=-.08;T.bounce=0;
+   T.lR=.12+(kR.hip-.1)*hold;T.kR=kR.knee*hold-.08*(1-hold);T.lL=.12+(kL.hip-.1)*hold;T.kL=kL.knee*hold-.08*(1-hold);
+   T.hx=-.05*(kR.swing+kL.swing)*hold;T.bounce=0;
   }
  }
  if(mode.endsWith('Rest')){T.aLX=T.aRX=.2;T.eL=T.eR=.15;T.hx=.15;}

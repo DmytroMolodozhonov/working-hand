@@ -64,6 +64,14 @@ export const WAVE = {
     MAXIMA: { width: 11, height: 3.8, speed: 8, dist: 32 },
 };
 
+/**
+ * A water mage's wave (the author 14.11: «вода слишком медленно двигается, может в разы быстрее»): it rises in half the time and rolls 2.4× as fast, a little farther —
+ * a mage's wave is a weapon, not a show. One number each, the same on every computer (the rise message carries `n`).
+ */
+export const NPC_WAVE = { RISE: 0.65, SPEED_K: 2.4, DIST_K: 1.15, AIM_T: 0.3 };
+/** Makes `w` a mage's wave (its own copy of the form: the shared one is never changed). */
+export function npcWave(w) { w.npc = true; w.rise = NPC_WAVE.RISE; w.F = { ...w.F, speed: w.F.speed * NPC_WAVE.SPEED_K, dist: w.F.dist * NPC_WAVE.DIST_K }; w.dist = w.F.dist; return w; }
+
 /** The size of a wave of this spell. */
 export function waveForm(name) {
     return name === 'WaveAttackMaxima' ? WAVE.MAXIMA : WAVE.NORMAL;
@@ -164,10 +172,11 @@ export function stepWave(w, dt, env) {
     }
     switch (w.phase) {
         case 'rise': {
-            const k = clamp(w.t / WAVE.RISE, 0, 1);
+            const rise = w.rise || WAVE.RISE; // (a water mage's wave rises quicker: WAVE.NPC)
+            const k = clamp(w.t / rise, 0, 1);
             w.h = F.height * (k * k * (3 - 2 * k));
             w.curl = 0;
-            if (w.t >= WAVE.RISE) { w.phase = 'aim'; w.t = 0; }
+            if (w.t >= rise) { w.phase = 'aim'; w.t = 0; }
             break;
         }
         case 'aim':
@@ -521,8 +530,8 @@ export class WaveAttacks {
         const g=this.game,water=waveSource(g.world?.terrain?.data,source);
         if(!g.authority||!water)return null;
         const w=newWave(name,v.id,water,foe.x-water.x,foe.z-water.z);
-        w.npc=true;w.npcAim={x:foe.x,z:foe.z};this._add(w);
-        g.sync?.spell?.(name,new THREE.Vector3(w.o.x,w.o.y,w.o.z),new THREE.Vector3(w.dx,0,w.dz),{w:'r'},v.id);
+        npcWave(w);w.npcAim={x:foe.x,z:foe.z};this._add(w);
+        g.sync?.spell?.(name,new THREE.Vector3(w.o.x,w.o.y,w.o.z),new THREE.Vector3(w.dx,0,w.dz),{w:'r',n:1},v.id);
         g.sound?.playWaterRise?.();return w;
     }
 
@@ -536,7 +545,8 @@ export class WaveAttacks {
         if (step === 'r') {
             if(this.game.authority&&!waveSource(this.game.world?.terrain?.data,o))return;
             if (w) this._remove(w);
-            this._add(newWave(name, by, o, d.x, d.z));
+            const nw = newWave(name, by, o, d.x, d.z);
+            this._add(ph.n ? npcWave(nw) : nw);
             return;
         }
         if (step === 'a') { if (w) { const l = Math.hypot(d.x, d.z) || 1; w.tdx = d.x / l; w.tdz = d.z / l; } return; }
@@ -615,7 +625,7 @@ export class WaveAttacks {
         if(this.game.authority)for(const w of this.list)if(w.npc&&(w.phase==='rise'||w.phase==='aim')){
             const v=this.game.castleLife?.byId.get(w.by);
             if(!v||v.dead||v.stunT>0||v.lev||!v.foe){this._fall(w);this.game.sync?.spell?.(w.name,new THREE.Vector3(w.o.x,w.o.y,w.o.z),new THREE.Vector3(w.dx,0,w.dz),{w:'x'},w.by);}
-            else if(w.phase==='aim'&&w.t>.7){const o=new THREE.Vector3(w.x,w.base,w.z),d=new THREE.Vector3(w.dx,0,w.dz);this._go(w,o,d);this.game.sync?.spell?.(w.name,o,d,{w:'g'},w.by);}
+            else if(w.phase==='aim'&&w.t>NPC_WAVE.AIM_T){const o=new THREE.Vector3(w.x,w.base,w.z),d=new THREE.Vector3(w.dx,0,w.dz);this._go(w,o,d);this.game.sync?.spell?.(w.name,o,d,{w:'g'},w.by);}
         }
         const g = this.game;
         this.spray?.flow.begin(dt);

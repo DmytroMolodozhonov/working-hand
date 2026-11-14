@@ -5,6 +5,7 @@ import {waveSource} from './WaveSource.js';
 /** Host-owned elemental combat on ordinary CastleLife bodies: shared spell collisions, armour and death. */
 import * as T from 'three';
 import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat } from './ElementalParry.js';
+import { findWater } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
 import { elementalEndurance } from './ElementalRules.js';
@@ -91,10 +92,8 @@ export class ElementalMages {
   const a=v.elemental,g=this.game;a.scan-=dt;
   if(a.scan<=0){
    a.scan=.75;a.source=false;a.sourcePoint=null;const data=g.terrain?.data;
-   if(data)for(let x=-10;x<=10&&!a.source;x+=2)for(let z=-10;z<=10&&!a.source;z+=2){
-    const X=Math.round(v.x+x),Z=Math.round(v.z+z);if(data.landMade&&!data.landMade(X,Z))continue;
-    for(let y=-5;y<=3;y++)if(data.get(X,Math.round(v.y)+y+1,Z)===BLOCK.WATER){a.source=true;a.sourcePoint={x:X,y:Math.round(v.y)+y,z:Z};break;}
-   }
+   const w=data?findWater((x,y,z)=>data.get(x,y,z),id=>id===BLOCK.WATER,v.x,v.y,v.z,data.landMade?(x,z)=>data.landMade(x,z):null):null; // (the nearest real water: WaterMageSource.js — the picture uses the same)
+   if(w){a.source=true;a.sourcePoint=w;}
   }
   if(a.source&&v.entry.look?.tank)a.water=Math.min(36,a.water+dt*6);
   const desert=!!g.terrain?.data?.pyr?.sandy?.(Math.round(v.x),Math.round(v.z));
