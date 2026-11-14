@@ -11,19 +11,35 @@
 import { isSoftwareGpu } from '../game/SystemSpecs.js';
 
 const MAX = 60;
+/** A card's name as a person writes it: the page's own string and the program's differ — «Intel(R) UHD Graphics 770 (CFL GT2)», «Mesa Intel UHD Graphics», «ANGLE (… Direct3D11 vs_5_0)». */
+export function plainName(s) {
+    return String(s || '')
+        .replace(/\((?:R|TM|r|tm)\)/g, '')
+        .replace(/^ANGLE \((?:[^,]*,\s*)?/, '').replace(/\s*\(0x[0-9a-f]+\).*$/i, '').replace(/\s*(?:Direct3D|OpenGL|Vulkan|Metal)\b.*$/i, '')
+        .replace(/^Mesa\s+/i, '').replace(/\s*\([A-Z0-9 ,.-]{2,16}\)\s*$/, '') // («(CFL GT2)», «(RADV NAVI23)»: the chip's code name)
+        .replace(/\)$/, '').replace(/\s+/g, ' ').trim();
+}
+/** The same card? (one name holds the other, or they share the model's numbers and the maker) */
+export function sameCard(a, b) {
+    const x = plainName(a).toLowerCase(), y = plainName(b).toLowerCase();
+    if (!x || !y) return false;
+    if (x.includes(y) || y.includes(x)) return true;
+    const num = (s) => (s.match(/\d{3,5}[a-z]{0,2}/g) || []).join(','), maker = (s) => (s.match(/nvidia|amd|radeon|geforce|intel|apple|arc/) || [''])[0];
+    return !!num(x) && num(x) === num(y) && maker(x) === maker(y);
+}
 const cut = (s) => (s.length > MAX ? s.slice(0, MAX - 1) + '…' : s);
 
 /** The words of the three choices. info = { gpuShort, gpuName, cpu, gpus[], threads }. → { auto, GPU, CPU, hasGpu } */
 export function deviceLabels(info = {}) {
     const soft = isSoftwareGpu(info.gpuName || info.gpuShort);
-    const page = String(info.gpuShort || info.gpuName || '').trim();
+    const page = plainName(info.gpuShort || info.gpuName || '');
     const all = [];
     if (page && !soft) all.push(page);
     for (const g of info.gpus || []) {
-        const n = String(g || '').trim();
+        const n = plainName(g);
         if (!n || isSoftwareGpu(n)) continue;
-        // (the same card as the page's own, written another way: «NVIDIA GeForce RTX 3050» vs «NVIDIA GeForce RTX 3050 Laptop GPU» — one)
-        if (all.some((a) => a.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(a.toLowerCase()))) continue;
+        // (the same card as the page's own, written another way: «NVIDIA GeForce RTX 3050» vs «… Laptop GPU», «Intel(R) UHD Graphics 770 (…)» vs «Intel UHD Graphics 770» — one)
+        if (all.some((a) => sameCard(a, n))) continue;
         all.push(n);
     }
     const hasGpu = all.length > 0;

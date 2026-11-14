@@ -48,3 +48,22 @@ test('the <select>: labels are rewritten, values and the saved choice stay; the 
     assert.match(opts[1].textContent, /RTX 3050/);
     assert.equal(applyDeviceLabels(null, {}), null);
 });
+
+import { plainName, sameCard } from '../../src/ui/DeviceNames.js';
+test('other people\'s cards: Intel / AMD / Mesa / Apple names are the same card however they are written', () => {
+    assert.equal(plainName('ANGLE (Intel, Intel(R) UHD Graphics 770 (0x00004688) Direct3D11 vs_5_0 ps_5_0, D3D11)'), 'Intel UHD Graphics 770');
+    assert.equal(plainName('Mesa Intel(R) UHD Graphics 620 (CFL GT2)'), 'Intel UHD Graphics 620');
+    assert.equal(plainName('AMD Radeon RX 6600 (RADV NAVI23)'), 'AMD Radeon RX 6600');
+    assert.equal(plainName('ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)'), 'AMD Radeon Graphics');
+    assert.equal(plainName('Apple M1'), 'Apple M1');
+    assert.ok(sameCard('Intel(R) UHD Graphics 770', 'Intel UHD Graphics 770'));
+    assert.ok(sameCard('NVIDIA GeForce RTX 3050', 'NVIDIA GeForce RTX 3050 Laptop GPU'));
+    assert.ok(!sameCard('NVIDIA GeForce RTX 3050', 'Intel UHD Graphics 770'));
+    assert.ok(!sameCard('NVIDIA GeForce RTX 3050', 'NVIDIA GeForce RTX 3060'));
+    // an Intel machine: the page's card and the program's are one card, not «есть также» of itself
+    const L = deviceLabels({ gpuShort: 'Intel(R) UHD Graphics 770 (0x00004688)', gpuName: 'ANGLE (Intel, Intel(R) UHD Graphics 770 (0x00004688) Direct3D11)', cpu: 'Intel Core i5-12400F', gpus: ['Intel UHD Graphics 770'] });
+    assert.equal(L.GPU, 'Видеокарте — Intel UHD Graphics 770');
+    // a laptop with two cards, the page on the weak one: both are named
+    const H = deviceLabels({ gpuShort: 'Intel(R) Iris(R) Xe Graphics', gpuName: 'ANGLE (Intel…)', cpu: 'x', gpus: ['Intel Iris Xe Graphics', 'NVIDIA GeForce RTX 3050 Laptop GPU'] });
+    assert.match(H.GPU, /Intel Iris Xe Graphics \(есть также: NVIDIA GeForce RTX 3050 Laptop GPU\)/);
+});

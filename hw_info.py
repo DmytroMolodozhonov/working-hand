@@ -77,10 +77,31 @@ def cpu_name():
     return clean_name(platform.processor())
 
 
+def _win_cards_from_registry():
+    """The display adapters' own driver descriptions: no PowerShell, no console, instant (the class key of the display drivers)."""
+    import winreg  # noqa: PLC0415
+    base = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+    names = []
+    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as root:
+        for i in range(0, 32):
+            try:
+                with winreg.OpenKey(root, "%04d" % i) as k:
+                    names.append(str(winreg.QueryValueEx(k, "DriverDesc")[0]))
+            except OSError:
+                continue
+    return parse_cards("\n".join(names))
+
+
 def gpu_names():
     out = []
     try:
         if sys.platform == "win32":
+            try:
+                out = _win_cards_from_registry()
+            except Exception:  # noqa: BLE001
+                out = []
+            if out:
+                return out
             t = _run(["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | ForEach-Object { $_.Name }"], 8)
             out = parse_cards(t) or parse_cards(_run(["wmic", "path", "win32_VideoController", "get", "name"], 6))
         elif sys.platform == "darwin":
