@@ -19,7 +19,7 @@ import { CombatVisuals } from '../game/Combat.js';
 import { NPC_SHIELD } from '../game/ShieldBounce.js';
 import { SmokeSwipe } from '../game/SmokeSwipe.js';
 
-export const FX = { LUMOS: 1, SHIELD: 2, DOME: 4, LEV: 8, SPARK: 16, DRAW: 32, CAST: 64, BLINK: 128, OFFER: 256, BREW: 512, LEVFAIL: 1024, NOWAND: 2048, SWIPE: 4096, SWIRL: 8192 };
+export const FX = { LUMOS: 1, SHIELD: 2, DOME: 4, LEV: 8, SPARK: 16, DRAW: 32, CAST: 64, BLINK: 128, OFFER: 256, BREW: 512, LEVFAIL: 1024, NOWAND: 2048, SWIPE: 4096, SWIRL: 8192, SHARDS: 16384 };
 const NEAR = 40; // m: farther wizards' small magic is not drawn
 const PROPS = 6;
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();

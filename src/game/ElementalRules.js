@@ -43,3 +43,35 @@ export function nextAirMove(last, roll) {
     const rest = AIR_MOVES.filter((m) => m !== last);
     return rest[Math.min(rest.length - 1, Math.floor(roll * rest.length))];
 }
+
+/**
+ * The water mage's ICE SHARDS (the author 14.11: «превратить воду в лёд, потом в осколки, направить на игрока — по аналогии с магом земли»): the water he has — a stream, his tank,
+ * the moisture of the air — is wound round him and freezes into `N` shards that hang and turn about him (FREEZE_T), then they are hurled in a volley at the foe (HURL_T…), each a little
+ * aside and a little late. A shard hurts one player (the shield or the dome of «Protection» turns it: the cost of «Ice»); the host decides, every computer draws the same flight.
+ */
+export const SHARDS = { N: 6, COST: 24, FREEZE_T: 0.95, HURL_T: 1.25, END_T: 1.8, SPEED: 26, GRAV: 3, LIFE: 2.2, DAMAGE: 3.5, SPREAD: 0.1, STAGGER: 0.07, MIN_DIST: 5, MAX_DIST: 30, HIT_R: 0.35, ORBIT_R: 1.5, MAX_LIVE: 96 };
+/** Where shard `i` of `n` hangs round a mage at (x, y, z) at time `t` (a turning ring, bobbing). → out {x, y, z} */
+export function orbitPoint(i, n, t, x, y, z, out = {}) {
+    const a = t * 2.6 + i * (Math.PI * 2 / n);
+    out.x = x + Math.cos(a) * SHARDS.ORBIT_R; out.z = z + Math.sin(a) * SHARDS.ORBIT_R; out.y = y + 2.4 + 0.45 * Math.sin(t * 2 + i * 1.7);
+    return out;
+}
+/** The unit direction of shard `k` thrown from `from` at `to`: aside by up to SPREAD (`roll` 0…1), a touch up for the gravity. */
+export function shardAim(from, to, roll, up = 0.02) {
+    const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z, flat = Math.hypot(dx, dz) || 1;
+    const yaw = Math.atan2(dx, dz) + (roll * 2 - 1) * SHARDS.SPREAD, pitch = Math.atan2(dy, flat) + up + ((roll * 7.3) % 1 - 0.5) * SHARDS.SPREAD * 0.6;
+    const c = Math.cos(pitch);
+    return { x: Math.sin(yaw) * c, y: Math.sin(pitch), z: Math.cos(yaw) * c };
+}
+/** Does the segment p0→p1 come within `r` of the capsule axis a→b? → the fraction t along p0→p1 of the closest approach, or null. */
+export function segHitsCapsule(p0, p1, a, b, r) {
+    let best = null, bd = Infinity;
+    for (let k = 0; k <= 6; k++) {
+        const t = k / 6, x = p0.x + (p1.x - p0.x) * t, y = p0.y + (p1.y - p0.y) * t, z = p0.z + (p1.z - p0.z) * t;
+        const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z, L = abx * abx + aby * aby + abz * abz;
+        const u = L > 1e-9 ? Math.max(0, Math.min(1, ((x - a.x) * abx + (y - a.y) * aby + (z - a.z) * abz) / L)) : 0;
+        const d = Math.hypot(x - a.x - abx * u, y - a.y - aby * u, z - a.z - abz * u);
+        if (d <= r && d < bd) { bd = d; best = t; }
+    }
+    return best;
+}

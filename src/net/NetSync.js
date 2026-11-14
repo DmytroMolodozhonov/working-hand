@@ -1290,6 +1290,7 @@ export class NetSync {
             case 'vhit': if (this.net.isHost && m.by !== this.me) { const v = g.castleLife?.byId.get(m.id); if (v) { const f = +m.mg || 0; g.castleLife.hit(v, Math.min(30, +m.dmg || 1), Array.isArray(m.d) ? new THREE.Vector3(m.d[0], 0, m.d[1]) : null, m.by, { magic: !!(f & 1), weapon: !!(f & 2), spell: !!(f & 4), pierce: !!(f & 8), hard: !!(f & 16) }); } } break;
             case 'srock': if(!this.net.isHost&&typeof m.id==='string')g.houses?.boulders.break(m.id,false); break;
             case 'aobj': case 'aobjhit': if(!this.net.isHost) g.elementalMages?.objects.onNet(m); break;
+            case 'ishard': case 'ishit': if(!this.net.isHost) g.elementalMages?.shards?.onNet(m); break; // (the water mage's ice shards: the flight to draw, a hit on me — IceShards.js)
             case 'vstr': if (m.to === this.me) g.castleLife?.struck(Math.min(10, +m.dmg || 1), +m.x || 0, +m.z || 0, String(m.who || 'Рыцарь').slice(0, 30)); break;
             case 'vsay': if (m.by !== this.me) g.castleLife?.heard(m.id, String(m.text || '').slice(0, 200)); break;
             case 'valarm': if (m.to === this.me) console.info('[NetSync] villagers turned on me:', m); break; // (no hint — the author: useless)

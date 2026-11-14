@@ -4066,6 +4066,7 @@ export class Game {
         if(this.airFx)zoo.add(this.airFx.sampleModel());
         if(this.waves)zoo.add(this.waves.sampleModel());
         if(this.elementalMages?.guard)zoo.add(this.elementalMages.guard.sampleModel());
+        if(this.elementalMages?.shards?.mesh)zoo.add(this.elementalMages.shards.sampleModel());
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), (() => { const m = spiderModel(); new FarShape(m, { cache: false }).set(true); return m; })(), ...(this.diabolos?.sampleModels() || []), (() => { const m = phoenixModel(); new FarShape(m, { cache: false }).set(true); return m; })(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of VampireLife.samples()) zoo.add(m);
         // (the titans are NOT warmed here: they live on the planets only, and painting their textures made the loading screen stall — a friend's

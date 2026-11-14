@@ -9,6 +9,8 @@ import { findWater, WIDE_WATER } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
 import { ElementalSwirl } from '../fx/ElementalSwirl.js';
+import { IceShards } from './IceShards.js';
+import { SHARDS, shardAim } from './ElementalRules.js';
 import { elementalEndurance, AIR_THROW, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import {FLIGHT} from './Flight.js';
@@ -24,7 +26,7 @@ const TITLES={water:'Маг воды',air:'Маг воздуха',fire:'Маг �
 const _o=new T.Vector3(),_d=new T.Vector3();
 export function elementalGifts(entry){const r=createRng((entry.seed??1)^0x43b2ca19);return {hydro:{h:entry.element==='water'&&r()<.25?1:0},resist:{f:entry.element==='water'&&r()<.1?1:0}};}
 export class ElementalMages {
- constructor(game){this.game=game;this.seq=0;this.objects=new AirMageObjects(game);this.guard=game.scene?new WaterMageGuard(game):null;this.swirl=game.scene?new ElementalSwirl(game):null;}
+ constructor(game){this.game=game;this.seq=0;this.objects=new AirMageObjects(game);this.guard=game.scene?new WaterMageGuard(game):null;this.swirl=game.scene?new ElementalSwirl(game):null;this.shards=game.scene?new IceShards(game):null;}
  init(v){
   const element=v.entry?.element;if(!TITLES[element])return;
   v.element=element;v.title=TITLES[element];v.bareHand='advanced';v.bareMaster=true;v.noWand=true;v.rank='elemental';v.skillRole='mage';
@@ -110,7 +112,7 @@ export class ElementalMages {
   if(a.liftT>0)this.endLift(v);a.capture=null;a.wave=null;a.guard=0;v.fx=0;
   if(v.mana>=12)a.recover=false;
   v.hop=newHop();v.hop.side=-(a.moveSide||1);a.moveSide=v.hop.side;v.hop.wait=0;a.hopping=false;
-  this.phase(v,'rest');a.swat=null;v.castT=0;
+  this.phase(v,'rest');a.swat=null;a.shard=null;v.castT=0;
  }
  /** A resident needs nearby real water; only a traveller has a finite portable reservoir. */
  waterSource(v,dt){
@@ -143,8 +145,38 @@ export class ElementalMages {
   // Like horse hit capsules, this descendant must be current before localToWorld.
   foot.updateWorldMatrix(true,false);return foot.localToWorld(new T.Vector3(0,-.95,0)).add(new T.Vector3(-Math.sin(v.yaw)*.35,0,-Math.cos(v.yaw)*.35));
  }
+ /** The ice shards (IceShards.js): the water he has is wound round him, freezes into shards, and is hurled at the foe in a volley. */
+ canShards(v,foe){
+  const a=v.elemental,d=Math.hypot(foe.x-v.x,foe.z-v.z);
+  return !!this.shards&&v.mana>=SHARDS.COST&&d>=SHARDS.MIN_DIST&&d<=SHARDS.MAX_DIST&&this.waterSource(v,0)&&this.game.castleLife._sees(v,foe);
+ }
+ startShards(v){
+  const a=v.elemental;if(!this.pay(v,SHARDS.COST))return false;
+  if(!a.source&&!a.humid)a.water=Math.max(0,a.water-8); // (a tank gives its water)
+  a.shard={t:0,hurled:false};this.phase(v,'Shard');v.mode='waterFreeze';v.fx=FX.SHARDS;return true;
+ }
+ shardStep(v,foe,dt){
+  const a=v.elemental,S=a.shard,g=this.game,L=g.castleLife;
+  if(v.stunT>0||v.lev||v.vy||v.dead||v.carriedBy){a.shard=null;v.fx=0;return false;}
+  S.t+=dt;v.speed=0;a.hopping=false;v.model.elementPoseT=S.t;
+  v.fx=S.t<SHARDS.HURL_T&&!S.hurled?FX.SHARDS:0;
+  v.mode=S.t<SHARDS.FREEZE_T?'waterFreeze':'waterHurl';
+  if(!S.hurled&&S.t>=SHARDS.HURL_T){
+   S.hurled=true;
+   if(L._sees(v,foe)){
+    const list=[];for(let i=0;i<SHARDS.N;i++){
+     this.shards.orbitAt(v.id,i,v,_o);const to={x:foe.x,y:foe.y+.3,z:foe.z},dir=shardAim(_o,to,Math.random());
+     list.push({p:[_o.x,_o.y,_o.z],v:[dir.x*SHARDS.SPEED,dir.y*SHARDS.SPEED,dir.z*SHARDS.SPEED],d:i*SHARDS.STAGGER});
+    }
+    this.shards.volley(v.id,list);g.sound?.spellCast?.('IceDuel',_o.set(v.x,v.y+2.4,v.z));this.engaged(v);
+   }
+  }
+  if(S.t>=SHARDS.END_T){a.shard=null;v.fx=0;a.cycle++;this.phase(v,'Gather');}
+  L._ground(v);return true;
+ }
  waterAttack(v,foe){
   const g=this.game,a=v.elemental;
+  if(a.cycle%4===1&&this.canShards(v,foe)&&this.startShards(v))return true; // (every fourth attack, when he has the water and the foe is in the range)
   if(a.cycle%3===0&&a.sourcePoint&&g.waves&&waveSource(g.world?.terrain?.data,a.sourcePoint)){
    const name=v.mana>60&&a.cycle%2===0?'WaveAttackMaxima':'WaveAttack';
    if(this.pay(v,SPELL_COST[name])){const wave=g.waves.npcRaise(v,name,a.sourcePoint,foe);if(wave){a.wave=wave;this.engaged(v);return true;}v.mana+=SPELL_COST[name];}
@@ -195,6 +227,7 @@ export class ElementalMages {
   if(v.element==='water'){
    if(this.parry(v,foe,dt))return true; // (puts out a thrown fireball / bombardo with a jet of water before it arrives)
    if(this.seekWater(v,foe,dt))return true;
+   if(a.shard)return this.shardStep(v,foe,dt);
    if(a.capture){const b=g.vortex?.bubbles?.get(a.capture),f=g.vortex?.flights?.get(a.capture);if(b||f){v.mode=b?.phase==='ice'?'waterPush':'waterGather';if(f&&!b&&!this.pay(v,dt)){g.vortex._endFlight(f,'mana',true);}L._ground(v);return true;}a.capture=null;}
    if(a.guard>0){a.guard-=dt;if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';}
    else{v.fx=0;if(threat&&this.waterSource(v,0)&&this.pay(v,threat.bomb?20:5)){a.guard=threat.bomb?3:1.8;v.fx=threat.bomb?FX.DOME:FX.SHIELD;this.phase(v,'Guard');}}
@@ -272,7 +305,7 @@ export class ElementalMages {
   if(!v.featherFall&&v.vy< -5&&this.pay(v,FEATHER.COST)){v.featherFall=true;this.game.sound?.spellCast?.('Featherfall',_o.set(v.x,v.y+2,v.z));}
   if(v.featherFall&&!this.pay(v,FEATHER.DRAIN*dt))v.featherFall=false;
  }
- update(dt){this.guard?.update(dt);this.swirl?.update(dt);this.objects.update(dt);}
- dispose(){this.objects.dispose();this.guard?.dispose();}
+ update(dt){this.guard?.update(dt);this.swirl?.update(dt);this.shards?.update(dt);this.objects.update(dt);}
+ dispose(){this.objects.dispose();this.guard?.dispose();this.shards?.dispose();}
  land(v,dt){if(v.elemental?.winged){stepAirMageWings(this.game,v,null,dt,true);return;}if(!this.pay(v,FLIGHT.HOVER_COST*dt)){v.fly=false;v.vy=Math.min(v.vy||0,-.5);return;}const gy=this.game.collision.groundAt(v.x,v.z,v.y+1);v.y=Math.max(gy,v.y-dt*2);if(v.y<=gy+.05){v.fly=false;v.vy=0;v.y=gy;}}
 }
