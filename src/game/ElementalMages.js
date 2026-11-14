@@ -4,6 +4,7 @@ import {duelRange} from './DuelRange.js';
 import {waveSource} from './WaveSource.js';
 /** Host-owned elemental combat on ordinary CastleLife bodies: shared spell collisions, armour and death. */
 import * as T from 'three';
+import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
 import { elementalEndurance } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
@@ -33,13 +34,21 @@ export class ElementalMages {
  pay(v,cost){if(v.mana<cost)return false;v.mana-=cost;return true;}
  phase(v,p){v.elemental.phase=p;v.elemental.t=0;v.elemental.fired=false;v.elemental.shots=0;v.model.elementPoseT=0;v.mode=v.element+p;}
  interrupt(v){if(v.element==='fire'&&v.elemental?.phase==='Vault'){this.phase(v,'Chamber');v.castT=0;}}
+ /** Hops (ElementalMove.js): a few steps to a free place, a pause, the body turned the way he goes — never a slide round the foe. → 'hop' | 'wait' | 'stuck' */
  reposition(v,foe,dt,radius=14){
-  const a=v.elemental,dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz)||1;
-  const side=a.moveSide||(a.moveSide=(v.entry.seed&1)?1:-1),radial=Math.max(-1,Math.min(1,(d-radius)/4)),x=v.x,z=v.z,foeId=v.foe;
-  this.game.castleLife._steer(v,x+(dx/d*radial-dz/d*side)*6,z+(dz/d*radial+dx/d*side)*6,v.walk*1.3,dt,0);
-  if(!v.foe&&foeId)v.foe=foeId;
-  a.blocked=Math.hypot(v.x-x,v.z-z)<.001?(a.blocked||0)+dt:0;if(a.blocked>.75){a.moveSide=-side;a.blocked=0;}
-  v.yaw=Math.atan2(foe.x-v.x,foe.z-v.z)+Math.PI;
+  const L=this.game.castleLife,a=v.elemental,foeId=v.foe,h=v.hop||(v.hop=newHop());
+  const r=stepHop(h,foe,radius,v.walk*1.1,dt,{pos:v,steer:(tx,tz,sp,d)=>L._steer(v,tx,tz,sp,d,0),free:(x,z)=>L._walkable?L._walkable(x,z,v.y):true,rng:Math.random});
+  if(!v.foe&&foeId)v.foe=foeId; // (a blocked step must not make the pilot forget a live foe)
+  a.hopping=r==='hop';return r;
+ }
+ /** The watchdog (a mage that makes no progress for a few seconds is set going again): the way, the stuck flags, the phase. */
+ unstick(v,foe){
+  const a=v.elemental,g=this.game;
+  g.castleLife?.alog?.decision?.(v,'стихийный маг стоял без дела — сброшены путь и состояние');
+  if(a.liftT>0)this.endLift(v);a.capture=null;a.wave=null;a.guard=0;v.fx=0;
+  if(v.mana>=12)a.recover=false;
+  v.hop=newHop();v.hop.side=-(a.moveSide||1);a.moveSide=v.hop.side;v.hop.wait=0;a.hopping=false;
+  this.phase(v,'rest');v.castT=0;
  }
  /** A resident needs nearby real water; only a traveller has a finite portable reservoir. */
  waterSource(v,dt){
@@ -107,7 +116,9 @@ export class ElementalMages {
   if(v.element==='water')this.waterSource(v,dt);
   if(!foe||Math.hypot(foe.x-v.x,foe.z-v.z)>75){if(a.liftT>0)this.endLift(v);v.foe=null;v.fx=0;v.mana=Math.min(v.maxMana,v.mana+dt);if(v.fly)this.land(v,dt);else L._ground(v);v.mode='idle';a.phase='rest';return true;}
   const dx=foe.x-v.x,dz=foe.z-v.z,dist=Math.hypot(dx,dz)||1,want=Math.atan2(-dx,-dz);
-  v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*5);
+  if(!a.hopping)v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*5);
+  a.hopping=false;
+  if(stuckStep(a.watch||(a.watch=newWatch()),v,true,a.phase+':'+a.cycle,dt,!!(v.vy||v.stunT>0||v.lev||v.carriedBy||v.fly||a.liftT>0||a.capture||a.wave||a.guard>0||g.hellfire?.npcs?.has(v.id)))){this.unstick(v,foe);return true;}
   const threat=g.earthMages?._threat(v);
   if(v.mana<10)a.recover=true;if(a.recover&&v.mana>=Math.max(v.element==='air'?SPELL_COST.Wind:v.element==='water'?SPELL_COST.WaterVortex:SPELL_COST.Inferno,Math.min(v.maxMana,45)))a.recover=false;
   if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);if(!v.fly)this.reposition(v,foe,dt,24);v.mode=v.fly?'airFlight':v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
@@ -123,7 +134,7 @@ export class ElementalMages {
     if(a.phase==='Push'&&a.t>1.3){a.fired=false;a.cycle++;this.phase(v,'Gather');}
     v.mode='water'+a.phase;
    }
-   if(dist>26)L._steer(v,foe.x,foe.z,v.walk,dt,22);else if(dist<9)L._steer(v,v.x-dx/dist*6,v.z-dz/dist*6,v.walk,dt,0);else if(a.phase==='Gather'&&!a.capture&&!a.wave&&!a.guard)this.reposition(v,foe,dt,18);
+   if(dist>26){L._steer(v,foe.x,foe.z,v.walk,dt,22);a.hopping=true;}else if(dist<9){L._steer(v,v.x-dx/dist*6,v.z-dz/dist*6,v.walk,dt,0);a.hopping=true;}else if(a.phase==='Gather'&&!a.capture&&!a.wave&&!a.guard)this.reposition(v,foe,dt,18);
    L._ground(v);
   }else if(v.element==='air'){
    v.fx=0;
@@ -134,9 +145,7 @@ export class ElementalMages {
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
     else{a.flight-=dt;const gy=g.collision.groundAt(v.x,v.z,v.y+1);const ny=v.y+(gy+5-v.y)*Math.min(1,dt*1.5);if(!L._airFree||L._airFree(v.x,v.z,ny))v.y=ny;else a.flight=0;v.mode='airFlight';}
    }
-   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))){ // Defensive circular retreat, never chase an opponent who is leaving.
-    const sign=(v.entry.seed&1)?1:-1;L._steer(v,v.x-dx/dist*5-dz/dist*sign*4,v.z-dz/dist*5+dx/dist*sign*4,v.walk*1.3,dt,0);v.yaw=want;
-   }
+   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch)))this.reposition(v,foe,dt,17); // (hops back and aside — never chase an opponent who is leaving)
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
@@ -163,7 +172,7 @@ export class ElementalMages {
    if((a.phase==='Punch'||a.phase==='Kick')&&a.t>.43&&!a.fired){a.fired=true;if(L._sees(v,foe))this.cast(v,a.cycle%3===1?'Fireball':dist<11?'Inferno':a.cycle%4===3&&v.mana>=SPELL_COST.BombardoMaxima?'BombardoMaxima':'Bombardo',foe);}
    if((a.phase==='Punch'||a.phase==='Kick')&&a.t>1.1){a.fired=false;a.cycle++;this.phase(v,'Chamber');}
    if(a.phase==='Chamber'||a.phase!=='Vault'&&a.t>.85){
-    if(dist>20||!visible){const foeId=v.foe;L._steer(v,foe.x,foe.z,v.walk*1.6,dt,visible?16:0);if(!v.foe)v.foe=foeId;}else this.reposition(v,foe,dt,12);
+    if(dist>20||!visible){const foeId=v.foe;L._steer(v,foe.x,foe.z,v.walk*1.6,dt,visible?16:0);if(!v.foe)v.foe=foeId;a.hopping=true;}else this.reposition(v,foe,dt,12);
    }
    v.mode='fire'+a.phase;L._ground(v);
   }

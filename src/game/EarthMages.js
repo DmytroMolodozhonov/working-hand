@@ -7,6 +7,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { GV, digCells, liftable, lifted, hitBlocks, sweepsShield } from './GroundVortexRules.js';
 import { findPassage } from './Stitching.js';
 import { SPELL_COST } from './Combat.js';
+import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 const _at=new THREE.Vector3(),_dir=new THREE.Vector3(),_hit=new THREE.Vector3(),_slot={};
 const modeOf=p=>'earth'+p[0].toUpperCase()+p.slice(1);
 const alive=v=>v&&!v.dead&&!v.sleep&&!v.lev&&!v.carriedBy&&!(v.stunT>0)&&!v.vy;
@@ -42,16 +43,21 @@ export class EarthMages {
   v.model.earthPoseT=undefined;v.castT=0;
  }
  _pay(v,n){if(v.mana<n)return false;v.mana-=n;return true;}
+ /** Hops (ElementalMove.js), not a slide round the foe: a few steps to a free place, a pause, the body turned the way he goes; a blocked way → the other one. */
  _reposition(v,foe,dt,recover){
-  const L=this.game.castleLife,a=v.earth,dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz)||1;
-  const side=a.moveSide||(a.moveSide=1),radial=Math.max(-1,Math.min(1,(d-(recover?24:16))/4));
-  const x=v.x,z=v.z,foeId=v.foe;
-  L._steer(v,x+(dx/d*radial-dz/d*side)*6,z+(dz/d*radial+dx/d*side)*6,v.walk*(recover?.8:.65),dt,0);
-  // A blocked sidestep must not make the ordinary path pilot forget a live foe.
-  if(!v.foe&&foeId)v.foe=foeId;
-  a.moveBlocked=Math.hypot(v.x-x,v.z-z)<.001?(a.moveBlocked||0)+dt:0;
-  if(a.moveBlocked>.75){a.moveSide=-side;a.moveBlocked=0;}
-  v.yaw=Math.atan2(foe.x-v.x,foe.z-v.z)+Math.PI;
+  const L=this.game.castleLife,a=v.earth,foeId=v.foe,h=v.hop||(v.hop=newHop());
+  const r=stepHop(h,foe,recover?24:16,v.walk*(recover?.8:.65),dt,{pos:v,steer:(tx,tz,sp,d)=>L._steer(v,tx,tz,sp,d,0),free:(x,z)=>L._walkable?L._walkable(x,z,v.y):true,rng:Math.random});
+  if(!v.foe&&foeId)v.foe=foeId; // (a blocked step must not make the ordinary path pilot forget a live foe)
+  a.hopping=r==='hop';return r;
+ }
+ /** The watchdog: no progress for a few seconds (cornered, stones that never come, a state left by a blast) → everything let go and a fresh start. */
+ _unstick(v){
+  const a=v.earth,g=this.game;
+  g.castleLife?.alog?.decision?.(v,'маг земли стоял без дела — сброшены вихрь, путь и состояние');
+  this._stop(v.id);if(a.slab)g.levMax?.end?.(a.slab,false);
+  a.slab=null;a.stitchPose=0;a.wallPlan=null;a.phase='rest';a.t=0;a.fired=false;a.strike=0;a.empty=0;a.source++;
+  if(v.mana>=E.START+E.THROW_COST+2)a.recover=false;
+  v.hop=newHop();v.hop.side=-(v.hop.side||1);v.hop.wait=0;a.hopping=false;v.model.earthPoseT=undefined;v.castT=0;
  }
  _threat(v){
   // Swept direction, not just the mere presence of a charge nearby.
@@ -86,7 +92,9 @@ export class EarthMages {
    if(s)this._stop(v.id);v.foe=null;v.mode='idle';v.model.earthPoseT=undefined;L._ground(v);return true;
   }
   const dx=foe.x-v.x,dz=foe.z-v.z,dist=Math.hypot(dx,dz)||1;
-  const want=Math.atan2(-dx,-dz);v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*4);
+  const want=Math.atan2(-dx,-dz);if(!a.hopping)v.yaw+=Math.atan2(Math.sin(want-v.yaw),Math.cos(want-v.yaw))*Math.min(1,dt*4);
+  a.hopping=false;
+  if(stuckStep(a.watch||(a.watch=newWatch()),v,true,a.phase+':'+a.cycle+':'+(s?s.n:0),dt,!!(v.vy||v.stunT>0||v.lev||v.carriedBy||a.slab||a.stitchPose>0))){this._unstick(v);return true;}
   if(v.mana<(s?E.THROW_COST+E.DRAIN*dt:E.START))a.recover=true;
   if(a.recover&&v.mana>=Math.min(v.maxMana,E.START+12))a.recover=false;
   a.quiet=v.hp<(a.lastHp??v.hp)?0:(a.quiet||0)+dt;a.lastHp=v.hp;
@@ -139,7 +147,7 @@ export class EarthMages {
   // source/angle with real collision steering, and fall back to mana recovery.
   a.empty=s.n?0:a.empty+dt;
   if(a.empty>2.5){a.source++;s.plan.length=0;a.empty=0;}
-  if((dist>E.RANGE||!L._sees(v,foe)||!s.n)&&a.phase==='orbit')L._steer(v,foe.x,foe.z,v.walk*1.3,dt,L._sees(v,foe)&&s.n?E.RANGE-3:0);
+  if((dist>E.RANGE||!L._sees(v,foe)||!s.n)&&a.phase==='orbit'){L._steer(v,foe.x,foe.z,v.walk*1.3,dt,L._sees(v,foe)&&s.n?E.RANGE-3:0);a.hopping=true;}
   else if(a.phase==='orbit')this._reposition(v,foe,dt,false);
   v.mode=modeOf(a.phase);L._ground(v);return true;
  }
