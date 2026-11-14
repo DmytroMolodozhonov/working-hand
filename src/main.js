@@ -5,6 +5,7 @@ import {rememberStartupFailure,readStartupFailure,clearStartupFailure,showStartu
  */
 
 import { mountHeroPanel } from './ui/HeroSettingsUi.js';
+import { fillDeviceNames } from './ui/DeviceNames.js';
 import { PortalLoader } from './ui/PortalLoader.js';
 import { MagicUi } from './ui/MagicUi.js';
 import { DEFAULT_HERO } from './game/HeroSetup.js';
@@ -149,6 +150,7 @@ const gpuWeak = /SwiftShader|llvmpipe|Software|Microsoft Basic|Intel|\bUHD\b|Iri
     && !/NVIDIA|GeForce|Quadro|RTX|GTX|Radeon RX|Radeon Pro|Arc A\d/i.test(gpuName);
 window.__zns = window.__zns || {};
 window.__zns.gpu = { name: gpuName, short: gpuShort, weak: gpuWeak };
+fillDeviceNames(document.getElementById('vision-delegate'), window.__zns.gpu); // («Нейросеть считает на…»: the real names of the card and the processor — DeviceNames.js)
 if (gpuWeak) {
     const warn = document.createElement('div');
     warn.id = 'gpu-warning';

@@ -46,6 +46,7 @@ import sys
 import threading
 import webbrowser
 
+import hw_info
 import log_upload
 from world_storage import WorldStorage, safe_id
 from urllib.parse import parse_qs, urlparse
@@ -725,6 +726,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_snap()
         if path == "/api/pose/pace":
             return self._pose_pace(urlparse(self.path).query)
+        if path == "/api/system":
+            return self._json(200, hw_info.hardware())  # (the processor and the graphics cards by name — «Нейросеть считает на…» in the settings)
         if path == "/api/version":
             return self._json(200, game_version())
         if path == "/api/ping":
