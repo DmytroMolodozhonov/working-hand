@@ -218,7 +218,7 @@ export class ElementalMages {
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
     else{a.flight-=dt;const gy=g.collision.groundAt(v.x,v.z,v.y+1);const ny=v.y+(gy+5-v.y)*Math.min(1,dt*1.5);if(!L._airFree||L._airFree(v.x,v.z,ny))v.y=ny;else a.flight=0;v.mode='airFlight';}
    }
-   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch)))this.reposition(v,foe,dt,17); // (hops back and aside — never chase an opponent who is leaving)
+   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash')this.reposition(v,foe,dt,17); // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
