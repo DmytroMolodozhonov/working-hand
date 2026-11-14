@@ -98,6 +98,13 @@ export class ElementalMages {
   if(d<=5){a.scan=0;return false;} // (near enough: the next scan finds it)
   a.seeking=true;L._steer(v,w.x,w.z,v.walk*1.3,dt,4);a.hopping=true;v.mode='waterGather';L._ground(v);return true;
  }
+ /** Out of mana (or badly hurt): he RUNS from the foe to a safe distance, then stands and gathers himself — and comes back (the author 14.11). → true while running. */
+ retreat(v,foe,dt){
+  const a=v.elemental,L=this.game.castleLife,dx=v.x-foe.x,dz=v.z-foe.z,d=Math.hypot(dx,dz)||1;
+  if(d>=24){this.reposition(v,foe,dt,24);return false;}
+  const side=((v.entry.seed&1)?1:-1)*(.35+.25*Math.sin((a.t||0)*.7)),foeId=v.foe;
+  L._steer(v,v.x+(dx/d-dz/d*side)*8,v.z+(dz/d+dx/d*side)*8,v.walk*1.5,dt,0);if(!v.foe&&foeId)v.foe=foeId;a.hopping=true;return true;
+ }
  /** The water mage douses a thrown orb: a stream flies from his hands to it, it goes out in a cloud of steam. */
  douse(v,o,at){
   const g=this.game,glow=g.fx?.glow;
@@ -205,7 +212,7 @@ export class ElementalMages {
   if(r&&v.elemental&&!v.dead&&!(v.fx&(FX.DOME|FX.SHIELD))&&this.swirling(v))v.fx=(v.fx|0)|FX.SWIRL;
   return r;
  }
- swirling(v){const a=v.elemental,p=a.phase;return !!(a.recover||p==='Coil'||p==='Chamber'||p==='Gather'||p==='rest'||p==='Spin');}
+  swirling(v){const a=v.elemental,p=a.phase;return !!(v.element==='air'&&!a.liftT||a.recover||p==='Coil'||p==='Chamber'||p==='Gather'||p==='rest'||p==='Spin');}
  _think(v,dt){
   const g=this.game,L=g.castleLife,a=v.elemental;if(!a)return false;
   if(!v.foe&&v.cs?.def&&v.cs.def.kind!=='elemental'){
@@ -223,7 +230,7 @@ export class ElementalMages {
   const threat=g.earthMages?._threat(v);
   v.mana=Math.min(v.maxMana,v.mana+(a.recover?REGEN.REST:REGEN.FIGHT)*dt); // (mana comes back all the time — a mage at 12 mana must not wait for ever)
   if(v.mana<=lowMana(v.element,v.maxMana))a.recover=true;else if(a.recover&&v.mana>=readyMana(v.element,v.maxMana))a.recover=false;
-  if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);if(!v.fly)this.reposition(v,foe,dt,24);v.mode=v.fly?'airFlight':v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
+  if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);const ran=!v.fly&&this.retreat(v,foe,dt);v.mode=v.fly?'airFlight':ran?'run':v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
   if(v.element==='water'){
    if(this.parry(v,foe,dt))return true; // (puts out a thrown fireball / bombardo with a jet of water before it arrives)
    if(this.seekWater(v,foe,dt))return true;

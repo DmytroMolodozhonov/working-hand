@@ -3720,6 +3720,7 @@ export class Game {
                 body: bodyOf(me),
                 hit: (kind, from, push) => (kind === 'Bounce' ? c.shieldFactor(from) >= 1 && (c._blocked(from), false) : c.hitBySpell(kind, from, casterId, push)),
                 blocks: (from) => c.shieldFactor(from) >= 1,
+                shieldR: () => (c.shield?.type === 2 ? 2.7 : 1.7), // (how far from my middle a held flame is stopped: the dome's radius / a hand shield's reach — SpellManager.castInferno)
                 chill: (amount, from) => c.chillBy(amount, from, casterId),
             });
         }
@@ -3732,6 +3733,7 @@ export class Game {
                 body: bodyOf(id),
                 hit: (kind, from) => { if (r.shieldBlocks(from)) r.showBlock(from, this.fx); return true; },
                 blocks: (from) => r.shieldBlocks(from),
+                shieldR: () => 1.7,
                 chill: () => true,
             });
         }

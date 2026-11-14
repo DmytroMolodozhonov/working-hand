@@ -46,6 +46,10 @@ export class EarthMages {
  /** Hops (ElementalMove.js), not a slide round the foe: a few steps to a free place, a pause, the body turned the way he goes; a blocked way → the other one. */
  _reposition(v,foe,dt,recover){
   const L=this.game.castleLife,a=v.earth,foeId=v.foe,h=v.hop||(v.hop=newHop());
+  if(recover){ // (14.11: out of mana / hurt — he RUNS from the foe to a safe distance, then stands and gathers himself)
+   const dx=v.x-foe.x,dz=v.z-foe.z,d=Math.hypot(dx,dz)||1;
+   if(d<22){const side=((v.entry.seed&1)?1:-1)*.35;L._steer(v,v.x+(dx/d-dz/d*side)*8,v.z+(dz/d+dx/d*side)*8,v.walk*1.4,dt,0);if(!v.foe&&foeId)v.foe=foeId;a.hopping=true;return 'run';}
+  }
   const r=stepHop(h,foe,recover?24:(a.blindT>1.2?7:16),v.walk*(recover?.8:.65),dt,{pos:v,steer:(tx,tz,sp,d)=>L._steer(v,tx,tz,sp,d,0),free:(x,z)=>L._walkable?L._walkable(x,z,v.y):true,rng:Math.random});
   if(!v.foe&&foeId)v.foe=foeId; // (a blocked step must not make the ordinary path pilot forget a live foe)
   a.hopping=r==='hop';return r;
@@ -106,9 +110,9 @@ export class EarthMages {
    if(a.stitchCd<=0&&v.mana>=SPELL_COST.Stitching&&a.scan<=0){a.scan=.9;this._stitch(v,foe);}
    if(a.stitchPose>0){a.stitchPose-=dt;v.mode='earthWall';v.model.earthPoseT=1.3-a.stitchPose;L._ground(v);return true;}
    if(a.quiet>6&&v.hp<v.maxHp*.4)v.hp=Math.min(v.maxHp*.4,v.hp+.3*dt);
-   this._reposition(v,foe,dt,true);
+   const ran=this._reposition(v,foe,dt,true)==='run';
    // Recover while facing the opponent; do not abandon a live fight forever at low HP.
-   v.mode='earthRest';v.model.earthPoseT=a.t;L._ground(v);return true;
+   v.mode=ran?'run':'earthRest';v.model.earthPoseT=a.t;L._ground(v);return true;
   }
   if(!s){s=this._start(v);if(!s){a.recover=true;v.mode='earthRest';L._ground(v);return true;}}
   s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;s.phaseT=a.t;v.model.earthPoseT=a.t;

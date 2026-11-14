@@ -10,12 +10,25 @@ import { FX } from './WizardFx.js';
 
 const NEAR = 50; // m: farther mages' swirls are not drawn
 const LOOK = {
-    air: { cols: [0xffffff, 0xdff3ff, 0xbfe6ff], r: 1.6, up: 1.5, spin: 3.6, size: [0.16, 0.32], life: 0.85, n: 4 },
+    // (14.11, the author: «недостаточно видно, что он владеет магией воздуха… микрочастицы, мини-листики, воздух искажается»: wisps, leaves and dust going up in the spiral, a ring of dust on the ground, big faint haze)
+    air: { cols: [0xffffff, 0xdff3ff, 0xbfe6ff, 0x8fc24a, 0xb7d65c, 0xd9b66a, 0xa8895a], r: 1.9, up: 1.7, spin: 3.8, size: [0.12, 0.3], life: 0.95, n: 6, dust: true },
     fire: { cols: [0xff6a00, 0xffd27a, 0xff2a00, 0xffb030], r: 1.25, up: 2.2, spin: 3.2, size: [0.2, 0.4], life: 0.85, n: 4 },
     water: { cols: [0x6ec6ff, 0x9fdcff, 0xd8f2ff, 0x4aa8e8], r: 1.4, up: 0.9, spin: 4.0, size: [0.15, 0.3], life: 0.9, n: 4 },
 };
 export class ElementalSwirl {
     constructor(game) { this.game = game; this.t = 0; }
+    /** The air mage's ground dust ring and faint haze: the air round him is seen to move. */
+    _air(glow, v, fast) {
+        for (let i = 0; i < 2; i++) {
+            const a = this.t * 3.2 * fast + i * 3.14 + Math.random() * 0.6, r = 1.6 + Math.random() * 1.4;
+            glow.spawn(v.x + Math.cos(a) * r, v.y + 0.15, v.z + Math.sin(a) * r, -Math.sin(a) * 4.5 * fast, 0.7 + Math.random() * 0.8, Math.cos(a) * 4.5 * fast, 0xcbbf9f, 0.22 + Math.random() * 0.3, 0.8, { shrink: 0.9 }); // (dust)
+        }
+        if (Math.random() < 0.7) {
+            const a = Math.random() * 6.2832, r = 0.9 + Math.random() * 1.6;
+            glow.spawn(v.x + Math.cos(a) * r, v.y + 0.5 + Math.random() * 3, v.z + Math.sin(a) * r, -Math.sin(a) * 2.2 * fast, 0.4, Math.cos(a) * 2.2 * fast, 0xeef6ff, 0.55 + Math.random() * 0.5, 1.0, { shrink: 0.5 }); // (a faint wide haze: the air itself)
+        }
+    }
+
     update(dt) {
         const g = this.game, glow = g.fx?.glow, L = g.castleLife, me = g.character?.group?.position;
         if (!glow || !L || !me) return;
@@ -25,6 +38,7 @@ export class ElementalSwirl {
             if (!K || v.dead || !(v.fx & FX.SWIRL) || !v.group?.visible) continue;
             if (Math.hypot(v.x - me.x, v.z - me.z) > NEAR) continue;
             const fast = v.mode === 'airSpin' ? 2.2 : v.elemental?.recover ? 0.8 : 1;
+            if (K.dust) this._air(glow, v, fast);
             const n = Math.max(1, Math.round(K.n * (v.mode === 'airSpin' ? 2.5 : 1)));
             for (let i = 0; i < n; i++) {
                 const k = (this.t * 0.9 + i / n) % 1; // (a turn of the helix: the spawn point climbs and goes round)

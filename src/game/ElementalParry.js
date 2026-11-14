@@ -20,10 +20,10 @@ export const SWAT = {
     HIT_MAX: 0.34, // s: the longest wait for the orb to be within reach
     T: 0.66, // s: the whole move
     CD: 1.9, // s between two parries
-    CHANCE: { fire: 0.8, air: 0.7, water: 0.8 },
+    CHANCE: { fire: 0.85, air: 0.9, water: 0.8 }, // (14.11: the author threw a Bombardo at the air mage and it was not turned: raised, and now also in the middle of his other moves)
     COST: { fire: 6, air: 8, water: 7 },
     // the water mage DOUSES the orb from afar (the author 14.11: «направлять воду на неё и тушить ещё до того, как она долетит») — a stream at it, a cloud of steam, no orb comes back
-    REACH_BY: { water: 15 }, TAKE_BY: { water: 12.5 },
+    REACH_BY: { water: 15, air: 14 }, TAKE_BY: { water: 12.5 },
     SCATTER: 0.07, // rad of the way back (a little aside)
     TAKE_R: 3.4, // m: the orb is struck when it comes this near
 };
@@ -75,7 +75,6 @@ export function canSwat(v, a, mana) {
     if (!a || (a.swat != null) || (a.parryCd || 0) > 0) return false;
     if (v.stunT > 0 || v.lev || v.carriedBy || v.vy || v.dead) return false;
     if (a.liftT > 0 || a.capture || a.wave || a.guard > 0 || a.recover) return false;
-    if (v.element === 'fire' && (a.phase === 'Vault' || a.phase === 'Punch' || a.phase === 'Kick')) return false;
-    if (v.element === 'air' && a.phase === 'Sweep') return false;
+    if (v.element === 'fire' && a.phase === 'Vault') return false; // (upside down on his hands: no free arm). Mid-sweep or mid-punch he may still turn the orb: the blow is cut short
     return !!SWAT.COST[v.element] && mana >= SWAT.COST[v.element];
 }

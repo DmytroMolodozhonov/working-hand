@@ -46,7 +46,8 @@ test('canSwat: not while casting, lifting, stunned, recovering, broke', () => {
     assert.equal(canSwat(v, { ...a, recover: true }, 50), false);
     assert.equal(canSwat({ ...v, stunT: 1 }, a, 50), false);
     assert.equal(canSwat(v, a, 1), false);
-    assert.equal(canSwat({ element: 'air', stunT: 0 }, { phase: 'Sweep', parryCd: 0 }, 50), false);
+    assert.equal(canSwat({ element: 'air', stunT: 0 }, { phase: 'Sweep', parryCd: 0 }, 50), true, 'mid-sweep he can still turn it (14.11)');
+    assert.equal(canSwat({ element: 'fire', stunT: 0 }, { phase: 'Punch', parryCd: 0 }, 50), true);
 });
 
 function fixture(element, mana = 220) {

@@ -680,7 +680,9 @@ export class SpellManager {
                 const players = this._players(casterId);
                 const stop = streamStop(o, d, infernoReach(flame.t), {
                     waters: this.hooks.waters ? this.hooks.waters() : [],
-                    shields: players.filter((p) => p.blocks(o)).map((p) => { const c = p.center(); return { x: c.x, y: c.y, z: c.z, r: 0.8 }; }),
+                    // (14.11, the author: «Протекшн должен сдерживать огонь, а он поджигает место, где я стою» — the flame was stopped 0.8 m from my middle, so its end — where the ground is lit —
+                    // fell at my feet; it is now stopped at the shield itself: a hand shield's reach, the dome's radius)
+                    shields: players.filter((p) => p.blocks(o)).map((p) => { const c = p.center(); return { x: c.x, y: c.y, z: c.z, r: p.shieldR?.() ?? 0.8 }; }),
                     blockAt: this.hooks.blockAt || null,
                 });
                 flame.len = stop.t; flame.end = stop.by;
@@ -709,11 +711,13 @@ export class SpellManager {
                     if (!p.local) continue; // (every computer burns only its own player)
                     if (inStream(o, d, flame.len, p.center(), 0.5) && p.hit('Inferno', o)) hit = true;
                 }
+                // the flame pressing on my shield: the shield drinks mana for it (a held beam — paid once a gap) and holds; I am not lit, the ground behind it is not lit
+                if (flame.end === 'shield') for (const p of players) if (p.local && p.blocks(o)) p.hit('Inferno', o);
                 // trees, dry blocks, animals, villagers, knights, spiders, living trees…
                 flame.burnT -= dt;
                 if (flame.burnT <= 0) {
                     flame.burnT = INFERNO.BURN_TICK / (this.hooks.fireBoost?.(casterId) || 1); // (the dragon's wand: it burns 60% more)
-                    if (this.hooks.burn && this.hooks.burn(o, d, flame.len, casterId)) hit = true;
+                    if (this.hooks.burn && this.hooks.burn(o, d, flame.end === 'shield' ? Math.max(0, flame.len - 1.2) : flame.len, casterId)) hit = true; // (stopped by a shield: the grass before it is not lit)
                     else if (!this.hooks.burn && this.hooks.ignite) this.hooks.ignite(o, d, flame.len);
                 }
                 // mana: the flame really burnt something — or simply came out and burnt a while (the author: the first
