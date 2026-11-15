@@ -463,6 +463,48 @@ try {
         });
         console.log('  тени:', JSON.stringify(st));
     }
+    if (args.includes('--drawtest')) { // which things the draws of one frame belong to (main picture and sun shadow apart)
+        const dt = await page.evaluate(async () => {
+            const g = window.__zns.game, R = g.renderer;
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            const main = {}, shadow = {}, orig = R.renderBufferDirect.bind(R);
+            R.renderBufferDirect = function (cam, sc, geo, mat, obj, grp) {
+                let top = obj; while (top.parent && top.parent !== g.scene) top = top.parent;
+                if (top === g.character.group && !(mat.isMeshDepthMaterial || mat.isMeshDistanceMaterial)) {
+                    const path = []; for (let q = obj.parent; q && q !== top && path.length < 3; q = q.parent) path.push(q.name || q.type);
+                    const hk = 'hero:' + (obj.isSkinnedMesh ? 'skin ' : '') + (mat.type || '?').replace('Material', '') + ' ← ' + path.join('<');
+                    (globalThis.__heroDraws = globalThis.__heroDraws || {})[hk] = (globalThis.__heroDraws[hk] || 0) + 1;
+                }
+                let k = top.userData?.farBatch ? 'farbatch' : (top.name || (top.userData?.isTerrain ? 'terrain' : top.type));
+                if (k === 'Group') k = 'Group[' + Object.keys(top.userData || {}).slice(0, 3).join('/') + '|' + (top.children[0]?.name || top.children[0]?.type) + '|x' + top.children.length + '|' + Math.round(top.position.x) + ',' + Math.round(top.position.z) + ']';
+                if (obj.userData?.isTerrain) k = 'terrain' + (obj.userData.cluster ? '-куски' : '') + (obj.material === g.world.terrain.waterMaterial ? '-вода' : '');
+                const T = mat.isMeshDepthMaterial || mat.isMeshDistanceMaterial ? shadow : main;
+                T[k] = (T[k] || 0) + 1;
+                return orig(cam, sc, geo, mat, obj, grp);
+            };
+            R.shadowMap.needsUpdate = true; R.info.reset(); R.render(g.scene, g.camera);
+            R.renderBufferDirect = orig;
+            const f = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 22).map(([k, v]) => `${k} ${v}`).join(', ');
+            globalThis.__heroOut = Object.entries(globalThis.__heroDraws || {}).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => `${v}× ${k}`);
+            return { hero: globalThis.__heroOut, main: f(main), mainN: Object.values(main).reduce((a, b) => a + b, 0), shadow: f(shadow), shadowN: Object.values(shadow).reduce((a, b) => a + b, 0) };
+        });
+        if (dt.hero?.length) console.log('  герой в картинке:\n    ' + dt.hero.join('\n    '));
+        console.log('  отрисовки: картинка', dt.mainN, '→', dt.main, '\n             тени', dt.shadowN, '→', dt.shadow);
+    }
+    if (args.includes('--who')) { // the top objects of the scene at given x,z (--who 109,-257): their parts
+        const [wx, wz] = (opt('who', '0,0')).split(',').map(Number);
+        const wh = await page.evaluate(([wx, wz]) => {
+            const g = window.__zns.game, out = [];
+            for (const top of g.scene.children) {
+                if (Math.hypot(top.position.x - wx, top.position.z - wz) > 6 || top.type !== 'Group') continue;
+                const parts = [];
+                top.traverse((o) => { if (o.isMesh && parts.length < 24) parts.push(`${o.name || o.geometry.type}${o.visible ? '' : '(скрыт)'} ${o.material?.type}`); });
+                out.push(`${top.name || '-'} ud:${Object.keys(top.userData).join(',')} детей ${top.children.length}: ${parts.join('; ')}`);
+            }
+            return out;
+        }, [wx, wz]);
+        console.log('  кто там:\n    ' + wh.join('\n    '));
+    }
     const r = await page.evaluate(scene, FRAMES);
     const clp = await page.evaluate(() => { const g = window.__zns.game; return g._clProf ? Object.entries(g._clProf).map(([k, v]) => `${k} ${(v / g.frameCount).toFixed(2)}`).join(', ') : null; });
     if (clp) console.log('  castleLife по частям (мс за кадр, от начала игры):', clp);

@@ -59,7 +59,7 @@ export class MagicFloraLife {
 
     _inst(geo, mat, cap) {
         const m = new THREE.InstancedMesh(geo, mat, cap);
-        m.count = 0; m.frustumCulled = false; m.castShadow = false; m.receiveShadow = true;
+        m.count = 0; m.frustumCulled = false; // (visible at first: the instanced shaders compile in the first frame as before; later an empty one is hidden — _writeBody) m.castShadow = false; m.receiveShadow = true;
         m.matrixAutoUpdate = false; m.userData.noFar = true;
         this.group.add(m);
         return m;
@@ -167,7 +167,7 @@ export class MagicFloraLife {
             _m.compose(_p.set(pl.x, pl.y, pl.z), _q.setFromAxisAngle(_up, pl.yaw), _s.setScalar(pl.scale * (pl.burn > 0 ? 1 - 0.4 * (1 - pl.burn / BURN_TIME) : 1)));
             mesh.setMatrixAt(counts[pl.variant]++, _m);
         }
-        for (let v = 0; v < FLORA_VARIANTS; v++) { const mesh = M.body[kind][v]; mesh.count = counts[v]; mesh.instanceMatrix.needsUpdate = true; }
+        for (let v = 0; v < FLORA_VARIANTS; v++) { const mesh = M.body[kind][v]; mesh.count = counts[v]; mesh.visible = counts[v] > 0; mesh.instanceMatrix.needsUpdate = true; } // (an empty one is not drawn at all: a draw of no instances is still a call into the driver)
     }
 
     _writePicks(kind) {
@@ -183,7 +183,7 @@ export class MagicFloraLife {
                 mesh.setMatrixAt(n++, _m);
             }
         }
-        mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
+        mesh.count = n; mesh.visible = n > 0; mesh.instanceMatrix.needsUpdate = true;
     }
 
     // ----------------------------------------------------------- picking
