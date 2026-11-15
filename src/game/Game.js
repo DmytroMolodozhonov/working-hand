@@ -79,6 +79,7 @@ import { PEGASUS_COATS, PEGASUS_COLOR, HORSE_COLORS } from './AnimalModels.js';
 import { FarShape, skinnedSamples } from '../core/FarShape.js';
 import { installSceneMatrices } from '../core/SceneMatrices.js';
 import { updateFarBatches, resetFarBatches } from '../core/FarBatch.js';
+import { trimShadowCasters } from '../core/ShadowTrim.js';
 import { CastleLife } from './CastleLife.js';
 import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
@@ -4699,6 +4700,7 @@ export class Game {
                 if (reach > 900 + CASTLE_CELL) this.world.terrain?.warmSites?.(wp.x, wp.z, reach, CASTLE_CELL);
             }
         }
+        if (this.frameCount % 60 === 7 && this.character?.group && !(typeof window !== 'undefined' && window.__ZNS_NO_SHADOW_TRIM__)) trimShadowCasters(this.character.group); // (the hero's small parts do not cast: ~90 shadow draws fewer — ShadowTrim.js)
         sysMark('warmSites');
         if (this.frameCount % 5 === 0 && this.space?.inSpace) this.space.drawMap(this.hud); // (the map of the Solar System)
         else if (this.frameCount % 5 === 0 && !this.duelOnly) {

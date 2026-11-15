@@ -267,8 +267,9 @@ try {
         Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
     });
     const P = PRESETS[LEVEL];
-    await page.evaluate(({ P, SEED, MODE, OLDMAT, NOBATCH, NOCLUST }) => {
+    await page.evaluate(({ P, SEED, MODE, OLDMAT, NOBATCH, NOCLUST, NOTRIM }) => {
         if (OLDMAT) window.__ZNS_ALL_MATRICES__ = true;
+        if (NOTRIM) window.__ZNS_NO_SHADOW_TRIM__ = true; // (--noshadowtrim: the hero's small parts cast as before — to compare)
         if (NOCLUST) window.__ZNS_NO_TERRAIN_CLUSTERS__ = true; // (--noclusters: the far chunks drawn one by one — to compare)
         if (NOBATCH) window.__ZNS_NO_FAR_BATCH__ = true; // (--nobatch: every one-shape drawn by itself — to compare) // (--oldmat: every object's matrix each frame, as three.js does — to compare)
         for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance], ['ultra-quality', P.ultra || 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
@@ -276,7 +277,7 @@ try {
         const seen = window.__compiled = []; // (each material's first compile: who needed a shader after the start)
         z.THREE.Material.prototype.onBeforeCompile = function () { seen.push(this); };
         z.startGame({ ...z.readConfig(), mode: MODE, map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on' });
-    }, { P, SEED, MODE, OLDMAT: args.includes('--oldmat'), NOBATCH: args.includes('--nobatch'), NOCLUST: args.includes('--noclusters') });
+    }, { P, SEED, MODE, OLDMAT: args.includes('--oldmat'), NOBATCH: args.includes('--nobatch'), NOCLUST: args.includes('--noclusters'), NOTRIM: args.includes('--noshadowtrim') });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     // the start's land and its people: wait until the land around is made (the workers) and things settle
@@ -426,6 +427,42 @@ try {
     const SHOT = opt('shot', null); // --shot file.png: the picture before the measuring (to compare looks: --nobatch / --oldmat)
     if (SHOT) { await sleep(2500); await page.screenshot({ path: SHOT }); console.log('снимок: ' + SHOT); }
     if (KEYS) await page.evaluate(() => { window.__KEYS = true; });
+    if (args.includes('--shadowtest')) { // how many draws the sun's shadow pass costs: one frame drawn with the shadows on, then off
+        const st = await page.evaluate(async () => {
+            const g = window.__zns.game, R = g.renderer, out = {};
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            out.info = { enabled: R.shadowMap.enabled, auto: R.shadowMap.autoUpdate, type: R.shadowMap.type, cast: g.world.dirLight.castShadow, q: g.quality?.current?.name, shadowsQ: g.quality?.current?.shadows, fixed: g.quality?._shadowsFixed, lights: g.scene.children.filter((o) => o.isLight).map((o) => o.type + ':' + o.castShadow) };
+            const was = R.shadowMap.enabled, auto = R.shadowMap.autoUpdate;
+            for (const on of [true, false, true]) {
+                R.shadowMap.enabled = on; R.shadowMap.needsUpdate = true; R.shadowMap.autoUpdate = true;
+                g.scene.traverse((o) => { if (o.material) o.material.needsUpdate = false; });
+                const gl = R.getContext(); let n = 0; const o1 = gl.drawElements.bind(gl), o2 = gl.drawElementsInstanced.bind(gl), o3 = gl.drawArrays.bind(gl);
+                gl.drawElements = (...a) => { n++; return o1(...a); }; gl.drawElementsInstanced = (...a) => { n++; return o2(...a); }; gl.drawArrays = (...a) => { n++; return o3(...a); };
+                R.info.reset(); R.render(g.scene, g.camera);
+                gl.drawElements = o1; gl.drawElementsInstanced = o2; gl.drawArrays = o3;
+                out[on ? 'тени вкл' : 'тени выкл'] = { calls: R.info.render.calls, gl: n, tris: R.info.render.triangles };
+            }
+            R.shadowMap.enabled = was; R.shadowMap.autoUpdate = auto;
+            // who casts into the sun's box (≈ 50 m round the hero): by the top object of the scene, with the size of the parts
+            const me = g.character.group.position, by = {};
+            g.scene.traverse((o) => {
+                if (!o.isMesh || !o.castShadow) return;
+                for (let q = o; q; q = q.parent) if (!q.visible) return;
+                const p = o.getWorldPosition(new g.camera.position.constructor());
+                if (Math.hypot(p.x - me.x, p.z - me.z) > 55) return;
+                let top = o; while (top.parent && top.parent !== g.scene) top = top.parent;
+                const k = (top.name || top.type) + (top.userData?.farBatch ? '/batch' : '');
+                const e = by[k] || (by[k] = { n: 0, small: 0 });
+                e.n++;
+                o.geometry.boundingBox || o.geometry.computeBoundingBox();
+                const sz = o.geometry.boundingBox.getSize(new g.camera.position.constructor());
+                if (Math.max(sz.x * o.scale.x, sz.y * o.scale.y, sz.z * o.scale.z) < 0.9) e.small++;
+            });
+            out.casters = Object.entries(by).sort((a, b) => b[1].n - a[1].n).slice(0, 12).map(([k, e]) => `${k}: ${e.n} (мелких ${e.small})`);
+            return out;
+        });
+        console.log('  тени:', JSON.stringify(st));
+    }
     const r = await page.evaluate(scene, FRAMES);
     const clu = await page.evaluate(() => { const t = window.__zns.game.world?.terrain || window.__zns.game.terrain; return t?.clusters ? { ...t.clusters.stats, squares: t.clusters.map.size, chunks: t.meshes.size } : null; });
     if (clu) console.log('  далёкая земля кусками:', JSON.stringify(clu));
