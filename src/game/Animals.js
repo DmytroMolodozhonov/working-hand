@@ -2098,14 +2098,25 @@ export class Animals {
     _handPicks(dt) {
         const g = this.game;
         const now = performance.now();
+        // (the author 14.11: «мясо множится при выбрасывании — выбрасываю, а в руке тут же новое»: the hand that has just let a piece go over the carcass
+        //  took the next one at once. A hand takes meat only if it came to the carcass EMPTY: it holds something, or has let go of it, → not again until it has left the carcass)
+        const fresh = this._meatReady || (this._meatReady = { right: true, left: true });
+        for (const side of ['right', 'left']) {
+            if (g.items.held[side] || g.weapons.hands[side].held) { fresh[side] = false; continue; }
+            if (fresh[side]) continue;
+            const hand = g.character.getHandWorldPosition(side, _v);
+            let near = false;
+            for (const a of this.list) if (a.dead && a.meat > 0 && a.group.position.distanceTo(hand) <= 1.9) { near = true; break; }
+            if (!near) fresh[side] = true; // (the empty hand is away from every carcass: it may take again)
+        }
         if (now - (this._pickAt || 0) < 600) return;
         for (const side of ['right', 'left']) {
-            if (g.items.held[side] || g.weapons.hands[side].held) continue;
+            if (g.items.held[side] || g.weapons.hands[side].held || !fresh[side]) continue;
             const hand = g.character.getHandWorldPosition(side, _v);
             for (const a of this.list) {
                 if (!a.dead || a.meat <= 0) continue;
                 if (a.group.position.distanceTo(hand) > 1.4) continue;
-                this._pickAt = now;
+                this._pickAt = now; fresh[side] = false; // (one piece per visit: the next only after the hand has gone away and come back)
                 if (this.auth) this._takeMeat(a, g.localId, side);
                 else g.sync?.animalMeat?.(a.id, side);
                 return;
