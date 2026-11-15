@@ -108,6 +108,7 @@ export const TARGETS = {
     Firefighting: { does: 'push', why: '«Firefighting»: лёгкий толчок, пылающий феникс гаснет и бросает атаку; без урона' },
     SapiraDuel: { does: 'hit', why: '−10' },
     ShardDuel: { does: 'hit', why: 'осколок льда ранит' },
+    GustDuel: { does: 'none', why: 'ветер несёт феникса: не вредит' },
     FireDuel: { does: 'none', why: 'огонь — стихия феникса: не вредит' },
     SandsDuel: { does: 'hit', why: '«Даст»: −4, песок с перьев слетает' },
     Sapira: { does: 'hit', why: 'луч «Сапира»: −5' },

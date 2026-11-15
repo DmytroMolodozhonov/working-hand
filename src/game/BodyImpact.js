@@ -20,6 +20,7 @@ import { GOT_UP_T } from './HandRelease.js';
 import { STEADY, windShieldRule } from './Steadiness.js';
 import { isMagicKind, isDivine, ALL_ROUND } from './ProtectionGods.js';
 import { FIRM, absoluteStops } from './FirmRules.js';
+import { resistsWaterPush } from './HeroElement.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 
@@ -45,6 +46,7 @@ export class BodyImpact {
         if (!c || c.dead || g.isDeadLocal || g.spiders?.held) return 'none';
         if (g.levitation?.lifted) { this._kickHead(o); return 'none'; }      // (the magic holds the body)
         if (g.monster?.active && !g.monster.pushedBy(o)) return 'none'; // (the monster form: 7× the body, nothing simple moves it — MonsterForm.js)
+        if (resistsWaterPush(g.heroElement?.id, o.spell || o.kind)) return 'none'; // (a mage of water is not moved by water — his own or a foe's: HeroElement)
         if (g.circleAttack?.holdsMe?.()) return 'none'; // (my «Circle Attack»: I stand on my island — nothing pushes me off)
         if (this._godsHold(o)) { this._note(o, 'blocked'); return 'blocked'; } // (the gods' shield: no spell moves me — ProtectionGods.js)
         if (o.blast && c.blastProof?.()) { this._note(o, 'blocked'); return 'blocked'; } // (a dome: a blast's wave never moves me — mine either)

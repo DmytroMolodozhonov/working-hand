@@ -62,7 +62,7 @@ test('a mana-empty air mage falls rather than receiving a free slow landing',()=
 });
 
 test('air mage at 17 metres uses a gust whose real reach can touch the opponent',()=>{
- const f=fixture('air');f.g.castleLife._playerPos=()=>({x:0,y:2,z:-17});f.step(130);
+ const f=fixture('air');f.g.castleLife._playerPos=()=>({x:0,y:2,z:-17});f.step(900); // (15.11: the air mage has more moves now — blades, a dash, a rise, a dance — so give him time to use a gust)
  assert.ok(f.casts.length>0);assert.ok(f.casts.every(([name])=>name==='WindMaxima'),'ordinary Wind only reaches 14 metres');
 });
 
@@ -90,4 +90,11 @@ test('elemental costumes retain ordinary seeded faces, hair and beards instead o
 
 test('peaceful elemental residents keep ordinary paths and can return to village day/night life',()=>{
  for(const e of ['water','air','fire']){const f=fixture(e);f.v.foe=null;f.v.cs={def:{kind:'hamlet'}};const path=[1,2];f.v.path=path;f.v.job='wander';f.v.seated=true;assert.equal(f.em.think(f.v,.1),false);assert.equal(f.v.path,path);assert.equal(f.v.job,'wander');assert.equal(f.v.seated,true);}
+});
+test('the air mage has a rich repertoire (15.11): wind blades, a dash, a rise, a dance — and the blades are duel charges',()=>{
+ const f=fixture('air',900);f.g.castleLife._isPlayer=()=>true;const bolts=[];
+ f.g.duel={bolts:new Map(),_addBolt:o=>{bolts.push(o);return{id:o.id};},clashes:[]};f.g.sync.duelCast=()=>{};f.g.castleLife._playerPos=()=>({x:0,y:2,z:-10});
+ const seen=new Set();for(let i=0;i<9000;i++){f.v.mana=Math.max(f.v.mana,400);f.step(1);seen.add(f.v.elemental.phase);}
+ for(const p of ['Sweep','Spin','Lash','Slash','Dash','Drift'])assert.ok(seen.has(p),'phase '+p);
+ assert.ok(bolts.length>=3&&bolts.every(b=>b.spell==='GustDuel'&&b.vs===undefined&&b.npc),'a fan of wind blades flew');
 });

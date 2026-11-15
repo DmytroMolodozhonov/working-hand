@@ -99,6 +99,8 @@ export const DUEL_SPELLS = {
     //  on, or stands a little beside the hand's line, is still reached)
     LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса', bend: 0.8, turn: 6 },
     // Slower and thicker: a dark-violet ball of force rolling through the air
+    // one wind blade of the air mage's «Slash» (ElementalMages): a pale-green crescent of cutting air, a fan of three; a hard shove and a few HP
+    GustDuel: { color: 0xd4f5c8, name: 'Лезвие ветра', speed: 21, core: 0.05, glow: 0.2, coreColor: 0xffffff, jag: 0.6 },
     // one ice shard of the water mage's «Shards» mode (HeroShards.js): thin, fast, icy-white; a volley of them, 3.5 each
     ShardDuel: { color: 0xa9dcff, name: 'Осколок льда', speed: 26, core: 0.03, glow: 0.11, coreColor: 0xffffff },
     // «Fire Vortex» as a duel charge (the fire mage's answer to a charge flying at him: a beam of fire meets it — the author 15.11): a roaring orange bolt with a white-hot core,
@@ -1460,6 +1462,9 @@ export class Duel {
                 g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
                 hit(DAMAGE.Sapira);
                 if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
+            } else if (spell === 'GustDuel') {
+                hit(DAMAGE.GustDuel);
+                if (!c.dead) g.creatureImpact?.spellHit(c, 'GustDuel', src, byId);
             } else if (spell === 'ShardDuel') {
                 g.fx.lightFlash(p, 0xbfe9ff, 1.5, 0.2, 10);
                 hit(DAMAGE.ShardDuel);
@@ -1584,6 +1589,11 @@ export class Duel {
             if (c.enabled) c.damage(DAMAGE.Sapira, byId, 'Sapira');
             else g.hud.setVoice('💜 Сапира попала в вас', true);
             g.impact?.apply({ v: push(12), from, by: byId, spell: 'SapiraDuel', jolt: 3, noShield: true });
+        } else if (spell === 'GustDuel') {
+            g.hud.flashColor?.('rgba(212, 245, 200, 0.5)');
+            if (c.enabled) c.damage(DAMAGE.GustDuel, byId, 'GustDuel');
+            else g.hud.setVoice('🌬️ Лезвие ветра попало в вас', true);
+            g.impact?.apply({ v: push(8), from, by: byId, spell: 'GustDuel', jolt: 2.5, noShield: true });
         } else if (spell === 'ShardDuel') {
             g.fx.lightFlash(p, 0xbfe9ff, 2, 0.2, 10);
             if (c.enabled) c.damage(DAMAGE.ShardDuel, byId, 'ShardDuel');
@@ -1645,6 +1655,9 @@ export class Duel {
                 g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
                 g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
                 if (!z.isDead) g.creatureImpact?.spellHit(z, 'SapiraDuel', src, byId);
+            } else if (spell === 'GustDuel') {
+                g.damageZombie(z, DAMAGE.GustDuel, true, _v2.set(0, 0, 1), byId);
+                if (!z.isDead) g.creatureImpact?.spellHit(z, 'GustDuel', src, byId);
             } else if (spell === 'ShardDuel') {
                 g.damageZombie(z, DAMAGE.ShardDuel, true, _v2.set(0, 0, 1), byId);
                 if (!z.isDead) g.creatureImpact?.spellHit(z, 'ShardDuel', src, byId);

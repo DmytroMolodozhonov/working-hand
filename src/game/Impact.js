@@ -146,7 +146,7 @@ export const SPELL_PHYSICS = {
     // (a wall of water knocks everyone it covers off the feet — a knight in armour too, not only a reel)
     WaveAttack: { push: 13, toss: 3.5, wet: true, always: true, down: 1.5 }, WaveAttackMaxima: { push: 20, toss: 4.7, wet: true, always: true, down: 2.5 },
     Thunderwave: { push: 20, thunder: true, jolt: 3 },
-    Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 }, FireDuel: { push: 6, jolt: 2 }, ShardDuel: { push: 3, jolt: 1 }, // (the fire mage's beam: a hot shove)
+    Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 }, FireDuel: { push: 6, jolt: 2 }, ShardDuel: { push: 3, jolt: 1 }, GustDuel: { push: 8, jolt: 2.5 }, // (the fire mage's beam: a hot shove)
     Expelliarmus: { push: 3, jolt: 2 }, // (a jolt; what it really does is knock the wand out: Expelliarmus.js)
     // («Джолт»: a bolt of air — off the feet, thrown back and up, a tumble in the air (Duel.JOLT);
     //  the toss stays under a hurting fall's height on flat ground: only a real drop hurts)

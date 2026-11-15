@@ -37,7 +37,7 @@ export function readyMana(element, maxMana) { return Math.min(maxMana || 30, Mat
  * `Sweep` — the sweep of both arms (a gust, or a heavy one); `Spin` — he whirls on the spot, two turns, and the air flies off him in a ring (the pushing blow at a near foe, a heavy
  * gust at a far one); `Lash` — a low lash of the arm along the ground (a gust that sweeps the foe's feet). Never the same move twice in a row.
  */
-export const AIR_MOVES = ['Sweep', 'Spin', 'Lash'];
+export const AIR_MOVES = ['Sweep', 'Spin', 'Lash', 'Slash', 'Dash', 'Rise']; // (15.11: «мало движений»: a fan of wind blades, a dash along the wind, a rise into the air that rains blades)
 export const AIR_SPIN = { RATE: 18, SPIN_T: 0.7, FIRE_T: 0.78, END_T: 1.25 }; // rad/s (two turns: 12.6 rad ≈ 4π), s
 export function nextAirMove(last, roll) {
     const rest = AIR_MOVES.filter((m) => m !== last);

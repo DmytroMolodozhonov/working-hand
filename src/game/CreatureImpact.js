@@ -46,6 +46,7 @@ export const RAG = { NEAR: 45, MAX: 8, BUDGET_MS: 2.5, DEAD_TIP: 1.6, UP_MAX: 3.
 import { FIRM, absoluteStops } from './FirmRules.js';
 import { creatureHolds, creatureAbsolute, ordinaryOutcome, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
+import { resistsWaterPush } from './HeroElement.js';
 
 export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: knocked off its feet, it lies 5 s at least + 1…5 s by chance — knights don't spring up at once)
     STAGGER_MAX: 0.8, FRICTION: 4, FRICTION_DOWN: 8, G: 24, GUEST_RISE: 20, REACH: 7 };
@@ -376,6 +377,7 @@ export class CreatureImpact {
         if (!this.auth) return 'none';
         if (this.game.temple?.wards?.(c.group.position)) return 'none'; // (in the Gods' temple: its golden ward — nobody is thrown)
         if (c.lev) return 'none'; // (held up by Leviosa: the magic holds the body)
+        if (resistsWaterPush(c.element, o.spell || o.kind)) return 'none'; // (a water mage is not moved by water — his own wave included: the author 15.11)
         if (K.immune?.(this.game, c, o)) return 'none'; // (the kind's own «не действует»: a phoenix in the air and an earthquake)
         // in a house's sphere of protection: a push / a spell from outside doesn't reach it (HouseWards.js)
         const src = o.from || (o.by != null ? this.game.wards?.casterAt?.(o.by) : null);

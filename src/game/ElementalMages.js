@@ -26,7 +26,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { createRng } from '../core/math.js';
 import { airWet } from './HydroRules.js';
 const TITLES={water:'Маг воды',air:'Маг воздуха',fire:'Маг огня'};
-const _o=new T.Vector3(),_d=new T.Vector3();
+const _up0=new T.Vector3(0,1,0),_o=new T.Vector3(),_d=new T.Vector3();
 export function elementalGifts(entry){const r=createRng((entry.seed??1)^0x43b2ca19);return {hydro:{h:entry.element==='water'&&r()<.25?1:0},resist:{f:entry.element==='water'&&r()<.1?1:0}};}
 export class ElementalMages {
  constructor(game){this.game=game;this.seq=0;this.objects=new AirMageObjects(game);this.guard=game.scene?new WaterMageGuard(game):null;this.swirl=game.scene?new ElementalSwirl(game):null;this.shards=game.scene?new IceShards(game):null;}
@@ -127,6 +127,7 @@ export class ElementalMages {
   const d=backDirection(_o,{x:from.x,y:from.y+1.0,z:from.z},Math.random());
   _d.set(d.x,d.y,d.z);
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);
+  if(name==='Inferno'&&v.element==='fire')this.startHang(v,_o,_d); // (the beam hangs in the air and goes on at the foe while he moves — the author 15.11)
   v.castT=.4;this.engaged(v);
  }
  /**
@@ -273,8 +274,51 @@ export class ElementalMages {
  /** The lift ends: dropped, or (`thr`: a velocity) THROWN — the swing, the body flies; the net message carries the throw to a guest. */
  endLift(v,thr=null){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id,thr);if(g.levitation?.lifted?.by===v.id){if(thr)g.levitation.throwMe(v.id,thr);else g.levitation.dropMe(false);}
   if(thr){this.phase(v,'Sweep');a.fired=true;a.t=.2;v.castT=.5;g.sound?.spellCast?.('WindImpulseMaxima',_o.set(v.x,v.y+2,v.z));}else this.phase(v,'Coil');}
+ /**
+  * The fire mage's HANGING beam (the author 15.11: «когда он пуляет свой луч, он может продолжать делать какие-то движения, но луч продолжается, будет висеть в воздухе и пуляться в игрока»):
+  * the Inferno he casts is let go of his hand — it stays floating at his shoulder (a burning orb), follows him loosely, and turns on the foe at a limited rate, keeping on
+  * (up to the stream's own life) while he strikes, hops, parries. Everyone draws the stream from the same hook (Game.handPose → `v.hangBeam`). Gone with him (dead / asleep) or the foe.
+  */
+ startHang(v,o,d){const a=v.elemental;a.hang={t:0,life:4.6,side:(v.entry?.seed&1)?1:-1,p:new T.Vector3(o.x,o.y,o.z),dir:new T.Vector3(d.x,d.y,d.z)};v.hangBeam={origin:a.hang.p,dir:a.hang.dir};}
+ hangStep(v,dt){
+  const a=v.elemental,h=a?.hang;if(!h)return;
+  const g=this.game,L=g.castleLife,glow=g.fx?.glow;h.t+=dt;
+  const foe=v.foe?L._playerPos(v.foe):null;
+  if(v.dead||h.t>h.life||!foe){a.hang=null;v.hangBeam=null;return;}
+  // the orb floats at his shoulder (right side of his body: cos/sin of his yaw), a little bobbing, following with a lag
+  const sx=Math.cos(v.yaw)*1.35*h.side-Math.sin(v.yaw)*.3,sz=-Math.sin(v.yaw)*1.35*h.side-Math.cos(v.yaw)*.3,wy=v.y+3.5+Math.sin(h.t*3)*.15;
+  h.p.x+=(v.x+sx-h.p.x)*Math.min(1,dt*6);h.p.y+=(wy-h.p.y)*Math.min(1,dt*6);h.p.z+=(v.z+sz-h.p.z)*Math.min(1,dt*6);
+  // it turns on the foe at a limited rate (never a snap): the beam sweeps
+  _d.set(foe.x-h.p.x,foe.y+1.4-h.p.y,foe.z-h.p.z).normalize();
+  const ang=h.dir.angleTo(_d),step=Math.min(ang,1.7*dt);if(ang>1e-4)h.dir.lerp(_d,step/ang).normalize();
+  // the hanging orb: a ball of fire with embers streaming from it
+  if(glow){for(let i=0;i<4;i++){const q=Math.random()*6.2832;glow.spawn(h.p.x+Math.cos(q)*.25,h.p.y+(Math.random()-.5)*.4,h.p.z+Math.sin(q)*.25,Math.cos(q)*1.2,.6+Math.random()*1.4,Math.sin(q)*1.2,[0xff7a1a,0xffd27a,0xff3a00][i%3],.35+Math.random()*.35,.45,{shrink:1});}
+   if(Math.random()<dt*14)glow.spawn(h.p.x,h.p.y,h.p.z,h.dir.x*8,h.dir.y*8,h.dir.z*8,0xffe9a0,.2,.4,{shrink:.8});}
+ }
+ /** A fan of `n` wind blades (duel charges) from the mage's hands at the foe (the author 15.11: the air mage had few moves): 6 mana (half for his element), a whoosh, a ring of leaves. */
+ gustFan(v,foe,n){
+  const g=this.game,L=g.castleLife,duel=g.duel;if(!duel?._addBolt||!L._isPlayer?.(v.foe))return false;
+  const cost=6*elementK('air','Wind');if(v.mana<cost)return false;
+  const o=new T.Vector3(v.x-Math.sin(v.yaw)*.9,v.y+2.3,v.z-Math.cos(v.yaw)*.9);
+  const reach=duelRange(v.mana);if(reach<=0)return false;
+  const base=new T.Vector3(foe.x-o.x,foe.y+1.4-o.y,foe.z-o.z).normalize();
+  v.mana-=cost;
+  for(let i=0;i<n;i++){
+   const d=base.clone().applyAxisAngle(_up0,(i-(n-1)/2)*.2);
+   const b=duel._addBolt({rng:emptyRange(reach,true),id:`${v.id}:gf${this._gfSeq=(this._gfSeq||0)+1}`,by:v.id,spell:'GustDuel',side:'right',tk:'p',tid:v.foe,ak:.55,o:o.clone(),d,npc:true});
+   if(b)g.sync?.duelCast?.(b);
+  }
+  v.castT=.5;v.model.castNow=true;g.sound?.playWhoosh?.();
+  const glow=g.fx?.glow;if(glow)for(let i=0;i<26;i++){const q=i/26*6.2832;glow.spawn(o.x+Math.cos(q)*.4,o.y+Math.sin(q)*.4,o.z,Math.cos(q)*3,Math.sin(q)*3,0,i%3?0xeaf6e0:0xb7d65c,.15+Math.random()*.15,.5,{shrink:1});}
+  g.fx?.lightFlash?.(o,0xe0f5d0,1.4,.14,8);L._say?.(v,'Gust!',1.5);this.engaged(v);return true;
+ }
+ /** A streak of wind and leaves behind the dashing mage. */
+ dashFx(v){const glow=this.game.fx?.glow;if(!glow)return;for(let i=0;i<5;i++)glow.spawn(v.x+(Math.random()-.5)*.8,v.y+.6+Math.random()*2.6,v.z+(Math.random()-.5)*.8,(Math.random()-.5)*2,.5,(Math.random()-.5)*2,i%2?0xeaf6e0:0xffffff,.3+Math.random()*.3,.45,{shrink:1});}
+ /** The column of air he rises on: a ring of dust and leaves thrown out from the ground. */
+ riseFx(v){const g=this.game,glow=g.fx?.glow;if(glow)for(let i=0;i<40;i++){const q=i/40*6.2832;glow.spawn(v.x+Math.cos(q)*.8,v.y+.3,v.z+Math.sin(q)*.8,Math.cos(q)*6,1+Math.random()*2,Math.sin(q)*6,i%3?0xcbbf9f:0xb7d65c,.3+Math.random()*.3,.8,{shrink:.7});}g.fx?.lightFlash?.(_o.set(v.x,v.y+1,v.z),0xe8f6ff,2.2,.3,16);g.sound?.playWhoosh?.();}
  /** The controller: `_think`, and the swirl bit on top — the mage winds his element round himself while he rests, coils, gathers or whirls (ElementalSwirl.js). */
  think(v,dt){
+  if(v.elemental?.hang)this.hangStep(v,dt);
   const r=this._think(v,dt);
   if(r&&v.elemental&&!v.dead&&!(v.fx&(FX.DOME|FX.SHIELD))&&this.swirling(v))v.fx=(v.fx|0)|FX.SWIRL;
   return r;
@@ -326,16 +370,32 @@ export class ElementalMages {
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
     else{a.flight-=dt;const gy=g.collision.groundAt(v.x,v.z,v.y+1);const ny=v.y+(gy+5-v.y)*Math.min(1,dt*1.5);if(!L._airFree||L._airFree(v.x,v.z,ny))v.y=ny;else a.flight=0;v.mode='airFlight';}
    }
-   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash')this.reposition(v,foe,dt,17); // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
+   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash'&&a.phase!=='Dash'&&a.phase!=='Slash'&&a.phase!=='Rise')this.reposition(v,foe,dt,17); // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
-   if(a.phase==='Coil'&&a.t>.7){const mv=nextAirMove(a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Coil'&&a.t>.7){const mv=a.lastMove!=='Drift'&&Math.random()<.22?'Drift':nextAirMove(a.lastMove==='Drift'?null:a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
    if(a.phase==='Spin'){
     if(a.t<AIR_SPIN.SPIN_T)v.yaw+=AIR_SPIN.RATE*dt;a.hopping=a.t<AIR_SPIN.SPIN_T; // (two turns on the spot: the body is his own to turn while he whirls)
     if(a.t>AIR_SPIN.FIRE_T&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(dist<11&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);else this.cast(v,'WindMaxima',foe);}}
     if(a.t>AIR_SPIN.END_T){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    }
+   if(a.phase==='Slash'){ // the arms cross and fling out: a fan of three wind blades (duel charges), a whoosh and a ring of leaves
+    if(a.t>.42&&!a.fired){a.fired=true;if(dist<26&&L._sees(v,foe))this.gustFan(v,foe,3);}
+    if(a.t>1.15){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   }
+   if(a.phase==='Dash'){ // a lunge sideways along the wind (a streak of air behind him), then a gust at the foe from the new place
+    if(!a.dashTo){const sg=Math.random()<.5?-1:1,px=-dz/dist*sg,pz=dx/dist*sg,len=7+Math.random()*3;a.dashTo={x:v.x+px*len,z:v.z+pz*len};}
+    if(a.t<.38){a.hopping=true;L._steer(v,a.dashTo.x,a.dashTo.z,20,dt,0);this.dashFx(v);}
+    else if(a.t>.42&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)&&this.pay(v,SPELL_COST.Wind*elementK('air','Wind')))this.cast(v,dist<12?'Wind':'WindMaxima',foe);} // (an ordinary gust reaches 14 m only)
+    if(a.t>.8){a.dashTo=null;a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   }
+   if(a.phase==='Rise'){ // the arms draw the air up out of the ground: he rises on a column and rains blades from above (his flight, with the fan)
+    if(a.t>.85&&!a.fired){a.fired=true;if(!v.fly&&!a.winged&&a.flightCd<=0&&this.pay(v,SPELL_COST.Flight*elementK('air','Flight'))){v.fly=true;a.flight=6;a.flightCd=14;a.skyfall=true;a.sfT=.3;this.riseFx(v);}}
+    if(a.t>1.05){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   }
+   if(a.phase==='Drift'&&a.t>1.6){a.cycle++;this.phase(v,'Coil');}
+   if(a.skyfall){a.sfT-=dt;if(!v.fly){a.skyfall=false;}else if(a.sfT<=0&&dist<26&&L._sees(v,foe)){a.sfT=.9;this.gustFan(v,foe,2);}}
    if(a.phase==='Lash'){
     if(a.t>.38&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,dist<12?'Wind':'WindMaxima',foe,_o.clone());}} // (an ordinary gust reaches 14 m only: a far foe gets the heavy one)
     if(a.t>1.0){a.fired=false;a.cycle++;this.phase(v,'Coil');}

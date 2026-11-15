@@ -95,3 +95,8 @@ export function bareOwn(element, spellId) {
     if (!isElement(element) || !spellId) return false;
     return spellElements(spellId).includes(element) || KEY_SPELL[element] === spellId || (ELEMENT_MODES[element] || []).includes(spellId);
 }
+
+/** The water that moves bodies: a water mage is not moved by it — his own wave, a foe's wave, a vortex's stream, a ball (the author 15.11: «маг воды может случайно себя сбить… у него должна быть устойчивость к Water Attack, к воде соперника тоже»). */
+const WATER_PUSH = new Set(['WaveAttack', 'Wave', 'WaterVortex', 'WaterVortexSuperMaxima', 'Waterball', 'WaterStorm', 'Whirlpool', 'LetItRain', 'Splash']);
+export const waterPushKind = (k) => WATER_PUSH.has(k) || (typeof k === 'string' && /^Wave/.test(k));
+export const resistsWaterPush = (element, kind) => element === 'water' && waterPushKind(kind);

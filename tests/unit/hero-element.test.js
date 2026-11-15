@@ -48,3 +48,11 @@ test('a mage of an element casts the spells of his own element with a bare hand,
     assert.equal(bareGate('Waterball', { ...st, elementOwn: true }).ok, true);
     assert.equal(bareGate('Fireball', { ...st, elementOwn: false }).ok, false, 'another element still wants the wand');
 });
+
+import { resistsWaterPush } from '../../src/game/HeroElement.js';
+test('a water mage is not moved by water (his own wave, a foe\'s vortex, a ball); others are', () => {
+    for (const k of ['WaveAttack', 'WaterVortex', 'Waterball', 'WaveRoll']) assert.equal(resistsWaterPush('water', k), true, k);
+    assert.equal(resistsWaterPush('fire', 'WaveAttack'), false);
+    assert.equal(resistsWaterPush('water', 'Bombardo'), false, 'only water');
+    assert.equal(resistsWaterPush(null, 'WaveAttack'), false);
+});

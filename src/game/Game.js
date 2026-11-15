@@ -174,6 +174,7 @@ import { HeroWings } from './HeroWings.js';
 import { HeroElement, bareOwn } from './HeroElement.js';
 import { AirVortex } from './AirVortex.js';
 import { HeroShards } from './HeroShards.js';
+import { ElementAura } from '../fx/ElementAura.js';
 import { WingFlight } from './WingFlight.js';
 import { ImperiusControl } from './ImperiusControl.js';
 import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
@@ -786,6 +787,7 @@ export class Game {
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this);
         this.elementalMages = new ElementalMages(this);
+        this.elementAura = new ElementAura(this); // the element round a mage as things you see: leaves, flames, drops, pebbles (ElementAura.js)
         this.earthMages = new EarthMages(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
         this.hellGate = new HellGate(this); // the gates of hell: «Pentagranium Infernum», the passage down and back (HellGate.js; rules — HellRules.js, the map — HellMap.js)
         this.hellRealm = new HellRealm(this); // hell's sky, fog, light, lava, sparks and sound — where the hero is (HellRealm.js)
@@ -1914,6 +1916,8 @@ export class Game {
         if (casterId === 'local' || casterId === this.localId) {
             return { origin: this.castOrigin(side), dir: this.character.getHandDirection(side) };
         }
+        const hv = this.castleLife?.byId?.get(casterId)?.hangBeam; // (a fire mage's hanging beam: it is let go of his hand and floats on — ElementalMages.startHang)
+        if (hv) return { origin: hv.origin, dir: hv.dir };
         const r = this.remotes.get(casterId);
         return r ? r.handPose(side) : null;
     }
@@ -4147,6 +4151,7 @@ export class Game {
         if (this.config.school) for (const m of [...coachSamples(), ...schoolDecorSamples()]) zoo.add(m); // (the school's magic coach — SchoolCoach.js) // (the sheet-ghost's outside and inside, the castle's chairs and candles, the flame — GhostFx.js, GhostProps.js)
         for (const m of this.beslan?.sampleModels?.() || []) zoo.add(m); // (Beslan's grass: its shader)
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
+        zoo.add(...(this.elementAura?.sampleModels() || [])); // (the mages' rings: leaves, flames, drops, pebbles)
         zoo.add(this.plants.sampleModels()); // (the Brightflower: stems, petals that open in the shader, flame, heart — BrightFlowerFx)
         zoo.add(plantSamples()); // (telewilpins and carnivorous heads: stems, petals, jaws, tendrils, the glow sprites — Plants.js)
         for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
@@ -4620,6 +4625,7 @@ export class Game {
         this.ghostCastle?.update(dt); sysMark('ghostCastle');
         this.earthMages?.update(dt); sysMark('earthMages');
         this.elementalMages?.update(dt); sysMark('elementalMages');
+        this.elementAura?.update(dt); sysMark('elementAura');
         this.groundVortex?.update(dt); sysMark('groundVortex');
         this.airFx?.update(dt); sysMark('airFx');
         this.featherfall?.update(dt); sysMark('featherfall');

@@ -1,5 +1,5 @@
 /** Original procedural martial choreography: water yields/coils, air turns, fire strikes. */
-export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat','waterSwat','airSpin','airLash','waterFreeze','waterHurl'];
+export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat','waterSwat','airSpin','airLash','waterFreeze','waterHurl','airSlash','airDash','airRise','airDrift'];
 const S=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
 export function elementalMagePose(m,T,mode,dt,t){
  m._acroActive=mode==='fireVault';
@@ -39,6 +39,21 @@ export function elementalMagePose(m,T,mode,dt,t){
   if(mode==='airSwat'){ // both palms sweep across: a gust turns the orb (variant 1: the other way)
    const p=S(u/.17)*(1-S((u-.32)/.3)),sd=m.elementVariant?-1:1;
    T.hy=sd*(.85-1.9*p);T.hx=.1;T.aLX=T.aRX=1.45+.25*p;T.aLZ=-1.0+sd*.9*p;T.aRZ=1.0+sd*.9*p;T.eL=T.eR=.2+.5*(1-p);T.lL=.4;T.lR=-.35;T.kL=-.7;T.kR=-.5;T.earthSpread=.3;
+  }
+  if(mode==='airDrift'){ // an idle dance: the air carries him — slow sways, the arms trace wide figures, one foot on tiptoe, the head tilted
+   const w=u*1.6;T.hy=Math.sin(w)*.55;T.hz=Math.cos(w*.5)*.1;T.hx=-.04;T.headX=-.1;T.headZ=Math.sin(w)*.12;
+   T.aLX=1.0+Math.sin(w*1.3)*.85;T.aRX=1.0+Math.cos(w*1.3)*.85;T.aLZ=-1.1-Math.sin(w)*.35;T.aRZ=1.1+Math.cos(w)*.35;T.eL=.35+Math.cos(w)*.3;T.eR=.35-Math.cos(w)*.3;
+   T.lL=.45+Math.sin(w)*.3;T.kL=-.7;T.lR=-.15;T.kR=-.25;T.earthSpread=.2;
+  }
+  if(mode==='airSlash'){ // the arms cross low in front (a gathering of the air), then fling out and up — the blades leave on the stroke
+   const g1=S(u/.38),p=S((u-.38)/.14)*(1-S((u-.7)/.35));
+   T.hx=.05+.25*p;T.hy=-.5*g1*(1-p)+.6*p;T.aLX=.45+1.3*p;T.aRX=.45+1.3*p;T.aLZ=(.55-1.95*p)*1;T.aRZ=(-.55+1.95*p);T.eL=T.eR=.9*(1-p)+.1;T.lL=.4*p+.15;T.kL=-.6;T.lR=-.3*p;T.earthSpread=.3+.2*p;
+  }
+  if(mode==='airDash'){ // a lunge along the wind: the body leans into it, the arms trail back, a long stride
+   T.hx=.5;T.hy=0;T.aLX=-.55;T.aRX=-.7;T.aLZ=-.35;T.aRZ=.35;T.eL=T.eR=.3;T.lL=.95;T.kL=-1.0;T.lR=-.9;T.kR=-.5;T.headX=-.25;T.earthSpread=.1;
+  }
+  if(mode==='airRise'){ // both arms drawn up out of the ground like pulling a rope, the back arched, rising onto the toes
+   const p=S(u/.85);T.hx=-.14*p;T.hy=Math.sin(u*9)*.06;T.aLX=T.aRX=.35+2.2*p;T.aLZ=-.35-.5*p;T.aRZ=.35+.5*p;T.eL=T.eR=.9*(1-p)+.1;T.headX=-.35*p;T.lL=.1;T.lR=-.1;T.kL=T.kR=-.1;T.earthSpread=.15;
   }
   if(mode==='airRun'){T.hx=.3;T.hy=0;T.aLX=1.1+Math.sin(t*10)*.65;T.aRX=1.1-Math.sin(t*10)*.65;T.aLZ=-.7;T.aRZ=.7;}
  }else{

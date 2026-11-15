@@ -93,7 +93,7 @@ export const PROTECTION_TARGETS = {
 
 /** The name a hit's kind is paid by (SPELL_COST): a duel charge, a ball, a bolt. */
 const HIT_SPELL = {
-    IceBall: 'Ice', FireDuel: 'FireVortex', ShardDuel: 'IceShards', IceDuel: 'Ice', IceDuelMaxima: 'IceMaxima', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
+    IceBall: 'Ice', FireDuel: 'FireVortex', ShardDuel: 'IceShards', GustDuel: 'Wind', IceDuel: 'Ice', IceDuelMaxima: 'IceMaxima', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
     Lightning: 'LightningStrike', Bombardo: 'Bombardo', BombardoMax: 'BombardoMaxima',
     // the Ice Queen's own blows (IceQueen.js; IceGiants.QUEEN_VS): the freeze, the spikes and the blade are as dear as «Айс Максима», shards and the gust as «Айс»
     DevilFire: 'Inferno', DevilBall: 'FireMaxima', DevilFist: 'BombardoMaxima', // (Дьяволос: струя давит щит как огонь — Combat.devilFire; шар и кулак щит ломают — Combat.breakShield)

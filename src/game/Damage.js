@@ -6,6 +6,7 @@
 export const DAMAGE = {
     AvadaKedavra: 25, // (no armour stops it — `pierce`)
     Sapira: 10,
+    GustDuel: 4, // one wind blade of the air mage's Slash
     ShardDuel: 3.5, // one ice shard of the water mage's «Shards» mode
     FireDuel: 8, // «Fire Vortex» as a duel charge (the fire mage's beam)
     Sands: 0, // only slows (Duel.SLOW) and shoves
