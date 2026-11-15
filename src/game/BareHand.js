@@ -34,7 +34,7 @@ export const isStop = (name) => name === 'Stand' || name === 'Stop';
  * @returns {{ok: boolean, why?: 'wand'}}
  */
 export function bareGate(name, st) {
-    if (st.hasWand || st.creative || st.bareMaster) return { ok: true };
+    if (st.hasWand || st.creative || st.bareMaster || st.elementOwn) return { ok: true }; // (st.elementOwn: a mage of an element and this is a spell of his element — HeroElement.bareOwn)
     if (BARE_FREE.has(name) || isStop(name)) return { ok: true };
     return { ok: false, why: 'wand' };
 }

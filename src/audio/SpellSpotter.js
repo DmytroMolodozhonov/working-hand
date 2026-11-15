@@ -49,6 +49,7 @@ const SAID = [
     ['инвизибл', 'инвизибилити', 'инвизибел'],
     ['граунд вортекс', 'граунт вортекс', 'граунд вортэкс', 'граунд вортикс'], // (Ground Vortex — both words together, GroundVortexWords.js)
     ['файр вортекс', 'фаер вортекс', 'файер вортекс', 'файр вортэкс'], // (Fire Vortex — both words together, ElementVortexWords.js)
+    ['шардс', 'шардз', 'шаардс'], // (Shards — the water mage's mode, one word)
     ['эрт вейл', 'эрс вейл', 'ерт вейл', 'эрт вэйл'], // (Earth Veil — both words together)
     ['эйр вортекс', 'эир вортекс', 'эйр вортэкс', 'аир вортекс'], // (Air Vortex)
     ['шилд', 'шилт', 'шиелд'], // (Shield — the earth vortex's shield word; does something only while it circles)

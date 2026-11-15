@@ -120,6 +120,17 @@ export class IceShards {
                 _m.compose(_p.set(_o.x, _o.y, _o.z), _q, _s.set(e, e, e)); this.mesh.setMatrixAt(n++, _m);
             }
         }
+        // --- my own ring (the water mage's «Shards» mode: HeroShards.js): hangs and turns round me while they wait for the volley
+        const hs = g.heroShards;
+        if (hs?.on && hs.n > 0 && me) {
+            const k = Math.min(1, hs._ot / GROW), e = k * k * (3 - 2 * k);
+            for (let i = 0; i < hs.n && n < SHARDS.MAX_LIVE; i++) {
+                const a = hs._ot * 2.6 + i * (Math.PI * 2 / hs.n), r = SHARDS.ORBIT_R * (0.9 + 0.3 * ((i * 7) % 3) / 2);
+                _o.x = me.x + Math.cos(a) * r; _o.z = me.z + Math.sin(a) * r; _o.y = me.y + 0.5 + 0.6 * ((i % 4) / 3) + 0.25 * Math.sin(hs._ot * 2 + i * 1.7);
+                _d.set(-Math.sin(a), 0.3, Math.cos(a)).normalize(); _q.setFromUnitVectors(_up, _d);
+                _m.compose(_p.set(_o.x, _o.y, _o.z), _q, _s.set(e, e, e)); this.mesh.setMatrixAt(n++, _m);
+            }
+        }
         this.mesh.count = n; this.mesh.instanceMatrix.needsUpdate = true;
     }
 

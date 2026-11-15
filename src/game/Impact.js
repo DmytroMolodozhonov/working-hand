@@ -146,7 +146,7 @@ export const SPELL_PHYSICS = {
     // (a wall of water knocks everyone it covers off the feet — a knight in armour too, not only a reel)
     WaveAttack: { push: 13, toss: 3.5, wet: true, always: true, down: 1.5 }, WaveAttackMaxima: { push: 20, toss: 4.7, wet: true, always: true, down: 2.5 },
     Thunderwave: { push: 20, thunder: true, jolt: 3 },
-    Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 }, FireDuel: { push: 6, jolt: 2 }, // (the fire mage's beam: a hot shove)
+    Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 }, FireDuel: { push: 6, jolt: 2 }, ShardDuel: { push: 3, jolt: 1 }, // (the fire mage's beam: a hot shove)
     Expelliarmus: { push: 3, jolt: 2 }, // (a jolt; what it really does is knock the wand out: Expelliarmus.js)
     // («Джолт»: a bolt of air — off the feet, thrown back and up, a tumble in the air (Duel.JOLT);
     //  the toss stays under a hurting fall's height on flat ground: only a real drop hurts)
@@ -186,7 +186,7 @@ export const SPELL_PHYSICS = {
     Caligo: null, // («Caligo»: a fog, nobody is pushed — DarkFog.js)
     Sectura: null, // («Sectura»: a cut, not a push — an invisible blade: Slash.js; the body is cut or wounded, nothing is shoved)
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
-    EarthDust: null, FireVortex: null, AirVortex: null, /* (the fire mage's smaller hellfire burns, it does not push; the air vortex lifts only the hero: AirVortex.js) */
+    IceShards: null, EarthDust: null, FireVortex: null, AirVortex: null, /* (the fire mage's smaller hellfire burns, it does not push; the air vortex lifts only the hero: AirVortex.js) */
     GroundVortex: { push: 7, jolt: 0.3 }, GroundShield: null, /* (a flying block of the earth vortex: GroundVortex.js; the shield word pushes nobody) */
     Pentagranium: null, // («Pentagranium <Name>»: a drawing on the ground — pushes nobody, Pentagranium.js)
     Cardilon: null, NihilisDuel: null, Nihilis: null, // («Nihilis Atra»: a cone of light against black magic — it pushes nobody, Nihilis.js)

@@ -36,7 +36,7 @@ import { spellElements } from '../ui/SpellElements.js';
 
 /** What holds concentration: key → its name on the screen and its own words. */
 export const HELD = {
-    WaterVortex: { ru: 'Вихрь', icon: '🌀', own: ['WaterVortex', 'AirBubble', 'AirBubbleMaxima', 'Attack', 'Frozen', 'Ice', 'FireMaxima'] },
+    WaterVortex: { ru: 'Вихрь', icon: '🌀', own: ['WaterVortex', 'IceShards', 'AirBubble', 'AirBubbleMaxima', 'Attack', 'Frozen', 'Ice', 'FireMaxima'] },
     WaterStorm: { ru: 'Водяная буря', icon: '🌊', own: ['WaterVortexSuperMaxima'] },
     Waterball: { ru: 'Водяной шар', icon: '💧', own: ['Waterball', 'WaterForming', 'Maxima', 'Frozen', 'Ice'] },
     Levitation: { ru: 'Левиоса', icon: '🪶', own: ['Levitation', 'Attack'] },

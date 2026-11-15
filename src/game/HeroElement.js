@@ -85,3 +85,13 @@ export class HeroElement {
 /** The network form of an element: 0 none, 1…4 = ELEMENTS index + 1. */
 export const elementIndex = (id) => ELEMENTS.indexOf(id) + 1;
 export const elementAt = (n) => ELEMENTS[(n | 0) - 1] || null;
+
+/**
+ * A mage of an element casts the spells of his OWN element with a bare hand, no wand (the author 15.11: «маги стихий свою стихию могут без палочки колдовать, если получат
+ * через пентаграмму такой стиль»): the spell's categories include his element, or it is one of the element's own modes (the ice shards of water).
+ */
+export const ELEMENT_MODES = { water: ['IceShards'], earth: ['EarthDust'], fire: [], air: [] };
+export function bareOwn(element, spellId) {
+    if (!isElement(element) || !spellId) return false;
+    return spellElements(spellId).includes(element) || KEY_SPELL[element] === spellId || (ELEMENT_MODES[element] || []).includes(spellId);
+}

@@ -93,7 +93,7 @@ export class GroundVortex {
         const g = this.game;
         const w = g.items?.heldOf?.('wand');
         if (w) return w.side;
-        if (!freeMode(g)) return null;
+        if (!freeMode(g) && !g.pentagranium?.bare && g.heroElement?.id !== 'earth') return null; // (a bare hand: Creative, Palmaris, or a mage of EARTH)
         const hand = castingHand(g);
         return hand ? hand.side : (g.magicHand || g.lastMagicHand || 'right');
     }

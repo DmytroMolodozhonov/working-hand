@@ -236,7 +236,7 @@ export class Hellfire {
         const g = this.game;
         const w = g.items?.heldOf?.('wand');
         if (w) return w.side;
-        if (g.config?.mode !== 'creative' && g.config?.mode !== 'test') return null;
+        if (g.config?.mode !== 'creative' && g.config?.mode !== 'test' && !g.pentagranium?.bare && !(g.heroElement?.id === 'fire')) return null; // (a bare hand: Creative, the rite of Palmaris, or a mage of FIRE — his own element)
         const ch = g.character;
         const pref = g.magicHand || g.lastMagicHand || 'right';
         for (const s of [pref, pref === 'right' ? 'left' : 'right']) if (ch.isArmRaised?.(s)) return s;

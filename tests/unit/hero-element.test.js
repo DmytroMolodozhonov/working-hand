@@ -34,3 +34,17 @@ test('the Creative setting is normalised; old worlds have none', () => {
     assert.equal(normalizeHero({ element: 'x' }).element, null);
     assert.equal(normalizeHero({}).element, DEFAULT_HERO.element);
 });
+
+import { bareOwn } from '../../src/game/HeroElement.js';
+import { bareGate } from '../../src/game/BareHand.js';
+test('a mage of an element casts the spells of his own element with a bare hand, and only those', () => {
+    assert.equal(bareOwn('water', 'WaterVortex'), true);
+    assert.equal(bareOwn('water', 'IceShards'), true);
+    assert.equal(bareOwn('earth', 'Earthquake'), true);
+    assert.equal(bareOwn('fire', 'FireVortex'), true);
+    assert.equal(bareOwn('fire', 'Waterball'), false);
+    assert.equal(bareOwn(null, 'Fireball'), false);
+    const st = { hasWand: false, creative: false, bareMaster: false };
+    assert.equal(bareGate('Waterball', { ...st, elementOwn: true }).ok, true);
+    assert.equal(bareGate('Fireball', { ...st, elementOwn: false }).ok, false, 'another element still wants the wand');
+});

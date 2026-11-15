@@ -233,6 +233,7 @@ export const TARGETS = {
     Expelliarmus: { does: 'none', why: 'в когтях ничего нет — не действует' },
     Disarmor: { does: 'none', why: 'на каменной шкуре нечего снять — не действует' },
     SapiraDuel: { does: 'none', why: '«Сапира»: не действует (камень)' },
+    ShardDuel: { does: 'none', why: 'осколки льда о камень: не действуют' },
     FireDuel: { does: 'none', why: 'огненный заряд мага огня: камень не горит' },
     SandsDuel: { does: 'none', why: '«Даст»: песок в камне — не действует' },
     LevitateDuel: { does: 'none', why: 'вырывается из невидимой руки — не действует' },

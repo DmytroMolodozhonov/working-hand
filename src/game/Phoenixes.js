@@ -107,6 +107,7 @@ export const TARGETS = {
     Jolt: { does: 'push', why: '«Джолт»: лёгкую птицу отбрасывает по воздуху, кувырком, без урона; нападение' },
     Firefighting: { does: 'push', why: '«Firefighting»: лёгкий толчок, пылающий феникс гаснет и бросает атаку; без урона' },
     SapiraDuel: { does: 'hit', why: '−10' },
+    ShardDuel: { does: 'hit', why: 'осколок льда ранит' },
     FireDuel: { does: 'none', why: 'огонь — стихия феникса: не вредит' },
     SandsDuel: { does: 'hit', why: '«Даст»: −4, песок с перьев слетает' },
     Sapira: { does: 'hit', why: 'луч «Сапира»: −5' },
@@ -827,6 +828,7 @@ export class Phoenixes {
         if (!this.auth) { this._send({ op: 'hit', id: f.id, dmg: 0, kind: spell }); return; }
         if (spell === 'AvadaKedavra') { g.fx?.lightFlash?.(phoenixCenter(f, _v3), 0x2bff00, 6, 0.55, 28); this.hit(f, 25, spell, by); }
         else if (spell === 'SapiraDuel') this.hit(f, 10, spell, by);
+        else if (spell === 'ShardDuel') this.hit(f, 3, spell, by);
         else if (spell === 'SandsDuel') this.hit(f, 4, spell, by);
         else if (spell === 'Stupefy') { this.hit(f, 2, spell, by); if (!f.dead) this._down(f); }
         else if (spell === 'IceDuel' || spell === 'IceDuelMaxima') this.hit(f, 0, 'IceDuel', by); // («Айс» / «Frozen» and its Maxima: the ice melts on it)

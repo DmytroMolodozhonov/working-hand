@@ -26,3 +26,10 @@ export function earthVeilWords(text) {
     for (let i = 0; i + 1 < w.length; i++) if (EARTH.test(w[i]) && VEIL.test(w[i + 1])) return true;
     return false;
 }
+
+const SHARDS = /^(?:shards?|shard|шардс|шардз|шарды|шаардс|чардс|шартс)$/;
+/** «Shards» — the water mage's ice-shards mode of his Water Vortex (HeroShards.js): the English word, alone (or with a filler word before it). */
+export function shardsWords(text) {
+    const w = words(text);
+    return w.length > 0 && w.length <= 2 && w.some((q) => SHARDS.test(q));
+}

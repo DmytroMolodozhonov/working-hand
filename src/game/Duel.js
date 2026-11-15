@@ -99,6 +99,8 @@ export const DUEL_SPELLS = {
     //  on, or stands a little beside the hand's line, is still reached)
     LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса', bend: 0.8, turn: 6 },
     // Slower and thicker: a dark-violet ball of force rolling through the air
+    // one ice shard of the water mage's «Shards» mode (HeroShards.js): thin, fast, icy-white; a volley of them, 3.5 each
+    ShardDuel: { color: 0xa9dcff, name: 'Осколок льда', speed: 26, core: 0.03, glow: 0.11, coreColor: 0xffffff },
     // «Fire Vortex» as a duel charge (the fire mage's answer to a charge flying at him: a beam of fire meets it — the author 15.11): a roaring orange bolt with a white-hot core,
     // embers behind it; whoever it hits burns (−8, the place catches fire). White magic (no darkening).
     FireDuel: { color: 0xff6a14, name: 'Fire Vortex (дуэльный)', speed: 14, core: 0.06, glow: 0.3, coreColor: 0xfff0b0, jag: 1.4 },
@@ -1458,6 +1460,10 @@ export class Duel {
                 g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
                 hit(DAMAGE.Sapira);
                 if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
+            } else if (spell === 'ShardDuel') {
+                g.fx.lightFlash(p, 0xbfe9ff, 1.5, 0.2, 10);
+                hit(DAMAGE.ShardDuel);
+                if (!c.dead) g.creatureImpact?.spellHit(c, 'ShardDuel', src, byId);
             } else if (spell === 'FireDuel') {
                 g.fx.lightFlash(p, 0xff6a14, 3, 0.4, 20);
                 hit(DAMAGE.FireDuel);
@@ -1578,6 +1584,11 @@ export class Duel {
             if (c.enabled) c.damage(DAMAGE.Sapira, byId, 'Sapira');
             else g.hud.setVoice('💜 Сапира попала в вас', true);
             g.impact?.apply({ v: push(12), from, by: byId, spell: 'SapiraDuel', jolt: 3, noShield: true });
+        } else if (spell === 'ShardDuel') {
+            g.fx.lightFlash(p, 0xbfe9ff, 2, 0.2, 10);
+            if (c.enabled) c.damage(DAMAGE.ShardDuel, byId, 'ShardDuel');
+            else g.hud.setVoice('🧊 Осколок льда попал в вас', true);
+            g.impact?.apply({ v: push(3), from, by: byId, spell: 'ShardDuel', jolt: 1, noShield: true });
         } else if (spell === 'FireDuel') {
             g.fx.lightFlash(p, 0xff6a14, 4, 0.4, 20);
             g.hud.flashColor?.('rgba(255, 106, 20, 0.6)');
@@ -1634,6 +1645,9 @@ export class Duel {
                 g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
                 g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
                 if (!z.isDead) g.creatureImpact?.spellHit(z, 'SapiraDuel', src, byId);
+            } else if (spell === 'ShardDuel') {
+                g.damageZombie(z, DAMAGE.ShardDuel, true, _v2.set(0, 0, 1), byId);
+                if (!z.isDead) g.creatureImpact?.spellHit(z, 'ShardDuel', src, byId);
             } else if (spell === 'FireDuel') {
                 g.fx.lightFlash(p, 0xff6a14, 3, 0.4, 20);
                 g.damageZombie(z, DAMAGE.FireDuel, true, _v2.set(0, 0, 1), byId);

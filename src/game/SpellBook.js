@@ -75,7 +75,8 @@ export function knows(name, who = {}) {
     if (who.mode === 'creative' && who.hero) { // (Творческий: «все заклинания есть» или «только сильного мага» — HeroSetup.js; не известное — доучить свитком можно)
         if (knownInCreative(who.hero, name) || START_SPELLS.has(name)) return true;
     } else if (free(who.mode) || (START_SPELLS.has(name) && !(who.school && SCHOOL_UNKNOWN.has(name)))) return true;
-    if (who.element && ELEMENT_KEY[who.element] === name) return true; // (a mage of an element knows its key spell: Water / Ground / Fire / Air Vortex — HeroElement.js)
+    if (who.element && ELEMENT_KEY[who.element] === name) return true;
+    if (who.element === 'water' && name === 'IceShards') return true; // (the ice-shards mode of his Water Vortex) // (a mage of an element knows its key spell: Water / Ground / Fire / Air Vortex — HeroElement.js)
     if (name === 'Flight') return who.mode !== 'freeworld' || !!who.flight || !!who.learned?.has?.('Flight');
     const k = teachKey(name);
     return !!who.spells?.[k] || !!who.learned?.has?.(k) || (k === 'Breakthrough' && (!!who.spells?.Groundprud || !!who.learned?.has?.('Groundprud')));

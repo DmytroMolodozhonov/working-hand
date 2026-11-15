@@ -94,6 +94,7 @@ export const TARGETS = {
     Disarmor: { does: 'dodge', why: 'перья не снимешь; простое — улетает' },
     Jolt: { does: 'dodge', why: '«Джолт» — простое: не действует, улетает' },
     SapiraDuel: { does: 'dodge', why: 'простое: не действует, улетает' },
+    ShardDuel: { does: 'dodge', why: 'простое: не действует, улетает' },
     FireDuel: { does: 'dodge', why: 'простое: не действует, улетает' },
     SandsDuel: { does: 'dodge', why: 'простое: не действует, улетает' },
     Bombardo: { does: 'dodge', why: '«Бомбардо», пушки: простое — улетает целой (а «Бомбардо Максима» со свитка — ранит)' },

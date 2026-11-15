@@ -171,8 +171,9 @@ import { DragonRide } from './DragonRide.js';
 import { DragonForm } from './DragonForm.js';
 import { musicPlace } from '../audio/MusicDirector.js';
 import { HeroWings } from './HeroWings.js';
-import { HeroElement } from './HeroElement.js';
+import { HeroElement, bareOwn } from './HeroElement.js';
 import { AirVortex } from './AirVortex.js';
+import { HeroShards } from './HeroShards.js';
 import { WingFlight } from './WingFlight.js';
 import { ImperiusControl } from './ImperiusControl.js';
 import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
@@ -941,6 +942,7 @@ export class Game {
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
         this.walkRec = new WalkRecorder(this); // F8: «Ходьба» — a recording to tune walking back (WalkRecorder.js)
         this.mermaid = new Mermaid(this); // «Зелье русалки»: a fish's tail for 12 min (Mermaid.js)
+        this.heroShards = new HeroShards(this); // the water mage's ice-shards mode of the Water Vortex (HeroShards.js)
         this.airVortex = new AirVortex(this); // «Air Vortex»: the wind holds the hero off the ground (AirVortex.js)
         this.heroElement = new HeroElement(this); // the hero as a mage of one element (the price of its spells halves; HeroElement.js)
         this.wings = new HeroWings(this); // «Зелье крыльев»: the wings grow on the back, for good (HeroWings.js; the flight — WingFlight.js)
@@ -2163,7 +2165,7 @@ export class Game {
         // the held spell's own words, Lumos, Nox, «стоп», the shield are free; Creative too)
         if (this.focus.gate(name, isFinal, !!BUILD_SPELLS[name])) return null;
         // no wand in the hand: only «Акцио» and «Protection» (BareHand.js) — until the white pentagram «Pentagranium Palmaris» is done; Creative is free
-        if (!bareGate(name, { hasWand: !!this.wandSide(), creative: this.config.mode === 'creative' || this.config.mode === 'test', bareMaster: !!this.pentagranium?.bare }).ok) {
+        if (!bareGate(name, { hasWand: !!this.wandSide(), creative: this.config.mode === 'creative' || this.config.mode === 'test', bareMaster: !!this.pentagranium?.bare, elementOwn: bareOwn(this.heroElement?.id, name) }).ok) {
             this.lastCastWhy = BARE_HINT;
             if (isFinal && !this._bareHinted) { this._bareHinted = true; this.hud.setVoice(BARE_HINT, true, true); } // (large, once a session)
             return null;
@@ -2245,6 +2247,7 @@ export class Game {
         if (name === 'Lumos' || name === 'LumosMaxima' || name === 'LumosFlashlight' || name === 'LumosAhead' || name === 'LumosFollowing' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
         if (name === 'Rescue') return this.bleeding.rescue(isFinal);
         if (name === 'Breakthrough' || name === 'BreakthroughMaxima') return this._castBreakthrough(name, isFinal);
+        if (name === 'Attack' && this.heroShards?.on && this.heroShards.n > 0) return this.heroShards.fire() ? 'Attack' : null; // (the ice shards hang round me: «Атак» looses them)
         if (name === 'Attack' && this.sunRay?.charged) { const r = this.sunRay.attack(isFinal); if (r !== undefined) return r; } // (the Sun's energy in the wand: the burning beam at the one it points at — SunRay.js)
         if (name === 'Attack' && this.whirl?.mine) return this.whirl.attack(isFinal); // (the whirled beams: let them go at him — Whirl.js)
         if (name === 'Attack') {
@@ -2338,6 +2341,7 @@ export class Game {
         if (name === 'FireVortex') return this.hellfire.castLite(isFinal); // (the fire mage's key spell: a smaller, white hellfire)
         if (name === 'AirVortex') return this.airVortex.cast(isFinal);
         if (name === 'EarthDust') return this._castEarthDust(isFinal);
+        if (name === 'IceShards') return this.heroShards.say(isFinal);
         if (name === 'FireSerpent') return this.fireSerpent.cast(isFinal);
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
@@ -2541,6 +2545,7 @@ export class Game {
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
         if (this.airVortex?.stop('stop')) done.push('воздушный вихрь');
+        if (this.heroShards?.stop('stop')) done.push('ледяные осколки');
         const hf = this.hellfire?.sayStop(); // («стоп» is free for it)
         if (hf === true) done.push('адский огонь');
         const ws = this.waterStorm?.sayStop(); // (and 50 for the water storm)
@@ -4874,6 +4879,7 @@ export class Game {
         this.monster.update(dt); // (the monster form: the size, the clock, the steps, the fists — before the body walks)
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
+        this.heroShards?.update(dt);
         if (this.airVortex?.on) this.airVortex.update(dt, this.camera.getWorldDirection(_airLook).y); // (the wind holds the hero — AirVortex.js; before his own step)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.fireSerpent?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.wingFlight?.airborne && !(this.boards?.mounted || this.boats?.riding) && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)

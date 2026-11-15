@@ -114,6 +114,7 @@ export const SPELL_COST = {
     CreateBridge: 10, // planks over a river or a ravine, 2–40 m, +0.5 mana a metre beyond 16 (Bridge.js; no scroll)
     Fireworks: 15, // once, at the start (the author: «снимается 15 маны»); the 10 s that follow cost nothing (Fireworks.js; no scroll)
     Invisibility: 250, // nobody sees me; then 2 a second (only from a scroll — Invisibility.js)
+    IceShards: 12, // «Shards»: the water mage's vortex water turns to a ring of ice shards (HeroShards.js); half for a water mage
     EarthDust: 10, // the earth mage's smoke screen (EarthMages: out of mana / hurt, running away): the ground bursts near the foe and a great cloud of dust goes up (half for an earth mage)
     FireVortex: 20, // «Fire Vortex»: the small white hellfire (Hellfire.castLite): 20 at once, then 1 a second; half for a fire mage
     AirVortex: 20, // «Air Vortex»: the wind holds the hero off the ground (AirVortex.js): 20, then 1 a second

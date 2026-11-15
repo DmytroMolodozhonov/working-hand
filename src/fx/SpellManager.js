@@ -31,7 +31,7 @@ import { bridgeWords } from '../game/Bridge.js';
 import { visibleGodiWords } from '../game/VisibleGodiWords.js';
 import { nihilisWords } from '../game/NihilisWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
-import { fireVortexWords, airVortexWords, earthVeilWords } from '../game/ElementVortexWords.js';
+import { fireVortexWords, airVortexWords, earthVeilWords, shardsWords } from '../game/ElementVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 import { pentagramWords, pentFirstSaid, INFERNUM_WORD } from '../game/PentagramWords.js';
 import { creationWords } from '../game/CreationWords.js';
@@ -269,6 +269,7 @@ export function matchSpell(text) {
     if (has('райтинг', 'райтин', 'врайтин', 'райдинг', 'writing', 'writin', 'righting', 'латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
     // «Ground Vortex» (both words) and its «Shield»: before the water's «vortex» (GroundVortexWords.js)
     if (groundVortexWords(s)) return 'GroundVortex';
+    if (shardsWords(s)) return 'IceShards'; // (the water mage's ice-shards mode — ElementVortexWords.js)
     if (earthVeilWords(s)) return 'EarthDust'; // (the earth smoke screen — ElementVortexWords.js)
     if (fireVortexWords(s)) return 'FireVortex'; // (the fire / air mage's key spells — ElementVortexWords.js)
     if (airVortexWords(s)) return 'AirVortex';

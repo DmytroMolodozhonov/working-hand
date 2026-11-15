@@ -395,7 +395,7 @@ export class WaterVortex {
         const g = this.game;
         const w = g.items?.heldOf?.('wand');
         if (w) return w.side;
-        if (g.config?.mode !== 'creative') return null;
+        if (g.config?.mode !== 'creative' && g.config?.mode !== 'test' && !g.pentagranium?.bare && g.heroElement?.id !== 'water') return null; // (a bare hand: Creative, Palmaris, or a mage of WATER)
         const ch = g.character;
         const pref = g.magicHand || g.lastMagicHand || 'right';
         for (const s of [pref, pref === 'right' ? 'left' : 'right']) if (ch.isArmRaised?.(s)) return s;
