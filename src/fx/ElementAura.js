@@ -27,7 +27,7 @@ const BUCKETS = { leaf: [0xf6f2e4, 0xe3b04a, 0xb8642a, 0x9cc24a], flame: [0xff4a
 const KIND = {
     air: { mesh: 'leaf', n: [12, 26], r: [1.4, 3.0], h: [0.3, 4.4], spin: 2.6, bob: 0.5, size: [0.75, 1.35], cols: [0x7fae3a, 0x9bc255, 0xc9a35a, 0x8a6a3a, 0xf1f6ff, 0xdbe7d0] },
     fire: { mesh: 'flame', n: [8, 15], r: [1.0, 1.8], h: [0.4, 3.3], spin: 2.2, bob: 0.35, size: [0.9, 1.6], cols: [0xff7a1a, 0xff4a00, 0xffb030, 0xffd86a] },
-    water: { mesh: 'drop', n: [6, 12], r: [0.9, 1.9], h: [0.6, 3.2], spin: 2.8, bob: 0.3, size: [0.34, 0.6], cols: [0x7ccfff, 0x9fe0ff, 0xd8f4ff, 0x56b4f0] },
+    water: { mesh: 'drop', n: [12, 22], r: [1.0, 2.2], h: [0.6, 3.2], spin: 2.8, bob: 0.3, size: [0.6, 1.1], cols: [0x7ccfff, 0x9fe0ff, 0xd8f4ff, 0x56b4f0] },
     earth: { mesh: 'pebble', n: [4, 8], r: [1.2, 2.0], h: [0.6, 3.0], spin: 1.1, bob: 0.2, size: [0.3, 0.6], cols: [0x7d6a55, 0x6b5440, 0x8a7a64, 0x5a4a3c] },
 };
 
@@ -118,7 +118,7 @@ export class ElementAura {
             let x = s.x + Math.cos(a) * r, z = s.z + Math.sin(a) * r, y = s.y + h;
             if (s.element === 'water') { // (tilted rings: an orrery)
                 const tilt = 0.5 + 0.5 * f, rr = r * 0.9;
-                x = s.x + Math.cos(a) * rr; z = s.z + Math.sin(a) * rr * Math.cos(tilt); y = s.y + 1.7 + Math.sin(a) * rr * Math.sin(tilt) * 0.9 + Math.sin(this.t + i) * 0.1;
+                x = s.x + Math.cos(a) * rr; z = s.z + Math.sin(a) * rr * Math.cos(tilt); y = s.y + 2.0 + Math.sin(a) * rr * Math.sin(tilt) * 1.0 + Math.sin(this.t + i) * 0.12;
             }
             const size = K.size[0] + (K.size[1] - K.size[0]) * f;
             const grow = Math.min(1, this.t * 2 - lane * 0.4); // (they come in one after another when the aura first appears)
