@@ -21,6 +21,7 @@ import { isDivine } from './ProtectionGods.js';
 import { normalizeSpawn, normalizeFoe } from './SpawnSpots.js';
 import { RECIPES } from './Potions.js';
 import { heroItems, KIT_MAX } from './HeroItems.js';
+import { normalizeElement } from './HeroElement.js';
 
 export const HERO = {
     CELLS_MIN: 30, CELLS_MAX: 100000, CELLS_DEFAULT: 500,
@@ -46,6 +47,7 @@ export const DEFAULT_HERO = Object.freeze({
     wings: false, // the hero starts with grown wings (HeroWings.js: flying by the arms' strokes) — the author: «галочка с крыльями или без, по умолчанию без»
     items: [], // the things (HeroItems.START_ITEMS ids) the hero starts with in the interface — the author 02.11: «как зелья, но для предметов»; with the potions at most KIT_MAX
     potions: [], // the potions (RECIPES ids) the hero starts with in the bag, one flask each — the author 05.11: «выпадающий список, где можно выбрать любое зелье… несколько или ни одного»
+    element: null, // the hero is a mage of one element (HeroElement.js): null | 'water' | 'earth' | 'fire' | 'air' — the author 15.11
     noCrew: false, // ships without sailors (and the black ship without Black Moustache and his skeletons) — Sailors.setCrewless
 });
 
@@ -76,6 +78,7 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         wandBonus: clamp(Math.round(num(r.wandBonus, b.wandBonus ?? 0)), 0, HERO.WAND_MAX),
         noCrew: r.noCrew == null ? !!b.noCrew : !!r.noCrew,
         wings: r.wings == null ? !!b.wings : !!r.wings,
+        element: normalizeElement(r.element === undefined ? b.element : r.element),
         ...kit(r, b),
         friendSame: r.friendSame == null ? b.friendSame !== false : !!r.friendSame,
     };

@@ -14,6 +14,7 @@ import { IceShards } from './IceShards.js';
 import { SHARDS, shardAim } from './ElementalRules.js';
 import { elementalEndurance, AIR_THROW, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
+import { elementK } from './HeroElement.js';
 import {FLIGHT} from './Flight.js';
 import { FEATHER } from './Featherfall.js';
 import { isImpulse } from './WindImpulse.js';
@@ -168,7 +169,7 @@ export class ElementalMages {
   else _o.set(v.x-Math.sin(v.yaw)*.9,v.y+2.7,v.z-Math.cos(v.yaw)*.9);
   _d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
   if(!isImpulse(name)&&!g.collision.lineOfSight?.(_o.x,_o.y,_o.z,foe.x,foe.y,foe.z,.2)&&g.collision.lineOfSight)return false;
-  if(!this.pay(v,SPELL_COST[name]??10))return false;
+  if(!this.pay(v,(SPELL_COST[name]??10)*elementK(v.element,name)))return false; // (a mage's own element: half the price — the author 15.11)
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);g.sound?.spellCast?.(name,_o);
   v.aimPitch=Math.asin(_d.y);v.castT=.6;v.model.castNow=true;this.engaged(v);return true;
  }

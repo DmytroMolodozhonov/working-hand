@@ -539,7 +539,7 @@ export class Combat {
     /** Pay the fatigue of a spell that was cast. */
     /** Fatigue a spell costs (a wand in the hand saves 15%). */
     costOf(name, extra = 0) {
-        const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
+        const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1) * (this.game.heroElement?.k(name) ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
         return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardDispel|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * wandCostMul(w) * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }

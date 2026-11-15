@@ -67,14 +67,15 @@ test('air mage at 17 metres uses a gust whose real reach can touch the opponent'
 });
 
 test('air mage uses paid body-centred Wind Impulse to repel a nearby opponent',()=>{
- for(const [distance,name,cost] of [[2,'WindImpulse',10],[7,'WindImpulseMaxima',40]]){
+ // (15.11: a mage's own element costs half — HeroElement.elementK: WindImpulse 10 → 5, Maxima 40 → 20)
+ for(const [distance,name,cost] of [[2,'WindImpulse',5],[7,'WindImpulseMaxima',20]]){
   const f=fixture('air');f.g.castleLife._playerPos=()=>({x:0,y:2,z:-distance});
   f.v.elemental.flightCd=99;f.em.phase(f.v,'Sweep');f.v.elemental.t=.46;
   const mana=f.v.mana;f.em.think(f.v,.01);
   const cast=f.casts.find(c=>c[0]===name);assert.ok(cast,name);assert.deepEqual(cast[1].toArray(),[0,1.5,0]);
   assert.equal(mana-f.v.mana,cost);assert.ok(f.sent.some(c=>c[0]===name));
  }
- const f=fixture('air',9);assert.equal(f.em.cast(f.v,'WindImpulse',{x:0,y:2,z:-2}),false);assert.equal(f.casts.length,0);
+ const f=fixture('air',4);assert.equal(f.em.cast(f.v,'WindImpulse',{x:0,y:2,z:-2}),false);assert.equal(f.casts.length,0);
 });
 
 test('elemental costumes retain ordinary seeded faces, hair and beards instead of replacing everyone with a clone',()=>{

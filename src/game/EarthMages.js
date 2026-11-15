@@ -7,6 +7,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { GV, digCells, liftable, lifted, hitBlocks, sweepsShield } from './GroundVortexRules.js';
 import { findPassage } from './Stitching.js';
 import { SPELL_COST } from './Combat.js';
+import { elementK } from './HeroElement.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 const _at=new THREE.Vector3(),_dir=new THREE.Vector3(),_hit=new THREE.Vector3(),_slot={};
 const modeOf=p=>'earth'+p[0].toUpperCase()+p.slice(1);
@@ -42,7 +43,7 @@ export class EarthMages {
   a.slab=null;a.stitchPose=0;a.wallPlan=null;a.phase='rest';a.t=0;a.fired=false;a.strike=0;
   v.model.earthPoseT=undefined;v.castT=0;
  }
- _pay(v,n){if(v.mana<n)return false;v.mana-=n;return true;}
+ _pay(v,n){n*=elementK('earth','GroundVortex');if(v.mana<n)return false;v.mana-=n;return true;} // (his own element: half the price — the author 15.11)
  /** Hops (ElementalMove.js), not a slide round the foe: a few steps to a free place, a pause, the body turned the way he goes; a blocked way → the other one. */
  _reposition(v,foe,dt,recover){
   const L=this.game.castleLife,a=v.earth,foeId=v.foe,h=v.hop||(v.hop=newHop());

@@ -10,6 +10,7 @@ import { rankDuelPower, rankDuelRange, WIZ_RANK_RU } from '../game/WizardAI.js';
 import { SPAWN_SPOTS, SPAWN_GROUPS, groupOfSpot, DUEL_FOES } from '../game/SpawnSpots.js';
 import { RECIPES } from '../game/Potions.js';
 import { START_ITEMS, KIT_MAX } from '../game/HeroItems.js';
+import { ELEMENTS, ELEMENT_NAME, ELEMENT_ICON } from '../game/HeroElement.js';
 
 const T = {
     mana: 'Ячейки маны — сколько маны вы можете накопить. С бесконечной маной заклинания ничего не стоят и колдовать можно сколько угодно. Если убрать галочку, мана станет обычной: тратится на заклинания и сама набирается обратно (1 в секунду). Впишите, сколько ячеек у вас будет.',
@@ -26,6 +27,7 @@ const T = {
     wings: 'Герой появляется с выросшими крыльями (как после зелья крыльев). Взлететь: разбегитесь и машите обеими руками сверху вниз; в полёте тоже машите время от времени, иначе упадёте. Наклон туловища вперёд — вниз, назад — вверх, вбок — поворот. Мягко садитесь: от удара о землю можно разбиться.',
     potions: `Какие зелья будут у вас в интерфейсе с самого начала: отметьте любые — несколько или ни одного. Каждого по одной колбе. Зелья и предметы вместе — не больше ${KIT_MAX}.`,
     items: `Какие вещи будут у вас с самого начала: оружие, лук, щит, палочка и другое — отметьте любые. Если вещей и зелий больше, чем ячеек, ячеек станет больше. Вещей и зелий вместе — не больше ${KIT_MAX}. Пьедесталов с вещами у начала больше нет.`,
+    element: 'Герой — маг одной стихии (воды, земли, огня или воздуха): все заклинания этой стихии стоят вдвое дешевле, защита становится стихийной. Стать магом другой стихии можно только пентаграммой — старое преимущество тогда пропадает.',
     noCrew: 'Корабли в порту и в море стоят пустыми: на них нет ни капитана, ни моряков. Чёрный корабль тоже без капитана Чёрные Усы и скелетов — на нём можно спокойно осмотреться. Удобно, чтобы проверить корабли отдельно от команды.',
     health: 'Здоровье. «Бессмертен» — герой не получает урона и не умирает (так в Творческом было всегда). «Обычное здоровье» — как в Свободном мире: удары, огонь, падение ранят, а при нуле герой погибает, роняет вещи и возрождается.',
     maxHp: 'Сколько здоровья у героя при обычном здоровье. По умолчанию 20 — как в Свободном мире.',
@@ -60,6 +62,7 @@ const html = (p) => `
   <div class="hero-row" id="${p}-wand-row" hidden title="${T.wand}"><label for="${p}-wand">🪄 Сила палочки: +</label> <input type="number" id="${p}-wand" min="0" max="${HERO.WAND_MAX}" step="5" value="0"> % <span class="mp-hint">к силе ваших дуэльных заклинаний (0 — без добавки)</span></div>
   <div class="hero-row" id="${p}-foe-row" hidden title="${T.foe}"><label for="${p}-foe">⚔️ Соперник на арене:</label> <select id="${p}-foe">${DUEL_FOES.map(foeOption).join('')}</select></div>
   <label class="world-opt" id="${p}-same-row" hidden title="${T.same}"><input type="checkbox" id="${p}-same" checked> 🤝 Дать другу такую же силу <span class="mp-hint">— соперником станет друг, который зайдёт на сервер; остальные — зрители</span></label>
+  <div class="hero-row" title="${T.element}"><label for="${p}-element">🌀 Стихийная магия:</label> <select id="${p}-element"><option value="">нет</option>${ELEMENTS.map((e) => `<option value="${e}">${ELEMENT_ICON[e]} маг: ${ELEMENT_NAME[e]}</option>`).join('')}</select> <span class="mp-hint">— заклинания стихии вдвое дешевле</span></div>
   <label class="world-opt" title="${T.wings}"><input type="checkbox" id="${p}-wings"> 🪽 С крыльями <span class="mp-hint">— летать взмахами рук, без маны</span></label>
   <label class="world-opt" title="${T.noCrew}"><input type="checkbox" id="${p}-nocrew"> ⚓ Корабли без моряков <span class="mp-hint">— и чёрный корабль без капитана и скелетов</span></label>
   <label class="world-opt" title="${T.mana}"><input type="checkbox" id="${p}-inf" checked> ♾️ Бесконечная мана <span class="mp-hint">— заклинания ничего не стоят</span></label>
@@ -147,14 +150,14 @@ export function mountHeroPanel(root, prefix = 'hero') {
         infiniteMana: $('inf').checked, cells: $('cells').value === '' ? HERO.CELLS_DEFAULT : $('cells').value,
         armor: $('armor').checked, robe: $('robe').checked,
         duelMastery: $('mastery').value === '' ? 0 : $('mastery').value,
-        spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, wings: $('wings').checked, potions: pots(), items: items(), foe: $('foe').value, friendSame: $('same').checked, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
+        spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, wings: $('wings').checked, element: $('element').value || null, potions: pots(), items: items(), foe: $('foe').value, friendSame: $('same').checked, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked,
     });
     const set = (h) => {
         const v = normalizeHero(h, DEFAULT_HERO);
         $('inf').checked = v.infiniteMana; $('cells').value = v.cells;
         $('armor').checked = v.armor; $('robe').checked = v.robe;
-        $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('wings').checked = v.wings; for (const i of root.querySelectorAll('input[data-pot]')) i.checked = v.potions.includes(i.dataset.pot); for (const i of root.querySelectorAll('input[data-item]')) i.checked = v.items.includes(i.dataset.item); $('foe').value = v.foe; $('same').checked = v.friendSame; $('wand').value = v.wandBonus;
+        $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('wings').checked = v.wings; $('element').value = v.element || ''; for (const i of root.querySelectorAll('input[data-pot]')) i.checked = v.potions.includes(i.dataset.pot); for (const i of root.querySelectorAll('input[data-item]')) i.checked = v.items.includes(i.dataset.item); $('foe').value = v.foe; $('same').checked = v.friendSame; $('wand').value = v.wandBonus;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
         $('mastery').value = v.duelMastery; $('dark').value = v.dark; $('bw').checked = v.breakward;
         sync();

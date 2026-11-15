@@ -319,6 +319,7 @@ export class HeroApply {
         this.dress();
         // («С крыльями»: grown at once. The author 05.11: no potion of wings in the bag for it — «у меня и так крылья есть, зачем мне зелье?»)
         if (h.wings) g.wings?.grant();
+        if (h.element) g.heroElement?.set(h.element, { say: false }); // (the Creative setting «Стихийный маг»)
         // the potions chosen in the list «Зелья в сумке» (HeroSettingsUi): one flask of each
         // …and the things chosen in «Предметы в интерфейсе» (HeroItems): the cells grow when the kit does not fit (the author: «ячейки будут увеличены»)
         const inv = g.inventory;

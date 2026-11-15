@@ -20,7 +20,7 @@ const fakeGame = (hero, mode = 'creative') => {
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
     // (почему `wings`: автор 05.11 — галочка «С крыльями» в Творческом, по умолчанию без крыльев)
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false, wings: false, items: [], potions: [], friendSame: true }); // (potions: the author 05.11 — a list of starting potions, none by default; items: 02.11 — the same for things)
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, element: null, noCrew: false, wings: false, items: [], potions: [], friendSame: true }); // (potions: the author 05.11 — a list of starting potions, none by default; items: 02.11 — the same for things)
     assert.deepEqual(d, DEFAULT_HERO);
 });
 

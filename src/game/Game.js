@@ -171,6 +171,7 @@ import { DragonRide } from './DragonRide.js';
 import { DragonForm } from './DragonForm.js';
 import { musicPlace } from '../audio/MusicDirector.js';
 import { HeroWings } from './HeroWings.js';
+import { HeroElement } from './HeroElement.js';
 import { WingFlight } from './WingFlight.js';
 import { ImperiusControl } from './ImperiusControl.js';
 import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
@@ -936,6 +937,7 @@ export class Game {
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
         this.walkRec = new WalkRecorder(this); // F8: «Ходьба» — a recording to tune walking back (WalkRecorder.js)
         this.mermaid = new Mermaid(this); // «Зелье русалки»: a fish's tail for 12 min (Mermaid.js)
+        this.heroElement = new HeroElement(this); // the hero as a mage of one element (the price of its spells halves; HeroElement.js)
         this.wings = new HeroWings(this); // «Зелье крыльев»: the wings grow on the back, for good (HeroWings.js; the flight — WingFlight.js)
         this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
         this.potionFx._randomLook = () => _cleanLook(_rollLook());

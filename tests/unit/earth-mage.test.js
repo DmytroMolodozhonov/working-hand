@@ -77,7 +77,7 @@ test('Breakthrough uses a prepared real wall, costs mana and waits for the earth
  f.g.sync.spell=()=>{};
  f.g.spells={spells:[{life:1,bomb:{p:new T.Vector3(0,2,-20),v:new T.Vector3(0,0,20),by:'me'}}]};
  const before=f.v.mana;em.think(f.v,.01);assert.equal(f.v.earth.phase,'wall');assert.equal(grown,0);
- em.think(f.v,.66);assert.equal(grown,1);assert.ok(f.v.mana<before-9);assert.ok(f.v.castAtPlayers.has('me'));
+ em.think(f.v,.66);assert.equal(grown,1);assert.ok(f.v.mana<before-4);assert.ok(f.v.castAtPlayers.has('me'));
 });
 
 test('weak mage can stitch a genuine cave passage between himself and his pursuer, never an open field',async()=>{
