@@ -133,7 +133,7 @@ export function projectOnMesh(mesh, box, lift = 0.012) {
     const M = mesh.matrixWorld;
     const world = (i, out) => { out.fromBufferAttribute(P, i); if (skinned) mesh.boneTransform(i, out); return out.applyMatrix4(M); };
     const planes = [[box.ax, box.hx], [box.ax.clone().negate(), box.hx], [box.ay, box.hy], [box.ay.clone().negate(), box.hy], [box.az, box.hz], [box.az.clone().negate(), box.hz]];
-    const pos = [], uv = [], nor = [], sk = [], sw = [];
+    const pos = [], uv = [], nor = [], sk = [], sw = [], tdepth = []; // (tdepth: per emitted triangle, how far towards the caster its nearest point is)
     const SI = geo.attributes.skinIndex, SW = geo.attributes.skinWeight, N = geo.attributes.normal;
     const raw = (i) => new THREE.Vector3().fromBufferAttribute(P, i);
     for (let t = 0; t < count; t += 3) {
@@ -161,13 +161,23 @@ export function projectOnMesh(mesh, box, lift = 0.012) {
             return { lp, u: (rel.dot(box.ax) / box.hx + 1) / 2, v: (rel.dot(box.ay) / box.hy + 1) / 2, vi: dom(q.b) };
         };
         const vs = poly.map(vert);
-        for (let k = 1; k < vs.length - 1; k++) for (const q of [vs[0], vs[k], vs[k + 1]]) {
+        let dep = -1e9; for (const q of poly) dep = Math.max(dep, _v0.subVectors(q.p, box.c).dot(box.az));
+        for (let k = 1; k < vs.length - 1; k++) { tdepth.push(dep); for (const q of [vs[0], vs[k], vs[k + 1]]) {
             pos.push(q.lp.x, q.lp.y, q.lp.z); uv.push(q.u, q.v); nor.push(rn.x, rn.y, rn.z);
             if (skinned) { sk.push(SI.getX(q.vi), SI.getY(q.vi), SI.getZ(q.vi), SI.getW(q.vi)); sw.push(SW.getX(q.vi), SW.getY(q.vi), SW.getZ(q.vi), SW.getW(q.vi)); }
-        }
+        } }
     }
     if (!pos.length) return null;
-    return { pos, uv, nor, sk: skinned ? sk : null, sw: skinned ? sw : null };
+    return { pos, uv, nor, tdepth, sk: skinned ? sk : null, sw: skinned ? sw : null };
+}
+
+/** Keep only the triangles within `band` of the nearest surface the blade met (the first thing in its way, not the arm behind the body). */
+export function nearestSurface(r, maxDepth, band = 0.4) {
+    const keep = r.tdepth.map((d) => d >= maxDepth - band);
+    if (!keep.some(Boolean)) return null;
+    const out = { pos: [], uv: [], nor: [], sk: r.sk ? [] : null, sw: r.sw ? [] : null };
+    keep.forEach((k, t) => { if (!k) return; for (let v = 0; v < 3; v++) { const i = t * 3 + v; out.pos.push(r.pos[i * 3], r.pos[i * 3 + 1], r.pos[i * 3 + 2]); out.uv.push(r.uv[i * 2], r.uv[i * 2 + 1]); out.nor.push(r.nor[i * 3], r.nor[i * 3 + 1], r.nor[i * 3 + 2]); if (r.sk) { for (let q = 0; q < 4; q++) { out.sk.push(r.sk[i * 4 + q]); out.sw.push(r.sw[i * 4 + q]); } } } });
+    return out;
 }
 
 export class Scars {
@@ -230,7 +240,7 @@ export class Scars {
             return g;
         });
         // the wound lies ON the surfaces it crosses (projected decal); the floating ribbon is only the fallback for a model that gave no triangles (see the header)
-        const decal = hits ? this._decal(pts, parent, sheet, body, seed) : null;
+        const decal = this._decal(pts, parent, sheet, body, seed); // (no rays needed: it works on the posed triangles itself — the rays above miss skinned models, whose bind-pose bounds are elsewhere: that is why the old ribbon floated)
         if (decal) {
             const mine0 = this.list.filter((e) => e.owner === owner);
             if (mine0.length >= SCAR.MAX_PER) this._drop(mine0[0]);
@@ -262,20 +272,28 @@ export class Scars {
         const ay = new THREE.Vector3().crossVectors(az, ax); if (ay.lengthSq() < 1e-6) return null; ay.normalize();
         ax.crossVectors(ay, az).normalize(); // (re-orthogonalised)
         const c = new THREE.Vector3(); for (const p of pts) c.add(_a.set(p.x, p.y, p.z)); c.divideScalar(pts.length);
-        const hx = Math.min(len * 0.55, body.r * 1.25 + 0.2), hy = Math.max(0.07, Math.min(0.16, 0.07 + body.r * 0.05));
+        const hx = Math.min(len * 0.55, body.r * 1.0 + 0.1), hy = Math.max(0.07, Math.min(0.16, 0.07 + body.r * 0.05));
         const flip = ((seed * 2654435761) >>> 0) & 1;
-        const box = { c, ax, ay: flip ? ay.clone().negate() : ay, az, hx, hy, hz: body.r + 0.55, reach: Math.hypot(hx, hy, body.r + 0.55) + 0.2 };
+        const box = { c, ax, ay: flip ? ay.clone().negate() : ay, az, hx, hy, hz: 4, reach: Math.hypot(hx, hy, 4) + 0.2 }; // (a thin slab round the skin points: only what the blade really crossed, not the arms and the things behind)
         const objs = [];
         parent.updateMatrixWorld(true);
         const meshes = [];
         parent.traverse((o) => { if (o.isMesh && o.visible && !o.userData?.scar && o.material?.visible !== false && o.geometry?.attributes?.position && !o.isInstancedMesh) meshes.push(o); });
-        for (const m of meshes.slice(0, 40)) {
+        let budget = 80000; // (triangles looked at: one wound is cheap, a huge merged model is not allowed to hitch the frame)
+        const found = []; let maxDepth = -1e9;
+        for (const m of meshes) {
+            const tris = (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
+            if ((budget -= tris) < 0) break;
             const r = projectOnMesh(m, box);
+            if (!r) continue;
+            found.push([m, r]); for (const d of r.tdepth) maxDepth = Math.max(maxDepth, d);
+        }
+        for (const [m, r0] of found) { // (only the nearest surface along the blade's way — the first thing it meets)
+            const r = nearestSurface(r0, maxDepth);
             if (!r) continue;
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.Float32BufferAttribute(r.pos, 3));
             geo.setAttribute('uv', new THREE.Float32BufferAttribute(r.uv, 2));
-            // (normals: the lit face is the parent's — a decal is lit like the skin it lies on)
             geo.setAttribute('normal', new THREE.Float32BufferAttribute(r.nor, 3));
             let mesh;
             if (r.sk) {
@@ -288,6 +306,7 @@ export class Scars {
             mesh.frustumCulled = false; mesh.renderOrder = 3; mesh.userData.scar = true;
             m.add(mesh); objs.push(mesh);
         }
+        this.lastDecal = { meshes: meshes.length, made: objs.length };
         if (!objs.length) return null;
         return { objs, anchor: parent.worldToLocal(c.clone()) };
     }
