@@ -621,6 +621,7 @@ export class Game {
             fallWatch: (ck, c, casterId) => this.levitation.watchFall(ck, c, casterId), // («Overgrown»: a fall from up high hurts)
             scatterCrew: (origin, pushAt, casterId) => this.ships?.crew.scatter?.(origin, pushAt, casterId),
             quakeMe: (casterId, origin, reached, power, dir) => this._quakeMe(casterId, origin, reached, power, dir),
+            dustMe: (casterId, origin, R, dt) => this._dustMe(casterId, origin, R, dt), // (the earth mage's smoke screen: the dust blinds and slows whoever stands in it)
             quakeGround: (x, z, power, side) => this.quake.breakGround(x, z, power, side), // (Quake.js: the ground breaks along the crack)
             quakeShake: (front, power, casterId) => { this.quake.shake(front, power); this.crystals?.hitAt(front, power > 1 ? 5 : 3.5, casterId, 'Earthquake', 30); /* (the rock shakes: crystals in a cave under the wave crack) */ if (this.authority && (this._quakeAlarmT || 0) < performance.now() - 500) { this._quakeAlarmT = performance.now(); this.castleLife?.alarm(front, 'quake', null, power > 1 ? 9 : 6); } }, // (…and shakes under whoever is near the wave; the people near take fright)
             storm: (origin) => this.storm?.start(origin, 13),
@@ -3036,6 +3037,14 @@ export class Game {
     }
 
     /** Another wizard's quake ran under me: I fall for a few seconds and get hurt. */
+    /** In the earth mage's cloud of dust: the eyes sting (a dusty veil on the screen) and the legs slow down; only while I stand in it. */
+    _dustMe(casterId, origin, R, dt) {
+        const c = this.combat, p = this.character?.group?.position;
+        if (!p || !c || c.dead || casterId === this.localId || Math.hypot(p.x - origin.x, p.z - origin.z) > R || Math.abs(p.y - origin.y) > 8) return;
+        this._dustT = (this._dustT || 0) + dt;
+        if (this._dustT > 0.5) { this._dustT = 0; this.hud?.flashColor?.('rgba(181, 154, 120, 0.7)'); c.slow?.(2.5, casterId); }
+    }
+
     _quakeMe(casterId, origin, reached, power, dir = null) {
         if (casterId === 'local' || casterId === this.localId) return false;
         const c = this.combat;

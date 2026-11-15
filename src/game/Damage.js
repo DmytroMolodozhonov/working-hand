@@ -6,6 +6,7 @@
 export const DAMAGE = {
     AvadaKedavra: 25, // (no armour stops it — `pierce`)
     Sapira: 10,
+    FireDuel: 8, // «Fire Vortex» as a duel charge (the fire mage's beam)
     Sands: 0, // only slows (Duel.SLOW) and shoves
     Thunderwave: 10, // everyone in the zone
     Lightning: 20, // «Lightning Strike» and Thor's hammer

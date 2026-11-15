@@ -57,7 +57,7 @@ test('every spell a beginner does not know has a real source: a scroll somewhere
     for (const n of allSpells()) {
         if (START_SPELLS.has(n)) continue;
         const k = teachKey(n);
-        const ok = found.has(k) || BOOK_SPELLS.has(k) || MANA_SPELLS.has(k) || TEMPLE_SCROLLS.includes(k) || k === 'FireVortex' || k === 'AirVortex' /* (the fire / air mage's key spells come with the element, SpellBook.knows) */ || k === 'CreateHouse' || k === 'Inspirius' || k === 'Pentagranium'; // (Pentagranium: no spell scroll — each pentagram is learnt from its own scroll, Game.knowsSpell)
+        const ok = found.has(k) || BOOK_SPELLS.has(k) || MANA_SPELLS.has(k) || TEMPLE_SCROLLS.includes(k) || k === 'EarthDust' /* (the earth mage's own smoke screen — NPC only) */ || k === 'FireVortex' || k === 'AirVortex' /* (the fire / air mage's key spells come with the element, SpellBook.knows) */ || k === 'CreateHouse' || k === 'Inspirius' || k === 'Pentagranium'; // (Pentagranium: no spell scroll — each pentagram is learnt from its own scroll, Game.knowsSpell)
         assert.ok(ok, `«${n}»: not known from the start, and no scroll «${k}» turns up anywhere`);
         if (found.has(k)) assert.ok(SPELL_RIBBON[k] && SPELL_RU[k], `the scroll «${k}»: its ribbon and its name`);
     }

@@ -182,3 +182,22 @@ test('a thrown orb is bent in the air mage\'s mood: its velocity turns about the
     assert.ok(Math.abs(Math.hypot(o.v.x, o.v.z) - 32) < 0.01, 'the speed is the same: only the direction changed');
     assert.equal(f.casts.length, 0, 'nothing thrown back');
 });
+test('the fire mage answers a charge flying at him with his own beam of fire (a duel): one answer, half price, never at the gods\' spells', () => {
+    const f = fixture('fire'); f.g.castleLife._isPlayer = (id) => id === 'me';
+    const made = [];
+    const bolt = { id: 'b1', state: 'flying', by: 'me', spell: 'Stupefy', tk: 'v', tid: f.v.id, o: new T.Vector3(0, 3, -16), front: new T.Vector3(0, 2.6, -9), dir: new T.Vector3(0, 0, 1) };
+    f.g.duel = { bolts: new Map([['b1', bolt]]), boltSpeed: () => 22, _addBolt: (o) => { made.push(o); return { id: o.id }; }, colors: () => ({ glow: 0xff6a14 }), _burst() {}, clashes: [] };
+    f.g.sync.duelCast = () => {};
+    f.v.mana = 300;
+    const orig = Math.random; Math.random = () => 0.1;
+    try { for (let i = 0; i < 30; i++) { f.step(1); } } finally { Math.random = orig; }
+    assert.equal(made.length, 1, 'answered once');
+    assert.equal(made[0].spell, 'FireDuel'); assert.equal(made[0].vs, 'b1', 'the two charges meet: a duel'); assert.equal(made[0].tid, 'me');
+    assert.ok(f.v.mana < 300, 'paid (the price is half of 14 for his own element; net of what comes back he is still poorer)');
+    // the gods' spell: no answer
+    const g = fixture('fire'); g.g.castleLife._isPlayer = () => true; const gods = [...DIVINE_SPELLS][0]; const gm = [];
+    const gb = { id: 'g1', state: 'flying', by: 'me', spell: gods, tk: 'v', tid: g.v.id, o: new T.Vector3(0, 3, -16), front: new T.Vector3(0, 2.6, -9), dir: new T.Vector3(0, 0, 1) };
+    g.g.duel = { bolts: new Map([['g1', gb]]), boltSpeed: () => 22, _addBolt: (o) => { gm.push(o); return { id: o.id }; }, colors: () => ({ glow: 0 }), _burst() {}, clashes: [] };
+    g.v.mana = 300; Math.random = () => 0.1; try { for (let i = 0; i < 30; i++) g.step(1); } finally { Math.random = orig; }
+    assert.equal(gm.length, 0);
+});

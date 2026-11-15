@@ -1,6 +1,7 @@
 import {LEV_MAX} from './LevitationMaxima.js';
 import {HOLD_FATIGUE} from './Levitation.js';
-import {duelRange} from './DuelRange.js';
+import {duelRange,emptyRange} from './DuelRange.js';
+import { NPC_COST } from './WizardAI.js';
 import {waveSource} from './WaveSource.js';
 /** Host-owned elemental combat on ordinary CastleLife bodies: shared spell collisions, armour and death. */
 import * as T from 'three';
@@ -50,7 +51,44 @@ export class ElementalMages {
   a.hopping=r==='hop';return r;
  }
  /** Beating a thrown orb back (ElementalParry.js): see it, swing, take it out of the flight, throw it back at the thrower. → true while the swing goes on. */
+ /**
+  * The fire mage's answer to a duel charge flying at him (the author 15.11: «вместо протекшена… магия луча огня… вступает в дуэль… огненная версия заклинания»):
+  * his own beam («Fire Vortex») leaves the wand at whoever cast it, the two charges meet and push against each other (Duel clashes: the one the meeting point
+  * reaches loses). Half the price for his own element. Only at a player's charge that is not of the gods; one answer to one charge; not in a clash already.
+  * true: he answered (the caller does nothing else this frame).
+  */
+ fireCounter(v,foe){
+  const g=this.game,L=g.castleLife,duel=g.duel,a=v.elemental;
+  if(!duel?.bolts||!duel._addBolt||(a.fireCd||0)>0||a.swat||v.prep)return false;
+  if(duel.clashes?.some((x)=>x.a.by===v.id||x.b.by===v.id))return false;
+  let hit=null;
+  for(const b of duel.bolts.values()){
+   if(b.state!=='flying'||b.npc||b.by===v.id||b.fireSeen||isDivine(b.spell)||!L._isPlayer(b.by))continue;
+   const dx=v.x-b.front.x,dz=v.z-b.front.z,dist=Math.hypot(dx,dz);
+   if(dist>22||dist<3)continue;
+   if(!((b.tk==='v'&&b.tid===v.id)||(b.dir.x*dx+b.dir.z*dz>dist*.94)))continue; // (aimed at him, or coming straight at him)
+   hit=b;break;
+  }
+  if(!hit)return false;
+  hit.fireSeen=true; // (one answer to one charge, taken or not)
+  const cost=(NPC_COST.FireDuel??14)*elementK('fire','FireVortex');
+  const fp=L._playerPos?.(hit.by);if(!fp||v.mana<cost||!L._sees(v,foe||{x:fp.x,y:fp.y,z:fp.z}))return false;
+  if(Math.random()>=.85)return false; // (his die: he did not see it in time)
+  const o=T.Vector3?new T.Vector3(v.x-Math.sin(v.yaw)*.9,v.y+2.7,v.z-Math.cos(v.yaw)*.9):null;
+  const d=new T.Vector3(hit.o.x-o.x,hit.o.y-o.y,hit.o.z-o.z).normalize();
+  const reach=duelRange(v.mana);if(reach<=0)return false;
+  if(g.collision?.lineOfSight&&!g.collision.lineOfSight(v.x,v.y+3,v.z,o.x,o.y,o.z,.15))return false;
+  v.mana-=cost;a.fireCd=2.2;
+  v.yaw=Math.atan2(-(hit.o.x-v.x),-(hit.o.z-v.z));
+  const b=duel._addBolt({rng:emptyRange(reach,true),id:`${v.id}:fc${++this._fcSeq||(this._fcSeq=1)}`,by:v.id,spell:'FireDuel',side:'right',tk:'p',tid:hit.by,ak:.55,o:o.clone(),d,npc:true,vs:hit.id});
+  if(!b)return false;
+  g.sync?.duelCast?.(b);duel._burst?.(o,duel.colors('FireDuel',v.id).glow,12);
+  v.aimPitch=Math.asin(Math.max(-1,Math.min(1,d.y)));v.castT=.55;v.model.castNow=true;
+  L._say?.(v,'Fire Vortex!',1.8);this.phase(v,'Chamber');
+  return true;
+ }
  parry(v,foe,dt){
+  if(v.elemental)v.elemental.fireCd=Math.max(0,(v.elemental.fireCd||0)-dt);
   const a=v.elemental,g=this.game,L=g.castleLife;a.parryCd=Math.max(0,(a.parryCd||0)-dt);
   if(a.swat){
    const S=a.swat;S.t+=dt;v.mode=SWAT_MODES[v.element];v.model.elementPoseT=S.t;a.hopping=false;v.speed=0;
@@ -64,6 +102,7 @@ export class ElementalMages {
    if(S.t>=SWAT.T){a.swat=null;a.parryCd=S.kind==='bend'?BEND.CD:SWAT.CD;this.phase(v,v.element==='fire'?'Chamber':v.element==='water'?'Gather':'Coil');}
    L._ground(v);return true;
   }
+  if(v.element==='fire'&&this.fireCounter(v,foe))return true; // (a charge flies at the fire mage: his beam of fire meets it — a duel)
   if(!g.spells?.spells||!canSwat(v,a,v.mana)||!L._sees(v,foe))return false;
   if(v.element==='water'&&!this.waterSource(v,0))return false; // (the water he douses with is the water he has)
   const chest={x:v.x,y:v.y+2.6,z:v.z},orbs=this._orbs||(this._orbs=[]);orbs.length=0;

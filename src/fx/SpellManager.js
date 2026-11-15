@@ -36,6 +36,7 @@ import { flyingMaximaWords } from '../game/Space.js';
 import { pentagramWords, pentFirstSaid, INFERNUM_WORD } from '../game/PentagramWords.js';
 import { creationWords } from '../game/CreationWords.js';
 import { segmentToSegment } from '../game/SegmentContact.js';
+import { QuakeFx } from './QuakeFx.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -585,6 +586,7 @@ export class SpellManager {
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;
             // (the beam: `direction` = from the target point back to the caster's hands)
             case 'LightningBeam': this.castLightningHit(o, casterId, o.clone().add(direction)); break;
+            case 'EarthDust': this.castEarthDust(o, casterId); break;
             case 'Earthquake': this.castEarthquake(o, d, casterId, 1); break;
             case 'EarthquakeMaxima': this.castEarthquake(o, d, casterId, 3); break;
             case 'WindMaxima': if (isWindRing(name, d)) this.castWindRing(o, casterId); else this.castWind(o, d, casterId, 3); break; // (the wand up: a ring of wind — WindRing.js)
@@ -957,6 +959,35 @@ export class SpellManager {
      * crack opens, dust and stones jump, and everything it runs under falls
      * down for a few seconds and gets hurt. Maxima: 3× stronger, longer, wider.
      */
+    /**
+     * The earth mage's smoke screen (the author 15.11): the ground bursts near the foe — a ring of dust, a crown of earth chunks, a great rolling cloud that stays
+     * a few seconds and hides whoever is in it; the one inside is blinded and slowed (`hooks.dustMe`, each computer for its own hero). Seen by everybody.
+     */
+    castEarthDust(o, casterId) {
+        this._sound('playExplosion', o, o, 1);
+        const fx = this.fx, R = 5;
+        const qfx = new QuakeFx(this.scene, fx, (x, z) => (this.hooks.collision ? this.hooks.collision.surfaceY(x, z) : o.y));
+        qfx.origin = o.clone(); qfx.power = 1; qfx.dir = new THREE.Vector3(0, 0, -1); qfx.side = new THREE.Vector3(1, 0, 0); qfx.length = 1; qfx.rings = [];
+        const ringG = new THREE.RingGeometry(0.82, 1, 36).rotateX(-Math.PI / 2);
+        for (let i = 0; i < 4; i++) { const mat = new THREE.MeshBasicMaterial({ color: 0xc7b08c, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }); const mesh = new THREE.Mesh(ringG, mat); mesh.visible = false; mesh.frustumCulled = false; qfx.group.add(mesh); qfx.mats.push(mat); qfx.rings.push({ mesh, mat, t: 0, max: 5, life: 1, on: false }); }
+        qfx._ring(o.x, o.y, o.z, R * 1.6, 0.7, 0xd8c29c, 0.7);
+        for (let i = 0; i < 30; i++) { const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6; fx.debris?.spawn(o.x + Math.cos(a) * 0.6, o.y + 0.3, o.z + Math.sin(a) * 0.6, Math.cos(a) * sp, 7 + Math.random() * 8, Math.sin(a) * sp, [0x6b5440, 0x7d6a55, 0x5a4a3c, 0x4f8a30][i % 4], 0.3 + Math.random() * 0.4, 2 + Math.random() * 1.5, { shrink: 0.1, fade: false, spin: 12 }); }
+        fx.lightFlash?.(o.clone().setY(o.y + 1.5), 0xe8c890, 4, 0.4, 35);
+        this.hooks.quakeShake?.(o, 1, casterId);
+        let t = 0, puffed = 0;
+        this.spells.push({
+            life: 7,
+            onUpdate: (spell, dt) => {
+                t += dt; qfx.update(dt, t, 0);
+                // the cloud: a great mass of dust billowing up out of the burst for 1.2 s, then hanging and thinning
+                if (t < 1.2) { const n = Math.max(1, Math.round(dt * 90)); for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, r = Math.random() * R * 0.8; fx.smoke?.spawn(o.x + Math.cos(a) * r, o.y + 0.4, o.z + Math.sin(a) * r, Math.cos(a) * 1.4, 2 + Math.random() * 3.4, Math.sin(a) * 1.4, [0xb59a78, 0xa08a6a, 0xc7b08c, 0x8f7a5c][(Math.random() * 4) | 0], 1.6 + Math.random() * 1.8, 3 + Math.random() * 2.5, { shrink: -0.3, spin: 0.8 }); puffed++; } }
+                else if (t < 4.5 && Math.random() < dt * 14) fx.smoke?.spawn(o.x + (Math.random() - 0.5) * R, o.y + 1 + Math.random() * 2, o.z + (Math.random() - 0.5) * R, (Math.random() - 0.5) * 0.8, 0.4, (Math.random() - 0.5) * 0.8, 0xb59a78, 1.8 + Math.random() * 1.4, 2.5, { shrink: -0.2, spin: 0.5 });
+                if (t < 5) this.hooks.dustMe?.(casterId, o, R + 1, dt);
+            },
+            onEnd: () => { qfx.dispose(); ringG.dispose(); },
+        });
+    }
+
     castEarthquake(origin, direction, casterId, power = 1) {
         this._sound('playExplosion', origin, origin, power > 1 ? 2 : 1);
         const dir = direction.clone().setY(0);
@@ -967,60 +998,25 @@ export class SpellManager {
         const half = power > 1 ? 4 : 2.4; // half-width of the hit strip
         const SPEED = 16; // m/s the wave runs
         const ground = (x, z) => (this.hooks.collision ? this.hooks.collision.surfaceY(x, z) : 0);
-        // The crack: a jagged dark line on the ground that opens as the wave passes
-        const crackMat = new THREE.MeshBasicMaterial({ color: 0x1c120c, transparent: true, opacity: 0.95, depthWrite: false });
-        const glowMat = new THREE.MeshBasicMaterial({ color: power > 1 ? 0xff6a2a : 0xd08a4a, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false });
-        const crack = new THREE.Group();
-        this.scene.add(crack);
-        const segs = [];
-        // a «Максима» tears three cracks side by side (the middle one wide and glowing)
-        const lanes = power > 1 ? [0, -2.2, 2.2] : [0];
-        for (const lane of lanes) {
-            let prev = origin.clone().addScaledVector(dir, 1).addScaledVector(side, lane * 0.4);
-            const w = (power > 1 ? 0.55 : 0.32) * (lane ? 0.7 : 1);
-            for (let d = 2; d <= length; d += 1.6) {
-                const p = origin.clone().addScaledVector(dir, d).addScaledVector(side, lane * Math.min(1, d / 6) + (Math.random() - 0.5) * 1.2);
-                for (const q of [prev, p]) q.y = ground(q.x, q.z) + 0.04;
-                const len = prev.distanceTo(p);
-                const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, len), crackMat);
-                m.position.copy(prev).lerp(p, 0.5);
-                m.lookAt(p);
-                m.scale.set(0.01, 1, 1);
-                const glow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.35, 0.05, len), glowMat);
-                glow.position.y = 0.01;
-                m.add(glow);
-                crack.add(m);
-                segs.push({ m, d, lane, at: p.clone() });
-                prev = p;
-            }
-        }
+        // The picture (QuakeFx.js: the stomp, the fissure with forks and the heaving earth, the aftershocks); the game's own work stays below
+        const qfx = new QuakeFx(this.scene, this.fx, ground);
+        const segs = qfx.build(origin, dir, side, length, power); // [{d, lane, at}]: where the ground really breaks
+        qfx.stomp();
+        this._sound('playRumble', origin, origin);
+        qfx.onTremor = (k, at) => this.hooks.quakeShake?.(at, power * k * 1.4, casterId); // (an aftershock: the screen shakes again for whoever is near)
         const hit = new Set(), fell = new Set(); // (hurt once; thrown off the feet once)
         let t = 0;
         this.spells.push({
-            life: length / SPEED + 8,
+            life: length / SPEED + 9,
             onUpdate: (spell, dt) => {
                 t += dt;
                 const front = t * SPEED;
+                qfx.update(dt, t, front);
                 for (const s of segs) {
-                    if (s.d > front) continue;
-                    s.m.scale.x = Math.min(1, s.m.scale.x + dt * 6);
-                    // dust and stones jump where the wave passes now (every piece once, even on a slow frame)
-                    if (!s.burst) {
-                        s.burst = true;
-                        const p = s.m.position;
-                        for (let i = 0; i < (power > 1 ? 12 : 6); i++) {
-                            this.fx.spark(_a.set(p.x + (Math.random() - 0.5) * half, p.y + 0.2, p.z + (Math.random() - 0.5) * half), [0x8a6a4a, 0x6b5440, 0xa38766][i % 3], 0.3 + Math.random() * 0.3 * power, _b.set((Math.random() - 0.5) * 3, 3 + Math.random() * 4 * power, (Math.random() - 0.5) * 3), 1.0);
-                        }
-                        // big rocks thrown out of the crack, and a cloud of dust along it
-                        for (let i = 0; i < (power > 1 ? 4 : 2); i++) {
-                            this.fx.spark(_a.set(p.x, p.y + 0.3, p.z), i % 2 ? 0x5a4a3c : 0x7d6a55, 0.55 + Math.random() * 0.35 * power, _b.copy(side).multiplyScalar((Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 3)).setY(5 + Math.random() * 3 * power), 1.4);
-                        }
-                        for (let i = 0; i < (power > 1 ? 5 : 3); i++) {
-                            this.fx.glow?.spawn(p.x + (Math.random() - 0.5) * half, p.y + 0.4, p.z + (Math.random() - 0.5) * half, (Math.random() - 0.5) * 1.5, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 1.5, 0xb59a78, 0.9 + Math.random() * 0.8 * power, 1.4, { shrink: -0.4 });
-                        }
-                        // the ground really breaks along the crack (the host decides, everybody gets the blocks)
-                        if (this.auth) this.hooks.quakeGround?.(s.at.x, s.at.z, power, s.lane >= 0 ? side : _b.copy(side).negate());
-                    }
+                    if (s.d > front || s.burst) continue;
+                    s.burst = true;
+                    // the ground really breaks along the crack (the host decides, everybody gets the blocks)
+                    if (this.auth) this.hooks.quakeGround?.(s.at.x, s.at.z, power, s.lane >= 0 ? side : _b.copy(side).negate());
                 }
                 // Whatever the wave runs under falls down (once)
                 if (front <= length + 1) {
@@ -1053,16 +1049,8 @@ export class SpellManager {
                     // the ground shakes under whoever is near the running wave
                     this.hooks.quakeShake?.(_c.copy(origin).addScaledVector(dir, Math.min(front, length)), power, casterId);
                 }
-                // the crack fades away after a while
-                const fade = t - length / SPEED - 5;
-                if (fade > 0) { crackMat.opacity = Math.max(0, 0.95 - fade / 3); glowMat.opacity = Math.max(0, 0.7 - fade / 3); }
-                else glowMat.opacity = 0.45 + Math.sin(t * 9) * 0.25;
             },
-            onEnd: () => {
-                this.scene.remove(crack);
-                crack.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
-                crackMat.dispose(); glowMat.dispose();
-            },
+            onEnd: () => { qfx.dispose(); },
         });
     }
 

@@ -266,7 +266,7 @@ export class Spiders {
         if (spell === 'Expelliarmus') return; // (no wand, no weapon in its legs: nothing to knock out — no effect)
         if (spell === 'Disarmor') return; // (its shell is its own: nothing to take off — no effect, ArmorTypes.DISARMOR_TARGETS)
         if (spell === 'Jolt' || spell === 'JoltMaxima') { this.jolt(s, spell, by); return; }
-        this.hit(s, spell === 'AvadaKedavra' ? 25 : spell === 'SapiraDuel' ? 10 : 4, spell, by);
+        this.hit(s, spell === 'AvadaKedavra' ? 25 : spell === 'SapiraDuel' ? 10 : spell === 'FireDuel' ? 14 : 4, spell, by);
     }
 
     /**

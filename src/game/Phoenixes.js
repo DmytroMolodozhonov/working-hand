@@ -107,6 +107,7 @@ export const TARGETS = {
     Jolt: { does: 'push', why: '«Джолт»: лёгкую птицу отбрасывает по воздуху, кувырком, без урона; нападение' },
     Firefighting: { does: 'push', why: '«Firefighting»: лёгкий толчок, пылающий феникс гаснет и бросает атаку; без урона' },
     SapiraDuel: { does: 'hit', why: '−10' },
+    FireDuel: { does: 'none', why: 'огонь — стихия феникса: не вредит' },
     SandsDuel: { does: 'hit', why: '«Даст»: −4, песок с перьев слетает' },
     Sapira: { does: 'hit', why: 'луч «Сапира»: −5' },
     Thunderwave: { does: 'hit', why: 'громовая волна: −8' },

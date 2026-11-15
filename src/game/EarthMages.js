@@ -43,6 +43,17 @@ export class EarthMages {
   a.slab=null;a.stitchPose=0;a.wallPlan=null;a.phase='rest';a.t=0;a.fired=false;a.strike=0;
   v.model.earthPoseT=undefined;v.castT=0;
  }
+ /** The smoke screen (the author 15.11): 10 mana (half for his own element), the ground bursts near the foe and a great cloud of dust goes up between them. true: cast. */
+ _dust(v,foe){
+  const g=this.game,L=g.castleLife,a=v.earth;if(!foe||!g.spells?.cast)return false;
+  const dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz);if(d<5||d>24||!L._sees(v,foe))return false;
+  if(!this._pay(v,SPELL_COST.EarthDust))return false;
+  a.dustCd=14;a.stitchPose=1.1;
+  const k=Math.min(4,d*.35),o={x:foe.x-dx/d*k,z:foe.z-dz/d*k};o.y=g.collision?.surfaceY?g.collision.surfaceY(o.x,o.z):foe.y; // (a few metres in front of the foe, towards him)
+  const P=new THREE.Vector3(o.x,o.y,o.z),D=new THREE.Vector3(dx/d,0,dz/d);
+  g.spells.cast('EarthDust',P,D,'right',v.id);g.sync?.spell?.('EarthDust',P,D,'right',v.id);L._say?.(v,'Земля, закрой меня!',2);
+  return true;
+ }
  _pay(v,n){n*=elementK('earth','GroundVortex');if(v.mana<n)return false;v.mana-=n;return true;} // (his own element: half the price — the author 15.11)
  /** Hops (ElementalMove.js), not a slide round the foe: a few steps to a free place, a pause, the body turned the way he goes; a blocked way → the other one. */
  _reposition(v,foe,dt,recover){
@@ -110,6 +121,7 @@ export class EarthMages {
    if(s)this._stop(v.id);
    if(a.phase!=='rest')this._phase(v,null,'rest');
    if(a.stitchCd<=0&&v.mana>=SPELL_COST.Stitching&&a.scan<=0){a.scan=.9;this._stitch(v,foe);}
+   a.dustCd=Math.max(0,(a.dustCd||0)-dt);if(a.dustCd<=0&&a.stitchPose<=0&&this._dust(v,foe))return true; // (out of mana or hurt, running: a smoke screen)
    if(a.stitchPose>0){a.stitchPose-=dt;v.mode='earthWall';v.model.earthPoseT=1.3-a.stitchPose;L._ground(v);return true;}
    if(a.quiet>6&&v.hp<v.maxHp*.4)v.hp=Math.min(v.maxHp*.4,v.hp+.3*dt);
    const ran=this._reposition(v,foe,dt,true)==='run';

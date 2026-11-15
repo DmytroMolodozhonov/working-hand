@@ -99,6 +99,9 @@ export const DUEL_SPELLS = {
     //  on, or stands a little beside the hand's line, is still reached)
     LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса', bend: 0.8, turn: 6 },
     // Slower and thicker: a dark-violet ball of force rolling through the air
+    // «Fire Vortex» as a duel charge (the fire mage's answer to a charge flying at him: a beam of fire meets it — the author 15.11): a roaring orange bolt with a white-hot core,
+    // embers behind it; whoever it hits burns (−8, the place catches fire). White magic (no darkening).
+    FireDuel: { color: 0xff6a14, name: 'Fire Vortex (дуэльный)', speed: 14, core: 0.06, glow: 0.3, coreColor: 0xfff0b0, jag: 1.4 },
     SapiraDuel: { color: 0x8e2de2, name: 'Сапира', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
     // «Даст»: a sandy charge — whoever it hits is slowed for 5 s
     SandsDuel: { color: 0xd2b48c, name: 'Даст', speed: 13, coreColor: 0xfff1cf },
@@ -1455,6 +1458,11 @@ export class Duel {
                 g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
                 hit(DAMAGE.Sapira);
                 if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
+            } else if (spell === 'FireDuel') {
+                g.fx.lightFlash(p, 0xff6a14, 3, 0.4, 20);
+                hit(DAMAGE.FireDuel);
+                g.fire?.ignite?.(p, 1.2);
+                if (!c.dead) g.creatureImpact?.spellHit(c, 'FireDuel', src, byId);
             } else if (spell === 'SandsDuel') {
                 c.slowT = Math.max(c.slowT || 0, SLOW.TIME);
                 this._sand(p);
@@ -1570,6 +1578,13 @@ export class Duel {
             if (c.enabled) c.damage(DAMAGE.Sapira, byId, 'Sapira');
             else g.hud.setVoice('💜 Сапира попала в вас', true);
             g.impact?.apply({ v: push(12), from, by: byId, spell: 'SapiraDuel', jolt: 3, noShield: true });
+        } else if (spell === 'FireDuel') {
+            g.fx.lightFlash(p, 0xff6a14, 4, 0.4, 20);
+            g.hud.flashColor?.('rgba(255, 106, 20, 0.6)');
+            if (c.enabled) c.damage(DAMAGE.FireDuel, byId, 'FireDuel');
+            else g.hud.setVoice('🔥 Огненный заряд попал в вас', true);
+            g.fire?.ignite?.(p, 1.2);
+            g.impact?.apply({ v: push(6), from, by: byId, spell: 'FireDuel', jolt: 2, noShield: true });
         } else if (spell === 'SandsDuel') {
             this._sand(p);
             g.hud.flashColor?.('rgba(210, 180, 140, 0.6)');
@@ -1619,6 +1634,11 @@ export class Duel {
                 g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
                 g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
                 if (!z.isDead) g.creatureImpact?.spellHit(z, 'SapiraDuel', src, byId);
+            } else if (spell === 'FireDuel') {
+                g.fx.lightFlash(p, 0xff6a14, 3, 0.4, 20);
+                g.damageZombie(z, DAMAGE.FireDuel, true, _v2.set(0, 0, 1), byId);
+                g.fire?.ignite?.(p, 1.2);
+                if (!z.isDead) g.creatureImpact?.spellHit(z, 'FireDuel', src, byId);
             } else if (spell === 'SandsDuel') {
                 z.slowT = Math.max(z.slowT || 0, SLOW.TIME);
                 this._sand(p);

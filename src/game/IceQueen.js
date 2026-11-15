@@ -128,6 +128,7 @@ export function iceBolt(type, spell) {
     if (!small(type)) return { dmg: 0 }; // (the queen and her monsters: the simple duel magic does nothing)
     if (spell === 'Stupefy') return { dmg: 0, stun: 4 };
     if (spell === 'SapiraDuel') return { dmg: 10 };
+    if (spell === 'FireDuel') return { dmg: 12 }; // (fire hurts the queen of ice more than a plain charge)
     if (spell === 'SandsDuel') return { dmg: 3 };
     return { dmg: 2, stun: 1 };
 }
