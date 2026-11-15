@@ -2337,6 +2337,7 @@ export class Game {
         if (name === 'Hellfire') return this.hellfire.cast(isFinal);
         if (name === 'FireVortex') return this.hellfire.castLite(isFinal); // (the fire mage's key spell: a smaller, white hellfire)
         if (name === 'AirVortex') return this.airVortex.cast(isFinal);
+        if (name === 'EarthDust') return this._castEarthDust(isFinal);
         if (name === 'FireSerpent') return this.fireSerpent.cast(isFinal);
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
@@ -3037,6 +3038,28 @@ export class Game {
     }
 
     /** Another wizard's quake ran under me: I fall for a few seconds and get hurt. */
+    /**
+     * «Earth Veil» (a scroll): the wand at the ground (≤ 22 m) — the earth bursts THERE and a great cloud of dust goes up; whoever stands in it is blinded and slowed
+     * (the earth mage's smoke screen; `SpellManager.castEarthDust`). 10 mana; half for an earth mage. The cloud is no harm to me (my own cloud: `_dustMe` skips the caster).
+     */
+    _castEarthDust(isFinal) {
+        if (!isFinal) return null;
+        const now = Date.now();
+        if (now - (this._lastDust || 0) < 1500) return null;
+        const hand = castingHand(this);
+        if (!hand) { this.hud.setVoice('🌫️ Направьте палочку на землю и скажите «Earth Veil»', true); return null; }
+        const o = hand.origin, d = hand.dir;
+        let hit = null;
+        for (let r = 2; r <= 22; r += 1) { const x = o.x + d.x * r, y = o.y + d.y * r, z = o.z + d.z * r, gy = this.collision.surfaceY(x, z); if (y <= gy + 0.3) { hit = new THREE.Vector3(x, gy, z); break; } }
+        if (!hit) { this.hud.setVoice('🌫️ Направьте палочку <b>на землю</b> (до 22 м)', true); return null; }
+        const tired = this.combat.check('EarthDust'); if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('EarthDust'); this._lastDust = now;
+        const D = new THREE.Vector3(d.x, 0, d.z).normalize();
+        this.spells.cast('EarthDust', hit, D, hand.side, this.localId);
+        this.sync?.spell?.('EarthDust', hit, D, hand.side);
+        return 'EarthDust';
+    }
+
     /** In the earth mage's cloud of dust: the eyes sting (a dusty veil on the screen) and the legs slow down; only while I stand in it. */
     _dustMe(casterId, origin, R, dt) {
         const c = this.combat, p = this.character?.group?.position;

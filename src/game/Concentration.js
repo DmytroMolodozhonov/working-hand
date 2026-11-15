@@ -32,6 +32,7 @@
  */
 
 import { HintGate } from './Hints.js';
+import { spellElements } from '../ui/SpellElements.js';
 
 /** What holds concentration: key → its name on the screen and its own words. */
 export const HELD = {
@@ -91,8 +92,11 @@ export const FREE = new Set(['Lumos', 'LumosMaxima', 'LumosFlashlight', 'LumosAh
  * May `name` be cast while `held` (a HELD key, or null) is held? Pure (tests).
  * `ctx.hovering`: «Флайн» while hovering is the flight's own word (fly on); `ctx.isBuild`: a building spell.
  */
+/** The held keys of each element's own vortex: while it is held, that element's spells stay free (the author 15.11). */
+const KEY_HELD = { water: ['WaterVortex'], earth: ['GroundVortex'], fire: ['Hellfire'], air: ['AirVortex'] };
 export function mayCast(held, name, ctx = {}) {
     if (!held || !name) return true;
+    if (ctx.element && KEY_HELD[ctx.element]?.includes(held) && spellElements(name).includes(ctx.element)) return true; // (a mage of an element: his own vortex hinders none of his element's spells)
     if (HELD[held]?.none) return false;
     if (HELD[held]?.only) return name === 'Stand' || name === 'Stop'; // («Империус»: you play the creature — no spell of yours but «стоп»)
     if (FREE.has(name)) return true;
@@ -157,7 +161,7 @@ export class Concentration {
      */
     gate(name, isFinal = true, isBuild = false) {
         const held = this.held();
-        if (mayCast(held, name, { hovering: !!this.game.flight?.hovering, isBuild })) return null;
+        if (mayCast(held, name, { hovering: !!this.game.flight?.hovering, isBuild, element: this.game.heroElement?.id || null })) return null;
         const ru = HELD[held]?.ru || held;
         const say = held === 'Duel' ? '⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)'
             : held === 'Imperius' ? '🌀 Вы в чужом теле — колдовать нельзя. «Стоп» — вернуться в своё'

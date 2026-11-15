@@ -61,6 +61,115 @@ export function ballLine(o, f, s, a, b, r, samples = SCAR.SAMPLES) {
     return out;
 }
 
+// ------------------------------------------------------------------ the wound DECAL (the author 15.11: «наклеивает какую-то штуку… очень нереалистично. Надо переделать»)
+// A flat ribbon floated over a boxy body looked like a sticker. Now the cut is PROJECTED onto the real triangles it crosses (every mesh of the creature the
+// blade's strip touches: the torso, the arm, the leg…): the triangles are clipped to a strip along the cut line, so the wound lies flush on each surface, bends
+// round the edges of the parts, and — being made of pieces of the creature's own meshes — moves with them (a skinned part gets the same bones). A drawn wound
+// (lens-shaped lips, a dark clotted centre, glossy blood, a few runs and beads) is its texture, shared by all (one material).
+let _woundTex = null, _woundMat = null;
+function woundTexture() {
+    if (_woundTex) return _woundTex;
+    if (typeof document === 'undefined') return null;
+    const W = 256, H = 64, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    c.clearRect(0, 0, W, H);
+    const lens = (inset, ampK) => { // a lens: pointed ends, bulging in the middle, slightly crooked (a real cut is not a ruler line)
+        c.beginPath();
+        const top = (x) => H / 2 - Math.sin(Math.PI * x) * (H * 0.3 * ampK) - Math.sin(x * 11) * 1.2;
+        const bot = (x) => H / 2 + Math.sin(Math.PI * x) * (H * 0.3 * ampK) * 0.9 + Math.sin(x * 9 + 1) * 1.2;
+        const x0 = inset * W, x1 = W - inset * W;
+        c.moveTo(x0, H / 2);
+        for (let i = 0; i <= 40; i++) { const x = i / 40; c.lineTo(x0 + (x1 - x0) * x, top(x * 0.98 + 0.01)); }
+        for (let i = 40; i >= 0; i--) { const x = i / 40; c.lineTo(x0 + (x1 - x0) * x, bot(x * 0.98 + 0.01)); }
+        c.closePath();
+    };
+    // the bruised, swollen flesh round it (soft, low alpha), the lips, the blood, the dark depth, the gloss
+    const g = c.createRadialGradient(W / 2, H / 2, 4, W / 2, H / 2, W * 0.5); g.addColorStop(0, 'rgba(150,40,50,0.55)'); g.addColorStop(1, 'rgba(150,40,50,0)');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    lens(0.04, 0.95); c.fillStyle = 'rgba(176,42,52,0.95)'; c.fill(); // (the torn lips)
+    lens(0.07, 0.68); c.fillStyle = '#7d0d17'; c.fill(); // (blood)
+    lens(0.1, 0.4); c.fillStyle = '#2a0408'; c.fill(); // (the dark depth)
+    c.strokeStyle = 'rgba(255,170,170,0.55)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(W * 0.2, H * 0.4); c.quadraticCurveTo(W * 0.5, H * 0.3, W * 0.78, H * 0.41); c.stroke(); // (the gloss on the wet edge)
+    // runs of blood and a few beads below the lower lip
+    for (const [x, len] of [[0.3, 0.3], [0.52, 0.42], [0.7, 0.24]]) { c.fillStyle = 'rgba(120,8,18,0.9)'; c.beginPath(); const px = x * W; c.moveTo(px - 2, H * 0.62); c.lineTo(px + 2, H * 0.62); c.lineTo(px + 1, H * (0.62 + len * 0.38)); c.lineTo(px - 1, H * (0.62 + len * 0.38)); c.closePath(); c.fill(); c.beginPath(); c.arc(px, H * (0.62 + len * 0.38) + 1.5, 2.2, 0, Math.PI * 2); c.fill(); }
+    const t = new THREE.CanvasTexture(cv); t.anisotropy = 4; t.userData = { shared: true };
+    return (_woundTex = t);
+}
+function woundMat() {
+    if (_woundMat) return _woundMat;
+    const map = woundTexture();
+    _woundMat = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: map ? 0xffffff : 0x8a0a14 });
+    _woundMat.userData.shared = true;
+    return _woundMat;
+}
+
+const _v0 = new THREE.Vector3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _w0 = new THREE.Vector3(), _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _fn = new THREE.Vector3(), _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3();
+/** Clip a convex polygon (array of {p: Vector3, b: [b0, b1, b2]}) against the plane n·x ≤ d; barycentrics are interpolated with the points. */
+function clipPoly(poly, n, d) {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+        const a = poly[i], b = poly[(i + 1) % poly.length];
+        const da = n.dot(a.p) - d, db = n.dot(b.p) - d;
+        if (da <= 0) out.push(a);
+        if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
+            const k = da / (da - db);
+            out.push({ p: a.p.clone().lerp(b.p, k), b: [a.b[0] + (b.b[0] - a.b[0]) * k, a.b[1] + (b.b[1] - a.b[1]) * k, a.b[2] + (b.b[2] - a.b[2]) * k] });
+        }
+    }
+    return out;
+}
+
+/**
+ * PURE-ish: the triangles of `mesh` (current pose, world) inside the box {c, ax (along the cut), ay (across), az (projection, towards the caster = −f), hx, hy, hz} →
+ * { pos: [bind/local x,y,z …], uv: [..], skin: [index4, weight4 …] | null } or null. `facing`: a triangle must face the caster (n·az > FACE).
+ */
+export function projectOnMesh(mesh, box, lift = 0.012) {
+    const geo = mesh.geometry;
+    const P = geo?.attributes?.position;
+    if (!P) return null;
+    const idx = geo.index, count = idx ? idx.count : P.count;
+    const skinned = !!mesh.isSkinnedMesh && geo.attributes.skinIndex;
+    mesh.updateMatrixWorld(true);
+    const M = mesh.matrixWorld;
+    const world = (i, out) => { out.fromBufferAttribute(P, i); if (skinned) mesh.boneTransform(i, out); return out.applyMatrix4(M); };
+    const planes = [[box.ax, box.hx], [box.ax.clone().negate(), box.hx], [box.ay, box.hy], [box.ay.clone().negate(), box.hy], [box.az, box.hz], [box.az.clone().negate(), box.hz]];
+    const pos = [], uv = [], nor = [], sk = [], sw = [];
+    const SI = geo.attributes.skinIndex, SW = geo.attributes.skinWeight, N = geo.attributes.normal;
+    const raw = (i) => new THREE.Vector3().fromBufferAttribute(P, i);
+    for (let t = 0; t < count; t += 3) {
+        const i0 = idx ? idx.getX(t) : t, i1 = idx ? idx.getX(t + 1) : t + 1, i2 = idx ? idx.getX(t + 2) : t + 2;
+        world(i0, _w0); world(i1, _w1); world(i2, _w2);
+        // (a quick reject: the triangle's box against the decal's ball)
+        const cx = (_w0.x + _w1.x + _w2.x) / 3 - box.c.x, cy = (_w0.y + _w1.y + _w2.y) / 3 - box.c.y, cz = (_w0.z + _w1.z + _w2.z) / 3 - box.c.z;
+        if (cx * cx + cy * cy + cz * cz > box.reach * box.reach) continue;
+        _fn.crossVectors(_e1.subVectors(_w1, _w0), _e2.subVectors(_w2, _w0));
+        const fl = _fn.length(); if (fl < 1e-9) continue;
+        _fn.divideScalar(fl);
+        const face = _fn.dot(box.az); // (normals out of a closed mesh: front faces point at the caster)
+        if (Math.abs(face) < 0.3) continue; // (sideways: skip — the wound wraps on the next face)
+        if (face < 0) continue; // (the back faces)
+        let poly = [{ p: _w0.clone(), b: [1, 0, 0] }, { p: _w1.clone(), b: [0, 1, 0] }, { p: _w2.clone(), b: [0, 0, 1] }];
+        for (const [n, d] of planes) { poly = clipPoly(poly, n, n.dot(box.c) + d); if (poly.length < 3) break; }
+        if (poly.length < 3) continue;
+        const r0 = raw(i0), r1 = raw(i1), r2 = raw(i2);
+        const rn = N ? new THREE.Vector3().fromBufferAttribute(N, i0) : _fn.clone();
+        const dom = (b) => (b[0] >= b[1] && b[0] >= b[2] ? i0 : b[1] >= b[2] ? i1 : i2);
+        const vert = (q) => {
+            const lp = r0.clone().multiplyScalar(q.b[0]).addScaledVector(r1, q.b[1]).addScaledVector(r2, q.b[2]);
+            lp.addScaledVector(rn, lift / Math.max(0.2, Math.min(3, (mesh.scale?.y || 1)))); // (a hair off the skin: along the normal)
+            const rel = _v0.subVectors(q.p, box.c);
+            return { lp, u: (rel.dot(box.ax) / box.hx + 1) / 2, v: (rel.dot(box.ay) / box.hy + 1) / 2, vi: dom(q.b) };
+        };
+        const vs = poly.map(vert);
+        for (let k = 1; k < vs.length - 1; k++) for (const q of [vs[0], vs[k], vs[k + 1]]) {
+            pos.push(q.lp.x, q.lp.y, q.lp.z); uv.push(q.u, q.v); nor.push(rn.x, rn.y, rn.z);
+            if (skinned) { sk.push(SI.getX(q.vi), SI.getY(q.vi), SI.getZ(q.vi), SI.getW(q.vi)); sw.push(SW.getX(q.vi), SW.getY(q.vi), SW.getZ(q.vi), SW.getW(q.vi)); }
+        }
+    }
+    if (!pos.length) return null;
+    return { pos, uv, nor, sk: skinned ? sk : null, sw: skinned ? sw : null };
+}
+
 export class Scars {
     constructor(game) {
         this.game = game;
@@ -120,6 +229,15 @@ export class Scars {
             }
             return g;
         });
+        // the wound lies ON the surfaces it crosses (projected decal); the floating ribbon is only the fallback for a model that gave no triangles (see the header)
+        const decal = hits ? this._decal(pts, parent, sheet, body, seed) : null;
+        if (decal) {
+            const mine0 = this.list.filter((e) => e.owner === owner);
+            if (mine0.length >= SCAR.MAX_PER) this._drop(mine0[0]);
+            while (this.list.length >= SCAR.MAX) this._drop(this.list[0]);
+            this.list.push({ objs: decal.objs, owner, parent, t: 0, anchor: decal.anchor });
+            return true;
+        }
         // (a model that did not answer at all: the ball's line, kept a little outside)
         const lift = hits ? SCAR.LIFT : SCAR.LIFT + 0.06;
         const mesh = this._ribbon(pts, parent, lift, body.r);
@@ -129,8 +247,49 @@ export class Scars {
         if (mine.length >= SCAR.MAX_PER) this._drop(mine[0]);
         while (this.list.length >= SCAR.MAX) this._drop(this.list[0]);
         parent.add(mesh);
-        this.list.push({ mesh, owner, parent, t: 0 });
+        this.list.push({ objs: [mesh], owner, parent, t: 0, anchor: null });
         return true;
+    }
+
+    /** The decal strip along the cut: → {objs, anchor} or null. */
+    _decal(pts, parent, sheet, body, seed) {
+        const first = pts[0], last = pts[pts.length - 1];
+        const ax = new THREE.Vector3(last.x - first.x, last.y - first.y, last.z - first.z);
+        const len = ax.length();
+        if (len < 0.12) return null;
+        ax.divideScalar(len);
+        const az = new THREE.Vector3().copy(sheet.f).negate(); // (towards the caster)
+        const ay = new THREE.Vector3().crossVectors(az, ax); if (ay.lengthSq() < 1e-6) return null; ay.normalize();
+        ax.crossVectors(ay, az).normalize(); // (re-orthogonalised)
+        const c = new THREE.Vector3(); for (const p of pts) c.add(_a.set(p.x, p.y, p.z)); c.divideScalar(pts.length);
+        const hx = Math.min(len * 0.55, body.r * 1.25 + 0.2), hy = Math.max(0.07, Math.min(0.16, 0.07 + body.r * 0.05));
+        const flip = ((seed * 2654435761) >>> 0) & 1;
+        const box = { c, ax, ay: flip ? ay.clone().negate() : ay, az, hx, hy, hz: body.r + 0.55, reach: Math.hypot(hx, hy, body.r + 0.55) + 0.2 };
+        const objs = [];
+        parent.updateMatrixWorld(true);
+        const meshes = [];
+        parent.traverse((o) => { if (o.isMesh && o.visible && !o.userData?.scar && o.material?.visible !== false && o.geometry?.attributes?.position && !o.isInstancedMesh) meshes.push(o); });
+        for (const m of meshes.slice(0, 40)) {
+            const r = projectOnMesh(m, box);
+            if (!r) continue;
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(r.pos, 3));
+            geo.setAttribute('uv', new THREE.Float32BufferAttribute(r.uv, 2));
+            // (normals: the lit face is the parent's — a decal is lit like the skin it lies on)
+            geo.setAttribute('normal', new THREE.Float32BufferAttribute(r.nor, 3));
+            let mesh;
+            if (r.sk) {
+                geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(r.sk, 4));
+                geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(r.sw, 4));
+                mesh = new THREE.SkinnedMesh(geo, woundMat());
+                mesh.bindMode = m.bindMode;
+                mesh.bind(m.skeleton, m.bindMatrix);
+            } else mesh = new THREE.Mesh(geo, woundMat());
+            mesh.frustumCulled = false; mesh.renderOrder = 3; mesh.userData.scar = true;
+            m.add(mesh); objs.push(mesh);
+        }
+        if (!objs.length) return null;
+        return { objs, anchor: parent.worldToLocal(c.clone()) };
     }
 
     _ribbon(pts, parent, lift, bodyR) {
@@ -176,8 +335,7 @@ export class Scars {
     _drop(e) {
         const i = this.list.indexOf(e);
         if (i >= 0) this.list.splice(i, 1);
-        e.mesh.parent?.remove(e.mesh);
-        e.mesh.geometry?.dispose();
+        for (const o of e.objs) { o.parent?.remove(o); o.geometry?.dispose(); }
     }
 
     /** Every frame: drops from the scars of the bleeding, and now and then the sweep for the dead. */
@@ -188,7 +346,7 @@ export class Scars {
             this._sweepT = SCAR.SWEEP;
             for (const e of [...this.list]) {
                 const o = e.owner;
-                let up = e.mesh.parent, ok = false;
+                let up = e.objs[0]?.parent, ok = false;
                 while (up) { if (up === g.scene) { ok = true; break; } up = up.parent; }
                 if (!ok || o?.removable || o?.gone) this._drop(e);
             }
@@ -200,9 +358,8 @@ export class Scars {
             const o = e.owner;
             if (!(o?.bleed > 0 || o?.woundHold) || o.dead || o.isDead) continue;
             if (Math.random() > SCAR.DRIP * 0.25) continue;
-            const pos = e.mesh.geometry.attributes.position;
-            const k = Math.floor(Math.random() * (pos.count / 4)) * 4 + (Math.random() < 0.5 ? 1 : 2);
-            _a.fromBufferAttribute(pos, Math.min(pos.count - 1, k)).applyMatrix4(e.mesh.matrixWorld);
+            if (e.anchor) e.parent.localToWorld(_a.copy(e.anchor)).addScaledVector(_b.set(Math.random() - 0.5, (Math.random() - 0.5) * 0.4, Math.random() - 0.5), 0.5);
+            else { const m = e.objs[0], pos = m.geometry.attributes.position; const k = Math.floor(Math.random() * (pos.count / 4)) * 4 + (Math.random() < 0.5 ? 1 : 2); _a.fromBufferAttribute(pos, Math.min(pos.count - 1, k)).applyMatrix4(m.matrixWorld); }
             if (cam && _a.distanceToSquared(cam) > SCAR.NEAR * SCAR.NEAR) continue;
             g.dismember?._drip?.(_a);
         }

@@ -1232,7 +1232,7 @@ export const SPELL_SOUND = {
     LevitationSuperMaxima: { own: ['spaceRise'], cast: 'fxMaxima' },
     PlanetLiquidation: { own: ['doomBeam', 'doomRumble', 'doomBlast'], theme: 'thDoom' }, // (the beam, the cracking, the blast — SpaceSounds, everybody who sees it; the tune from the caster)
     Hellfire: { own: ['inferno', 'rumble'], theme: 'thHell' },
-    FireVortex: { own: ['inferno'] }, AirVortex: { own: ['fxWind'] }, // (the fire / air mage's key spells)
+    EarthDust: { own: ['explosion', 'rumble'] }, FireVortex: { own: ['inferno'] }, AirVortex: { own: ['fxWind'] }, // (the fire / air mage's key spells)
     FireSerpent: { own: ['inferno', 'rumble'], theme: 'thSerpent' }, // (the serpent rises out of the fire: its own dark tune — FireSerpent.js)
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
     GroundVortex: { theme: 'thEarth' }, GroundShield: { cast: 'fxShield' }, // («Ground Vortex»: its tune; the shield word — a short shield chime)

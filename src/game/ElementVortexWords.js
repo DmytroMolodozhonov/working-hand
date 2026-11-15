@@ -14,5 +14,15 @@ const pair = (text, A, RUN) => {
     for (let i = 0; i + 1 < w.length; i++) if (A.test(w[i]) && VORTEX.test(w[i + 1])) return true;
     return false;
 };
+const EARTH = /^(?:earth|эрт|ерт|эрс|ёрт|ерс|эрз|урт|arth)$/;
+const VEIL = /^(?:veil|вейл|вэйл|вел|вейль|veal|vale|вэл)$/;
+const VEIL_RUN = /^(?:earthveil|эртвейл|эрсвейл|ертвейл)$/;
 export const fireVortexWords = (t) => pair(t, FIRE, FIRE_RUN);
 export const airVortexWords = (t) => pair(t, AIR, AIR_RUN);
+/** «Earth Veil» — the smoke screen of earth (a cloud of dust near the foe): both words together. */
+export function earthVeilWords(text) {
+    const w = words(text);
+    if (w.some((q) => VEIL_RUN.test(q))) return true;
+    for (let i = 0; i + 1 < w.length; i++) if (EARTH.test(w[i]) && VEIL.test(w[i + 1])) return true;
+    return false;
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a3a2a"/><stop offset="1" stop-color="#22190f"/></linearGradient>
+    <radialGradient id="d1" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#d8c29c"/><stop offset="1" stop-color="#a08a6a" stop-opacity=".25"/></radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#bg)"/>
+  <ellipse cx="32" cy="55" rx="18" ry="3.5" fill="#000" opacity=".35"/>
+  <path d="M10 50l14-6 8 4 10-5 12 7z" fill="#3b2a1a" stroke="#1a110a" stroke-width="1"/>
+  <circle cx="22" cy="34" r="11" fill="url(#d1)"/><circle cx="36" cy="28" r="13" fill="url(#d1)"/><circle cx="46" cy="38" r="9" fill="url(#d1)"/><circle cx="30" cy="20" r="9" fill="url(#d1)"/><circle cx="16" cy="44" r="6" fill="url(#d1)"/>
+  <g fill="#6b5440" stroke="#2a1d12" stroke-width=".8"><rect x="12" y="12" width="5" height="5" transform="rotate(20 14 14)"/><rect x="48" y="14" width="4" height="4" transform="rotate(-15 50 16)"/><rect x="40" y="8" width="3.5" height="3.5" transform="rotate(35 42 10)"/></g>
+</svg>

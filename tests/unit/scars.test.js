@@ -1,6 +1,7 @@
 /** Scars: the cut line is where the blade's sheet meets the body, facing the caster (the author 07.11: «прямо по шву, не рандомные»). */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { Vector3 } from 'three';
 import { ballLine, SCAR } from '../../src/fx/Scars.js';
 
@@ -42,4 +43,24 @@ test('a tall body (an axis from a to b): the line is where the sheet crosses the
     const line = ballLine(o, f, s, V(0, 1, 0), V(0, 6, 0), 1);
     assert.ok(line.length > 0);
     for (const p of line) assert.ok(Math.abs(p.y - 4) < 1e-6);
+});
+
+import { projectOnMesh } from '../../src/fx/Scars.js';
+test('the wound decal lies on the triangles it crosses: a strip on the face towards the caster, on nothing else, in the mesh\'s own space', () => {
+    const THREE_ = THREE;
+    const m = new THREE_.Mesh(new THREE_.BoxGeometry(1, 1, 1, 4, 4, 4), new THREE_.MeshBasicMaterial());
+    m.position.set(2, 0, 0); m.updateMatrixWorld(true);
+    // the caster is at +z looking along −z: the cut runs along x across the front face
+    const box = { c: new THREE_.Vector3(2, 0, 0.5), ax: new THREE_.Vector3(1, 0, 0), ay: new THREE_.Vector3(0, 1, 0), az: new THREE_.Vector3(0, 0, 1), hx: 0.4, hy: 0.1, hz: 0.3, reach: 1 };
+    const r = projectOnMesh(m, box);
+    assert.ok(r && r.pos.length >= 9, 'a strip of triangles');
+    for (let i = 0; i < r.pos.length; i += 3) {
+        assert.ok(Math.abs(r.pos[i + 2] - 0.5) < 0.05, 'on the front face (the lift is a hair)');
+        assert.ok(Math.abs(r.pos[i]) <= 0.41 && Math.abs(r.pos[i + 1]) <= 0.11, 'inside the strip');
+    }
+    for (const u of r.uv) assert.ok(u >= -1e-6 && u <= 1 + 1e-6);
+    // a caster on the other side sees the back face: nothing is made on the front one
+    const away = { ...box, az: new THREE_.Vector3(0, 0, -1), c: new THREE_.Vector3(2, 0, 0.5) };
+    const r2 = projectOnMesh(m, away); // (its strip is at the front face but it looks from behind: the back face is 1 m away, outside hz)
+    assert.ok(!r2, 'the front face is a back face for a caster behind it');
 });

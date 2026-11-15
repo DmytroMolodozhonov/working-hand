@@ -43,6 +43,17 @@ export class EarthMages {
   a.slab=null;a.stitchPose=0;a.wallPlan=null;a.phase='rest';a.t=0;a.fired=false;a.strike=0;
   v.model.earthPoseT=undefined;v.castT=0;
  }
+ /** «Earthquake»: a stomp, a crack runs at the foe (his own element: half the price). Not hurt-and-running (that is the smoke screen's time); true: cast. */
+ _quake(v,foe){
+  const g=this.game,L=g.castleLife,a=v.earth;if(!g.spells?.cast||a.recover||v.hp<v.maxHp*.3)return false;
+  const dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz);if(d<6||d>18||!L._sees(v,foe))return false;
+  if(Math.random()>.5){a.quakeCd=3;return false;} // (his mood: not at every chance)
+  if(v.mana<SPELL_COST.Earthquake*.5+E.START*.5||!this._pay(v,SPELL_COST.Earthquake))return false;
+  a.quakeCd=16;a.stitchPose=1.1;
+  const P=new THREE.Vector3(v.x,g.collision?.surfaceY?g.collision.surfaceY(v.x,v.z):v.y,v.z),D=new THREE.Vector3(dx/d,0,dz/d);
+  g.spells.cast('Earthquake',P,D,'right',v.id);g.sync?.spell?.('Earthquake',P,D,'right',v.id);L._say?.(v,'Earthquake!',2);
+  return true;
+ }
  /** The smoke screen (the author 15.11): 10 mana (half for his own element), the ground bursts near the foe and a great cloud of dust goes up between them. true: cast. */
  _dust(v,foe){
   const g=this.game,L=g.castleLife,a=v.earth;if(!foe||!g.spells?.cast)return false;
@@ -103,6 +114,8 @@ export class EarthMages {
    if(slab&&(slab.phase==='loosen'||slab.phase==='carry')){v.mode=slab.phase==='loosen'?'earthLift':'earthHammer';v.model.earthPoseT=(slab.npc?.time||0)%1.1;L._ground(v);return true;}
    a.slab=null;
   }
+  a.quakeCd=Math.max(0,(a.quakeCd||0)-dt);
+  if(foe&&a.quakeCd<=0&&!a.slab&&a.stitchPose<=0&&this._quake(v,foe))return true; // («Earthquake» is an earth spell: he may say it whatever he holds — even his Ground Vortex — the author 15.11)
   let s=this.swarms.get(v.id);
   if(!foe||Math.hypot(foe.x-v.x,foe.z-v.z)>E.LEASH){
    if(s)this._stop(v.id);v.foe=null;v.mode='idle';v.model.earthPoseT=undefined;L._ground(v);return true;
