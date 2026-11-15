@@ -22,7 +22,7 @@
 import * as THREE from 'three';
 import { CAMPFIRE } from './Campfires.js';
 import { spellScroll, makeItemModel, newUid } from './ItemTypes.js';
-import { pentagramScroll, figureIds } from './PentagramRules.js';
+import { pentagramScroll, lootFigureIds as figureIds } from './PentagramRules.js';
 import { hashString } from '../core/math.js';
 import { CHUNK, chunkKey } from '../world/Terrain.js';
 import { makeStatue, STATUE_BOX } from './CopruStatue.js';

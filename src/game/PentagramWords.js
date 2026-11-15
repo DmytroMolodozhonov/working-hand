@@ -26,6 +26,10 @@ export const PENT_NAMES = {
     vitality: { en: 'Sanguinis', say: ['сангвинис', 'сангуинис', 'сангвинес', 'сангуинес'], stems: ['sanguinis', 'sanguines', 'sangwinis', 'сангвинис', 'сангуинис', 'сангвинес', 'сангуинес', 'сангвинэс', 'сангуйнис', 'санг винис'] },
     night: { en: 'Noctis', say: ['ноктис', 'ноктес', 'ноктиз'], stems: ['noctis', 'noktis', 'noctes', 'ноктис', 'ноктес', 'нокт ис', 'ноктиз'] },
     sight: { en: 'Spectris', say: ['спектрис', 'спектрес', 'спектрэс'], stems: ['spectris', 'spektris', 'spectres', 'спектрис', 'спектрес', 'спектрэс', 'спектриз', 'спекрис'] },
+    elwater: { en: 'Marinus', say: ['маринус', 'маринас', 'маринес'], stems: ['marinus', 'marinas', 'marines', 'маринус', 'маринас', 'маринес', 'марине', 'мариниус'] },
+    elearth: { en: 'Terranus', say: ['терранус', 'теранус', 'терранас', 'терранос'], stems: ['terranus', 'teranus', 'terranas', 'терранус', 'теранус', 'терранас', 'терранос', 'терранюс'] },
+    elfire: { en: 'Flammeus', say: ['фламеус', 'фламиус', 'фламеос', 'фламеас'], stems: ['flammeus', 'flameus', 'flamius', 'фламеус', 'фламиус', 'фламеос', 'фламеас', 'фламеюс'] },
+    elair: { en: 'Ventulus', say: ['вентулус', 'вентулас', 'вентулос', 'вентюлус'], stems: ['ventulus', 'ventulas', 'ventulos', 'вентулус', 'вентулас', 'вентулос', 'вентюлус', 'вентулюс'] },
     firm: { en: 'Firmitas', say: ['фирмитас', 'фермитас', 'фирмитес', 'фирмитэс'], stems: ['firmitas', 'firmitus', 'фирмитас', 'фермитас', 'фирмитес', 'фирмитэс', 'фирмитус', 'фирмитос', 'фермитес'] },
     infernum: { en: 'Infernum', say: ['инфернум', 'инфэрнум', 'инфернус', 'инферно'], stems: ['infernum', 'infernus', 'infernom', 'inferno', 'инфернум', 'инфэрнум', 'инфернус', 'инфёрнум', 'инфер нум', 'инфернам', 'инферно', 'инфэрно', 'инфёрно'] }, // («…Инферно»: the author says it so — with «Пентаграниум» in the phrase it is the gates of hell, never the fire spell)
     darkward: { en: 'Albedo', say: ['альбедо', 'албедо', 'альбидо'], stems: ['albedo', 'albido', 'albeido', 'альбедо', 'албедо', 'альбидо', 'альбейдо', 'альб едо'] },

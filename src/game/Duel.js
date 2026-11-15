@@ -1322,7 +1322,8 @@ export class Duel {
         }
         // (my «Protection» pays half of the charge's mana; out of mana it shatters and the charge goes on)
         if (g.combat.shieldFactor(caster) >= 1 && g.combat._blocked(caster, b.spell)) {
-            this._end(b, 'blocked');
+            if (g.heroElement?.id === 'air' && !g.combat.shield?.gods) this._deflect(b, { id: this.me }); // (an AIR mage's guard does not stop a charge: the bent air throws it back — the author 15.11)
+            else this._end(b, 'blocked');
             return;
         }
         this._end(b, 'hit');

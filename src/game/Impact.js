@@ -186,6 +186,7 @@ export const SPELL_PHYSICS = {
     Caligo: null, // («Caligo»: a fog, nobody is pushed — DarkFog.js)
     Sectura: null, // («Sectura»: a cut, not a push — an invisible blade: Slash.js; the body is cut or wounded, nothing is shoved)
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
+    FireVortex: null, AirVortex: null, /* (the fire mage's smaller hellfire burns, it does not push; the air vortex lifts only the hero: AirVortex.js) */
     GroundVortex: { push: 7, jolt: 0.3 }, GroundShield: null, /* (a flying block of the earth vortex: GroundVortex.js; the shield word pushes nobody) */
     Pentagranium: null, // («Pentagranium <Name>»: a drawing on the ground — pushes nobody, Pentagranium.js)
     Cardilon: null, NihilisDuel: null, Nihilis: null, // («Nihilis Atra»: a cone of light against black magic — it pushes nobody, Nihilis.js)

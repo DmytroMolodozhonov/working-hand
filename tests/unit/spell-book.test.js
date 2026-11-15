@@ -57,7 +57,7 @@ test('every spell a beginner does not know has a real source: a scroll somewhere
     for (const n of allSpells()) {
         if (START_SPELLS.has(n)) continue;
         const k = teachKey(n);
-        const ok = found.has(k) || BOOK_SPELLS.has(k) || MANA_SPELLS.has(k) || TEMPLE_SCROLLS.includes(k) || k === 'CreateHouse' || k === 'Inspirius' || k === 'Pentagranium'; // (Pentagranium: no spell scroll — each pentagram is learnt from its own scroll, Game.knowsSpell)
+        const ok = found.has(k) || BOOK_SPELLS.has(k) || MANA_SPELLS.has(k) || TEMPLE_SCROLLS.includes(k) || k === 'FireVortex' || k === 'AirVortex' /* (the fire / air mage's key spells come with the element, SpellBook.knows) */ || k === 'CreateHouse' || k === 'Inspirius' || k === 'Pentagranium'; // (Pentagranium: no spell scroll — each pentagram is learnt from its own scroll, Game.knowsSpell)
         assert.ok(ok, `«${n}»: not known from the start, and no scroll «${k}» turns up anywhere`);
         if (found.has(k)) assert.ok(SPELL_RIBBON[k] && SPELL_RU[k], `the scroll «${k}»: its ribbon and its name`);
     }
@@ -80,7 +80,7 @@ test('a lone wizard\'s house chest holds a thing about houses 40 % of the time; 
 });
 
 test('the pentagram drawing-scrolls turn up (chests, the towers\' shops, the wizards) and are not spell scrolls; «Пентаграниум» itself is a spell scroll only', async () => {
-    const { isPentagramScroll, figureIds } = await import('../../src/game/PentagramRules.js');
+    const { isPentagramScroll, figureIds, lootFigureIds } = await import('../../src/game/PentagramRules.js');
     const { lootOfVillager } = await import('../../src/game/Death.js');
     const r = createRng(11), drawings = new Set(), shop = new Set(), wiz = new Set();
     for (let i = 0; i < 24000; i++) { // (each new pentagram thins the share of the rest: enough rolls for the rarest)
@@ -90,7 +90,7 @@ test('the pentagram drawing-scrolls turn up (chests, the towers\' shops, the wiz
         if (isPentagramScroll(s)) shop.add(s.pent);
         for (const d of lootOfVillager('wanderer', {}, r)) if (isPentagramScroll(d)) wiz.add(d.pent);
     }
-    assert.deepEqual([...drawings].sort(), [...figureIds()].sort(), 'every figure has a scroll in the chests');
+    assert.deepEqual([...drawings].sort(), [...lootFigureIds()].sort(), 'every figure has a scroll in the chests (but the element pentagrams: found only in the settlements of the elements — the author 15.11)');
     assert.ok(shop.size >= 1, 'a tower\'s shop sells a drawing now and then');
     assert.ok(wiz.size >= 1, 'a wanderer carries one now and then');
     assert.ok(!scrollsFound().has('Pentagranium'), 'there is no «Pentagranium» spell scroll: only the pentagrams\' own');

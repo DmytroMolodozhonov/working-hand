@@ -207,3 +207,32 @@ export const SOUL_SEAL_LINES = [
     [[-0.18, 0.12], [0.18, 0.12], [0.18, -0.2], [-0.18, -0.2], [-0.18, 0.12]],
     [[0, 0.12], [0, 0.35]],
 ];
+
+// ------------------------------------------------------------------ the four ELEMENT pentagrams (white; the author 15.11): one picture each, the element itself.
+/** Water: three ripples spreading from a drop that has just fallen — open arcs round a small ring, wider each, opened at the top. */
+export const EL_WATER_LINES = (() => {
+    const ring = arc(0, 0, 0.14, 0, Math.PI * 2, 10);
+    const ripple = (r, gap) => curve(arc(0, 0, r, Math.PI / 2 + gap, Math.PI / 2 + Math.PI * 2 - gap, 22));
+    const drop = [pt(0, 0.34), pt(0.1, 0.22), pt(0, 0.14), pt(-0.1, 0.22), pt(0, 0.34)];
+    return [...curve(ring), ...ripple(0.34, 0.5), ...ripple(0.58, 0.42), ...ripple(0.82, 0.34), ...curve(drop)];
+})();
+/** Earth: a stone cube drawn from above-aside (a hexagon cut by a Y) with two pebbles on the ground and three cracks. */
+export const EL_EARTH_LINES = (() => {
+    const hex = Array.from({ length: 7 }, (_, k) => { const a = Math.PI / 2 + (k * Math.PI) / 3; return pt(Math.cos(a) * 0.62, Math.sin(a) * 0.62 + 0.06); });
+    const y = [[pt(0, 0.68), pt(0, 0.06)], [pt(0, 0.06), pt(-0.54, -0.25)], [pt(0, 0.06), pt(0.54, -0.25)]];
+    const pebble = (x, yy, s) => curve([pt(x - s, yy), pt(x - s * 0.4, yy + s * 0.7), pt(x + s * 0.6, yy + s * 0.5), pt(x + s, yy), pt(x - s, yy)]);
+    return [...curve(hex), ...y, ...pebble(-0.6, -0.78, 0.13), ...pebble(0.52, -0.82, 0.1), ...curve([pt(-0.2, 0.38), pt(-0.1, 0.26), pt(-0.2, 0.15)]), ...curve([pt(0.3, 0.3), pt(0.22, 0.18), pt(0.34, 0.1)])];
+})();
+/** Fire: one tall flame (a teardrop leaning, its tip curling) with a smaller tongue in front and two sparks rising beside it. */
+export const EL_FIRE_LINES = (() => {
+    const flame = [pt(0, -0.78), pt(-0.46, -0.52), pt(-0.52, -0.1), pt(-0.28, 0.24), pt(-0.12, 0.5), pt(0.02, 0.9), pt(0.2, 0.5), pt(0.42, 0.18), pt(0.5, -0.18), pt(0.4, -0.55), pt(0, -0.78)];
+    const tongue = [pt(0, -0.56), pt(-0.22, -0.34), pt(-0.12, -0.06), pt(0, 0.16), pt(0.12, -0.08), pt(0.22, -0.34), pt(0, -0.56)];
+    const spark = (x, yy) => [[pt(x, yy - 0.06), pt(x, yy + 0.06)], [pt(x - 0.06, yy), pt(x + 0.06, yy)]];
+    return [...curve(flame), ...curve(tongue), ...spark(-0.72, 0.4), ...spark(0.72, 0.62)];
+})();
+/** Air: a spiral of two turns that unwinds from the centre, with three short gusts blowing off its end. */
+export const EL_AIR_LINES = (() => {
+    const spiral = Array.from({ length: 41 }, (_, k) => { const t = k / 40, a = Math.PI / 2 + t * Math.PI * 4, r = 0.08 + t * 0.7; return pt(Math.cos(a) * r, Math.sin(a) * r); });
+    const gust = (yy, len) => curve([pt(0.74, yy), pt(0.74 + len * 0.5, yy + 0.05), pt(0.74 + len, yy)]);
+    return [...curve(spiral), ...gust(0.1, 0.2), ...gust(-0.08, 0.14), ...gust(-0.26, 0.2)];
+})();

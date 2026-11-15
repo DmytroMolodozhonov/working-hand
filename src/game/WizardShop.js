@@ -12,7 +12,7 @@ import {ELEMENT_SPELLS} from '../ui/SpellElements.js';
 import { newUid, itemValue, SPELL_RU, fitThings, freshShopScroll,SCROLL_WEIGHTS,spellScroll } from './ItemTypes.js';
 import { bookSpells, WARD_ID } from './BookBirds.js';
 import { rollChestArmor } from './ArmorTypes.js';
-import { pentagramScroll, figureIds } from './PentagramRules.js';
+import { pentagramScroll, lootFigureIds as figureIds } from './PentagramRules.js';
 
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const randInt = (r, a, b) => a + Math.floor(r() * (b - a + 1));
@@ -68,7 +68,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
         if (at < 0) at = Math.floor(r() * things.length) % Math.max(1, things.length);
         if (things.length) things[at] = rollHouseThing(r); else things.push(rollHouseThing(r));
     }
-    if(element)for(let i=0;i<things.length;i++)if(things[i].kind==='scroll'&&(things[i].stat==='spell'||things[i].stat==='pentagram'))things[i]=r()<.5?rollElementalHouseScroll(r,element):pentagramScroll(pick(r,figureIds()),newUid());
+    if(element)for(let i=0;i<things.length;i++)if(things[i].kind==='scroll'&&(things[i].stat==='spell'||things[i].stat==='pentagram'))things[i]=r()<.3?pentagramScroll(ELEMENT_PENT[element]||pick(r,figureIds()),newUid()):r()<.5?rollElementalHouseScroll(r,element):pentagramScroll(pick(r,figureIds()),newUid()); // (a settlement of an element: its own pentagram turns up often — the only place they are found; the author 15.11)
     if(element==='fire'&&r()<.25){const head={kind:'gargoyleHead',uid:newUid()};let at=things.findIndex(it=>['bread','cheese','apple','pie'].includes(it.kind));if(at<0)at=things.length-1;if(at<0)things.push(head);else things[at]=head;}
     return things;
 }
@@ -109,6 +109,7 @@ export function scrollName(it) {
     return 'свиток';
 }
 
+const ELEMENT_PENT={water:'elwater',earth:'elearth',fire:'elfire',air:'elair'};
 export { itemValue };
 
 /** Relative weight +40% for every earth spell, preserving the other spells and their rarity. */

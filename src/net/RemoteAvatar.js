@@ -5,6 +5,7 @@
  */
 
 import { attachWings } from '../game/HeroWings.js';
+import { elementAt } from '../game/HeroElement.js';
 import { attachTail } from '../game/Mermaid.js';
 import { applyRemoteMonster } from '../game/MonsterTransform.js';
 import * as THREE from 'three';
@@ -160,6 +161,7 @@ export class RemoteAvatar {
             this.combat.shield = s.c[0];
             this.combat.gods = !!s.c[5]; // (ProtectionGods.js: their shield / dome golden)
             this.combat.atWand = !!s.c[6]; // (their hand shield at their wand's tip)
+            this.combat.el = elementAt(s.c[8]); // (their element's paint — HeroElement.js)
             this.combat.cross = !!s.c[7]; // (the crossed arms' shield: in front of their arms)
             this.combat.side = s.c[1] ? 'left' : 'right';
             this.combat.shieldLeft = s.c[2];

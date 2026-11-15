@@ -58,6 +58,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { addDark } from './DarkMagic.js';
 import { BARE } from './BareHand.js';
 import { OFFERINGS } from './PentagramOfferings.js';
+import { ELEMENT_OF_PENT } from './HeroElement.js';
 import { RESIST_HINT } from './ResistRules.js';
 
 /** ms: a pentagram's name still being said must hold this long unchanged before it casts (the author: «после Pentagranium подождать полсекунды»). */
@@ -97,6 +98,10 @@ const USE_TEXT = {
     bare: 'Встаньте в круг (50 маны) — и вы сможете колдовать любые заклинания без палочки',
     vitality: 'Положите в круг тело человека, убитого чёрной магией, и встаньте рядом: максимум вашего здоровья вырастет на максимум здоровья жертвы (250 маны, +10 к тёмной магии)',
     night: 'Встаньте в круг (50 маны) — вы навсегда начнёте лучше видеть в темноте',
+    elwater: 'Встаньте в круг (150 маны) — вы станете магом воды',
+    elearth: 'Встаньте в круг (150 маны) — вы станете магом земли',
+    elfire: 'Встаньте в круг (150 маны) — вы станете магом огня',
+    elair: 'Встаньте в круг (150 маны) — вы станете магом воздуха',
     sight: 'Встаньте в круг с пером птички Спенсера (150 маны) — вы начнёте видеть невидимое',
     infernum: 'Встаньте в круг и постойте немного — врата в ад открыты',
     darkward: 'Бросьте в круг три цветка — солнечницу, светлошляпку и лазурницу, — встаньте в него (150 маны): тёмные заклинания против вас станут вдвое слабее (пока уровень тёмного мага не выше 10)',
@@ -520,6 +525,10 @@ export class Pentagranium {
             if (s.cd > 0) return;
             const done = g.sight?.useCircle(m.pent, { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
             if (done) s.cd = 30; // (a gift given once: standing on in the circle gives no more)
+        } else if (m.pent.startsWith('el') && ELEMENT_OF_PENT[m.pent]) {
+            if (s.cd > 0) return;
+            const done = g.heroElement?.useCircle(ELEMENT_OF_PENT[m.pent], { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
+            if (done) s.cd = 30; // (given once: standing on in the circle gives no more)
         } else if (m.pent === 'hydro') {
             if (s.cd > 0) return;
             const done = g.hydro?.useCircle({ m, pays, hint, mana, fx: () => this._useFx('hydro', m, true) });
@@ -567,7 +576,7 @@ export class Pentagranium {
 
     /** The glow of a use: a pillar of sparks, a ring spreading, a flash (the shared flash light) and a sound; shown to everybody (`pgm` fx). */
     _useFx(kind, m, send = false) {
-        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8], darkward: [0xf4f0ff, 0xfff4d0], fireward: [0xff9a3a, 0xffe0a0], grip: [0x7be7c5, 0xe0fff4], blastward: [0xc8d6e4, 0xf2c24a], hydro: [0x6fc4ff, 0xe8f6ff] }[kind] || [0xffffff, 0xffe9a8];
+        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8], darkward: [0xf4f0ff, 0xfff4d0], fireward: [0xff9a3a, 0xffe0a0], grip: [0x7be7c5, 0xe0fff4], blastward: [0xc8d6e4, 0xf2c24a], hydro: [0x6fc4ff, 0xe8f6ff], elwater: [0x2f98ff, 0xd8f2ff], elearth: [0xb89968, 0xf0e0c0], elfire: [0xff7a1a, 0xffe08a], elair: [0xdff1ff, 0xffffff] }[kind] || [0xffffff, 0xffe9a8];
         if (fx) {
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 2;
@@ -784,7 +793,7 @@ export class Pentagranium {
                 if (m.perm && TABLE[m.pent]?.permanent) { mk.perm = true; mk.life = Infinity; mk.t = 5; mk.pair = typeof m.pair === 'string' ? m.pair : null; const o = mk.pair && this.marks.get(mk.pair); if (o) o.pair = mk.id; }
             }
         } else if (m.k === 'fx') {
-            if (['teleport', 'life', 'mend', 'night', 'sight', 'firm'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
+            if (['teleport', 'life', 'mend', 'night', 'sight', 'firm', 'elwater', 'elearth', 'elfire', 'elair'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
         } else if (m.k === 'bare') {
             const mk = this.marks.get(m.id);
             if (mk && mk.pent === 'bare') this._bareBegin(mk, false);

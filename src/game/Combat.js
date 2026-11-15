@@ -42,6 +42,7 @@ import { DAMAGE, blastDamage } from './Damage.js';
 import { SLOW } from './Slow.js';
 import { wandCostMul } from './Enchant.js';
 import { regenCellsK, regenTier, regenLine } from './ManaRegen.js';
+import { elementIndex } from './HeroElement.js';
 import { PGODS, isDivine, isMagicKind, godsKeepsOff, ALL_ROUND, payDivine, BREAKS_GODS } from './ProtectionGods.js';
 
 export const PVP = {
@@ -136,6 +137,23 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 
+/** The colours of the element mage's shield (the author 15.11: water forms the guard, earth stones, fire flame, air bends the space). */
+const ELEMENT_SHIELD = {
+    water: { body: 0x2f98ff, o: 0.4, ring: 0xc4ecff, grid: 0x9fe0ff },
+    earth: { body: 0x6b5236, o: 0.55, ring: 0xc9a56b, grid: 0x3d2f20, solid: true },
+    fire: { body: 0xff5a10, o: 0.38, ring: 0xffd27a, grid: 0xff9a3a },
+    air: { body: 0xdff1ff, o: 0.16, ring: 0xffffff, grid: 0xcfe8ff },
+};
+/** The particle layer the element shields breathe with (set by the Game once its effects exist). */
+let SHIELD_GLOW = null;
+export function setShieldGlow(glow) { SHIELD_GLOW = glow; }
+const EL_PARTS = {
+    water: { col: [0x6ec6ff, 0x9fdcff, 0xd8f2ff], vy: -1.6, spread: 0.5, size: 0.18, life: 0.7 }, // (drops run off the rim)
+    fire: { col: [0xff7a1a, 0xffb040, 0xffe08a], vy: 2.2, spread: 0.7, size: 0.2, life: 0.6 }, // (embers rise)
+    earth: { col: [0x8a6a44, 0x6b5236, 0xa08560], vy: -0.2, spread: 0.3, size: 0.16, life: 0.9 }, // (pebbles and dust fall off)
+    air: { col: [0xffffff, 0xd8ecff, 0xbfe3ff], vy: 0.3, spread: 1.4, size: 0.12, life: 0.8 }, // (a spiral of leaves and dust)
+};
+
 // Shared shield / ice-shell visuals (local and remote players)
 let SHARED = null;
 function shared() {
@@ -156,6 +174,17 @@ function shared() {
     const darkDomeMat = new THREE.MeshBasicMaterial({ color: 0x140626, transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false });
     const darkGridMat = new THREE.LineBasicMaterial({ color: 0x9a5cff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
     // (the rays: 12 thin spikes round the disc, one shape)
+    // the element mage's shields (HeroElement.js): water, earth, fire, air — the same shape, painted (and moving) as his element
+    const elMats = {};
+    for (const [e, c] of Object.entries(ELEMENT_SHIELD)) {
+        const blend = c.solid ? {} : { blending: THREE.AdditiveBlending };
+        elMats[e] = {
+            shield: new THREE.MeshBasicMaterial({ color: c.body, transparent: true, opacity: c.o, side: THREE.DoubleSide, depthWrite: false, ...blend }),
+            ring: new THREE.MeshBasicMaterial({ color: c.ring, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
+            dome: new THREE.MeshBasicMaterial({ color: c.body, transparent: true, opacity: c.o * 0.5, side: THREE.DoubleSide, depthWrite: false, ...blend }),
+            grid: new THREE.LineBasicMaterial({ color: c.grid, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+        };
+    }
     const rays = [];
     for (let i = 0; i < 12; i++) {
         const a = (i / 12) * Math.PI * 2, L = i % 2 ? 0.32 : 0.5;
@@ -173,6 +202,7 @@ function shared() {
         domeGrid: new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 1)),
         shell: new THREE.IcosahedronGeometry(1, 1),
         spike: new THREE.ConeGeometry(1, 1, 5).translate(0, 0.5, 0),
+        elMats,
         shieldMat, ringMat, domeMat, gridMat, iceMat, darkShieldMat, darkRingMat, darkDomeMat, darkGridMat,
     };
     return SHARED;
@@ -327,7 +357,8 @@ export class CombatVisuals {
     update(dt, st, body) {
         this._t += dt;
         if (this.shards.length) this._updateShards(dt);
-        if (!!st.dark !== !!this._dark) this._paint(!!st.dark);
+        if ((st.el || null) !== (this._el || null) || !!st.dark !== !!this._dark) this._paint(!!st.dark, st.el || null);
+        if (st.el && !st.gods && st.shield && st.shieldLeft > 0) this._elementFx(dt, st, body, st.shield === 1);
         if (st.gods) this.hand.visible = this.dome.visible = false;
         else this.gHand.visible = this.gDome.visible = false;
         if (st.gods) { this._updateGods(dt, st, body); this._shell(dt, st, body); return; }
@@ -356,10 +387,37 @@ export class CombatVisuals {
         this._shell(dt, st, body);
     }
 
+    /** The element's guard moves: the ring turns (air fast, a ripple on water, a flicker in fire), the matter streams off it as particles (a few a second, one pool). */
+    _elementFx(dt, st, body, hand) {
+        const E = EL_PARTS[st.el]; if (!E) return;
+        const t = this._t, S = shared(), M = S.elMats[st.el];
+        if (M) M.shield.opacity = ELEMENT_SHIELD[st.el].o * (st.el === 'fire' ? 0.8 + 0.3 * Math.sin(t * 17) * Math.sin(t * 5.3) : st.el === 'water' ? 0.92 + 0.12 * Math.sin(t * 3) : 1);
+        this.handRing.rotation.z += dt * (st.el === 'air' ? 5 : st.el === 'water' ? 0.8 : 0.15);
+        if (!SHIELD_GLOW) return;
+        this._pAcc = (this._pAcc || 0) + dt * (hand ? 26 : 40);
+        let n = 0;
+        while (this._pAcc >= 1 && n++ < 6) {
+            this._pAcc -= 1;
+            const col = E.col[(Math.random() * E.col.length) | 0], a = Math.random() * Math.PI * 2;
+            let x, y, z;
+            if (hand) { // (a point on the disc, in the hand's plane)
+                const r = Math.random() * 1.05;
+                _v2.set(0, 1, 0).cross(body.dir).normalize(); if (_v2.lengthSq() < 0.01) _v2.set(1, 0, 0);
+                _v3.copy(body.dir).cross(_v2).normalize();
+                const u = Math.cos(a) * r, w = Math.sin(a) * r;
+                x = body.hand.x + _v2.x * u + _v3.x * w + body.dir.x * 0.5; y = body.hand.y + _v2.y * u + _v3.y * w + body.dir.y * 0.5; z = body.hand.z + _v2.z * u + _v3.z * w + body.dir.z * 0.5;
+            } else { const q = Math.random() * 2 - 1, R = PVP.DOME_R || 5, r = Math.sqrt(1 - q * q) * R; x = body.center.x + Math.cos(a) * r; y = body.center.y + q * R; z = body.center.z + Math.sin(a) * r; }
+            const sw = st.el === 'air' ? 3 : 0; // (air: along the tangent — a swirl)
+            SHIELD_GLOW.spawn(x, y, z, -Math.sin(a) * sw + (Math.random() - 0.5) * E.spread, E.vy + (Math.random() - 0.5) * 0.6, Math.cos(a) * sw + (Math.random() - 0.5) * E.spread, col, E.size * (0.6 + Math.random() * 0.8), E.life, { shrink: 1.2 });
+        }
+    }
+
     /** The true dark mage's shield / dome are painted dark, the plain ones blue (the gods' one stays gold: divine magic is not his). */
-    _paint(dark) {
+    _paint(dark, el = null) {
         const S = shared();
-        this._dark = dark;
+        this._dark = dark; this._el = el;
+        const M = el && !dark ? S.elMats[el] : null; // (an element mage: his own element's paint — HeroElement.js)
+        if (M) { this.handDisc.material = M.shield; this.handRing.material = M.ring; this.handHex.material = M.grid; this.domeBall.material = M.dome; this.domeGrid.material = M.grid; return; }
         this.handDisc.material = dark ? S.darkShieldMat : S.shieldMat;
         this.handRing.material = dark ? S.darkRingMat : S.ringMat;
         this.handHex.material = dark ? S.darkGridMat : S.gridMat;
@@ -1280,6 +1338,7 @@ export class Combat {
             shieldLeft: this.shield ? Math.min(this.shield.left, 1e6) : 0, // (Creative's endless one: a number the network can carry)
             gods: !!this.shield?.gods, // (the gods' shield: gold — ProtectionGods.js)
             dark: !!this.game.darkLord?.on, // (a true dark mage's shields are dark — DarkLord.js)
+            el: this.game.heroElement?.id || null, // (an element mage's: painted as his element — HeroElement.js)
             frozen: this.frozen,
         };
     }
@@ -1287,7 +1346,7 @@ export class Combat {
     serialize() {
         if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Айс» is seen in every mode)
         const s = this.shield?.tent ? null : this.shield; // (a guessed shield of the crossed arms is not sent until confirmed)
-        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0, s?.gods ? 1 : 0, s?.wand ? 1 : 0, s?.gesture ? 1 : 0]; // (the 8th: the crossed arms' shield, in front of them; the 5th: how many times it shattered — the others see the pieces; the 6th: the gods' shield, gold; the 7th: at the wand's tip)
+        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0, s?.gods ? 1 : 0, s?.wand ? 1 : 0, s?.gesture ? 1 : 0, elementIndex(this.game.heroElement?.id)]; // (the 9th: the element mage's shield paint, ELEMENTS index + 1) // (the 8th: the crossed arms' shield, in front of them; the 5th: how many times it shattered — the others see the pieces; the 6th: the gods' shield, gold; the 7th: at the wand's tip)
     }
 
     // ============================================================ melee out

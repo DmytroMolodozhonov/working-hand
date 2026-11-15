@@ -13,7 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
-import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES, MURUS_LINES, GRIP_LINES, SOUL_SEAL_LINES } from './PentagramFigures.js';
+import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES, INFERNUM_LINES, DARKWARD_LINES, FIREWARD_LINES, HYDRO_LINES, EL_WATER_LINES, EL_EARTH_LINES, EL_FIRE_LINES, EL_AIR_LINES, MURUS_LINES, GRIP_LINES, SOUL_SEAL_LINES } from './PentagramFigures.js';
 import { INFERNUM } from './HellRules.js';
 
 export const PENT = {
@@ -148,6 +148,19 @@ registerPentagram({
     effect: 'Поднимите шар воды «Waterbollow» (жидкую воду, не лёд), встаньте в круг, не отпуская её, и заплатите 50 маны — водяным заклинаниям больше не нужна река: воду они возьмут из влажности воздуха. В пустынях воздух слишком сух.',
 });
 
+// The four WHITE pentagrams of the ELEMENTS (HeroElement.js; the author 15.11): stand in the circle, 150 mana — you become a mage of THAT element (one at a time: a new one takes the old advantage away).
+// Found only in the settlements of the elements (WizardShop.rollElementalHouseScroll): its spells cost half, the guard and the key vortex are its own.
+const ELEMENT_PENTS = [
+    ['elwater', 'воды', 0x2f98ff, EL_WATER_LINES, 'PentagramElWater'], ['elearth', 'земли', 0xb89968, EL_EARTH_LINES, 'PentagramElEarth'],
+    ['elfire', 'огня', 0xff7a1a, EL_FIRE_LINES, 'PentagramElFire'], ['elair', 'воздуха', 0xdff1ff, EL_AIR_LINES, 'PentagramElAir'],
+];
+for (const [id, ru, glow, lines, scroll] of ELEMENT_PENTS) {
+    registerPentagram({
+        id, title: `Пентаграмма мага ${ru}`, dark: false, glow, cost: 150, permanent: true, scroll, lines,
+        effect: `Встаньте в круг и заплатите 150 маны — вы станете магом ${ru}: все заклинания этой стихии вдвое дешевле, защита становится стихийной, открывается ключевое заклинание. Магом можно быть только одной стихии: другая пентаграмма отнимет прежнее преимущество.`,
+    });
+}
+
 // «Пентаграмма ада» (HellRules.js, HellGate.js): чёрная; 50 маны и +10 к тьме при слове, жертва — одно тело любого убитого существа, шаг в открытый круг — в ад.
 registerPentagram({
     id: 'infernum', lootStrong: true, title: 'Пентаграмма ада', dark: true, glow: 0xff3010, cost: 0, darkBonus: INFERNUM.DARK, once: false, scroll: 'PentagramInfernum', lines: INFERNUM_LINES,
@@ -164,6 +177,10 @@ registerPentagram({
 });
 
 /** A drawing-scroll with this figure. */
+/** The element pentagrams (a mage of an element): only in the settlements of the elements — never in a chest / shop / bird's loot (the author 15.11). */
+export const isElementPent = (id) => ELEMENT_PENTS.some((e) => e[0] === id);
+/** The figures a RANDOM loot roll may give (everything but the element pentagrams). */
+export const lootFigureIds = () => figureIds().filter((id) => !isElementPent(id));
 export const pentagramScroll = (id, uid) => ({ kind: 'scroll', uid, stat: 'pentagram', pent: figureOf(id) ? id : 'devil', dark: !!TABLE[figureOf(id) ? id : 'devil']?.dark });
 export const isPentagramScroll = (it) => !!it && it.kind === 'scroll' && it.stat === 'pentagram';
 

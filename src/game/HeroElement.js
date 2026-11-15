@@ -19,7 +19,10 @@ export const ELEMENT_NAME = { water: 'вода', earth: 'земля', fire: 'о�
 export const ELEMENT_ICON = { water: '💧', earth: '🪨', fire: '🔥', air: '🌬️' };
 /** The key spell of each element (the vortex round the mage; its modes — aim / guard / …). */
 export const KEY_SPELL = { water: 'WaterVortex', earth: 'GroundVortex', fire: 'FireVortex', air: 'AirVortex' };
-export const DISCOUNT = 0.5; // the price of the element's own spells
+export const DISCOUNT = 0.5;
+export const ELEMENT_COST = 150; // mana for the rite of an element pentagram (the author 15.11)
+/** Which element a pentagram id gives. */
+export const ELEMENT_OF_PENT = { elwater: 'water', elearth: 'earth', elfire: 'fire', elair: 'air' }; // the price of the element's own spells
 
 export const isElement = (id) => ELEMENTS.includes(id);
 export const normalizeElement = (id) => (isElement(id) ? id : null);
@@ -39,15 +42,15 @@ export function switchTo(cur, next) {
 }
 
 export class HeroElement {
-    constructor(game) { this.game = game; this.id = null; }
+    constructor(game) { this.game = game; this.id = null; this.givenByRite = false; }
     get element() { return this.id; }
     /** The cost factor for the hero's own cast (Combat.costOf). */
     k(spellId) { return elementK(this.id, spellId); }
     /** Become a mage of this element (a pentagram, the Creative setting). → what changed. */
-    set(id, { say = true } = {}) {
+    set(id, { say = true, rite = false } = {}) {
         const r = switchTo(this.id, id);
         if (!r.changed) return r;
-        this.id = r.element;
+        this.id = r.element; this.givenByRite = !!rite;
         const g = this.game;
         if (say) g.hud?.setVoice?.(r.lost
             ? `${ELEMENT_ICON[r.element]} Вы стали магом стихии «${ELEMENT_NAME[r.element]}». Преимущество стихии «${ELEMENT_NAME[r.lost]}» потеряно`
@@ -55,7 +58,30 @@ export class HeroElement {
         g.sync?.perk?.(this.id);
         return r;
     }
-    clear() { this.id = null; }
-    snapshot() { return this.id; }
-    restore(s) { this.id = normalizeElement(s); }
+    clear() { this.id = null; this.givenByRite = false; }
+    /** Death takes what a pentagram gave (the Creative setting's element stays). */
+    onDeath() { if (this.givenByRite) this.clear(); }
+    snapshot() { return this.id ? (this.givenByRite ? { e: this.id, r: 1 } : this.id) : null; }
+    restore(s) { const o = s && typeof s === 'object'; this.id = normalizeElement(o ? s.e : s); this.givenByRite = !!(this.id && o && s.r); }
+    /**
+     * The circle of an element pentagram: stand in it and pay (Pentagranium.js asks every frame the hero stands in a lit circle).
+     * @returns {boolean} given (the circle is then quiet for a while)
+     */
+    useCircle(element, ctx) {
+        const g = this.game;
+        if (g.isDeadLocal || g.combat?.dead) return false;
+        if (this.id === element) { ctx.hint?.(`${ELEMENT_ICON[element]} Вы уже маг стихии «${ELEMENT_NAME[element]}»`); return false; }
+        if (ctx.pays) {
+            if (ctx.mana < ELEMENT_COST) { ctx.hint?.(`😮‍💨 Не хватает маны: нужно ${ELEMENT_COST}`); return false; }
+            g.combat.fatigue -= ELEMENT_COST; g.combat._hudKey = '';
+        }
+        this.set(element, { rite: true });
+        ctx.fx?.();
+        g.perf?.note?.(`${ELEMENT_ICON[element]} Пентаграмма мага: ${ELEMENT_NAME[element]}`);
+        return true;
+    }
 }
+
+/** The network form of an element: 0 none, 1…4 = ELEMENTS index + 1. */
+export const elementIndex = (id) => ELEMENTS.indexOf(id) + 1;
+export const elementAt = (n) => ELEMENTS[(n | 0) - 1] || null;

@@ -18,6 +18,6 @@ test('tablets are rigid round models with shared resources and distinct figure U
  assert.equal(geometries.size,figureIds().length+2);
  const light=makeItemModel({kind:'scroll',stat:'pentagram',pent:'life'}),dark=makeItemModel({kind:'scroll',stat:'pentagram',pent:'devil'});
  assert.notEqual(light.children[0].material.color.getHex(),dark.children[0].material.color.getHex());
- assert.notDeepEqual([...light.children[2].geometry.attributes.uv.array],[...dark.children[2].geometry.attributes.uv.array]);
+ assert.ok(light.children[2].material!==dark.children[2].material||JSON.stringify([...light.children[2].geometry.attributes.uv.array])!==JSON.stringify([...dark.children[2].geometry.attributes.uv.array]),'a different atlas page or a different tile (16 figures a page: with 25 figures two can share a tile on different pages)');
  assert.notEqual(makeItemModel({kind:'scroll',stat:'spell',spell:'Bombardo'}).name,'pentagram-tablet');
 });

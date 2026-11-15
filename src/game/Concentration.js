@@ -42,7 +42,8 @@ export const HELD = {
     LevitationMaxima: { ru: 'Левиоса Максима', icon: '🪶', own: ['LevitationMaxima', 'Attack'] },
     PlanetMove: { ru: 'Левиоса Супер Максима', icon: '🪐', own: ['LevitationSuperMaxima'] }, // (a planet held: PlanetMagic.js)
     Alive: { ru: 'Живое дерево', icon: '🌳', own: ['Alive', 'AliveMaxima', 'Attack'] },
-    Hellfire: { ru: 'Адский огонь', icon: '🔥', own: ['Hellfire', 'FireSerpent', 'Attack'] }, // («Serpent» out of the fire, «Атак» for it — FireSerpent.js)
+    AirVortex: { ru: 'Воздушный вихрь', icon: '🌬️', own: ['AirVortex'] }, // (the wind holds the hero off the ground: 1 mana a second — AirVortex.js)
+    Hellfire: { ru: 'Адский огонь', icon: '🔥', own: ['Hellfire', 'FireVortex', 'FireSerpent', 'Attack'] }, // («Serpent» out of the fire, «Атак» for it — FireSerpent.js)
     Inferno: { ru: 'Инферно', icon: '🔥', own: ['Inferno'] },
     Drawdown: { ru: 'Drawdown', icon: '⬇️', own: ['Drawdown', 'DrawdownMaxima'] },
     House: { ru: 'Магия дома', icon: '🏠', own: ['CreateHouse', 'ImproveHouse'] },
@@ -78,7 +79,7 @@ export const HELD = {
  * Not so under the strict holds (`strict`: the duel's clash, the gods' shield) and in another body (`only` / `none`).
  */
 export const CONC_SPELLS = new Set(['Waterball', 'WaterVortex', 'WaterVortexSuperMaxima', 'Levitation', 'LevitationMaxima', 'LevitationSuperMaxima',
-    'Alive', 'AliveMaxima', 'Hellfire', 'FireSerpent', 'Inferno', 'Drawdown', 'DrawdownMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle',
+    'Alive', 'AliveMaxima', 'Hellfire', 'FireVortex', 'AirVortex', 'FireSerpent', 'Inferno', 'Drawdown', 'DrawdownMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle',
     'IceCastle', 'IceBridge', 'ProtectionHouse', 'ProtectionInvisible', 'WardGrow', 'StrengthenHouse', 'WaveAttack', 'WaveAttackMaxima',
     'LightningStrike', 'Ice', 'ProtectionGods', 'ProtectionGodsMaxima', 'BrainrotMaxima', 'GroundVortex', 'VisibleGodi', 'WaterWalk', 'WaterPart', 'Helios', 'SunRay', 'Fireworks', 'Electrum',
     'Imperius', 'ImperiusMaxima']);
@@ -120,6 +121,7 @@ export class Concentration {
         if (g.planetMagic?.busy) return 'PlanetMove';
         if (g.levitation?.active || g.doors?.carried) return 'Levitation';
         if (g.hellfire?.busy) return 'Hellfire';
+        if (g.airVortex?.on) return 'AirVortex';
         if (g.houseMagic?.magic && g.houseMagic.magic.by === g.localId) return 'House';
         if (g.castleMagic?.magic && g.castleMagic.magic.by === g.localId) return 'Castle';
         if (g.iceMagic?.mine?.()) return 'IceMagic';

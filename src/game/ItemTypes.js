@@ -63,7 +63,7 @@ import { armorItemModel } from '../entities/ArmorLook.js';
 import { iceRodModel } from './IceModels.js';
 import { isDivine } from './DivineSword.js';
 import { scaleCoins } from './CoinScale.js';
-import { figureOf, figureIds, pentagramScroll } from './PentagramRules.js';
+import { figureOf, figureIds, lootFigureIds, pentagramScroll } from './PentagramRules.js';
 import { pentagramTextLines } from './PentagramText.js';
 import { describeUnited } from './UnitedRules.js';
 import { unitedWandModel } from './UnitedWandModel.js';
@@ -557,7 +557,7 @@ export function rollDungeonLoot(r = Math.random, flavor = 'ruin', count = 0, siz
  */
 export function strongPentagrams() {
     const out = { dark: [], white: [] };
-    for (const id of figureIds()) {
+    for (const id of lootFigureIds()) {
         const f = figureOf(id)?.def;
         if (!f) continue;
         const strong = f.lootStrong || typeof f.cost !== 'number' || f.cost >= 100 || id === 'devil';
@@ -786,7 +786,7 @@ export const spellScroll = (spell) => ({ kind: 'scroll', uid: newUid(), stat: 's
 function _rollScroll(r) {
     if (r() >= 0.5) return _rollSpellScroll(r);
     let y = r() * PENT_TOTAL;
-    for (const [k, w] of PENT_SCROLLS) if ((y -= w) < 0) { const ids = figureIds(); return pentagramScroll(k === 'pent:*' ? pick(r, ids) : k.slice(5), newUid()); }
+    for (const [k, w] of PENT_SCROLLS) if ((y -= w) < 0) { const ids = lootFigureIds(); return pentagramScroll(k === 'pent:*' ? pick(r, ids) : k.slice(5), newUid()); }
     return pentagramScroll('life', newUid());
 }
 
@@ -797,7 +797,7 @@ function _rollSpellScroll(r) {
     let y = r() * SCROLL_TOTAL;
     for (const [k, w] of SPELL_SCROLLS) {
         if ((y -= w) >= 0) continue;
-        if (k.startsWith('pent:')) { const ids = figureIds(); return pentagramScroll(k === 'pent:*' ? ids[Math.floor(r() * ids.length) % ids.length] : k.slice(5), newUid()); } // ('pent:*': any other pentagram of the table)
+        if (k.startsWith('pent:')) { const ids = lootFigureIds(); return pentagramScroll(k === 'pent:*' ? ids[Math.floor(r() * ids.length) % ids.length] : k.slice(5), newUid()); } // ('pent:*': any other pentagram of the table)
         return spellScroll(k);
     }
     return spellScroll('LightningStrike');

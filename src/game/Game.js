@@ -44,7 +44,7 @@ import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
-import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
+import { Combat, PVP, bombardoDamage, sampleShieldModels, setShieldGlow } from './Combat.js';
 import { isDivine } from './ProtectionGods.js';
 import { chestCoins } from './CastleTreasure.js';
 import { scaleCoins } from './CoinScale.js';
@@ -172,6 +172,7 @@ import { DragonForm } from './DragonForm.js';
 import { musicPlace } from '../audio/MusicDirector.js';
 import { HeroWings } from './HeroWings.js';
 import { HeroElement } from './HeroElement.js';
+import { AirVortex } from './AirVortex.js';
 import { WingFlight } from './WingFlight.js';
 import { ImperiusControl } from './ImperiusControl.js';
 import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
@@ -323,7 +324,8 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Cardilon', 'Breakthrough', 'BreakthroughMaxima', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
+const _airLook = new THREE.Vector3();
+const MANA_LATER = new Set(['FireVortex', 'Cardilon', 'Breakthrough', 'BreakthroughMaxima', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -589,6 +591,7 @@ export class Game {
         this.hud.setTerrain(this.terrain);
 
         this.fx = new Effects(this.scene, this.collision);
+        setShieldGlow(this.fx.glow); // (the element mage's guard throws drops / embers / pebbles / leaves — Combat.js)
         this.spells = new SpellManager(this.scene, this.fx, {
             zombies: () => this.zombies,
             authoritative: () => this.authority,
@@ -937,6 +940,7 @@ export class Game {
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
         this.walkRec = new WalkRecorder(this); // F8: «Ходьба» — a recording to tune walking back (WalkRecorder.js)
         this.mermaid = new Mermaid(this); // «Зелье русалки»: a fish's tail for 12 min (Mermaid.js)
+        this.airVortex = new AirVortex(this); // «Air Vortex»: the wind holds the hero off the ground (AirVortex.js)
         this.heroElement = new HeroElement(this); // the hero as a mage of one element (the price of its spells halves; HeroElement.js)
         this.wings = new HeroWings(this); // «Зелье крыльев»: the wings grow on the back, for good (HeroWings.js; the flight — WingFlight.js)
         this.potionFx = new PotionEffects(this); // the potions' timed effects: disguise, dazzle, luck, breath (PotionEffects.js)
@@ -2330,6 +2334,8 @@ export class Game {
         if (name === 'Inspirius') return this.inspirius.cast(isFinal);
         if (name === 'Boom') return this.boom.cast(isFinal);
         if (name === 'Hellfire') return this.hellfire.cast(isFinal);
+        if (name === 'FireVortex') return this.hellfire.castLite(isFinal); // (the fire mage's key spell: a smaller, white hellfire)
+        if (name === 'AirVortex') return this.airVortex.cast(isFinal);
         if (name === 'FireSerpent') return this.fireSerpent.cast(isFinal);
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
@@ -2532,6 +2538,7 @@ export class Game {
         if (pm) done.push('Левиоса Супер Максима');
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
+        if (this.airVortex?.stop('stop')) done.push('воздушный вихрь');
         const hf = this.hellfire?.sayStop(); // («стоп» is free for it)
         if (hf === true) done.push('адский огонь');
         const ws = this.waterStorm?.sayStop(); // (and 50 for the water storm)
@@ -4835,6 +4842,7 @@ export class Game {
         this.monster.update(dt); // (the monster form: the size, the clock, the steps, the fists — before the body walks)
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
+        if (this.airVortex?.on) this.airVortex.update(dt, this.camera.getWorldDirection(_airLook).y); // (the wind holds the hero — AirVortex.js; before his own step)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.diabolos?.holding && !this.fireSerpent?.holding && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.dragonForm?.active && !this.wingFlight?.airborne && !(this.boards?.mounted || this.boats?.riding) && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
@@ -5225,7 +5233,7 @@ export class Game {
     /** Does the hero know this spell? One answer for everything (SpellBook.js: what is known from the start, the rest from scrolls and books). */
     knowsSpell(name) {
         if (name === 'Pentagranium') return this.pentagranium.known().length > 0; // (no spell of its own: each pentagram is learnt by burning ITS scroll; Creative knows all)
-        return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, hero: this.config.mode === 'creative' ? this.hero : null, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight, school: !!this.config.school });
+        return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, hero: this.config.mode === 'creative' ? this.hero : null, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight, element: this.heroElement?.id || null, school: !!this.config.school });
     }
 
     /** Can the hero say this spell now (the pause menu's spell book outside Creative)? The same checks the cast makes. */

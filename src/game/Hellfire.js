@@ -46,6 +46,13 @@ import { SwingMeter } from './WaterVortex.js';
 
 import { serpentDrainK } from './FireSerpentRules.js';
 
+/**
+ * «Fire Vortex» — the fire mage's own key spell (the author 15.11: «уменьшенная версия Let the Hellfire Come, белая магия, в 2 раза слабее»): the same fire,
+ * the same hands (the wand points → the blaze follows; the hand going round → the ring), half the size and half the heat, and WHITE magic: no mana
+ * maximum needed, it darkens nobody. The price is the vortexes' own (SPELL_COST.FireVortex, half for a fire mage).
+ */
+export const HELLFIRE_LITE = { R: 0.55, REACH: 0.7, DMG: 0.5, DRAIN: 0.5, NAME: 'FireVortex' };
+
 export const HELLFIRE = {
     NAME: 'Hellfire',
     MIN_MAX_MANA: 250, // the mana maximum one must have (free world): at least what one cast costs
@@ -128,7 +135,8 @@ export function blazeReach(stretch) {
 }
 
 /** The blaze's radius after `t` s held, the hands `spread` m apart (null: one hand seen). */
-export function blazeRadius(t, spread = null) {
+export function blazeRadius(t, spread = null, lite = false) {
+    if (lite) return clamp(blazeRadius(t, spread) * HELLFIRE_LITE.R, HELLFIRE.R_MIN, HELLFIRE.R_MAX);
     const base = HELLFIRE.R0 + Math.min(HELLFIRE.R_TIME, HELLFIRE.R_GROW * Math.max(0, t));
     const k = spread == null ? 1 : clamp(0.55 + spread * 1.1, 0.7, 1.9);
     return clamp(base * k, HELLFIRE.R_MIN, HELLFIRE.R_MAX);
@@ -237,19 +245,20 @@ export class Hellfire {
 
     // ================================================================ voice
     /** The words. @returns the spell name, or null */
-    cast(isFinal = true) {
+    cast(isFinal = true, lite = false) {
         const g = this.game;
         if (this.state) { if (isFinal && this.state.t > 3) g._why?.('busy', HELLFIRE.NAME); return null; } // (the interim and the final version of one phrase; later: say why)
         if (this._t - (this._endAt ?? -9) < 2.5) return null; // (…and the final one after a quick «стоп»)
         const side = this._castSide();
         if (!side) return this._hint('🪄 «Let the Hellfire Come» вызывается только <b>волшебной палочкой в руке</b>', isFinal);
         const c = g.combat;
-        const why = hellfireBlock({ enabled: !!c?.enabled, max: g.breakward?.cellMax(HELLFIRE.NAME, HELLFIRE.MIN_MAX_MANA, c?.maxFatigue || 30) ?? (c?.maxFatigue || 30), mana: c?.fatigue ?? 0 });
+        const NAME = lite ? HELLFIRE_LITE.NAME : HELLFIRE.NAME;
+        const why = lite ? ((c?.enabled && (c?.fatigue ?? 0) < c.costOf(NAME)) ? 'mana' : null) : hellfireBlock({ enabled: !!c?.enabled, max: g.breakward?.cellMax(HELLFIRE.NAME, HELLFIRE.MIN_MAX_MANA, c?.maxFatigue || 30) ?? (c?.maxFatigue || 30), mana: c?.fatigue ?? 0 });
         if (why === 'max') return this._hint(`🔥 Адский огонь подвластен только сильным магам: нужен <b>максимум маны ${HELLFIRE.MIN_MAX_MANA}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`, isFinal);
-        const tired = c?.check(HELLFIRE.NAME);
-        if (tired || why) return this._hint(tired || `😮‍💨 Не хватает маны: нужно ${HELLFIRE.COST}`, true);
-        c?.pay(HELLFIRE.NAME);
-        if (g.breakward?.afterPay(HELLFIRE.NAME, HELLFIRE.MIN_MAX_MANA, null)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
+        const tired = c?.check(NAME);
+        if (tired || why) return this._hint(tired || `😮‍💨 Не хватает маны: нужно ${lite ? c.costOf(NAME) : HELLFIRE.COST}`, true);
+        c?.pay(NAME);
+        if (!lite && g.breakward?.afterPay(HELLFIRE.NAME, HELLFIRE.MIN_MAX_MANA, null)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
         g._manaLater = true; // (mana: it counts as working when it really burns something)
         const ch = g.character;
         const o = g.spellStart ? g.spellStart(side) : g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side); // (a body right at the wand: the fire leaves before it)
@@ -259,7 +268,7 @@ export class Hellfire {
             side, t: 0, o: o.clone(), d: d.clone().normalize(),
             c: o.clone().addScaledVector(d, HELLFIRE.REACH_MIN), // (it bursts out of the wand)
             target: new THREE.Vector3(), R: 0.4, k: 0, ang: 0, spin: 1.5, rr: ringRadius(HELLFIRE.R0), rw: HELLFIRE.RING_W, rh: HELLFIRE.RING_H, turns: 0, ns: 5,
-            ringT: 0, burnT: 0, meT: 0, roarT: 0, worked: false, wet: 0,
+            ringT: 0, burnT: 0, meT: 0, roarT: 0, worked: false, wet: 0, lite,
         };
         this._note({ ev: 'cast', side });
         g.fx?.lightFlash?.(o, 0xff5a1a, 9, 0.6, 60);
@@ -267,8 +276,11 @@ export class Hellfire {
         g.sound?.playInferno?.();
         g.sound?.playRumble?.(o, ch.group.position);
         g.hud?.setVoice?.('🔥 <b>Адский огонь!</b> Он идёт за палочкой: рука дальше — огонь дальше, руки шире — огонь больше. <b>Крутите рукой</b> — огонь кольцом вокруг вас. «Стоп» — погасить', true);
-        return HELLFIRE.NAME;
+        return NAME;
     }
+
+    /** «Fire Vortex»: the smaller, white fire (HELLFIRE_LITE). */
+    castLite(isFinal = true) { return this.cast(isFinal, true); }
 
     /**
      * «Стоп» said: puts it out, for free — fires stay where it was.
@@ -387,17 +399,17 @@ export class Hellfire {
         const w = g.items?.heldOf?.('wand');
         if (w && w.side !== s.side) s.side = w.side;
         // the caster pays while holding it (the free world)
-        if (c && (c.drain(hellfireDrain(dt) * serpentDrainK(!!g.fireSerpent?.alive), dt) === false || c.manaOut())) { this.stop('mana'); return; }
+        if (c && (c.drain(hellfireDrain(dt) * (s.lite ? HELLFIRE_LITE.DRAIN : 1) * serpentDrainK(!!g.fireSerpent?.alive), dt) === false || c.manaOut())) { this.stop('mana'); return; }
         s.t += dt;
         if (s.t > HELLFIRE.MAX_LIFE) { this.stop('time'); return; }
         // the wand: where it is, where it points, how far the arm is stretched
         const side = s.side;
         if (g.spellStart) g.spellStart(side, s.o); else if (g.castOrigin) g.castOrigin(side, s.o); else ch.getHandWorldPosition(side, s.o);
         (ch.getPointingDirection ? ch.getPointingDirection(side, s.d) : ch.getHandDirection(side, s.d)).normalize();
-        const reach = blazeReach(this._stretch(side));
+        const reach = blazeReach(this._stretch(side)) * (s.lite ? HELLFIRE_LITE.REACH : 1);
         // the hands spread apart: a bigger fire
         const spread = this._spread();
-        const want = blazeRadius(s.t, spread);
+        const want = blazeRadius(s.t, spread, s.lite);
         // water drowns it: it hisses and shrinks there (the blaze, and the ring round the caster)
         s.wet = this._wet(s.c, s.R) * (1 - s.k);
         const rw = s.k > 0.2 ? this._ringWet(ch.group.position, s.rr, s.rw, s.rh) * s.k : 0;
@@ -455,7 +467,7 @@ export class Hellfire {
         this._sendT += dt;
         if (this._sendT >= HELLFIRE.SEND) {
             this._sendT = 0;
-            this._send([r2(s.c.x), r2(s.c.y), r2(s.c.z), r2(s.R), r2(s.k), r2(s.ang), r2(s.spin), r2(s.rr), r2(s.o.x), r2(s.o.y), r2(s.o.z), r2(body.x), r2(body.y), r2(body.z), r2(s.rw), r2(s.rh), s.ns]);
+            this._send([r2(s.c.x), r2(s.c.y), r2(s.c.z), r2(s.R), r2(s.k), r2(s.ang), r2(s.spin), r2(s.rr), r2(s.o.x), r2(s.o.y), r2(s.o.z), r2(body.x), r2(body.y), r2(body.z), r2(s.rw), r2(s.rh), s.ns, s.lite ? 1 : 0]);
         }
         this._draw(dt, s, body);
     }
@@ -621,7 +633,7 @@ export class Hellfire {
         const reach = hp ? Math.max(Math.hypot(f.c.x - hp.x, f.c.z - hp.z) + f.R, Math.hypot(body.x - hp.x, body.z - hp.z) + (f.rr || 0) + 6) + HELLFIRE.HEAT_R + f.R * HELLFIRE.HEAT_PER_R + HELLFIRE.FEAR_R + 8 : 55;
         const bodies = g.duel?._bodies?.(null, Math.min(400, Math.max(55, reach))) || [];
         const auth = !!g.authority;
-        const K = g.fireBoost?.(by) ?? 1; // (the dragon's wand in the caster's hand: 60% hotter)
+        const K = (g.fireBoost?.(by) ?? 1) * (f.lite ? HELLFIRE_LITE.DMG : 1); // (the dragon's wand in the caster's hand: 60% hotter)
         const D = HELLFIRE.CREATURE_DMG * K;
         const W = f.rw || HELLFIRE.RING_W;
         const heatR = HELLFIRE.HEAT_R + f.R * HELLFIRE.HEAT_PER_R;
@@ -676,7 +688,7 @@ export class Hellfire {
                     if (ic) g.iceCastle.hit(ic, dmg, HELLFIRE.NAME, by);
                 } else if (cr) {
                     if (b.kind === 'a') { cr.damageCooldown = 0; g.animals?.hit?.(cr, dmg, dir, by, true); }
-                    else if (b.kind === 'v') g.castleLife?.hit?.(cr, dmg, dir, by, { spell: true, magic: true, fire: true, hell: true }); // (hell: a killed humanoid darkens the caster — HellKills.js)
+                    else if (b.kind === 'v') g.castleLife?.hit?.(cr, dmg, dir, by, { spell: true, magic: true, fire: true, hell: !f.lite }); // (hell: a killed humanoid darkens the caster — HellKills.js)
                     else if (b.kind === 't') g.livingTrees?.hit?.(cr, dmg, HELLFIRE.NAME); // (fire: the only thing that kills a living tree)
                     else if (b.kind === 'f') g.phoenixes?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (a phoenix: born of fire — no harm, but an attack)
                     else if (b.kind === 'g') g.gargoyles?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (hellish itself: the hellfire does not touch an infernal gargoyle)
@@ -770,7 +782,7 @@ export class Hellfire {
         f.tc.set(s[0], s[1], s[2]);
         f.tR = clamp(s[3], 0, HELLFIRE.R_MAX); f.tk = clamp(s[4], 0, 1);
         f.spin = clamp(s[6], 0, 40); f.rr = clamp(s[7], 2, 30);
-        f.rw = clamp(Number.isFinite(s[14]) ? s[14] : HELLFIRE.RING_W, 1, 12); f.rh = clamp(Number.isFinite(s[15]) ? s[15] : HELLFIRE.RING_H, 1, 10); f.ns = clamp(s[16] | 0 || 5, 5, 20);
+        f.rw = clamp(Number.isFinite(s[14]) ? s[14] : HELLFIRE.RING_W, 1, 12); f.rh = clamp(Number.isFinite(s[15]) ? s[15] : HELLFIRE.RING_H, 1, 10); f.ns = clamp(s[16] | 0 || 5, 5, 20); f.lite = s[17] === 1;
         if (Math.abs(s[5] - f.ang) > 1.5) f.ang = s[5];
         f.o.set(s[8], s[9], s[10]);
         f.netBody = [s[11], s[12], s[13]];

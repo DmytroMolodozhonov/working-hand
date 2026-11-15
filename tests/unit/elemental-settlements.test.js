@@ -37,7 +37,7 @@ test('elemental chest spells retain their rarity and have exactly 1.4 relative d
  const r=createRng(37418);let heads=0,spells=0,tablets=0;for(let i=0;i<16000;i++){
   const items=rollWizardHouseLoot(r,false,3,false,'fire');assert.ok(items.length<=3);heads+=Number(items.some(it=>it.kind==='gargoyleHead'));
   for(const it of items)if(it.kind==='scroll'){if(it.stat==='spell')spells++;else if(it.stat==='pentagram')tablets++;}
- }assert.ok(heads/16000>.235&&heads/16000<.265);assert.ok(Math.abs(spells/(spells+tablets)-.5)<.025);
+ }assert.ok(heads/16000>.235&&heads/16000<.265);assert.ok(Math.abs(spells/(spells+tablets)-.35)<.025); // (15.11: 30 % of a settlement's pentagram-or-spell slots are the element's own pentagram: spells .5 × .7)
 });
 
 test('the fire pavilion portal stays dormant without its gargoyle head, never opens from an arbitrary corpse',()=>{
