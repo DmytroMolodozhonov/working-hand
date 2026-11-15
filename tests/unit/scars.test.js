@@ -64,3 +64,19 @@ test('the wound decal lies on the triangles it crosses: a strip on the face towa
     const r2 = projectOnMesh(m, away); // (its strip is at the front face but it looks from behind: the back face is 1 m away, outside hz)
     assert.ok(!r2, 'the front face is a back face for a caster behind it');
 });
+
+import { woundPlace } from '../../src/fx/Scars.js';
+import { woundRegion, woundBothHands } from '../../src/game/WoundCareRules.js';
+test('where a wound is on a person: head, torso, an arm (held by the OTHER hand), a leg; both hands out of a fight, one in it', () => {
+    const min = { x: -1, y: 0, z: -0.5 }, max = { x: 1, y: 4, z: 0.5 };
+    const at = (x, y) => woundRegion(...Object.values(woundPlace(min, max, { x, y, z: 0 }, 0)));
+    assert.equal(at(0, 3.8).region, 'head');
+    assert.equal(at(0, 2.4).region, 'torso');
+    assert.equal(at(0.9, 2.4).region, 'arm'); assert.equal(at(0.9, 2.4).side, 'r', 'at yaw 0 (facing −z) his right is +x');
+    assert.equal(at(-0.9, 2.4).side, 'l');
+    assert.equal(at(0.2, 0.8).region, 'leg');
+    assert.equal(woundBothHands({}), true, 'out of a fight: both hands');
+    assert.equal(woundBothHands({ foe: 'me' }), false, 'in a fight: one');
+    assert.equal(woundBothHands({ fleeT: 2 }), false);
+    assert.equal(woundBothHands({ mode: 'attack' }), false);
+});

@@ -57,6 +57,7 @@ import { RebellionLife } from './RebellionLife.js';
 import { AudacityLife } from './AudacityLife.js';
 import { HomeDefence } from './HomeDefenceLife.js';
 import { WoundCare } from './WoundCare.js';
+import { WOUND_REGION_CODE, WOUND_REGION_BY_CODE } from './WoundCareRules.js';
 import { MOB as MOB_RULES } from './Audacity.js';
 import { SocialLife } from './SocialLife.js';
 import { CourtLife } from './CourtLife.js';
@@ -4188,7 +4189,7 @@ export class CastleLife {
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
                     const choreMoving = v.mode === 'chore' && v.speed > 0.4; // (a villager at a chore that is on the move — pushed, drawn off: he walks, his things are not shown: no bench stuck to the feet)
-                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { lost: v.bewilderT > 0, mode: choreMoving ? 'walk' : (v.bewilderT > 0 ? 'idle' : v.mode), speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: v.bewilderT > 0 ? 'confused' : gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, wound: v.woundHold ? v.woundSide || 'r' : null, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
+                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { lost: v.bewilderT > 0, mode: choreMoving ? 'walk' : (v.bewilderT > 0 ? 'idle' : v.mode), speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: v.bewilderT > 0 ? 'confused' : gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, wound: v.woundHold ? v.woundSide || 'r' : null, woundReg: v.woundReg || 'torso', woundBoth: !!v.woundBoth, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);
@@ -4274,7 +4275,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0) | (v.steward && v.arena?.kind === 'steward' ? 8 : 0) | (v.woundHold ? (v.woundSide === 'l' ? 48 : 16) : 0), choreCode(shownChore(v), v.choreSide)]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0) | (v.steward && v.arena?.kind === 'steward' ? 8 : 0) | (v.woundHold ? (v.woundSide === 'l' ? 48 : 16) | (v.woundBoth ? 64 : 0) | (WOUND_REGION_CODE[v.woundReg] || 0) << 7 : 0), choreCode(shownChore(v), v.choreSide)]);
         g.sync.villagers?.(list);
     }
 
@@ -4315,7 +4316,7 @@ export class CastleLife {
             if ((disarmed & 1) && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
             if ((disarmed & 2) && !v.shieldGone) { v.shieldGone = true; v.model?.dropShield?.(); }
             if ((disarmed & 4) && !v.toolGone) { v.toolGone = true; v.model?.setHeldTool?.('none'); }
-            v.woundHold = !!(disarmed & 16); v.woundSide = (disarmed & 32) ? 'l' : 'r'; // (a hand at the wound — WoundCare.js)
+            v.woundHold = !!(disarmed & 16); v.woundSide = (disarmed & 32) ? 'l' : 'r'; v.woundBoth = !!(disarmed & 64); v.woundReg = WOUND_REGION_BY_CODE[(disarmed >> 7) & 3] || 'torso'; // (a hand at the wound — WoundCare.js)
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead' && !v.dead) { v.dead = true; this.game.creatureImpact?.ragDeath?.(v); } // (a guest: the body falls as a rag doll here too)
         }

@@ -13,7 +13,7 @@
  * a night comes → the sleeping are not helpers (`v.sleep`); two helpers for one wounded → the wizard and the plain one only (two slots); a wizard far off but hears
  * the call (HEAR) → comes; no wizard → the plain helper stays; the host leaves → every flag lives on the villager and is rebuilt by the next host from the blood.
  */
-import { CARE, CARE_LINES, canRescue, woundSide, staysSelf, pickWizard, pickPlain, isDefenceless } from './WoundCareRules.js';
+import { CARE, CARE_LINES, canRescue, woundSide, woundBothHands, staysSelf, pickWizard, pickPlain, isDefenceless } from './WoundCareRules.js';
 import * as THREE from 'three';
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -38,6 +38,7 @@ export class WoundCare {
         for (const v of L.byId.values()) {
             const hold = !v.dead && v.bleed > 0;
             if (hold !== !!v.woundHold) { v.woundHold = hold; if (hold) v.woundSide = woundSide(v.id); else v.called = false; }
+            if (hold) { v.woundReg = v.woundAt?.region || 'torso'; v.woundBoth = woundBothHands(v); if (v.woundReg === 'arm' && v.woundAt?.side) v.woundSide = v.woundAt.side === 'r' ? 'l' : 'r'; } // (the wound's place; an arm wound is held by the OTHER hand)
         }
         if ((this._t -= dt) > 0) return;
         this._t = CARE.SCAN;

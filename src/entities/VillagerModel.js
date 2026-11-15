@@ -1611,16 +1611,35 @@ export class VillagerModel {
         }
     }
 
-    /** A hand at the wound («Sectura» and the rest: WoundCare.js): the free hand at the belly, a stoop, the head bowed; the sword hand and the shield arm stay as they are. */
-    _clutch(T, side, t) {
+    /**
+     * A hand at the wound («Sectura» and the rest: WoundCare.js; the author 15.11): the hand goes to WHERE the wound is — the belly / chest (the torso), up to the head, the
+     * OTHER hand across to the arm that was cut (the wounded arm hangs), down to the thigh with a deep stoop (the leg) — with BOTH hands when he is out of the fight and
+     * with one (the free one: the sword hand and the shield arm stay as they are) while he still fights. `side`: the holding hand ('l' / 'r').
+     */
+    _clutch(T, side, t, region = 'torso', both = false) {
         const sword = this.toolKind && this.toolKind !== 'none' && !this._sheath;
         let s = side === 'l' ? 'l' : 'r';
         if (sword && s === 'r') s = 'l';
         if (this.shield && s === 'l') s = 'r';
         const pulse = Math.sin(t * 3.1) * 0.04; // (a breath, a wince)
-        if (s === 'r') { T.aRX = 1.0 + pulse; T.aRZ = -0.62; } else { T.aLX = 1.0 + pulse; T.aLZ = 0.62; }
-        T.wrist = -1.5;
-        T.hx += 0.17; T.headX += 0.24;
+        const rFree = !(sword) && !(this.toolKind && this.toolKind !== 'none' && !this._sheath), lFree = !this.shield;
+        const two = both && !sword && lFree; // (both hands only with nothing drawn and no shield on the arm)
+        const put = (hand, ax, az) => { if (hand === 'r') { T.aRX = ax + pulse; T.aRZ = -az; } else { T.aLX = ax + pulse; T.aLZ = az; } };
+        const other = s === 'r' ? 'l' : 'r';
+        if (region === 'head') { // a hand (two) up to the head, the head sunk into it
+            put(s, 2.5, 0.35); if (two) put(other, 2.5, 0.35);
+            T.wrist = -1.2; T.headX += 0.3; T.hx += 0.1;
+        } else if (region === 'arm') { // the other hand across to the cut arm (s is already the other hand: WoundCare); the wounded arm hangs, a bit forward
+            put(s, 1.05, 0.95); if (two) put(other, 0.35, 0.2);
+            T.wrist = -1.4; T.hx += 0.14; T.headX += 0.2;
+        } else if (region === 'leg') { // bent over the thigh: the stoop deep, the hands down at the leg
+            put(s, 0.62, 0.22); if (two) put(other, 0.62, 0.22);
+            T.wrist = -1.3; T.hx += 0.42; T.headX += 0.3;
+        } else { // the belly / chest: the hand (both — one over the other) pressed in, a stoop
+            put(s, 1.0, 0.62); if (two) put(other, 1.05, 0.58);
+            T.wrist = -1.5; T.hx += two ? 0.22 : 0.17; T.headX += 0.24;
+        }
+        void rFree;
     }
 
     /** A gesture begins — with a free hand: the sword hand and the shield arm do not wave. */
@@ -2006,7 +2025,7 @@ export class VillagerModel {
         // ---- what he feels shows in the bearing, and in the hands when he talks (Emotions.js, Gestures.js)
         this._brow = 0; this._blink = 0; this._mouthAcc = 0; // (set again by _feel: walking, fighting or working leaves the face as it was)
         if (!own && !loco && (mode === 'idle' || mode === 'talk')) this._feel(dt, state, mode, T);
-        if (state.wound && !own && mode !== 'dead' && mode !== 'flail') this._clutch(T, state.wound, t); // (a bleeding wound: the hand holds it)
+        if (state.wound && !own && mode !== 'dead' && mode !== 'flail') this._clutch(T, state.wound, t, state.woundReg, state.woundBoth); // (a bleeding wound: the hand — or both — holds it where it is)
         this._faceStep(dt, state, mode, t);
         if (this.chore && mode !== 'chore') carryBody(this, this.chore, T); // (a bucket, a sack carried home)
         if (this._lookYaw != null && mode !== 'bow' && mode !== 'flail' && mode !== 'chore') T.headY = this._lookYaw;

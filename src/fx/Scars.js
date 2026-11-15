@@ -14,6 +14,7 @@
  * back; the wound is the HUD's red).
  */
 import * as THREE from 'three';
+import { woundRegion } from '../game/WoundCareRules.js';
 
 export const SCAR = {
     MAX: 80, MAX_PER: 6,
@@ -66,42 +67,72 @@ export function ballLine(o, f, s, a, b, r, samples = SCAR.SAMPLES) {
 // blade's strip touches: the torso, the arm, the leg…): the triangles are clipped to a strip along the cut line, so the wound lies flush on each surface, bends
 // round the edges of the parts, and — being made of pieces of the creature's own meshes — moves with them (a skinned part gets the same bones). A drawn wound
 // (lens-shaped lips, a dark clotted centre, glossy blood, a few runs and beads) is its texture, shared by all (one material).
-let _woundTex = null, _woundMat = null;
-function woundTexture() {
-    if (_woundTex) return _woundTex;
+const _woundTex = {}, _woundMat = {};
+/** The three looks of a wound: on bare SKIN (lips and gloss), on CLOTH (a torn slit, frayed threads, a blood-soaked stain spreading round it), in FUR (matted dark hair, a spiky rim). */
+function woundTexture(kind) {
+    if (_woundTex[kind]) return _woundTex[kind];
     if (typeof document === 'undefined') return null;
     const W = 256, H = 64, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d');
     c.clearRect(0, 0, W, H);
-    const lens = (inset, ampK) => { // a lens: pointed ends, bulging in the middle, slightly crooked (a real cut is not a ruler line)
+    const rng = (() => { let q = kind === 'cloth' ? 7 : kind === 'fur' ? 13 : 3; return () => (q = (q * 1664525 + 1013904223) % 4294967296) / 4294967296; })();
+    const lens = (inset, ampK, jag = 0) => { // a lens: pointed ends, bulging in the middle, crooked; `jag`: a ragged edge (torn cloth, fur)
         c.beginPath();
-        const top = (x) => H / 2 - Math.sin(Math.PI * x) * (H * 0.3 * ampK) - Math.sin(x * 11) * 1.2;
-        const bot = (x) => H / 2 + Math.sin(Math.PI * x) * (H * 0.3 * ampK) * 0.9 + Math.sin(x * 9 + 1) * 1.2;
-        const x0 = inset * W, x1 = W - inset * W;
+        const wob = (x, k) => Math.sin(x * (9 + k) + k) * 1.2 + (jag ? (rng() - 0.5) * jag : 0);
+        const top = (x) => H / 2 - Math.sin(Math.PI * x) * (H * 0.3 * ampK) + wob(x, 2);
+        const bot = (x) => H / 2 + Math.sin(Math.PI * x) * (H * 0.3 * ampK) * 0.9 + wob(x, 5);
+        const x0 = inset * W, x1 = W - inset * W, n = jag ? 70 : 40;
         c.moveTo(x0, H / 2);
-        for (let i = 0; i <= 40; i++) { const x = i / 40; c.lineTo(x0 + (x1 - x0) * x, top(x * 0.98 + 0.01)); }
-        for (let i = 40; i >= 0; i--) { const x = i / 40; c.lineTo(x0 + (x1 - x0) * x, bot(x * 0.98 + 0.01)); }
+        for (let i = 0; i <= n; i++) { const x = i / n; c.lineTo(x0 + (x1 - x0) * x, top(x * 0.98 + 0.01)); }
+        for (let i = n; i >= 0; i--) { const x = i / n; c.lineTo(x0 + (x1 - x0) * x, bot(x * 0.98 + 0.01)); }
         c.closePath();
     };
-    // the bruised, swollen flesh round it (soft, low alpha), the lips, the blood, the dark depth, the gloss
-    const g = c.createRadialGradient(W / 2, H / 2, 4, W / 2, H / 2, W * 0.5); g.addColorStop(0, 'rgba(150,40,50,0.55)'); g.addColorStop(1, 'rgba(150,40,50,0)');
-    c.fillStyle = g; c.fillRect(0, 0, W, H);
-    lens(0.04, 0.95); c.fillStyle = 'rgba(176,42,52,0.95)'; c.fill(); // (the torn lips)
-    lens(0.07, 0.68); c.fillStyle = '#7d0d17'; c.fill(); // (blood)
-    lens(0.1, 0.4); c.fillStyle = '#2a0408'; c.fill(); // (the dark depth)
-    c.strokeStyle = 'rgba(255,170,170,0.55)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(W * 0.2, H * 0.4); c.quadraticCurveTo(W * 0.5, H * 0.3, W * 0.78, H * 0.41); c.stroke(); // (the gloss on the wet edge)
-    // runs of blood and a few beads below the lower lip
+    if (kind === 'skin') {
+        const g = c.createRadialGradient(W / 2, H / 2, 4, W / 2, H / 2, W * 0.5); g.addColorStop(0, 'rgba(150,40,50,0.55)'); g.addColorStop(1, 'rgba(150,40,50,0)');
+        c.fillStyle = g; c.fillRect(0, 0, W, H); // (the bruised, swollen flesh)
+        lens(0.04, 0.95); c.fillStyle = 'rgba(176,42,52,0.95)'; c.fill(); // (the torn lips)
+        lens(0.07, 0.68); c.fillStyle = '#7d0d17'; c.fill(); // (blood)
+        lens(0.1, 0.4); c.fillStyle = '#2a0408'; c.fill(); // (the depth)
+        c.strokeStyle = 'rgba(255,170,170,0.55)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(W * 0.2, H * 0.4); c.quadraticCurveTo(W * 0.5, H * 0.3, W * 0.78, H * 0.41); c.stroke(); // (the gloss on the wet edge)
+    } else if (kind === 'cloth') {
+        // the blood has soaked the cloth round the cut: a wide dark stain (darkest at the slit, ragged at its edge), then the slit itself — frayed edge, the dark under it
+        const g = c.createRadialGradient(W / 2, H / 2, 6, W / 2, H / 2, W * 0.46); g.addColorStop(0, 'rgba(95,8,16,0.92)'); g.addColorStop(0.55, 'rgba(110,12,20,0.7)'); g.addColorStop(1, 'rgba(110,12,20,0)');
+        c.fillStyle = g; c.beginPath(); c.ellipse(W / 2, H / 2, W * 0.47, H * 0.5, 0, 0, Math.PI * 2); c.fill();
+        lens(0.06, 0.52, 5); c.fillStyle = '#220305'; c.fill(); // (the slit in the cloth: dark under it)
+        lens(0.09, 0.3, 3); c.fillStyle = '#5a0710'; c.fill();
+        c.strokeStyle = 'rgba(230,220,200,0.55)'; c.lineWidth = 0.9; // (loose threads at the rim)
+        for (let i = 0; i < 26; i++) { const x = (0.1 + rng() * 0.8) * W, up = rng() < 0.5 ? -1 : 1, y = H / 2 + up * H * (0.1 + rng() * 0.16) * Math.sin(Math.PI * (x / W)); c.beginPath(); c.moveTo(x, y); c.lineTo(x + (rng() - 0.5) * 7, y + up * (2 + rng() * 5)); c.stroke(); }
+    } else { // fur
+        const g = c.createRadialGradient(W / 2, H / 2, 6, W / 2, H / 2, W * 0.46); g.addColorStop(0, 'rgba(70,6,12,0.95)'); g.addColorStop(0.6, 'rgba(80,10,16,0.75)'); g.addColorStop(1, 'rgba(80,10,16,0)');
+        c.fillStyle = g; c.fillRect(0, 0, W, H); // (blood in the hair)
+        lens(0.05, 0.6, 7); c.fillStyle = '#1a0205'; c.fill();
+        lens(0.09, 0.34, 4); c.fillStyle = '#6a0a14'; c.fill();
+        c.strokeStyle = 'rgba(40,10,10,0.8)'; c.lineWidth = 1.4; // (matted tufts of hair standing round the wound)
+        for (let i = 0; i < 40; i++) { const x = (0.06 + rng() * 0.88) * W, up = rng() < 0.5 ? -1 : 1, y = H / 2 + up * H * (0.12 + rng() * 0.18) * Math.sin(Math.PI * (x / W)); c.beginPath(); c.moveTo(x, y); c.lineTo(x + (rng() - 0.5) * 9, y + up * (3 + rng() * 7)); c.stroke(); }
+    }
+    // runs of blood and a few beads below the lower edge
     for (const [x, len] of [[0.3, 0.3], [0.52, 0.42], [0.7, 0.24]]) { c.fillStyle = 'rgba(120,8,18,0.9)'; c.beginPath(); const px = x * W; c.moveTo(px - 2, H * 0.62); c.lineTo(px + 2, H * 0.62); c.lineTo(px + 1, H * (0.62 + len * 0.38)); c.lineTo(px - 1, H * (0.62 + len * 0.38)); c.closePath(); c.fill(); c.beginPath(); c.arc(px, H * (0.62 + len * 0.38) + 1.5, 2.2, 0, Math.PI * 2); c.fill(); }
     const t = new THREE.CanvasTexture(cv); t.anisotropy = 4; t.userData = { shared: true };
-    return (_woundTex = t);
+    return (_woundTex[kind] = t);
 }
-function woundMat() {
-    if (_woundMat) return _woundMat;
-    const map = woundTexture();
-    _woundMat = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: map ? 0xffffff : 0x8a0a14 });
-    _woundMat.userData.shared = true;
-    return _woundMat;
+function woundMat(kind = 'skin') {
+    if (_woundMat[kind]) return _woundMat[kind];
+    const map = woundTexture(kind);
+    const m = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: map ? 0xffffff : 0x8a0a14 });
+    m.userData.shared = true;
+    return (_woundMat[kind] = m);
 }
+const _skinC = new THREE.Color();
+/** What the wound is on: a part's material near the creature's skin colour → 'skin'; an animal → 'fur'; anything else (a person's clothes) → 'cloth'. */
+export function surfaceKind(part, owner) {
+    if (owner?.isAnimal) return 'fur';
+    const skin = owner?.look?.skin ?? owner?.entry?.look?.skin ?? owner?.skin;
+    const col = part?.material?.color;
+    if (skin == null || !col) return 'cloth';
+    _skinC.set(skin);
+    return Math.hypot(col.r - _skinC.r, col.g - _skinC.g, col.b - _skinC.b) < 0.2 ? 'skin' : 'cloth';
+}
+const cloth = surfaceKind;
 
 const _v0 = new THREE.Vector3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _w0 = new THREE.Vector3(), _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _fn = new THREE.Vector3(), _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3();
 /** Clip a convex polygon (array of {p: Vector3, b: [b0, b1, b2]}) against the plane n·x ≤ d; barycentrics are interpolated with the points. */
@@ -180,6 +211,14 @@ export function nearestSurface(r, maxDepth, band = 0.4) {
     return out;
 }
 
+/** PURE: where on a body (its box {min, max}, facing `yaw`) a point lies: `fy` the height share, `lat` sideways from the middle as a share of the half width (+ his right). */
+export function woundPlace(min, max, p, yaw) {
+    const h = Math.max(1e-6, max.y - min.y), cx = (min.x + max.x) / 2, cz = (min.z + max.z) / 2;
+    const rx = Math.cos(yaw), rz = -Math.sin(yaw); // (his right: facing −z at yaw 0 → +x)
+    const half = Math.max(0.3, ((max.x - min.x) * Math.abs(rx) + (max.z - min.z) * Math.abs(rz)) / 2);
+    return { fy: (p.y - min.y) / h, lat: ((p.x - cx) * rx + (p.z - cz) * rz) / half };
+}
+
 export class Scars {
     constructor(game) {
         this.game = game;
@@ -196,7 +235,11 @@ export class Scars {
         g.setAttribute('color', new THREE.Float32BufferAttribute([1, 0, 0, 1, 0, 0, 1, 0, 0], 3));
         const m = new THREE.Mesh(g, scarMat());
         m.frustumCulled = false;
-        return m;
+        // (and the decal's materials, with a picture: their shaders are built at the start too)
+        g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
+        const grp = new THREE.Group(); grp.add(m);
+        for (const k of ['skin', 'cloth', 'fur']) { const d = new THREE.Mesh(g, woundMat(k)); d.frustumCulled = false; grp.add(d); }
+        return grp;
     }
 
     /** The object a creature's marks hang on (its group), or null. */
@@ -240,12 +283,13 @@ export class Scars {
             return g;
         });
         // the wound lies ON the surfaces it crosses (projected decal); the floating ribbon is only the fallback for a model that gave no triangles (see the header)
-        const decal = this._decal(pts, parent, sheet, body, seed); // (no rays needed: it works on the posed triangles itself — the rays above miss skinned models, whose bind-pose bounds are elsewhere: that is why the old ribbon floated)
+        const decal = this._decal(pts, parent, sheet, body, seed, owner); // (no rays needed: it works on the posed triangles itself — the rays above miss skinned models, whose bind-pose bounds are elsewhere: that is why the old ribbon floated)
         if (decal) {
             const mine0 = this.list.filter((e) => e.owner === owner);
             if (mine0.length >= SCAR.MAX_PER) this._drop(mine0[0]);
             while (this.list.length >= SCAR.MAX) this._drop(this.list[0]);
-            this.list.push({ objs: decal.objs, owner, parent, t: 0, anchor: decal.anchor });
+            this.list.push({ objs: decal.objs, follow: decal.follow, owner, parent, t: 0, anchor: decal.anchor });
+            this._place(owner, parent, decal.anchor);
             return true;
         }
         // (a model that did not answer at all: the ball's line, kept a little outside)
@@ -258,11 +302,24 @@ export class Scars {
         while (this.list.length >= SCAR.MAX) this._drop(this.list[0]);
         parent.add(mesh);
         this.list.push({ objs: [mesh], owner, parent, t: 0, anchor: null });
+        this._place(owner, parent, parent.worldToLocal(_a.set(pts[Math.floor(pts.length / 2)].x, pts[Math.floor(pts.length / 2)].y, pts[Math.floor(pts.length / 2)].z)).clone());
         return true;
     }
 
+    /** Remember WHERE on the creature it was cut (a person holds the wound there with a hand — or two: WoundCareRules.woundRegion). */
+    _place(owner, parent, anchorLocal) {
+        try {
+            const wp = parent.localToWorld(anchorLocal.clone());
+            const box = new THREE.Box3().setFromObject(parent);
+            const pl = woundPlace(box.min, box.max, wp, owner.yaw ?? parent.rotation?.y ?? 0);
+            owner.woundAt = woundRegion(pl.fy, pl.lat);
+            // an animal cut low (a leg) goes lame: the same limp as cut-off legs, milder (Animals: `legK`); a creature cut higher keeps its pace
+            if (owner.isAnimal && owner.woundAt.region === 'leg') owner.legK = Math.min(owner.legK ?? 1, 0.6);
+        } catch (_) { /* (a model without bounds: no place — the torso is the default) */ }
+    }
+
     /** The decal strip along the cut: → {objs, anchor} or null. */
-    _decal(pts, parent, sheet, body, seed) {
+    _decal(pts, parent, sheet, body, seed, owner) {
         const first = pts[0], last = pts[pts.length - 1];
         const ax = new THREE.Vector3(last.x - first.x, last.y - first.y, last.z - first.z);
         const len = ax.length();
@@ -275,11 +332,14 @@ export class Scars {
         const hx = Math.min(len * 0.55, body.r * 1.0 + 0.1), hy = Math.max(0.07, Math.min(0.16, 0.07 + body.r * 0.05));
         const flip = ((seed * 2654435761) >>> 0) & 1;
         const box = { c, ax, ay: flip ? ay.clone().negate() : ay, az, hx, hy, hz: 4, reach: Math.hypot(hx, hy, 4) + 0.2 }; // (a thin slab round the skin points: only what the blade really crossed, not the arms and the things behind)
-        const objs = [];
+        const objs = [], follow = [];
         parent.updateMatrixWorld(true);
+        // The surfaces: the creature's PARTS (a torso, an arm, a leg, the clothes over them…). Since the far-shape drawing (FarShape.js) the parts are hidden and
+        // drawn as one merged skinned shape — but they are still posed every frame, so a wound made of pieces of THEIR triangles, following their matrices, lies exactly
+        // where the cloth and skin are drawn. (The old ribbon rays hit only visible meshes: they missed everything, and the floating ribbon was the fallback — the «sticker».)
         const meshes = [];
-        parent.traverse((o) => { if (o.isMesh && o.visible && !o.userData?.scar && o.material?.visible !== false && o.geometry?.attributes?.position && !o.isInstancedMesh) meshes.push(o); });
-        let budget = 80000; // (triangles looked at: one wound is cheap, a huge merged model is not allowed to hitch the frame)
+        parent.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh && !o.isInstancedMesh && !o.userData?.scar && (o.visible || o.userData?.farHid) && o.material?.visible !== false && o.geometry?.attributes?.position) meshes.push(o); });
+        let budget = 80000; // (triangles looked at: one wound is cheap, a huge model is not allowed to hitch the frame)
         const found = []; let maxDepth = -1e9;
         for (const m of meshes) {
             const tris = (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
@@ -288,27 +348,22 @@ export class Scars {
             if (!r) continue;
             found.push([m, r]); for (const d of r.tdepth) maxDepth = Math.max(maxDepth, d);
         }
-        for (const [m, r0] of found) { // (only the nearest surface along the blade's way — the first thing it meets)
+        const scene = this.game.scene;
+        for (const [m, r0] of found) { // (only the nearest surface along the blade's way — the first thing it meets: the cloth, not the body under it)
             const r = nearestSurface(r0, maxDepth);
             if (!r) continue;
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.Float32BufferAttribute(r.pos, 3));
             geo.setAttribute('uv', new THREE.Float32BufferAttribute(r.uv, 2));
             geo.setAttribute('normal', new THREE.Float32BufferAttribute(r.nor, 3));
-            let mesh;
-            if (r.sk) {
-                geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(r.sk, 4));
-                geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(r.sw, 4));
-                mesh = new THREE.SkinnedMesh(geo, woundMat());
-                mesh.bindMode = m.bindMode;
-                mesh.bind(m.skeleton, m.bindMatrix);
-            } else mesh = new THREE.Mesh(geo, woundMat());
+            const mesh = new THREE.Mesh(geo, woundMat(cloth(m, owner)));
+            mesh.matrixAutoUpdate = false; mesh.matrixWorldNeedsUpdate = false; mesh.matrixWorld.copy(m.matrixWorld);
             mesh.frustumCulled = false; mesh.renderOrder = 3; mesh.userData.scar = true;
-            m.add(mesh); objs.push(mesh);
+            scene.add(mesh); objs.push(mesh); follow.push([mesh, m]);
         }
         this.lastDecal = { meshes: meshes.length, made: objs.length };
         if (!objs.length) return null;
-        return { objs, anchor: parent.worldToLocal(c.clone()) };
+        return { objs, follow, anchor: parent.worldToLocal(c.clone()) };
     }
 
     _ribbon(pts, parent, lift, bodyR) {
@@ -361,6 +416,12 @@ export class Scars {
     update(dt) {
         const g = this.game;
         if (!this.list.length) return;
+        // the wounds follow the parts they lie on (the parts are posed every frame, hidden or not) and are shown while their creature is
+        for (const e of this.list) {
+            if (!e.follow) continue;
+            const vis = e.parent?.visible !== false;
+            for (const [mesh, part] of e.follow) { mesh.visible = vis; if (vis) mesh.matrixWorld.copy(part.matrixWorld); }
+        }
         if ((this._sweepT -= dt) <= 0) {
             this._sweepT = SCAR.SWEEP;
             for (const e of [...this.list]) {

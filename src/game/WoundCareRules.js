@@ -57,6 +57,22 @@ export function isDefenceless(v) { return !!v && !v.dead && !isFighter(v) && !is
 /** A helper from the plain folk: a villager at ease (not a fighter, not a wizard of the middle rank — they have their own way). */
 export function isPlainHelper(v) { return !!v && !v.dead && !isFighter(v) && !v.wizard && !(v.stunT > 0) && !v.lev && !v.carriedBy && !v.foe && !(v.fleeT > 0) && !v.seated; }
 
+/**
+ * Where on a person the wound is (from the scar's place on his body), and how many hands hold it (the author 15.11: «хватается за рану рукой или двумя руками.
+ * Одной, если он ещё в битве»). `fy`: the wound's height as a share of his height (0 feet … 1 crown), `lat`: sideways from the middle as a share of the half width
+ * (+ his right), → 'head' | 'torso' | 'arm' | 'leg', `side` the arm's side ('r' / 'l', his own).
+ */
+export function woundRegion(fy, lat) {
+    if (fy > 0.8) return { region: 'head', side: lat >= 0 ? 'r' : 'l' };
+    if (fy < 0.42) return { region: 'leg', side: lat >= 0 ? 'r' : 'l' };
+    if (Math.abs(lat) > 0.5 && fy > 0.42) return { region: 'arm', side: lat >= 0 ? 'r' : 'l' };
+    return { region: 'torso', side: lat >= 0 ? 'r' : 'l' };
+}
+export const WOUND_REGION_CODE = { torso: 0, head: 1, arm: 2, leg: 3 };
+export const WOUND_REGION_BY_CODE = ['torso', 'head', 'arm', 'leg'];
+/** Both hands hold it when he is out of the fight (nobody to fight, not running); in a fight only the free one (the sword / the wand / the shield arm stay). */
+export const woundBothHands = (v) => !!v && !v.foe && !(v.fleeT > 0) && !(v.castT > 0) && !(v.atkT > 0) && v.mode !== 'attack' && v.mode !== 'cast';
+
 /** Which hand holds the wound: stable per person (the left for about one in three). */
 export function woundSide(id) {
     let h = 0;
