@@ -78,3 +78,26 @@ export function canSwat(v, a, mana) {
     if (v.element === 'fire' && a.phase === 'Vault') return false; // (upside down on his hands: no free arm). Mid-sweep or mid-punch he may still turn the orb: the blow is cut short
     return !!SWAT.COST[v.element] && mana >= SWAT.COST[v.element];
 }
+
+/**
+ * The air mage BENDS a spell aside (the author 14.11: «если игрок кидает заклинание, он ветром, прямо видно искривление, немножко меняет траекторию — игрок промахивается»).
+ * No catching, no throwing back: a gust at the flying thing turns its way by an angle that makes it miss him by about `MISS` m (more the nearer it is — never a wide curve:
+ * from 14 m about 12°, from 6 m about 27°). Any thrown thing: a charge of the duel (Stupefy, Jolt, Ice… — the gods' spells excepted: nothing turns those), a Bombardo, a Fireball.
+ * It costs a little mana, has its own pause, and he may fail (his die). The bent thing flies on straight and may hit whoever is there.
+ */
+export const BEND = { COST: 5, MISS: 3.0, CD: 0.9, HIT: 0.1, MIN_DIST: 3.2, FAR_MIN: 5.5, CHANCE: 0.9, RETURN_SHARE: 0.5 };
+/** The turn (radians, a sign by the die) that makes a thing `dist` m off miss him by BEND.MISS. */
+export function bendAngle(dist, roll) {
+    const a = Math.atan2(BEND.MISS, Math.max(BEND.FAR_MIN, dist));
+    return (roll < 0.5 ? -1 : 1) * a;
+}
+/** Turns a vector {x, z} about the vertical by `a` (in place; y untouched). */
+export function rotateYInPlace(v, a) {
+    const c = Math.cos(a), s = Math.sin(a), x = v.x, z = v.z;
+    v.x = x * c + z * s; v.z = -x * s + z * c;
+    return v;
+}
+/** A duel charge as the thing `incoming` / `pickOrb` read: { p, v, by, bolt }. `speed` m/s. */
+export function boltAsOrb(b, speed) {
+    return { p: b.front, v: { x: b.dir.x * speed, y: b.dir.y * speed, z: b.dir.z * speed }, by: b.by, fire: false, maxima: false, bolt: b };
+}

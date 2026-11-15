@@ -1039,6 +1039,22 @@ export class Duel {
         return b;
     }
 
+    /**
+     * (host) An air mage's gust bends a flying charge aside by `ang` (radians, about the vertical): the same charge goes on straight from where it is, along the new line, with no
+     * target any more (it no longer corrects its way back to him: the player misses). The new charge replaces the old by the same id on every computer.
+     */
+    bendBolt(b, ang) {
+        if (!b || !this.bolts.has(b.id) || b.state !== 'flying') return null;
+        const dir = b.dir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), ang).normalize();
+        const nb = this._addBolt({ ...b, tk: 'n', tid: null, o: b.front.clone(), d: dir });
+        nb.traveled = b.traveled; nb.age = b.age; nb.bent = true;
+        this.game.sync?.duelCast?.(nb);
+        return nb;
+    }
+
+    /** A flying charge's speed (m/s). */
+    boltSpeed(b) { return DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED; }
+
     _tmpBody() {
         return this._tb || (this._tb = { kind: 'n', id: null, a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 });
     }

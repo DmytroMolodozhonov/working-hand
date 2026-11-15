@@ -138,3 +138,47 @@ test('the water mage DOUSES a thrown orb from afar: a jet, steam — no orb come
     Math.random = () => 0.1; try { for (let i = 0; i < 30; i++) { o2.p.z += 32 / 60; d.step(1); } } finally { Math.random = origRandom; }
     assert.ok(t2.life > 0, 'dry: no douse');
 });
+
+import { BEND, bendAngle, rotateYInPlace, boltAsOrb } from '../../src/game/ElementalParry.js';
+import { isDivine, DIVINE_SPELLS } from '../../src/game/ProtectionGods.js';
+
+test('bend: the turn makes a thing miss by about BEND.MISS, a little more the nearer it is; the sign is by the die', () => {
+    assert.ok(Math.abs(Math.tan(Math.abs(bendAngle(12, 0.1))) * 12 - BEND.MISS) < 0.01, 'from 12 m: 3 m of miss');
+    assert.ok(Math.abs(bendAngle(6, 0.1)) > Math.abs(bendAngle(14, 0.1)), 'nearer → a bigger turn');
+    assert.ok(Math.abs(bendAngle(2, 0.1)) < 0.6, 'never a wide curve even when it is close');
+    assert.ok(bendAngle(10, 0.1) < 0 && bendAngle(10, 0.9) > 0);
+    const v = { x: 0, y: 3, z: 10 }; rotateYInPlace(v, Math.PI / 2);
+    assert.ok(Math.abs(v.x - 10) < 1e-9 && Math.abs(v.z) < 1e-9 && v.y === 3, 'turned about the vertical, y untouched');
+});
+test('the air mage BENDS a duel charge aside: it is turned (not caught), costs a little, the gods\' spells are not turned, and the fire mage does not bend', () => {
+    const f = fixture('air'); const calls = [];
+    const bolt = { id: 'b1', state: 'flying', by: 'me', spell: 'Stupefy', front: new T.Vector3(0, 2.6, -10), dir: new T.Vector3(0, 0, 1) };
+    f.g.duel = { bolts: new Map([['b1', bolt]]), boltSpeed: () => 22, bendBolt: (b, ang) => { calls.push(ang); return {}; } };
+    const mana = f.v.mana; let n = 0;
+    const rolls = [0.3, 0.1, 0.1, 0.1]; const orig = Math.random; Math.random = () => (rolls.length ? rolls.shift() : 0.1);
+    try { while (n < 90 && !calls.length) { bolt.front.z += 22 / 60; f.step(1); n++; } } finally { Math.random = orig; }
+    assert.equal(calls.length, 1, 'bent once');
+    assert.ok(Math.abs(calls[0]) > 0.1 && Math.abs(calls[0]) < 0.5, 'a slight turn: ' + calls[0].toFixed(2) + ' rad');
+    assert.ok(mana - f.v.mana >= BEND.COST - 1, 'paid (net of the mana that comes back in the meantime)');
+    // a divine spell: nothing turns it
+    const g = fixture('air'); const gods = [...DIVINE_SPELLS][0]; assert.ok(isDivine(gods));
+    const gb = { id: 'g1', state: 'flying', by: 'me', spell: gods, front: new T.Vector3(0, 2.6, -10), dir: new T.Vector3(0, 0, 1) }; const gc = [];
+    g.g.duel = { bolts: new Map([['g1', gb]]), boltSpeed: () => 22, bendBolt: (b, ang) => { gc.push(ang); return {}; } };
+    Math.random = () => 0.1; try { for (let i = 0; i < 40; i++) { gb.front.z += 22 / 60; g.step(1); } } finally { Math.random = orig; }
+    assert.equal(gc.length, 0, 'a god\'s spell is not bent');
+    // the fire mage has no wind
+    const fm = fixture('fire'); const fc = [];
+    const fb = { id: 'f1', state: 'flying', by: 'me', spell: 'Stupefy', front: new T.Vector3(0, 2.6, -10), dir: new T.Vector3(0, 0, 1) };
+    fm.g.duel = { bolts: new Map([['f1', fb]]), boltSpeed: () => 22, bendBolt: (b, ang) => { fc.push(ang); return {}; } };
+    Math.random = () => 0.1; try { for (let i = 0; i < 40; i++) { fb.front.z += 22 / 60; fm.step(1); } } finally { Math.random = orig; }
+    assert.equal(fc.length, 0, 'only the air mage bends charges');
+});
+test('a thrown orb is bent in the air mage\'s mood: its velocity turns about the vertical and the orb is NOT taken', () => {
+    const f = fixture('air'); const o = orb(0, -10, 0, 32); o.v = new T.Vector3(0, 0, 32); o.p = new T.Vector3(0, 2.6, -10); const t = f.task(o);
+    const rolls = [0.8, 0.1, 0.4, 0.1, 0.1]; const orig = Math.random; Math.random = () => (rolls.length ? rolls.shift() : 0.1);
+    try { for (let i = 0; i < 60 && Math.abs(o.v.x) < 1; i++) { o.p.z += 32 / 60; f.step(1); } } finally { Math.random = orig; }
+    assert.ok(t.life > 0, 'not caught');
+    assert.ok(Math.abs(o.v.x) > 1, 'its way turned: vx ' + o.v.x.toFixed(2));
+    assert.ok(Math.abs(Math.hypot(o.v.x, o.v.z) - 32) < 0.01, 'the speed is the same: only the direction changed');
+    assert.equal(f.casts.length, 0, 'nothing thrown back');
+});

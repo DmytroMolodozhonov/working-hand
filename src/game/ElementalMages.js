@@ -4,7 +4,8 @@ import {duelRange} from './DuelRange.js';
 import {waveSource} from './WaveSource.js';
 /** Host-owned elemental combat on ordinary CastleLife bodies: shared spell collisions, armour and death. */
 import * as T from 'three';
-import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat } from './ElementalParry.js';
+import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat, BEND, bendAngle, rotateYInPlace, boltAsOrb } from './ElementalParry.js';
+import { isDivine } from './ProtectionGods.js';
 import { findWater, WIDE_WATER } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
@@ -52,22 +53,26 @@ export class ElementalMages {
   const a=v.elemental,g=this.game,L=g.castleLife;a.parryCd=Math.max(0,(a.parryCd||0)-dt);
   if(a.swat){
    const S=a.swat;S.t+=dt;v.mode=SWAT_MODES[v.element];v.model.elementPoseT=S.t;a.hopping=false;v.speed=0;
-   if(!S.done&&S.t>=SWAT.HIT){
+   if(S.kind==='bend'){
+    if(!S.done&&S.t>=BEND.HIT){S.done=true;this.bendNow(v,S);}
+   }else if(!S.done&&S.t>=SWAT.HIT){
     const t=S.task,o=t.orb;
     if(t.life>0&&Math.hypot(o.p.x-v.x,o.p.y-(v.y+2.6),o.p.z-v.z)<=(SWAT.TAKE_BY[v.element]||SWAT.TAKE_R)){S.done=true;this.swatHit(v,t,foe);}
     else if(S.t>=SWAT.HIT_MAX)S.done=true; // (it burst or flew wide: the swing found nothing)
    }
-   if(S.t>=SWAT.T){a.swat=null;a.parryCd=SWAT.CD;this.phase(v,v.element==='fire'?'Chamber':v.element==='water'?'Gather':'Coil');}
+   if(S.t>=SWAT.T){a.swat=null;a.parryCd=S.kind==='bend'?BEND.CD:SWAT.CD;this.phase(v,v.element==='fire'?'Chamber':v.element==='water'?'Gather':'Coil');}
    L._ground(v);return true;
   }
   if(!g.spells?.spells||!canSwat(v,a,v.mana)||!L._sees(v,foe))return false;
   if(v.element==='water'&&!this.waterSource(v,0))return false; // (the water he douses with is the water he has)
   const chest={x:v.x,y:v.y+2.6,z:v.z},orbs=this._orbs||(this._orbs=[]);orbs.length=0;
   for(const t of g.spells.spells)if(t.orb&&t.life>0&&t.parry)orbs.push(t.orb);
+  if(v.element==='air'&&g.duel?.bolts)for(const b of g.duel.bolts.values())if(b.state==='flying'&&b.by!==v.id&&!isDivine(b.spell))orbs.push(boltAsOrb(b,g.duel.boltSpeed?.(b)||22)); // (a charge of the duel too: the gods' spells are not turned by anything)
   const pick=pickOrb(orbs,chest,v.id,SWAT.REACH_BY[v.element]||SWAT.REACH);if(!pick)return false;
+  const kind=v.element==='air'&&(pick.o.bolt||Math.random()>=BEND.RETURN_SHARE)?'bend':'return'; // (air: a charge is always bent; a thrown orb is bent or thrown back, by his mood)
   a.parryCd=SWAT.CD*.5;if(Math.random()>=SWAT.CHANCE[v.element])return false; // (his die: he did not see it in time)
-  if(!this.pay(v,SWAT.COST[v.element]))return false;
-  a.swat={t:0,task:pick.o.task,done:false,variant:Math.random()<.5?0:1};v.model.elementVariant=a.swat.variant;if(v.element==='water'&&!a.source&&!a.humid)a.water=Math.max(0,a.water-3);this.phase(v,'Swat');v.mode=SWAT_MODES[v.element];return true;
+  if(!this.pay(v,kind==='bend'?BEND.COST:SWAT.COST[v.element]))return false;
+  a.swat={t:0,task:pick.o.task,bolt:pick.o.bolt||null,kind,done:false,variant:Math.random()<.5?0:1};v.model.elementVariant=a.swat.variant;if(v.element==='water'&&!a.source&&!a.humid)a.water=Math.max(0,a.water-3);this.phase(v,'Swat');v.mode=SWAT_MODES[v.element];return true;
  }
  /** The blow lands: the orb is taken out of its flight (no blast at the mage) and a new one of the same spell goes back from his hand at whoever threw it. */
  swatHit(v,task,foe){
@@ -104,6 +109,28 @@ export class ElementalMages {
   if(d>=24){this.reposition(v,foe,dt,24);return false;}
   const side=((v.entry.seed&1)?1:-1)*(.35+.25*Math.sin((a.t||0)*.7)),foeId=v.foe;
   L._steer(v,v.x+(dx/d-dz/d*side)*8,v.z+(dz/d+dx/d*side)*8,v.walk*1.5,dt,0);if(!v.foe&&foeId)v.foe=foeId;a.hopping=true;return true;
+ }
+ /** The gust: a flying charge or orb is turned aside by an angle that makes it miss (ElementalParry.BEND); the air is seen to bend where it was turned. */
+ bendNow(v,S){
+  const g=this.game,chest=_o.set(v.x,v.y+2.6,v.z);let at=null,ang=0;
+  if(S.bolt){
+   const b=S.bolt;if(!g.duel?.bolts?.has(b.id)||b.state!=='flying')return;
+   const d=b.front.distanceTo(chest);if(d<BEND.MIN_DIST)return;
+   ang=bendAngle(d,Math.random());const nb=g.duel.bendBolt(b,ang);if(!nb)return;at=b.front;
+  }else{
+   const t=S.task,o=t?.orb;if(!o||t.life<=0)return;
+   const d=Math.hypot(o.p.x-chest.x,o.p.y-chest.y,o.p.z-chest.z);if(d<BEND.MIN_DIST)return;
+   ang=bendAngle(d,Math.random());rotateYInPlace(o.v,ang);at=o.p;
+  }
+  this.airBendFx(v,at,ang);this.engaged(v);
+ }
+ /** The air bending: a ring of wisps round the turned thing, streaming off to the side it was turned. */
+ airBendFx(v,at,ang){
+  const g=this.game,glow=g.fx?.glow;if(!glow)return;
+  const sx=-Math.sign(ang||1);
+  for(let i=0;i<18;i++){const a=i/18*6.2832;glow.spawn(at.x+Math.cos(a)*.5,at.y+Math.sin(a)*.5,at.z,Math.cos(a)*3+sx*4,Math.sin(a)*3,(Math.random()-.5)*2,i%3?0xffffff:0xcfefff,.14+Math.random()*.16,.5,{shrink:1});}
+  for(let i=0;i<10;i++)glow.spawn(at.x,at.y,at.z,sx*(3+Math.random()*4),(Math.random()-.5)*2,(Math.random()-.5)*2,0xeef6ff,.5+Math.random()*.5,.7,{shrink:.5});
+  g.fx?.lightFlash?.(at,0xcfefff,1.2,.12,6);g.sound?.playWhoosh?.();
  }
  /** The water mage douses a thrown orb: a stream flies from his hands to it, it goes out in a cloud of steam. */
  douse(v,o,at){
