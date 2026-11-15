@@ -4070,9 +4070,17 @@ export class CastleLife {
     }
 
     // ------------------------------------------------------------ frame
+    /** The time since the last mark goes to the game's per-system table (PerfLog «системы»: castleLife is the biggest of them in a village). */
+    _mark(name) {
+        const S = this.game._sys; if (!S) return;
+        const n = performance.now(), d = n - (this._mt || n); S[name] = (S[name] || 0) + d; this._mt = n;
+        const T = this.game._clProf || (this.game._clProf = {}); T[name] = (T[name] || 0) + d; // (running totals: the bench divides by the frames)
+    }
+
     update(dt) {
         if (!this.enabled || !this.index) return;
         const g = this.game;
+        this._mt = performance.now();
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
@@ -4099,6 +4107,7 @@ export class CastleLife {
             this._clock = (this._clock || 0) + dt;
             const land = this.game.world?.terrain?.data;
             const pls = this._players();
+            this._mark('cl.systems');
             for (const v of [...this.byId.values()]) {
                 if (v.handLink) continue; // (held by the hand: HandHold leads them)
                 // (its land is not made yet — the workers bring it: it waits, instead of making the ground here in the middle of a frame)
@@ -4125,7 +4134,9 @@ export class CastleLife {
                 this.stuck.watch(v, tdt, v.mode === 'walk' || v.mode === 'run' || (v.path && v.pathI < v.path.length));
             }
             this._bossNow = null;
+            this._mark('cl.think');
             this._separate(dt);
+            this._mark('cl.separate');
         } else {
             for (const v of this.byId.values()) {
                 v.sayT -= dt; // (here too: else after a guest's first line every line of the host's villagers was dropped)
@@ -4205,11 +4216,14 @@ export class CastleLife {
                 if (dd < R && dd > 1e-3) { me.x += dx / dd * (R - dd); me.z += dz / dd * (R - dd); }
             }
         }
+        this._mark('cl.models');
         this.night?.visuals(dt); // (blankets, «z-z-z», the watch's torches; a hand on a sleeper)
         this.wizards.update(dt);
+        this._mark('cl.wizards');
         this._chatter(dt);
         this.talk.update(dt);
         this._netSend(dt);
+        this._mark('cl.talk+net');
     }
 
     /** A chore heard (every computer, from the body's own moment: the blow, the catch, the bubble). */

@@ -464,6 +464,8 @@ try {
         console.log('  тени:', JSON.stringify(st));
     }
     const r = await page.evaluate(scene, FRAMES);
+    const clp = await page.evaluate(() => { const g = window.__zns.game; return g._clProf ? Object.entries(g._clProf).map(([k, v]) => `${k} ${(v / g.frameCount).toFixed(2)}`).join(', ') : null; });
+    if (clp) console.log('  castleLife по частям (мс за кадр, от начала игры):', clp);
     const clu = await page.evaluate(() => { const t = window.__zns.game.world?.terrain || window.__zns.game.terrain; return t?.clusters ? { ...t.clusters.stats, squares: t.clusters.map.size, chunks: t.meshes.size } : null; });
     if (clu) console.log('  далёкая земля кусками:', JSON.stringify(clu));
     if (KEYS) console.log('\nпрогретые ключи (Lambert/Phong):\n' + (await page.evaluate(() => window.__zns.game.renderer.info.programs.filter((p) => /Lambert|Phong/.test(p.name)).map((p) => p.name + ' ' + String(p.cacheKey).slice(0, 600)).join('\n'))));
