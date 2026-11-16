@@ -1545,7 +1545,7 @@ export class CastleLife {
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; this._deadFall(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
         if (v.savior != null) g.savior?.manaStep(v, dt); // (including stun / flight: exactly one mana update)
         if (v.sleep && this.night?.step(v, dt)) return; // (going to bed, asleep, getting up — NightLife.js)
-        if(v.element==='fire'&&(v.carriedBy||v.lev||v.stunT>0||v.vy))g.elementalMages?.interrupt?.(v);
+        if((v.element==='fire'||v.element==='air')&&(v.carriedBy||v.lev||v.stunT>0||v.vy))g.elementalMages?.interrupt?.(v);
         // held up by «Вингардиум Левиоса»: Levitation carries the body
         if (v.carriedBy) { v.mode = 'flail'; v.speed = 0; return; } // (in a gargoyle's claws: hanging, kicking — Gargoyles._carry holds the place)
         if (v.lev) { v.mode = v.lev.body ? 'dead' : 'flail'; v.speed = 0; return; } // (kicking in the air: VillagerModel 'flail')
@@ -4190,7 +4190,7 @@ export class CastleLife {
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
                     const choreMoving = v.mode === 'chore' && v.speed > 0.4; // (a villager at a chore that is on the move — pushed, drawn off: he walks, his things are not shown: no bench stuck to the feet)
-                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { lost: v.bewilderT > 0, mode: choreMoving ? 'walk' : (v.bewilderT > 0 ? 'idle' : v.mode), speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: v.bewilderT > 0 ? 'confused' : gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, wound: v.woundHold ? v.woundSide || 'r' : null, woundReg: v.woundReg || 'torso', woundBoth: !!v.woundBoth, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
+                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.hover = !!(v.fly && v.wizard && v.element !== 'air' && (v.savior != null || v.knowsFlight)); v.model.update(v.animT, { lost: v.bewilderT > 0, mode: choreMoving ? 'walk' : (v.bewilderT > 0 ? 'idle' : (v.model.hover && (v.mode === 'idle' || v.mode === 'run' || v.mode === 'walk') ? 'soar' : v.mode)), speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: v.bewilderT > 0 ? 'confused' : gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, wound: v.woundHold ? v.woundSide || 'r' : null, woundReg: v.woundReg || 'torso', woundBoth: !!v.woundBoth, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);

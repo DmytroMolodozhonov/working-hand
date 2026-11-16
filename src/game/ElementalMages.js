@@ -41,7 +41,11 @@ export class ElementalMages {
  }
  pay(v,cost){if(v.mana<cost)return false;v.mana-=cost;return true;}
  phase(v,p){v.elemental.phase=p;v.elemental.t=0;v.elemental.fired=false;v.elemental.shots=0;v.model.elementPoseT=0;v.mode=v.element+p;}
- interrupt(v){if(v.element==='fire'&&v.elemental?.phase==='Vault'){this.phase(v,'Chamber');v.castT=0;}}
+ interrupt(v){
+  if(v.element==='fire'&&v.elemental?.phase==='Vault'){this.phase(v,'Chamber');v.castT=0;}
+  // (an air mage knocked off by a blast or stunned: the lift and the stance end at once and, if he flies by the wind, he FALLS — he must not hang in the air in a stand-up pose; the brain starts again when he is up)
+  if(v.element==='air'&&v.elemental){const a=v.elemental;if(a.liftT>0||a.carry)this.endLift(v,null);a.hopping=false;a.guard=0;if(a.phase!=='Coil'&&a.phase!=='rest')this.phase(v,'Coil');if(v.fly&&!a.winged&&(v.stunT>0||v.vy)){v.fly=false;a.flight=0;a.flightCd=Math.max(a.flightCd||0,4);if(!v.vy)v.vy=-0.01;}}
+ }
  /** Hops (ElementalMove.js): a few steps to a free place, a pause, the body turned the way he goes — never a slide round the foe. → 'hop' | 'wait' | 'stuck' */
  reposition(v,foe,dt,radius=14){
   const L=this.game.castleLife,a=v.elemental,foeId=v.foe,h=v.hop||(v.hop=newHop());

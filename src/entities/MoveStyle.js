@@ -208,6 +208,12 @@ export function wizardPose(m, T, mode, loco, dt, t) {
     else m._fightT = (m._fightT ?? 99) + dt;
     const fight = m._fightT < 8;
     switch (mode) {
+        case 'soar': { // a wizard in the air (the Saviour, a flier): arms spread, leaning forward into the flight, the legs trailing; a slow sway when he hovers
+            const sway = Math.sin(t * 1.7);
+            T.hx = -0.18; T.hy = 0; T.aLX = T.aRX = 0.55 + sway * 0.06; T.aLZ = -1.2; T.aRZ = 1.2; T.eL = T.eR = 0.2;
+            T.lL = 0.15; T.lR = -0.4; T.kL = -0.8; T.kR = -0.55; T.bounce = 0;
+            return 40;
+        }
         case 'cast': {
             if (m.castNow) { m.castNow = false; m._flickT = 0.12; m._swingT = 0; m._castHeld = 0; }
             m._castHeld = (m._castHeld || 0) + dt;
