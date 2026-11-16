@@ -1696,7 +1696,7 @@ export class VillagerModel {
     _enterMode(mode) {
         const prev = this.mode;
         this.mode = mode;
-        this._acroActive=mode==='fireVault';
+        this._acroActive=mode==='fireVault'&&this.look.element==='fire'&&!!this.leftElbow; // (only a fire mage's body stands on its hands: an ordinary person given the mode has no elbows to stand on — the test of every mode crashed)
         if(!this._acroActive)this.pelvis.rotation.z=0;
         if(mode==='dead'||SLEEP_MODES.has(mode))this._airWings?.set(1,0);
         if (mode === 'attack') { this._atkT = 0; this.attackPhase = 0; }

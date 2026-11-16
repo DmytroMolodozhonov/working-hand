@@ -13,7 +13,7 @@ import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
 import { ElementalSwirl } from '../fx/ElementalSwirl.js';
 import { IceShards } from './IceShards.js';
-import { SHARDS, shardAim } from './ElementalRules.js';
+import { SHARDS, shardAim, NEEDLES, WATER_DRAW } from './ElementalRules.js';
 import { elementalEndurance, AIR_THROW, AIR_BOLD, KITE, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import { elementK } from './HeroElement.js';
@@ -204,6 +204,9 @@ export class ElementalMages {
   }
   if(a.source&&v.entry.look?.tank)a.water=Math.min(36,a.water+dt*6);
   const desert=!!g.terrain?.data?.pyr?.sandy?.(Math.round(v.x),Math.round(v.z));
+  // (the author 16.11: «маги воды беспомощные» — far from water his tank was empty after four or five strokes and nothing ever filled it: now every water mage
+  //  draws the moisture of the air into his supply all the time — slowly; in a desert, in hell, off the Earth hardly at all)
+  if(dt>0&&!a.source){const wet=airWet({offEarth:!!g.space?.offEarth,hell:!!g.hellGate?.inHell,desert});a.water=Math.min(v.entry.look?.tank?36:WATER_DRAW.CAP,a.water+dt*(wet?WATER_DRAW.WET:WATER_DRAW.DRY));}
   const humid=!!v.gifts.hydro.h&&!airWet({offEarth:!!g.space?.offEarth,hell:!!g.hellGate?.inHell,desert});
   a.humid=humid;return a.source||humid||a.water>=6;
  }
@@ -255,6 +258,44 @@ export class ElementalMages {
   if(S.t>=SHARDS.END_T){a.shard=null;v.fx=0;a.cycle++;this.phase(v,'Gather');}
   L._ground(v);return true;
  }
+ /**
+  * «Ледяные иглы» (the author 16.11: the water mage had no quick stroke that hurts anyone): a little of his water is flicked from the hands and freezes in the air
+  * into NEEDLES.N thin needles — duel charges `ShardDuel` (3,5 each, every kind of body is hit, the shield turns them), one after another as the hands snap
+  * forward in turn. NEEDLES.COST mana (half for his element) and NEEDLES.WATER of his water.
+  */
+ startNeedles(v,foe){
+  const g=this.game,a=v.elemental,L=g.castleLife,ref=foeRef(v.foe);
+  if(!g.duel?._addBolt||(!ref&&!L._isPlayer?.(v.foe))||!this.waterSource(v,0))return false;
+  const d=Math.hypot(foe.x-v.x,foe.z-v.z);if(d>NEEDLES.RANGE||!L._sees(v,foe))return false;
+  if(!this.pay(v,NEEDLES.COST*elementK('water','IceShards')))return false;
+  if(!a.source&&!a.humid)a.water=Math.max(0,a.water-NEEDLES.WATER);
+  a.needle={t:0,shot:0,fan:Math.random()<NEEDLES.FAN_SHARE};v.model.elementVariant=a.needle.fan?1:0;this.phase(v,'Needle');v.mode='waterNeedle';this.engaged(v);return true; // (two ways, never the same look: hand after hand — or both arms open a FAN of needles at once)
+ }
+ needleStep(v,foe,dt){
+  const g=this.game,a=v.elemental,N=a.needle,L=g.castleLife;
+  if(v.stunT>0||v.lev||v.vy||v.dead||v.carriedBy){a.needle=null;return false;}
+  N.t+=dt;v.speed=0;a.hopping=false;v.model.elementPoseT=N.t;v.mode='waterNeedle';
+  const fanN=NEEDLES.FAN_N;
+  while(N.fan?(N.shot<fanN&&N.t>=NEEDLES.FAN_T):(N.shot<NEEDLES.N&&N.t>=NEEDLES.FIRST+N.shot*NEEDLES.STAGGER)){
+   const k=N.shot++,side=N.fan?(k<fanN/2?-1:1):(k%2?1:-1),ref=foeRef(v.foe);
+   if(!L._sees(v,foe))continue;
+   // (from the hand that snaps forward now: left, right, left…)
+   const o=new T.Vector3(v.x-Math.sin(v.yaw)*.95+Math.cos(v.yaw)*.45*side,v.y+2.55,v.z-Math.cos(v.yaw)*.95-Math.sin(v.yaw)*.45*side);
+   const dir=new T.Vector3(foe.x-o.x,foe.y+.8-o.y,foe.z-o.z).normalize().applyAxisAngle(_up0,N.fan?(k-(fanN-1)/2)*NEEDLES.FAN_STEP:(Math.random()-.5)*NEEDLES.SPREAD);
+   const reach=duelRange(v.mana)||NEEDLES.RANGE;
+   const b=g.duel._addBolt({rng:emptyRange(reach,true),id:`${v.id}:nd${this._ndSeq=(this._ndSeq||0)+1}`,by:v.id,spell:'ShardDuel',side:side>0?'right':'left',tk:ref?ref.k:'p',tid:ref?ref.id:v.foe,ak:.55,o,d:dir,npc:true});
+   if(b){g.sync?.duelCast?.(b);this.needleFx(o,dir);}
+  }
+  if(N.t>=NEEDLES.END){a.needle=null;a.cycle++;this.phase(v,'Gather');}
+  L._ground(v);return true;
+ }
+ /** A flick of water at the hand that freezes as it leaves: drops, a white puff of frost, a tick of ice. */
+ needleFx(o,d){
+  const g=this.game,glow=g.fx?.glow;if(!glow)return;
+  for(let i=0;i<7;i++)glow.spawn(o.x,o.y,o.z,d.x*4+(Math.random()-.5)*2,d.y*4+Math.random()*1.5,d.z*4+(Math.random()-.5)*2,[0x6ec6ff,0x9fdcff,0xeaf8ff][i%3],.12+Math.random()*.1,.35,{shrink:1.4});
+  glow.spawn(o.x,o.y,o.z,d.x*2,d.y*2,d.z*2,0xf2fbff,.45,.3,{shrink:.8});
+  if(Math.random()<.5)g.sound?.spellCast?.('IceShards',o);
+ }
  waterAttack(v,foe){
   const g=this.game,a=v.elemental;
   if(a.cycle%4===1&&this.canShards(v,foe)&&this.startShards(v))return true; // (every fourth attack, when he has the water and the foe is in the range)
@@ -262,10 +303,12 @@ export class ElementalMages {
    const name=v.mana>60&&a.cycle%2===0?'WaveAttackMaxima':'WaveAttack';
    if(this.pay(v,SPELL_COST[name])){const wave=g.waves.npcRaise(v,name,a.sourcePoint,foe);if(wave){a.wave=wave;this.engaged(v);return true;}v.mana+=SPELL_COST[name];}
   }
-  if(!this.waterSource(v,0)||!g.vortex||!this.pay(v,SPELL_COST.WaterVortex))return false;
+  // (16.11: «Ледяные иглы» — his everyday quick stroke; the great vortex every third time, or when the needles cannot go)
+  if(a.cycle%3!==2&&this.startNeedles(v,foe))return true;
+  if(!this.waterSource(v,0)||!g.vortex||!this.pay(v,SPELL_COST.WaterVortex))return this.startNeedles(v,foe);
   if(!a.source&&!a.humid)a.water=Math.max(0,a.water-6);
   _o.set(v.x,v.y+2.6,v.z);_d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
-  const m={by:v.id,ev:'launch',id:v.id+':water:'+(++this.seq),o:_o.toArray(),d:_d.toArray(),h:_o.clone().addScaledVector(_d,1.5).toArray(),v:6,a:0,pw:1,tk:'p',tid:v.foe,s:null,npcMode:['','freeze','throw','drown'][a.cycle%4]};
+  const fr=foeRef(v.foe),m={by:v.id,ev:'launch',id:v.id+':water:'+(++this.seq),o:_o.toArray(),d:_d.toArray(),h:_o.clone().addScaledVector(_d,1.5).toArray(),v:6,a:0,pw:1,tk:fr?fr.k:'p',tid:fr?fr.id:v.foe,s:null,npcMode:['','freeze','throw','drown'][a.cycle%4]};
   if(m.npcMode)a.capture=m.id;g.vortex._addFlight(v.id,m);g.sync?.vortex?.(m);g.sound?.spellCast?.('WaterVortex',_o);this.engaged(v);return true;
  }
  /** His plan (the author 17.11): a push of air knocks the foe down; a foe who lies is lifted into the air and thrown. Never idle: when nothing else, the blades. */
@@ -382,6 +425,7 @@ export class ElementalMages {
    if(this.parry(v,foe,dt))return true; // (puts out a thrown fireball / bombardo with a jet of water before it arrives)
    if(this.seekWater(v,foe,dt))return true;
    if(a.shard)return this.shardStep(v,foe,dt);
+   if(a.needle&&this.needleStep(v,foe,dt))return true;
    if(a.capture){const b=g.vortex?.bubbles?.get(a.capture),f=g.vortex?.flights?.get(a.capture);if(b||f){v.mode=b?.phase==='ice'?'waterPush':'waterGather';if(f&&!b&&!this.pay(v,dt)){g.vortex._endFlight(f,'mana',true);}L._ground(v);return true;}a.capture=null;}
    if(a.guard>0){a.guard-=dt;if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';}
    else{v.fx=0;if(threat&&this.waterSource(v,0)&&this.pay(v,threat.bomb?20:5)){a.guard=threat.bomb?4:1.8;v.fx=threat.bomb?FX.DOME:FX.SHIELD;this.phase(v,'Guard');}}
