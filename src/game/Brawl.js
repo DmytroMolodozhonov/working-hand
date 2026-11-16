@@ -292,8 +292,16 @@ export class Brawl {
             const v = L?.byId.get(e.id);
             if (!v || v.dead) continue;
             if (!list) { v.foe = null; continue; }
+            // (a foe is KEPT: the mage's own mind starts a new fight — a reaction time of seconds — at every change of the foe,
+            //  so the nearest one flipping between running zombies kept him forever «reacting»: he changes only when the foe is
+            //  gone, or another is much nearer for a while)
+            const cur = v.foe && list.find((o) => foeId(o.k, o.id) === v.foe && o.team !== e.team);
             const en = pickEnemy(e.team, v, list);
+            const dist = (o) => Math.hypot(o.x - v.x, o.z - v.z);
+            const now = performance.now();
+            if (cur && (!en || cur === en || dist(cur) < dist(en) * 1.8 || now - (v.brawlFoeAt || 0) < 6000)) continue;
             v.foe = en ? foeId(en.k, en.id) : null;
+            v.brawlFoeAt = now;
             if (v.foe && v.cs?.hostile) v.cs.hostile.set(v.foe, Date.now() + 30000); // (the ordinary mages fight whom their place holds hostile: WizardFight)
         }
     }
