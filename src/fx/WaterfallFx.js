@@ -36,14 +36,14 @@ export class WaterfallFx {
 
     _spray(p, dt, near, size) {
         const fx = this.game.fx; if (!fx) return;
-        this._acc += dt * (14 + 26 * near) * size;
+        this._acc += dt * (5 + 10 * near) * size;
         const n = Math.floor(this._acc); this._acc -= n;
         const tx = -p.nz, tz = p.nx, half = Math.max(1, p.sw / 2);
         for (let i = 0; i < n; i++) {
             const v = (Math.random() * 2 - 1) * (half + 0.5), out = 0.6 + Math.random() * 2.2 * (0.5 + size);
             const x = p.fxAt.x - p.nx * out + tx * v, z = p.fxAt.z - p.nz * out + tz * v;
             // the mist: pale, big, slow, rises and drifts off the fall
-            fx.smoke?.spawn(x, 0.2 + Math.random() * 0.8, z, -p.nx * (0.5 + Math.random()) + (Math.random() - 0.5), 1.2 + Math.random() * 1.8 * size, -p.nz * (0.5 + Math.random()) + (Math.random() - 0.5), [0xf2fbff, 0xdaeef6, 0xe8f6fb][i % 3], 1.3 + Math.random() * 1.6 * size, 1.6 + Math.random() * 1.4, { shrink: -0.35, gravity: 0 });
+            fx.smoke?.spawn(x, 0.2 + Math.random() * 0.8, z, -p.nx * (0.5 + Math.random()) + (Math.random() - 0.5), 1.2 + Math.random() * 1.8 * size, -p.nz * (0.5 + Math.random()) + (Math.random() - 0.5), [0xc4dde8, 0xb6d2e0, 0xcfe4ee][i % 3], 0.45 + Math.random() * 0.7 * size, 1.4 + Math.random() * 1.2, { shrink: -0.25, gravity: 0 });
             // a drop thrown up from the pool
             if (Math.random() < 0.5) fx.spark?.(_v.set(x, 0.1, z), 0xeaf8ff, 0.07 + Math.random() * 0.07, _a(-p.nx * 2 + (Math.random() - 0.5) * 3, 2 + Math.random() * 4 * size, -p.nz * 2 + (Math.random() - 0.5) * 3), 0.7);
         }
@@ -56,15 +56,15 @@ export class WaterfallFx {
 
     /** A faint rainbow in the mist of a big fall when the sun is behind the hero and the water in front: drawn as a thin arc of a few coloured strips. */
     _rainbow(p, dist = 0) {
-        const g = this.game, want = !!p && p.kind !== 'cascade' && ULTRA.sunVis.value > 0.5;
+        const g = this.game, want = !!p && p.kind === 'great' && !g.isNight && ULTRA.sunVis.value > 0.6 && !(g.weather?.rain > 0.1);
         if (!want) { if (this.bow) this.bow.visible = false; return; }
         if (!this.bow) this.bow = this._makeBow();
         const k = Math.min(1, (90 - dist) / 40);
         this.bow.visible = k > 0.05;
         this.bow.position.set(p.x - p.nx * 3, 0, p.z - p.nz * 3);
         this.bow.rotation.y = Math.atan2(-p.nx, -p.nz);
-        this.bow.scale.setScalar(Math.max(3, p.H * 0.8));
-        for (const m of this.bow.userData.mats) m.opacity = 0.2 * k;
+        this.bow.scale.setScalar(Math.max(3, p.H * 0.55));
+        for (const m of this.bow.userData.mats) m.opacity = 0.09 * k;
     }
 
     _makeBow() {
@@ -72,7 +72,7 @@ export class WaterfallFx {
         cols.forEach((c, i) => {
             const m = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, fog: false });
             mats.push(m);
-            const ring = new THREE.Mesh(new THREE.RingGeometry(1 - i * 0.03, 1 - i * 0.03 + 0.03, 40, 1, 0, Math.PI), m);
+            const ring = new THREE.Mesh(new THREE.RingGeometry(1 - i * 0.022, 1 - i * 0.022 + 0.022, 48, 1, 0, Math.PI), m);
             ring.renderOrder = 5; grp.add(ring);
         });
         grp.userData.mats = mats; grp.visible = false;
