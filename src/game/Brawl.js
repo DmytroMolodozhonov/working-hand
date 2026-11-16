@@ -152,7 +152,7 @@ export class Brawl {
             if (!life || !site) { this.why = 'жители недоступны'; return null; }
             const idx = ++this._person;
             const m = this._person;
-            site.people.push({ idx, role: def.role, female: m % 3 === 0, name: def.label + ' ' + m, home: -1, stall: -1, seed: 20261116 + m * 97, rank: def.rank, brave: 1, mana: def.mana });
+            site.people.push({ idx, role: def.role, female: m % 3 === 0, name: def.label + ' ' + m, home: -1, stall: -1, seed: 20261116 + m * 97, rank: def.rank, brave: 1, mana: def.mana, ...(def.outfit ? { outfit: def.outfit } : {}) });
             const cs = life._runtime(site);
             if (!cs.awake) cs.awake = true;
             const yaw = team === 'A' ? Math.PI * 1.5 : Math.PI * 0.5;

@@ -94,7 +94,7 @@ export class WizardLife {
         const W = wizardStats(v.role, rank, max);
         v.wizard = true;
         v.rank = rank;
-        v.skillRole = { novice: 'student', adept: 'adept', teacher: 'teacher', master: 'master', elder: 'teacher' }[rank] || v.role;
+        v.skillRole = { novice: 'student', adept: 'adept', teacher: 'teacher', master: 'master', elder: 'teacher', supermage: 'supermage', savior: 'savior' }[rank] || v.role;
         v.W = W;
         v.mana = max; v.maxMana = max;
         v.castCd = 1 + Math.random(); v.domeCd = 0; v.windCd = 0; v.blinkCd = 0;

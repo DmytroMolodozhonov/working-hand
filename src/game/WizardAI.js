@@ -40,6 +40,12 @@ WIZ.savior = {
     spells: { Electrum: 1 }, // (only the blue «Электром»; his wind and blasts — Savior.js)
     dome: { hits: 8, t: 11, cd: 9 }, wind: { r: 4.5, cd: 6 }, blink: { cd: 12 }, heal: 0.25,
 };
+// the Supermage (Brawl.js «Сверхмаг»): every fighting spell, none held back — the duel charges of all colours, the wind and both blasts; 2000 mana, fast, steady, a good dome
+WIZ.supermage = {
+    hp: 100, ward: 80, mana: 2000, regen: 4.0, skill: 2.5, cast: 0.75, react: 0.95, reactT: 0.2, stunK: 0.25, range: [8, 22],
+    spells: { Stupefy: 0.07, SapiraDuel: 0.07, IceDuel: 0.09, JoltMaxima: 0.09, FireDuel: 0.11, SandsDuel: 0.05, Electrum: 0.1, LiquidationDuel: 0.04, Expelliarmus: 0.05, WindMaxima: 0.1, BombardoMaxima: 0.1, Bombardo: 0.06, LevitateDuel: 0.07 },
+    dome: { hits: 10, t: 12, cd: 9 }, wind: { r: 4.5, cd: 5 }, blink: { cd: 10 }, heal: 0.3,
+};
 WIZ.seller = WIZ.teacher;
 WIZ.wanderer = { ...WIZ.teacher, mana: 50, range: [8, 18] }; // (a wanderer has seen more: a duel won against him is worth more)
 WIZ.townwiz = { ...WIZ.teacher }; // (a wizard of a settlement — WizardVillages.js: his rank decides how he fights)
@@ -63,6 +69,7 @@ export const WIZ_RANKS = {
     teacher: { mana: 200, spread: 0.15, as: 'teacher' },
     master: { mana: 500, spread: 0.10, as: 'master' },
     savior: { mana: 700, spread: 0, as: 'savior' }, // (the white Saviour: SaviorRules.js)
+    supermage: { mana: 2000, spread: 0, as: 'supermage' }, // (Brawl.js «Сверхмаг»)
     elder: { mana: 400, spread: 0.10, as: 'teacher' }, // (a settlement's strong wizard: ~400 — only the Master of a tower is stronger)
 };
 export const WIZ_RANK_RU = {
@@ -103,7 +110,7 @@ export const REGEN = 1;
  * «Максима» in a beam clash (as a player shouts it: 5 mana, at most once in 3 s): how readily a
  * wizard of this rank shouts it when he may — a beginner seldom, a teacher nearly always, the Master always.
  */
-export const NPC_MAXIMA = { student: 0.5, adept: 0.75, teacher: 0.9, master: 1, savior: 1 };
+export const NPC_MAXIMA = { student: 0.5, adept: 0.75, teacher: 0.9, master: 1, savior: 1, supermage: 1 };
 export function wantsMaxima(skillRole, mana, rng = Math.random) {
     return mana >= 5 && rng() < (NPC_MAXIMA[skillRole] ?? 0.5);
 }

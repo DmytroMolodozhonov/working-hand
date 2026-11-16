@@ -604,6 +604,10 @@ export class WizardFight {
             if (seen && this.life._sees(v, seen)) return 'NihilisDuel';
         }
         if (v.savior != null) return 'Electrum'; // (the white Saviour: blue «Электром» unless the recognized-darkness exception above applies — SaviorRules.js; his wind and blasts are his own: Savior.js)
+        if (SAVIOR_SPECIAL.has(spell) && v.savior == null) { // (the Supermage's wind and blasts: not on top of himself — near, a shove of «Джолт Максима» instead)
+            const pp = foe != null ? this.life._playerPos(foe) : null;
+            if (pp && Math.hypot(pp.x - v.x, pp.z - v.z) < (spell === 'WindMaxima' ? 3 : 11)) return 'JoltMaxima';
+        }
         if (v.lesson) return lessonSpell();
         if (v.blastThreat?.by === foe && v.blastThreat.until > Date.now()) return v.blastThreat.reply; // (a lesson: only Expelliarmus / Stupefy — never freezing, never deadly)
         if (spell === 'LevitateDuel' || spell === 'AvadaKedavra') spell = 'Stupefy'; // (they don't lift a man to hold him)
