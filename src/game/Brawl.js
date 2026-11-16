@@ -9,6 +9,7 @@
  * Host only in a network game is not a thing here (a map for one); `authority` is always true.
  */
 import * as THREE from 'three';
+import { allLog } from '../core/AllLog.js';
 import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage, teamAt } from './BrawlRules.js';
 import { TUTORIAL } from '../world/TutorialLand.js';
 import { SHARDS } from './ElementalRules.js';
@@ -264,6 +265,8 @@ export class Brawl {
         if (!(a.A > 0 && a.B > 0)) { this.why = 'нужны бойцы с обеих сторон'; return false; }
         this.state = 'fight';
         this.winner = null;
+        this._logT = 0; this._hook();
+        allLog('Битва', `бой начался: красных ${a.A}, синих ${a.B}; бойцы: ` + [...this.roster.values()].map((e) => `${e.team}:${e.type}#${e.id}`).join(' '));
         this.game.hud?.setVoice?.('⚔️ Бой начался', true);
         this._changed();
         return true;
@@ -462,14 +465,43 @@ export class Brawl {
     }
 
     // ----------------------------------------------------------------- frame
+    /** «Битва» in the general journal (Настройки → Журнал → Общие логи): who casts what at whom, blows on the mages, a snapshot of every mage each 2 s — for the analysis of a fight. */
+    _hook() {
+        if (this._hooked) return;
+        this._hooked = true;
+        const g = this.game, mine = (id) => typeof id === 'string' && this.roster.has('v:' + id);
+        const em = g.elementalMages;
+        if (em?.cast) { const o = em.cast.bind(em); em.cast = (v, name, ...a) => { if (this.state === 'fight' && mine(v?.id)) allLog('Битва', `${v.name || v.id} (${v.element}) колдует ${name} на ${v.foe || '—'}`); return o(v, name, ...a); }; }
+        const duel = g.duel;
+        if (duel?._addBolt) { const o = duel._addBolt.bind(duel); duel._addBolt = (b) => { if (this.state === 'fight' && b && mine(b.by)) allLog('Битва', `${b.by} пускает заряд ${b.spell} → ${b.tk}:${b.tid}`); return o(b); }; }
+        const ci = g.creatureImpact;
+        if (ci?.apply) { const o = ci.apply.bind(ci); ci.apply = (c, op) => { const r = o(c, op); if (this.state === 'fight' && (mine(op?.by) || this.roster.has('v:' + c?.id))) allLog('Битва', `толчок ${op?.spell || op?.kind || '?'} от ${op?.by || '—'} на ${c?.id ?? c?.name ?? '?'}: ${r}`); return r; }; }
+        const sv = g.servants;
+        if (sv?.damage) { const o = sv.damage.bind(sv); sv.damage = (ref, ...a) => { if (this.state === 'fight') allLog('Битва', `урон по ${ref?.k}:${ref?.id}: ${Math.round((a[0] ?? 0) * 10) / 10} от ${a[2] || '—'}`); return o(ref, ...a); }; }
+    }
+
+    _snapshot() {
+        const L = this.game.castleLife;
+        for (const e of this.roster.values()) {
+            const v = e.k === 'v' ? L?.byId.get(e.id) : null;
+            if (!v || v.dead) continue;
+            const a = v.elemental || v.earth || {}, foe = v.foe ? this.foePos(v.foe) : null;
+            allLog('Битва', `${e.team}:${e.type}#${e.id} hp ${Math.round(v.hp)} мана ${Math.round(v.mana ?? 0)} режим ${v.mode}${a.phase ? '/' + a.phase : ''}${v.fly ? ' летит' : ''}${v.stunT > 0 ? ' оглушён' : ''} цель ${v.foe || '—'} дист ${foe ? Math.round(Math.hypot(foe.x - v.x, foe.z - v.z)) : '—'} реакция ${v.reactLag?.t ?? '—'}`);
+        }
+        const al = this.aliveCount();
+        allLog('Битва', `живых: красные ${al.A}, синие ${al.B}`);
+    }
+
     update(dt) {
         this._frame++;
         if (!this._stripBuilt && this._frame > 20 && this.game.terrain?.data?.landMade?.(0, 0) !== false) this._buildStrip();
         if (this.state === 'fight') {
+            this._logT = (this._logT || 0) + dt; if (this._logT >= 2) { this._logT = 0; this._snapshot(); }
             const w = winnerOf(this.aliveCount(), true);
             if (w) {
                 this.state = 'over';
                 this.winner = w;
+                allLog('Битва', `бой окончен: ${w === 'draw' ? 'ничья' : 'победа ' + w}`);
                 this.overAt = performance.now();
                 this.game.hud?.setVoice?.(w === 'draw' ? '🤝 Все пали — ничья' : `🏆 Победа: ${TEAMS[w].label}`, true);
                 this._changed();
