@@ -94,7 +94,8 @@ test('peaceful elemental residents keep ordinary paths and can return to village
 test('the air mage has a rich repertoire (15.11): wind blades, a dash, a rise, a dance — and the blades are duel charges',()=>{
  const f=fixture('air',900);f.g.castleLife._isPlayer=()=>true;const bolts=[];
  f.g.duel={bolts:new Map(),_addBolt:o=>{bolts.push(o);return{id:o.id};},clashes:[]};f.g.sync.duelCast=()=>{};f.g.castleLife._playerPos=()=>({x:0,y:2,z:-10});
- const seen=new Set();for(let i=0;i<9000;i++){f.v.mana=Math.max(f.v.mana,400);f.step(1);seen.add(f.v.elemental.phase);}
+ let zz=10;f.g.castleLife._playerPos=()=>({x:0,y:2,z:-zz}); // (17.11: the plan is by distance — the impulse near, the heavy gust at middle range, the drift far: the foe is put at three distances)
+ const seen=new Set();for(let i=0;i<9000;i++){zz=[5,12,30][Math.floor(i/1500)%3];f.v.mana=Math.max(f.v.mana,400);f.step(1);seen.add(f.v.elemental.phase);}
  for(const p of ['Sweep','Spin','Lash','Slash','Dash','Drift'])assert.ok(seen.has(p),'phase '+p);
  assert.ok(bolts.length>=3&&bolts.every(b=>b.spell==='GustDuel'&&b.vs===undefined&&b.npc),'a fan of wind blades flew');
 });

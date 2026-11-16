@@ -267,6 +267,18 @@ export class ElementalMages {
   const m={by:v.id,ev:'launch',id:v.id+':water:'+(++this.seq),o:_o.toArray(),d:_d.toArray(),h:_o.clone().addScaledVector(_d,1.5).toArray(),v:6,a:0,pw:1,tk:'p',tid:v.foe,s:null,npcMode:['','freeze','throw','drown'][a.cycle%4]};
   if(m.npcMode)a.capture=m.id;g.vortex._addFlight(v.id,m);g.sync?.vortex?.(m);g.sound?.spellCast?.('WaterVortex',_o);this.engaged(v);return true;
  }
+ /** His plan (the author 17.11): a push of air knocks the foe down; a foe who lies is lifted into the air and thrown. Never idle: when nothing else, the blades. */
+ airMove(v,foe,dist,idle){
+  const a=v.elemental;
+  if(dist<17&&this.foeLying(v)&&!this.objects.active.has(v.id)&&v.mana>=SPELL_COST.WindImpulseMaxima)return 'Sweep'; // (the lift)
+  if(dist<23){ // (to knock the foe down: the impulse near, the heavy gust far; now and then the whirl or the blades for variety)
+   const r=Math.random();
+   if(idle>3.5)return 'Slash';
+   if(dist<9)return r<.55?'Sweep':r<.7?'Slash':r<.85?'Spin':'Dash';
+   return r<.55?'Lash':r<.75?'Slash':r<.9?'Spin':'Dash';
+  }
+  return a.lastMove!=='Drift'?'Drift':'Slash';
+ }
  /** Does the foe lie (knocked down / stunned / frozen)? The lift is for the one on the ground. */
  foeLying(v){
   const g=this.game,id=v.foe;if(id==null)return false;
@@ -394,7 +406,7 @@ export class ElementalMages {
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
-   if(a.phase==='Coil'&&a.t>.7){const mv=idle>3.5?['Slash','Lash','Sweep'][(Math.random()*3)|0]:a.lastMove!=='Drift'&&Math.random()<.22?'Drift':nextAirMove(a.lastMove==='Drift'?null:a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Coil'&&a.t>.7){const mv=this.airMove(v,foe,dist,idle);a.lastMove=mv;this.phase(v,mv);}
    if(a.phase==='Spin'){
     if(a.t<AIR_SPIN.SPIN_T)v.yaw+=AIR_SPIN.RATE*dt;a.hopping=a.t<AIR_SPIN.SPIN_T; // (two turns on the spot: the body is his own to turn while he whirls)
     if(a.t>AIR_SPIN.FIRE_T&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(dist<11&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);else this.cast(v,'WindMaxima',foe);}}
@@ -417,14 +429,14 @@ export class ElementalMages {
    if(a.phase==='Drift'&&a.t>1.6){a.cycle++;this.phase(v,'Coil');}
    if(a.skyfall){a.sfT-=dt;if(!v.fly){a.skyfall=false;}else if(a.sfT<=0&&dist<26&&L._sees(v,foe)){a.sfT=.9;this.gustFan(v,foe,2);}}
    if(a.phase==='Lash'){
-    if(a.t>.38&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,dist<12?'Wind':'WindMaxima',foe,_o.clone());}} // (an ordinary gust reaches 14 m only: a far foe gets the heavy one)
+    if(a.t>.38&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,v.mana>=SPELL_COST.WindMaxima?'WindMaxima':'Wind',foe,_o.clone());}} // (the heavy gust fells: the first step of his plan)
     if(a.t>1.0){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    }
    if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
-    if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
-    else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&a.cycle%2===0&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
-    else if(!this.objects.active.has(v.id)&&dist<17&&this.foeLying(v)&&this.airLift(v,foe))return true; // (the author 17.11: he lifts and throws a foe only when the foe LIES — knocked down by his wind first)
-    else this.cast(v,dist<9||Math.hypot(dist,foe.y-(v.y+2.7))>12?'WindMaxima':'Wind',foe);
+    if(!this.objects.active.has(v.id)&&dist<17&&this.foeLying(v)&&this.airLift(v,foe))return true; // (the author 17.11: his plan — first a push of air that knocks the foe down, THEN he lifts him up and throws him; the lift only for a foe who LIES)
+    else if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
+    else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
+    else this.cast(v,v.mana>=SPELL_COST.WindMaxima?'WindMaxima':'Wind',foe);
    }}
    if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    if(!v.fly){v.mode=a.wings?.launch?'airRun':'air'+a.phase;if(!v.vy)L._ground(v);}
