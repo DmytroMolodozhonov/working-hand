@@ -158,6 +158,9 @@ import { Cine } from './Cine.js';
 import { coachSamples } from '../fx/SchoolCoach.js';
 import { schoolDecorSamples } from '../fx/SchoolDecor.js';
 import { Tutorial } from './Tutorial.js';
+import { Brawl } from './Brawl.js';
+import { SpectatorCam } from './SpectatorCam.js';
+import { BrawlPanel } from '../ui/BrawlPanel.js';
 import { TutorialNudge } from './TutorialNudge.js';
 import { School } from './School.js';
 import { PharaohLife } from './PharaohLife.js';
@@ -1050,6 +1053,10 @@ export class Game {
         } else if (config.school) {
             this.cine = new Cine(this); // (cut-scenes: the school's opening — Cine.js)
             this.school = new School(this); // («Школа Акселдорф»: the year at the school — School.js)
+        } else if (config.brawl) {
+            this.brawl = new Brawl(this); // («Битва существ»: two teams on a bounded field; the player is only a camera — Brawl.js, SpectatorCam.js)
+            this.spectator = new SpectatorCam(this);
+            this.brawlPanel = new BrawlPanel(this);
         } else if (config.tutorial) {
             this.tutorial = new Tutorial(this, { from: config.tutorialFrom | 0, only: config.tutorialOnly || null }); // («Обучение»: the steps, the narrator, the frozen hero — Tutorial.js)
         } else if (config.mode === 'freeworld') {
@@ -4590,6 +4597,7 @@ export class Game {
         if (earth && !duelOnly) this.vampire?.update(dt); sysMark('vampire');
         if (!duelOnly) this.titans?.update(dt); sysMark('titans');
         this.godhood?.update(dt); sysMark('godhood');
+        this.brawl?.update(dt); sysMark('brawl');
         this.tutorial?.update(dt); sysMark('tutorial'); // (on the planets — it knows itself where the hero is)
         this.tutorialNudge?.update(dt); sysMark('tutorialNudge'); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
         this.school?.update(dt); sysMark('school'); // («Школа Акселдорф»: School.js)
@@ -5588,6 +5596,7 @@ export class Game {
             this.camera.lookAt(_v2);
             if (this._jolt) { this.camera.rotateY(this._jolt.yaw * 0.5); this.camera.rotateX(this._jolt.pitch * 0.5); }
         }
+        if (this.spectator?.active) this.spectator.apply(this.camera, dt); // («Битва существ»: the free camera)
         if (this.fx.shake > 0) {
             const s = this.fx.shake * 0.25;
             this.camera.position.x += (Math.random() - 0.5) * s;
@@ -5815,6 +5824,7 @@ export class Game {
         this.titans?.dispose();
         this.godhood?.dispose();
         this.tutorial?.dispose();
+        this.brawlPanel?.dispose(); this.spectator?.dispose(); this.brawl?.dispose();
         this.school?.dispose?.(); this.cine?.dispose?.();
         this.temple?.dispose();
         this.fleet?.dispose();

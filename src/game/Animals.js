@@ -346,7 +346,7 @@ export class Animals {
         // places to wake: any player near, nobody seeing them; the nearest first
         const look = this._look(this._lookV || (this._lookV = new THREE.Vector3()));
         const todo = this._todo; todo.length = 0;
-        const eachSite = (x, z, fn) => { sitesNear(x, z, H.WAKE, seed, fn); swanSitesNear(x, z, H.WAKE, seed, fn); seaSitesNear(x, z, H.WAKE, seed, fn); }; // (and the sea's creatures: SeaLife.seaSiteAt) // (the swans' places too: their own roll — SwanLife.swanSiteAt)
+        const eachSite = (x, z, fn) => { if (this.noWild) return; /* («Битва существ»: only the creatures the player puts) */ sitesNear(x, z, H.WAKE, seed, fn); swanSitesNear(x, z, H.WAKE, seed, fn); seaSitesNear(x, z, H.WAKE, seed, fn); }; // (and the sea's creatures: SeaLife.seaSiteAt) // (the swans' places too: their own roll — SwanLife.swanSiteAt)
         for (const p of people) {
             if(!earthly(p))continue;
             eachSite(p.x, p.z, (s) => {
