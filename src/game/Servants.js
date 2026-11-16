@@ -16,6 +16,7 @@
 
 import * as THREE from 'three';
 import { UNDEAD, raidMeans, leashPoint } from './UndeadOrders.js';
+import { teamOfMaster } from './BrawlRules.js';
 
 export const SERVANT = {
     TIME: 45000, // ms a «Брейнрот» lasts
@@ -211,6 +212,7 @@ export class Servants {
      */
     enemyFor(self, master, me, seek = SERVANT.SEEK) {
         const g = this.game;
+        if (teamOfMaster(master)) return g.brawl?.enemyFor(self, master, me) ?? null; // («Битва существ»: a team is the master — the nearest of the other team, Brawl.js)
         const o = this.orders.get(master);
         if (o && o.k != null) {
             const p = performance.now() < o.until && !(o.k === self.k && o.id === self.id) ? this.pos(o.k, o.id) : null;
@@ -352,11 +354,13 @@ export class Servants {
             for (const a of g.animals?.list || []) {
                 if (a.dead || a.servantOf == null) continue;
                 if (a.servantUntil && performance.now() > a.servantUntil) { this._free('a', a); continue; }
+                if (teamOfMaster(a.servantOf)) continue; // (a team's own ring: Brawl.js)
                 mark(a, a.group.position, 2.2 * (a.model?.scale?.y || 1)); sv.push(['a', a.id, a.servantOf]);
             }
             for (const v of g.castleLife?.byId.values() || []) {
                 if (v.dead || v.servantOf == null) continue;
                 if (v.servantUntil && performance.now() > v.servantUntil) { this._free('v', v); continue; }
+                if (teamOfMaster(v.servantOf)) continue;
                 if (v.group?.visible !== false) mark(v, _v.set(v.x, v.y, v.z), 4.6); sv.push(['v', v.id, v.servantOf]);
             }
             this.netList = sv;

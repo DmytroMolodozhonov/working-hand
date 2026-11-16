@@ -48,7 +48,7 @@ import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
 import { WORLD_GEN } from './world/Terrain.js';
 import { STAGE_TITLES as TUT_STAGES } from './game/Tutorial.js';
-import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, TUTORIAL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
+import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, BRAWL_ENTRY, TUTORIAL_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { sadTrombone } from './audio/MagicSound.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
@@ -195,6 +195,7 @@ const zombieCountDisplay = $('zombie-count-val');
 
 let selectedMode = 'creative';
 let selectedMap = null;
+let brawlPick = false; // «Карты» → «Битва существ» chosen (Brawl.js)
 let pickingMap = false; // «Создать мир» → «Карты» chosen: the maps are shown
 let cachedMaps = null;
 let isMenuVoiceActive = false;
@@ -480,6 +481,7 @@ async function updateGameMapList(forceRefresh = false) {
         card.innerHTML = `<span class="mode-icon">${m.icon}</span><span class="map-name">${m.label}</span>${m.wip ? '<span class="mode-wip">в разработке</span>' : ''}`;
         card.onclick = () => {
             pickingMap = id === 'maps';
+            brawlPick = false;
             selectedMap = null;
             selectedMode = pickingMap ? 'survival' : id;
             if (pickingMap) { // (the map chosen last time is chosen again)
@@ -494,7 +496,7 @@ async function updateGameMapList(forceRefresh = false) {
     }
     const hint = document.createElement('div');
     hint.className = 'mode-hint';
-    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
+    hint.textContent = pickingMap && brawlPick ? BRAWL_ENTRY.hint : pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
     mapListDiv.appendChild(hint);
     // «Обучение»: go on from the stage left off (the author 07.11: a tick, on by default; off — from the start)
     if (selectedMode === 'tutorial' && !pickingMap) {
@@ -532,6 +534,16 @@ async function updateGameMapList(forceRefresh = false) {
     grid.className = 'map-list-grid' + (pickingMap ? '' : ' hidden');
     mapListDiv.appendChild(grid);
 
+    { // («Битва существ» — the first card of «Карты»: two teams on a field, the player only watches — Brawl.js)
+        const bc = document.createElement('div');
+        bc.className = 'map-card' + (brawlPick ? ' selected' : '');
+        bc.setAttribute('role', 'button');
+        bc.dataset.brawl = '1';
+        bc.tabIndex = 0;
+        bc.innerHTML = `<div class="map-preview-canvas" style="display:flex;align-items:center;justify-content:center;font-size:44px;width:80px;height:80px">${BRAWL_ENTRY.icon}</div><div class="map-name">${BRAWL_ENTRY.label}</div>`;
+        bc.onclick = () => { pickingMap = true; brawlPick = !brawlPick; selectedMap = null; selectedMode = 'survival'; updateGameMapList(); };
+        grid.appendChild(bc);
+    }
     for (const name of sortedNames) {
         const mapData = maps[name];
         const card = document.createElement('div');
@@ -562,6 +574,7 @@ async function updateGameMapList(forceRefresh = false) {
         card.appendChild(nameDiv);
         card.onclick = () => {
             pickingMap = true;
+            brawlPick = false;
             selectedMap = selectedMap && selectedMap.name === name ? null : { ...mapData, name };
             if (selectedMap) createMem.save('maps', { map: name });
             selectedMode = 'survival';
@@ -571,8 +584,8 @@ async function updateGameMapList(forceRefresh = false) {
     }
     if (creativeSettings) creativeSettings.style.display = selectedMode === 'creative' && !pickingMap ? 'block' : 'none';
     const start = $('start-btn');
-    start.disabled = pickingMap && !selectedMap;
-    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : selectedMode === 'school' ? '🏰 Создать и в школу' : '✨ Создать и играть';
+    start.disabled = pickingMap && !selectedMap && !brawlPick;
+    start.textContent = pickingMap ? (brawlPick ? '⚔️ Начать битву существ' : selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : selectedMode === 'school' ? '🏰 Создать и в школу' : '✨ Создать и играть';
 }
 // «Карты» → «🛠️ Создать карту»: the map editor opens right here (it was a tab of its own)
 function openMapEditor(on) {
@@ -1151,6 +1164,7 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && game && game.active) { e.preventDefault(); togglePauseMenu(); return; }
     if (!game || !game.active || e.target.tagName === 'INPUT') return;
     if (!$('pause-menu').classList.contains('hidden')) return; // (the menu is open)
+    if (game.brawl) return; // («Битва существ»: the keys fly the camera — SpectatorCam; no debug spells)
     // F9: a 10-second recording of the hands for the developer (HandRecorder.js)
     if (e.key === 'F9') { e.preventDefault(); startHandRecording(); return; }
     // F10: the skeleton's diary - a long recording of what the camera saw of the body and what the game made of it (no video)
@@ -1374,6 +1388,7 @@ async function startGameInner(config, welcome) {
         B.begin('камера (параллельно)');
         const camPromise = (async () => {
             if (window.__ZNS_NO_CAMERA__) return true;
+            if (config.brawl) return false; // («Битва существ»: the keyboard and the mouse — no web camera, nothing to start)
             try {
                 poseService.onStatus = (t) => { camStatus = t; if (camWaiting) updateProgress(75, t); };
                 // (V5 hands couldn't start: the player is told — shown once the game is on)
@@ -1508,6 +1523,7 @@ $('start-btn').addEventListener('click', () => {
         setMpStatus('Вы подключены к чужой игре — её запускает хост.');
         return;
     }
+    if (pickingMap && brawlPick) { startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, brawl: true, map: null, worldName: 'Битва существ' }); return; } // («Битва существ»: a small bounded field, no saving — Brawl.js)
     const cfg = readConfig();
     if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)

@@ -24,6 +24,9 @@ export const MODES = {
 /** «Карты»: hand-made maps from the map editor (internally a 'survival' game with a map — that internal value stays for maps only). */
 export const MAPS_ENTRY = { label: 'Карты', icon: '🗺️', hint: 'Пройдите карту до финиша' };
 
+/** «Битва существ» (Brawl.js): a card inside «Карты» — the player puts creatures of two teams on a field and only watches them fight. */
+export const BRAWL_ENTRY = { label: 'Битва существ', icon: '⚔️', hint: 'Расставьте на поле бойцов двух сторон — зомби, животных, магов — и наблюдайте, как они сражаются. Вы летаете как камера: мышь и клавиатура, веб-камера не нужна' };
+
 /** «Обучение» (Tutorial.js): a small bounded map where the hero learns the game step by step (internally a 'freeworld' game with `tutorial`). */
 export const SCHOOL_ENTRY = { label: 'Школа Акселдорф', icon: '🏰', hint: 'Год в школе волшебства: уроки защиты, зельеварения, пентаграмм и истории мира вместе с другими учениками. Выпускник уходит в мир Выживания со всем, чему научился' };
 export const TUTORIAL_ENTRY = { label: 'Обучение', icon: '🎓', hint: 'Пошаговое обучение: камера и микрофон, взгляд, руки и палочка, заклинания, вещи, ходьба и первый бой. Начните с него, если играете впервые' };
