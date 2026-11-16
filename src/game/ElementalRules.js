@@ -12,7 +12,7 @@ export function elementalEndurance(entry,fallback=220){
  * holds while his mana lasts); the dome of «Protection Maxima» turns it away or breaks it (Levitation.liftMe/_updateLifted: `air`).
  * HOLD s overhead, then the swing: the body flies `SPEED` m/s horizontally, `UP` up, aside by up to `SPREAD` rad from straight away from the mage.
  */
-export const AIR_THROW = { HOLD: 2.6, SPEED: 13, UP: 3, SPREAD: 0.7 }; // (17.11: held longer = lifted HIGH (≈12 m: Levitation.holdPoint 2,8 m/s up to 15), thrown from there: the fall hurts)
+export const AIR_THROW = { HOLD: 2.6, SPEED: 8, UP: -15, SPREAD: 0.7 }; // (16.11, the author: «бесполезный» — thrown aside from 12 m the foe lost 3 HP: now the SLAM — down and a little away, into the ground: the blow of the landing (Levitation impactDamage) ≈ 12) // (17.11: held longer = lifted HIGH (≈12 m: Levitation.holdPoint 2,8 m/s up to 15), thrown from there: the fall hurts)
 export const KITE = { NEAR: 6.5, RUN_T: 2.2, REST_T: 2.5 }; // (17.11, every elemental mage: an enemy nearer than NEAR m — he RUNS off for RUN_T s, then fights REST_T s — never lets him come close and stay)
 export const AIR_BOLD = { CLOSE: 15, SPEED: 7, FLY_SPEED: 10 }; // (m: the range the air mage fights from; m/s of his charge on the ground / in the air)
 /** The throw's velocity {x, y, z}: from the mage (mx, mz) over the foe (fx, fz), a die `roll` 0…1 for the side. Never zero. */

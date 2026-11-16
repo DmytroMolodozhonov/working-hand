@@ -48,7 +48,7 @@ test('air lift is the great kind (14.11: only «Protection Maxima» keeps it off
  f.v.elemental.cycle=3;assert.equal(f.em.airLift(f.v,{x:0,y:2,z:-12}),true);assert.equal(lifts.length,1);assert.equal(f.v.mode,'airLift');assert.equal(f.v.elemental.liftMax,true);
  const mana=f.v.mana;f.em.think(f.v,1);assert.ok(mana-f.v.mana>0&&mana-f.v.mana<4,'the Maxima drain, not the plain hold cost');
  f.em.liftedBy(f.v.id,true);f.v.elemental.liftT=.01;f.em.think(f.v,.1);
- assert.equal(thrown.length,1);assert.equal(thrown[0][0],f.v.id);assert.ok(Math.hypot(thrown[0][1].x,thrown[0][1].z)>10,'thrown hard');assert.ok(thrown[0][1].y>0,'and up');
+ assert.equal(thrown.length,1);assert.equal(thrown[0][0],f.v.id);assert.ok(thrown[0][1].y<-10,'slammed DOWN into the ground (16.11: thrown aside it hurt 3 HP — «бесполезный»)');assert.ok(Math.hypot(thrown[0][1].x,thrown[0][1].z)>5,'and a little away from the mage');
  assert.ok(releases.some(m=>m[4]===false&&m[6]===f.v.id&&m[7]&&Number.isFinite(m[7].x)),'the guests get the throw in the release');
  assert.equal(f.v.elemental.cycle,4);assert.equal(f.v.elemental.phase,'Sweep');
  // the foe broke free (the dome): a plain drop, no throw
