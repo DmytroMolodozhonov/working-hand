@@ -130,6 +130,9 @@ const _h2 = new THREE.Vector3();
 const _h3 = new THREE.Vector3();
 const _h4 = new THREE.Vector3();
 
+/** The air mage's lift of a foe (17.11: «гораздо быстрее и резче, а то вяло»): the body shoots up (m/s) to the top (m) and follows the hold SNAP times quicker. */
+export const AIR_LIFT = { RISE: 9, TOP: 12, SNAP: 2.2 };
+
 export class Levitation {
     constructor(game) {
         this.game = game;
@@ -640,12 +643,12 @@ export class Levitation {
             const carry=npc.element==='air'?npc.elemental?.carry:null; // («Битва существ»: an air mage lifts a creature of the other team)
             if(carry?.c.lev&&carry.c.lev.by===by){
                 if(npc.mode!=='airLift')return null;
-                const Lc=carry.c.lev,anchor=Lc.npcAnchor||(Lc.npcAnchor=Lc.target.clone());out.copy(anchor);out.y+=Math.min(15,Lc.age*2.8);
+                const Lc=carry.c.lev,anchor=Lc.npcAnchor||(Lc.npcAnchor=Lc.target.clone());out.copy(anchor);out.y+=Math.min(AIR_LIFT.TOP,Lc.age*AIR_LIFT.RISE);
                 return out;
             }
             if(npc.element==='air'&&this.lifted?.by===by){
                 if(npc.mode!=='airLift')return null;
-                const L=this.lifted,anchor=L.npcAnchor||(L.npcAnchor=L.target.clone());out.copy(anchor);out.y+=Math.min(15,L.age*2.8);
+                const L=this.lifted,anchor=L.npcAnchor||(L.npcAnchor=L.target.clone());out.copy(anchor);out.y+=Math.min(AIR_LIFT.TOP,L.age*AIR_LIFT.RISE);
                 const length=out.y-anchor.y+2,hit=g.terrain?.data?.raycast?.(anchor,_h4.set(0,1,0),length);
                 if(hit)out.y=anchor.y+Math.max(0,hit.dist-2);
                 return out;
@@ -721,10 +724,10 @@ export class Levitation {
             if (L.off) L.off.dp *= Math.exp(-dt * LEVITATE.RISE); // (it rises onto the hand's line, smoothly)
             const want = this.holdPoint(L.by, L.side, L.hold, up, _h2, L.off, L.steady || (L.steady = {}), dt);
             if (!want) { this.letGo(ck, c, false); return; }
-            L.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW));
+            L.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW * (L.npcAnchor ? AIR_LIFT.SNAP : 1)));
         }
         _h3.subVectors(L.target, centre);
-        L.vel.lerp(_h3.multiplyScalar(4), Math.min(1, dt * 6));
+        L.vel.lerp(_h3.multiplyScalar(L.npcAnchor ? 4 * AIR_LIFT.SNAP : 4), Math.min(1, dt * (L.npcAnchor ? 6 * AIR_LIFT.SNAP : 6)));
         if (!L.body && !L.lower && this._struggle(ck, c, L, dt)) return;
         if (L.doll) {
             // a rag doll in the hold: its chest is held where the magic holds the body (the target is the body's middle — the chest

@@ -90,6 +90,6 @@ test('thrown into another person: that one is knocked down too', () => {
 
 test('air NPC can hold a player overhead without a remote-player avatar; ceilings and lost concentration still stop it',()=>{
  const caster={element:'air',mode:'airLift'},self={game:{localId:'me',castleLife:{byId:new Map([['air',caster]])},terrain:{data:{raycast:()=>null}}},lifted:{by:'air',age:3,target:new THREE.Vector3(2,4,6)}};
- const out=new THREE.Vector3();assert.equal(Levitation.prototype.holdPoint.call(self,'air','right',5,2,out),out);assert.ok(out.y>12&&out.y<13);assert.equal(out.x,2);
+ const out=new THREE.Vector3();assert.equal(Levitation.prototype.holdPoint.call(self,'air','right',5,2,out),out);assert.equal(out.y,16,'17.11: the lift is quick — 9 m/s up to 12 m over the anchor');assert.equal(out.x,2);
  self.game.terrain.data.raycast=()=>({dist:5});Levitation.prototype.holdPoint.call(self,'air','right',5,2,out);assert.equal(out.y,7,'head stops below the cave roof');caster.stunT=1;assert.equal(Levitation.prototype.holdPoint.call(self,'air','right',5,2,out),null);
 });
