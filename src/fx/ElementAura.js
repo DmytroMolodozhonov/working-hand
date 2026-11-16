@@ -112,7 +112,7 @@ export class ElementAura {
     update(dt) {
         const g = this.game;
         if (!g.scene) return;
-        this.t += dt; this._dt = dt; this._rings = 0;
+        this.t += dt; this._dt = dt; this._rings = 0; this._wr = 0;
         const subs = this._gather(this.subjects);
         for (const k of Object.keys(this.index)) for (const e of this.index[k]) e.n = 0;
         for (const s of subs) this._draw(s);
@@ -149,6 +149,12 @@ export class ElementAura {
     _draw(s) {
         if (s.element === 'fire') return this._fire(s);
         if (s.element === 'air') return this._air(s);
+        if (s.element === 'water') { // the same flowing rings as my own Water Vortex (WaterVortex.auraRing), the two nearest
+            const wv = this.game.vortex;
+            if (!wv?.auraRing || (s.me && wv.state)) return;
+            if ((this._wr = (this._wr || 0) + 1) > 2) return;
+            return wv.auraRing(s.id, s.x, s.y + 1.95, s.z, s.k);
+        }
         this._leaves(s, KIND[s.element]);
     }
 

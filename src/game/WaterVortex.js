@@ -140,6 +140,7 @@ const _m = new THREE.Matrix4();
 const _srcInner = new THREE.Vector3();
 const _bh = { o: new THREE.Vector3(), d: new THREE.Vector3() }; // (the hand carrying a bubble)
 const UP = new THREE.Vector3(0, 1, 0);
+const _aur = new THREE.Vector3();
 /** A zombie kicks its legs in the water. */
 function z_kick(z) {
     const k = Math.sin(performance.now() * 0.012) * 0.6;
@@ -288,6 +289,7 @@ export class WaterVortex {
         this.flights = new Map(); // id -> flying / clinging vortex (everyone's)
         this.bubbles = new Map(); // id -> bubble round a creature (everyone's)
         this.effects = []; // fire spirals / blooms
+        this.auras = new Map(); // the water mages' calm rings (auraRing): id → {x, y, z, vol, angle, spin, at}
         this.log = []; // events (tests / debugging)
         this._seq = 0;
         this._t = 0;
@@ -1626,6 +1628,12 @@ export class WaterVortex {
             r.angle += (r.spin || 0.6) * dt;
             ring(av.position, +r.s[1] || 0, r.angle, r.spin || 0.6);
         }
+        // the water mages' calm rings (ElementAura): the same bands of flowing water as my own vortex, smaller, no damage and no push
+        for (const [id, a] of this.auras) {
+            if (this._t - a.at > 0.3) { this.auras.delete(id); continue; }
+            a.angle += a.spin * dt;
+            ring(_aur.set(a.x, a.y, a.z), a.vol, a.angle, a.spin, 0.9);
+        }
         // a throw: the rings round the caster unwind into one thick jet of water (from its tail to its round
         // head), with threads of water twisting round it; spray tears off its head
         for (const f of this.flights.values()) {
@@ -1706,6 +1714,16 @@ export class WaterVortex {
         }
         flow.end();
         this.spray?.update(dt, this.game.camera);
+    }
+
+    /**
+     * A water mage's calm ring (the author 16.11: «такие же частицы, как у игрока Water Vortex»): called every frame while he works his water; `y` the middle of his body, `k` 0…1 how busy.
+     * Drawn by `_draw` like any other caster's rings (flowing bands, threads, spray); it hurts and pushes nobody.
+     */
+    auraRing(id, x, y, z, k = 0.5) {
+        const a = this.auras.get(id) || { angle: Math.random() * TAU, spin: 3, vol: 12 };
+        a.x = x; a.y = y; a.z = z; a.at = this._t; a.vol = 12 + 12 * k; a.spin = 2.6 + 2.2 * k;
+        this.auras.set(id, a);
     }
 
     /** Drops flung off the spinning rings (along the way the water runs). */
