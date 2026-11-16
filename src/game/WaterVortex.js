@@ -49,6 +49,7 @@ import { aimOffset, applyAimOffset, steadyDir } from './AimHold.js';
 
 export const VORTEX = {
     COST: 20, // mana at once (see Combat.SPELL_COST)
+    SHATTER_DMG: 8, // HP the broken ice takes off the one dropped inside it from on high (then the fall; the author 17.11)
     MANA_DRAIN: 1, // mana a second while the water is in the vortex (swinging, and the rings still round me while the stream flies)
     START_TIME: 3, // s to start swinging the hand after the words
     START_TURNS: 0.3, // turns of the hand that mean «it has started»
@@ -968,6 +969,7 @@ export class WaterVortex {
     _burst(b, why = 'burst', broadcast = false) {
         if (!b || b.phase === 'gone') return;
         this._note({ ev: 'burst', id: b.id, why });
+        if (b.phase === 'ice' && b.npcMode === 'freeze' && why === 'release') b.shatter = true; // (dropped from on high: the ice breaks on the one inside — _release)
         if (b.phase === 'ice') this._sparkle(b.pos, 50, b.r);
         else {
             this._splash(b.pos, 1.5 + b.r * 0.5, 50);
@@ -1007,12 +1009,14 @@ export class WaterVortex {
         if (b.released) return;
         b.released = true;
         const g = this.game;
+        if (b.shatter && !b.shattered && (b.tk === 'p' ? b.tid === this.me : g.authority)) { b.shattered = true; this._iceHurt(b, false, VORTEX.SHATTER_DMG); } // (the broken ice cuts; the fall after it hurts as after «Левиоса»)
         if (b.tk === 'p' && b.tid === this.me) {
             g.combat.encased = false;
             g.hud?.setFrozenOverlay?.(0);
             g.hud?.setStatus?.('');
             g.character.verticalVelocity = 0;
             if(b.npcMode){g.levitation?.watchMyFall?.(b.by,0);if(b.npcThrow){g.knockback?.add?.(b.npcThrow);g.character.verticalVelocity=b.npcThrow.y;}}
+            if (b.npcMode) g.knock?.daze?.(b.shatter ? 0.3 : 0.15); // (me: the head swims after the lack of air and the fall)
         }
         if (b.tk && b.tk !== 'p' && g.authority) {
             const c = b.tk === 'z' ? g.zombieById?.get(b.tid) : g.duel?._creature?.(b.tk, b.tid);
@@ -1021,6 +1025,13 @@ export class WaterVortex {
             else if (c?.lev?.vortex === b.id) {
                 if (g.levitation?.letGo) g.levitation.letGo(b.tk, c, false);
                 else c.lev = null;
+            }
+            // a victim of a water mage's ball (the author 17.11): the lack of air makes the head swim 3–5 s, the fall from on high too (it is dizzy at once on its feet), and broken ice
+            // leaves the cold on it for a few seconds
+            if (c && b.npcMode && !c.dead && !c.isDead) {
+                const air = b.npcMode === 'freeze' || b.npcMode === 'drown';
+                g.creatureImpact?.dazeCreature?.(c, (air ? 3 + Math.random() * 2 : 1.5) + (b.shatter ? 2 : 0));
+                if (b.shatter) g.strong?.dot?.(b.tk, c, 2, 4, 'IceDuel', b.by);
             }
         }
     }
@@ -1085,8 +1096,15 @@ export class WaterVortex {
         const g=this.game,v=g.castleLife?.byId?.get(b.by);
         if(!v||v.dead||v.stunT>0||v.lev||v.vy||!v.foe||v.mana<VORTEX.MANA_DRAIN*dt){this._burst(b,'caster',true);return;}
         v.mana-=VORTEX.MANA_DRAIN*dt;
-        const target=_b.copy(b.home);target.y+=Math.min(8,b.t*2);this._liftStep(b,dt,target,true);
-        if(b.npcMode==='freeze'&&b.t>2.2&&b.grow>.9&&b.phase==='liquid'&&v.mana>=SPELL_COST.Frozen){v.mana-=SPELL_COST.Frozen;this._freeze(b);this._send({by:b.by,ev:'freeze',id:b.id});}
+        const fz=b.npcMode==='freeze'; // («Frozen» of the water mage: the ball lifts the foe HIGH, freezes there, and is let go — the ice shatters and the fall hurts badly; the author 17.11)
+        const target=_b.copy(b.home);target.y+=fz?Math.min(15,b.t*3):Math.min(8,b.t*2);this._liftStep(b,dt,target,true);
+        if(fz){
+            if(b.phase==='liquid'&&b.grow>.9&&b.pos.y-b.home.y>=11&&v.mana>=SPELL_COST.Frozen){v.mana-=SPELL_COST.Frozen;this._freeze(b);b.frozenAt=b.t;this._send({by:b.by,ev:'freeze',id:b.id});}
+            if(b.frozenAt!=null&&b.t-b.frozenAt>1.2){this._burst(b,'release',true);return;} // (a moment up there, frozen — then the ice is dropped)
+            if(b.t>16){this._burst(b,'release',true);return;} // (could not get high / not enough mana for the freeze: it is let go anyway)
+            b.sendT-=dt;if(b.sendT<=0){b.sendT=.1;this._send({by:b.by,ev:'bpos',id:b.id,p:b.pos.toArray()});}
+            return;
+        }
         if(b.t>6){
             if(b.npcMode==='throw')b.npcThrow=new THREE.Vector3(b.pos.x-v.x,0,b.pos.z-v.z).normalize().multiplyScalar(12).setY(3);
             this._burst(b,'release',true);return;
@@ -1217,14 +1235,14 @@ export class WaterVortex {
     }
 
     /** One second in the ice: −1 HP from the cold, −1 HP without air. */
-    _iceHurt(b,onlyAir=false) {
+    _iceHurt(b,onlyAir=false,fixed=0) {
         const g = this.game;
         if (!b.tk) return;
-        const dmg = onlyAir?VORTEX.AIR_DPS:iceDamagePerSecond();
+        const dmg = fixed || (onlyAir?VORTEX.AIR_DPS:iceDamagePerSecond());
         this._note({ ev: 'iceHurt', id: b.id, dmg });
         if (b.tk === 'p') {
             if (b.tid !== this.me) return;
-            if (g.combat.enabled) { if(!onlyAir)g.combat.damage(VORTEX.COLD_DPS, b.by, 'cold'); if (!g.combat.dead) g.combat.damage(VORTEX.AIR_DPS, b.by, 'air'); } else g.damageLocalPlayer?.(dmg);
+            if (g.combat.enabled && fixed) g.combat.damage(fixed, b.by, 'cold'); else if (g.combat.enabled) { if(!onlyAir)g.combat.damage(VORTEX.COLD_DPS, b.by, 'cold'); if (!g.combat.dead) g.combat.damage(VORTEX.AIR_DPS, b.by, 'air'); } else g.damageLocalPlayer?.(dmg);
             return;
         }
         if (b.tk === 'z') {

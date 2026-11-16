@@ -362,6 +362,9 @@ export class CreatureImpact {
         return e;
     }
 
+    /** (host) Dizzy for `t` s once on its feet (a lack of air, a fall): a wizard aims badly, the body sways — the same daze as after a blast. */
+    dazeCreature(c, t) { const ck = kindOf(c); if (ck && this.auth && c?.group) this._daze(ck, c, this._state(ck, c), t); }
+
     /** Is this creature lying / falling / getting up? */
     isDown(c) { const ck = kindOf(c); const e = ck && this.active.get(ck + '|' + c.id); return !!e && ['falling', 'down', 'rising'].includes(e.s.state); }
     stateOf(c) { const ck = kindOf(c); const e = ck && this.active.get(ck + '|' + c.id); return e ? e.s.state : 'up'; }
