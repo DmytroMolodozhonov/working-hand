@@ -77,6 +77,7 @@ export class SpectatorCam {
     /** Put the camera there, and the (hidden) hero on the ground below it. */
     apply(camera, dt) {
         this.step(dt);
+        this._cleanse();
         camera.position.copy(this.pos);
         camera.quaternion.setFromEuler(_e.set(this.pitch, this.yaw, 0));
         const ch = this.game.character;
@@ -85,6 +86,16 @@ export class SpectatorCam {
             ch.group.position.set(this.pos.x, g, this.pos.z);
             ch.group.visible = false;
         }
+    }
+
+    /** Nothing may make the picture muddy, shaky, frozen or dark: no dizziness, shake, stun, ice, damage flash (a blast, a stunned hero, a fall). */
+    _cleanse() {
+        const g = this.game;
+        if (g.knock) { g.knock.dizzy = 0; g.knock.down = false; }
+        if (g.fx) g.fx.shake = 0;
+        const c = g.combat;
+        if (c && (c.stunLeft > 0 || c.frozenLeft > 0 || c.slowLeft > 0 || c.chill > 0)) c.clearEffects();
+        if (g.hud && this._flash !== false) { g.hud.setDizzy?.(0, g.renderer?.domElement); g.hud.setFrozenOverlay?.(0); }
     }
 
     /** The point of the ground under the mouse (client pixels): {x, z} | null. */

@@ -32,12 +32,16 @@ test('the real elemental mages hurt the zombies of the other team', { timeout: 1
         await sleep(1500);
         out.started = B.start();
         const phases = {};
+        let lifted = 0, thrown = 0, strip = !!B._strip;
+        const lv = g.levitation, origLet = lv.letGo.bind(lv);
+        lv.letGo = (ck, c, gentle) => { if (typeof c.lev?.by === 'string' && c.lev.by.startsWith('brawlelem:')) { thrown++; } return origLet(ck, c, gentle); };
         for (let i = 0; i < 3000 && B.state === 'fight'; i++) {
             await sleep(100);
             if (i % 20 === 0) for (const v of mages()) { (phases[v.element] ||= new Set()).add(v.mode + ':' + (v.foe ? 'foe' : 'nofoe')); }
+            for (const v of mages()) if (v.elemental?.carry && !v.elemental.carry.seen) { v.elemental.carry.seen = true; lifted++; }
         }
         out.state = B.state; out.winner = B.winner; out.alive = B.aliveCount();
-        out.hits = hits;
+        out.hits = hits; out.lifted = lifted; out.thrown = thrown; out.strip = strip || !!B._strip;
         out.phases = Object.fromEntries(Object.entries(phases).map(([k, v]) => [k, [...v]]));
         out.zombiesLeft = g.zombies.filter((z) => !z.isDead && !z.isDying).length;
         out.mageHp = mages().map((v) => [v.element, Math.round(v.hp), Math.round(v.mana)]);
@@ -48,5 +52,7 @@ test('the real elemental mages hurt the zombies of the other team', { timeout: 1
     assert.ok(r.put.every(Boolean), 'all four mages were put');
     assert.deepEqual(r.elements.sort(), ['air', 'earth', 'fire', 'water']);
     assert.ok(r.started);
+    assert.ok(r.strip, 'the strip between the teams is there');
+    console.log('air mage: lifted', r.lifted, 'thrown/dropped', r.thrown);
     assert.ok(r.zombiesLeft < 6, 'the mages killed or the fight went: ' + r.zombiesLeft);
 });

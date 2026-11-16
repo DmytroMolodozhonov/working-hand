@@ -9,7 +9,7 @@
  * Host only in a network game is not a thing here (a map for one); `authority` is always true.
  */
 import * as THREE from 'three';
-import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage } from './BrawlRules.js';
+import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage, teamAt } from './BrawlRules.js';
 import { TUTORIAL } from '../world/TutorialLand.js';
 import { elementalLook } from './ElementalTestSites.js';
 import { earthLook } from './EarthMagicRules.js';
@@ -32,6 +32,7 @@ export class Brawl {
         this._elemN = 0; // (…and the elemental mages' in theirs)
         this.onChange = null; // (the panel: counts, state)
         this._makeMarkers();
+        this._strip = null; // (the strip between the teams: made once the ground is there — _makeStrip)
         this._quiet();
     }
 
@@ -106,7 +107,7 @@ export class Brawl {
             zb.setThrall(true);
             zb.thrallOwner = masterOfTeam(team);
             zb.thrallUntil = Infinity;
-            zb.group.rotation.y = team === 'A' ? -Math.PI / 2 : Math.PI / 2;
+            zb.group.rotation.y = team === 'A' ? Math.PI / 2 : -Math.PI / 2; // (facing the other team: A looks to +x)
         } else if (def.kind === 'a') {
             const a = g.animals?._spawn(def.type, new THREE.Vector3(x, y, z), { yaw: team === 'A' ? -Math.PI / 2 : Math.PI / 2 });
             if (!a) { this.why = 'не получилось'; return null; }
@@ -179,7 +180,7 @@ export class Brawl {
      * → what was taken away {fighters, bodies, items, chunks}.
      */
     sweep() {
-        const g = this.game, out = { fighters: this.count(), bodies: 0, items: 0, chunks: 0, fires: 0 };
+        const g = this.game, out = { fighters: this.count(), bodies: 0, items: 0, chunks: 0, fires: 0, weapons: 0 };
         g.falling?.clear?.(); // (the pieces in the air land — then the ground is made again below them)
         out.fires = this._fireOut();
         this.clear();
@@ -196,6 +197,10 @@ export class Brawl {
         const loose = g.items?.loose;
         if (loose) for (const uid of [...loose.keys()]) { g.items.removeLoose(uid); out.items++; }
         out.chunks = g.terrain?.data?.resetModified?.() || 0;
+        this._stripToGround();
+        // (swords, axes, bows, shields lying about — what the knights dropped, what a blast threw: every weapon not held by a hand)
+        out.weapons = 0;
+        for (const w of [...(g.weapons?.weapons || [])]) { if (w.holder || g.fixedWeapons?.includes?.(w.id)) continue; g.weapons.remove(w); out.weapons++; }
         g.terrain?.data?.settling?.clear?.();
         this._changed();
         return out;
@@ -293,6 +298,80 @@ export class Brawl {
         }
     }
 
+    // ----------------------------------------------------------------- the air mage's lift
+    /** (LevitationMaxima.npcPlayer) The air mage `v` lifts the creature `ref` {k, id} of the other team: the game's own hold (Levitation.grab) raised by the wind. → true when taken. */
+    liftCreature(v, ref) {
+        const g = this.game, lev = g.levitation, a = v.elemental;
+        const c = lev?._creature(ref.k, ref.id);
+        if (!c || !a || c.lev || a.carry) return false;
+        if (!lev.grab(ref.k, c, v.id, 'right', 6)) return false;
+        a.carry = { ck: ref.k, c };
+        a.liftAck = true; a.liftHeld = true; // (held: after the time it is THROWN — ElementalMages: liftT, liftHeld)
+        return true;
+    }
+
+    /** (ElementalMages.endLift) The lift ends: `thr` {x, y, z} — the creature is thrown with it (the swing), none — it is let fall. */
+    throwCarried(v, cr, thr) {
+        const c = cr.c, L = c.lev;
+        if (!L || L.by !== v.id) return;
+        if (thr) L.vel.set(thr.x, thr.y, thr.z);
+        this.game.levitation.letGo(cr.ck, c, false);
+    }
+
+    /** (a few times a second) A carried creature that died or got away: the mage's hold ends, no throw. */
+    _watchCarry() {
+        const L = this.game.castleLife;
+        for (const e of this.roster.values()) {
+            if (!e.def.elemental) continue;
+            const v = L?.byId.get(e.id), a = v?.elemental;
+            if (!a?.carry) continue;
+            if (v.dead || !a.carry.c.lev || a.carry.c.lev.by !== v.id) { a.carry = null; a.liftHeld = false; }
+        }
+    }
+
+    // ------------------------------------------------------------------ the strip
+    /**
+     * The strip between the teams, lying on the ground (a ribbon that follows its bumps): a dashed white line in the middle, red on the left
+     * and blue on the right. One mesh, one small texture. Made once the land is there.
+     */
+    _makeStrip() {
+        const g = this.game, W = BRAWL.STRIP, Lz = BRAWL.EDGE * 2 + 6, N = 60;
+        const cv = document.createElement('canvas');
+        cv.width = 128; cv.height = 256;
+        const x = cv.getContext('2d');
+        const gr = x.createLinearGradient(0, 0, 128, 0);
+        gr.addColorStop(0, 'rgba(255,90,68,0.55)'); gr.addColorStop(0.42, 'rgba(255,90,68,0.12)');
+        gr.addColorStop(0.58, 'rgba(74,144,255,0.12)'); gr.addColorStop(1, 'rgba(74,144,255,0.55)');
+        x.fillStyle = gr; x.fillRect(0, 0, 128, 256);
+        x.fillStyle = 'rgba(255,255,255,0.85)';
+        for (let y = 0; y < 256; y += 32) x.fillRect(61, y, 6, 18); // (the dashed line of the middle)
+        x.fillStyle = 'rgba(255,255,255,0.5)';
+        x.fillRect(0, 0, 4, 256); x.fillRect(124, 0, 4, 256); // (the edges)
+        const tex = new THREE.CanvasTexture(cv);
+        tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, Lz / 8);
+        tex.anisotropy = 4;
+        const geo = new THREE.PlaneGeometry(W, Lz, 1, N);
+        geo.rotateX(-Math.PI / 2);
+        const pos = geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) pos.setY(i, this.groundAt(pos.getX(i), pos.getZ(i)) + 0.07);
+        pos.needsUpdate = true;
+        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, side: THREE.DoubleSide, fog: false });
+        const m = new THREE.Mesh(geo, mat);
+        m.frustumCulled = false;
+        m.renderOrder = 4;
+        g.scene.add(m);
+        this._strip = m;
+    }
+
+    /** The ribbon follows the ground again (after the whole field was made clean: the craters are gone). */
+    _stripToGround() {
+        const m = this._strip;
+        if (!m) return;
+        const pos = m.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) pos.setY(i, this.groundAt(pos.getX(i), pos.getZ(i)) + 0.07);
+        pos.needsUpdate = true;
+    }
+
     // --------------------------------------------------------------- markers
     /** A ring on the ground under each fighter in its team's colour (one InstancedMesh). */
     _makeMarkers() {
@@ -328,6 +407,7 @@ export class Brawl {
     // ----------------------------------------------------------------- frame
     update(dt) {
         this._frame++;
+        if (!this._strip && this._frame > 20 && this.game.terrain?.data?.landMade?.(0, 0) !== false) this._makeStrip();
         if (this.state === 'fight') {
             const w = winnerOf(this.aliveCount(), true);
             if (w) {
@@ -339,7 +419,7 @@ export class Brawl {
             }
         }
         if (this._frame % 2 === 0) this._updateMarkers();
-        if (this._frame % 12 === 3) this._feedFoes();
+        if (this._frame % 12 === 3) { this._feedFoes(); this._watchCarry(); }
         if (this._frame % 30 === 0) { // (no stranger on the field: a zombie nobody put there goes)
             for (const z of [...this.game.zombies]) if (!this.roster.has('z:' + z.id) && !z.isDying) this.game.removeZombie(z);
         }
@@ -353,6 +433,7 @@ export class Brawl {
     dispose() {
         try { this.clear(); } catch (e) { /* the game is going down: nothing to take off */ }
         this.game.scene.remove(this.markers);
+        if (this._strip) { this.game.scene.remove(this._strip); this._strip.geometry.dispose(); this._strip.material.map?.dispose(); this._strip.material.dispose(); }
         this.markers.geometry.dispose();
         this.markers.material.dispose();
     }

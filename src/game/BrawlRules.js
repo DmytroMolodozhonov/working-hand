@@ -2,7 +2,7 @@
  * BrawlRules.js — «Битва существ» (карты → «Битва существ»): the pure rules. No THREE, no game.
  *
  * The author 16.11: «можно будет игроку спавнить разных магов, обычных или стихий, зомби, животных — и заставлять сражаться.
- * Игрок просто действует как камера: наблюдает, ходит мышкой и клавиатурой, камера (веб-камера) не нужна». Two teams, A and B.
+ * Игрок просто действует как камера: наблюдает, ходит мышкой и клавиатурой, камера (веб-камера) не нужна». Two teams, A and B: by the SIDE of the field the fighter is put on (a strip between them, BRAWL.STRIP), not by a button (the author 17.11).
  *
  * Elemental mages are the game's REAL ones (their own brain, poses, auras, spells: ElementalMages.js, EarthMages.js); their foe is a pseudo player id
  * `bf|k|id` that CastleLife._playerPos resolves to the enemy creature's place (Brawl.foePos).
@@ -52,11 +52,24 @@ export const FIGHTER_GROUPS = [...new Set(FIGHTERS.map((f) => f.group))];
 
 export const BRAWL = {
     MAX: 60, // fighters on the field at most (the arena is 84 m across: more is a heap, and the frame pays for each)
+    STRIP: 6, // m: the strip between the teams (nobody is put on it): the left half of the field (x < 0, seen from the start camera) is the red team's, the right half the blue's
     GROUP: 5, // Shift+click: this many at once
     GROUP_R: 3.2, // m: the spread of such a group
     EDGE: 38, // m: no one is put farther than this from the middle (the meadow is 42 m)
     RESTART_S: 6, // s the banner of the winners stays
 };
+
+/** The team a click at `x` puts the fighter on: the left of the strip — A (red), the right — B (blue), on the strip itself — none. */
+export function teamAt(x) {
+    const h = BRAWL.STRIP / 2;
+    return x < -h ? 'A' : x > h ? 'B' : null;
+}
+
+/** `x` kept on its own team's side of the strip (a group put near the strip does not cross it). */
+export function onSide(x, team) {
+    const h = BRAWL.STRIP / 2 + 1;
+    return team === 'A' ? Math.min(x, -h) : team === 'B' ? Math.max(x, h) : x;
+}
 
 /** The nearest living fighter of the OTHER team. list: [{k, id, team, x, z}]. → the entry or null. */
 export function pickEnemy(team, me, list) {
@@ -80,9 +93,10 @@ export function winnerOf(alive, started) {
 }
 
 /** Where a click puts `n` fighters: the point, or a ring of them round it (never beyond EDGE of the middle). → [{x, z}] */
-export function placePoints(x, z, n = 1, rnd = Math.random) {
+export function placePoints(x, z, n = 1, rnd = Math.random, team = null) {
     const out = [];
     const clamp = (px, pz) => {
+        px = onSide(px, team);
         const d = Math.hypot(px, pz);
         return d > BRAWL.EDGE ? { x: (px / d) * BRAWL.EDGE, z: (pz / d) * BRAWL.EDGE } : { x: px, z: pz };
     };

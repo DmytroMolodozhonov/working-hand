@@ -2,13 +2,13 @@
  * BrawlPanel.js — the panel of «Битва существ» (Brawl.js): the team, whom to put, start, clear; a click on the field puts a fighter.
  * Plain DOM over the game; made when the mode starts, removed when the game ends.
  */
-import { TEAMS, TEAM_IDS, FIGHTERS, FIGHTER_GROUPS, BRAWL, placePoints } from '../game/BrawlRules.js';
+import { TEAMS, TEAM_IDS, FIGHTERS, FIGHTER_GROUPS, BRAWL, placePoints, teamAt } from '../game/BrawlRules.js';
 
 const CSS = `
 #brawl-panel{position:fixed;left:12px;top:12px;width:262px;max-height:calc(100vh - 24px);overflow:auto;z-index:60;background:rgba(14,12,28,.82);color:#e9e6ff;border:1px solid rgba(160,140,255,.35);border-radius:12px;padding:10px 12px;font:13px/1.35 system-ui,sans-serif;backdrop-filter:blur(4px);user-select:none}
 #brawl-panel h3{margin:0 0 6px;font-size:15px}
 #brawl-panel .bp-teams{display:flex;gap:6px;margin-bottom:8px}
-#brawl-panel .bp-team{flex:1;border:2px solid transparent;border-radius:8px;padding:6px 4px;cursor:pointer;color:#fff;font-weight:600;text-align:center;opacity:.65}
+#brawl-panel .bp-team{flex:1;border:2px solid transparent;border-radius:8px;padding:6px 4px;cursor:default;font-size:12px;color:#fff;font-weight:600;text-align:center;opacity:.65}
 #brawl-panel .bp-team.on{opacity:1;border-color:#fff}
 #brawl-panel .bp-g{margin:6px 0 2px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#a99cff}
 #brawl-panel .bp-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
@@ -38,23 +38,22 @@ export class BrawlPanel {
         const root = (this.root = document.createElement('div'));
         root.id = 'brawl-panel';
         root.innerHTML = `<h3>⚔️ Битва существ</h3>
-            <div class="bp-teams">${TEAM_IDS.map((t) => `<div class="bp-team" data-t="${t}" style="background:${TEAMS[t].css}">${TEAMS[t].label}</div>`).join('')}</div>
+            <div class="bp-teams"><div class="bp-team on" style="background:${TEAMS.A.css}">◀ ${TEAMS.A.label}: слева</div><div class="bp-team on" style="background:${TEAMS.B.css}">справа: ${TEAMS.B.label} ▶</div></div>
             ${FIGHTER_GROUPS.map((g) => `<div class="bp-g">${g}</div><div class="bp-grid">${FIGHTERS.filter((f) => f.group === g).map((f) => `<button class="bp-f" data-f="${f.id}">${f.icon} ${f.label}</button>`).join('')}</div>`).join('')}
             <div class="bp-cnt" id="bp-cnt"></div>
             <div class="bp-row"><button class="bp-btn" id="bp-start">⚔️ Начать бой</button><button class="bp-btn alt" id="bp-clear">🗑 Убрать всех</button></div>
             <div class="bp-row"><button class="bp-btn alt" id="bp-sweep" title="Убирает бойцов, трупы, вещи, огонь и чинит землю после взрывов">🧹 Очистить поле полностью</button></div>
-            <div class="bp-hint">Выберите сторону и бойца, затем щёлкните по полю (Shift — сразу пятерых). Лететь: W A S D, Пробел и Ctrl; осмотреться — правая кнопка мыши; колесо — скорость.</div>`;
+            <div class="bp-hint">Выберите бойца и щёлкните по полю: слева от полосы он будет в красной команде, справа — в синей (Shift — сразу пятерых). Лететь: W A S D, Пробел и Ctrl; осмотреться — правая кнопка мыши; колесо — скорость.</div>`;
         document.body.appendChild(root);
         document.body.classList.add('brawl-on'); // (the hero's bars, slots, minimap and the camera window are of no use to a spectator)
         const banner = (this.banner = document.createElement('div'));
         banner.id = 'brawl-banner';
         document.body.appendChild(banner);
         root.addEventListener('mousedown', (e) => e.stopPropagation());
-        root.querySelectorAll('.bp-team').forEach((el) => { el.onclick = () => { this.team = el.dataset.t; this._sync(); }; });
         root.querySelectorAll('.bp-f').forEach((el) => { el.onclick = () => { this.pick = el.dataset.f; this._sync(); }; });
         root.querySelector('#bp-start').onclick = () => { if (!game.brawl.start()) this._say(game.brawl.why); };
         root.querySelector('#bp-clear').onclick = () => game.brawl.clear();
-        root.querySelector('#bp-sweep').onclick = () => { const r = game.brawl.sweep(); this._say(`Поле чистое (убрано: бойцов ${r.fighters}, тел ${r.bodies}, вещей ${r.items}, огней ${r.fires}, исправлено участков земли ${r.chunks})`); };
+        root.querySelector('#bp-sweep').onclick = () => { const r = game.brawl.sweep(); this._say(`Поле чистое (убрано: бойцов ${r.fighters}, тел ${r.bodies}, вещей ${r.items}, оружия ${r.weapons}, огней ${r.fires}, исправлено участков земли ${r.chunks})`); };
         this._down = null;
         this._onDown = (e) => { if (e.button === 0) this._down = { x: e.clientX, y: e.clientY, shift: e.shiftKey }; };
         this._onUp = (e) => {
@@ -77,12 +76,13 @@ export class BrawlPanel {
         const g = this.game, p = g.spectator?.pick(cx, cy, g.camera);
         if (!p) return;
         if (g.brawl.state === 'over') g.brawl.clear();
-        const pts = placePoints(p.x, p.z, group ? BRAWL.GROUP : 1);
-        for (const q of pts) if (!g.brawl.spawn(this.pick, this.team, q.x, q.z)) { this._say(g.brawl.why); break; }
+        const team = teamAt(p.x);
+        if (!team) { this._say('Это полоса между командами: ставьте бойцов слева (красные) или справа (синие)'); return; }
+        const pts = placePoints(p.x, p.z, group ? BRAWL.GROUP : 1, Math.random, team);
+        for (const q of pts) if (!g.brawl.spawn(this.pick, team, q.x, q.z)) { this._say(g.brawl.why); break; }
     }
 
     _sync() {
-        this.root.querySelectorAll('.bp-team').forEach((el) => el.classList.toggle('on', el.dataset.t === this.team));
         this.root.querySelectorAll('.bp-f').forEach((el) => el.classList.toggle('on', el.dataset.f === this.pick));
     }
 

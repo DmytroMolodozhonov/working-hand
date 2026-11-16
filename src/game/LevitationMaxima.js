@@ -41,6 +41,7 @@
  * «На кого и на что» (CLAUDE.md): MAXIMA_TARGETS below.
  */
 
+import { foeRef } from './BrawlRules.js';
 import { isDivine } from './DivineSword.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
@@ -839,6 +840,7 @@ export class LevitationMaxima {
         const g=this.game,fp=g.castleLife?._playerPos(to);
         if(!this.auth||!fp||v.dead||v.mana<LEV_MAX.COST+LEV_MAX.DRAIN*6||Math.hypot(fp.x-v.x,fp.z-v.z)>LEV_MAX.RANGE)return false;
         if(g.collision?.lineOfSight&&!g.collision.lineOfSight(v.x,v.y+2.7,v.z,fp.x,fp.y,fp.z,.2))return false;
+        if(foeRef(to)&&!g.brawl?.liftCreature(v,foeRef(to)))return false; // («Битва существ»: the foe is a creature of the other team — it is lifted by the same wind: Brawl.liftCreature)
         v.mana-=LEV_MAX.COST;v.mode='airLift';
         if(to===g.localId)g.levitation?.liftMe?.(v.id,'right',{mx:true,air:true});
         g.sync?.levMax?.({a:'p',by:v.id,from:v.id,to,side:'right',air:1});

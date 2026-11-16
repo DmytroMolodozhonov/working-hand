@@ -1,7 +1,7 @@
 // «Битва существ» (BrawlRules.js): the teams, the field, the foe search, the mage's distance, the winner.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TEAMS, teamOfMaster, masterOfTeam, otherTeam, FIGHTERS, fighterDef, FIGHTER_GROUPS, pickEnemy, winnerOf, placePoints, BRAWL, foeId, foeRef, isMage } from '../../src/game/BrawlRules.js';
+import { TEAMS, teamOfMaster, masterOfTeam, otherTeam, FIGHTERS, fighterDef, FIGHTER_GROUPS, pickEnemy, winnerOf, placePoints, BRAWL, foeId, foeRef, isMage, teamAt, onSide } from '../../src/game/BrawlRules.js';
 import { WIZ_RANKS } from '../../src/game/WizardAI.js';
 
 test('a team is a pseudo-master and back; a real player is no team', () => {
@@ -66,6 +66,27 @@ test('a click puts one; Shift a group round it; never beyond the field', () => {
     for (const p of g) assert.ok(Math.hypot(p.x, p.z) < BRAWL.GROUP_R * 1.3);
     for (const p of placePoints(100, 0, 5)) assert.ok(Math.hypot(p.x, p.z) <= BRAWL.EDGE + 1e-9);
     assert.ok(Math.hypot(...Object.values(placePoints(-90, 90, 1)[0])) <= BRAWL.EDGE + 1e-9);
+});
+
+test('the team is the SIDE of the field: left red, right blue, nobody on the strip between them', () => {
+    const h = BRAWL.STRIP / 2;
+    assert.equal(teamAt(-20), 'A');
+    assert.equal(teamAt(20), 'B');
+    assert.equal(teamAt(0), null);
+    assert.equal(teamAt(-h + 0.01), null);
+    assert.equal(teamAt(h - 0.01), null);
+    assert.equal(teamAt(-h - 0.01), 'A');
+    assert.equal(teamAt(h + 0.01), 'B');
+});
+
+test('a group put near the strip never crosses it', () => {
+    const h = BRAWL.STRIP / 2;
+    for (let k = 0; k < 40; k++) {
+        for (const q of placePoints(-h - 1.2, 3, 5, Math.random, 'A')) assert.ok(teamAt(q.x) === 'A', 'A stays left: ' + q.x);
+        for (const q of placePoints(h + 1.2, 3, 5, Math.random, 'B')) assert.ok(teamAt(q.x) === 'B', 'B stays right: ' + q.x);
+    }
+    assert.ok(onSide(0, 'A') < -h && onSide(0, 'B') > h);
+    assert.equal(onSide(5, null), 5);
 });
 
 test('teams are two and distinct', () => {

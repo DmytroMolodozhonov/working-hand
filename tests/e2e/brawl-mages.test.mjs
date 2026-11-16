@@ -43,13 +43,17 @@ test('ordinary mages fight with their real spells; the full sweep leaves a clean
         data.set(5, L, 5, 0);
         out.blockBroken = data.get(5, L, 5);
         out.bodiesBefore = g.death.bodies.size;
+        const T = window.__zns.THREE;
+        g.weapons.spawnHovering('sword', new T.Vector3(3, g.brawl.groundAt(3, 3) + 1, 3), 'brawlSword1', {});
+        g.weapons.spawnHovering('axe', new T.Vector3(-3, g.brawl.groundAt(-3, 3) + 1, 3), 'brawlAxe1', {});
+        out.weaponsBefore = g.weapons.weapons.length;
         out.sweep = B.sweep();
         await sleep(500);
         out.blockAfter = data.get(5, L, 5);
         out.rosterAfter = B.count(); out.bodiesAfter = g.death.bodies.size;
         out.zombiesAfter = g.zombies.length; out.animalsAfter = g.animals.list.length;
         out.peopleAfter = [...g.castleLife.byId.values()].filter((v) => v.brawl).length;
-        out.stateAfter = B.state;
+        out.stateAfter = B.state; out.weaponsAfter = g.weapons.weapons.filter((w) => !w.holder).length;
         return out;
     });
     console.log(JSON.stringify(r));
@@ -61,4 +65,6 @@ test('ordinary mages fight with their real spells; the full sweep leaves a clean
     assert.equal(r.blockAfter, r.blockBefore, 'the broken ground is whole again');
     assert.equal(r.rosterAfter, 0); assert.equal(r.bodiesAfter, 0); assert.equal(r.zombiesAfter, 0); assert.equal(r.peopleAfter, 0);
     assert.equal(r.stateAfter, 'setup');
+    assert.ok(r.weaponsBefore >= 2, 'weapons were lying about');
+    assert.equal(r.weaponsAfter, 0, 'the swords and axes are gone too');
 });
