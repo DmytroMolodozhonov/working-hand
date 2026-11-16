@@ -14,7 +14,7 @@ import {WaterMageGuard} from '../fx/WaterMageGuard.js';
 import { ElementalSwirl } from '../fx/ElementalSwirl.js';
 import { IceShards } from './IceShards.js';
 import { SHARDS, shardAim } from './ElementalRules.js';
-import { elementalEndurance, AIR_THROW, AIR_BOLD, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
+import { elementalEndurance, AIR_THROW, AIR_BOLD, KITE, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import { elementK } from './HeroElement.js';
 import {FLIGHT} from './Flight.js';
@@ -215,6 +215,7 @@ export class ElementalMages {
   _d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
   if(!isImpulse(name)&&!g.collision.lineOfSight?.(_o.x,_o.y,_o.z,foe.x,foe.y,foe.z,.2)&&g.collision.lineOfSight)return false;
   if(!this.pay(v,(SPELL_COST[name]??10)*elementK(v.element,name)))return false; // (a mage's own element: half the price — the author 15.11)
+  if(isImpulse(name)&&v.elemental)v.elemental.pushAt=performance.now(); // (the air mage shoves first, then runs: KITE)
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);g.sound?.spellCast?.(name,_o);
   v.aimPitch=Math.asin(_d.y);v.castT=.6;v.model.castNow=true;this.engaged(v);return true;
  }
@@ -370,6 +371,12 @@ export class ElementalMages {
   v.mana=Math.min(v.maxMana,v.mana+(a.recover?REGEN.REST:REGEN.FIGHT)*dt); // (mana comes back all the time — a mage at 12 mana must not wait for ever)
   if(v.mana<=lowMana(v.element,v.maxMana))a.recover=true;else if(a.recover&&v.mana>=readyMana(v.element,v.maxMana))a.recover=false;
   if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);const ran=!v.fly&&this.retreat(v,foe,dt);v.mode=v.fly?'airFlight':ran?'run':v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
+  // (the author 17.11: the same strategy for every mage — keep away, do not let the enemy come near: nearer than KITE.NEAR he runs off for a couple of seconds, then fights a moment, and runs again)
+  a.kiteCd=Math.max(0,(a.kiteCd||0)-dt);
+  if(dist<KITE.NEAR&&a.kiteCd<=0&&(v.element!=='air'||performance.now()-(a.pushAt??-1e9)<2500)&&!a.liftT&&!a.capture&&!a.wave&&!a.guard&&!a.shard&&!v.vy&&!v.stunT&&!v.lev&&!v.carriedBy&&!(g.hellfire?.npcs?.has(v.id))&&!(a.winged&&(v.fly||a.wings?.launch))){
+   a.kiteT=(a.kiteT||0)+dt;
+   if(this.retreat(v,foe,dt)){v.mode=v.fly?'airFlight':v.element==='air'?'airRun':'run';if(!v.fly&&!v.vy)L._ground(v);if(a.kiteT>KITE.RUN_T){a.kiteT=0;a.kiteCd=KITE.REST_T;}return true;}
+  }else if(dist>=KITE.NEAR)a.kiteT=0;
   if(v.element==='water'){
    if(this.parry(v,foe,dt))return true; // (puts out a thrown fireball / bombardo with a jet of water before it arrives)
    if(this.seekWater(v,foe,dt))return true;

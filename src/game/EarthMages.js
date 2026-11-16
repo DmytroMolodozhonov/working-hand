@@ -1,6 +1,6 @@
 /** Host-driven earth discipline. Real terrain, shared Ground Vortex stones/flights, ordinary NPC bodies/armour/death. */
 import * as THREE from 'three';
-import { elementalEndurance, REGEN } from './ElementalRules.js';
+import { elementalEndurance, REGEN, KITE } from './ElementalRules.js';
 import { EARTH as E, EARTH_PHASES, EARTH_STRIKES, EARTH_ATTACKS, EARTH_SHELL, WALL_COUNT, ELEMENTAL_BARE_HAND, earthSlot, earthBlockHit } from './EarthMagicRules.js';
 import { newSwarm } from './GroundVortex.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -149,6 +149,11 @@ export class EarthMages {
   if(!s){s=this._start(v);if(!s){a.recover=true;v.mode='earthRest';L._ground(v);return true;}}
   s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;s.phaseT=a.t;v.model.earthPoseT=a.t;
   v.mana=Math.max(0,v.mana-E.DRAIN*dt);
+  a.kiteCd=Math.max(0,(a.kiteCd||0)-dt);
+  if(dist<KITE.NEAR&&a.kiteCd<=0&&a.phase==='orbit'&&!v.vy&&!v.stunT&&g.elementalMages?.retreat){ // (the author 17.11: keeps away — see ElementalMages: runs off for a couple of seconds with the stones orbiting him, then fights)
+   a.kiteT=(a.kiteT||0)+dt;
+   if(g.elementalMages.retreat(v,foe,dt)){v.mode='run';v.model.earthPoseT=a.t;L._ground(v);if(a.kiteT>KITE.RUN_T){a.kiteT=0;a.kiteCd=KITE.REST_T;}return true;}
+  }else if(dist>=KITE.NEAR)a.kiteT=0;
   if((a.phase==='lift'&&a.t>.22)||a.phase==='orbit')this._gather(v,s,dt);
   if(a.phase==='lift'&&a.t>=EARTH_PHASES.lift)this._phase(v,s,'orbit');
   else if(a.phase==='orbit'){
