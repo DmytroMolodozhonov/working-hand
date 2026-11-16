@@ -31,6 +31,8 @@ test('the real elemental mages hurt the zombies of the other team', { timeout: 1
         g.damageZombie = (z, amount, w, dir, by, ...rest) => { if (typeof by === 'string' && by.startsWith('brawlelem:')) { const el = g.castleLife.byId.get(by)?.element || '?'; hits[el] = (hits[el] || 0) + 1; } return orig(z, amount, w, dir, by, ...rest); };
         await sleep(1500);
         out.started = B.start();
+        let shardHits = 0; const origSh = B.shardHit.bind(B);
+        B.shardHit = (sh, b) => { const ok = origSh(sh, b); if (ok) shardHits++; return ok; };
         const phases = {};
         let lifted = 0, thrown = 0, strip = !!B._strip;
         const lv = g.levitation, origLet = lv.letGo.bind(lv);
@@ -41,7 +43,7 @@ test('the real elemental mages hurt the zombies of the other team', { timeout: 1
             for (const v of mages()) if (v.elemental?.carry && !v.elemental.carry.seen) { v.elemental.carry.seen = true; lifted++; }
         }
         out.state = B.state; out.winner = B.winner; out.alive = B.aliveCount();
-        out.hits = hits; out.lifted = lifted; out.thrown = thrown; out.strip = strip || !!B._strip;
+        out.hits = hits; out.shardHits = shardHits; out.lifted = lifted; out.thrown = thrown; out.strip = strip || !!B._strip;
         out.phases = Object.fromEntries(Object.entries(phases).map(([k, v]) => [k, [...v]]));
         out.zombiesLeft = g.zombies.filter((z) => !z.isDead && !z.isDying).length;
         out.mageHp = mages().map((v) => [v.element, Math.round(v.hp), Math.round(v.mana)]);
@@ -53,6 +55,7 @@ test('the real elemental mages hurt the zombies of the other team', { timeout: 1
     assert.deepEqual(r.elements.sort(), ['air', 'earth', 'fire', 'water']);
     assert.ok(r.started);
     assert.ok(r.strip, 'the strip between the teams is there');
+    console.log('water shards that hit creatures:', r.shardHits);
     console.log('air mage: lifted', r.lifted, 'thrown/dropped', r.thrown);
     assert.ok(r.zombiesLeft < 6, 'the mages killed or the fight went: ' + r.zombiesLeft);
 });

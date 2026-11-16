@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage, teamAt } from './BrawlRules.js';
 import { TUTORIAL } from '../world/TutorialLand.js';
+import { SHARDS } from './ElementalRules.js';
 import { elementalLook } from './ElementalTestSites.js';
 import { earthLook } from './EarthMagicRules.js';
 
@@ -304,6 +305,28 @@ export class Brawl {
             v.brawlFoeAt = now;
             if (v.foe && v.cs?.hostile) v.cs.hostile.set(v.foe, Date.now() + 30000); // (the ordinary mages fight whom their place holds hostile: WizardFight)
         }
+    }
+
+    // ----------------------------------------------------------- the water mage's shards
+    /** (IceShards._bodies) Every fighter on the field as a capsule {id, a, b, r, ref}: the shards fly through the friends and hit the foes (shardHit). */
+    shardTargets(out) {
+        if (this.state !== 'fight') return;
+        const s = this.game.servants;
+        for (const e of this.roster.values()) {
+            const p = s.pos(e.k, e.id, _d);
+            if (!p) continue;
+            const r = e.k === 'a' ? (e.type === 'horse' ? 1.0 : 0.8) : 0.7, h = e.k === 'a' ? 1.6 : 3.2;
+            out.push({ id: foeId(e.k, e.id), a: new THREE.Vector3(p.x, p.y + 0.3, p.z), b: new THREE.Vector3(p.x, p.y + h, p.z), r, ref: { k: e.k, id: e.id }, team: e.team });
+        }
+    }
+
+    /** A shard `s` (caster `s.by`) reached the fighter `b`: the foe's — it is hurt (true), a friend's — nothing (false: the shard flies on). */
+    shardHit(s, b) {
+        const g = this.game, caster = g.castleLife?.byId.get(s.by), team = caster?.brawl?.team;
+        if (!team || b.team === team) return false;
+        const len = Math.hypot(s.vx, s.vz) || 1;
+        g.servants.damage(b.ref, SHARDS.DAMAGE, _d.set(s.vx / len, 0, s.vz / len), masterOfTeam(team), 'servant', { x: caster.x, z: caster.z });
+        return true;
     }
 
     // ----------------------------------------------------------------- the air mage's lift
