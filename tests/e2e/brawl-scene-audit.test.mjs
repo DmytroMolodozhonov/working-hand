@@ -23,6 +23,14 @@ test('brawl scene audit', { timeout: 1700000 }, async () => {
         await sleep(15000);
         const sc = g.scene, tally = {};
         sc.traverse((o) => { if (o === sc) return; const depth = (() => { let d = 0, p = o; while (p.parent && p.parent !== sc) { d++; p = p.parent; } return d; })(); if (depth > 0) return; const k = (o.name || o.userData?.kind || o.type) + '|' + o.type + '|vis' + (o.visible ? 1 : 0); const e = (tally[k] ||= { n: 0, ex: null }); e.n++; if (!e.ex) e.ex = [Math.round(o.position.x), Math.round(o.position.y), Math.round(o.position.z)]; });
+        out.visible = [];
+        const THREE_ = window.__zns.THREE;
+        for (const o of sc.children) {
+            if (!o.visible || o.type === 'Audio' || /Light|Camera/.test(o.type)) continue;
+            const box = new THREE_.Box3().setFromObject(o), c = box.getCenter(new THREE_.Vector3()), sz = box.getSize(new THREE_.Vector3());
+            let n = 0; o.traverse(() => n++);
+            out.visible.push([o.name || '-', o.type, o.geometry?.type || '', 'sub' + n, 'c ' + [c.x, c.y, c.z].map(Math.round).join(','), 'size ' + [sz.x, sz.y, sz.z].map((x) => Math.round(Math.min(x, 9999))).join('x'), o.material?.name || o.material?.type || ''].join(' | '));
+        }
         out.sceneTop = Object.entries(tally).map(([k, v]) => k + ' x' + v.n + ' @' + v.ex.join(',')).sort();
         const sys = {};
         for (const k of Object.keys(g)) {
