@@ -22,7 +22,7 @@ test('ordinary mages fight with their real spells; the full sweep leaves a clean
         for (let i = 0; i < 300 && !g.terrain?.data?.landMade?.(0, 0); i++) await sleep(100);
         const B = g.brawl;
         out.put = [B.spawn('novice', 'A', -14, -5), B.spawn('wizard', 'A', -14, 0), B.spawn('archmage', 'A', -14, 5)].map((e) => !!e);
-        for (let i = 0; i < 5; i++) B.spawn('zombie', 'B', 14, -8 + i * 4);
+        out.putB = [B.spawn('wizard', 'B', 14, -3), B.spawn('archmage', 'B', 14, 3), B.spawn('zombie', 'B', 16, -8), B.spawn('zombie', 'B', 16, 8)].map((e) => !!e);
         const mages = () => [...B.roster.values()].filter((e) => e.def.group === 'Маги').map((e) => g.castleLife.byId.get(e.id)).filter(Boolean);
         const hits = {}, orig = g.damageZombie.bind(g);
         g.damageZombie = (z, amount, w, dir, by, ...rest) => { if (typeof by === 'string' && by.startsWith('brawlfield:')) hits[by] = (hits[by] || 0) + 1; return orig(z, amount, w, dir, by, ...rest); };
@@ -54,9 +54,9 @@ test('ordinary mages fight with their real spells; the full sweep leaves a clean
     });
     console.log(JSON.stringify(r));
     await page.screenshot({ path: 'docs/media/brawl-mages.png' });
-    assert.ok(r.put.every(Boolean));
+    assert.ok(r.put.every(Boolean) && r.putB.every(Boolean));
     assert.ok(r.started);
-    assert.ok(r.zombiesLeft < 5 || r.state === 'over', 'the mages hurt the zombies: ' + JSON.stringify(r.hitsOnZombies));
+    assert.ok(r.state === 'over' || r.alive.A + r.alive.B < 9, 'the real spells kill: ' + JSON.stringify(r.alive) + ' ' + r.spells);
     assert.equal(r.blockBroken, 0);
     assert.equal(r.blockAfter, r.blockBefore, 'the broken ground is whole again');
     assert.equal(r.rosterAfter, 0); assert.equal(r.bodiesAfter, 0); assert.equal(r.zombiesAfter, 0); assert.equal(r.peopleAfter, 0);

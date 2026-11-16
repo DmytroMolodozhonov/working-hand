@@ -2913,7 +2913,7 @@ export class CastleLife {
     }
 
     /** (host) How wanted this player is: 0…3 (Wanted.js). */
-    wantedLevel(id) { return this._isPlayer(id) ? this.wanted.level(id, Date.now() / 1000) : 0; }
+    wantedLevel(id) { return this._isPlayer(id) ? this.wanted.level(id, Date.now() / 1000) : (typeof id === 'string' && id.startsWith('bf|') ? 3 : 0); } // («Битва существ»: an enemy of the other team is fought in earnest — the heavy spells, not only the stunning of a first quarrel: Wanted.wantedTactics)
 
     // ------------------------------------------------------------ damage
     /** Someone hit a villager (weapons, fists, spells). */
