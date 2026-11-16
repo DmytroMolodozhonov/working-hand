@@ -6,7 +6,7 @@ import { newSwarm } from './GroundVortex.js';
 import { BLOCK } from '../world/Terrain.js';
 import { GV, digCells, liftable, lifted, hitBlocks, sweepsShield } from './GroundVortexRules.js';
 import { findPassage } from './Stitching.js';
-import { tutorialHeight } from '../world/TutorialLand.js';
+import { brawlHeight } from '../world/TutorialLand.js';
 import { foeRef } from './BrawlRules.js';
 import { SPELL_COST } from './Combat.js';
 import { elementK } from './HeroElement.js';
@@ -206,7 +206,7 @@ export class EarthMages {
   g.stitching.sew(_at.clone(),_dir.clone(),v.id);g.sync?.spell('Stitching',_at,_dir,null,v.id);g.castleLife._say(v,'Stitching!',2);return true;
  }
  /** («Битва существ») The natural height of the ground at a column — what the land was made as; null: unknown (the ordinary world). */
- _natural(){return this.game.config?.brawl?tutorialHeight:null;}
+ _natural(){return this.game.config?.brawl?brawlHeight:null;}
  /** Ground a mage must never take: close to his own feet (no pit round him), and in the battle field no deeper than one layer under the natural ground. */
  _ownGround(v,x,L,z){
   const nat=this._natural(),d=Math.hypot(x-v.x,z-v.z);

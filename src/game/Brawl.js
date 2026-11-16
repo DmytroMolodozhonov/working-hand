@@ -394,11 +394,26 @@ export class Brawl {
      * блоков»): red edge on the left, blue on the right, grey between, a dashed white line along the middle. Made once the land is there, and
      * again after the field was made clean (the ground is made again then).
      */
+    /** The tutorial's little hill is in the middle of the field — the strip must run straight and the teams must see each other: its blocks are taken off. → false: its land is not made yet. */
+    _levelHill(data) {
+        const H = TUTORIAL.HILL, R = Math.ceil(H.r + 1.5), G = TUTORIAL.G;
+        if (data.landMade && (!data.landMade(H.x - R, H.z) || !data.landMade(H.x + R, H.z) || !data.landMade(H.x, H.z - R) || !data.landMade(H.x, H.z + R))) return false;
+        for (let ix = H.x - R; ix <= H.x + R; ix++) for (let iz = H.z - R; iz <= H.z + R; iz++) {
+            if (Math.hypot(ix - H.x, iz - H.z) > H.r + 1.5) continue;
+            const top = data.topLayer(ix, iz);
+            if (top <= G) continue;
+            for (let L = top; L > G; L--) data.set(ix, L, iz, BLOCK.AIR);
+            data.set(ix, G, iz, BLOCK.GRASS);
+        }
+        return true;
+    }
+
     _buildStrip() {
         const data = this.game.terrain?.data;
         if (!data) return false;
         const h = BRAWL.STRIP / 2, z0 = -BRAWL.EDGE - 3, z1 = BRAWL.EDGE + 3;
         let n = 0;
+        if (!this._levelHill(data)) return false;
         for (let iz = z0; iz <= z1; iz++) {
             if (data.landMade && !data.landMade(0, iz)) return false;
             for (let ix = -h; ix < h; ix++) {
