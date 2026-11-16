@@ -29,6 +29,7 @@ function world({ water = false } = {}) {
         fire: { douse: () => 0 }, space: { spellBlocked: () => null },
     };
     g.burning = new Burning(g);
+    g.burning._catches = () => true; // (the older tests: contact already long enough — the 3 s rule has its own test below)
     g.hurt = hurt;
     return g;
 }
@@ -155,4 +156,29 @@ test('the lava\'s fire (hell): twice as strong as a plain fire, it burns on afte
     for (const k of ['T', 'D', 'g', 'G', 'dv']) assert.equal(B.ignite(k, 'x', null, 12, false, true), false, k);
     // the guests see the lava's fire big
     B.onNet({ by: 'p2', on: 1, bl: 2 }); assert.equal(B.shown.get('p:p2').k, 2);
+});
+
+test('a creature catches fire only after ~3 s of CONTACT (the author 17.11); a break cools it; a burst counts for 1.5 s; lava is at once', () => {
+    const g = world(), B = g.burning;
+    delete B._catches; // (the real rule)
+    const real = performance.now;
+    let t = 1000; performance.now = () => t;
+    try {
+        let burning = false;
+        for (let i = 0; i < 10 && !burning; i++) { t += 125; burning = B.ignite('v', 1); } // (1.25 s of contact)
+        assert.equal(burning, false, 'not yet');
+        for (let i = 0; i < 20 && !burning; i++) { t += 125; burning = B.ignite('v', 1); }
+        assert.equal(burning, true, 'after about three seconds');
+        // a break of 1.2 s: the heat is gone
+        const g2 = world(), B2 = g2.burning; delete B2._catches;
+        for (let i = 0; i < 12; i++) { t += 125; B2.ignite('v', 2); }
+        t += 1200; assert.equal(B2.ignite('v', 2), false);
+        // two bursts of fire in a row: 1.5 + 1.5
+        const g3 = world(), B3 = g3.burning; delete B3._catches;
+        assert.equal(B3.ignite('v', 1, null, undefined, false, false, BURN.BURST_CREDIT), false);
+        t += 300; assert.equal(B3.ignite('v', 1, null, undefined, false, false, BURN.BURST_CREDIT), true);
+        // lava: at once
+        const g4 = world(); delete g4.burning._catches;
+        assert.equal(g4.burning.ignite('v', 1, null, 12, false, true), true);
+    } finally { performance.now = real; }
 });
