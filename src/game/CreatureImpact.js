@@ -201,6 +201,8 @@ export function kindOf(c) {
 const ease = (k) => 1 - Math.cos(Math.min(1, Math.max(0, k)) * HALF_PI);
 const smooth = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
 
+const BLAST_PUSH = new Set(['Bombardo', 'BombardoMaxima', 'Boom', 'Inspirius']); // (the blasts the dome closes the shove of)
+
 export class CreatureImpact {
     constructor(game) {
         this.game = game;
@@ -397,6 +399,12 @@ export class CreatureImpact {
         if (wind === 'none') {
             this._note(ck, c, o, 'none');
             if (o.by != null && o.by === this.game.localId) this.game.hud?.setVoice?.('🛡️ Protection Maxima остановил даже воздух', true);
+            return 'none';
+        }
+        // a blast («Бомбарда», «Бомбарда Максима», «Бум», «Инспириус») against a wizard's raised dome («Protection Maxima»): it isolates from such spells
+        // completely — no harm (CastleLife.hit) and no shove either (the author 17.11: the Saviour «падает от бомбарды»)
+        if (ck === 'v' && c.wizard && (c.fx & FX.DOME) && BLAST_PUSH.has(o.spell)) {
+            this._note(ck, c, o, 'none');
             return 'none';
         }
         const v = Math.hypot(o.v.x, o.v.z);

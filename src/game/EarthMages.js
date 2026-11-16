@@ -97,7 +97,7 @@ export class EarthMages {
    if(dot<=0||dx*dx+dy*dy+dz*dz-dot*dot>16)return;
    if(!threat||dist<threat.dist)threat={p,by,bomb,dist};
   };
-  for(const b of this.game.duel?.bolts.values()||[])if(b.state==='flying')accept(b.front,b.dir,b.by);
+  for(const b of this.game.duel?.bolts.values()||[])if(b.state==='flying')accept(b.front,b.dir,b.by,/Fire/.test(b.spell||'')); // (a fire charge is as heavy a threat as a blast: the water mage meets it with the dome)
   for(const task of this.game.spells?.spells||[])if(task.bomb&&task.life>0)accept(task.bomb.p,task.bomb.v,task.bomb.by,true);
   return threat;
  }
