@@ -604,10 +604,16 @@ export class CreatureImpact {
         if (!this.auth) return 0;
         const P = SPELL_PHYSICS[name] || {};
         let n = 0;
+        // (the author 16.11: «не только себя сбивает, но и своих соплеменников — должен быть иммунитет»: a person's area spell — wind, the ring,
+        //  the impulse, a quake, a thunderwave — never pushes HIM, nor his own: the same team in «Битва существ», the people of his own place in the world)
+        const caster = casterId != null ? this.game.castleLife?.byId?.get(casterId) : null;
+        const team = caster?.brawl?.team ?? null, roster = team ? this.game.brawl?.roster : null;
+        const ally = (ck, c) => team ? roster?.get(ck + ':' + c.id)?.team === team : !!(caster && ck === 'v' && caster.cs && c.cs === caster.cs);
         for (const ck of opts.kinds || Object.keys(KINDS)) {
             const K = KINDS[ck];
             for (const c of K.list(this.game)) {
                 if (!c.group || !K.alive(c) || opts.skip?.(c)) continue;
+                if (casterId != null && (c.id === casterId || ally(ck, c))) continue; // (never the caster himself — his own «Ветер Максима» knocked HIM down — nor his own people)
                 const p = K.centre(c, new THREE.Vector3());
                 const v = pushAt(p, c);
                 if (!v) continue;
