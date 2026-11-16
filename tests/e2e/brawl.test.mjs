@@ -39,7 +39,8 @@ test('two teams put on the field fight to the end; the player is only a camera',
         }
         out.state = B.state; out.winner = B.winner; out.alive = B.aliveCount();
         out.camMoved = (() => { const p = g.spectator.pos.clone(); g.spectator.keys.add('KeyW'); return p; })();
-        await sleep(600);
+        const p0z = g.spectator.pos.z;
+        for (let i = 0; i < 200 && Math.abs(g.spectator.pos.z - p0z) < 0.05; i++) await sleep(100); // (a slow machine: a few frames a second)
         g.spectator.keys.clear();
         out.camAfter = [g.spectator.pos.x, g.spectator.pos.z].map((n) => Math.round(n * 10) / 10);
         out.camBefore = [out.camMoved.x, out.camMoved.z].map((n) => Math.round(n * 10) / 10);
