@@ -206,7 +206,10 @@ export class ElementalMages {
   const desert=!!g.terrain?.data?.pyr?.sandy?.(Math.round(v.x),Math.round(v.z));
   // (the author 16.11: «маги воды беспомощные» — far from water his tank was empty after four or five strokes and nothing ever filled it: now every water mage
   //  draws the moisture of the air into his supply all the time — slowly; in a desert, in hell, off the Earth hardly at all)
-  if(dt>0&&!a.source){const wet=airWet({offEarth:!!g.space?.offEarth,hell:!!g.hellGate?.inHell,desert});a.water=Math.min(v.entry.look?.tank?36:WATER_DRAW.CAP,a.water+dt*(wet?WATER_DRAW.WET:WATER_DRAW.DRY));}
+  if(dt>0&&!a.source){const wet=airWet({offEarth:!!g.space?.offEarth,hell:!!g.hellGate?.inHell,desert}),cap=v.entry.look?.tank?36:WATER_DRAW.CAP;a.water=Math.min(cap,a.water+dt*(wet?WATER_DRAW.WET:WATER_DRAW.DRY));
+   // (seen: wisps of mist drawn in from the air round him to his palms, while he is still gathering)
+   const glow=g.fx?.glow;if(glow&&a.water<cap&&Math.random()<dt*(wet?7:2)){const q=Math.random()*6.2832,r=2.2+Math.random()*1.3,hx=v.x-Math.sin(v.yaw)*.7,hz=v.z-Math.cos(v.yaw)*.7,hy=v.y+2.4,sx=v.x+Math.cos(q)*r,sz=v.z+Math.sin(q)*r,sy=v.y+1+Math.random()*2.6;
+    glow.spawn(sx,sy,sz,(hx-sx)*1.6,(hy-sy)*1.6,(hz-sz)*1.6,Math.random()<.5?0xcfe9ff:0xeaf6ff,.25+Math.random()*.2,.6,{shrink:1.2});}}
   const humid=!!v.gifts.hydro.h&&!airWet({offEarth:!!g.space?.offEarth,hell:!!g.hellGate?.inHell,desert});
   a.humid=humid;return a.source||humid||a.water>=6;
  }
@@ -343,7 +346,18 @@ export class ElementalMages {
  /** The lift ends: dropped, or (`thr`: a velocity) THROWN — the swing, the body flies; the net message carries the throw to a guest. */
  endLift(v,thr=null){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;if(a.carry){const cr=a.carry;a.carry=null;g.brawl?.throwCarried(v,cr,thr);} // (a creature held by the wind: thrown or dropped — Brawl)
   g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id,thr);if(g.levitation?.lifted?.by===v.id){if(thr)g.levitation.throwMe(v.id,thr);else g.levitation.dropMe(false);}
-  if(thr){this.phase(v,'Sweep');a.fired=true;a.t=.2;v.castT=.5;g.sound?.spellCast?.('WindImpulseMaxima',_o.set(v.x,v.y+2,v.z));}else this.phase(v,'Coil');}
+  if(thr){this.phase(v,'Sweep');a.fired=true;a.t=.2;v.castT=.5;g.sound?.spellCast?.('WindImpulseMaxima',_o.set(v.x,v.y+2,v.z));const fp=v.foe?g.castleLife?._playerPos?.(v.foe):null;if(fp)this.slamFx(fp);}else this.phase(v,'Coil');}
+ /**
+  * The SLAM seen (16.11, «красиво и разнообразно»): a column of white wind presses down on the thrown one from above — streaks falling past him —
+  * and where he will strike the ground a ring of dust and leaves bursts out flat along it. Pooled sparks only (the shared glow pool).
+  */
+ slamFx(p){
+  const g=this.game,glow=g.fx?.glow;if(!glow)return;
+  const gy=g.collision?.groundAt?.(p.x,p.z,p.y+1)??p.y-2;
+  for(let i=0;i<34;i++){const q=Math.random()*6.2832,r=Math.random()*1.6;glow.spawn(p.x+Math.cos(q)*r,p.y+3+Math.random()*7,p.z+Math.sin(q)*r,0,-22-Math.random()*10,0,i%3?0xffffff:0xd9f0ff,.12+Math.random()*.12,.45,{shrink:.6});}
+  for(let i=0;i<44;i++){const q=i/44*6.2832;glow.spawn(p.x+Math.cos(q)*.6,gy+.25,p.z+Math.sin(q)*.6,Math.cos(q)*(9+Math.random()*4),.4+Math.random()*1.2,Math.sin(q)*(9+Math.random()*4),i%4===0?0xb7d65c:i%2?0xcbbf9f:0xe8e2cf,.35+Math.random()*.35,.9,{shrink:.5});}
+  g.fx?.lightFlash?.(_o.set(p.x,gy+1,p.z),0xe8f6ff,2.4,.25,14);g.sound?.playWhoosh?.();
+ }
  /**
   * The fire mage's HANGING beam (the author 15.11: «когда он пуляет свой луч, он может продолжать делать какие-то движения, но луч продолжается, будет висеть в воздухе и пуляться в игрока»):
   * the Inferno he casts is let go of his hand — it stays floating at his shoulder (a burning orb), follows him loosely, and turns on the foe at a limited rate, keeping on
