@@ -41,9 +41,9 @@ export const FIGHTERS = [
     { id: 'supermage', label: 'Сверхмаг', icon: '👑', group: 'Маги', kind: 'v', role: 'teacher', rank: 'supermage', outfit: 'supermage', mana: 2000 }, // (all the fighting spells, 2000 mana, a robe of his own)
     { id: 'savior', label: 'Волшебник-спаситель', icon: '🤍', group: 'Маги', kind: 'v', role: 'savior', savior: true, mana: 700 }, // (the white sage of Savior.js: flies, bombs from above; one on the field — his brain is one)
     { id: 'fire', label: 'Маг огня', icon: '🔥', group: 'Маги стихий', kind: 'v', elemental: 'fire', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
-    { id: 'water', label: 'Маг воды', icon: '💧', group: 'Маги стихий', kind: 'v', elemental: 'water', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
-    { id: 'earth', label: 'Маг земли', icon: '⛰️', group: 'Маги стихий', kind: 'v', elemental: 'earth', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
-    { id: 'air', label: 'Маг воздуха', icon: '🌪️', group: 'Маги стихий', kind: 'v', elemental: 'air', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
+    { id: 'water', label: 'Маг воды', icon: '💧', group: 'Маги стихий', kind: 'v', elemental: 'water', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
+    { id: 'earth', label: 'Маг земли', icon: '⛰️', group: 'Маги стихий', kind: 'v', elemental: 'earth', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
+    { id: 'air', label: 'Маг воздуха', icon: '🌪️', group: 'Маги стихий', kind: 'v', elemental: 'air', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'cow', label: 'Корова', icon: '🐄', group: 'Животные', kind: 'a', type: 'cow' },
     { id: 'pig', label: 'Свинья', icon: '🐖', group: 'Животные', kind: 'a', type: 'pig' },
     { id: 'sheep', label: 'Баран', icon: '🐏', group: 'Животные', kind: 'a', type: 'sheep' },

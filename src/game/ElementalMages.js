@@ -324,7 +324,7 @@ export class ElementalMages {
  }
  /** A fan of `n` wind blades (duel charges) from the mage's hands at the foe (the author 15.11: the air mage had few moves): 6 mana (half for his element), a whoosh, a ring of leaves. */
  gustFan(v,foe,n){
-  const g=this.game,L=g.castleLife,duel=g.duel;if(!duel?._addBolt||!L._isPlayer?.(v.foe))return false;
+  const g=this.game,L=g.castleLife,duel=g.duel,ref=foeRef(v.foe);if(!duel?._addBolt||(!ref&&!L._isPlayer?.(v.foe)))return false; // (any foe: a creature of «Битва существ» too — the author 16.11: the blades flew only at players, so against creatures he hurt nobody)
   const cost=6*elementK('air','Wind');if(v.mana<cost)return false;
   const o=new T.Vector3(v.x-Math.sin(v.yaw)*.9,v.y+2.3,v.z-Math.cos(v.yaw)*.9);
   const reach=duelRange(v.mana);if(reach<=0)return false;
@@ -332,7 +332,7 @@ export class ElementalMages {
   v.mana-=cost;
   for(let i=0;i<n;i++){
    const d=base.clone().applyAxisAngle(_up0,(i-(n-1)/2)*.2);
-   const b=duel._addBolt({rng:emptyRange(reach,true),id:`${v.id}:gf${this._gfSeq=(this._gfSeq||0)+1}`,by:v.id,spell:'GustDuel',side:'right',tk:'p',tid:v.foe,ak:.55,o:o.clone(),d,npc:true});
+   const b=duel._addBolt({rng:emptyRange(reach,true),id:`${v.id}:gf${this._gfSeq=(this._gfSeq||0)+1}`,by:v.id,spell:'GustDuel',side:'right',tk:ref?ref.k:'p',tid:ref?ref.id:v.foe,ak:.55,o:o.clone(),d,npc:true});
    if(b)g.sync?.duelCast?.(b);
   }
   v.castT=.5;v.model.castNow=true;g.sound?.playWhoosh?.();
@@ -358,6 +358,7 @@ export class ElementalMages {
    v.mana=Math.min(v.maxMana,v.mana+dt);a.phase='rest';if(v.fly){this.land(v,dt);return true;}return false;
   }
   a.t+=dt;v.model.elementPoseT=a.t;a.flightCd=Math.max(0,a.flightCd-dt);v.prep=null;v.cardilon=null;v.practice=null;v.fleeT=0;v.path=null;v.seated=false;v.speed=0;
+  if(v.brawl&&v.foe!=null&&!foeRef(v.foe))v.foe=null; // («Битва существ»: the hero is only the eye — never the foe; the field gives him the next fighter)
   const foe=v.foe?L._playerPos(v.foe):null;
   if(v.element==='water')this.waterSource(v,dt);
   if(!foe||Math.hypot(foe.x-v.x,foe.z-v.z)>75){if(a.liftT>0)this.endLift(v);v.foe=null;v.fx=0;v.mana=Math.min(v.maxMana,v.mana+dt);if(v.fly)this.land(v,dt);else L._ground(v);v.mode='idle';a.phase='rest';return true;}
@@ -407,7 +408,9 @@ export class ElementalMages {
    a.charging=false;
    // (the author 17.11: «проблема в расстоянии — он должен драться дерзко»: the air mage does not keep away — between the strokes he CLOSES IN, in the air if he can, to the range of his push; he backs off only when almost beaten)
    if(!(a.winged&&(v.fly||a.wings?.launch))&&(a.phase==='Coil'||a.phase==='Drift')&&!a.liftT){
-    if(dist>AIR_BOLD.CLOSE&&L._sees(v,foe)){a.hopping=true;a.charging=true;L._steer(v,foe.x,foe.z,v.fly?AIR_BOLD.FLY_SPEED:AIR_BOLD.SPEED,dt,0);}
+    if(dist>AIR_BOLD.CLOSE&&L._sees(v,foe)){a.hopping=true;a.charging=true;
+     if(v.fly){const st=AIR_BOLD.FLY_SPEED*dt,nx=v.x+dx/dist*st,nz=v.z+dz/dist*st;if(!L._airFree||L._airFree(nx,nz,v.y)){v.x=nx;v.z=nz;}v.yaw=want;} // (in the air: straight on through the free air — the walkers' steering held him 24–28 m off, out of his own reach; 16.11)
+     else L._steer(v,foe.x,foe.z,AIR_BOLD.SPEED,dt,0);}
     else if(dist<3&&v.hp<v.maxHp*.35){const hop=this.reposition(v,foe,dt,9);if(hop==='stuck'&&a.phase==='Coil'&&a.t>.3)this.phase(v,'Slash');}
    }
    a.atkAt??=performance.now();const idle=(performance.now()-a.atkAt)/1000; // (s since his last attack: an air mage mostly keeps away, but never forgets to strike — the author 17.11: «чтобы не завис и не проиграл в воздухе, не решившись напасть»)
