@@ -14,7 +14,7 @@ import {WaterMageGuard} from '../fx/WaterMageGuard.js';
 import { ElementalSwirl } from '../fx/ElementalSwirl.js';
 import { IceShards } from './IceShards.js';
 import { SHARDS, shardAim } from './ElementalRules.js';
-import { elementalEndurance, AIR_THROW, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
+import { elementalEndurance, AIR_THROW, AIR_BOLD, throwVector, lowMana, readyMana, REGEN, AIR_SPIN, nextAirMove } from './ElementalRules.js';
 import { SPELL_COST } from './SpellCosts.js';
 import { elementK } from './HeroElement.js';
 import {FLIGHT} from './Flight.js';
@@ -392,14 +392,16 @@ export class ElementalMages {
    if(this.parry(v,foe,dt))return true;
    if(a.winged)stepAirMageWings(g,v,foe,dt);
    if(a.liftT>0){a.liftT-=dt;const cost=(a.liftMax?LEV_MAX.DRAIN:HOLD_FATIGUE.wizard)+(v.fly&&!a.winged?FLIGHT.HOVER_COST:0);if(a.liftT<=0||(a.liftAck&&!a.liftHeld)||!this.pay(v,cost*dt)){this.endLift(v,a.liftT<=0&&a.liftMax&&a.liftHeld?this.throwOf(v,foe):null);}else{v.mode='airLift';if(!v.fly&&!v.vy)L._ground(v);return true;}}
-   if(!a.winged&&!v.fly&&a.flightCd<=0&&(dist<14||threat)&&this.pay(v,SPELL_COST.Flight)){v.fly=true;a.flight=7;a.flightCd=15;}
+   if(!a.winged&&!v.fly&&a.flightCd<=0&&(dist<24||threat)&&this.pay(v,SPELL_COST.Flight)){v.fly=true;a.flight=7;a.flightCd=15;}
    if(v.fly&&!a.winged){
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
     else{a.flight-=dt;const gy=g.collision.groundAt(v.x,v.z,v.y+1);const ny=v.y+(gy+5-v.y)*Math.min(1,dt*1.5);if(!L._airFree||L._airFree(v.x,v.z,ny))v.y=ny;else a.flight=0;v.mode='airFlight';}
    }
-   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash'&&a.phase!=='Dash'&&a.phase!=='Slash'&&a.phase!=='Rise'){
-    const hop=this.reposition(v,foe,dt,17);
-    if(hop==='stuck'&&a.phase==='Coil'&&a.t>.3)this.phase(v,'Slash'); // (nowhere to go back to — he fights: the author 17.11 «если им некуда идти — будут атаковать»)
+   a.charging=false;
+   // (the author 17.11: «проблема в расстоянии — он должен драться дерзко»: the air mage does not keep away — between the strokes he CLOSES IN, in the air if he can, to the range of his push; he backs off only when almost beaten)
+   if(!(a.winged&&(v.fly||a.wings?.launch))&&(a.phase==='Coil'||a.phase==='Drift')&&!a.liftT){
+    if(dist>AIR_BOLD.CLOSE&&L._sees(v,foe)){a.hopping=true;a.charging=true;L._steer(v,foe.x,foe.z,v.fly?AIR_BOLD.FLY_SPEED:AIR_BOLD.SPEED,dt,0);}
+    else if(dist<3&&v.hp<v.maxHp*.35){const hop=this.reposition(v,foe,dt,9);if(hop==='stuck'&&a.phase==='Coil'&&a.t>.3)this.phase(v,'Slash');}
    }
    a.atkAt??=performance.now();const idle=(performance.now()-a.atkAt)/1000; // (s since his last attack: an air mage mostly keeps away, but never forgets to strike — the author 17.11: «чтобы не завис и не проиграл в воздухе, не решившись напасть»)
    if(v.fly&&!a.winged&&idle>2.5&&dist<26&&a.phase!=='Spin'&&L._sees(v,foe)){this.gustFan(v,foe,3);a.atkAt=performance.now();} // (in the air too: a fan of blades from above whenever he has been quiet too long) // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
@@ -439,7 +441,7 @@ export class ElementalMages {
     else this.cast(v,v.mana>=SPELL_COST.WindMaxima?'WindMaxima':'Wind',foe);
    }}
    if(a.phase==='Sweep'&&a.t>.95){a.fired=false;a.cycle++;this.phase(v,'Coil');}
-   if(!v.fly){v.mode=a.wings?.launch?'airRun':'air'+a.phase;if(!v.vy)L._ground(v);}
+   if(!v.fly){v.mode=(a.wings?.launch||a.charging)?'airRun':'air'+a.phase;if(!v.vy)L._ground(v);}
   }else{
    v.fx=0; // Fire has no shield/dome and never delegates to the ordinary wizard's defence.
    if(this.parry(v,foe,dt))return true;

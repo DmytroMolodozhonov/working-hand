@@ -12,7 +12,8 @@ export function elementalEndurance(entry,fallback=220){
  * holds while his mana lasts); the dome of «Protection Maxima» turns it away or breaks it (Levitation.liftMe/_updateLifted: `air`).
  * HOLD s overhead, then the swing: the body flies `SPEED` m/s horizontally, `UP` up, aside by up to `SPREAD` rad from straight away from the mage.
  */
-export const AIR_THROW = { HOLD: 2.8, SPEED: 13, UP: 6, SPREAD: 0.7 };
+export const AIR_THROW = { HOLD: 4.5, SPEED: 13, UP: 3, SPREAD: 0.7 }; // (17.11: held longer = lifted HIGH (≈12 m: Levitation.holdPoint 2,8 m/s up to 15), thrown from there: the fall hurts)
+export const AIR_BOLD = { CLOSE: 7, SPEED: 7, FLY_SPEED: 10 }; // (m: the range the air mage fights from; m/s of his charge on the ground / in the air)
 /** The throw's velocity {x, y, z}: from the mage (mx, mz) over the foe (fx, fz), a die `roll` 0…1 for the side. Never zero. */
 export function throwVector(mx, mz, fx, fz, roll) {
     let dx = fx - mx, dz = fz - mz; const l = Math.hypot(dx, dz);
