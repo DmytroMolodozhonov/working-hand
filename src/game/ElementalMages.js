@@ -272,7 +272,8 @@ export class ElementalMages {
  throwOf(v,foe){const t=throwVector(v.x,v.z,foe.x,foe.z,Math.random());return {x:t.x,y:t.y,z:t.z};}
  liftedBy(by,on){if(!this.game.authority)return;const v=this.game.castleLife?.byId?.get(by);if(v?.element==='air'&&v.elemental){v.elemental.liftAck=true;v.elemental.liftHeld=!!on;}}
  /** The lift ends: dropped, or (`thr`: a velocity) THROWN — the swing, the body flies; the net message carries the throw to a guest. */
- endLift(v,thr=null){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id,thr);if(g.levitation?.lifted?.by===v.id){if(thr)g.levitation.throwMe(v.id,thr);else g.levitation.dropMe(false);}
+ endLift(v,thr=null){const g=this.game,a=v.elemental;a.liftT=0;a.cycle++;if(a.carry){const cr=a.carry;a.carry=null;g.brawl?.throwCarried(v,cr,thr);} // (a creature held by the wind: thrown or dropped — Brawl)
+  g.sync?.lev?.('p',v.foe,'right',0,false,false,v.id,thr);if(g.levitation?.lifted?.by===v.id){if(thr)g.levitation.throwMe(v.id,thr);else g.levitation.dropMe(false);}
   if(thr){this.phase(v,'Sweep');a.fired=true;a.t=.2;v.castT=.5;g.sound?.spellCast?.('WindImpulseMaxima',_o.set(v.x,v.y+2,v.z));}else this.phase(v,'Coil');}
  /**
   * The fire mage's HANGING beam (the author 15.11: «когда он пуляет свой луч, он может продолжать делать какие-то движения, но луч продолжается, будет висеть в воздухе и пуляться в игрока»):

@@ -637,6 +637,12 @@ export class Levitation {
         const npc=g.castleLife?.byId?.get(by);
         if(npc){
             if(npc.dead||npc.stunT>0||npc.lev||npc.vy)return null;
+            const carry=npc.element==='air'?npc.elemental?.carry:null; // («Битва существ»: an air mage lifts a creature of the other team)
+            if(carry?.c.lev&&carry.c.lev.by===by){
+                if(npc.mode!=='airLift')return null;
+                const Lc=carry.c.lev,anchor=Lc.npcAnchor||(Lc.npcAnchor=Lc.target.clone());out.copy(anchor);out.y+=Math.min(15,Lc.age*2.8);
+                return out;
+            }
             if(npc.element==='air'&&this.lifted?.by===by){
                 if(npc.mode!=='airLift')return null;
                 const L=this.lifted,anchor=L.npcAnchor||(L.npcAnchor=L.target.clone());out.copy(anchor);out.y+=Math.min(15,L.age*2.8);

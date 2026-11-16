@@ -1001,6 +1001,28 @@ export class TerrainData {
     /** Hell's plan (HellMap.hellPlan — worked out the first time it is asked for). */
     get hellPlan() { return this._hellPlan || (this._hellPlan = hellPlan(this.seed)); }
 
+    /**
+     * Every chunk that was changed (a crater, a ruin, a dug hole) made again as the recipe made it, and its mesh asked for again
+     * («Битва существ»: the whole field clean). Not for a world with a saved history. → how many chunks.
+     */
+    resetModified() {
+        let n = 0;
+        for (const [key, c] of [...this.chunks]) {
+            if (!c.modified || c.empty) continue;
+            const fresh = this._generateChunk(c.cx, c.cz);
+            if (!fresh) continue;
+            fresh.ver = (c.ver || 0) + 1; // (a new chunk: TerrainView._share sends it again)
+            this.chunks.set(key, fresh);
+            this.dirtyChunks.add(key);
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) this.dirtyChunks.add(chunkKey(c.cx + dx, c.cz + dz)); // (the faces on the borders)
+            if (this.mapDirty.size < 64) this.mapDirty.add(key);
+            n++;
+        }
+        this._last = null;
+        this.version++; // (what was remembered about those blocks — CastleLife._walkable — is asked again)
+        return n;
+    }
+
     _generateChunk(cx, cz) {
         if (this.tutorial) return generateTutorialChunk(cx, cz);
         if (this.hell && cx >= ZONE_CX && hellChunk(cx, cz, CHUNK)) return generateHellChunk(cx, cz, this.hellPlan, this.bedrockTop ?? OLD_BEDROCK);

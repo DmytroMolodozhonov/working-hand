@@ -441,6 +441,7 @@ export class CastleLife {
 
     _playerPos(id) {
         const g = this.game;
+        if (typeof id === 'string' && id.charCodeAt(0) === 98 && id.startsWith('bf|')) return g.brawl?.foePos(id) ?? null; // («Битва существ»: a creature of the other team as the foe — Brawl.foePos)
         const b = this._bossNow; // (the boss being thought: the king, the head of the wizards' tower — sees the invisible and cries out)
         const boss = b ? { key: 'villager:' + b.id, x: b.x, z: b.z, say: (t) => this._say(b, t, 4, true, true) } : null;
         const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p, boss) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
@@ -1938,7 +1939,6 @@ export class CastleLife {
         if (!sv) return false;
         v.foe = null; v.fleeT = 0; v.seated = false; v.investigate = null;
         v.serveT = (v.serveT || 0) - dt;
-        if (v.brawl && g.brawl?.casterStep(v, sv, dt)) return true; // («Битва существ»: a mage casts at its foe instead of the sword — Brawl.js)
         if (sv.mode === 'strike') {
             const e = sv.enemy;
             this._steer(v, e.x, e.z, 0, dt, 9); // (turned to the enemy)
@@ -2913,7 +2913,7 @@ export class CastleLife {
     }
 
     /** (host) How wanted this player is: 0…3 (Wanted.js). */
-    wantedLevel(id) { return this._isPlayer(id) ? this.wanted.level(id, Date.now() / 1000) : 0; }
+    wantedLevel(id) { return this._isPlayer(id) ? this.wanted.level(id, Date.now() / 1000) : (typeof id === 'string' && id.startsWith('bf|') ? 3 : 0); } // («Битва существ»: an enemy of the other team is fought in earnest — the heavy spells, not only the stunning of a first quarrel: Wanted.wantedTactics)
 
     // ------------------------------------------------------------ damage
     /** Someone hit a villager (weapons, fists, spells). */

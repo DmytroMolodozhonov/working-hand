@@ -1155,6 +1155,7 @@ export class Combat {
 
     damage(amount, byId, kind) {
         if (this.dead) return;
+        if (this.game.spectator?.active) return; // («Битва существ»: the player is only a camera — nothing can hurt it)
         if (this.game.skin?.shrugs(kind)) { this.game.skin.slid(amount, kind); return; } // (the potion of firm skin: a plain blade's / an arrow's blow does nothing, the steel I wear takes its wear — Skin.js)
         if (this.game.dragonForm?.active) return; // (the body is inside the dragon of the potion: the dragon takes the blows — DragonForm.js)
         if (this.game.darkLord?.lifting) return; // (the rite of a true dark mage: the ball of darkness is round the body — nothing gets in, nothing is half-done; DarkLord.js)
@@ -1183,6 +1184,7 @@ export class Combat {
     }
 
     die(byId, how) {
+        if (this.game.spectator?.active) { this.hp = this.maxHp || 20; return; } // (a camera does not die: a fall, a blast, the void — Brawl)
         if (this.dead) return;
         // (a death caught here leaves no «how» behind: else the next ordinary death was taken for «Дай» / Pilbidrio — StrongMagic, Death.js)
         if (this.game.bossRetry?.intercept?.()) { this.game._deathHow = null; return; } // (a start at a boss: a fall is a window to try again, not a death — BossRetry.js)

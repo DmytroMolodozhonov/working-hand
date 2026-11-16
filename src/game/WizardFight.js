@@ -29,6 +29,7 @@
  * it shatters and the spell goes on through.
  */
 
+import { foeRef } from './BrawlRules.js';
 import * as THREE from 'three';
 import { SAVIOR, SAVIOR_SPECIAL } from './SaviorRules.js';
 import { duelRange, emptyRange } from './DuelRange.js';
@@ -551,7 +552,7 @@ export class WizardFight {
         if (v.mana < cost) return false;
         const t = v.savior != null ? 0.4 : prepTime(); // (the Saviour says it at once: no seconds of standing silent)
         if (v.lesson) v.lesson.casts++;
-        v.prep = { spell, foe: foeId, at: o.at || null, vs: o.vs || null, cost, cd: o.cd ?? v.W.cast, sq: o.sq || null, t, age: 0 };
+        v.prep = { spell, foe: foeId, at: o.at || foeRef(foeId), vs: o.vs || null, cost, cd: o.cd ?? v.W.cast, sq: o.sq || null, t, age: 0 };
         v.castCd = Math.max(v.castCd ?? 0, t + 0.1); // (nothing else begun meanwhile)
         return true;
     }

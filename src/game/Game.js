@@ -1937,7 +1937,7 @@ export class Game {
 
     damageLocalPlayer(amount, kind = null) {
         if (!this.isDeadLocal && amount > 0) this.imperius?.interruptByDamage?.(amount, kind); // («Империус»: harm to the body — the mind back at once; in Creative too, where nobody is hurt)
-        if (this.isDeadLocal || this.config.mode === 'creative' || this.dragonForm?.active) return; // (the dragon form: the body is inside the dragon)
+        if (this.isDeadLocal || this.config.mode === 'creative' || this.dragonForm?.active || this.spectator?.active) return; // (the dragon form: the body is inside the dragon) // («Битва существ»: a camera takes no harm)
         const mon = this.monster?.active ? this.monster : null; // (the monster form: MonsterForm.spellOnMonster)
         if (mon) { amount = mon.filterDamage(amount, kind, null); if (!(amount > 0)) return; }
         this.playerHP -= amount;
