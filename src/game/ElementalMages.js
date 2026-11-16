@@ -7,6 +7,7 @@ import {waveSource} from './WaveSource.js';
 import * as T from 'three';
 import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat, BEND, bendAngle, rotateYInPlace, boltAsOrb } from './ElementalParry.js';
 import { isDivine } from './ProtectionGods.js';
+import { foeRef } from './BrawlRules.js';
 import { findWater, WIDE_WATER } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
@@ -266,6 +267,14 @@ export class ElementalMages {
   const m={by:v.id,ev:'launch',id:v.id+':water:'+(++this.seq),o:_o.toArray(),d:_d.toArray(),h:_o.clone().addScaledVector(_d,1.5).toArray(),v:6,a:0,pw:1,tk:'p',tid:v.foe,s:null,npcMode:['','freeze','throw','drown'][a.cycle%4]};
   if(m.npcMode)a.capture=m.id;g.vortex._addFlight(v.id,m);g.sync?.vortex?.(m);g.sound?.spellCast?.('WaterVortex',_o);this.engaged(v);return true;
  }
+ /** Does the foe lie (knocked down / stunned / frozen)? The lift is for the one on the ground. */
+ foeLying(v){
+  const g=this.game,id=v.foe;if(id==null)return false;
+  if(id===g.localId||id==='local')return !!g.knock?.down;
+  const r=foeRef(id);
+  if(r){const c=g.levitation?._creature?.(r.k,r.id);return !!c&&(!!g.creatureImpact?.isDown?.(c)||c.stunT>0||!!c.isFrozen||c.stunTimer>0);}
+  const rp=g.remotes?.get(id);return !!(rp&&(rp.down||rp.knocked));
+ }
  airLift(v,foe){ // (14.11: always the great kind — only the dome of «Protection Maxima» keeps it off; then the throw: endLift(v, thr))
   const g=this.game,a=v.elemental;
   a.liftAck=false;a.liftHeld=false;
@@ -414,7 +423,7 @@ export class ElementalMages {
    if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
     if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
     else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&a.cycle%2===0&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
-    else if(!this.objects.active.has(v.id)&&a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;
+    else if(!this.objects.active.has(v.id)&&dist<17&&this.foeLying(v)&&this.airLift(v,foe))return true; // (the author 17.11: he lifts and throws a foe only when the foe LIES — knocked down by his wind first)
     else this.cast(v,dist<9||Math.hypot(dist,foe.y-(v.y+2.7))>12?'WindMaxima':'Wind',foe);
    }}
    if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}
