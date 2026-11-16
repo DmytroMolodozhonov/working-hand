@@ -38,6 +38,8 @@ export const FIGHTERS = [
     { id: 'novice', label: 'Начинающий маг', icon: '🧙', group: 'Маги', kind: 'v', role: 'student', rank: 'novice', mana: 40 },
     { id: 'wizard', label: 'Маг', icon: '🧙‍♂️', group: 'Маги', kind: 'v', role: 'student', rank: 'adept', mana: 100 },
     { id: 'archmage', label: 'Сильный маг', icon: '🔮', group: 'Маги', kind: 'v', role: 'teacher', rank: 'teacher', mana: 200 },
+    { id: 'supermage', label: 'Сверхмаг', icon: '👑', group: 'Маги', kind: 'v', role: 'teacher', rank: 'supermage', outfit: 'supermage', mana: 2000 }, // (all the fighting spells, 2000 mana, a robe of his own)
+    { id: 'savior', label: 'Волшебник-спаситель', icon: '🤍', group: 'Маги', kind: 'v', role: 'savior', savior: true, mana: 700 }, // (the white sage of Savior.js: flies, bombs from above; one on the field — his brain is one)
     { id: 'fire', label: 'Маг огня', icon: '🔥', group: 'Маги стихий', kind: 'v', elemental: 'fire', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'water', label: 'Маг воды', icon: '💧', group: 'Маги стихий', kind: 'v', elemental: 'water', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'earth', label: 'Маг земли', icon: '⛰️', group: 'Маги стихий', kind: 'v', elemental: 'earth', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
@@ -52,6 +54,7 @@ export const FIGHTER_GROUPS = [...new Set(FIGHTERS.map((f) => f.group))];
 
 export const BRAWL = {
     MAX: 60, // fighters on the field at most (the arena is 84 m across: more is a heap, and the frame pays for each)
+    REACT: { t: 0.35, level: 3, lost: false }, // a mage's reaction at a new foe (WizardFight._engage): the field is a battle, he is ready
     STRIP: 6, // m: the strip between the teams (nobody is put on it): the left half of the field (x < 0, seen from the start camera) is the red team's, the right half the blue's
     GROUP: 5, // Shift+click: this many at once
     GROUP_R: 3.2, // m: the spread of such a group

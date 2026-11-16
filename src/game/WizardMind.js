@@ -22,7 +22,7 @@ export function seededRng(seed) {
 
 // ------------------------------------------------------------------ 1. reaction
 /** Levels of reaction by rank: 1 — junior, 2 — middle, 3 — strong, 4 — the head of the tower. */
-export const REACT_LEVEL = { novice: 1, adept: 2, teacher: 3, elder: 3, master: 4, savior: 4 };
+export const REACT_LEVEL = { novice: 1, adept: 2, teacher: 3, elder: 3, master: 4, savior: 4, supermage: 4 };
 export const REACT_LEVEL_RU = { 1: 'младший', 2: 'средний', 3: 'сильный', 4: 'глава башни' };
 
 /**
@@ -60,14 +60,14 @@ export function reactLagText(lag) {
 
 // ------------------------------------------------------------------ 2. fire
 export const FIRE = {
-    KNOW: 0.8, // the share who know «Firefighting»
+    KNOW: 1, // the share who know «Firefighting»: every wizard (the author 17.11: «все волшебники должны идеально знать заклинание тушения собственного тела»)
     COST: 3, // mana to put himself out
-    SELF_T: [0.9, 1.6], // s: how long it takes a wizard of a level to say it (strong — quicker)
+    SELF_T: [0.7, 1.2], // s: how long it takes a wizard of a level to say it (strong — quicker)
 };
 
 /** Does this wizard know «Firefighting»? (A fixed share of them, by his id — the same on every computer; the Master always.) */
 export function knowsFirefighting(id, rank = 'adept') {
-    if (rank === 'master') return true;
+    if (FIRE.KNOW >= 1 || rank === 'master') return true;
     return (hashString(String(id) + ':ff') % 1000) / 1000 < FIRE.KNOW;
 }
 

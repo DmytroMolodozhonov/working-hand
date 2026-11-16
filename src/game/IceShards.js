@@ -5,7 +5,7 @@
  * Flying: the host sends one `ishard` message per volley (the start points and velocities); every computer flies the same shards; only the host looks for hits, and tells the one
  * who was hit (`ishit`, to a guest) or hurts him at once (his own hero). A hit is turned by a shield or a dome (the cost of «Ice»), is stopped by a wall, by water, by the ground.
  *
- * «Кто/что»: players — hurt (3.5, a push); zombies, animals, castle people, ships — not touched (the mage's shards go for his foe: no friendly fire, no harm to the world);
+ * «Кто/что»: players — hurt (3.5, a push); zombies, animals, castle people, ships — not touched, but in «Битва существ» the creatures of the OTHER team are hurt (Brawl.shardHit; no friendly fire there either);
  * blocks — a shard breaks on them in a puff of ice (no digging); the gods' shield turns them like any blow; invisible / dead / spectating players are not hit.
  * One InstancedMesh (96 shards at most), one material: prewarmed (`sampleModel`), nothing built in a frame.
  */
@@ -69,6 +69,7 @@ export class IceShards {
     _bodies() {
         const out = [];
         for (const b of this.game.duel?._bodies?.(null) || []) if (b.kind === 'p') out.push({ id: b.id, a: b.a.clone(), b: b.b.clone(), r: b.r });
+        this.game.brawl?.shardTargets?.(out); // («Битва существ»: the creatures of the other team are hit too — each carries its `ref`; the caster's side is filtered at the hit)
         return out;
     }
 
@@ -92,6 +93,7 @@ export class IceShards {
                     if (b.id === s.by) continue;
                     const t = segHitsCapsule({ x: ox, y: oy, z: oz }, { x: s.x, y: s.y, z: s.z }, b.a, b.b, b.r + SHARDS.HIT_R);
                     if (t == null) continue;
+                    if (b.ref) { if (!g.brawl.shardHit(s, b)) continue; s.dead = 1; this._burst(s.x, s.y, s.z); break; } // (a creature of the other team: Brawl.shardHit; a friend — the shard flies on)
                     this._hurt(s, b.id); s.dead = 1; this._burst(s.x, s.y, s.z); break;
                 }
             }

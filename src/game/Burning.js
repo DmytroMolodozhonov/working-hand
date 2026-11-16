@@ -26,6 +26,9 @@ export const BURN = {
     TIME: 8, // s a creature burns after the last fire that touched it (also the most it can ever have left)
     DMG: 2, // HP a second (a player has 20; one damage for every creature)
     TICK: 1, // s between two burns
+    CATCH: 3, // s of CONTACT with any fire before a villager / a beast / a zombie catches fire (the author 17.11: «поджечь нпс должно быть чуть сложнее, ~3 секунды контакта, а не сразу»); the player's own rules stay
+    CATCH_GAP: 1, // s without the fire: the heat is lost (the contact must be continuous)
+    BURST_CREDIT: 1.5, // s of contact one blast of fire counts for (a single hit is not continuous: two bursts in a row set a creature alight)
     STAND: 0.1, // s a creature must touch a campfire / a burning block / a burning tree to catch fire — whoever runs through a fire or brushes it burns (the author); the check is made 8 times a second while any fire burns (WizardMind.FIRE_TOUCH)
     EDGE: 0.5, // m beyond the flames that still count as «рядом» (the heat of an open fire)
     UP_R: 3, // m round the caster where «Firefighting» held up puts the burning out
@@ -144,7 +147,7 @@ export class Burning {
      * Only the creature's own computer decides about a player (me: here; others: ignored); the host — about the rest.
      * @returns true if it burns now
      */
-    ignite(kind, id, by = null, time = BURN.TIME, hell = false, lava = false) {
+    ignite(kind, id, by = null, time = BURN.TIME, hell = false, lava = false, credit = 0) {
         const g = this.game;
         if (!BURNS.has(kind)) return false;
         if (kind === 'p') { if (id !== g.localId && id !== 'local') return false; return this._igniteMe(by, time, lava); }
@@ -153,6 +156,7 @@ export class Burning {
         if(npc&&(npc.element==='fire'||npc.gifts?.resist?.f))return false;
         const k = key(kind, id);
         let b = this.list.get(k);
+        if (!b && !lava && !this._catches(k, credit)) return false; // (not yet: the fire must touch it about three seconds — BURN.CATCH)
         if (!b) {
             const e = g.duel?._bodyOf?.(kind, id, this._tmp);
             if (!e || this._wet(e)) return false;
@@ -166,6 +170,17 @@ export class Burning {
         if (by) b.by = by;
         b.hell = !!hell; // (the last fire to touch it: a death by the Hellfire's burn counts for the caster — HellKills.js)
         return true;
+    }
+
+    /** A creature's contact with fire: true once it has been in it BURN.CATCH s (counted by the time between the calls; a break of BURN.CATCH_GAP cools it). */
+    _catches(k, credit = 0) {
+        const h = this._heat || (this._heat = new Map()), now = performance.now(), was = h.get(k);
+        const dt = credit || (was && now - was.at < BURN.CATCH_GAP * 1000 ? Math.min(0.5, (now - was.at) / 1000) : 0.05);
+        const acc = (was && now - was.at < BURN.CATCH_GAP * 1000 ? was.acc : 0) + dt;
+        if (acc >= BURN.CATCH) { h.delete(k); return true; }
+        h.set(k, { acc, at: now });
+        if (h.size > 64) for (const [kk, v] of h) if (now - v.at > 4000) h.delete(kk); // (bounded)
+        return false;
     }
 
     _igniteMe(by, time, lava = false) {
@@ -350,7 +365,7 @@ export class Burning {
         const v = b.kind === 'v' ? g.duel._creature('v', b.id) : null;
         // a wizard puts himself out with «Firefighting» (4 of 5 know it; it costs mana) — the rest, and one out of mana, run in panic
         if (v?.wizard) {
-            if (!b.act) { b.act = onFire({ knows: v.knowsFire !== false, mana: v.mana ?? 0, noWand: !!v.noWand, rank: v.rank }); g.castleLife?.alog?.decision?.(v, b.act.a === 'douse' ? `горит: тушится «Firefighting» (${FIRE.COST} маны, ${b.act.t} с)` : `горит: ${v.knowsFire === false ? 'не знает «Firefighting»' : 'нет маны или палочки'} — бежит к воде/прочь`); }
+            if (!b.act) { b.act = onFire({ knows: v.knowsFire !== false, mana: v.mana ?? 0, noWand: !!v.noWand && !v.elemental, rank: v.rank }); g.castleLife?.alog?.decision?.(v, b.act.a === 'douse' ? `горит: тушится «Firefighting» (${FIRE.COST} маны, ${b.act.t} с)` : `горит: ${v.knowsFire === false ? 'не знает «Firefighting»' : 'нет маны или палочки'} — бежит к воде/прочь`); }
             if (b.act.a === 'douse') {
                 b.selfT += dt;
                 if (!b.said) { b.said = true; g.castleLife?._say?.(v, 'Firefighting!'); }
@@ -455,14 +470,7 @@ export class Burning {
             const along = _a.dot(d);
             if (along < 0 || along > len + b.r) continue;
             if (_a.addScaledVector(d, -along).length() > width + b.r + 0.6) continue;
-            // (the author 05.11: «Инферно должен поджигать существо — не сразу, в течение 3 секунд»): the stream on a body heats it — it
-            // catches fire after INFERNO_CATCH s of it (counted while the stream is on it; it cools off when the stream leaves it)
-            const k = key(b.kind, b.id), now = performance.now(), h = this._heat || (this._heat = new Map());
-            const was = h.get(k), dt = was && now - was.at < 400 ? (now - was.at) / 1000 : 0.03;
-            const acc = (was && now - was.at < 1500 ? was.acc : 0) + dt;
-            if (acc >= BURN.INFERNO_CATCH) { h.delete(k); this.ignite(b.kind, b.id, by); }
-            else h.set(k, { acc, at: now });
-            if (h.size > 64) for (const [kk, v] of h) if (now - v.at > 3000) h.delete(kk); // (bounded)
+            this.ignite(b.kind, b.id, by); // (the stream on a body: contact counted by ignite — BURN.CATCH s)
         }
     }
 
@@ -472,7 +480,7 @@ export class Burning {
         if (!g.authority) return;
         for (const b of g.duel?._bodies?.(by) || []) {
             if (!BURNS.has(b.kind) || b.kind === 'p') continue;
-            if (segDist(p, b.a, b.b) - b.r <= R) this.ignite(b.kind, b.id, by);
+            if (segDist(p, b.a, b.b) - b.r <= R) this.ignite(b.kind, b.id, by, undefined, false, false, BURN.BURST_CREDIT);
         }
     }
 

@@ -6,6 +6,8 @@ import { newSwarm } from './GroundVortex.js';
 import { BLOCK } from '../world/Terrain.js';
 import { GV, digCells, liftable, lifted, hitBlocks, sweepsShield } from './GroundVortexRules.js';
 import { findPassage } from './Stitching.js';
+import { brawlHeight } from '../world/TutorialLand.js';
+import { foeRef } from './BrawlRules.js';
 import { SPELL_COST } from './Combat.js';
 import { elementK } from './HeroElement.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
@@ -46,10 +48,10 @@ export class EarthMages {
  /** «Earthquake»: a stomp, a crack runs at the foe (his own element: half the price). Not hurt-and-running (that is the smoke screen's time); true: cast. */
  _quake(v,foe){
   const g=this.game,L=g.castleLife,a=v.earth;if(!g.spells?.cast||a.recover||v.hp<v.maxHp*.3)return false;
-  const dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz);if(d<6||d>18||!L._sees(v,foe))return false;
-  if(Math.random()>.5){a.quakeCd=3;return false;} // (his mood: not at every chance)
+  const dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz);if(d<3.5||d>22||!L._sees(v,foe))return false; // (17.11: from 3.5 m — the knights come close — and to 22 m)
+  if(Math.random()>.85){a.quakeCd=2;return false;} // (his mood: not at every chance — 17.11: nearly always, the author wanted him to use it)
   if(v.mana<SPELL_COST.Earthquake*.5+E.START*.5||!this._pay(v,SPELL_COST.Earthquake))return false;
-  a.quakeCd=16;a.stitchPose=1.1;
+  a.quakeCd=a.aggr?4:8;a.stitchPose=1.1; // (17.11: every 8 s, was 16; against a strong foe every 4)
   const P=new THREE.Vector3(v.x,g.collision?.surfaceY?g.collision.surfaceY(v.x,v.z):v.y,v.z),D=new THREE.Vector3(dx/d,0,dz/d);
   g.spells.cast('Earthquake',P,D,'right',v.id);g.sync?.spell?.('Earthquake',P,D,'right',v.id);L._say?.(v,'Earthquake!',2);
   return true;
@@ -95,8 +97,9 @@ export class EarthMages {
    if(dot<=0||dx*dx+dy*dy+dz*dz-dot*dot>16)return;
    if(!threat||dist<threat.dist)threat={p,by,bomb,dist};
   };
-  for(const b of this.game.duel?.bolts.values()||[])if(b.state==='flying')accept(b.front,b.dir,b.by);
+  for(const b of this.game.duel?.bolts.values()||[])if(b.state==='flying')accept(b.front,b.dir,b.by,/Fire/.test(b.spell||'')); // (a fire charge is as heavy a threat as a blast: the water mage meets it with the dome)
   for(const task of this.game.spells?.spells||[])if(task.bomb&&task.life>0)accept(task.bomb.p,task.bomb.v,task.bomb.by,true);
+  for(const f of this.game.vortex?.flights?.values()||[])if(f.phase==='fly'&&f.tk==='v'&&f.tid===v.id&&f.pos)accept(f.pos,{x:v.x-f.pos.x,y:v.y+2-f.pos.y,z:v.z-f.pos.z},f.by,true); // (a water ball thrown at him)
   return threat;
  }
  think(v,dt){
@@ -114,6 +117,8 @@ export class EarthMages {
    if(slab&&(slab.phase==='loosen'||slab.phase==='carry')){v.mode=slab.phase==='loosen'?'earthLift':'earthHammer';v.model.earthPoseT=(slab.npc?.time||0)%1.1;L._ground(v);return true;}
    a.slab=null;
   }
+  a.footT=(a.footT||0)-dt;if(a.footT<=0){a.footT=.5;this._footing(v);}
+  a.aggrT=(a.aggrT||0)-dt;if(a.aggrT<=0){a.aggrT=1;a.aggr=foe?this._foeStrong(v):false;} // (a strong foe: he attacks sooner and stands his ground)
   a.quakeCd=Math.max(0,(a.quakeCd||0)-dt);
   if(foe&&a.quakeCd<=0&&!a.slab&&a.stitchPose<=0&&this._quake(v,foe))return true; // («Earthquake» is an earth spell: he may say it whatever he holds — even his Ground Vortex — the author 15.11)
   let s=this.swarms.get(v.id);
@@ -131,7 +136,7 @@ export class EarthMages {
   a.quiet=v.hp<(a.lastHp??v.hp)?0:(a.quiet||0)+dt;a.lastHp=v.hp;
   const weak=v.hp<v.maxHp*.3||a.recover;
   if(weak){
-   if(s)this._stop(v.id);
+   if(s){if(v.hp<v.maxHp*.3)this._stop(v.id);else{s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;}} // (the stones are let go only when he is badly hurt — a tired mage keeps them circling and rests; the author 17.11: «без веской причины не отпускают»)
    if(a.phase!=='rest')this._phase(v,null,'rest');
    if(a.stitchCd<=0&&v.mana>=SPELL_COST.Stitching&&a.scan<=0){a.scan=.9;this._stitch(v,foe);}
    a.dustCd=Math.max(0,(a.dustCd||0)-dt);if(a.dustCd<=0&&a.stitchPose<=0&&this._dust(v,foe))return true; // (out of mana or hurt, running: a smoke screen)
@@ -147,12 +152,12 @@ export class EarthMages {
   if((a.phase==='lift'&&a.t>.22)||a.phase==='orbit')this._gather(v,s,dt);
   if(a.phase==='lift'&&a.t>=EARTH_PHASES.lift)this._phase(v,s,'orbit');
   else if(a.phase==='orbit'){
-   if(threat?.bomb&&s.n>=EARTH_SHELL.length&&this._pay(v,E.COCOON_COST))this._phase(v,s,'cocoon');
-   else if(threat?.bomb&&s.n<WALL_COUNT&&a.wallCd<=0&&v.mana>=SPELL_COST.Breakthrough&&threat.dist>7){
+   if(threat&&s.n>=EARTH_SHELL.length&&this._pay(v,E.COCOON_COST))this._phase(v,s,'cocoon'); // (any spell flying at him — a blast, a fire, a charge of any colour, a water ball — the earth shelters him: the author 17.11, as an ordinary mage's «Protection»)
+   else if(threat&&s.n<WALL_COUNT&&a.wallCd<=0&&v.mana>=SPELL_COST.Breakthrough&&threat.dist>7){
     const plan=g.breakthrough?.prepare({x:v.x,y:v.y,z:v.z},{x:dx,z:dz});
     if(plan?.plan){a.wallCd=8;this._phase(v,s,'wall');a.wallPlan=plan;}
    }else if(threat&&s.n>=WALL_COUNT&&this._pay(v,E.WALL_COST))this._phase(v,s,'wall');
-   else if(a.t>(v.mana<E.THROW_COST+E.DRAIN*(EARTH_PHASES.orbit+1.1)?0:EARTH_PHASES.orbit)&&s.n>=1&&dist<=E.RANGE){
+   else if(a.t>(v.mana<E.THROW_COST+E.DRAIN*(EARTH_PHASES.orbit+1.1)?0:EARTH_PHASES.orbit*(a.aggr?.3:1))&&s.n>=1&&dist<=E.RANGE){
     a.cycle++;
     if(a.cycle%6===0&&g.levMax?.npcEarth){const id=g.levMax.npcEarth(v,foe);if(id){a.slab=id;this._stop(v.id);this._engaged(v);return true;}}
     if(!s.blade&&a.cycle%2===0&&v.mana>=E.BLADE_COST+E.THROW_COST+3&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
@@ -166,7 +171,10 @@ export class EarthMages {
   }else if(EARTH_STRIKES[a.phase]){
    const strikes=EARTH_STRIKES[a.phase];
    while(a.strike<strikes.length&&a.t>=strikes[a.strike][0]){
-    const count=strikes[a.strike++][1];
+    const idx=a.strike;a.strike++;
+    // (17.11, the author: the earth is thrown ALL AT ONCE in the attack — in two portions, half and the rest — not by a few stones as the pose's table said; and not let go without a weighty reason)
+    if(idx===0)a.portionOf=s.n;
+    const count=strikes.length>=2&&idx<strikes.length-1?Math.max(1,Math.ceil((a.portionOf||s.n)/2)):s.n;
     if(s.n&&L._sees(v,foe)&&this._pay(v,E.THROW_COST)){
      _dir.set(dx,0,dz).normalize();
      s.aim=[foe.x,foe.y+.6,foe.z];s.arc=a.phase==='hammer'?1.6:a.phase==='sweep'?1.15:1;
@@ -180,7 +188,7 @@ export class EarthMages {
   a.empty=s.n?0:a.empty+dt;
   if(a.empty>2.5){a.source++;s.plan.length=0;a.empty=0;}
   if((dist>E.RANGE||!L._sees(v,foe)||!s.n)&&a.phase==='orbit'){L._steer(v,foe.x,foe.z,v.walk*1.3,dt,L._sees(v,foe)&&s.n?E.RANGE-3:0);a.hopping=true;}
-  else if(a.phase==='orbit')this._reposition(v,foe,dt,false);
+  else if(a.phase==='orbit'&&!a.aggr)this._reposition(v,foe,dt,false); // (a strong foe: no hopping about — he stands and strikes)
   v.mode=modeOf(a.phase);L._ground(v);return true;
  }
  _engaged(v){if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
@@ -198,17 +206,62 @@ export class EarthMages {
   v.mana-=SPELL_COST.Stitching;v.earth.stitchCd=14;v.earth.stitchPose=1.3;
   g.stitching.sew(_at.clone(),_dir.clone(),v.id);g.sync?.spell('Stitching',_at,_dir,null,v.id);g.castleLife._say(v,'Stitching!',2);return true;
  }
+ /** («Битва существ») The natural height of the ground at a column — what the land was made as; null: unknown (the ordinary world). */
+ _natural(){return this.game.config?.brawl?brawlHeight:null;}
+ /** Ground a mage must never take: close to his own feet (no pit round him), and in the battle field no deeper than one layer under the natural ground. */
+ _ownGround(v,x,L,z){
+  const nat=this._natural(),d=Math.hypot(x-v.x,z-v.z);
+  if(!nat)return d<2.6;
+  return d<6||L<nat(x,z)-1;
+ }
+ /** The heaps: columns higher than the natural ground (the earth thrown before, lying about) — their top blocks, the nearest first, but never the cell by his feet. [x, L, z, block][] */
+ _pileCells(v,data,s){
+  const nat=this._natural();if(!nat)return [];
+  const out=[],cols=[],R=16,cx=Math.round(v.x),cz=Math.round(v.z);
+  for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){
+   const x=cx+dx,z=cz+dz,d=Math.hypot(x-v.x,z-v.z);if(d<1.6||d>R)continue;
+   if(data.landMade&&!data.landMade(x,z))continue;
+   const top=data.topLayer(x,z);if(top<=nat(x,z))continue;
+   cols.push([d+.01*((x*73856093^z*19349663)&255)/255,x,z,top]);
+  }
+  cols.sort((a,b)=>a[0]-b[0]);
+  for(const [,x,z,top] of cols){
+   const b=data.get(x,top,z);if(!liftable(b))continue;
+   const above=data.get(x,top+1,z);if(above!==BLOCK.AIR&&above!==undefined)continue;
+   if(data.godGiftAt?.(x,top,z)||this.game.wards?.forbids?.(s.body,{x,y:top-1,z}))continue;
+   out.push([x,top,z,b]);if(out.length>=12)break;
+  }
+  return out;
+ }
+ /** Always blocks under his feet (the author 17.11): the columns round him are made whole again, up to the natural ground. */
+ _footing(v){
+  const nat=this._natural(),data=this.game.terrain?.data;if(!nat||!data)return;
+  const cx=Math.round(v.x),cz=Math.round(v.z);
+  for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+   const x=cx+dx,z=cz+dz,top=data.topLayer(x,z),n=nat(x,z);
+   for(let L=top+1;L<=n;L++)data.set(x,L,z,L===n?BLOCK.GRASS:BLOCK.DIRT);
+  }
+ }
+ /** Is the foe stronger than he is (more health)? Then he fights harder: the author 17.11. */
+ _foeStrong(v){
+  const g=this.game,ref=foeRef(v.foe);let hp=null;
+  if(ref){const c=ref.k==='v'?g.castleLife.byId.get(ref.id):ref.k==='z'?g.zombieById?.get(ref.id):g.animals?.byId.get(ref.id);hp=c?(c.hp??c.health):null;}
+  else hp=g.combat?.hp??20;
+  return hp!=null&&hp>=v.hp*1.15;
+ }
  _gather(v,s,dt){
   const gv=this.game.groundVortex,data=gv.data;if(!data||s.n>=E.MAX)return;
   s.acc=Math.min(4,s.acc+dt*E.LIFT_RATE);let took=0;
   while(s.acc>=1&&s.n<E.MAX&&took<2){
    if(!s.plan.length){
+    const piles=this._pileCells(v,data,s);
+    if(piles.length){s.plan=piles;continue;} // (the author 17.11: first the heaps — the earth thrown before, lying about — not the ground under his own feet)
     const angle=v.yaw+(v.earth.source%8)*Math.PI/4;
     const x=Math.round(v.x-Math.sin(angle)*5),z=Math.round(v.z-Math.cos(angle)*5);
     if(data.landMade&&!data.landMade(x,z))return;
     const level=data.floorBelow?data.floorBelow(x,z,Math.floor(v.y+1.5)):data.topLayer(x,z);
     s.plan=digCells((x,L,z)=>data.get(x,L,z),(x,z)=>data.landMade&&!data.landMade(x,z)?-1e6:data.floorBelow?data.floorBelow(x,z,Math.floor(v.y+1.5)):data.topLayer(x,z),{x,z,L:level},{x:v.x,z:v.z},18,(x,L,z)=>
-     data.landMade&&!data.landMade(x,z)||data.godGiftAt?.(x,L,z)||this.game.wards?.forbids?.(s.body,{x,y:L-1,z})||this.game.ships?.footprintAt?.(x,L-1,z));
+     data.landMade&&!data.landMade(x,z)||data.godGiftAt?.(x,L,z)||this.game.wards?.forbids?.(s.body,{x,y:L-1,z})||this.game.ships?.footprintAt?.(x,L-1,z)||this._ownGround(v,x,L,z));
     if(!s.plan.length){v.earth.source++;s.acc=0;return;}
    }
    const [x,L,z,type]=s.plan.shift();if(!liftable(data.get(x,L,z)))continue;
@@ -249,8 +302,8 @@ export class EarthMages {
    if(m.ev==='volley'&&Array.isArray(m.ids)&&Array.isArray(m.d)){
     // Launch points are authoritative: a late snapshot must not throw a guest's
     // stones from their former extraction cells or unfinished interpolation.
-    for(let j=0;j<Math.min(8,m.ids.length);j++){const b=s.B[m.ids[j]],p=m.origins?.[j];if(b&&Array.isArray(p)&&p.length===3&&p.every(Number.isFinite)){b.pos.fromArray(p);b.src=null;}}
-    s.arc=Number.isFinite(m.arc)?Math.max(1,Math.min(1.6,m.arc)):1;s.aim=Array.isArray(m.aim)&&m.aim.length===3&&m.aim.every(Number.isFinite)?m.aim:null;this.game.groundVortex._replayVolley(s,m.ids.filter(Number.isInteger).slice(0,8),_dir.fromArray(m.d),m.seed|0);}
+    for(let j=0;j<Math.min(E.MAX,m.ids.length);j++){const b=s.B[m.ids[j]],p=m.origins?.[j];if(b&&Array.isArray(p)&&p.length===3&&p.every(Number.isFinite)){b.pos.fromArray(p);b.src=null;}}
+    s.arc=Number.isFinite(m.arc)?Math.max(1,Math.min(1.6,m.arc)):1;s.aim=Array.isArray(m.aim)&&m.aim.length===3&&m.aim.every(Number.isFinite)?m.aim:null;this.game.groundVortex._replayVolley(s,m.ids.filter(Number.isInteger).slice(0,E.MAX),_dir.fromArray(m.d),m.seed|0);}
    else if(m.ev==='hit'&&Array.isArray(m.ids))this.game.groundVortex._breakBlocks(s,m.ids.filter(Number.isInteger).slice(0,E.MAX),false);
    return;
   }

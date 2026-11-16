@@ -11,8 +11,11 @@
 import * as THREE from 'three';
 import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage, teamAt } from './BrawlRules.js';
 import { TUTORIAL } from '../world/TutorialLand.js';
+import { SHARDS } from './ElementalRules.js';
+import { BLOCK } from '../world/Terrain.js';
 import { elementalLook } from './ElementalTestSites.js';
 import { earthLook } from './EarthMagicRules.js';
+import { saviorEntry, GX0, SAVIOR, stageOf } from './SaviorRules.js';
 
 export const BRAWL_SITE = 'brawlfield';
 export const BRAWL_ELEM_SITE = 'brawlelem'; // (the real elemental mages: a site of the kind 'elemental', as the Creative fixtures)
@@ -32,7 +35,8 @@ export class Brawl {
         this._elemN = 0; // (…and the elemental mages' in theirs)
         this.onChange = null; // (the panel: counts, state)
         this._makeMarkers();
-        this._strip = null; // (the strip between the teams: made once the ground is there — _makeStrip)
+        this._stripBuilt = false; // (the strip between the teams: blocks, laid once the ground is there — _buildStrip)
+        if (game.world) game.world.duelFar = 115; // (only the field and the cliffs round it are drawn and made: nothing beyond is of any use — FPS and loading)
         this._quiet();
     }
 
@@ -115,6 +119,21 @@ export class Brawl {
             a.servantUntil = 0;
             a.state = 'graze'; a.attacker = null;
             e = this._join('a', a.id, team, def);
+        } else if (def.kind === 'v' && def.savior) {
+            const life = g.castleLife, site = this._site();
+            if (!life || !site || !g.savior) { this.why = 'жители недоступны'; return null; }
+            if (g.savior.v && !g.savior.v.dead && this.roster.has('v:' + g.savior.v.id)) { this.why = 'Спаситель на поле только один'; return null; }
+            const idx = ++this._person;
+            site.people.push({ ...saviorEntry(GX0 + idx, 0), idx });
+            const cs = life._runtime(site);
+            if (!cs.awake) cs.awake = true;
+            const yaw = team === 'A' ? Math.PI * 1.5 : Math.PI * 0.5;
+            const v = life._activate(cs, idx, { x, y: y + SAVIOR.FLY_H, z, yaw }, 'savior');
+            if (!v) { this.why = 'не получилось'; return null; }
+            v.brawl = { team, def };
+            v.yaw = yaw;
+            g.savior.adoptBrawl(v, stageOf(0));
+            e = this._join('v', v.id, team, def);
         } else if (def.kind === 'v' && def.elemental) {
             const life = g.castleLife, site = this._elemSite();
             if (!life || !site) { this.why = 'жители недоступны'; return null; }
@@ -134,7 +153,7 @@ export class Brawl {
             if (!life || !site) { this.why = 'жители недоступны'; return null; }
             const idx = ++this._person;
             const m = this._person;
-            site.people.push({ idx, role: def.role, female: m % 3 === 0, name: def.label + ' ' + m, home: -1, stall: -1, seed: 20261116 + m * 97, rank: def.rank, brave: 1, mana: def.mana });
+            site.people.push({ idx, role: def.role, female: m % 3 === 0, name: def.label + ' ' + m, home: -1, stall: -1, seed: 20261116 + m * 97, rank: def.rank, brave: 1, mana: def.mana, ...(def.outfit ? { outfit: def.outfit } : {}) });
             const cs = life._runtime(site);
             if (!cs.awake) cs.awake = true;
             const yaw = team === 'A' ? Math.PI * 1.5 : Math.PI * 0.5;
@@ -153,6 +172,16 @@ export class Brawl {
         const e = { k, id, team, type: def.id, def };
         this.roster.set(k + ':' + id, e);
         return e;
+    }
+
+    /** Take one fighter off the field (a test, a sweep of one): the creature and its place in the roster. */
+    removeFighter(k, id) {
+        const g = this.game, life = g.castleLife;
+        if (k === 'z') { const z = g.zombieById?.get(id); if (z) g.removeZombie(z); }
+        else if (k === 'a') { const a = g.animals?.byId.get(id); if (a) g.animals._remove(a); }
+        else if (k === 'v') { const v = life?.byId.get(id); if (v) { v.dead = true; life._deactivate(v); } }
+        this.roster.delete(k + ':' + id);
+        this._changed();
     }
 
     /** Take everybody off the field. */
@@ -197,7 +226,7 @@ export class Brawl {
         const loose = g.items?.loose;
         if (loose) for (const uid of [...loose.keys()]) { g.items.removeLoose(uid); out.items++; }
         out.chunks = g.terrain?.data?.resetModified?.() || 0;
-        this._stripToGround();
+        this._stripBuilt = false; this._buildStrip(); // (the ground was made again: the strip of blocks with it)
         // (swords, axes, bows, shields lying about — what the knights dropped, what a blast threw: every weapon not held by a hand)
         out.weapons = 0;
         for (const w of [...(g.weapons?.weapons || [])]) { if (w.holder || g.fixedWeapons?.includes?.(w.id)) continue; g.weapons.remove(w); out.weapons++; }
@@ -291,6 +320,7 @@ export class Brawl {
             if (!isMage(e.def)) continue;
             const v = L?.byId.get(e.id);
             if (!v || v.dead) continue;
+            v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; // (in the middle of a battle a mage is on his guard: not the seconds of a first surprise before he lifts the wand — knights cross the field in two)
             if (!list) { v.foe = null; continue; }
             // (a foe is KEPT: the mage's own mind starts a new fight — a reaction time of seconds — at every change of the foe,
             //  so the nearest one flipping between running zombies kept him forever «reacting»: he changes only when the foe is
@@ -304,6 +334,28 @@ export class Brawl {
             v.brawlFoeAt = now;
             if (v.foe && v.cs?.hostile) v.cs.hostile.set(v.foe, Date.now() + 30000); // (the ordinary mages fight whom their place holds hostile: WizardFight)
         }
+    }
+
+    // ----------------------------------------------------------- the water mage's shards
+    /** (IceShards._bodies) Every fighter on the field as a capsule {id, a, b, r, ref}: the shards fly through the friends and hit the foes (shardHit). */
+    shardTargets(out) {
+        if (this.state !== 'fight') return;
+        const s = this.game.servants;
+        for (const e of this.roster.values()) {
+            const p = s.pos(e.k, e.id, _d);
+            if (!p) continue;
+            const r = e.k === 'a' ? (e.type === 'horse' ? 1.0 : 0.8) : 0.7, h = e.k === 'a' ? 1.6 : 3.2;
+            out.push({ id: foeId(e.k, e.id), a: new THREE.Vector3(p.x, p.y + 0.3, p.z), b: new THREE.Vector3(p.x, p.y + h, p.z), r, ref: { k: e.k, id: e.id }, team: e.team });
+        }
+    }
+
+    /** A shard `s` (caster `s.by`) reached the fighter `b`: the foe's — it is hurt (true), a friend's — nothing (false: the shard flies on). */
+    shardHit(s, b) {
+        const g = this.game, caster = g.castleLife?.byId.get(s.by), team = caster?.brawl?.team;
+        if (!team || b.team === team) return false;
+        const len = Math.hypot(s.vx, s.vz) || 1;
+        g.servants.damage(b.ref, SHARDS.DAMAGE, _d.set(s.vx / len, 0, s.vz / len), masterOfTeam(team), 'servant', { x: caster.x, z: caster.z });
+        return true;
     }
 
     // ----------------------------------------------------------------- the air mage's lift
@@ -339,45 +391,40 @@ export class Brawl {
 
     // ------------------------------------------------------------------ the strip
     /**
-     * The strip between the teams, lying on the ground (a ribbon that follows its bumps): a dashed white line in the middle, red on the left
-     * and blue on the right. One mesh, one small texture. Made once the land is there.
+     * The strip between the teams — made of ORDINARY BLOCKS laid into the ground's top layer (the author 17.11: «не нарисованная, а из обычных
+     * блоков»): red edge on the left, blue on the right, grey between, a dashed white line along the middle. Made once the land is there, and
+     * again after the field was made clean (the ground is made again then).
      */
-    _makeStrip() {
-        const g = this.game, W = BRAWL.STRIP, Lz = BRAWL.EDGE * 2 + 6, N = 60;
-        const cv = document.createElement('canvas');
-        cv.width = 128; cv.height = 256;
-        const x = cv.getContext('2d');
-        const gr = x.createLinearGradient(0, 0, 128, 0);
-        gr.addColorStop(0, 'rgba(255,90,68,0.55)'); gr.addColorStop(0.42, 'rgba(255,90,68,0.12)');
-        gr.addColorStop(0.58, 'rgba(74,144,255,0.12)'); gr.addColorStop(1, 'rgba(74,144,255,0.55)');
-        x.fillStyle = gr; x.fillRect(0, 0, 128, 256);
-        x.fillStyle = 'rgba(255,255,255,0.85)';
-        for (let y = 0; y < 256; y += 32) x.fillRect(61, y, 6, 18); // (the dashed line of the middle)
-        x.fillStyle = 'rgba(255,255,255,0.5)';
-        x.fillRect(0, 0, 4, 256); x.fillRect(124, 0, 4, 256); // (the edges)
-        const tex = new THREE.CanvasTexture(cv);
-        tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, Lz / 8);
-        tex.anisotropy = 4;
-        const geo = new THREE.PlaneGeometry(W, Lz, 1, N);
-        geo.rotateX(-Math.PI / 2);
-        const pos = geo.attributes.position;
-        for (let i = 0; i < pos.count; i++) pos.setY(i, this.groundAt(pos.getX(i), pos.getZ(i)) + 0.07);
-        pos.needsUpdate = true;
-        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, side: THREE.DoubleSide, fog: false });
-        const m = new THREE.Mesh(geo, mat);
-        m.frustumCulled = false;
-        m.renderOrder = 4;
-        g.scene.add(m);
-        this._strip = m;
+    /** The tutorial's little hill is in the middle of the field — the strip must run straight and the teams must see each other: its blocks are taken off. → false: its land is not made yet. */
+    _levelHill(data) {
+        const H = TUTORIAL.HILL, R = Math.ceil(H.r + 1.5), G = TUTORIAL.G;
+        if (data.landMade && (!data.landMade(H.x - R, H.z) || !data.landMade(H.x + R, H.z) || !data.landMade(H.x, H.z - R) || !data.landMade(H.x, H.z + R))) return false;
+        for (let ix = H.x - R; ix <= H.x + R; ix++) for (let iz = H.z - R; iz <= H.z + R; iz++) {
+            if (Math.hypot(ix - H.x, iz - H.z) > H.r + 1.5) continue;
+            const top = data.topLayer(ix, iz);
+            if (top <= G) continue;
+            for (let L = top; L > G; L--) data.set(ix, L, iz, BLOCK.AIR);
+            data.set(ix, G, iz, BLOCK.GRASS);
+        }
+        return true;
     }
 
-    /** The ribbon follows the ground again (after the whole field was made clean: the craters are gone). */
-    _stripToGround() {
-        const m = this._strip;
-        if (!m) return;
-        const pos = m.geometry.attributes.position;
-        for (let i = 0; i < pos.count; i++) pos.setY(i, this.groundAt(pos.getX(i), pos.getZ(i)) + 0.07);
-        pos.needsUpdate = true;
+    _buildStrip() {
+        const data = this.game.terrain?.data;
+        if (!data) return false;
+        const h = BRAWL.STRIP / 2, z0 = -BRAWL.EDGE - 3, z1 = BRAWL.EDGE + 3;
+        let n = 0;
+        if (!this._levelHill(data)) return false;
+        for (let iz = z0; iz <= z1; iz++) {
+            if (data.landMade && !data.landMade(0, iz)) return false;
+            for (let ix = -h; ix < h; ix++) {
+                const type = ix === -h ? BLOCK.ROOF_RED : ix === h - 1 ? BLOCK.ROOF_BLUE : ix === 0 && ((iz >> 1) & 1) ? BLOCK.CS_WHITE : BLOCK.CS_GREY;
+                const L = data.topLayer(ix, iz);
+                if (data.get(ix, L, iz) !== type) { data.set(ix, L, iz, type); n++; }
+            }
+        }
+        this._stripBuilt = true;
+        return true;
     }
 
     // --------------------------------------------------------------- markers
@@ -415,7 +462,7 @@ export class Brawl {
     // ----------------------------------------------------------------- frame
     update(dt) {
         this._frame++;
-        if (!this._strip && this._frame > 20 && this.game.terrain?.data?.landMade?.(0, 0) !== false) this._makeStrip();
+        if (!this._stripBuilt && this._frame > 20 && this.game.terrain?.data?.landMade?.(0, 0) !== false) this._buildStrip();
         if (this.state === 'fight') {
             const w = winnerOf(this.aliveCount(), true);
             if (w) {
@@ -441,7 +488,6 @@ export class Brawl {
     dispose() {
         try { this.clear(); } catch (e) { /* the game is going down: nothing to take off */ }
         this.game.scene.remove(this.markers);
-        if (this._strip) { this.game.scene.remove(this._strip); this._strip.geometry.dispose(); this._strip.material.map?.dispose(); this._strip.material.dispose(); }
         this.markers.geometry.dispose();
         this.markers.material.dispose();
     }

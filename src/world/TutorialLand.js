@@ -51,6 +51,12 @@ export function tutorialHeight(x, z) {
     return T.G;
 }
 
+/** The ground of «Битва существ»: the tutorial's land without the little hill (the field is flat; Brawl._levelHill levels the hill's blocks). */
+export function brawlHeight(x, z) {
+    const H = TUTORIAL.HILL;
+    return Math.hypot(x - H.x, z - H.z) < H.r + 1.5 && Math.hypot(x, z) < TUTORIAL.CLIFF0 ? TUTORIAL.G : tutorialHeight(x, z);
+}
+
 /** The block of a column's top (and just under it) — the meadow's skin, the hill's, the cliffs'. */
 function topBlock(x, z, h, L) {
     const T = TUTORIAL, r = Math.hypot(x, z), H = T.HILL, dh = Math.hypot(x - H.x, z - H.z);

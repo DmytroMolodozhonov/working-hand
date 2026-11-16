@@ -7,6 +7,7 @@ import {waveSource} from './WaveSource.js';
 import * as T from 'three';
 import { SWAT, SWAT_MODES, swatSpell, pickOrb, backDirection, canSwat, BEND, bendAngle, rotateYInPlace, boltAsOrb } from './ElementalParry.js';
 import { isDivine } from './ProtectionGods.js';
+import { foeRef } from './BrawlRules.js';
 import { findWater, WIDE_WATER } from './WaterMageSource.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
 import {WaterMageGuard} from '../fx/WaterMageGuard.js';
@@ -41,7 +42,11 @@ export class ElementalMages {
  }
  pay(v,cost){if(v.mana<cost)return false;v.mana-=cost;return true;}
  phase(v,p){v.elemental.phase=p;v.elemental.t=0;v.elemental.fired=false;v.elemental.shots=0;v.model.elementPoseT=0;v.mode=v.element+p;}
- interrupt(v){if(v.element==='fire'&&v.elemental?.phase==='Vault'){this.phase(v,'Chamber');v.castT=0;}}
+ interrupt(v){
+  if(v.element==='fire'&&v.elemental?.phase==='Vault'){this.phase(v,'Chamber');v.castT=0;}
+  // (an air mage knocked off by a blast or stunned: the lift and the stance end at once and, if he flies by the wind, he FALLS — he must not hang in the air in a stand-up pose; the brain starts again when he is up)
+  if(v.element==='air'&&v.elemental&&!v.elemental.hit1){const a=v.elemental;a.hit1=true;if(a.liftT>0||a.carry)this.endLift(v,null);a.hopping=false;a.guard=0;if(a.phase!=='Coil'&&a.phase!=='rest')this.phase(v,'Coil');if(v.fly&&!a.winged&&(v.stunT>0||v.vy)){v.fly=false;a.flight=0;a.flightCd=Math.max(a.flightCd||0,4);if(!v.vy)v.vy=-0.01;}}
+ }
  /** Hops (ElementalMove.js): a few steps to a free place, a pause, the body turned the way he goes — never a slide round the foe. → 'hop' | 'wait' | 'stuck' */
  reposition(v,foe,dt,radius=14){
   const L=this.game.castleLife,a=v.elemental,foeId=v.foe,h=v.hop||(v.hop=newHop());
@@ -213,7 +218,7 @@ export class ElementalMages {
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);g.sound?.spellCast?.(name,_o);
   v.aimPitch=Math.asin(_d.y);v.castT=.6;v.model.castNow=true;this.engaged(v);return true;
  }
- engaged(v){if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
+ engaged(v){if(v.elemental)v.elemental.atkAt=performance.now();if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
  fireFoot(v,side){
   const foot=side?v.model.leftKnee:v.model.rightKnee;
   if(!foot)return null;
@@ -261,6 +266,14 @@ export class ElementalMages {
   _o.set(v.x,v.y+2.6,v.z);_d.set(foe.x,foe.y,foe.z).sub(_o).normalize();
   const m={by:v.id,ev:'launch',id:v.id+':water:'+(++this.seq),o:_o.toArray(),d:_d.toArray(),h:_o.clone().addScaledVector(_d,1.5).toArray(),v:6,a:0,pw:1,tk:'p',tid:v.foe,s:null,npcMode:['','freeze','throw','drown'][a.cycle%4]};
   if(m.npcMode)a.capture=m.id;g.vortex._addFlight(v.id,m);g.sync?.vortex?.(m);g.sound?.spellCast?.('WaterVortex',_o);this.engaged(v);return true;
+ }
+ /** Does the foe lie (knocked down / stunned / frozen)? The lift is for the one on the ground. */
+ foeLying(v){
+  const g=this.game,id=v.foe;if(id==null)return false;
+  if(id===g.localId||id==='local')return !!g.knock?.down;
+  const r=foeRef(id);
+  if(r){const c=g.levitation?._creature?.(r.k,r.id);return !!c&&(!!g.creatureImpact?.isDown?.(c)||c.stunT>0||!!c.isFrozen||c.stunTimer>0);}
+  const rp=g.remotes?.get(id);return !!(rp&&(rp.down||rp.knocked));
  }
  airLift(v,foe){ // (14.11: always the great kind — only the dome of «Protection Maxima» keeps it off; then the throw: endLift(v, thr))
   const g=this.game,a=v.elemental;
@@ -324,7 +337,8 @@ export class ElementalMages {
   if(r&&v.elemental&&!v.dead&&!(v.fx&(FX.DOME|FX.SHIELD))&&this.swirling(v))v.fx=(v.fx|0)|FX.SWIRL;
   return r;
  }
-  swirling(v){const a=v.elemental,p=a.phase;return !!(v.element==='air'&&!a.liftT||a.recover||p==='Coil'||p==='Chamber'||p==='Gather'||p==='rest'||p==='Spin');}
+  swirling(v){const a=v.elemental,p=a.phase;if(v.element==='air'&&!v.fly)return false; // (the author 17.11: the air round an air mage only when he has taken off)
+  return !!(v.element==='air'&&!a.liftT||a.recover||p==='Coil'||p==='Chamber'||p==='Gather'||p==='rest'||p==='Spin');}
  _think(v,dt){
   const g=this.game,L=g.castleLife,a=v.elemental;if(!a)return false;
   if(!v.foe&&v.cs?.def&&v.cs.def.kind!=='elemental'){
@@ -350,7 +364,7 @@ export class ElementalMages {
    if(a.shard)return this.shardStep(v,foe,dt);
    if(a.capture){const b=g.vortex?.bubbles?.get(a.capture),f=g.vortex?.flights?.get(a.capture);if(b||f){v.mode=b?.phase==='ice'?'waterPush':'waterGather';if(f&&!b&&!this.pay(v,dt)){g.vortex._endFlight(f,'mana',true);}L._ground(v);return true;}a.capture=null;}
    if(a.guard>0){a.guard-=dt;if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';}
-   else{v.fx=0;if(threat&&this.waterSource(v,0)&&this.pay(v,threat.bomb?20:5)){a.guard=threat.bomb?3:1.8;v.fx=threat.bomb?FX.DOME:FX.SHIELD;this.phase(v,'Guard');}}
+   else{v.fx=0;if(threat&&this.waterSource(v,0)&&this.pay(v,threat.bomb?20:5)){a.guard=threat.bomb?4:1.8;v.fx=threat.bomb?FX.DOME:FX.SHIELD;this.phase(v,'Guard');}}
    if(!a.guard){
     if(a.wave&&(a.wave.phase==='rise'||a.wave.phase==='aim')){v.mode='waterGather';L._ground(v);return true;}a.wave=null;
     if(a.phase==='rest'||a.phase==='Guard')this.phase(v,'Gather');
@@ -371,11 +385,16 @@ export class ElementalMages {
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
     else{a.flight-=dt;const gy=g.collision.groundAt(v.x,v.z,v.y+1);const ny=v.y+(gy+5-v.y)*Math.min(1,dt*1.5);if(!L._airFree||L._airFree(v.x,v.z,ny))v.y=ny;else a.flight=0;v.mode='airFlight';}
    }
-   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash'&&a.phase!=='Dash'&&a.phase!=='Slash'&&a.phase!=='Rise')this.reposition(v,foe,dt,17); // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
+   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash'&&a.phase!=='Dash'&&a.phase!=='Slash'&&a.phase!=='Rise'){
+    const hop=this.reposition(v,foe,dt,17);
+    if(hop==='stuck'&&a.phase==='Coil'&&a.t>.3)this.phase(v,'Slash'); // (nowhere to go back to — he fights: the author 17.11 «если им некуда идти — будут атаковать»)
+   }
+   a.atkAt??=performance.now();const idle=(performance.now()-a.atkAt)/1000; // (s since his last attack: an air mage mostly keeps away, but never forgets to strike — the author 17.11: «чтобы не завис и не проиграл в воздухе, не решившись напасть»)
+   if(v.fly&&!a.winged&&idle>2.5&&dist<26&&a.phase!=='Spin'&&L._sees(v,foe)){this.gustFan(v,foe,3);a.atkAt=performance.now();} // (in the air too: a fan of blades from above whenever he has been quiet too long) // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
-   if(a.phase==='Coil'&&a.t>.7){const mv=a.lastMove!=='Drift'&&Math.random()<.22?'Drift':nextAirMove(a.lastMove==='Drift'?null:a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Coil'&&a.t>.7){const mv=idle>3.5?['Slash','Lash','Sweep'][(Math.random()*3)|0]:a.lastMove!=='Drift'&&Math.random()<.22?'Drift':nextAirMove(a.lastMove==='Drift'?null:a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
    if(a.phase==='Spin'){
     if(a.t<AIR_SPIN.SPIN_T)v.yaw+=AIR_SPIN.RATE*dt;a.hopping=a.t<AIR_SPIN.SPIN_T; // (two turns on the spot: the body is his own to turn while he whirls)
     if(a.t>AIR_SPIN.FIRE_T&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(dist<11&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);else this.cast(v,'WindMaxima',foe);}}
@@ -404,7 +423,7 @@ export class ElementalMages {
    if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
     if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
     else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&a.cycle%2===0&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
-    else if(!this.objects.active.has(v.id)&&a.cycle%4===3&&dist<17&&this.airLift(v,foe))return true;
+    else if(!this.objects.active.has(v.id)&&dist<17&&this.foeLying(v)&&this.airLift(v,foe))return true; // (the author 17.11: he lifts and throws a foe only when the foe LIES — knocked down by his wind first)
     else this.cast(v,dist<9||Math.hypot(dist,foe.y-(v.y+2.7))>12?'WindMaxima':'Wind',foe);
    }}
    if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}

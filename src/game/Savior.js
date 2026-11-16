@@ -112,6 +112,18 @@ export class Savior {
         return false;
     }
 
+    /** «Битва существ» (Brawl.js): the Saviour put on the field by hand — his own brain, his foe is the enemy creature (Brawl._feedFoes gives `v.foe`). */
+    adoptBrawl(v, st = stageOf(0)) {
+        this.sealing = false;
+        this.air = null; this.airCd = SAVIOR.AIR_CD * 0.5; this.hurtLog.length = 0; this.rocket = false; this.opener = false;
+        this.v = v; this.foe = v.foe || null; this.quiet = 0; this.lineT = 2.2; this.lastLine = null;
+        this.said = { arrive: true, attack: false, hurt: false, dome: 0 };
+        v.savior = st.n; v.fly = true; v.removable = false;
+        v.maxHp = st.hp; v.hp = st.hp; v.maxArmor = st.ward; v.armor = st.ward;
+        v.W = { ...v.W, hp: st.hp, ward: st.ward, mana: st.mana, dome: st.dome, stunK: SAVIOR.STUN_K, spells: SAVIOR.SPELLS };
+        v.maxMana = st.mana; v.mana = st.mana - SPELL_COST.Flight; v.castCd = 2; v.domeCd = 0;
+    }
+
     _prepare(v, st, by) {
         const g = this.game;
         this.sealing = false;
@@ -148,15 +160,18 @@ export class Savior {
         if (v.dead || !this.life.byId.has(v.id)) { this._over(v); return; }
         if (v.soulTask) return;
         if (this.sealing) { this.sealing = false; this._leave(v, 'win'); return; }
-        const L = this.life, pp = L._playerPos(this.foe);
+        const bf = !!v.brawl; // (on the brawl field he never leaves: no foe for a while — he waits)
+        if (bf) this.foe = v.foe || null;
+        const L = this.life, pp = this.foe == null ? null : L._playerPos(this.foe);
         this.lineT -= dt;
+        if (bf && !pp) return;
         if (!pp) { this._leave(v, 'win'); return; } // (the player is dead / gone: he has done what he came for)
         const d = Math.hypot(pp.x - v.x, pp.z - v.z);
-        if (d > SAVIOR.FAR) { this._leave(v, 'leave'); return; }
+        if (d > SAVIOR.FAR && !bf) { this._leave(v, 'leave'); return; }
         // the hunt: the foe is always his (a wizard's own fight does the rest); never anybody else
         if (!v.foe || v.foe !== this.foe) { v.foe = this.foe; v.grudge = { id: this.foe, until: Date.now() + 3600e3 }; }
         this.quiet = d < 40 && (v.hurtAt && Date.now() - v.hurtAt < 20000 || v.prep || v.castT > 0) ? 0 : this.quiet + dt;
-        if (this.quiet > SAVIOR.QUIET_S) { this._leave(v, 'leave'); return; }
+        if (this.quiet > SAVIOR.QUIET_S && !bf) { this._leave(v, 'leave'); return; }
         // the words
         if (this.lineT <= 0) {
             let kind = null;

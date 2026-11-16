@@ -25,6 +25,8 @@ const PALETTE = {
     fire: { robe: [0x8a2a20, 0x7a2418, 0x6a1c18], trim: 0x1a1214, hat: 0x6a1c18, accent: 0xff7a30, hatKind: 'cowl' },
     druid: { robe: [0x4a7a3a, 0x3f6b3a, 0x55803f], trim: 0x3a2412, hat: 0x3a7a2a, accent: 0xc9b27a, hatKind: 'wreath' },
     frost: { robe: [0xb8cce8, 0xc4d4ec, 0xaac0e0], trim: 0x3a5a9a, hat: 0x9fe8ff, accent: 0xffffff, hatKind: 'icecrown' },
+    // the Supermage (Brawl.js «Сверхмаг»; never rolled for a random wizard: not in OUTFIT_KINDS): black-violet robe, gold and a cold cyan glow
+    supermage: { robe: [0x2a1450, 0x331a5e, 0x24104a], trim: 0x0e0620, hat: 0x1a0c38, accent: 0x6ae8ff, hatKind: 'wizardWide' },
     astrologer: { robe: [0x2c2f7a, 0x1f2866, 0x362a70], trim: 0x14143a, hat: 0x2c2f7a, accent: GOLD, hatKind: 'wizard' },
 };
 
@@ -89,6 +91,13 @@ export function outfitBody(L, B) {
         case 'astrologer': // a gold sash with a coin, stars sprinkled on the robe
             bx(B, 0.18, 2.0, 0.06, -0.15, 0.0, -0.66, GOLD, 0, 0, 0.55); bx(B, 0.34, 0.34, 0.06, 0.2, -0.3, -0.7, GOLD, 0, 0, Math.PI / 4);
             for (let i = 0; i < 16; i++) { const a = i * 2.4; bx(B, 0.07, 0.07, 0.03, Math.cos(a) * 0.5, 0.4 - (i % 8) * 0.34 - (i > 7 ? 0.1 : 0), -0.47 - (i % 8) * 0.045, 0xfff2a0, 0, 0, Math.PI / 4); }
+            break;
+        case 'supermage': // a long cape lined with cyan, gold mantle with spikes, a glowing sash and rune row, a cyan gem at the throat
+            bx(B, 1.5, 2.9, 0.08, 0, -0.9, 0.58, 0x120828, 0.05); bx(B, 1.46, 2.9, 0.05, 0, -0.9, 0.53, 0x2a8fb0, 0.05); bx(B, 1.54, 0.08, 0.12, 0, -2.3, 0.6, GOLD);
+            for (const sx of [-1, 1]) { bx(B, 0.95, 0.32, 1.05, sx * 0.8, 0.68, 0, 0x1a0c38, 0, 0, sx * 0.16); bx(B, 0.98, 0.06, 1.08, sx * 0.8, 0.5, 0, GOLD); for (let k = 0; k < 3; k++) bx(B, 0.12, 0.42, 0.12, sx * (0.6 + k * 0.28), 0.92 + k * 0.06, 0, GOLD, 0, 0, -sx * (0.2 + k * 0.15)); }
+            bx(B, 0.2, 2.1, 0.06, -0.2, -0.05, -0.66, GOLD, 0, 0, 0.5); bx(B, 0.14, 2.1, 0.05, -0.2, -0.05, -0.68, 0x6ae8ff, 0, 0, 0.5);
+            for (let i = 0; i < 12; i++) bx(B, 0.07, 0.12, 0.03, (i % 6 - 2.5) * 0.2, -1.5 - (i > 5 ? 0.22 : 0), -0.5 - 0.3, 0x6ae8ff, 0, 0, i * 0.5);
+            bx(B, 0.18, 0.18, 0.07, 0, 0.78, -0.53, 0x6ae8ff, 0, 0, Math.PI / 4);
             break;
         default: break;
     }

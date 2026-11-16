@@ -560,9 +560,19 @@ test('a hanging ball still takes 1 mana a second; out of mana it bursts', () => 
 test('water NPC holds and lifts the same bubble, pays continuously, and pays Frozen only once',()=>{
  const v={element:'water',mana:50,foe:'me'},sent=[];
  const self={game:{castleLife:{byId:new Map([['water',v]])}},_liftStep(b,dt,p){b.pos.copy(p);},_freeze(b){b.phase='ice';},_send:m=>sent.push(m),_burst(){assert.fail('unexpected release');}};
- const b={id:'capture',by:'water',npcMode:'freeze',phase:'liquid',grow:1,t:3,home:new THREE.Vector3(0,2,0),pos:new THREE.Vector3(),sendT:0};
- WaterVortex.prototype._npcBubble.call(self,b,1);assert.equal(v.mana,44);assert.equal(b.phase,'ice');assert.equal(b.pos.y,8);assert.ok(sent.some(m=>m.ev==='freeze'&&m.by==='water'));
+ const b={id:'capture',by:'water',npcMode:'freeze',phase:'liquid',grow:1,t:4,home:new THREE.Vector3(0,2,0),pos:new THREE.Vector3(),sendT:0};
+ WaterVortex.prototype._npcBubble.call(self,b,1);assert.equal(v.mana,44);assert.equal(b.phase,'ice');assert.equal(b.pos.y,14); // (17.11: the water mage lifts the foe HIGH — 11+ m over the start — and freezes it there; then drops the ice)
+assert.ok(sent.some(m=>m.ev==='freeze'&&m.by==='water'));
  WaterVortex.prototype._npcBubble.call(self,b,1);assert.equal(v.mana,43,'Frozen not paid twice');
+});
+
+test('a frozen ball held up high is dropped after a moment: the ice shatters on the one inside (fixed damage), a long hold is let go anyway',()=>{
+ const v={element:'water',mana:50,foe:'me'},out=[];
+ const self={game:{castleLife:{byId:new Map([['water',v]])}},_liftStep(b,dt,p){b.pos.copy(p);},_freeze(b){b.phase='ice';},_send(){},_burst:(b,why)=>out.push(why)};
+ const b={id:'c',by:'water',npcMode:'freeze',phase:'ice',frozenAt:4,grow:1,t:5.3,home:new THREE.Vector3(0,2,0),pos:new THREE.Vector3(),sendT:1};
+ WaterVortex.prototype._npcBubble.call(self,b,.1);assert.deepEqual(out,['release']);
+ const hits=[],h={me:'me',_note(){},game:{combat:{enabled:true,damage:(n,by,k)=>hits.push([n,k])}}},bb={id:'c',tk:'p',tid:'me',by:'water'};
+ WaterVortex.prototype._iceHurt.call(h,bb,false,VORTEX.SHATTER_DMG);assert.deepEqual(hits,[[VORTEX.SHATTER_DMG,'cold']]);
 });
 
 test('a water NPC cannot hold a victim while stunned, dead or out of mana; a thrown victim is actually released',()=>{

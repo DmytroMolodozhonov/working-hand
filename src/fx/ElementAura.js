@@ -94,6 +94,7 @@ export class ElementAura {
         if (L && me) {
             for (const v of L.byId.values()) {
                 if (!v.element || v.dead || !v.group?.visible || v.invisible) continue;
+                if (v.element === 'air' && !v.fly) continue; // (the author 17.11: the wind, the leaves and the dust round an air mage — only when he has flown up)
                 if (!v.foe || v.elemental?.phase === 'rest') continue; // (the author 16.11: the effects are costly — only while the mage works his magic, in a fight; never while he stands)
                 if (Math.hypot(v.x - me.x, v.z - me.z) > NEAR) continue;
                 const busy = (v.fx & FX.SWIRL ? 0.7 : 0.4) + (v.mode === 'airSpin' || v.mode === 'fireVault' || v.mode === 'waterPush' ? 0.3 : 0);

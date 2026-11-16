@@ -275,7 +275,7 @@ export class CastleTalk {
     // ---------------------------------------------------------- speaking
     /** A villager says a line: over the head, and aloud for those close enough. */
     voice(v, text, shout = false) {
-        if (!this.voiceOn || !this.speech.supported || !text || this.game.duelOnly) return;
+        if (!this.voiceOn || !this.speech.supported || !text || this.game.duelOnly || this.game.config?.brawl) return; // («Битва существ»: бойцы не говорят — голоса не нужны)
         if (v.dead || v.stunT > 0) return; // (the dead and the knocked out say nothing)
         const me = this.game.character.group.position;
         const d = Math.hypot(v.x - me.x, v.z - me.z);
@@ -1872,7 +1872,7 @@ export class CastleTalk {
             this._age = (this._age || 0) + 0.5;
             const close = this._age < 20 && this.life.targets().some((v) => Math.hypot(v.x - g.character.group.position.x, v.z - g.character.group.position.z) < 25);
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
-            const duelOnly = !!g.duelOnly; // (the duel-only start: no neural voices, no fillers, no villagers' net — nobody is talked to here)
+            const duelOnly = !!g.duelOnly || !!g.config?.brawl; // («Битва существ» — то же: никто не говорит) // (the duel-only start: no neural voices, no fillers, no villagers' net — nobody is talked to here)
             if (!duelOnly && this.voiceOn && this.life.castles.size && (this._age >= 8 || close)) this.speech.preload?.();
             if (!duelOnly) this._prepareFillers();
             // (no warm-up of the net while I come near: on the author's processor it took the cores the voice and the

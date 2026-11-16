@@ -43,7 +43,7 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife', 'heka'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, ...ELEMENTAL_MODES, 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthPunch','earthKick','earthSweep','earthHammer','earthRest'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, ...ELEMENTAL_MODES, 'soar', 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthPunch','earthKick','earthSweep','earthHammer','earthRest'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 const ARENA_SET = new Set(ARENA_MODES);
@@ -1769,6 +1769,7 @@ export class VillagerModel {
         T.eL=T.eR=T.earthSpread=T.pelvisZ=0;
         this._earthMoving=this.look.element&&loco;
         const own = (this.look.element ? (this.look.element==='earth'?earthMagePose:elementalMagePose)(this,T,mode,dt,t) : 0) || (this._wiz ? wizardPose(this, T, mode, loco, dt, t) : 0);
+        if (own && this.hover) { T.lL = 0.15; T.lR = -0.4; T.kL = -0.8; T.kR = -0.55; } // (a flying wizard: the legs trail behind, not planted — he does not walk on the air)
         if (own) rate = own;
         else if (mode === 'idle' && !loco) idleShift(T, t, this.look.seed | 0);
         if (!own) switch (mode) {
