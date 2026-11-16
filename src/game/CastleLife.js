@@ -1939,7 +1939,6 @@ export class CastleLife {
         if (!sv) return false;
         v.foe = null; v.fleeT = 0; v.seated = false; v.investigate = null;
         v.serveT = (v.serveT || 0) - dt;
-        if (v.brawl && g.brawl?.casterStep(v, sv, dt)) return true; // («Битва существ»: a mage casts at its foe instead of the sword — Brawl.js)
         if (sv.mode === 'strike') {
             const e = sv.enemy;
             this._steer(v, e.x, e.z, 0, dt, 9); // (turned to the enemy)

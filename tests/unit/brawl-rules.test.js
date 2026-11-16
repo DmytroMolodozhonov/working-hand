@@ -1,7 +1,7 @@
 // «Битва существ» (BrawlRules.js): the teams, the field, the foe search, the mage's distance, the winner.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TEAMS, teamOfMaster, masterOfTeam, otherTeam, FIGHTERS, fighterDef, FIGHTER_GROUPS, pickEnemy, casterMove, winnerOf, placePoints, BRAWL } from '../../src/game/BrawlRules.js';
+import { TEAMS, teamOfMaster, masterOfTeam, otherTeam, FIGHTERS, fighterDef, FIGHTER_GROUPS, pickEnemy, winnerOf, placePoints, BRAWL, foeId, foeRef, isMage } from '../../src/game/BrawlRules.js';
 import { WIZ_RANKS } from '../../src/game/WizardAI.js';
 
 test('a team is a pseudo-master and back; a real player is no team', () => {
@@ -21,7 +21,6 @@ test('every fighter has a name, an icon, a group, and a real way to be made', ()
         if (f.kind === 'a') assert.ok(f.type, f.id);
         if (f.kind === 'v') assert.ok(f.role || f.elemental, f.id);
         if (f.rank) assert.ok(WIZ_RANKS[f.rank], 'a rank the game knows: ' + f.rank);
-        if (f.caster) assert.ok(f.caster.dmg > 0 && f.caster.every > 0 && f.caster.color, f.id);
     }
     for (const g of ['Нежить', 'Люди', 'Маги', 'Маги стихий', 'Животные']) assert.ok(FIGHTER_GROUPS.includes(g), g);
     assert.equal(fighterDef('nope'), null);
@@ -37,11 +36,19 @@ test('the foe is the nearest of the OTHER team', () => {
     assert.equal(pickEnemy('A', { x: 0, z: 0 }, []), null);
 });
 
-test('a mage closes in, holds and casts, or steps back by the distance', () => {
-    assert.equal(casterMove(30), 'close');
-    assert.equal(casterMove(BRAWL.KEEP[1] + 0.1), 'close');
-    assert.equal(casterMove(12), 'hold');
-    assert.equal(casterMove(3), 'back');
+test('a foe id for the mages\' real brains goes there and back; a player\'s id is no foe of this kind', () => {
+    assert.deepEqual(foeRef(foeId('z', 12)), { k: 'z', id: 12 });
+    assert.deepEqual(foeRef(foeId('a', 7)), { k: 'a', id: 7 });
+    assert.deepEqual(foeRef(foeId('v', 'brawlfield:3')), { k: 'v', id: 'brawlfield:3' });
+    assert.equal(foeRef('p1'), null);
+    assert.equal(foeRef(null), null);
+    assert.equal(foeRef('bf|x|1'), null);
+});
+
+test('every mage (ordinary and elemental) is run by his own brain; the others are servants of their team', () => {
+    for (const id of ['novice', 'wizard', 'archmage', 'fire', 'water', 'earth', 'air']) assert.ok(isMage(fighterDef(id)), id);
+    for (const id of ['zombie', 'knight', 'cow', 'pig', 'sheep', 'horse']) assert.ok(!isMage(fighterDef(id)), id);
+    assert.ok(!isMage(null));
 });
 
 test('the winner: not before the start, none while both live, a draw when nobody is left', () => {

@@ -7,8 +7,8 @@
  * Elemental mages are the game's REAL ones (their own brain, poses, auras, spells: ElementalMages.js, EarthMages.js); their foe is a pseudo player id
  * `bf|k|id` that CastleLife._playerPos resolves to the enemy creature's place (Brawl.foePos).
  *
- * How they fight (Brawl.js): every fighter is a «servant» of its team (Servants.js: a team is a pseudo-master `brawl:A`), so each system's own
- * walking and blows work as they do for «Брейнрот» (zombies, animals, people); the mages additionally cast bolts (Brawl.casterStep).
+ * How they fight (Brawl.js): every fighter who is not a mage is a «servant» of its team (Servants.js: a team is a pseudo-master `brawl:A`), so each system's own
+ * walking and blows work as they do for «Брейнрот» (zombies, animals, people); the mages fight by their OWN real brains (WizardFight, ElementalMages, EarthMages) aimed at the enemy creature (Brawl.foePos, _feedFoes).
  */
 
 export const TEAM_IDS = ['A', 'B'];
@@ -16,20 +16,28 @@ export const TEAMS = {
     A: { id: 'A', master: 'brawl:A', label: 'Красные', color: 0xff5a44, css: '#ff5a44' },
     B: { id: 'B', master: 'brawl:B', label: 'Синие', color: 0x4a90ff, css: '#4a90ff' },
 };
+/** A foe the real brains of the mages aim at: a pseudo player id `bf|k|id` (CastleLife._playerPos → Brawl.foePos) and back to the creature {k, id}. */
+export const foeId = (k, id) => `bf|${k}|${id}`;
+export const foeRef = (fid) => {
+    const m = typeof fid === 'string' ? /^bf\|([zav])\|(.+)$/.exec(fid) : null;
+    return m ? { k: m[1], id: m[1] === 'v' ? m[2] : +m[2] } : null;
+};
+/** Mages (ordinary and elemental) fight by their own real brains; the others as servants of their team. */
+export const isMage = (def) => !!def && (!!def.elemental || def.group === 'Маги');
 export const masterOfTeam = (t) => TEAMS[t]?.master ?? null;
 export const teamOfMaster = (m) => (typeof m === 'string' && m.startsWith('brawl:') && TEAMS[m.slice(6)] ? m.slice(6) : null);
 export const otherTeam = (t) => (t === 'A' ? 'B' : 'A');
 
 /**
- * Whom the player can put on the field. kind: 'z' zombie, 'a' animal (type), 'v' a person (role/rank), caster: the mage's bolt colour.
+ * Whom the player can put on the field. kind: 'z' zombie, 'a' animal (type), 'v' a person (role/rank); mages (group «Маги», elemental) fight by their own brains.
  * `group` — the tab of the panel.
  */
 export const FIGHTERS = [
     { id: 'zombie', label: 'Зомби', icon: '🧟', group: 'Нежить', kind: 'z' },
     { id: 'knight', label: 'Рыцарь', icon: '🛡️', group: 'Люди', kind: 'v', role: 'knight' },
-    { id: 'novice', label: 'Начинающий маг', icon: '🧙', group: 'Маги', kind: 'v', role: 'student', rank: 'novice', mana: 40, caster: { color: 0xb08cff, dmg: 3, every: 2.6 } },
-    { id: 'wizard', label: 'Маг', icon: '🧙‍♂️', group: 'Маги', kind: 'v', role: 'student', rank: 'adept', mana: 100, caster: { color: 0x7fd0ff, dmg: 5, every: 2.0 } },
-    { id: 'archmage', label: 'Сильный маг', icon: '🔮', group: 'Маги', kind: 'v', role: 'teacher', rank: 'teacher', mana: 200, caster: { color: 0xffe27a, dmg: 8, every: 1.5 } },
+    { id: 'novice', label: 'Начинающий маг', icon: '🧙', group: 'Маги', kind: 'v', role: 'student', rank: 'novice', mana: 40 },
+    { id: 'wizard', label: 'Маг', icon: '🧙‍♂️', group: 'Маги', kind: 'v', role: 'student', rank: 'adept', mana: 100 },
+    { id: 'archmage', label: 'Сильный маг', icon: '🔮', group: 'Маги', kind: 'v', role: 'teacher', rank: 'teacher', mana: 200 },
     { id: 'fire', label: 'Маг огня', icon: '🔥', group: 'Маги стихий', kind: 'v', elemental: 'fire', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'water', label: 'Маг воды', icon: '💧', group: 'Маги стихий', kind: 'v', elemental: 'water', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'earth', label: 'Маг земли', icon: '⛰️', group: 'Маги стихий', kind: 'v', elemental: 'earth', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
@@ -47,11 +55,6 @@ export const BRAWL = {
     GROUP: 5, // Shift+click: this many at once
     GROUP_R: 3.2, // m: the spread of such a group
     EDGE: 38, // m: no one is put farther than this from the middle (the meadow is 42 m)
-    BOLT_SPEED: 26, // m/s
-    BOLT_LIFE: 1.8, // s
-    BOLT_HIT_R: 1.7, // m: a bolt hits a body this near its path
-    BOLT_PUSH: 6, // m/s: the shove of a hit
-    KEEP: [9, 15], // m: a mage keeps this far from its foe (nearer — steps back, farther — closes in)
     RESTART_S: 6, // s the banner of the winners stays
 };
 
@@ -64,13 +67,6 @@ export function pickEnemy(team, me, list) {
         if (d < bd) { bd = d; best = e; }
     }
     return best;
-}
-
-/** A mage's move by the distance to its foe: 'close' in, 'hold' and cast, 'back' away. */
-export function casterMove(d, keep = BRAWL.KEEP) {
-    if (d > keep[1]) return 'close';
-    if (d < keep[0]) return 'back';
-    return 'hold';
 }
 
 /** Alive counts by team → the winning team, 'draw' (none left), or null (the fight goes on / not started). */
