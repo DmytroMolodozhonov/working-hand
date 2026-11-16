@@ -51,6 +51,12 @@ export function nextAirMove(last, roll) {
  * the moisture of the air — is wound round him and freezes into `N` shards that hang and turn about him (FREEZE_T), then they are hurled in a volley at the foe (HURL_T…), each a little
  * aside and a little late. A shard hurts one player (the shield or the dome of «Protection» turns it: the cost of «Ice»); the host decides, every computer draws the same flight.
  */
+/**
+ * «Ледяные иглы» (the author 16.11: «маги воды беспомощные»): the water mage's everyday quick stroke — N needles of ice (`ShardDuel` duel charges) from the hands in turn.
+ * `WATER_DRAW`: the moisture of the air he draws into his supply every second (WET — where the air is damp, DRY — a desert, hell, off the Earth), up to CAP (a tank — 36).
+ */
+export const NEEDLES = { N: 4, COST: 8, WATER: 2, RANGE: 26, FIRST: 0.22, STAGGER: 0.09, END: 0.85, SPREAD: 0.08, FAN_SHARE: 0.4, FAN_N: 6, FAN_T: 0.4, FAN_STEP: 0.09 }; // (the fan: six at once, 0,09 rad apart — a wall the foe cannot step aside from)
+export const WATER_DRAW = { WET: 0.7, DRY: 0.15, CAP: 18 };
 export const SHARDS = { N: 6, COST: 24, FREEZE_T: 0.95, HURL_T: 1.25, END_T: 1.8, SPEED: 26, GRAV: 3, LIFE: 2.2, DAMAGE: 3.5, SPREAD: 0.1, STAGGER: 0.07, MIN_DIST: 5, MAX_DIST: 30, HIT_R: 0.35, ORBIT_R: 1.5, MAX_LIVE: 96 };
 /** Where shard `i` of `n` hangs round a mage at (x, y, z) at time `t` (a turning ring, bobbing). → out {x, y, z} */
 export function orbitPoint(i, n, t, x, y, z, out = {}) {
