@@ -43,7 +43,7 @@ WIZ.savior = {
 // the Supermage (Brawl.js «Сверхмаг»): every fighting spell, none held back — the duel charges of all colours, the wind and both blasts; 2000 mana, fast, steady, a good dome
 WIZ.supermage = {
     hp: 100, ward: 80, mana: 2000, regen: 4.0, skill: 2.5, cast: 0.75, react: 0.95, reactT: 0.2, stunK: 0.25, range: [8, 22],
-    spells: { Stupefy: 0.07, SapiraDuel: 0.07, IceDuel: 0.09, JoltMaxima: 0.09, FireDuel: 0.11, SandsDuel: 0.05, Electrum: 0.1, LiquidationDuel: 0.04, Expelliarmus: 0.05, WindMaxima: 0.1, BombardoMaxima: 0.1, Bombardo: 0.06, LevitateDuel: 0.07 },
+    spells: { Stupefy: 0.07, SapiraDuel: 0.07, IceDuel: 0.09, JoltMaxima: 0.09, FireDuel: 0.11, SandsDuel: 0.05, Electrum: 0.1, LiquidationDuel: 0.04, Expelliarmus: 0.05, AvadaKedavra: 0.05, Accentric: 0.05, WindMaxima: 0.1, BombardoMaxima: 0.1, Bombardo: 0.06, LevitateDuel: 0.07 },
     dome: { hits: 10, t: 12, cd: 9 }, wind: { r: 4.5, cd: 5 }, blink: { cd: 10 }, heal: 0.3,
 };
 WIZ.seller = WIZ.teacher;
@@ -63,6 +63,14 @@ WIZ.mage = WIZ.teacher; // (a wizard of a hamlet — Hamlets.js: his rank decide
  * of one rank still differ noticeably. The Master's ±10 %: there is one of him, he stays far above all.
  * `as`: whose fighting habits (WIZ) the rank has — the spells, the pause between casts, reactions.
  */
+/** The Supermage's heavy spells (Brawl.js «Сверхмаг»; the author 17.11: «не только одиночные, но и коллективные, и чёрную магию»): the group ones hit everybody in a place, the black ones are his too. CD: s between two of each. */
+export const SUPER = {
+    GROUP: ['Thunderwave', 'EarthquakeMaxima', 'BombardoMaxima', 'WindImpulseMaxima', 'Inferno'],
+    BLACK: ['AvadaKedavra', 'SapiraDuel', 'Accentric'],
+    CD: { Thunderwave: 14, EarthquakeMaxima: 16, BombardoMaxima: 10, WindImpulseMaxima: 8, Inferno: 9, WindMaxima: 12, Bombardo: 7 },
+    CROWD_R: 10, // m: enemies this close to his foe make a crowd (group spells)
+};
+
 export const WIZ_RANKS = {
     novice: { mana: 50, spread: 0.15, as: 'student' },
     adept: { mana: 100, spread: 0.15, as: 'adept' },
@@ -167,7 +175,7 @@ export function manaPace(mana, max) {
 }
 
 /** Mana a spell costs a wizard (the same as a player's base spell). */
-export const NPC_COST = { FireDuel: 14, NihilisDuel: 40, Electrum: 30, WindMaxima: 18, BombardoMaxima: 25, Bombardo: 10, SandsDuel: 12, LiquidationDuel: 25, Expelliarmus: 8, Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
+export const NPC_COST = { Accentric: 30, FireDuel: 14, NihilisDuel: 40, Electrum: 30, WindMaxima: 18, BombardoMaxima: 25, Bombardo: 10, SandsDuel: 12, LiquidationDuel: 25, Expelliarmus: 8, Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
 
 export const WIZ_ROLE_RU = {
     student: ['Ученик', 'Ученица'], teacher: ['Наставник', 'Наставница'], seller: ['Торговец свитками', 'Торговка свитками'],

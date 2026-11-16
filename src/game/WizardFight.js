@@ -33,7 +33,7 @@ import { foeRef } from './BrawlRules.js';
 import * as THREE from 'three';
 import { SAVIOR, SAVIOR_SPECIAL } from './SaviorRules.js';
 import { duelRange, emptyRange } from './DuelRange.js';
-import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist, prepTime, CAST_PREP } from './WizardAI.js';
+import { WIZ, SUPER, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist, prepTime, CAST_PREP } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
@@ -548,7 +548,7 @@ export class WizardFight {
     _begin(v, spell, foeId, fp, o = {}) {
         if (v.prep || v.noWand) return false;
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
-        const cost = v.savior != null ? (SPELL_COST[spell] ?? o.cost ?? NPC_COST[spell] ?? 10) : (o.cost ?? NPC_COST[spell] ?? 10);
+        const cost = v.savior != null || v.rank === 'supermage' ? (SPELL_COST[spell] ?? o.cost ?? NPC_COST[spell] ?? 10) : (o.cost ?? NPC_COST[spell] ?? 10);
         if (v.mana < cost) return false;
         const t = v.savior != null ? 0.4 : prepTime(); // (the Saviour says it at once: no seconds of standing silent)
         if (v.lesson) v.lesson.casts++;
@@ -603,6 +603,7 @@ export class WizardFight {
             const seen = this.life._playerPos(foe);
             if (seen && this.life._sees(v, seen)) return 'NihilisDuel';
         }
+        if (v.rank === 'supermage' && !v.lesson) return this._superSpell(v, spell, foe);
         if (v.savior != null) return 'Electrum'; // (the white Saviour: blue «Электром» unless the recognized-darkness exception above applies — SaviorRules.js; his wind and blasts are his own: Savior.js)
         if (SAVIOR_SPECIAL.has(spell) && v.savior == null) { // (the Supermage's wind and blasts: not on top of himself — near, a shove of «Джолт Максима» instead; and not often: a blast tears the ground and the frame pays for it)
             const pp = foe != null ? this.life._playerPos(foe) : null;
@@ -626,6 +627,28 @@ export class WizardFight {
             else if (Math.random() < (DISARM.FIRST[role] ?? DISARM.FIRST.teacher)) spell = 'Expelliarmus';
         }
         if ((v.skillRole || v.role) === 'student' && (spell === 'IceDuel' || spell === 'AvadaKedavra')) spell = 'Stupefy';
+        return spell;
+    }
+
+    /**
+     * The Supermage chooses from EVERYTHING (the author 17.11): the single charges of every colour, the black ones (Avada, Sapira, Accentric), the group spells
+     * (Thunderwave, the quake, both blasts, the impulse ring, the Inferno) — a crowd round his foe calls for the group ones, a lone foe for the single and the black.
+     */
+    _superSpell(v, spell, foe) {
+        const now = performance.now(), cd = (n) => (v.spCd?.[n] || 0) <= now;
+        const pp = foe != null ? this.life._playerPos(foe) : null, dist = pp ? Math.hypot(pp.x - v.x, pp.z - v.z) : 99;
+        const crowd = this.game.brawl?.crowdAround?.(v) ?? 1;
+        const roll = Math.random();
+        if (crowd >= 2 ? roll < 0.55 : roll < 0.12) {
+            const ok = SUPER.GROUP.filter((n) => cd(n) && v.mana >= (SPELL_COST[n] ?? NPC_COST[n] ?? 20) + 40 && dist >= (n === 'WindImpulseMaxima' ? 0 : 5) && dist <= (n === 'WindImpulseMaxima' ? 9 : 26));
+            if (ok.length) return ok[(Math.random() * ok.length) | 0];
+        } else if (roll > 0.78) {
+            return SUPER.BLACK[(Math.random() * SUPER.BLACK.length) | 0]; // (black magic: he has no vow against it)
+        }
+        if (SAVIOR_SPECIAL.has(spell)) { // (the single wind / blasts: not on top of himself, not too often)
+            if (!cd(spell)) return 'JoltMaxima';
+            if (dist < (spell === 'WindMaxima' ? 3 : 11)) return 'JoltMaxima';
+        }
         return spell;
     }
 
@@ -747,7 +770,7 @@ export class WizardFight {
     /** A duel charge from the wand at a player (the charge itself: Duel.js, seen by everybody). */
     _cast(v, spell, foeId, fp, vs = null, at = null) {
         const g = this.game, duel = g.duel;
-        if (SAVIOR_SPECIAL.has(spell)) return this._castSpecial(v, spell, fp); // (the Saviour's own: the wind, the blasts — not duel charges)
+        if (SAVIOR_SPECIAL.has(spell) || (v.rank === 'supermage' && SUPER.GROUP.includes(spell))) return this._castSpecial(v, spell, fp); // (the Saviour's own: the wind, the blasts — not duel charges)
         if (!duel?._addBolt) return false;
         // «лицом к цели»: from the side or with his back — no spell; he turns first (step / pursueThreat)
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
@@ -793,7 +816,7 @@ export class WizardFight {
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
         if (!g.spells?.cast) return false;
-        if (v.savior == null) (v.spCd || (v.spCd = {}))[spell] = performance.now() + (SAVIOR.SPECIAL_CD[spell] || 8) * 1000 * 1.5; // (the Supermage: a blast / the wind not oftener than the Saviour's pause ×1.5)
+        if (v.savior == null) (v.spCd || (v.spCd = {}))[spell] = performance.now() + (SUPER.CD[spell] || SAVIOR.SPECIAL_CD[spell] || 8) * 1000 * 1.5; // (the Supermage: a blast / the wind not oftener than the Saviour's pause ×1.5)
         try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return false; } // (a failed spell is not entry into combat)
         g.sync?.spell?.(spell, _o, _d, 'right', v.id);
         const me = g.character.group.position;

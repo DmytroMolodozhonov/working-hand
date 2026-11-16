@@ -179,8 +179,8 @@ test('«Создать мир» помнит выбор отдельно для 
 test('старт «Перед дуэлью»: жители не говорят вслух и не болтают, мир сведён к арене', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Game.js', import.meta.url), 'utf8');
     assert.match(src, /this\.duelOnly = config\.mode === 'creative' && this\.hero\.spawn === 'arena'/);
-    for (const sys of ['animals', 'spiders', 'dragons', 'iceCastle', 'owls', 'livingTrees']) assert.match(src, new RegExp(`!duelOnly\\) this\\.${sys}\\b`), sys);
-    assert.match(src, /if \(earth && !duelOnly\) \{[^}]*try \{ this\.gargoyles\.update\(dt\)/, 'gargoyles: the guard also contains error isolation');
+    for (const sys of ['animals', 'spiders', 'dragons', 'iceCastle', 'owls', 'livingTrees']) assert.match(src, new RegExp(`!duelOnly( && !lean)?\\) this\\.${sys}\\b`), sys);
+    assert.match(src, /if \(earth && !duelOnly( && !lean)?\) \{[^}]*try \{ this\.gargoyles\.update\(dt\)/, 'gargoyles: the guard also contains error isolation');
     const life = (await import('node:fs')).readFileSync(new URL('../../src/game/CastleLife.js', import.meta.url), 'utf8');
     assert.match(life, /const mute = !!this\.game\.duelOnly/);
     assert.match(life, /this\.game\.duelOnly\) return; \/\/ \(the duel-only start: nobody chatters\)/);

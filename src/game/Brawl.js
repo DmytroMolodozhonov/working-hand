@@ -16,6 +16,7 @@ import { SHARDS } from './ElementalRules.js';
 import { BLOCK } from '../world/Terrain.js';
 import { elementalLook } from './ElementalTestSites.js';
 import { earthLook } from './EarthMagicRules.js';
+import { SUPER } from './WizardAI.js';
 import { saviorEntry, GX0, SAVIOR, stageOf } from './SaviorRules.js';
 
 export const BRAWL_SITE = 'brawlfield';
@@ -478,6 +479,16 @@ export class Brawl {
         if (ci?.apply) { const o = ci.apply.bind(ci); ci.apply = (c, op) => { const r = o(c, op); if (this.state === 'fight' && (mine(op?.by) || this.roster.has('v:' + c?.id))) allLog('Битва', `толчок ${op?.spell || op?.kind || '?'} от ${op?.by || '—'} на ${c?.id ?? c?.name ?? '?'}: ${r}`); return r; }; }
         const sv = g.servants;
         if (sv?.damage) { const o = sv.damage.bind(sv); sv.damage = (ref, ...a) => { if (this.state === 'fight') allLog('Битва', `урон по ${ref?.k}:${ref?.id}: ${Math.round((a[0] ?? 0) * 10) / 10} от ${a[2] || '—'}`); return o(ref, ...a); }; }
+    }
+
+    /** How many fighters of the OTHER team stand round the foe of `v` (a crowd calls for a group spell). */
+    crowdAround(v) {
+        const f = v.foe && this.foePos(v.foe);
+        if (!f) return 1;
+        const e = this.roster.get('v:' + v.id), team = e?.team;
+        let n = 0;
+        for (const o of this._enemies()) if (o.team !== team && Math.hypot(o.x - f.x, o.z - f.z) < SUPER.CROWD_R) n++;
+        return Math.max(1, n);
     }
 
     _snapshot() {
