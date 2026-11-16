@@ -35,7 +35,7 @@ export class ElementalSwirl {
         this.t += dt;
         for (const v of L.byId.values()) {
             const K = LOOK[v.element];
-            if (!K || v.dead || !(v.fx & FX.SWIRL) || !v.group?.visible) continue;
+            if (!K || v.dead || !(v.fx & FX.SWIRL) || !v.group?.visible || !v.foe) continue; // (only in a fight: the effects are costly)
             if (Math.hypot(v.x - me.x, v.z - me.z) > NEAR) continue;
             const fast = v.mode === 'airSpin' ? 2.2 : v.elemental?.recover ? 0.8 : 1;
             if (K.dust) this._air(glow, v, fast);

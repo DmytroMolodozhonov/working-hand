@@ -23,13 +23,28 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vect
 
 /** How many things, where and how fast, per element (calm → busy by `k` 0…1). */
 /** The colour buckets of each kind (one InstancedMesh and one plain material each: per-instance colours read black on this renderer, so the variety is made of a few meshes). */
-const BUCKETS = { leaf: [0xf6f2e4, 0xe3b04a, 0xb8642a, 0x9cc24a], flame: [0xff4a00, 0xffc23a], drop: [0x7ccfff, 0xd8f4ff], pebble: [0x7d6a55, 0x5a4a3c] };
+const BUCKETS = { leaf: [0xd9cfae, 0xb59a5a, 0x8a6a3a, 0x7d9a45], flame: [0xff4a00, 0xffc23a], drop: [0x7ccfff, 0xd8f4ff], pebble: [0x7d6a55, 0x5a4a3c], streak: [0xdbeeff, 0xffffff] };
 const KIND = {
-    air: { mesh: 'leaf', n: [12, 26], r: [1.4, 3.0], h: [0.3, 4.4], spin: 2.6, bob: 0.5, size: [0.75, 1.35], cols: [0x7fae3a, 0x9bc255, 0xc9a35a, 0x8a6a3a, 0xf1f6ff, 0xdbe7d0] },
+    air: { mesh: 'leaf', n: [5, 12], r: [1.4, 3.2], h: [0.3, 4.4], spin: 2.6, bob: 0.5, size: [0.2, 0.4], cols: [0x7fae3a, 0x9bc255, 0xc9a35a, 0x8a6a3a, 0xf1f6ff, 0xdbe7d0] }, // (a little dry debris on the wind; the wind itself is the streaks — _air)
     fire: { mesh: 'flame', n: [8, 15], r: [1.0, 1.8], h: [0.4, 3.3], spin: 2.2, bob: 0.35, size: [0.9, 1.6], cols: [0xff7a1a, 0xff4a00, 0xffb030, 0xffd86a] },
     water: { mesh: 'drop', n: [12, 22], r: [1.0, 2.2], h: [0.6, 3.2], spin: 2.8, bob: 0.3, size: [0.6, 1.1], cols: [0x7ccfff, 0x9fe0ff, 0xd8f4ff, 0x56b4f0] },
     earth: { mesh: 'pebble', n: [4, 8], r: [1.2, 2.0], h: [0.6, 3.0], spin: 1.1, bob: 0.2, size: [0.3, 0.6], cols: [0x7d6a55, 0x6b5440, 0x8a7a64, 0x5a4a3c] },
 };
+
+/** A strip of wind: an arc of a ring (unit radius, ~125°) as a thin band that swells in the middle and fades to nothing at both ends (vertex colours: additive black = clear). */
+function streakGeometry() {
+    const N = 16, span = 2.2, pos = [], col = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+        const u = i / N, a = (u - 0.5) * span, w = Math.sin(u * Math.PI), wy = 0.5 * Math.pow(w, 0.8), c = Math.pow(w, 1.2);
+        for (const sgn of [-1, 1]) { pos.push(Math.sin(a), sgn * wy, Math.cos(a)); col.push(c, c, c); }
+        if (i < N) { const b = i * 2; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    return g;
+}
 
 let SHARED = null;
 function parts() {
@@ -41,9 +56,11 @@ function parts() {
         flame: new THREE.LatheGeometry([[0.0, 0.0], [0.17, 0.08], [0.24, 0.26], [0.21, 0.5], [0.12, 0.74], [0.05, 0.92], [0.0, 1.0]].map(([x, y]) => new THREE.Vector2(x, y)), 10), // (a teardrop of flame: round at the foot, a curling tip; tip up +Y)
         drop: new THREE.SphereGeometry(0.5, 10, 8).scale(0.6, 1.25, 0.6),
         pebble: new THREE.DodecahedronGeometry(0.5, 0),
+        streak: streakGeometry(),
     };
     const mk = (kind, hex) => {
-        const m = kind === 'flame' ? new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+        const m = kind === 'streak' ? new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, vertexColors: true })
+            : kind === 'flame' ? new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
             : kind === 'drop' ? new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.82 })
             : new THREE.MeshBasicMaterial({ color: hex, side: THREE.DoubleSide });
         m.userData.shared = true; return m;
@@ -77,6 +94,7 @@ export class ElementAura {
         if (L && me) {
             for (const v of L.byId.values()) {
                 if (!v.element || v.dead || !v.group?.visible || v.invisible) continue;
+                if (!v.foe || v.elemental?.phase === 'rest') continue; // (the author 16.11: the effects are costly — only while the mage works his magic, in a fight; never while he stands)
                 if (Math.hypot(v.x - me.x, v.z - me.z) > NEAR) continue;
                 const busy = (v.fx & FX.SWIRL ? 0.7 : 0.4) + (v.mode === 'airSpin' || v.mode === 'fireVault' || v.mode === 'waterPush' ? 0.3 : 0);
                 out.push({ id: v.id, element: v.element, x: v.x, y: v.y, z: v.z, k: Math.min(1, busy), seed: (v.entry?.seed | 0) || hash(v.id) });
@@ -85,7 +103,7 @@ export class ElementAura {
         const el = g.heroElement?.id;
         if (el && me && !g.isDeadLocal && !g.combat?.dead && !g.invisibility?.on) {
             const working = !!(g.vortex?.state || g.hellfire?.state || g.airVortex?.on || g.groundVortex?.busy || g.heroShards?.on);
-            out.push({ id: 'me', element: el, x: me.x, y: me.y - 2.0, z: me.z, k: working ? 1 : 0.35, seed: 7, me: true });
+            if (working) out.push({ id: 'me', element: el, x: me.x, y: me.y - 2.0, z: me.z, k: 1, seed: 7, me: true }); // (only while he works his element, like the vortex itself)
         }
         return out;
     }
@@ -93,15 +111,48 @@ export class ElementAura {
     update(dt) {
         const g = this.game;
         if (!g.scene) return;
-        this.t += dt;
+        this.t += dt; this._dt = dt; this._rings = 0;
         const subs = this._gather(this.subjects);
         for (const k of Object.keys(this.index)) for (const e of this.index[k]) e.n = 0;
         for (const s of subs) this._draw(s);
         for (const k of Object.keys(this.index)) for (const e of this.index[k]) { e.im.count = e.n; e.im.instanceMatrix.needsUpdate = true; }
     }
 
+    /** The air mage's wind: thin bands going round him at many heights and speeds, each tilted a little, and a bit of dry debris carried by it. */
+    _air(s) {
+        const bs = this.index.streak, N = Math.round(7 + 8 * s.k);
+        for (let i = 0; i < N; i++) {
+            const bk = bs[i & 1]; if (bk.n >= CAP) continue;
+            const f = (i * 0.6180339 + (s.seed % 97) / 97) % 1, f2 = (i * 0.7548776 + (s.seed % 53) / 53) % 1;
+            const sp = (1.6 + 2.6 * f) * (1 + 0.7 * s.k) * (i % 3 === 2 ? -0.7 : 1);
+            const a = this.t * sp + i * 2.1;
+            const h = 0.35 + f2 * 3.5 + Math.sin(this.t * 0.9 + i) * 0.25;
+            const r = 1.1 + f * 1.4 + Math.sin(this.t * 0.7 + i * 1.3) * 0.15;
+            const grow = Math.min(1, this.t * 1.5 - i * 0.05);
+            _e.set(0.18 * Math.sin(this.t * 0.8 + i), a, 0.22 * Math.cos(this.t * 0.6 + i * 1.7)); _q.setFromEuler(_e);
+            const wd = (0.1 + 0.28 * f2) * Math.max(0.01, grow);
+            _m.compose(_p.set(s.x, s.y + h, s.z), _q, _s.set(r, wd, r));
+            bk.im.setMatrixAt(bk.n++, _m);
+        }
+        this._leaves(s, KIND.air);
+    }
+
+    /** The calm fire round a fire mage: the same ring of flame with serpents as «Let the Hellfire Come» (Hellfire._auraRing) — small, steady, no damage. */
+    _fire(s) {
+        const hf = this.game.hellfire;
+        if (!hf?._auraRing || (s.me && hf.state)) return; // (my own real ring is burning: no second one)
+        if ((this._rings = (this._rings || 0) + 1) > 2) return; // (the two nearest: the ring is made of a few hundred sparks a second)
+        hf._auraRing(this._dt, s.x, s.y, s.z, s.k, s.seed);
+    }
+
     _draw(s) {
-        const K = KIND[s.element]; if (!K) return;
+        if (s.element === 'fire') return this._fire(s);
+        if (s.element === 'air') return this._air(s);
+        this._leaves(s, KIND[s.element]);
+    }
+
+    _leaves(s, K) {
+        if (!K) return;
         const buckets = this.index[K.mesh];
         const n = Math.round(K.n[0] + (K.n[1] - K.n[0]) * s.k);
         for (let i = 0; i < n; i++) {

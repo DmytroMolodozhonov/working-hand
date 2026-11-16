@@ -198,6 +198,7 @@ function segDist(p, a, b) {
 
 const r2 = (v) => Math.round(v * 100) / 100;
 
+const _auraBody = new THREE.Vector3();
 export class Hellfire {
     constructor(game) {
         this.game = game;
@@ -819,7 +820,7 @@ export class Hellfire {
     }
 
     /** One frame of a fire: the blaze (weight 1 − k) and the ring round `body` (weight k). */
-    _draw(dt, f, body, amt = 1) {
+    _draw(dt, f, body, amt = 1, quiet = false) {
         const P = this.pool, fx = this.game.fx;
         if (!P || !fx) return;
         const t = this._t;
@@ -918,7 +919,7 @@ export class Hellfire {
                     -sa * v * 0.25, 0.6 + Math.random(), ca * v * 0.25, seg < 2 ? pick(CORE) : seg < 8 ? pick(FLAME) : pick(DEEP), Math.max(0.15, size), 0.22 + Math.random() * 0.12, { shrink: 0.8, spin: 8 });
             }
             // smoke over the ring, embers flung outwards
-            for (let i = this._n('smoke', 10 * wr, dt, 1); i > 0; i--) {
+            for (let i = this._n('smoke', quiet ? 0 : 10 * wr, dt, 1); i > 0; i--) {
                 const a = Math.random() * TAU;
                 fx.smoke.spawn(body.x + Math.cos(a) * (rr + 0.5), gy + H + 0.5 + Math.random(), body.z + Math.sin(a) * (rr + 0.5), Math.cos(a) * 1.2, 1.8 + Math.random(), Math.sin(a) * 1.2, pick(SMOKE), 0.6 + Math.random() * 0.5, 1.8, { shrink: -0.5, spin: 0.8 });
             }
@@ -930,8 +931,20 @@ export class Hellfire {
         }
         // the firelight on everything round it
         _a.copy(c).lerp(_b.set(body.x, body.y + 0.5, body.z), wr);
-        if (amt >= 1 || !this.state) fx.lightFlash(_a, 0xff6a1a, (4 + 4 * Math.min(1.5, f.R / 3)) * flick * Math.max(0.5, amt), 0.15, 30 + f.R * 6);
+        if (!quiet && (amt >= 1 || !this.state)) fx.lightFlash(_a, 0xff6a1a, (4 + 4 * Math.min(1.5, f.R / 3)) * flick * Math.max(0.5, amt), 0.15, 30 + f.R * 6);
         if (f === this.state) fx.shake = Math.max(fx.shake || 0, 0.05 + 0.08 * Math.min(1, f.R / 4)); // (the roar shakes the air)
+    }
+
+    /**
+     * The fire mage's calm aura (the author 16.11: «по аналогии как сделан Let the Hellfire Come вокруг»): the same ring of flame with serpents racing round it,
+     * drawn by the same `_draw`, but small, low and steady — nothing burns (no damage, no light flash, no sound). `k` 0…1 how busy the mage is.
+     */
+    _auraRing(dt, x, feetY, z, k = 0.4, seed = 1) {
+        const f = this._aura || (this._aura = { k: 1, R: 1, ang: 0, spin: 2.2, rr: 1.9, rw: 0.9, rh: 2.4, ns: 3, wet: 0, o: null, lite: true, c: new THREE.Vector3() });
+        f.ang += dt * (2.0 + 1.6 * k) + (seed & 1) * 0;
+        f.spin = 2.2 + 1.4 * k; f.rr = 1.7 + 0.7 * k; f.rw = 0.8 + 0.5 * k; f.rh = 2.2 + 1.0 * k; f.ns = 3 + Math.round(2 * k);
+        const b = _auraBody.set(x, feetY + 1.95, z); f.c.copy(b);
+        this._draw(dt, f, b, 0.17 + 0.1 * k, true);
     }
 
     /** A random point in a sphere of radius r (shared vector). */
