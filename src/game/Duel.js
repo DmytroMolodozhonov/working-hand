@@ -871,6 +871,7 @@ export class Duel {
         if (c.isGargoyle) return gargoyleCenter(c, out);
         if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, 4.5 * (c.model.userData.s || 1), 0));
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
+        if (c.x === undefined && c.group?.position) return out.copy(c.group.position).add(_v2.set(0, 1.5, 0)); // (a zombie: its group, the middle of its body)
         return out.set(c.x, c.y + 2.4, c.z);
     }
 
@@ -888,6 +889,7 @@ export class Duel {
         const g = this.game;
         if (kind === 'a') { const a = g.animals?.byId.get(id); return a && !a.dead ? a : null; }
         if (kind === 'v') { const v = g.castleLife?.byId.get(id); return v && !v.dead ? v : null; }
+        if (kind === 'z') { const z = g.zombieById?.get(id); return z && !z.isDead && !z.isDying ? z : null; } // (a zombie: «Битва существ» — a wizard's spell aimed at one)
         if (kind === 'b') { const b = g.books?.birds?.get(id); return b && b.state !== 'fall' ? b : null; }
         if (kind === 't') { const t = g.livingTrees?.byId.get(id); return t && !t.isDead ? t : null; }
         if (kind === 'c') { const c = g.ships?.crew.byId.get(id); return c && !c.dead ? c : null; }

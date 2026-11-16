@@ -302,6 +302,7 @@ export class Brawl {
             if (!isMage(e.def)) continue;
             const v = L?.byId.get(e.id);
             if (!v || v.dead) continue;
+            v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; // (in the middle of a battle a mage is on his guard: not the seconds of a first surprise before he lifts the wand — knights cross the field in two)
             if (!list) { v.foe = null; continue; }
             // (a foe is KEPT: the mage's own mind starts a new fight — a reaction time of seconds — at every change of the foe,
             //  so the nearest one flipping between running zombies kept him forever «reacting»: he changes only when the foe is

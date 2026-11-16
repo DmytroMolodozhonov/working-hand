@@ -22,7 +22,10 @@ test('ordinary mages fight with their real spells; the full sweep leaves a clean
         for (let i = 0; i < 300 && !g.terrain?.data?.landMade?.(0, 0); i++) await sleep(100);
         const B = g.brawl;
         out.put = [B.spawn('novice', 'A', -14, -5), B.spawn('wizard', 'A', -14, 0), B.spawn('archmage', 'A', -14, 5)].map((e) => !!e);
-        out.putB = [B.spawn('wizard', 'B', 14, -3), B.spawn('archmage', 'B', 14, 3), B.spawn('zombie', 'B', 16, -8), B.spawn('zombie', 'B', 16, 8)].map((e) => !!e);
+        out.putB = [B.spawn('knight', 'B', 14, -3), B.spawn('knight', 'B', 14, 3), B.spawn('zombie', 'B', 16, -8), B.spawn('wizard', 'B', 16, 8)].map((e) => !!e);
+        const casts = {}, dd = g.duel, oab = dd._addBolt.bind(dd);
+        dd._addBolt = (o) => { if (typeof o?.by === 'string' && o.by.startsWith('brawlfield:')) { const k = o.by + '>' + o.spell + '>' + o.tk; casts[k] = (casts[k] || 0) + 1; } return oab(o); };
+        out.casts = casts;
         const mages = () => [...B.roster.values()].filter((e) => e.def.group === 'Маги').map((e) => g.castleLife.byId.get(e.id)).filter(Boolean);
         const hits = {}, orig = g.damageZombie.bind(g);
         g.damageZombie = (z, amount, w, dir, by, ...rest) => { if (typeof by === 'string' && by.startsWith('brawlfield:')) hits[by] = (hits[by] || 0) + 1; return orig(z, amount, w, dir, by, ...rest); };
