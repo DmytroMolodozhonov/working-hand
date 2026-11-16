@@ -179,8 +179,9 @@ export class Brawl {
      * → what was taken away {fighters, bodies, items, chunks}.
      */
     sweep() {
-        const g = this.game, out = { fighters: this.count(), bodies: 0, items: 0, chunks: 0 };
+        const g = this.game, out = { fighters: this.count(), bodies: 0, items: 0, chunks: 0, fires: 0 };
         g.falling?.clear?.(); // (the pieces in the air land — then the ground is made again below them)
+        out.fires = this._fireOut();
         this.clear();
         // (whoever else is on the field: a stray zombie, an animal, a corpse nobody put there)
         for (const z of [...(g.zombies || [])]) g.removeZombie(z);
@@ -198,6 +199,27 @@ export class Brawl {
         g.terrain?.data?.settling?.clear?.();
         this._changed();
         return out;
+    }
+
+    /**
+     * Every fire on the field out (the author 17.11: «после очистки поля не исчезает огонь»): burning trees and blocks, campfires, the Hellfire
+     * and the fires it left, the streams of «Инферно», «Fire Maxima», the fire serpents, everything that burns (creatures). → how many kinds were found alight.
+     */
+    _fireOut() {
+        const g = this.game;
+        let n = 0;
+        const G = this.groundAt(0, 0);
+        if ((g.fire?.douse?.(_v.set(0, G, 0), 400) || 0) > 0) n++; // (trees, grass, houses, wood: Fire.js)
+        for (const cf of [...(g.campfires?.list?.values() || [])]) { g.campfires._out(cf); n++; }
+        if (g.hellfire && (g.hellfire.state || g.hellfire.left?.length || g.hellfire.npcs?.size || g.hellfire.remote?.size)) n++;
+        g.hellfire?.clear?.(); // (the blaze, the ring, what it left on the ground)
+        for (const s of g.spells?.spells || []) if (s.kind === 'Inferno' && s.life > 0) { s.life = 0; n++; }
+        const fx = g.vortex?.effects;
+        if (fx) for (let i = fx.length - 1; i >= 0; i--) if (fx[i].kind === 'fire') { fx.splice(i, 1); n++; }
+        try { if (g.fireSerpent?.douse?.(() => true, 10)) n++; } catch (e) { /* no serpent */ }
+        if (g.burning?.douseWhere?.(() => true)) n++; // (whoever burns: me and the others)
+        g.burnWreck?.fuel?.clear?.();
+        return n;
     }
 
     start() {

@@ -42,7 +42,7 @@ export class BrawlPanel {
             ${FIGHTER_GROUPS.map((g) => `<div class="bp-g">${g}</div><div class="bp-grid">${FIGHTERS.filter((f) => f.group === g).map((f) => `<button class="bp-f" data-f="${f.id}">${f.icon} ${f.label}</button>`).join('')}</div>`).join('')}
             <div class="bp-cnt" id="bp-cnt"></div>
             <div class="bp-row"><button class="bp-btn" id="bp-start">⚔️ Начать бой</button><button class="bp-btn alt" id="bp-clear">🗑 Убрать всех</button></div>
-            <div class="bp-row"><button class="bp-btn alt" id="bp-sweep" title="Убирает бойцов, трупы, вещи и чинит землю после взрывов">🧹 Очистить поле полностью</button></div>
+            <div class="bp-row"><button class="bp-btn alt" id="bp-sweep" title="Убирает бойцов, трупы, вещи, огонь и чинит землю после взрывов">🧹 Очистить поле полностью</button></div>
             <div class="bp-hint">Выберите сторону и бойца, затем щёлкните по полю (Shift — сразу пятерых). Лететь: W A S D, Пробел и Ctrl; осмотреться — правая кнопка мыши; колесо — скорость.</div>`;
         document.body.appendChild(root);
         document.body.classList.add('brawl-on'); // (the hero's bars, slots, minimap and the camera window are of no use to a spectator)
@@ -54,7 +54,7 @@ export class BrawlPanel {
         root.querySelectorAll('.bp-f').forEach((el) => { el.onclick = () => { this.pick = el.dataset.f; this._sync(); }; });
         root.querySelector('#bp-start').onclick = () => { if (!game.brawl.start()) this._say(game.brawl.why); };
         root.querySelector('#bp-clear').onclick = () => game.brawl.clear();
-        root.querySelector('#bp-sweep').onclick = () => { const r = game.brawl.sweep(); this._say(`Поле чистое (убрано: бойцов ${r.fighters}, тел ${r.bodies}, вещей ${r.items}, исправлено участков земли ${r.chunks})`); };
+        root.querySelector('#bp-sweep').onclick = () => { const r = game.brawl.sweep(); this._say(`Поле чистое (убрано: бойцов ${r.fighters}, тел ${r.bodies}, вещей ${r.items}, огней ${r.fires}, исправлено участков земли ${r.chunks})`); };
         this._down = null;
         this._onDown = (e) => { if (e.button === 0) this._down = { x: e.clientX, y: e.clientY, shift: e.shiftKey }; };
         this._onUp = (e) => {
