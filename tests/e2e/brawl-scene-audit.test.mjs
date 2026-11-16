@@ -31,6 +31,28 @@ test('brawl scene audit', { timeout: 1700000 }, async () => {
             let n = 0; o.traverse(() => n++);
             out.visible.push([o.name || '-', o.type, o.geometry?.type || '', 'sub' + n, 'c ' + [c.x, c.y, c.z].map(Math.round).join(','), 'size ' + [sz.x, sz.y, sz.z].map((x) => Math.round(Math.min(x, 9999))).join('x'), o.material?.name || o.material?.type || ''].join(' | '));
         }
+        out.owners = [];
+        const groups = sc.children.filter((o) => o.visible && o.type === 'Group' && !o.name);
+        const find = (target) => {
+            const seen = new Set(), hits = [];
+            const walk = (obj, path, d) => {
+                if (!obj || typeof obj !== 'object' || seen.has(obj) || d > 3 || hits.length > 3) return;
+                seen.add(obj);
+                let keys = []; try { keys = Object.keys(obj); } catch { return; }
+                for (const k of keys.slice(0, 80)) {
+                    let v; try { v = obj[k]; } catch { continue; }
+                    if (v === target) { hits.push(path + '.' + k); continue; }
+                    if (v && typeof v === 'object') {
+                        if (v instanceof Map || v instanceof Set) { for (const x of v.values ? v.values() : v) { if (x === target || x?.group === target || x?.model === target || x?.mesh === target) hits.push(path + '.' + k + '[*]'); else if (x && typeof x === 'object' && d < 2) walk(x, path + '.' + k + '[*]', d + 1); } }
+                        else if (Array.isArray(v)) { for (const x of v.slice(0, 200)) if (x === target || x?.group === target || x?.model === target || x?.mesh === target) hits.push(path + '.' + k + '[]'); }
+                        else walk(v, path + '.' + k, d + 1);
+                    }
+                }
+            };
+            walk(g, 'g', 0);
+            return hits;
+        };
+        for (const o of groups) { const names = []; o.traverse((c) => { if (names.length < 6) names.push((c.name || c.type) + ':' + (c.geometry?.type || '') + ':' + (c.material?.color?.getHexString?.() || '')); }); out.owners.push({ at: [o.position.x, o.position.y, o.position.z].map(Math.round).join(','), parts: names, owner: find(o), ud: Object.keys(o.userData || {}).join(',') }); }
         out.sceneTop = Object.entries(tally).map(([k, v]) => k + ' x' + v.n + ' @' + v.ex.join(',')).sort();
         const sys = {};
         for (const k of Object.keys(g)) {
