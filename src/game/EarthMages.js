@@ -131,7 +131,7 @@ export class EarthMages {
   a.quiet=v.hp<(a.lastHp??v.hp)?0:(a.quiet||0)+dt;a.lastHp=v.hp;
   const weak=v.hp<v.maxHp*.3||a.recover;
   if(weak){
-   if(s)this._stop(v.id);
+   if(s){if(v.hp<v.maxHp*.3)this._stop(v.id);else{s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;}} // (the stones are let go only when he is badly hurt — a tired mage keeps them circling and rests; the author 17.11: «без веской причины не отпускают»)
    if(a.phase!=='rest')this._phase(v,null,'rest');
    if(a.stitchCd<=0&&v.mana>=SPELL_COST.Stitching&&a.scan<=0){a.scan=.9;this._stitch(v,foe);}
    a.dustCd=Math.max(0,(a.dustCd||0)-dt);if(a.dustCd<=0&&a.stitchPose<=0&&this._dust(v,foe))return true; // (out of mana or hurt, running: a smoke screen)
@@ -166,7 +166,10 @@ export class EarthMages {
   }else if(EARTH_STRIKES[a.phase]){
    const strikes=EARTH_STRIKES[a.phase];
    while(a.strike<strikes.length&&a.t>=strikes[a.strike][0]){
-    const count=strikes[a.strike++][1];
+    const idx=a.strike;a.strike++;
+    // (17.11, the author: the earth is thrown ALL AT ONCE in the attack — in two portions, half and the rest — not by a few stones as the pose's table said; and not let go without a weighty reason)
+    if(idx===0)a.portionOf=s.n;
+    const count=strikes.length>=2&&idx<strikes.length-1?Math.max(1,Math.ceil((a.portionOf||s.n)/2)):s.n;
     if(s.n&&L._sees(v,foe)&&this._pay(v,E.THROW_COST)){
      _dir.set(dx,0,dz).normalize();
      s.aim=[foe.x,foe.y+.6,foe.z];s.arc=a.phase==='hammer'?1.6:a.phase==='sweep'?1.15:1;
@@ -249,8 +252,8 @@ export class EarthMages {
    if(m.ev==='volley'&&Array.isArray(m.ids)&&Array.isArray(m.d)){
     // Launch points are authoritative: a late snapshot must not throw a guest's
     // stones from their former extraction cells or unfinished interpolation.
-    for(let j=0;j<Math.min(8,m.ids.length);j++){const b=s.B[m.ids[j]],p=m.origins?.[j];if(b&&Array.isArray(p)&&p.length===3&&p.every(Number.isFinite)){b.pos.fromArray(p);b.src=null;}}
-    s.arc=Number.isFinite(m.arc)?Math.max(1,Math.min(1.6,m.arc)):1;s.aim=Array.isArray(m.aim)&&m.aim.length===3&&m.aim.every(Number.isFinite)?m.aim:null;this.game.groundVortex._replayVolley(s,m.ids.filter(Number.isInteger).slice(0,8),_dir.fromArray(m.d),m.seed|0);}
+    for(let j=0;j<Math.min(E.MAX,m.ids.length);j++){const b=s.B[m.ids[j]],p=m.origins?.[j];if(b&&Array.isArray(p)&&p.length===3&&p.every(Number.isFinite)){b.pos.fromArray(p);b.src=null;}}
+    s.arc=Number.isFinite(m.arc)?Math.max(1,Math.min(1.6,m.arc)):1;s.aim=Array.isArray(m.aim)&&m.aim.length===3&&m.aim.every(Number.isFinite)?m.aim:null;this.game.groundVortex._replayVolley(s,m.ids.filter(Number.isInteger).slice(0,E.MAX),_dir.fromArray(m.d),m.seed|0);}
    else if(m.ev==='hit'&&Array.isArray(m.ids))this.game.groundVortex._breakBlocks(s,m.ids.filter(Number.isInteger).slice(0,E.MAX),false);
    return;
   }

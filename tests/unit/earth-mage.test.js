@@ -19,7 +19,7 @@ function fixture(){
 }
 
 test('earth mage uses real earth, a separate category, mana and bare hands',()=>{
- const f=fixture();f.step(150);const s=f.g.earthMages.swarms.get(f.v.id);
+ const f=fixture();f.step(90);const s=f.g.earthMages.swarms.get(f.v.id); // (17.11: the attack throws ALL the earth, so the stones are counted before the first throw)
  assert.equal(f.v.rank,'elemental');assert.equal(f.v.bareHand,'advanced');assert.equal(f.v.bareMaster,true);assert.equal(f.v.noWand,true);
  assert.ok(s.n>=12);assert.ok(f.v.mana<EARTH.MANA-EARTH.START);assert.equal(f.g.terrain.data.get(0,1,0),BLOCK.STONE,'no hole under caster');
  for(const b of s.B)if(b)assert.equal(f.g.terrain.data.get(b.cx,b.cy+1,b.cz),BLOCK.AIR,'stones came out of real cells');
@@ -39,7 +39,7 @@ test('wall tiles meet exactly and a cocoon is a closed voxel shell without overl
 });
 
 test('same stones sharpen and fly; shield collisions destroy real stones, death releases survivors',()=>{
- const f=fixture();f.step(150);const em=f.g.earthMages,s=em.swarms.get(f.v.id),first=s.B.find(Boolean);
+ const f=fixture();f.step(90);const em=f.g.earthMages,s=em.swarms.get(f.v.id),first=s.B.find(Boolean);
  em._phase(f.v,s,'blade');f.step(60);assert.equal(s.B.find(Boolean),first);assert.equal(first.blade,true);
  em._phase(f.v,s,'wall');for(let i=0;i<120;i++)em.update(1/60);
  const b=s.B.find(Boolean),hit=em.segmentHit(new T.Vector3(b.pos.x,b.pos.y,-15),new T.Vector3(0,b.pos.y,0),'me');assert.ok(hit);
@@ -190,6 +190,15 @@ test('a physically checked projectile does not re-test another line through a ch
  assert.equal(CastleLife.prototype.wardOff.call(L,v,new T.Vector3(), 'AvadaKedavra'),true,'non-projectile rays still query real stones');
  let options;const d={_creature:()=>v,_end(){},_partOf:()=>null,applyToCreature:(s,c,by,o,p,opts)=>options=opts};
  Duel.prototype._arriveAtCreature.call(d,{tk:'v',tid:'earth',spell:'AvadaKedavra',by:'me',earthChecked:true});assert.equal(options.earthChecked,true);
+});
+
+test('the attack throws ALL the earth, in two portions (half, then the rest) — and a tired mage keeps his stones',()=>{
+ const f=fixture();f.step(95);const em=f.g.earthMages,s=em.swarms.get(f.v.id),total=s.n;assert.ok(total>=12);
+ em._phase(f.v,s,'sweep');f.sent.length=0;em.think(f.v,.6);
+ const first=f.sent.find(m=>m.ev==='volley');assert.ok(first,'the first portion');assert.equal(first.ids.length,Math.ceil(total/2),'half');
+ em.think(f.v,.4);const volleys=f.sent.filter(m=>m.ev==='volley');assert.equal(volleys.length,2);assert.equal(volleys[0].ids.length+volleys[1].ids.length,total,'all of it');assert.equal(s.n,0);
+ // (a tired mage — no mana, not hurt — keeps the stones circling)
+ const g=fixture();g.step(70);const s2=g.g.earthMages.swarms.get(g.v.id);assert.ok(s2.n>0);g.v.mana=0.5;g.step(20);assert.ok(g.g.earthMages.swarms.get(g.v.id),'not let go for tiredness');
 });
 
 test('low-health earth mage eventually returns to fighting and always faces the foe during retreat',()=>{
