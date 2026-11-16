@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage, teamAt } from './BrawlRules.js';
 import { TUTORIAL } from '../world/TutorialLand.js';
 import { SHARDS } from './ElementalRules.js';
+import { BLOCK } from '../world/Terrain.js';
 import { elementalLook } from './ElementalTestSites.js';
 import { earthLook } from './EarthMagicRules.js';
 
@@ -33,7 +34,7 @@ export class Brawl {
         this._elemN = 0; // (…and the elemental mages' in theirs)
         this.onChange = null; // (the panel: counts, state)
         this._makeMarkers();
-        this._strip = null; // (the strip between the teams: made once the ground is there — _makeStrip)
+        this._stripBuilt = false; // (the strip between the teams: blocks, laid once the ground is there — _buildStrip)
         this._quiet();
     }
 
@@ -208,7 +209,7 @@ export class Brawl {
         const loose = g.items?.loose;
         if (loose) for (const uid of [...loose.keys()]) { g.items.removeLoose(uid); out.items++; }
         out.chunks = g.terrain?.data?.resetModified?.() || 0;
-        this._stripToGround();
+        this._stripBuilt = false; this._buildStrip(); // (the ground was made again: the strip of blocks with it)
         // (swords, axes, bows, shields lying about — what the knights dropped, what a blast threw: every weapon not held by a hand)
         out.weapons = 0;
         for (const w of [...(g.weapons?.weapons || [])]) { if (w.holder || g.fixedWeapons?.includes?.(w.id)) continue; g.weapons.remove(w); out.weapons++; }
@@ -373,45 +374,25 @@ export class Brawl {
 
     // ------------------------------------------------------------------ the strip
     /**
-     * The strip between the teams, lying on the ground (a ribbon that follows its bumps): a dashed white line in the middle, red on the left
-     * and blue on the right. One mesh, one small texture. Made once the land is there.
+     * The strip between the teams — made of ORDINARY BLOCKS laid into the ground's top layer (the author 17.11: «не нарисованная, а из обычных
+     * блоков»): red edge on the left, blue on the right, grey between, a dashed white line along the middle. Made once the land is there, and
+     * again after the field was made clean (the ground is made again then).
      */
-    _makeStrip() {
-        const g = this.game, W = BRAWL.STRIP, Lz = BRAWL.EDGE * 2 + 6, N = 60;
-        const cv = document.createElement('canvas');
-        cv.width = 128; cv.height = 256;
-        const x = cv.getContext('2d');
-        const gr = x.createLinearGradient(0, 0, 128, 0);
-        gr.addColorStop(0, 'rgba(255,90,68,0.55)'); gr.addColorStop(0.42, 'rgba(255,90,68,0.12)');
-        gr.addColorStop(0.58, 'rgba(74,144,255,0.12)'); gr.addColorStop(1, 'rgba(74,144,255,0.55)');
-        x.fillStyle = gr; x.fillRect(0, 0, 128, 256);
-        x.fillStyle = 'rgba(255,255,255,0.85)';
-        for (let y = 0; y < 256; y += 32) x.fillRect(61, y, 6, 18); // (the dashed line of the middle)
-        x.fillStyle = 'rgba(255,255,255,0.5)';
-        x.fillRect(0, 0, 4, 256); x.fillRect(124, 0, 4, 256); // (the edges)
-        const tex = new THREE.CanvasTexture(cv);
-        tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, Lz / 8);
-        tex.anisotropy = 4;
-        const geo = new THREE.PlaneGeometry(W, Lz, 1, N);
-        geo.rotateX(-Math.PI / 2);
-        const pos = geo.attributes.position;
-        for (let i = 0; i < pos.count; i++) pos.setY(i, this.groundAt(pos.getX(i), pos.getZ(i)) + 0.07);
-        pos.needsUpdate = true;
-        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, side: THREE.DoubleSide, fog: false });
-        const m = new THREE.Mesh(geo, mat);
-        m.frustumCulled = false;
-        m.renderOrder = 4;
-        g.scene.add(m);
-        this._strip = m;
-    }
-
-    /** The ribbon follows the ground again (after the whole field was made clean: the craters are gone). */
-    _stripToGround() {
-        const m = this._strip;
-        if (!m) return;
-        const pos = m.geometry.attributes.position;
-        for (let i = 0; i < pos.count; i++) pos.setY(i, this.groundAt(pos.getX(i), pos.getZ(i)) + 0.07);
-        pos.needsUpdate = true;
+    _buildStrip() {
+        const data = this.game.terrain?.data;
+        if (!data) return false;
+        const h = BRAWL.STRIP / 2, z0 = -BRAWL.EDGE - 3, z1 = BRAWL.EDGE + 3;
+        let n = 0;
+        for (let iz = z0; iz <= z1; iz++) {
+            if (data.landMade && !data.landMade(0, iz)) return false;
+            for (let ix = -h; ix < h; ix++) {
+                const type = ix === -h ? BLOCK.ROOF_RED : ix === h - 1 ? BLOCK.ROOF_BLUE : ix === 0 && ((iz >> 1) & 1) ? BLOCK.CS_WHITE : BLOCK.CS_GREY;
+                const L = data.topLayer(ix, iz);
+                if (data.get(ix, L, iz) !== type) { data.set(ix, L, iz, type); n++; }
+            }
+        }
+        this._stripBuilt = true;
+        return true;
     }
 
     // --------------------------------------------------------------- markers
@@ -449,7 +430,7 @@ export class Brawl {
     // ----------------------------------------------------------------- frame
     update(dt) {
         this._frame++;
-        if (!this._strip && this._frame > 20 && this.game.terrain?.data?.landMade?.(0, 0) !== false) this._makeStrip();
+        if (!this._stripBuilt && this._frame > 20 && this.game.terrain?.data?.landMade?.(0, 0) !== false) this._buildStrip();
         if (this.state === 'fight') {
             const w = winnerOf(this.aliveCount(), true);
             if (w) {
@@ -475,7 +456,6 @@ export class Brawl {
     dispose() {
         try { this.clear(); } catch (e) { /* the game is going down: nothing to take off */ }
         this.game.scene.remove(this.markers);
-        if (this._strip) { this.game.scene.remove(this._strip); this._strip.geometry.dispose(); this._strip.material.map?.dispose(); this._strip.material.dispose(); }
         this.markers.geometry.dispose();
         this.markers.material.dispose();
     }

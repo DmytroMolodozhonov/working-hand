@@ -6,6 +6,8 @@ import { newSwarm } from './GroundVortex.js';
 import { BLOCK } from '../world/Terrain.js';
 import { GV, digCells, liftable, lifted, hitBlocks, sweepsShield } from './GroundVortexRules.js';
 import { findPassage } from './Stitching.js';
+import { tutorialHeight } from '../world/TutorialLand.js';
+import { foeRef } from './BrawlRules.js';
 import { SPELL_COST } from './Combat.js';
 import { elementK } from './HeroElement.js';
 import { newHop, stepHop, newWatch, stuckStep } from './ElementalMove.js';
@@ -49,7 +51,7 @@ export class EarthMages {
   const dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz);if(d<3.5||d>22||!L._sees(v,foe))return false; // (17.11: from 3.5 m — the knights come close — and to 22 m)
   if(Math.random()>.85){a.quakeCd=2;return false;} // (his mood: not at every chance — 17.11: nearly always, the author wanted him to use it)
   if(v.mana<SPELL_COST.Earthquake*.5+E.START*.5||!this._pay(v,SPELL_COST.Earthquake))return false;
-  a.quakeCd=8;a.stitchPose=1.1; // (17.11: every 8 s, was 16)
+  a.quakeCd=a.aggr?4:8;a.stitchPose=1.1; // (17.11: every 8 s, was 16; against a strong foe every 4)
   const P=new THREE.Vector3(v.x,g.collision?.surfaceY?g.collision.surfaceY(v.x,v.z):v.y,v.z),D=new THREE.Vector3(dx/d,0,dz/d);
   g.spells.cast('Earthquake',P,D,'right',v.id);g.sync?.spell?.('Earthquake',P,D,'right',v.id);L._say?.(v,'Earthquake!',2);
   return true;
@@ -114,6 +116,8 @@ export class EarthMages {
    if(slab&&(slab.phase==='loosen'||slab.phase==='carry')){v.mode=slab.phase==='loosen'?'earthLift':'earthHammer';v.model.earthPoseT=(slab.npc?.time||0)%1.1;L._ground(v);return true;}
    a.slab=null;
   }
+  a.footT=(a.footT||0)-dt;if(a.footT<=0){a.footT=.5;this._footing(v);}
+  a.aggrT=(a.aggrT||0)-dt;if(a.aggrT<=0){a.aggrT=1;a.aggr=foe?this._foeStrong(v):false;} // (a strong foe: he attacks sooner and stands his ground)
   a.quakeCd=Math.max(0,(a.quakeCd||0)-dt);
   if(foe&&a.quakeCd<=0&&!a.slab&&a.stitchPose<=0&&this._quake(v,foe))return true; // («Earthquake» is an earth spell: he may say it whatever he holds — even his Ground Vortex — the author 15.11)
   let s=this.swarms.get(v.id);
@@ -152,7 +156,7 @@ export class EarthMages {
     const plan=g.breakthrough?.prepare({x:v.x,y:v.y,z:v.z},{x:dx,z:dz});
     if(plan?.plan){a.wallCd=8;this._phase(v,s,'wall');a.wallPlan=plan;}
    }else if(threat&&s.n>=WALL_COUNT&&this._pay(v,E.WALL_COST))this._phase(v,s,'wall');
-   else if(a.t>(v.mana<E.THROW_COST+E.DRAIN*(EARTH_PHASES.orbit+1.1)?0:EARTH_PHASES.orbit)&&s.n>=1&&dist<=E.RANGE){
+   else if(a.t>(v.mana<E.THROW_COST+E.DRAIN*(EARTH_PHASES.orbit+1.1)?0:EARTH_PHASES.orbit*(a.aggr?.3:1))&&s.n>=1&&dist<=E.RANGE){
     a.cycle++;
     if(a.cycle%6===0&&g.levMax?.npcEarth){const id=g.levMax.npcEarth(v,foe);if(id){a.slab=id;this._stop(v.id);this._engaged(v);return true;}}
     if(!s.blade&&a.cycle%2===0&&v.mana>=E.BLADE_COST+E.THROW_COST+3&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
@@ -183,7 +187,7 @@ export class EarthMages {
   a.empty=s.n?0:a.empty+dt;
   if(a.empty>2.5){a.source++;s.plan.length=0;a.empty=0;}
   if((dist>E.RANGE||!L._sees(v,foe)||!s.n)&&a.phase==='orbit'){L._steer(v,foe.x,foe.z,v.walk*1.3,dt,L._sees(v,foe)&&s.n?E.RANGE-3:0);a.hopping=true;}
-  else if(a.phase==='orbit')this._reposition(v,foe,dt,false);
+  else if(a.phase==='orbit'&&!a.aggr)this._reposition(v,foe,dt,false); // (a strong foe: no hopping about — he stands and strikes)
   v.mode=modeOf(a.phase);L._ground(v);return true;
  }
  _engaged(v){if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
@@ -201,17 +205,62 @@ export class EarthMages {
   v.mana-=SPELL_COST.Stitching;v.earth.stitchCd=14;v.earth.stitchPose=1.3;
   g.stitching.sew(_at.clone(),_dir.clone(),v.id);g.sync?.spell('Stitching',_at,_dir,null,v.id);g.castleLife._say(v,'Stitching!',2);return true;
  }
+ /** («Битва существ») The natural height of the ground at a column — what the land was made as; null: unknown (the ordinary world). */
+ _natural(){return this.game.config?.brawl?tutorialHeight:null;}
+ /** Ground a mage must never take: close to his own feet (no pit round him), and in the battle field no deeper than one layer under the natural ground. */
+ _ownGround(v,x,L,z){
+  const nat=this._natural(),d=Math.hypot(x-v.x,z-v.z);
+  if(!nat)return d<2.6;
+  return d<6||L<nat(x,z)-1;
+ }
+ /** The heaps: columns higher than the natural ground (the earth thrown before, lying about) — their top blocks, the nearest first, but never the cell by his feet. [x, L, z, block][] */
+ _pileCells(v,data,s){
+  const nat=this._natural();if(!nat)return [];
+  const out=[],cols=[],R=16,cx=Math.round(v.x),cz=Math.round(v.z);
+  for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){
+   const x=cx+dx,z=cz+dz,d=Math.hypot(x-v.x,z-v.z);if(d<1.6||d>R)continue;
+   if(data.landMade&&!data.landMade(x,z))continue;
+   const top=data.topLayer(x,z);if(top<=nat(x,z))continue;
+   cols.push([d+.01*((x*73856093^z*19349663)&255)/255,x,z,top]);
+  }
+  cols.sort((a,b)=>a[0]-b[0]);
+  for(const [,x,z,top] of cols){
+   const b=data.get(x,top,z);if(!liftable(b))continue;
+   const above=data.get(x,top+1,z);if(above!==BLOCK.AIR&&above!==undefined)continue;
+   if(data.godGiftAt?.(x,top,z)||this.game.wards?.forbids?.(s.body,{x,y:top-1,z}))continue;
+   out.push([x,top,z,b]);if(out.length>=12)break;
+  }
+  return out;
+ }
+ /** Always blocks under his feet (the author 17.11): the columns round him are made whole again, up to the natural ground. */
+ _footing(v){
+  const nat=this._natural(),data=this.game.terrain?.data;if(!nat||!data)return;
+  const cx=Math.round(v.x),cz=Math.round(v.z);
+  for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+   const x=cx+dx,z=cz+dz,top=data.topLayer(x,z),n=nat(x,z);
+   for(let L=top+1;L<=n;L++)data.set(x,L,z,L===n?BLOCK.GRASS:BLOCK.DIRT);
+  }
+ }
+ /** Is the foe stronger than he is (more health)? Then he fights harder: the author 17.11. */
+ _foeStrong(v){
+  const g=this.game,ref=foeRef(v.foe);let hp=null;
+  if(ref){const c=ref.k==='v'?g.castleLife.byId.get(ref.id):ref.k==='z'?g.zombieById?.get(ref.id):g.animals?.byId.get(ref.id);hp=c?(c.hp??c.health):null;}
+  else hp=g.combat?.hp??20;
+  return hp!=null&&hp>=v.hp*1.15;
+ }
  _gather(v,s,dt){
   const gv=this.game.groundVortex,data=gv.data;if(!data||s.n>=E.MAX)return;
   s.acc=Math.min(4,s.acc+dt*E.LIFT_RATE);let took=0;
   while(s.acc>=1&&s.n<E.MAX&&took<2){
    if(!s.plan.length){
+    const piles=this._pileCells(v,data,s);
+    if(piles.length){s.plan=piles;continue;} // (the author 17.11: first the heaps — the earth thrown before, lying about — not the ground under his own feet)
     const angle=v.yaw+(v.earth.source%8)*Math.PI/4;
     const x=Math.round(v.x-Math.sin(angle)*5),z=Math.round(v.z-Math.cos(angle)*5);
     if(data.landMade&&!data.landMade(x,z))return;
     const level=data.floorBelow?data.floorBelow(x,z,Math.floor(v.y+1.5)):data.topLayer(x,z);
     s.plan=digCells((x,L,z)=>data.get(x,L,z),(x,z)=>data.landMade&&!data.landMade(x,z)?-1e6:data.floorBelow?data.floorBelow(x,z,Math.floor(v.y+1.5)):data.topLayer(x,z),{x,z,L:level},{x:v.x,z:v.z},18,(x,L,z)=>
-     data.landMade&&!data.landMade(x,z)||data.godGiftAt?.(x,L,z)||this.game.wards?.forbids?.(s.body,{x,y:L-1,z})||this.game.ships?.footprintAt?.(x,L-1,z));
+     data.landMade&&!data.landMade(x,z)||data.godGiftAt?.(x,L,z)||this.game.wards?.forbids?.(s.body,{x,y:L-1,z})||this.game.ships?.footprintAt?.(x,L-1,z)||this._ownGround(v,x,L,z));
     if(!s.plan.length){v.earth.source++;s.acc=0;return;}
    }
    const [x,L,z,type]=s.plan.shift();if(!liftable(data.get(x,L,z)))continue;

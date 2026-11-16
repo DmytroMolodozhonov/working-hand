@@ -4083,6 +4083,8 @@ export class Game {
         const savedIntensity = this.flashlight.intensity;
         // things that appear only later (book-birds, bubbles, waves, items): one sample each
         const zoo = new THREE.Group();
+        // («Битва существ»: the world's objects — boats, trees, chests, shops, cauldrons… — are not on this field: their shapes are not compiled, the load is the shorter; the author 17.11)
+        const brawlFast = !!this.config?.brawl, addAll = (list) => { if (!brawlFast) for (const m of list) zoo.add(m); };
         zoo.position.copy(this.character.group.position);
         zoo.add(makeBookModel(0x8e2b2b));
         const earthSample=new EarthVillager(Object.assign(earthBaseLook(971206,'mage',false),earthLook()));
@@ -4091,26 +4093,26 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 8), glow));
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
-        for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
-        for (const m of this.riverRocks?.sampleModels?.() || []) zoo.add(m); // (the boulders: one Lambert material for every shape)
-        for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m);
-        for (const m of this.landTornado?.samples?.() || []) zoo.add(m); // (the land tornado's dusty funnel)
-        for (const m of this.whirlpool?.samples?.() || []) zoo.add(m); // (the whirlpool's disc)
-        for (const m of this.boats?.samples?.() || []) zoo.add(m); // (a boat — BoatModel.js)
-        for (const m of this.sunken?.samples?.() || []) zoo.add(m); // (the sunken temple — SeaTempleModel.js)
-        for (const m of this.seaFloor?.samples?.() || []) zoo.add(m);
-        for (const m of this.underwaterLight?.samples?.() || []) zoo.add(m); // (the sun's shafts and the marine snow)
+        addAll(this.items?.sampleModels?.() || []);
+        addAll(this.riverRocks?.sampleModels?.() || []); // (the boulders: one Lambert material for every shape)
+        addAll(this.oceanStorm?.samples?.() || []);
+        addAll(this.landTornado?.samples?.() || []); // (the land tornado's dusty funnel)
+        addAll(this.whirlpool?.samples?.() || []); // (the whirlpool's disc)
+        addAll(this.boats?.samples?.() || []); // (a boat — BoatModel.js)
+        addAll(this.sunken?.samples?.() || []); // (the sunken temple — SeaTempleModel.js)
+        addAll(this.seaFloor?.samples?.() || []);
+        addAll(this.underwaterLight?.samples?.() || []); // (the sun's shafts and the marine snow)
         { const fs = this.fireSerpent?.sample?.(); if (fs) zoo.add(fs.group); } // (the fire serpent's body, head and flames: its shapes are shared — kept)
-        for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
-        for (const m of hallSamples()) zoo.add(m); // (the big shops' show: bottles, rolled scrolls — ShopHallModels.js)
-        for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
-        for (const m of this.tarons?.sampleModels?.() || []) zoo.add(m); // (a Taron near and as one skinned shape: the underworld's giants — Taron.js)
-        for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
-        for (const m of this.doors?.sampleModels?.() || []) zoo.add(m); // (the keep's forged-iron gates: their iron, steel, rust and the plates' textures — GateModel.js)
-        for (const m of this.castleLife?.talk?.signs?.sampleModels?.() || []) zoo.add(m); // (the «Скупка» plaques of the buyers)
-        for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
-        for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
-        for (const m of this.buildingFx?.sampleModels?.() || []) zoo.add(m); // (a mill's sails, a church bell)
+        addAll(this.world.forest?.sampleModels?.() || []); // (the real trees' bark and leaves, their shadow)
+        addAll(hallSamples()); // (the big shops' show: bottles, rolled scrolls — ShopHallModels.js)
+        addAll(chestSamples()); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
+        addAll(this.tarons?.sampleModels?.() || []); // (a Taron near and as one skinned shape: the underworld's giants — Taron.js)
+        addAll(this.cauldrons?.sampleModels?.() || []); // (a cauldron's iron, rust, liquid, bubbles; a flask)
+        addAll(this.doors?.sampleModels?.() || []); // (the keep's forged-iron gates: their iron, steel, rust and the plates' textures — GateModel.js)
+        addAll(this.castleLife?.talk?.signs?.sampleModels?.() || []); // (the «Скупка» plaques of the buyers)
+        addAll(this.wizVillages?.sampleModels?.() || []); // (the plaque on Coprus the Clever's pedestal)
+        addAll(this.loreLibrary?.sampleModels?.() || []); // (the reading stand with its book)
+        addAll(this.buildingFx?.sampleModels?.() || []); // (a mill's sails, a church bell)
         this.whirl?.sampleMeshes();
         if (this.darkFog) for (const m of this.darkFog.sampleMeshes()) zoo.add(m); // («Caligo»: the dome's and the smoke's shaders)
         if (this.scars) zoo.add(this.scars.sampleMesh()); // (the scar's lit ribbon material)
@@ -4144,42 +4146,42 @@ export class Game {
         try { for (const m of PharaohLife.samples()) zoo.add(m); } catch (e) { console.error('prewarm pharaoh', e); } // (the pharaoh's locusts, darts, sarcophagus, wave ring)
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
-        for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
+        addAll(darkSamples()); // (чёрная магия: маска меток и дымок — DarkSkin.js)
         for (const m of [...darkLordSamples(), ...lordSamples(), ...knightSamples()]) zoo.add(m); // («настоящий тёмный маг»: шар тьмы, воронка, круг рун, наряд — DarkLordFx.js, DarkLordLook.js)
         zoo.add(monsterSamples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js)
-        for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
-        for (const m of this.enchantCircles?.sampleModels?.() || []) zoo.add(m); // (the enchanting circle, its column and rune rings)
-        for (const m of glowSamples()) zoo.add(m); // (the rune shell of an enchanted thing)
+        addAll(this.beds?.sampleModels?.() || []);
+        addAll(this.enchantCircles?.sampleModels?.() || []); // (the enchanting circle, its column and rune rings)
+        addAll(glowSamples()); // (the rune shell of an enchanted thing)
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
-        for (const m of this.gargoyles?.sampleModels?.() || []) zoo.add(m); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
-        for (const m of this.wandMagic?.sampleModels?.() || []) zoo.add(m); // (the flashlight's soft beam: its shader)
-        for (const m of this.timeTurn?.sampleModels?.() || []) zoo.add(m); // («Axis»: the sky's disc of star-trails, the axis, a rune ring — TimeTurn.js)
-        for (const m of this.sunRay?.sampleModels?.() || []) zoo.add(m); // («Sun Ray»: the thread of light, the orb, a ring — SunRay.js)
-        for (const m of this.helios?.sampleModels?.() || []) zoo.add(m); // («Helios»: the Sun's disc and corona — Helios.js)
-        for (const m of this.rainFx?.sampleModels?.() || []) zoo.add(m); // («Let it rain»: the beam, the deck of clouds, a ring, a curtain of rain — RainSummon.js)
-        for (const m of this.sun?.sampleModels?.() || []) zoo.add(m); // («To the Sun»: the beam's column, the heart at the clouds, a ring of shock, a shaft of the sun — SunBeam.js)
-        for (const m of this.customPlants?.sampleModels?.() || []) zoo.add(m); // (a plant of one's own: its lit body, its glow)
-        for (const m of this.customCreatures?.sampleModels?.() || []) zoo.add(m); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)
-        for (const m of this.spencers?.sampleModels?.() || []) zoo.add(m); // (the rose bird, its halo and the see-through material — only a seer ever has them in play, but the shader is compiled now)
-        for (const m of this.ghosts?.sampleModels?.() || []) zoo.add(m);
+        addAll(this.gargoyles?.sampleModels?.() || []); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
+        addAll(this.wandMagic?.sampleModels?.() || []); // (the flashlight's soft beam: its shader)
+        addAll(this.timeTurn?.sampleModels?.() || []); // («Axis»: the sky's disc of star-trails, the axis, a rune ring — TimeTurn.js)
+        addAll(this.sunRay?.sampleModels?.() || []); // («Sun Ray»: the thread of light, the orb, a ring — SunRay.js)
+        addAll(this.helios?.sampleModels?.() || []); // («Helios»: the Sun's disc and corona — Helios.js)
+        addAll(this.rainFx?.sampleModels?.() || []); // («Let it rain»: the beam, the deck of clouds, a ring, a curtain of rain — RainSummon.js)
+        addAll(this.sun?.sampleModels?.() || []); // («To the Sun»: the beam's column, the heart at the clouds, a ring of shock, a shaft of the sun — SunBeam.js)
+        addAll(this.customPlants?.sampleModels?.() || []); // (a plant of one's own: its lit body, its glow)
+        addAll(this.customCreatures?.sampleModels?.() || []); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)
+        addAll(this.spencers?.sampleModels?.() || []); // (the rose bird, its halo and the see-through material — only a seer ever has them in play, but the shader is compiled now)
+        addAll(this.ghosts?.sampleModels?.() || []);
         if (this.config.school) for (const m of [...coachSamples(), ...schoolDecorSamples()]) zoo.add(m); // (the school's magic coach — SchoolCoach.js) // (the sheet-ghost's outside and inside, the castle's chairs and candles, the flame — GhostFx.js, GhostProps.js)
-        for (const m of this.beslan?.sampleModels?.() || []) zoo.add(m); // (Beslan's grass: its shader)
-        for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
+        addAll(this.beslan?.sampleModels?.() || []); // (Beslan's grass: its shader)
+        addAll(this.owls?.sampleModels?.() || []); // (the owl's shimmering plumage; its feather shares it)
         zoo.add(...(this.elementAura?.sampleModels() || [])); // (the mages' rings: leaves, flames, drops, pebbles)
         zoo.add(this.plants.sampleModels()); // (the Brightflower: stems, petals that open in the shader, flame, heart — BrightFlowerFx)
         zoo.add(plantSamples()); // (telewilpins and carnivorous heads: stems, petals, jaws, tendrils, the glow sprites — Plants.js)
-        for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
+        addAll(this.wards?.sampleModels?.() || []); // (the dome of «Protection House»)
         for (const m of sampleShieldModels()) zoo.add(m); // (the shields: «Protection», and the gods' golden one — ProtectionGods.js)
-        for (const m of this.iceMagic?.sampleModels?.() || []) zoo.add(m); // (the gloss of a castle of ice)
-        for (const m of this.temple?.sampleModels?.() || []) zoo.add(m); // (the Temple of the Gods: its stone, marble, gold, books, sand, cobwebs, light)
-        for (const m of this.boom?.sampleModels?.() || []) zoo.add(m); // («Бум»: its flying rocks, its shock ring)
-        for (const m of this.ultra?.sampleModels?.() || []) zoo.add(m); // («Ультра качество»: the soft lawn)
+        addAll(this.iceMagic?.sampleModels?.() || []); // (the gloss of a castle of ice)
+        addAll(this.temple?.sampleModels?.() || []); // (the Temple of the Gods: its stone, marble, gold, books, sand, cobwebs, light)
+        addAll(this.boom?.sampleModels?.() || []); // («Бум»: its flying rocks, its shock ring)
+        addAll(this.ultra?.sampleModels?.() || []); // («Ультра качество»: the soft lawn)
         if (this.world.terrain?.flora) zoo.add(this.world.terrain.flora.sampleModel()); // (the meadows' tall grass and flowers)
-        for (const m of this.hellRealm?.sampleModels?.() || []) zoo.add(m); // (hell's sky dome — HellRealm.js)
-        for (const m of this.pentagranium?.sampleModels?.() || []) zoo.add(m); // («Пентаграниум»: the trail's ribbons, the figure's and the glow's shaders)
-        for (const m of this.groundVortex?.sampleModels?.() || []) zoo.add(m); // (the blocks of «Ground Vortex»)
-        for (const m of this.breakthrough?.sampleModels?.() || []) zoo.add(m); // (the earth of «Breakthrough» rising out of the ground)
-        for (const m of this.levMax?.sampleModels?.() || []) zoo.add(m); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
+        addAll(this.hellRealm?.sampleModels?.() || []); // (hell's sky dome — HellRealm.js)
+        addAll(this.pentagranium?.sampleModels?.() || []); // («Пентаграниум»: the trail's ribbons, the figure's and the glow's shaders)
+        addAll(this.groundVortex?.sampleModels?.() || []); // (the blocks of «Ground Vortex»)
+        addAll(this.breakthrough?.sampleModels?.() || []); // (the earth of «Breakthrough» rising out of the ground)
+        addAll(this.levMax?.sampleModels?.() || []); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
         for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)
         // (every thing lying about — and the swords and axes — as the video card draws them: one shape each (Items.oneShape,
@@ -4305,6 +4307,7 @@ export class Game {
      */
     async warmUp(progress = () => {}) {
         const B = bootTimer;
+        if (this.config?.brawl) return; // («Битва существ»: nothing of the world to warm — no icons, ships, trees; the sounds are made when first heard: the author 17.11 «ускорить загрузку»)
         B.begin('· звуки (дождаться)');
         try { await this.sound?.warmAll?.(progress); } catch (e) { console.warn('[Game] sounds warm-up', e); }
         B.end('· звуки (дождаться)');

@@ -1429,7 +1429,7 @@ async function startGameInner(config, welcome) {
         }
         // the sounds made ahead (read from the boot cache, or synthesized a piece at a time) at the same time as the world is
         // drawn: the land comes from the workers, the main thread mostly waits for it (Game.warmUp then finds them made)
-        const soundsWarm = game.sound ? B.span('синтез звуков (параллельно)', () => game.sound.warmAll()) : null;
+        const soundsWarm = game.sound && !config.brawl ? B.span('синтез звуков (параллельно)', () => game.sound.warmAll()) : null; // («Битва существ»: sounds are made when first heard — the load is the shorter)
         // the whole visible world is built on the loading screen (the first seconds of play stay smooth)
         await B.span('земля вокруг', () => game.loadNearby((f) => updateProgress(66 + Math.round(f * 4), `Прорисовка мира... ${Math.round(f * 100)}%`)));
         // the sounds and the spells' looks otherwise made in the first seconds of play (each a hitch): now
@@ -1523,7 +1523,7 @@ $('start-btn').addEventListener('click', () => {
         setMpStatus('Вы подключены к чужой игре — её запускает хост.');
         return;
     }
-    if (pickingMap && brawlPick) { startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, brawl: true, map: null, worldName: 'Битва существ' }); return; } // («Битва существ»: a small bounded field, no saving — Brawl.js)
+    if (pickingMap && brawlPick) { startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, brawl: true, map: null, realTrees: false, worldName: 'Битва существ' }); return; } // («Битва существ»: a small bounded field, no saving — Brawl.js)
     const cfg = readConfig();
     if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)

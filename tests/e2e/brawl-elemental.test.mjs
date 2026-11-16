@@ -36,7 +36,7 @@ test('the real elemental mages hurt the zombies of the other team', { timeout: 1
         let shardHits = 0; const origSh = B.shardHit.bind(B);
         B.shardHit = (sh, b) => { const ok = origSh(sh, b); if (ok) shardHits++; return ok; };
         const phases = {};
-        let lifted = 0, thrown = 0, strip = !!B._strip;
+        let lifted = 0, thrown = 0, strip = !!B._stripBuilt;
         const lv = g.levitation, origLet = lv.letGo.bind(lv);
         lv.letGo = (ck, c, gentle) => { if (typeof c.lev?.by === 'string' && c.lev.by.startsWith('brawlelem:')) { thrown++; } return origLet(ck, c, gentle); };
         for (let i = 0; i < 3000 && B.state === 'fight'; i++) {
@@ -45,7 +45,7 @@ test('the real elemental mages hurt the zombies of the other team', { timeout: 1
             for (const v of mages()) if (v.elemental?.carry && !v.elemental.carry.seen) { v.elemental.carry.seen = true; lifted++; }
         }
         out.state = B.state; out.winner = B.winner; out.alive = B.aliveCount();
-        out.hits = hits; out.impacts = impacts; out.shardHits = shardHits; out.lifted = lifted; out.thrown = thrown; out.strip = strip || !!B._strip;
+        out.hits = hits; out.impacts = impacts; out.shardHits = shardHits; out.lifted = lifted; out.thrown = thrown; out.strip = strip || !!B._stripBuilt;
         out.phases = Object.fromEntries(Object.entries(phases).map(([k, v]) => [k, [...v]]));
         out.zombiesLeft = g.zombies.filter((z) => !z.isDead && !z.isDying).length;
         out.mageHp = mages().map((v) => [v.element, Math.round(v.hp), Math.round(v.mana)]);
