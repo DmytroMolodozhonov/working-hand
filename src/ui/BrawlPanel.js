@@ -20,6 +20,7 @@ const CSS = `
 #brawl-panel .bp-btn[disabled]{opacity:.4;cursor:default}
 #brawl-panel .bp-cnt{margin-top:8px;font-weight:600}
 #brawl-panel .bp-hint{margin-top:8px;font-size:11.5px;color:#b7b2d6}
+body.brawl-on #hud,body.brawl-on #mana-num,body.brawl-on #fatigue-container,body.brawl-on #minimap-container,body.brawl-on #webcam-preview,body.brawl-on #hotbar,body.brawl-on #back-cells,body.brawl-on #coin-counter{display:none !important}
 #brawl-banner{position:fixed;left:50%;top:14%;transform:translateX(-50%);z-index:61;padding:10px 26px;border-radius:14px;font:700 28px system-ui,sans-serif;color:#fff;background:rgba(14,12,28,.78);border:2px solid #fff;display:none}
 `;
 
@@ -43,6 +44,7 @@ export class BrawlPanel {
             <div class="bp-row"><button class="bp-btn" id="bp-start">⚔️ Начать бой</button><button class="bp-btn alt" id="bp-clear">🗑 Убрать всех</button></div>
             <div class="bp-hint">Выберите сторону и бойца, затем щёлкните по полю (Shift — сразу пятерых). Лететь: W A S D, Пробел и Ctrl; осмотреться — правая кнопка мыши; колесо — скорость.</div>`;
         document.body.appendChild(root);
+        document.body.classList.add('brawl-on'); // (the hero's bars, slots, minimap and the camera window are of no use to a spectator)
         const banner = (this.banner = document.createElement('div'));
         banner.id = 'brawl-banner';
         document.body.appendChild(banner);
@@ -98,6 +100,7 @@ export class BrawlPanel {
     dispose() {
         this._cv?.removeEventListener('mousedown', this._onDown);
         this._cv?.removeEventListener('mouseup', this._onUp);
+        document.body.classList.remove('brawl-on');
         this.root.remove();
         this.banner.remove();
     }
