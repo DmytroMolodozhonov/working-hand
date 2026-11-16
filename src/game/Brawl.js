@@ -38,8 +38,27 @@ export class Brawl {
         this.onChange = null; // (the panel: counts, state)
         this._makeMarkers();
         this._stripBuilt = false; // (the strip between the teams: blocks, laid once the ground is there — _buildStrip)
+        this._muteHero(game);
         if (game.world) game.world.duelFar = 115; // (only the field and the cliffs round it are drawn and made: nothing beyond is of any use — FPS and loading)
         this._quiet();
+    }
+
+    /**
+     * The player here is only an observer (the author 17.11: «не должно начисляться баллы, писаться подсказки или начисляться мана — я наблюдатель»):
+     * no deeds and no mana cells (Achievements), no hints and notices on the screen (only the battle's own words), no animation of mana.
+     */
+    _muteHero(g) {
+        const A = g.achievements;
+        if (A) A.off = true; // (no deed is counted at all: Achievements.gain asks it)
+        if (A) for (const k of ['hit', 'fought', 'killed', 'award', 'gain', 'masterKilled', 'towerWrecked', 'checkTower', 'towerLeftHere']) if (typeof A[k] === 'function') A[k] = () => false;
+        const h = g.hud;
+        if (h) {
+            const mine = (t) => /^(⚔️|🏆|🤝)/.test(String(t ?? '').replace(/<[^>]*>/g, '').trim());
+            for (const k of ['setVoice', 'setStatus', 'showHint', 'setHint', 'toast', 'notify', 'setNotice', 'damageFlash', 'manaPulse', 'flashMana']) {
+                const o = h[k];
+                if (typeof o === 'function') h[k] = (t, ...a) => (k === 'setVoice' || k === 'setStatus' ? (mine(t) ? o.call(h, t, ...a) : undefined) : undefined);
+            }
+        }
     }
 
     /** Only what the player puts on the field: no herds, wild plants, birds, bosses (as the tutorial's meadow: Tutorial._quiet), no wandering zombies. */
