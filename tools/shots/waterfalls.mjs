@@ -11,7 +11,7 @@ export default async function (h, args) {
         if (p && want.includes(p.kind) && !seen[p.kind]) { seen[p.kind] = p; if (Object.keys(seen).length === want.length) break outer; }
     }
     h.log('found', Object.values(seen).map((p) => p.kind + ' ' + p.x + ',' + p.z + ' H' + p.H + ' W' + p.W));
-    h.time(0.3);
+    g.dayPhase = () => 0.3; // (a slow shot would drift into night: the day is held)
     for (const k of want) {
         const p = seen[k]; if (!p) continue;
         h.time(0.3);
