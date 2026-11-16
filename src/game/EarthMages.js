@@ -99,6 +99,7 @@ export class EarthMages {
   };
   for(const b of this.game.duel?.bolts.values()||[])if(b.state==='flying')accept(b.front,b.dir,b.by,/Fire/.test(b.spell||'')); // (a fire charge is as heavy a threat as a blast: the water mage meets it with the dome)
   for(const task of this.game.spells?.spells||[])if(task.bomb&&task.life>0)accept(task.bomb.p,task.bomb.v,task.bomb.by,true);
+  for(const f of this.game.vortex?.flights?.values()||[])if(f.phase==='fly'&&f.tk==='v'&&f.tid===v.id&&f.pos)accept(f.pos,{x:v.x-f.pos.x,y:v.y+2-f.pos.y,z:v.z-f.pos.z},f.by,true); // (a water ball thrown at him)
   return threat;
  }
  think(v,dt){
@@ -151,8 +152,8 @@ export class EarthMages {
   if((a.phase==='lift'&&a.t>.22)||a.phase==='orbit')this._gather(v,s,dt);
   if(a.phase==='lift'&&a.t>=EARTH_PHASES.lift)this._phase(v,s,'orbit');
   else if(a.phase==='orbit'){
-   if(threat?.bomb&&s.n>=EARTH_SHELL.length&&this._pay(v,E.COCOON_COST))this._phase(v,s,'cocoon');
-   else if(threat?.bomb&&s.n<WALL_COUNT&&a.wallCd<=0&&v.mana>=SPELL_COST.Breakthrough&&threat.dist>7){
+   if(threat&&s.n>=EARTH_SHELL.length&&this._pay(v,E.COCOON_COST))this._phase(v,s,'cocoon'); // (any spell flying at him — a blast, a fire, a charge of any colour, a water ball — the earth shelters him: the author 17.11, as an ordinary mage's «Protection»)
+   else if(threat&&s.n<WALL_COUNT&&a.wallCd<=0&&v.mana>=SPELL_COST.Breakthrough&&threat.dist>7){
     const plan=g.breakthrough?.prepare({x:v.x,y:v.y,z:v.z},{x:dx,z:dz});
     if(plan?.plan){a.wallCd=8;this._phase(v,s,'wall');a.wallPlan=plan;}
    }else if(threat&&s.n>=WALL_COUNT&&this._pay(v,E.WALL_COST))this._phase(v,s,'wall');
