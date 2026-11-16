@@ -8,3 +8,8 @@
 16:06:12.908 · [Заклинания] === игра началась 16.11.2026, 16:06:12 — журнал заклинаний: что услышано и что из этого вышло
 ════════════════════════════════════════════════════════════════
 
+16:07:04.542 · [Производительность] прогрев: долгие группы образцов — 3244 мс [348] MeshPhongMaterial/inst, MeshPhongMaterial | 1115 мс [188] MeshLambertMaterial, MeshBasicMaterial, MeshLambertMaterial:farshape-plain+skin/skin, MeshBasicMaterial:+skin/skin, MeshLambertMaterial:diabolos-skin, MeshLambertMaterial:diabolos-hard, MeshBasicMaterial:diabolos-glow, MeshLambertMaterial:diabolos-skin+skin/skin, MeshLambertMaterial:diabolos-hard+skin/skin, MeshBasicMaterial:diabolos-glow+skin/skin | 942 мс [288] MeshStandardMaterial:ghostProps/inst, ShaderMaterial:ghostFlame/inst, MeshBasicMaterial, MeshStandardMaterial, MeshLambertMaterial, MeshStandardMaterial:+skin/skin, MeshLambertMaterial:farshape-plain+skin/skin, MeshBasicMaterial:+skin/skin | 847 мс [300] MeshBasicMaterial, MeshLambertMaterial/inst, MeshBasicMaterial/inst, MeshStandardMaterial, PointsMaterial | 830 мс [324] MeshStandardMaterial, MeshLambertMaterial, MeshBasicMaterial
+16:07:05.395 · [Сеть] ⏱ загрузка (freeworld) 53,1 с: мир и объекты 0,6 · синтез звуков∥ 0,6 · земля вокруг 0,9 · шейдеры 50,5 · до «можно играть» 0,8 | прогрев: самый долгий шаг основного потока 1452 мс; готово (земля, шейдеры, плавность) через 0.8 с после старта | страница до меню 2.4 с
+16:07:05.395 · [Сеть] ⚡ Кеш: звуки 1 из кеша / 0 заново, иконки 1 из кеша / 0 заново; прочитано 79.9 МБ за 0,47 с
+16:07:52.776 · [Игра] === игра открыта 16.11.2026, 16:07:52
+16:07:54.012 · [Сеть] список серверов: нет
