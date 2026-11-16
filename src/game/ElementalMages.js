@@ -213,7 +213,7 @@ export class ElementalMages {
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);g.sound?.spellCast?.(name,_o);
   v.aimPitch=Math.asin(_d.y);v.castT=.6;v.model.castNow=true;this.engaged(v);return true;
  }
- engaged(v){if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
+ engaged(v){if(v.elemental)v.elemental.atkAt=performance.now();if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
  fireFoot(v,side){
   const foot=side?v.model.leftKnee:v.model.rightKnee;
   if(!foot)return null;
@@ -372,11 +372,16 @@ export class ElementalMages {
     if(!this.pay(v,dt*FLIGHT.COST)||a.flight<=0)this.land(v,dt);
     else{a.flight-=dt;const gy=g.collision.groundAt(v.x,v.z,v.y+1);const ny=v.y+(gy+5-v.y)*Math.min(1,dt*1.5);if(!L._airFree||L._airFree(v.x,v.z,ny))v.y=ny;else a.flight=0;v.mode='airFlight';}
    }
-   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash'&&a.phase!=='Dash'&&a.phase!=='Slash'&&a.phase!=='Rise')this.reposition(v,foe,dt,17); // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
+   if((dist<17||threat)&&!(a.winged&&(v.fly||a.wings?.launch))&&a.phase!=='Spin'&&a.phase!=='Lash'&&a.phase!=='Dash'&&a.phase!=='Slash'&&a.phase!=='Rise'){
+    const hop=this.reposition(v,foe,dt,17);
+    if(hop==='stuck'&&a.phase==='Coil'&&a.t>.3)this.phase(v,'Slash'); // (nowhere to go back to — he fights: the author 17.11 «если им некуда идти — будут атаковать»)
+   }
+   a.atkAt??=performance.now();const idle=(performance.now()-a.atkAt)/1000; // (s since his last attack: an air mage mostly keeps away, but never forgets to strike — the author 17.11: «чтобы не завис и не проиграл в воздухе, не решившись напасть»)
+   if(v.fly&&!a.winged&&idle>2.5&&dist<26&&a.phase!=='Spin'&&L._sees(v,foe)){this.gustFan(v,foe,3);a.atkAt=performance.now();} // (in the air too: a fan of blades from above whenever he has been quiet too long) // (not while he whirls or lashes: those are on the spot) // (hops back and aside — never chase an opponent who is leaving)
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
-   if(a.phase==='Coil'&&a.t>.7){const mv=a.lastMove!=='Drift'&&Math.random()<.22?'Drift':nextAirMove(a.lastMove==='Drift'?null:a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Coil'&&a.t>.7){const mv=idle>3.5?['Slash','Lash','Sweep'][(Math.random()*3)|0]:a.lastMove!=='Drift'&&Math.random()<.22?'Drift':nextAirMove(a.lastMove==='Drift'?null:a.lastMove,Math.random());a.lastMove=mv;this.phase(v,mv);}
    if(a.phase==='Spin'){
     if(a.t<AIR_SPIN.SPIN_T)v.yaw+=AIR_SPIN.RATE*dt;a.hopping=a.t<AIR_SPIN.SPIN_T; // (two turns on the spot: the body is his own to turn while he whirls)
     if(a.t>AIR_SPIN.FIRE_T&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(dist<11&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);else this.cast(v,'WindMaxima',foe);}}
