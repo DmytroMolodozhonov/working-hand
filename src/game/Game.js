@@ -2,7 +2,7 @@ import {fireballBody} from './FireballRules.js';
 import {waveSource} from './WaveSource.js';
 import { ElementalMages } from './ElementalMages.js';
 import { ELEMENTAL_TESTS,elementalTestSite } from './ElementalTestSites.js';
-import {EARTH_SETTLEMENTS_FROM_GEN,ELEMENTAL_SETTLEMENTS_FROM_GEN} from '../world/Terrain.js';
+import {EARTH_SETTLEMENTS_FROM_GEN,ELEMENTAL_SETTLEMENTS_FROM_GEN,WATERFALLS_FROM_GEN} from '../world/Terrain.js';
 import { EarthMages } from './EarthMages.js';
 import { earthSite,earthLook } from './EarthMagicRules.js';
 import { VillagerModel as EarthVillager, villagerLook as earthBaseLook } from '../entities/VillagerModel.js';
@@ -161,6 +161,8 @@ import { Tutorial } from './Tutorial.js';
 import { TutorialNudge } from './TutorialNudge.js';
 import { School } from './School.js';
 import { PharaohLife } from './PharaohLife.js';
+import { RiverRocks } from '../world/RiverRocks.js';
+import { WaterfallFx } from '../fx/WaterfallFx.js';
 import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
 import { Blackbeard } from './Blackbeard.js';
@@ -570,6 +572,7 @@ export class Game {
             arenaX2: this.gen >= ARENA_X2_FROM_GEN && !(config.mode === 'creative' && this.hero?.spawn === 'arena'), // (the real world's arenas twice as wide — DuelArenas.ARENA_X2; NOT the duel-only start: it keeps the former size)
             earthSettlements: this.gen >= EARTH_SETTLEMENTS_FROM_GEN,
             elementalSettlements:this.gen >= ELEMENTAL_SETTLEMENTS_FROM_GEN,
+            waterfalls: this.gen >= WATERFALLS_FROM_GEN, // (the rivers' waterfalls: Waterfalls.js)
             arenaFlat: this.gen >= ARENA_FLAT_FROM_GEN, // (an arena only where the land round it does not drop away — DuelArenas.arenaGround)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
@@ -916,6 +919,8 @@ export class Game {
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
         this.godhood = new Godhood(this); // who killed all seven titans: a god — immortal, the Hall of the Sun (Godhood.js)
         this.titans = new Titans(this); // the seven titans on their planets (Titans.js, TitanRules.js)
+        this.fallFx = new WaterfallFx(this); // the spray, the roar and the rainbow of the waterfalls (WaterfallFx.js)
+        this.riverRocks = new RiverRocks(this); // the boulders by the rivers and at the waterfalls' feet (RiverRocks.js; generation 32)
         this.pharaoh = new PharaohLife(this); // Pharaoh Sandy's pyramids: the mummies, the guards, the traps, the torches (PharaohLife.js)
         this.vampire = new VampireLife(this); // Count Sracula's castle: the count, his fifty bats, ten skeleton guards, the clouds over his land (VampireLife.js)
         this.iceCastle = new IceCastleLife(this); // the one Ice Castle of the world: the Ice Queen, her snowmen and ice monsters, the Ice Rod (IceQueen.js)
@@ -1371,6 +1376,7 @@ export class Game {
         // a wand makes my Bombardo destroy more
         if ((casterId === 'local' || casterId === this.localId) && this._lastSpell && performance.now() - this._lastSpell.at < 6000) radius *= 1 + (this._lastSpell.pw - 1) * 0.5;
         const keep = this.wards?.keepFor(pos, radius) || [];
+        this.riverRocks?.blast(pos, radius); // (a boulder of the rivers breaks in a blast: RiverRocks.blast)
         this.applyExplosion(pos, radius, true, power, casterId, keep);
         this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius, ...(keep.length ? { k: keep } : {}) }); // (k: the houses' spheres it could not eat into)
         // («Бомбардо» cracks a house's sphere — three break it —, «Бомбардо Максима» breaks it at once)
@@ -4079,6 +4085,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
+        for (const m of this.riverRocks?.sampleModels?.() || []) zoo.add(m); // (the boulders: one Lambert material for every shape)
         for (const m of this.oceanStorm?.samples?.() || []) zoo.add(m);
         for (const m of this.landTornado?.samples?.() || []) zoo.add(m); // (the land tornado's dusty funnel)
         for (const m of this.whirlpool?.samples?.() || []) zoo.add(m); // (the whirlpool's disc)
@@ -4579,6 +4586,7 @@ export class Game {
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
         if (earth && !duelOnly) this.iceCastle.update(dt); sysMark('iceCastle');
         if (earth && !duelOnly) this.pharaoh?.update(dt); sysMark('pharaoh');
+        if (earth && !duelOnly) { this.riverRocks?.update(dt, this.character.group.position); this.fallFx?.update(dt, this.character.group.position); } else if (this.riverRocks?.group.visible) this.riverRocks.group.visible = false;
         if (earth && !duelOnly) this.vampire?.update(dt); sysMark('vampire');
         if (!duelOnly) this.titans?.update(dt); sysMark('titans');
         this.godhood?.update(dt); sysMark('godhood');

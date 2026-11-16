@@ -993,6 +993,14 @@ const LOOPS = {
         glide(o, sr, 1.6, 2.2, 0.05, (u) => 180 - 60 * u, (u) => Math.sin(u * Math.PI), 2); // (a moan in the wind)
         return finish(loopSeam(o, sr), sr, { peak: 0.38 });
     },
+    /** A waterfall near you: a broad rushing hiss, a deep roar under it, a slow swell as the water comes in sheets, the splash of drops (loops). */
+    loopWaterfall(sr) {
+        const o = buf(sr, 5.6), r = rng(1601);
+        noise(o, sr, 0, 5.6, 0.3, (u) => 0.34 + 0.05 * Math.sin(u * 6.28 * 3), (u) => 0.8 + 0.2 * Math.sin(u * 6.28 * 2 + 1), r); // (the rush)
+        noise(o, sr, 0, 5.6, 0.45, (u) => 0.05 + 0.015 * Math.sin(u * 6.28 * 4), (u) => 0.85 + 0.15 * Math.sin(u * 6.28 * 3), r); // (the roar below)
+        for (let k = 0; k < 90; k++) noise(o, sr, Math.abs(r()) * 5.55, 0.02, 0.18, () => 0.6, (u) => 1 - u, r); // (drops splashing)
+        return finish(loopSeam(o, sr), sr, { peak: 0.5 });
+    },
     /** The divine sword near you: a quiet, high, shining hum — two soft fifths breathing against each other, a faint airy shimmer (loops). */
     loopDivineHum(sr) {
         const o = buf(sr, 4.8), r = rng(917);

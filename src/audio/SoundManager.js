@@ -1017,6 +1017,9 @@ export class SoundManager {
     /** Hell around the hero (HellRealm.js): its hot wind and the lava's rumble, as loud as `k` (0…1; 0 — silent). */
     hellHum(k) { if (this.context && this.loaded) this._loop('hell', this.enabled && k > 0.01 ? 'loopHell' : null, 0.8 * Math.min(1, k)); }
 
+    /** A waterfall near me (WaterfallFx.js): its rush and roar, as loud as `k` (0…1, by distance and size; 0 — silent). */
+    fallHum(k) { if (this.context && this.loaded) this._loop('waterfall', this.enabled && k > 0.01 ? 'loopWaterfall' : null, 0.9 * Math.min(1, k)); }
+
     /** The divine sword near me: its quiet shining hum, as loud as `k` (0…1, by distance; 0 — silent). DivineSwordFx. */
     divineHum(k) { if (this.context && this.loaded) this._loop('divine', this.enabled && k > 0.01 ? 'loopDivineHum' : null, 0.5 * Math.min(1, k)); }
 

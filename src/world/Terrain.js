@@ -36,6 +36,7 @@ import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
 import { VampireCastleSite } from './VampireCastle.js';
 import { PyramidSite, PYR, isPyramidBlock } from './Pyramids.js';
+import { WaterfallSite } from './Waterfalls.js';
 import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE, iceMount } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
@@ -289,7 +290,9 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 31;
+export const WORLD_GEN = 32;
+/** The first generation with waterfalls on the rivers (Waterfalls.js: rock bluffs with water falling into the river). */
+export const WATERFALLS_FROM_GEN = 32;
 export const EARTH_SETTLEMENTS_FROM_GEN = 30;
 export const ELEMENTAL_SETTLEMENTS_FROM_GEN = 31;
 /**
@@ -669,6 +672,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     const hill = (ix, iz) => {
         let h = fn(ix, iz);
         hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach; hill.kind = fn.kind;
+        hill.river = fn.river; hill.flowX = fn.flowX; hill.flowZ = fn.flowZ; // (the rivers' flags too: the current of the water, the waterfalls — Waterfalls.js)
         hill.mesa = fn.mesa; hill.emer = fn.emer; hill.moon = fn.moon; hill.fant = fn.fant;
         const m = fn.water ? -Infinity : testHillHeight(ix, iz); // (the river keeps its bed: its water's top stays level, no raised channel)
         if (m > h) h = m;
@@ -734,7 +738,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false } = {}) {
         this.seed = seed;
         this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
         this.schoolMode = !!school; // («Школа Акселдорф»: the world's own land, the school castle on a terrace near the start — SchoolLand.js)
@@ -763,7 +767,7 @@ export class TerrainData {
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = this.pyr = this.school = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = this.pyr = this.school = this.falls = null;
         this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
@@ -819,6 +823,8 @@ export class TerrainData {
             // the Castle of Ghosts (GhostCastle.js; generation 18): in the land only while the hero sees the invisible (`ghost.on`); never on another site's land
             this.ghost = ghostCastle && this.lush ? new GhostCastleIndex(seed, raw, (x, z, r) => dgNear(x, z, r) || (this.dungeons?.near(x, z, r).length > 0) || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL)) : null;
             if (this.ghost && ghostSeen) this.ghost.on = true;
+            // the waterfalls of the rivers (Waterfalls.js; generation 32): rock bluffs on the banks, away from every built place — made when a chunk asks
+            this.falls = waterfalls && this.lush ? new WaterfallSite(seed, raw, (x, z, r) => dgNear(x, z, r) || this.hamlets.near(x, z, r).length > 0 || busy(Math.round(x), Math.round(z))) : null;
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas, this.dungeons);
             this.iceCastle = ice;
             const den = this.den, vamp = this.vamp, pyr = this.pyr, school = this.school;
@@ -1299,7 +1305,7 @@ export class TerrainData {
                 const kind = b.kinds[Math.floor(hashLand(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * b.kinds.length)];
                 if (h > LUSH.TREE_LINE + (kind === 2 ? 8 : 0)) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
-                if (this.iceCastle?.rocky(tx, tz) || this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz)) continue; // (the Ice Castle's peak, the vampire's crag: bare rock)
+                if (this.iceCastle?.rocky(tx, tz) || this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz) || this.falls?.near(tx, tz, 2)) continue; // (the Ice Castle's peak, the vampire's crag: bare rock)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue;
                 if (this.school?.clear(tx, tz)) continue; // (the school's terrace and road: no trees)
                 if (this.ghost?.on && (this.ghost.insideAt(tx, tz, 6) || this.ghost.insideAt(tx + 1, tz + 1, 6))) continue; // (the Castle of Ghosts has no trees on its terrace)
@@ -1479,6 +1485,7 @@ export class TerrainData {
     _buildCastles(c) {
         let lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
         if (this.school) { const sc = this.school.partsForChunk(c.cx, c.cz, CHUNK); if (sc.length) lists = lists.length ? lists.concat(sc) : sc; } // (the school Akseldorf: SchoolLand.js)
+        if (this.falls) { const f = this.falls.partsForChunk(c.cx, c.cz, CHUNK); if (f.length) lists = lists.length ? lists.concat(f) : f; } // (the rivers' waterfalls: Waterfalls.js)
         if (this.pyr) { const p = this.pyr.partsForChunk(c.cx, c.cz, CHUNK); if (p.length) lists = lists.length ? lists.concat(p) : p; } // (the three pyramids: Pyramids.js)
         if (this.vamp) { const v = this.vamp.partsForChunk(c.cx, c.cz, CHUNK); if (v.length) lists = lists.length ? lists.concat(v) : v; } // (Count Sracula's castle: VampireCastle.js)
         if (this.ghost?.on) { const g = this.ghost.partsForChunk(c.cx, c.cz, CHUNK); if (g.length) lists = lists.length ? lists.concat(g) : g; } // (the Castle of Ghosts: only in a seer's land — GhostCastle.js)
@@ -2036,7 +2043,7 @@ export class TerrainData {
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue; // not on a beach (nor its crown)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue; // no trees in villages
                 if (this.ghost?.on && this.ghost.insideAt(tx, tz, 6)) continue;
-                if (this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz)) continue; // (the vampire's crag, the pyramids' desert)
+                if (this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz) || this.falls?.near(tx, tz, 2)) continue; // (the vampire's crag, the pyramids' desert)
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
                 // Only on level dry ground (the 2×2 trunk and its surroundings)
@@ -2895,11 +2902,14 @@ export class TerrainData {
                                 // (a river's top: its colour carries the way it flows — r, g the direction, b = 1 the mark — UltraWater draws the current)
                                 const fl = d === 1 && !pdef ? this._flowOf(c) : null, fi = (az * CHUNK + ax) * 2;
                                 key = (fl && (fl[fi] || fl[fi + 1]) ? (((fl[fi] >> 4) * 16 + 136) << 16) | (((fl[fi + 1] >> 4) * 16 + 136) << 8) | 1 : (c.sea && c.sea[az * CHUNK + ax] ? SEA_WATER_COL : WATER_COL)) + 1;
+                                // (water standing over water, raised above the rivers' level and looking sideways into the air: a WATERFALL's sheet — blue byte 2, the red byte its phase; UltraWater draws it falling)
+                                if (d !== 1 && !pdef && ay + lowest >= 1 && pad[ia - PXZ] === WATER) key = (((((x0 + ax) * 73 + (z0 + az) * 151) & 255) << 16) | (128 << 8) | 2) + 1;
                                 kind = 2;
                             }
                         } else if (b === WATER && (aRaw === AIR || aRaw === ICE_SHAPE)) {
                             const sx = ax + qx, sz = az + qz; // (the sea's water — a crater of «Бум» it poured into — in the sea's colour, not a lake's)
                             key = -((c.sea && sx >= 0 && sz >= 0 && sx < CHUNK && sz < CHUNK && c.sea[sz * CHUNK + sx] ? SEA_WATER_COL : WATER_COL) + 1); kind = 2;
+                            if (d !== 1 && !pdef && ay + lowest >= 1 && pad[ia + step - PXZ] === WATER) key = -((((((x0 + sx) * 73 + (z0 + sz) * 151) & 255) << 16) | (128 << 8) | 2) + 1); // (a waterfall's sheet, seen from the other side)
                         }
                         mask[n] = key;
                         maskKind[n] = kind;

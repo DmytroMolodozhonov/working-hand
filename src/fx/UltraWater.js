@@ -29,12 +29,32 @@ function ripples() {
 const COLOR_FRAG = `#include <color_fragment>
 // (a river's face colour is its flow, not a colour: its own murky green instead)
 #if defined( USE_COLOR )
-fwRiver = vColor.b < 0.02 ? 1.0 : 0.0;
+fwFall = (vColor.b > 0.0059 && vColor.b < 0.0098) ? 1.0 : 0.0; // (a waterfall's sheet: blue byte 2; the red byte is its phase)
+fwPhase = vColor.r * 9.0;
+fwRiver = (vColor.b < 0.0059 && fwFall < 0.5) ? 1.0 : 0.0;
+if (fwFall > 0.5) { diffuseColor.rgb = vec3(0.5, 0.74, 0.82); }
 if (fwRiver > 0.5) { fwFlow = normalize(vColor.rg * 2.0 - 1.0 + vec2(1e-4)); diffuseColor.rgb = vec3(0.16, 0.3, 0.27); }
 #endif
 `;
 
 const WATER_FRAG = `
+if (fwFall > 0.5) {
+    // A WATERFALL's sheet: streaks that run down at two speeds, bright broken ribs, foam where it lands, a milky body
+    vec3 fN = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
+    vec2 tang = normalize(vec2(-fN.z, fN.x) + vec2(1e-4));
+    float along = dot(vUltraWorld.xz, tang), fy = vUltraWorld.y, ft = uUltraTime;
+    vec4 fa = texture2D(uFreshRipple, vec2(along * 0.31 + fwPhase, fy * 0.05 + ft * 0.85));
+    vec4 fb = texture2D(uFreshRipple, vec2(along * 0.83 + 3.1 + fwPhase * 0.3, fy * 0.1 + ft * 1.6));
+    vec4 fc = texture2D(uFreshRipple, vec2(along * 2.1 - fwPhase, fy * 0.22 + ft * 2.7));
+    float streak = fa.r * 0.5 + fb.g * 0.3 + fc.b * 0.2;
+    float rib = smoothstep(0.46, 0.8, streak);
+    float foot = 1.0 - smoothstep(0.4, 2.6, fy + 0.5);
+    float lit = 0.72 + 0.28 * max(0.0, uUltraSunCol.r * uUltraSunVis + 0.45);
+    vec3 fdeep = vec3(0.42, 0.68, 0.78), fpale = vec3(0.93, 0.98, 1.0);
+    vec3 fcol = mix(fdeep, fpale, clamp(rib * 0.9 + 0.12 + foot * 0.4, 0.0, 1.0));
+    fcol = mix(fcol, vec3(1.0), foot * (0.35 + 0.5 * fb.r));
+    gl_FragColor = vec4(fcol * lit, clamp(0.5 + rib * 0.42 + foot * 0.3, 0.0, 0.96));
+} else
 {
     vec3 uwN = normalize((vec4(normal, 0.0) * viewMatrix).xyz); // (view → world)
     bool top = uwN.y > 0.5;
@@ -87,11 +107,11 @@ export function applyUltraWater(material) {
             .replace('#include <common>', '#include <common>\nvarying vec3 vUltraWorld;')
             .replace('#include <project_vertex>', '#include <project_vertex>\nvUltraWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
         shader.fragmentShader = shader.fragmentShader
-            .replace('#include <common>', '#include <common>\nuniform sampler2D uFreshRipple;\nvarying vec3 vUltraWorld;\nfloat fwRiver = 0.0;\nvec2 fwFlow = vec2(0.0, 1.0);\n' + ULTRA_PARS)
+            .replace('#include <common>', '#include <common>\nuniform sampler2D uFreshRipple;\nvarying vec3 vUltraWorld;\nfloat fwRiver = 0.0;\nfloat fwFall = 0.0;\nfloat fwPhase = 0.0;\nvec2 fwFlow = vec2(0.0, 1.0);\n' + ULTRA_PARS)
             .replace('#include <color_fragment>', COLOR_FRAG)
             .replace('#include <fog_fragment>', WATER_FRAG);
     };
     const key = material.customProgramCacheKey?.bind(material);
-    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw3';
+    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw4';
     return material;
 }

@@ -5,12 +5,13 @@ export default async function (h) {
     const hp = g.character.group.position;
     const gy = g.collision?.groundAt ? g.collision.groundAt(hp.x, hp.z - 14, hp.y) : hp.y - 2;
     let n = 0;
-    for (const style of ['blast', 'fire', 'cut']) {
+    for (const style of (h.args?.only ? [h.args.only] : ['blast', 'fire', 'cut'])) {
         const x = hp.x + (n - 1) * 3, z = hp.z - 14 - n * 0.01; n++;
         const grp = pl._load('carnivore', 900 + n, 900 + n, [{ x, z, y: gy, yaw: Math.PI, h: 0.6, i: 0, id: 'cd' + n }]);
         pl.groups.set('carnivore|' + (900 + n) + ',' + (900 + n), grp);
         pl._rebuildNear(new T.Vector3(x, gy, z));
         const p = grp.plants[0];
+        h.log(style, 'plant', !!p, p && { y: p.y, vis: p.root.visible, parent: !!p.root.parent, H: p.H, near: pl.near.includes(p) }, 'hero', hp.x | 0, hp.y | 0, hp.z | 0, 'plant', x | 0, gy | 0, z | 0);
         h.cam([x + 9, gy + 7, z + 11], [x, gy + 5, z]);
         await h.frames(30);
         await h.shot(style + '-0');
