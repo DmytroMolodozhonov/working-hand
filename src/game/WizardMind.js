@@ -60,14 +60,14 @@ export function reactLagText(lag) {
 
 // ------------------------------------------------------------------ 2. fire
 export const FIRE = {
-    KNOW: 0.8, // the share who know «Firefighting»
+    KNOW: 1, // the share who know «Firefighting»: every wizard (the author 17.11: «все волшебники должны идеально знать заклинание тушения собственного тела»)
     COST: 3, // mana to put himself out
-    SELF_T: [0.9, 1.6], // s: how long it takes a wizard of a level to say it (strong — quicker)
+    SELF_T: [0.7, 1.2], // s: how long it takes a wizard of a level to say it (strong — quicker)
 };
 
 /** Does this wizard know «Firefighting»? (A fixed share of them, by his id — the same on every computer; the Master always.) */
 export function knowsFirefighting(id, rank = 'adept') {
-    if (rank === 'master') return true;
+    if (FIRE.KNOW >= 1 || rank === 'master') return true;
     return (hashString(String(id) + ':ff') % 1000) / 1000 < FIRE.KNOW;
 }
 

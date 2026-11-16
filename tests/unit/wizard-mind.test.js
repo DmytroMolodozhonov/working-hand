@@ -31,14 +31,12 @@ test('reaction time: four levels by rank — a beginner is lost for seconds, the
     assert.deepEqual(reactLag('adept', seededRng(5)), reactLag('adept', seededRng(5)), 'the same wizard, the same lag, on every computer');
 });
 
-test('«Firefighting»: 4 wizards in 5 know it (the Master always); a burning one puts himself out for mana, the rest run', () => {
-    let n = 0; const N = 2000;
-    for (let i = 0; i < N; i++) if (knowsFirefighting('c1:' + i, 'adept')) n++;
-    assert.ok(Math.abs(n / N - FIRE.KNOW) < 0.04, 'about 80 %: ' + n / N);
+test('«Firefighting»: every wizard knows it (the author 17.11: was 4 in 5); a burning one puts himself out for mana, one out of mana runs', () => {
+    for (let i = 0; i < 500; i++) assert.ok(knowsFirefighting('c1:' + i, 'novice'), 'all of them know it');
     assert.ok(knowsFirefighting('x', 'master'));
     assert.equal(knowsFirefighting('c1:5', 'adept'), knowsFirefighting('c1:5', 'adept'));
     const a = onFire({ knows: true, mana: 20, rank: 'adept' }, () => 0.5);
-    assert.equal(a.a, 'douse'); assert.ok(a.t >= 0.9 && a.t <= 1.7);
+    assert.equal(a.a, 'douse'); assert.ok(a.t >= 0.7 && a.t <= 1.4);
     assert.ok(onFire({ knows: true, mana: 20, rank: 'master' }, () => 0.5).t < a.t, 'a strong one is quicker');
     assert.equal(onFire({ knows: false, mana: 20 }).a, 'run');
     assert.equal(onFire({ knows: true, mana: FIRE.COST - 1 }).a, 'run', 'no mana');

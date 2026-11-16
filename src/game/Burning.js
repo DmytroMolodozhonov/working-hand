@@ -365,7 +365,7 @@ export class Burning {
         const v = b.kind === 'v' ? g.duel._creature('v', b.id) : null;
         // a wizard puts himself out with «Firefighting» (4 of 5 know it; it costs mana) — the rest, and one out of mana, run in panic
         if (v?.wizard) {
-            if (!b.act) { b.act = onFire({ knows: v.knowsFire !== false, mana: v.mana ?? 0, noWand: !!v.noWand, rank: v.rank }); g.castleLife?.alog?.decision?.(v, b.act.a === 'douse' ? `горит: тушится «Firefighting» (${FIRE.COST} маны, ${b.act.t} с)` : `горит: ${v.knowsFire === false ? 'не знает «Firefighting»' : 'нет маны или палочки'} — бежит к воде/прочь`); }
+            if (!b.act) { b.act = onFire({ knows: v.knowsFire !== false, mana: v.mana ?? 0, noWand: !!v.noWand && !v.elemental, rank: v.rank }); g.castleLife?.alog?.decision?.(v, b.act.a === 'douse' ? `горит: тушится «Firefighting» (${FIRE.COST} маны, ${b.act.t} с)` : `горит: ${v.knowsFire === false ? 'не знает «Firefighting»' : 'нет маны или палочки'} — бежит к воде/прочь`); }
             if (b.act.a === 'douse') {
                 b.selfT += dt;
                 if (!b.said) { b.said = true; g.castleLife?._say?.(v, 'Firefighting!'); }
