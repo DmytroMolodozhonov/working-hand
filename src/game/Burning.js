@@ -364,8 +364,10 @@ export class Burning {
         if (b.kind === 'z') { const z = g.zombieById?.get(b.id); if (z) z.burning = 0.6; } // (the zombie's own smoke, seen on every computer)
         const v = b.kind === 'v' ? g.duel._creature('v', b.id) : null;
         // a wizard puts himself out with «Firefighting» (4 of 5 know it; it costs mana) — the rest, and one out of mana, run in panic
+        // (every elemental mage knows «Firefighting» and puts himself out even with no mana left: the author 17.11)
         if (v?.wizard) {
-            if (!b.act) { b.act = onFire({ knows: v.knowsFire !== false, mana: v.mana ?? 0, noWand: !!v.noWand && !v.elemental, rank: v.rank }); g.castleLife?.alog?.decision?.(v, b.act.a === 'douse' ? `горит: тушится «Firefighting» (${FIRE.COST} маны, ${b.act.t} с)` : `горит: ${v.knowsFire === false ? 'не знает «Firefighting»' : 'нет маны или палочки'} — бежит к воде/прочь`); }
+            if (!b.act) { b.act = onFire({ knows: v.knowsFire !== false || !!v.elemental, mana: v.elemental ? Math.max(v.mana ?? 0, FIRE.COST) : (v.mana ?? 0), noWand: !!v.noWand && !v.elemental, rank: v.rank }); g.castleLife?.alog?.decision?.(v, b.act.a === 'douse' ? `горит: тушится «Firefighting» (${FIRE.COST} маны, ${b.act.t} с)` : `горит: ${v.knowsFire === false ? 'не знает «Firefighting»' : 'нет маны или палочки'} — бежит к воде/прочь`); }
+            if (b.act.a === 'run' && v.mana >= FIRE.COST && v.knowsFire !== false && !v.noWand && (performance.now() - (b.actAt || 0)) > 500) { b.actAt = performance.now(); b.act = onFire({ knows: true, mana: v.mana, noWand: false, rank: v.rank }); } // (he had no mana when he caught fire: now he has — he puts himself out)
             if (b.act.a === 'douse') {
                 b.selfT += dt;
                 if (!b.said) { b.said = true; g.castleLife?._say?.(v, 'Firefighting!'); }

@@ -432,19 +432,27 @@ export class Brawl {
             for (let L = top; L > G; L--) data.set(ix, L, iz, BLOCK.AIR);
             data.set(ix, G, iz, BLOCK.GRASS);
         }
+        // the tutorial's cobbled ring and the path round it (r < 10, under the strip): grass like all the field — the field is clean and even
+        const R2 = TUTORIAL.PATH[1] + 1;
+        if (data.landMade && (!data.landMade(-R2, -R2) || !data.landMade(R2, R2))) return false;
+        for (let ix = -Math.ceil(R2); ix <= Math.ceil(R2); ix++) for (let iz = -Math.ceil(R2); iz <= Math.ceil(R2); iz++) {
+            if (Math.hypot(ix, iz) > R2) continue;
+            const top = data.topLayer(ix, iz), t = data.get(ix, top, iz);
+            if (t === BLOCK.PATH || t === BLOCK.COBBLE) data.set(ix, top, iz, BLOCK.GRASS);
+        }
         return true;
     }
 
     _buildStrip() {
         const data = this.game.terrain?.data;
         if (!data) return false;
-        const h = BRAWL.STRIP / 2, z0 = -BRAWL.EDGE - 3, z1 = BRAWL.EDGE + 3;
+        const half = BRAWL.STRIP / 2, z0 = -BRAWL.EDGE - 3, z1 = BRAWL.EDGE + 3; // (an EVEN width: a block ix covers x ∈ [ix, ix+1), so −half … half−1 is exactly symmetric about x = 0; the dashed middle line is the two middle blocks)
         let n = 0;
         if (!this._levelHill(data)) return false;
         for (let iz = z0; iz <= z1; iz++) {
             if (data.landMade && !data.landMade(0, iz)) return false;
-            for (let ix = -h; ix < h; ix++) {
-                const type = ix === -h ? BLOCK.ROOF_RED : ix === h - 1 ? BLOCK.ROOF_BLUE : ix === 0 && ((iz >> 1) & 1) ? BLOCK.CS_WHITE : BLOCK.CS_GREY;
+            for (let ix = -half; ix < half; ix++) {
+                const type = ix === -half ? BLOCK.ROOF_RED : ix === half - 1 ? BLOCK.ROOF_BLUE : (ix === 0 || ix === -1) && ((iz >> 1) & 1) ? BLOCK.CS_WHITE : BLOCK.CS_GREY;
                 const L = data.topLayer(ix, iz);
                 if (data.get(ix, L, iz) !== type) { data.set(ix, L, iz, type); n++; }
             }
