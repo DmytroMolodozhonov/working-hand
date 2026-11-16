@@ -91,7 +91,7 @@ export class SpectatorCam {
     /** Nothing may make the picture muddy, shaky, frozen or dark: no dizziness, shake, stun, ice, damage flash (a blast, a stunned hero, a fall). */
     _cleanse() {
         const g = this.game;
-        if (g.knock) { g.knock.dizzy = 0; g.knock.down = false; }
+        if (g.knock) g.knock.dizzyLeft = 0; // (`dizzy` is read from it: the blur of the picture)
         if (g.fx) g.fx.shake = 0;
         const c = g.combat;
         if (c && (c.stunLeft > 0 || c.frozenLeft > 0 || c.slowLeft > 0 || c.chill > 0)) c.clearEffects();
