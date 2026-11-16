@@ -131,6 +131,7 @@ export class Brawl {
             const v = life._activate(cs, idx, { x, y: y + SAVIOR.FLY_H, z, yaw }, 'savior');
             if (!v) { this.why = 'не получилось'; return null; }
             v.brawl = { team, def };
+            if (isMage(def)) { v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; } // (a mage is ready at once)
             v.yaw = yaw;
             g.savior.adoptBrawl(v, stageOf(0));
             e = this._join('v', v.id, team, def);
@@ -146,6 +147,7 @@ export class Brawl {
             const v = life._activate(cs, idx, { x, y, z, yaw }, 'elemental');
             if (!v) { this.why = 'не получилось'; return null; }
             v.brawl = { team, def, elemental: true };
+            v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; // (ready at once: not the seconds of a first surprise the ordinary roll gives — _feedFoes keeps it)
             v.yaw = yaw;
             e = this._join('v', v.id, team, def);
         } else if (def.kind === 'v') {

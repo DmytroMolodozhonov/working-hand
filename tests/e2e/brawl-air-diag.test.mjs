@@ -40,7 +40,7 @@ test('air mage diagnostics', { timeout: 1700000 }, async () => {
             await sleep(500);
             const a = v.elemental || {}, foe = v.foe ? B.foePos(v.foe) : null;
             const d = foe ? Math.round(Math.hypot(foe.x - v.x, foe.z - v.z)) : null;
-            out.log.push([Math.round((performance.now() - t0) / 1000), a.phase, v.mode, Math.round(v.mana), v.fly ? 'fly' : '', v.foe ? v.foe.slice(0, 8) : 'nofoe', d, EM.foeLying(v) ? 'LIES' : '', ((performance.now() - (a.atkAt || performance.now())) / 1000).toFixed(1), a.recover ? 'recover' : '', v.stunT > 0 ? 'stun' : '', v.vy ? 'vy' : '', v.reactLag ? JSON.stringify(v.reactLag) : '', v.engage?.role || '', Math.round(v.hp)].join(' '));
+            out.log.push([Math.round((performance.now() - t0) / 1000), 'f' + g.frameCount, a.phase, v.mode, Math.round(v.mana), v.fly ? 'fly' : '', v.foe ? v.foe.slice(0, 8) : 'nofoe', d, EM.foeLying(v) ? 'LIES' : '', ((performance.now() - (a.atkAt || performance.now())) / 1000).toFixed(1), a.recover ? 'recover' : '', v.stunT > 0 ? 'stun' : '', v.vy ? 'vy' : '', v.reactLag ? JSON.stringify(v.reactLag) : '', v.engage?.role || '', Math.round(v.hp)].join(' '));
             if (i > 160) break;
         }
         out.casts = casts; out.state = B.state; out.alive = B.aliveCount(); out.hp = v.hp; out.dead = v.dead;

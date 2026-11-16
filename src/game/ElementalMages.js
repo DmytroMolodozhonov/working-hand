@@ -406,15 +406,15 @@ export class ElementalMages {
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
-   if(a.phase==='Coil'&&a.t>.7){const mv=this.airMove(v,foe,dist,idle);a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Coil'&&a.t>.35){const mv=this.airMove(v,foe,dist,idle);a.lastMove=mv;this.phase(v,mv);}
    if(a.phase==='Spin'){
     if(a.t<AIR_SPIN.SPIN_T)v.yaw+=AIR_SPIN.RATE*dt;a.hopping=a.t<AIR_SPIN.SPIN_T; // (two turns on the spot: the body is his own to turn while he whirls)
     if(a.t>AIR_SPIN.FIRE_T&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(dist<11&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);else this.cast(v,'WindMaxima',foe);}}
     if(a.t>AIR_SPIN.END_T){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    }
    if(a.phase==='Slash'){ // the arms cross and fling out: a fan of three wind blades (duel charges), a whoosh and a ring of leaves
-    if(a.t>.42&&!a.fired){a.fired=true;if(dist<26&&L._sees(v,foe))this.gustFan(v,foe,3);}
-    if(a.t>1.15){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+    if(a.t>.3&&!a.fired){a.fired=true;if(dist<26&&L._sees(v,foe))this.gustFan(v,foe,3);}
+    if(a.t>.85){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    }
    if(a.phase==='Dash'){ // a lunge sideways along the wind (a streak of air behind him), then a gust at the foe from the new place
     if(!a.dashTo){const sg=Math.random()<.5?-1:1,px=-dz/dist*sg,pz=dx/dist*sg,len=7+Math.random()*3;a.dashTo={x:v.x+px*len,z:v.z+pz*len};}
@@ -429,16 +429,16 @@ export class ElementalMages {
    if(a.phase==='Drift'&&a.t>1.6){a.cycle++;this.phase(v,'Coil');}
    if(a.skyfall){a.sfT-=dt;if(!v.fly){a.skyfall=false;}else if(a.sfT<=0&&dist<26&&L._sees(v,foe)){a.sfT=.9;this.gustFan(v,foe,2);}}
    if(a.phase==='Lash'){
-    if(a.t>.38&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,v.mana>=SPELL_COST.WindMaxima?'WindMaxima':'Wind',foe,_o.clone());}} // (the heavy gust fells: the first step of his plan)
-    if(a.t>1.0){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+    if(a.t>.28&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){_o.set(v.x-Math.sin(v.yaw)*.9,v.y+1.1,v.z-Math.cos(v.yaw)*.9);this.cast(v,v.mana>=SPELL_COST.WindMaxima?'WindMaxima':'Wind',foe,_o.clone());}} // (the heavy gust fells: the first step of his plan)
+    if(a.t>.75){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    }
-   if(a.phase==='Sweep'&&a.t>.45&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
+   if(a.phase==='Sweep'&&a.t>.3&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){
     if(!this.objects.active.has(v.id)&&dist<17&&this.foeLying(v)&&this.airLift(v,foe))return true; // (the author 17.11: his plan — first a push of air that knocks the foe down, THEN he lifts him up and throws him; the lift only for a foe who LIES)
     else if(dist<3&&Math.abs(foe.y-v.y-1.5)<=5)this.cast(v,'WindImpulse',foe);
     else if(dist<9&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);
     else this.cast(v,v.mana>=SPELL_COST.WindMaxima?'WindMaxima':'Wind',foe);
    }}
-   if(a.phase==='Sweep'&&a.t>1.35){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   if(a.phase==='Sweep'&&a.t>.95){a.fired=false;a.cycle++;this.phase(v,'Coil');}
    if(!v.fly){v.mode=a.wings?.launch?'airRun':'air'+a.phase;if(!v.vy)L._ground(v);}
   }else{
    v.fx=0; // Fire has no shield/dome and never delegates to the ordinary wizard's defence.
