@@ -65,7 +65,15 @@ export class Brawl {
         const g = this.game;
         for (const k of ['flora', 'canaries', 'owls', 'phoenixes', 'spencers', 'dragons', 'plants', 'gargoyles', 'spiders', 'tarons', 'hellPatrol', 'crystals']) if (g[k] && 'enabled' in g[k]) g[k].enabled = false;
         if (g.books) g.books._spawnT = Infinity;
-        if (g.animals) g.animals.noWild = true; // (its own update stays: the animals of the teams walk and fight)
+        if (g.animals) g.animals.noWild = true;
+        this._hideExtras(); // (its own update stays: the animals of the teams walk and fight)
+    }
+
+    /** The scene's leftovers of the ordinary world (the author 17.11: «торнадо сзади, всякое бесполезное»): flowers, magic plants, river rocks, blast rocks — hidden, never drawn. */
+    _hideExtras() {
+        const sc = this.game.scene;
+        if (!sc) return;
+        for (const o of sc.children) if (o.visible && /^(magicFlora|brightFlowers|river-rocks|boom-rocks|boom-ring|reefFish|bodyFinder|apple-gold)$/.test(o.name || '')) o.visible = false;
     }
 
     // ------------------------------------------------------------- the field
@@ -564,7 +572,7 @@ export class Brawl {
             for (const z of [...this.game.zombies]) if (!this.roster.has('z:' + z.id) && !z.isDying) this.game.removeZombie(z);
         }
         if (this._frame % 20 === 0) this._changed(true);
-        if (this._frame % 90 === 7) this._tidyWeapons();
+        if (this._frame % 90 === 7) { this._tidyWeapons(); this._hideExtras(); }
     }
 
     _changed(soft = false) {

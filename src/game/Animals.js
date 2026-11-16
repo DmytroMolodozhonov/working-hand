@@ -1982,7 +1982,7 @@ export class Animals {
         const g = this.game;
         const me = g.character.group.position;
         this._treeT -= dt;
-        if (this._treeT <= 0) { this._treeT = 2; this._treesAround(me); }
+        if (this._treeT <= 0 && !this.noWild) { this._treeT = 2; this._treesAround(me); }
         this._lookFar(me, dt);
         this.sea.frame(dt); // (the glowfins' light breathes)
         // apples grow back
