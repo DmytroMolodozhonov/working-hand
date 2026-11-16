@@ -313,8 +313,9 @@ export class WizardFight {
         // (a held shield: the guards and the screen keep it up — it costs a little mana)
         if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2) { if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; }
         // the Master: he comes too close → blink away
-        if ((v.role === 'master' || v.savior != null) && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
+        if ((v.role === 'master' || v.savior != null || v.keepAway) && W.blink && d < (v.keepAway ? 5 : 3.5) && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
         let spot = this._spot(v, fp, d, sq);
+        if (spot && v.keepAway && d < 18) spot.run = true; // (the author 17.11: a mage, of any rank, does not let the enemy come near — he RUNS off the distance, not strolls)
         spot = this.wl.home?.spot(v, spot) ?? spot;
         // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
         const shot = this._castReady(v, d) && this.clearShot(v, fp);
@@ -602,6 +603,10 @@ export class WizardFight {
         if (!v.lesson && foe != null && v.mana >= 40 && wizardDetects(skin) && knowsNihilis(v)) {
             const seen = this.life._playerPos(foe);
             if (seen && this.life._sees(v, seen)) return 'NihilisDuel';
+        }
+        if (v.keepAway && !v.lesson && spell !== 'NihilisDuel') { // (an enemy too close: first of all a shove that throws him back — «Джолт»)
+            const pp = foe != null ? this.life._playerPos(foe) : null;
+            if (pp && Math.hypot(pp.x - v.x, pp.z - v.z) < 7 && v.mana >= NPC_COST.Jolt) return v.mana >= 60 ? 'JoltMaxima' : 'Jolt';
         }
         if (v.rank === 'supermage' && !v.lesson) return this._superSpell(v, spell, foe);
         if (v.savior != null) return 'Electrum'; // (the white Saviour: blue «Электром» unless the recognized-darkness exception above applies — SaviorRules.js; his wind and blasts are his own: Savior.js)

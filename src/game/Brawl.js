@@ -134,6 +134,7 @@ export class Brawl {
             if (!v) { this.why = 'не получилось'; return null; }
             v.brawl = { team, def };
             if (isMage(def)) { v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; } // (a mage is ready at once)
+            if (isMage(def)) { v.keepAway = true; v.W = { ...v.W, range: [14, 26], blink: v.W.blink || { cd: 8 } }; } // (the author 17.11: a mage of any rank keeps away and does not let the enemy come near — runs off, shoves him back, blinks away)
             v.yaw = yaw;
             g.savior.adoptBrawl(v, stageOf(0));
             e = this._join('v', v.id, team, def);
