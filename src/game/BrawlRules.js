@@ -53,7 +53,7 @@ export const fighterDef = (id) => FIGHTERS.find((f) => f.id === id) || null;
 export const FIGHTER_GROUPS = [...new Set(FIGHTERS.map((f) => f.group))];
 
 export const BRAWL = {
-    MAX: 60, // fighters on the field at most (the arena is 84 m across: more is a heap, and the frame pays for each)
+    MAX: 40, // fighters on the field at most (the arena is 84 m across: more is a heap, and the frame pays for each; the author's friend's game died at 55 knights on a weak card — 17.11)
     REACT: { t: 0.35, level: 3, lost: false }, // a mage's reaction at a new foe (WizardFight._engage): the field is a battle, he is ready
     STRIP: 6, // m: the strip between the teams (nobody is put on it): the left half of the field (x < 0, seen from the start camera) is the red team's, the right half the blue's
     GROUP: 5, // Shift+click: this many at once

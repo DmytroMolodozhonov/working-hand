@@ -496,9 +496,9 @@ export class Brawl {
         const duel = g.duel;
         if (duel?._addBolt) { const o = duel._addBolt.bind(duel); duel._addBolt = (b) => { if (this.state === 'fight' && b && mine(b.by)) allLog('Битва', `${b.by} пускает заряд ${b.spell} → ${b.tk}:${b.tid}`); return o(b); }; }
         const ci = g.creatureImpact;
-        if (ci?.apply) { const o = ci.apply.bind(ci); ci.apply = (c, op) => { const r = o(c, op); if (this.state === 'fight' && (mine(op?.by) || this.roster.has('v:' + c?.id))) allLog('Битва', `толчок ${op?.spell || op?.kind || '?'} от ${op?.by || '—'} на ${c?.id ?? c?.name ?? '?'}: ${r}`); return r; }; }
+        if (ci?.apply) { const o = ci.apply.bind(ci); ci.apply = (c, op) => { const r = o(c, op); if (this.state === 'fight' && r !== 'none' && (mine(op?.by) || this.roster.has('v:' + c?.id)) && this._isMageId(c?.id)) allLog('Битва', `толчок ${op?.spell || op?.kind || '?'} от ${op?.by || '—'} на ${c?.id ?? c?.name ?? '?'}: ${r}`); return r; }; }
         const sv = g.servants;
-        if (sv?.damage) { const o = sv.damage.bind(sv); sv.damage = (ref, ...a) => { if (this.state === 'fight') allLog('Битва', `урон по ${ref?.k}:${ref?.id}: ${Math.round((a[0] ?? 0) * 10) / 10} от ${a[2] || '—'}`); return o(ref, ...a); }; }
+        if (sv?.damage) { const o = sv.damage.bind(sv); sv.damage = (ref, ...a) => { if (this.state === 'fight' && ref?.k === 'v' && this._isMageId(ref.id)) allLog('Битва', `урон по ${ref?.k}:${ref?.id}: ${Math.round((a[0] ?? 0) * 10) / 10} от ${a[2] || '—'}`); return o(ref, ...a); }; }
     }
 
     /** How many fighters of the OTHER team stand round the foe of `v` (a crowd calls for a group spell). */
@@ -511,16 +511,29 @@ export class Brawl {
         return Math.max(1, n);
     }
 
+    /** What the dead dropped: a weapon lying on the field for 15 s is taken away (hundreds of them hung in the scene — the weak cards gave up). */
+    _tidyWeapons() {
+        const g = this.game, now = performance.now();
+        for (const w of [...(g.weapons?.weapons || [])]) {
+            if (w.holder || g.fixedWeapons?.includes?.(w.id)) { w._lyingAt = 0; continue; }
+            if (!w._lyingAt) { w._lyingAt = now; continue; }
+            if (now - w._lyingAt > 15000) g.weapons.remove(w);
+        }
+    }
+
+    _isMageId(id) { const e = this.roster.get('v:' + id); return !!e && isMage(e.def); }
+
     _snapshot() {
         const L = this.game.castleLife;
         for (const e of this.roster.values()) {
             const v = e.k === 'v' ? L?.byId.get(e.id) : null;
-            if (!v || v.dead) continue;
+            if (!v || v.dead || !isMage(e.def)) continue; // (the mages only: the rest are counted below — fifty lines every two seconds were a flood)
             const a = v.elemental || v.earth || {}, foe = v.foe ? this.foePos(v.foe) : null;
             allLog('Битва', `${e.team}:${e.type}#${e.id} hp ${Math.round(v.hp)} мана ${Math.round(v.mana ?? 0)} режим ${v.mode}${a.phase ? '/' + a.phase : ''}${v.fly ? ' летит' : ''}${v.stunT > 0 ? ' оглушён' : ''} цель ${v.foe || '—'} дист ${foe ? Math.round(Math.hypot(foe.x - v.x, foe.z - v.z)) : '—'} реакция ${v.reactLag?.t ?? '—'}`);
         }
         const al = this.aliveCount();
-        allLog('Битва', `живых: красные ${al.A}, синие ${al.B}`);
+        let hurt = 0; for (const e of this.roster.values()) if (e.k === 'v' && !isMage(e.def)) { const v = L?.byId.get(e.id); if (v && !v.dead && v.hp < v.maxHp * 0.5) hurt++; }
+        allLog('Битва', `раненых рыцарей (<50%): ${hurt}; живых: красные ${al.A}, синие ${al.B}`);
     }
 
     update(dt) {
@@ -544,6 +557,7 @@ export class Brawl {
             for (const z of [...this.game.zombies]) if (!this.roster.has('z:' + z.id) && !z.isDying) this.game.removeZombie(z);
         }
         if (this._frame % 20 === 0) this._changed(true);
+        if (this._frame % 90 === 7) this._tidyWeapons();
     }
 
     _changed(soft = false) {

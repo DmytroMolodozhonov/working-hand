@@ -394,7 +394,7 @@ export class DeathSystem {
         drops.push(...(g.soulSeal?.takeLoot(v) || [])); // (none: the armour stays on the body — «Disarmor» takes it off — Armor.deadArmor)
         drops.push(...steel);
         this.stripVillager(v);
-        if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
+        if (drops.length && !g.config?.brawl) this.scatter(drops, { x: v.x, y, z: v.z }); // («Битва существ»: no coins, shields or steel on the field — a crowd of the dead made hundreds of objects and a weak card gave up)
         if (v.burst) return;
         const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, natural: v.naturalDeath ? 1 : undefined, ki: v.deathKick || undefined, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: v.stripped ? 1 : 0, arm: g.armor?.deadArmor?.(v) || undefined, look: lived, ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null), mh: Math.round(v.maxHp || 20), ...(v.darkKill ? { dk: 1 } : null), ...(v.crushed ? { cr: 1 } : null) }; // (mh: his maximum health, dk: killed by black magic — the rite of monstrous vitality: VitalityRules.js) (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
         this.addBody(b);
