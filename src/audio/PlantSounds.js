@@ -8,8 +8,8 @@
  *   creak   the neck stretching out (a long wet creak of fibres)  squeeze  the tendrils coiling round the prey (a tight rubbery squeak)
  *   whoosh  the Brightflower's fire breath (a roaring rush)  flare  its cup opening with a soft flame  hush  the flame going out
  */
-export const PLANT_SOUNDS = ['rustle', 'prick', 'lash', 'snap', 'chomp', 'gulp', 'spit', 'burn', 'fall', 'whoosh', 'flare', 'hush', 'creak', 'squeeze'];
-const DUR = { rustle: 0.9, prick: 0.3, lash: 0.35, snap: 0.5, chomp: 0.9, gulp: 0.7, spit: 0.6, burn: 1.2, fall: 1.4, whoosh: 0.9, flare: 0.8, hush: 0.7, creak: 1.0, squeeze: 0.6 };
+export const PLANT_SOUNDS = ['rustle', 'prick', 'lash', 'snap', 'chomp', 'gulp', 'spit', 'burn', 'fall', 'whoosh', 'flare', 'hush', 'creak', 'squeeze', 'burp', 'shriek', 'rip', 'splat', 'crunch'];
+const DUR = { rustle: 0.9, prick: 0.3, lash: 0.35, snap: 0.5, chomp: 0.9, gulp: 0.7, spit: 0.6, burn: 1.2, fall: 1.4, whoosh: 0.9, flare: 0.8, hush: 0.7, creak: 1.0, squeeze: 0.6, burp: 1.0, shriek: 1.4, rip: 0.7, splat: 0.5, crunch: 0.6 };
 const TAU = Math.PI * 2;
 
 function noise(d, sr, at, dur, amp, lpK, decay, att = 400) {
@@ -52,6 +52,18 @@ export function synthPlant(ctx, kind) {
             noise(d, sr, 0, 0.9, 0.1, 0.1, 3, 20); break;
         }
         case 'squeeze': tone(d, sr, 0, 0.45, 900, 380, 0.14, 7); noise(d, sr, 0, 0.4, 0.35, 0.2, 8, 80); tone(d, sr, 0.04, 0.5, 120, 80, 0.4, 7); break;
+        case 'burp': { // a wet gurgle rising into a low belch
+            noise(d, sr, 0, 0.35, 0.3, 0.2, 7, 40); for (let k = 0; k < 6; k++) tone(d, sr, k * 0.045, 0.12, 120 + k * 22, 90 + k * 12, 0.28, 16);
+            tone(d, sr, 0.3, 0.6, 110, 62, 0.65, 3.8); tone(d, sr, 0.32, 0.5, 220, 120, 0.28, 4.4); noise(d, sr, 0.3, 0.5, 0.35, 0.3, 5, 30); break;
+        }
+        case 'shriek': { // a plant's scream: a rasping, wobbling shriek over a crackle of tearing fibres
+            for (let k = 0; k < 3; k++) tone(d, sr, k * 0.06, 1.2 - k * 0.1, 900 + k * 260, 1500 + k * 200, 0.22, 2.6 + k);
+            tone(d, sr, 0, 1.2, 140, 90, 0.35, 2.4); noise(d, sr, 0, 1.2, 0.35, 0.8, 2.2, 90);
+            for (let k = 0; k < 22; k++) noise(d, sr, Math.random() * 1.2, 0.02, 0.6, 0.7, 80); break;
+        }
+        case 'rip': noise(d, sr, 0, 0.5, 0.8, 0.5, 6, 70); tone(d, sr, 0, 0.4, 260, 90, 0.45, 8); for (let k = 0; k < 8; k++) noise(d, sr, k * 0.05, 0.03, 0.7, 0.8, 90); break;
+        case 'splat': noise(d, sr, 0, 0.12, 1.0, 0.5, 30); tone(d, sr, 0, 0.3, 170, 55, 0.6, 9); noise(d, sr, 0.04, 0.3, 0.3, 0.2, 10); break;
+        case 'crunch': for (let k = 0; k < 5; k++) { noise(d, sr, k * 0.07, 0.05, 0.9, 0.6, 60); tone(d, sr, k * 0.07, 0.08, 320 - k * 25, 120, 0.3, 16); } break;
         default: break;
     }
     // soften the clicks

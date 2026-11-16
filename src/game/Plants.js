@@ -23,6 +23,7 @@ import { BLOCK, PLANTS_FROM_GEN, BRIGHTFLOWER_FROM_GEN } from '../world/Terrain.
 import { BIOMES } from '../world/Landscape.js';
 import { BrightFlowers } from './BrightFlower.js';
 import { newUid } from './ItemTypes.js';
+import { CarnivoreFx, charMaterial } from '../fx/CarnivoreFx.js';
 import { crowdNear } from './CrowdSources.js';
 import {
     PLANT_KINDS, APPLE, EAT, FREEZE, BURN, plantGroupIn, plantId, plantHeight, plantGear, thornsPrick, swallowVerdict,
@@ -42,6 +43,13 @@ const bodyR = (kind) => (kind === 'carnivore' ? 0.6 : kind === 'brightflower' ? 
 const _up = new THREE.Vector3(0, 1, 0), _w2 = new THREE.Vector3(), _tv = new THREE.Vector3(), _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _o = new THREE.Vector3(1, 1, 1);
 const r2 = (x) => Math.round(x * 100) / 100;
 const ease = (t) => t * t * (3 - 2 * t);
+/** How a head dies, by what killed it (CarnivoreFx.js): fire burns it, a blast bursts it, anything else cuts it down. */
+export function deathStyle(kind) {
+    const k = String(kind || '');
+    if (FIRE_KINDS.has(k) || /fire|inferno|hellfire|burn|serpent/i.test(k)) return 'fire';
+    if (/bomb|blast|explo|boom|destruct|cannon|circle|crash|smash|meteor|total/i.test(k)) return 'blast';
+    return 'cut';
+}
 
 let _lobeA = null, _lobeB = null; const _headBases = [], _collars = [];
 const headBase = (i) => _headBases[i] || (_headBases[i] = buildHeadBase(i + 1));
@@ -55,6 +63,7 @@ export class Plants {
     constructor(game) {
         this.game = game;
         this.groups = new Map(); // 'kind|gx,gz' → {key, kind, plants[], root, ...} | null
+        this.carnFx = game.scene ? new CarnivoreFx(game) : null; // the hunt's blood and drool, the deaths (CarnivoreFx.js)
         this.byId = new Map(); // plant id → plant
         this.near = []; // live plants near me (for the crowd and the hits), rebuilt twice a second
         this._proxies = [];
@@ -272,6 +281,7 @@ export class Plants {
         else if (p.kind === 'brightflower') this.bright.anger(p, by);
     }
     hitAt(pos, radius, dmg, kind, by = null) {
+        this._blastAt = { x: pos.x, y: pos.y, z: pos.z, at: performance.now() }; // (a head that dies of it bursts away from this point)
         for (const p of this.near) if (!p.dead && this._dist(p, pos) < radius) this.hit(p, dmg, kind, by);
     }
     hitRay(org, d, len, width, dmg, kind, by = null) {
@@ -316,13 +326,17 @@ export class Plants {
     }
     /** A plant that nobody is near any more must not keep a creature in its tendrils. */
     _abandon(p) { if (p.hunt && p.kind === 'carnivore') this._dropHeld(p); }
-    _flinch(p) { p.flinch = 0.35; this.game.sound?.playPlant?.(_v.set(p.x, p.y + 2, p.z), 'rustle', 0.7); }
+    _flinch(p) {
+        p.flinch = 0.35; this.game.sound?.playPlant?.(_v.set(p.x, p.y + 2, p.z), 'rustle', 0.7);
+        if (p.kind === 'carnivore' && p.hunt && this.carnFx) this.carnFx.sap(this._toWorld(p, p.hunt.H, _w), 8, 0.8); // (a blow draws sap)
+    }
 
     /** (host) A plant is destroyed: it leaves its thing, falls, its prey is let go. */
     die(p, kind = 'melee', by = null) {
         if (p.dead) return;
         p.dead = true; p.deadT = 0; p.hp = 0;
         const g = this.game, K = PLANT_KINDS[p.kind];
+        p.deathStyle = p.kind === 'carnivore' ? (p.burnT > 0 && kind === 'net' ? 'fire' : deathStyle(kind)) : 'cut';
         this._gone.set(p.id, true);
         g.collision?.removeBox(p.boxId); p.boxId = null;
         this._dropHeld(p); this._release(p, true);
@@ -331,8 +345,9 @@ export class Plants {
         g.sound?.playPlant?.(_v, 'fall', 1);
         if (this.auth) {
             g.items?.spawnLoose?.({ kind: K.drop, uid: newUid(), count: K.dropCount }, _v.clone().setY(p.y + 1.2), { vel: _w.set((Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2) });
-            this._send({ op: 'die', id: p.id });
+            this._send({ op: 'die', id: p.id, kind });
         }
+        if (p.kind === 'carnivore' && p.hunt && this.carnFx) this._dieFx(p, kind);
         if (p.kind === 'telewilpin') this._buildTele(p.grp);
     }
 
@@ -363,6 +378,7 @@ export class Plants {
         this.bright.update(dt, me);
         for (const p of heads) this._head(p, dt, me);
         for (const grp of this.groups.values()) if (grp) for (const p of grp.plants) if (p.dead && p.kind === 'carnivore') this._fall(p, dt);
+        this.carnFx?.update(dt);
         this._holdMe(dt);
         if (this.auth) this._snapshot(dt);
     }
@@ -428,6 +444,7 @@ export class Plants {
     _burn(p, dt) {
         if (p.burnT <= 0 || p.dead) return;
         p.burnT -= dt;
+        if (p.kind === 'carnivore' && p.hunt && this.carnFx && this.near.includes(p)) this.carnFx.burning(p, (arr, out) => this._toWorld(p, arr, out), dt, 0.6);
         if (this.auth) { p.hp -= BURN.DPS * dt; if (p.hp <= 0) { this.die(p, 'Fire', null); return; } }
         if (Math.random() < dt * 14) {
             this._top(p, _v); _v.y -= Math.random() * p.H * 0.5;
@@ -478,13 +495,13 @@ export class Plants {
         const g = this.game, h = p.hunt;
         for (const e of ev) {
             switch (e) {
-                case 'lash': g.sound?.playPlant?.(this._toWorld(p, h.H, _v), 'creak', 1); g.sound?.playPlant?.(_v, 'lash', 0.9); this._panic(p); break;
+                case 'lash': p.windT = 0.28; g.sound?.playPlant?.(this._toWorld(p, h.H, _v), 'creak', 1); g.sound?.playPlant?.(_v, 'lash', 0.9); this._panic(p); break;
                 case 'hold': if (this.auth) { this._hold(p, prey, true); if (prey?.k === 'v') g.castleLife?.alarm?.(_v.set(p.x, p.y + 1, p.z), 'monster', null, 40); } break;
                 case 'wrap': g.sound?.playPlant?.(this._toWorld(p, h.mouth, _v), 'squeeze', 1); break;
-                case 'snap': g.sound?.playPlant?.(this._toWorld(p, h.mouth, _v), 'snap', 1); break;
+                case 'snap': p.whipT = 0.2; g.sound?.playPlant?.(this._toWorld(p, h.mouth, _v), 'snap', 1); break;
                 case 'bite': this._bite(p, prey); break;
-                case 'gulp': g.sound?.playPlant?.(this._toWorld(p, h.H, _v), 'gulp', 1); break;
-                case 'eaten': if (this.auth && prey?.k === 'a') { const a = g.animals.byId.get(prey.id); if (a) { a.plantHeld = false; g.animals._remove(a); } } break;
+                case 'gulp': g.sound?.playPlant?.(this._toWorld(p, h.H, _v), 'gulp', 1); if (prey) g.sound?.playPlant?.(_v, 'shriek', 0.5); this.carnFx?.drool(this._toWorld(p, h.mouth, _v), 6); break;
+                case 'eaten': this.carnFx?.burp(this._toWorld(p, h.H, _v)); if (prey?.k === 'a') this.carnFx?.bones(this._toWorld(p, h.mouth, _v)); if (this.auth && prey?.k === 'a') { const a = g.animals.byId.get(prey.id); if (a) { a.plantHeld = false; g.animals._remove(a); } } break;
                 case 'spit': this._flingPrey(p, prey); break;
                 case 'lost': case 'letgo': case 'done': if (this.auth) this._hold(p, prey, false); if (this.mine === p) this._release(p, false, false); break;
                 default: break;
@@ -594,7 +611,10 @@ export class Plants {
         if (prey.k === 'a') {
             const a = g.animals?.byId?.get(prey.id); if (!a) return;
             a.group.position.set(w.x, oy, w.z); a.net = a.group.position;
-            a.group.scale.setScalar((a._plantScale0 || 1) * h.preyScale);
+            const s0 = (a._plantScale0 || 1) * h.preyScale, sq = h.st === 'gulp' ? 0.72 : 1; // (swallowed: squeezed thin and long, as it goes down the throat)
+            a.group.scale.set(s0 * sq, s0 * sq, s0 / sq);
+            p.thrT = (p.thrT || 0) + dt * (h.st === 'bite' ? 22 : 15); // (it struggles: the body twists and kicks)
+            a.group.rotation.z = Math.sin(p.thrT) * (h.st === 'digest' ? 0 : 0.35) * (1 - (h.st === 'gulp' ? 0.6 : 0));
             const k = h.st === 'wrap' ? 0.35 : 0.9, f = Math.min(1, dt * 4);
             a.group.rotation.x += (k - a.group.rotation.x) * f;
             const ty = p.yaw + h.yaw; a.group.rotation.y += Math.atan2(Math.sin(ty - a.group.rotation.y), Math.cos(ty - a.group.rotation.y)) * Math.min(1, dt * 6);
@@ -607,6 +627,8 @@ export class Plants {
     _bite(p, prey) {
         const g = this.game;
         g.sound?.playPlant?.(this._toWorld(p, p.hunt.mouth, _v), 'snap', 1);
+        this.carnFx?.bite(this._toWorld(p, p.hunt.mouth, _v), prey?.k || 'a', 1);
+        p.biteK = 1;
         if (!this.auth || !prey) return;
         if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.hp -= EAT.ANIMAL_BITE * 0.5; if (a.hp <= 0) a.hp = 1; } } // (three bites weaken it; it is swallowed alive-or-nearly: no carcass)
         else if (prey.k === 'v') { const v = g.castleLife?.byId?.get(prey.id); if (v) g.castleLife.hit(v, 3, null, null, { kind: 'bite' }); }
@@ -680,14 +702,22 @@ export class Plants {
         // the jaws
         const target = h.jawTarget() + (p.flinch > 0 ? 0.3 * p.flinch : 0);
         p.jaw += (target - p.jaw) * Math.min(1, dt * (h.st === 'snap' ? 45 : h.st === 'bite' ? 28 : 9));
-        p.pivot.position.set(h.H[0], h.H[1], h.H[2]);
-        p.pivot.rotation.set(h.pitch, h.yaw, 0);
+        // visual offsets on top of the hunt's own head: it rears back before the lash, whips on the snap, jerks at each bite, drools while it waits
+        const HV = p._hv || (p._hv = [0, 0, 0]); let vp = h.pitch, vy = h.yaw;
+        HV[0] = h.H[0]; HV[1] = h.H[1]; HV[2] = h.H[2];
+        if (p.windT > 0) { p.windT -= dt; const k = Math.max(0, p.windT) / 0.28; HV[1] += 1.6 * k * p.s; vp -= 0.5 * k; }
+        if (p.whipT > 0) { p.whipT -= dt; const k = Math.max(0, p.whipT) / 0.2; vy += Math.sin(p.whipT * 40) * 0.25 * k; vp += 0.3 * k; }
+        if (p.biteK > 0) { p.biteK = Math.max(0, p.biteK - dt * 5); HV[1] -= 0.8 * p.biteK * p.s; vp += 0.35 * p.biteK; vy += Math.sin(this._clock * 40) * 0.12 * p.biteK; }
+        if (p.burnT > 0 && !p.dead) { vy += Math.sin(this._clock * 11 + p.phase) * 0.3; vp += Math.sin(this._clock * 8) * 0.25; p.jaw = Math.max(p.jaw, 0.6); } // (burning: it writhes and screams)
+        if (h.st === 'idle' && d < 30 && p.jaw > 0.05 && Math.random() < dt * 1.5) this.carnFx?.drool(this._toWorld(p, h.mouth, _w), 1);
+        p.pivot.position.set(HV[0], HV[1], HV[2]);
+        p.pivot.rotation.set(vp, vy, 0);
         p.top.rotation.x = -p.jaw; p.low.rotation.x = p.jaw;
         // chewing: the lower jaw works sideways
         const chew = h.st === 'bite' ? Math.sin(h.t * 14) * 0.09 : 0;
         p.low.position.x = chew; p.low.rotation.z = chew * 0.6;
         // the neck: it stretches and thins, the swallow goes down it as a swelling
-        const L = neckSpine(h.base, h.H, h.yaw, h.pitch, p.spine, p.spine.length);
+        const L = neckSpine(h.base, HV, vy, vp, p.spine, p.spine.length);
         p.neck.update(p.spine, neckThin(L), h.bulgeAt(), h.st === 'gulp' ? 0.35 : 0.55, t);
         p.stretch = L / HUNT.REST_NECK;
         // the tendrils
@@ -710,9 +740,81 @@ export class Plants {
         V.commit();
     }
 
+    /** The look of a head's death, by style (every computer): CarnivoreFx.blast / cut / (fire: it was already burning; now it falls and curls). */
+    _dieFx(p, kind) {
+        const fx = this.carnFx, toW = (arr, out) => this._toWorld(p, arr, out), h = p.hunt;
+        const style = p.deathStyle;
+        if (style === 'blast') {
+            const b = this._blastAt && performance.now() - this._blastAt.at < 400 ? new THREE.Vector3(this._blastAt.x, this._blastAt.y, this._blastAt.z) : null;
+            fx.blast(p, toW, b);
+        } else if (style === 'cut') {
+            fx.cut(p, toW);
+            // the head is flung by its own weight on the rope of the neck (CarnivoreFx / _deadHead): a start velocity away from where it was struck, and up
+            const a = Math.random() * 6.28;
+            p.dH = { x: h.H[0], y: h.H[1], z: h.H[2], vx: Math.cos(a) * 5, vy: 4 + Math.random() * 3, vz: Math.sin(a) * 5, pitch: h.pitch, yaw: h.yaw, roll: 0, spin: (Math.random() - 0.5) * 6, jaw: Math.max(0.2, p.jaw || 0.12) };
+            p.leakT = 2.8;
+        } else { // fire: it is already burning; it screams as it goes, then sags
+            this.game.sound?.playPlant?.(toW(h.H, _v), 'shriek', 1);
+            p.dH = { x: h.H[0], y: h.H[1], z: h.H[2], vx: 0, vy: 0, vz: 0, pitch: h.pitch, yaw: h.yaw, roll: 0, spin: 0, jaw: 0.5, slow: true };
+            this._char(p, 1);
+        }
+    }
+    /** Blacken everything of a burnt head (one shared charcoal material): k 0…1 (a one-way switch, made once). */
+    _char(p, k) {
+        if (k < 1 || p.charred) return;
+        p.charred = true;
+        const M = charMaterial();
+        p.root.traverse((o) => { if (o.isMesh && o.material !== M) { o.userData._mat0 = o.material; o.material = M; } });
+    }
+    /** (every computer) A dead head falls on the rope of its neck: gravity, the rope's length, the ground, bounces; the jaws loll open, the neck follows. */
+    _deadHead(p, dt) {
+        const d = p.dH, h = p.hunt; if (!d) return;
+        const base = h.base, LMAX = (HUNT.NECK_MAX * 0.92);
+        const g = d.slow ? 6 : 24; // (fire: it sags slowly)
+        d.vy -= g * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt;
+        // the rope: never farther than the neck can reach from its root
+        const dx = d.x - base[0], dy = d.y - base[1], dz = d.z - base[2], L = Math.hypot(dx, dy, dz);
+        if (L > LMAX) { const k = LMAX / L; d.x = base[0] + dx * k; d.y = base[1] + dy * k; d.z = base[2] + dz * k; const vn = (d.vx * dx + d.vy * dy + d.vz * dz) / L; if (vn > 0) { d.vx -= dx / L * vn * 1.4; d.vy -= dy / L * vn * 1.4; d.vz -= dz / L * vn * 1.4; } }
+        const floor = 0.7;
+        if (d.y < floor) {
+            d.y = floor;
+            if (Math.abs(d.vy) > 2.2 && !d.slow) { this.carnFx?.sap(this._toWorld(p, [d.x, d.y, d.z], _w), 6, 0.7); this.game.sound?.playPlant?.(_w, 'splat', 0.8); d.vy *= -0.35; d.vx *= 0.6; d.vz *= 0.6; d.spin *= 0.6; }
+            else { d.vy = 0; d.vx *= Math.max(0, 1 - 6 * dt); d.vz *= Math.max(0, 1 - 6 * dt); }
+        }
+        d.pitch += (0.9 - d.pitch) * Math.min(1, dt * (d.slow ? 1.2 : 3)); // (the head drops, the mouth down)
+        d.roll += d.spin * dt; d.spin *= Math.max(0, 1 - 3 * dt);
+        d.jaw += (0.85 - d.jaw) * Math.min(1, dt * 2); // (the jaws loll open)
+        // pose it (the same neck / jaws as the live head)
+        const HV = p._dV || (p._dV = [0, 0, 0]); HV[0] = d.x; HV[1] = d.y; HV[2] = d.z;
+        p.pivot.position.set(HV[0], HV[1], HV[2]); p.pivot.rotation.set(d.pitch, d.yaw, d.roll);
+        p.top.rotation.x = -d.jaw; p.low.rotation.x = d.jaw;
+        const L2 = neckSpine(base, HV, d.yaw, d.pitch, p.spine, p.spine.length);
+        p.neck.update(p.spine, neckThin(L2), -1, 0.5, this._clock + p.phase);
+        // the tendrils go slack: drawn to rest by the same code with no prey
+        p.vineT -= dt; if (p.vineT <= 0) { p.vineT = 0.06; this._poseVines(p, this._clock * 0.3 + p.phase); }
+    }
+
     _fall(p, dt) {
         if (!p.root || p.root.parent == null) return;
         p.deadT += dt;
+        const style = p.deathStyle || 'cut';
+        if (p.kind === 'carnivore' && style !== 'blast') {
+            this._deadHead(p, dt);
+            if (style === 'cut') this.carnFx?.leak(p, (arr, out) => this._toWorld(p, arr, out), dt);
+            if (style === 'fire') {
+                // it burns on while it sags: flames and soot along the neck, the foot shrinks into a smoking stump, embers
+                if (p.deadT < 5 && this.carnFx) this.carnFx.burning(p, (arr, out) => this._toWorld(p, arr, out), dt, 1 - p.deadT / 5);
+                p.root.scale.y = p.s * (1 - 0.45 * ease(Math.min(1, p.deadT / 4)));
+            }
+            if (p.deadT > (style === 'fire' ? 7 : 9) && p.root.visible) p.root.visible = false;
+            return;
+        }
+        if (style === 'blast') { // (what is left: the foot, charred and low)
+            if (p.deadT < 0.1) this._char(p, 1);
+            p.root.scale.y = p.s * (1 - 0.55 * ease(Math.min(1, p.deadT / 0.6)));
+            if (p.deadT > 5 && p.root.visible) p.root.visible = false;
+            return;
+        }
         const k = Math.min(1, p.deadT / 1.1);
         p.root.rotation.z = -ease(k) * 1.4; p.root.scale.y = p.s * (1 - 0.6 * ease(k));
         if (p.deadT > 3.5 && p.root.visible) p.root.visible = false;
@@ -734,7 +836,7 @@ export class Plants {
         if (m.op === 'b' || m.op === 'anger' || m.op === 'sleep') { this.bright.onNet(m); return; }
         if (m.op === 'bolt' && isHost) { const p = this.byId.get(m.id); if (p) this.boltHit(p, m.spell, null); }
         else if (m.op === 'hit' && isHost) { const p = this.byId.get(m.id); if (p) this.hit(p, +m.dmg || 0, m.kind || 'melee', m.by || null); }
-        else if (m.op === 'die' && !isHost) { const p = this.byId.get(m.id); if (p) this.die(p, 'net', null); else this._gone.set(m.id, true); }
+        else if (m.op === 'die' && !isHost) { const p = this.byId.get(m.id); if (p) this.die(p, m.kind || 'net', null); else this._gone.set(m.id, true); }
         else if (m.op === 's' && !isHost) {
             const seen = new Set();
             for (const e of m.l || []) {
@@ -759,6 +861,6 @@ export class Plants {
     dispose() {
         for (const grp of this.groups.values()) if (grp) this._unload(grp);
         this.groups.clear(); this.byId.clear(); this.near.length = 0;
-        this.bright.dispose();
+        this.bright.dispose(); this.carnFx?.dispose();
     }
 }
