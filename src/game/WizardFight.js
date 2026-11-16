@@ -604,8 +604,9 @@ export class WizardFight {
             if (seen && this.life._sees(v, seen)) return 'NihilisDuel';
         }
         if (v.savior != null) return 'Electrum'; // (the white Saviour: blue «Электром» unless the recognized-darkness exception above applies — SaviorRules.js; his wind and blasts are his own: Savior.js)
-        if (SAVIOR_SPECIAL.has(spell) && v.savior == null) { // (the Supermage's wind and blasts: not on top of himself — near, a shove of «Джолт Максима» instead)
+        if (SAVIOR_SPECIAL.has(spell) && v.savior == null) { // (the Supermage's wind and blasts: not on top of himself — near, a shove of «Джолт Максима» instead; and not often: a blast tears the ground and the frame pays for it)
             const pp = foe != null ? this.life._playerPos(foe) : null;
+            if ((v.spCd?.[spell] || 0) > performance.now()) return 'JoltMaxima';
             if (pp && Math.hypot(pp.x - v.x, pp.z - v.z) < (spell === 'WindMaxima' ? 3 : 11)) return 'JoltMaxima';
         }
         if (v.lesson) return lessonSpell();
@@ -792,6 +793,7 @@ export class WizardFight {
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
         if (!g.spells?.cast) return false;
+        if (v.savior == null) (v.spCd || (v.spCd = {}))[spell] = performance.now() + (SAVIOR.SPECIAL_CD[spell] || 8) * 1000 * 1.5; // (the Supermage: a blast / the wind not oftener than the Saviour's pause ×1.5)
         try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return false; } // (a failed spell is not entry into combat)
         g.sync?.spell?.(spell, _o, _d, 'right', v.id);
         const me = g.character.group.position;

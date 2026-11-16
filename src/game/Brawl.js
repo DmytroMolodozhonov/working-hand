@@ -36,6 +36,7 @@ export class Brawl {
         this.onChange = null; // (the panel: counts, state)
         this._makeMarkers();
         this._stripBuilt = false; // (the strip between the teams: blocks, laid once the ground is there — _buildStrip)
+        if (game.world) game.world.duelFar = 115; // (only the field and the cliffs round it are drawn and made: nothing beyond is of any use — FPS and loading)
         this._quiet();
     }
 
