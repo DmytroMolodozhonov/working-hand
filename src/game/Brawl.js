@@ -156,6 +156,16 @@ export class Brawl {
         return e;
     }
 
+    /** Take one fighter off the field (a test, a sweep of one): the creature and its place in the roster. */
+    removeFighter(k, id) {
+        const g = this.game, life = g.castleLife;
+        if (k === 'z') { const z = g.zombieById?.get(id); if (z) g.removeZombie(z); }
+        else if (k === 'a') { const a = g.animals?.byId.get(id); if (a) g.animals._remove(a); }
+        else if (k === 'v') { const v = life?.byId.get(id); if (v) { v.dead = true; life._deactivate(v); } }
+        this.roster.delete(k + ':' + id);
+        this._changed();
+    }
+
     /** Take everybody off the field. */
     clear() {
         const g = this.game, life = g.castleLife;
