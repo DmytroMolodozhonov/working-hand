@@ -15,6 +15,7 @@ import { SHARDS } from './ElementalRules.js';
 import { BLOCK } from '../world/Terrain.js';
 import { elementalLook } from './ElementalTestSites.js';
 import { earthLook } from './EarthMagicRules.js';
+import { saviorEntry, GX0, SAVIOR, stageOf } from './SaviorRules.js';
 
 export const BRAWL_SITE = 'brawlfield';
 export const BRAWL_ELEM_SITE = 'brawlelem'; // (the real elemental mages: a site of the kind 'elemental', as the Creative fixtures)
@@ -117,6 +118,21 @@ export class Brawl {
             a.servantUntil = 0;
             a.state = 'graze'; a.attacker = null;
             e = this._join('a', a.id, team, def);
+        } else if (def.kind === 'v' && def.savior) {
+            const life = g.castleLife, site = this._site();
+            if (!life || !site || !g.savior) { this.why = 'жители недоступны'; return null; }
+            if (g.savior.v && !g.savior.v.dead && this.roster.has('v:' + g.savior.v.id)) { this.why = 'Спаситель на поле только один'; return null; }
+            const idx = ++this._person;
+            site.people.push({ ...saviorEntry(GX0 + idx, 0), idx });
+            const cs = life._runtime(site);
+            if (!cs.awake) cs.awake = true;
+            const yaw = team === 'A' ? Math.PI * 1.5 : Math.PI * 0.5;
+            const v = life._activate(cs, idx, { x, y: y + SAVIOR.FLY_H, z, yaw }, 'savior');
+            if (!v) { this.why = 'не получилось'; return null; }
+            v.brawl = { team, def };
+            v.yaw = yaw;
+            g.savior.adoptBrawl(v, stageOf(0));
+            e = this._join('v', v.id, team, def);
         } else if (def.kind === 'v' && def.elemental) {
             const life = g.castleLife, site = this._elemSite();
             if (!life || !site) { this.why = 'жители недоступны'; return null; }

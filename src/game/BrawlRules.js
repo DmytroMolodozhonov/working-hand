@@ -38,6 +38,7 @@ export const FIGHTERS = [
     { id: 'novice', label: 'Начинающий маг', icon: '🧙', group: 'Маги', kind: 'v', role: 'student', rank: 'novice', mana: 40 },
     { id: 'wizard', label: 'Маг', icon: '🧙‍♂️', group: 'Маги', kind: 'v', role: 'student', rank: 'adept', mana: 100 },
     { id: 'archmage', label: 'Сильный маг', icon: '🔮', group: 'Маги', kind: 'v', role: 'teacher', rank: 'teacher', mana: 200 },
+    { id: 'savior', label: 'Волшебник-спаситель', icon: '🤍', group: 'Маги', kind: 'v', role: 'savior', savior: true, mana: 700 }, // (the white sage of Savior.js: flies, bombs from above; one on the field — his brain is one)
     { id: 'fire', label: 'Маг огня', icon: '🔥', group: 'Маги стихий', kind: 'v', elemental: 'fire', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'water', label: 'Маг воды', icon: '💧', group: 'Маги стихий', kind: 'v', elemental: 'water', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'earth', label: 'Маг земли', icon: '⛰️', group: 'Маги стихий', kind: 'v', elemental: 'earth', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
