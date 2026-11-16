@@ -4,6 +4,9 @@
  * The author 16.11: «можно будет игроку спавнить разных магов, обычных или стихий, зомби, животных — и заставлять сражаться.
  * Игрок просто действует как камера: наблюдает, ходит мышкой и клавиатурой, камера (веб-камера) не нужна». Two teams, A and B.
  *
+ * Elemental mages are the game's REAL ones (their own brain, poses, auras, spells: ElementalMages.js, EarthMages.js); their foe is a pseudo player id
+ * `bf|k|id` that CastleLife._playerPos resolves to the enemy creature's place (Brawl.foePos).
+ *
  * How they fight (Brawl.js): every fighter is a «servant» of its team (Servants.js: a team is a pseudo-master `brawl:A`), so each system's own
  * walking and blows work as they do for «Брейнрот» (zombies, animals, people); the mages additionally cast bolts (Brawl.casterStep).
  */
@@ -27,10 +30,10 @@ export const FIGHTERS = [
     { id: 'novice', label: 'Начинающий маг', icon: '🧙', group: 'Маги', kind: 'v', role: 'student', rank: 'novice', mana: 40, caster: { color: 0xb08cff, dmg: 3, every: 2.6 } },
     { id: 'wizard', label: 'Маг', icon: '🧙‍♂️', group: 'Маги', kind: 'v', role: 'student', rank: 'adept', mana: 100, caster: { color: 0x7fd0ff, dmg: 5, every: 2.0 } },
     { id: 'archmage', label: 'Сильный маг', icon: '🔮', group: 'Маги', kind: 'v', role: 'teacher', rank: 'teacher', mana: 200, caster: { color: 0xffe27a, dmg: 8, every: 1.5 } },
-    { id: 'fire', label: 'Маг огня', icon: '🔥', group: 'Маги стихий', kind: 'v', role: 'teacher', rank: 'teacher', mana: 160, caster: { color: 0xff7a2a, dmg: 7, every: 1.7, element: 'fire' } },
-    { id: 'water', label: 'Маг воды', icon: '💧', group: 'Маги стихий', kind: 'v', role: 'teacher', rank: 'teacher', mana: 160, caster: { color: 0x39b6ff, dmg: 6, every: 1.6, element: 'water' } },
-    { id: 'earth', label: 'Маг земли', icon: '⛰️', group: 'Маги стихий', kind: 'v', role: 'teacher', rank: 'teacher', mana: 160, caster: { color: 0x9a7a4a, dmg: 9, every: 2.4, element: 'earth' } },
-    { id: 'air', label: 'Маг воздуха', icon: '🌪️', group: 'Маги стихий', kind: 'v', role: 'teacher', rank: 'teacher', mana: 160, caster: { color: 0xdff5ff, dmg: 5, every: 1.2, element: 'air' } },
+    { id: 'fire', label: 'Маг огня', icon: '🔥', group: 'Маги стихий', kind: 'v', elemental: 'fire', mana: 400 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
+    { id: 'water', label: 'Маг воды', icon: '💧', group: 'Маги стихий', kind: 'v', elemental: 'water', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
+    { id: 'earth', label: 'Маг земли', icon: '⛰️', group: 'Маги стихий', kind: 'v', elemental: 'earth', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
+    { id: 'air', label: 'Маг воздуха', icon: '🌪️', group: 'Маги стихий', kind: 'v', elemental: 'air', mana: 220 }, // (the real elemental mage: ElementalMages / EarthMages, aimed at the enemy creature — Brawl.foePos)
     { id: 'cow', label: 'Корова', icon: '🐄', group: 'Животные', kind: 'a', type: 'cow' },
     { id: 'pig', label: 'Свинья', icon: '🐖', group: 'Животные', kind: 'a', type: 'pig' },
     { id: 'sheep', label: 'Баран', icon: '🐏', group: 'Животные', kind: 'a', type: 'sheep' },

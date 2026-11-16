@@ -19,13 +19,14 @@ test('every fighter has a name, an icon, a group, and a real way to be made', ()
         assert.ok(!ids.has(f.id), 'unique ' + f.id); ids.add(f.id);
         assert.ok(['z', 'a', 'v'].includes(f.kind));
         if (f.kind === 'a') assert.ok(f.type, f.id);
-        if (f.kind === 'v') assert.ok(f.role, f.id);
+        if (f.kind === 'v') assert.ok(f.role || f.elemental, f.id);
         if (f.rank) assert.ok(WIZ_RANKS[f.rank], 'a rank the game knows: ' + f.rank);
         if (f.caster) assert.ok(f.caster.dmg > 0 && f.caster.every > 0 && f.caster.color, f.id);
     }
     for (const g of ['Нежить', 'Люди', 'Маги', 'Маги стихий', 'Животные']) assert.ok(FIGHTER_GROUPS.includes(g), g);
     assert.equal(fighterDef('nope'), null);
-    for (const el of ['fire', 'water', 'earth', 'air']) assert.equal(fighterDef(el).caster.element, el);
+    // (the four elemental mages are the game's REAL ones — their own brain, not a bolt of a colour)
+    for (const el of ['fire', 'water', 'earth', 'air']) { assert.equal(fighterDef(el).elemental, el); assert.ok(!fighterDef(el).caster, el); }
 });
 
 test('the foe is the nearest of the OTHER team', () => {

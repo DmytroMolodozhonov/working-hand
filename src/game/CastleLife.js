@@ -441,6 +441,7 @@ export class CastleLife {
 
     _playerPos(id) {
         const g = this.game;
+        if (typeof id === 'string' && id.charCodeAt(0) === 98 && id.startsWith('bf|')) return g.brawl?.foePos(id) ?? null; // («Битва существ»: a creature of the other team as the foe — Brawl.foePos)
         const b = this._bossNow; // (the boss being thought: the king, the head of the wizards' tower — sees the invisible and cries out)
         const boss = b ? { key: 'villager:' + b.id, x: b.x, z: b.z, say: (t) => this._say(b, t, 4, true, true) } : null;
         const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p, boss) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)

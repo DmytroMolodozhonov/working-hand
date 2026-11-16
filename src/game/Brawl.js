@@ -13,8 +13,12 @@ import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEne
 import { FACE, facesTarget } from './FaceTarget.js';
 import { WALK, RUN } from './CastleLife.js';
 import { TUTORIAL } from '../world/TutorialLand.js';
+import { elementalLook } from './ElementalTestSites.js';
+import { earthLook } from './EarthMagicRules.js';
 
 export const BRAWL_SITE = 'brawlfield';
+export const BRAWL_ELEM_SITE = 'brawlelem'; // (the real elemental mages: a site of the kind 'elemental', as the Creative fixtures)
+export const foeId = (k, id) => `bf|${k}|${id}`;
 const _v = new THREE.Vector3(), _d = new THREE.Vector3();
 
 export class Brawl {
@@ -31,6 +35,7 @@ export class Brawl {
         this._listAt = -1;
         this._frame = 0;
         this._person = 0; // (the people made so far: their index in the field's site)
+        this._elemN = 0; // (…and the elemental mages' in theirs)
         this.onChange = null; // (the panel: counts, state)
         this._makeMarkers();
         this._quiet();
@@ -70,6 +75,21 @@ export class Brawl {
         return def;
     }
 
+    /** The elemental mages' place (kind 'elemental': their brain runs by `foe`, as the Creative fixtures'). */
+    _elemSite() {
+        const life = this.game.castleLife;
+        let def = life?.extra?.get(BRAWL_ELEM_SITE);
+        if (!def && life) {
+            const G = this.groundAt(0, 0);
+            def = {
+                id: BRAWL_ELEM_SITE, kind: 'elemental', name: 'Битва существ', x: 0, z: 0, F: G, zone: 80, gx: 0, gz: 0, knights: 0, population: 0, color: 0x555a66,
+                people: [], houses: [], stalls: [], fields: [], posts: [], beds: [], chests: [], pens: [], graves: [], graveyards: [], rooms: [], nodes: [], edges: [],
+            };
+            life.addSite(def);
+        }
+        return def;
+    }
+
     // --------------------------------------------------------------- putting
     count(team = null) {
         let n = 0;
@@ -100,6 +120,20 @@ export class Brawl {
             a.servantUntil = 0;
             a.state = 'graze'; a.attacker = null;
             e = this._join('a', a.id, team, def);
+        } else if (def.kind === 'v' && def.elemental) {
+            const life = g.castleLife, site = this._elemSite();
+            if (!life || !site) { this.why = 'жители недоступны'; return null; }
+            const idx = ++this._elemN, m = idx;
+            const el = def.elemental;
+            site.people.push({ idx, seed: 20261117 + m * 131, role: 'mage', element: el, name: def.label + ' ' + m, female: el === 'water' || m % 4 === 0, mana: def.mana, robe: false, look: el === 'earth' ? earthLook() : elementalLook(el, { tank: el === 'water' }) });
+            const cs = life._runtime(site);
+            if (!cs.awake) cs.awake = true;
+            const yaw = team === 'A' ? Math.PI * 1.5 : Math.PI * 0.5;
+            const v = life._activate(cs, idx, { x, y, z, yaw }, 'elemental');
+            if (!v) { this.why = 'не получилось'; return null; }
+            v.brawl = { team, def, elemental: true };
+            v.yaw = yaw;
+            e = this._join('v', v.id, team, def);
         } else if (def.kind === 'v') {
             const life = g.castleLife, site = this._site();
             if (!life || !site) { this.why = 'жители недоступны'; return null; }
@@ -140,7 +174,9 @@ export class Brawl {
         this.bolts.length = 0;
         const site = life?.extra?.get(BRAWL_SITE);
         if (site) { site.people.length = 0; life.state(BRAWL_SITE).killed.clear(); }
-        this._person = 0;
+        const es = life?.extra?.get(BRAWL_ELEM_SITE);
+        if (es) { es.people.length = 0; life.state(BRAWL_ELEM_SITE).killed.clear(); }
+        this._person = 0; this._elemN = 0;
         this.state = 'setup';
         this.winner = null;
         this._changed();
@@ -191,6 +227,29 @@ export class Brawl {
             out.push({ k: e.k, id: e.id, team: e.team, x: p.x, z: p.z });
         }
         return out;
+    }
+
+    /** The place of the creature `bf|k|id` as a player's place (feet + 2: CastleLife._playerPos's measure), or null when it is gone — the real elemental mages aim at it. */
+    foePos(id) {
+        const m = /^bf\|([zav])\|(.+)$/.exec(id);
+        if (!m) return null;
+        const k = m[1], key = k === 'v' ? m[2] : +m[2];
+        const p = this.game.servants?.pos(k, key, _d);
+        return p ? { x: p.x, y: p.y + 2, z: p.z } : null;
+    }
+
+    /** (a few times a second) The elemental mages' foes: the nearest living fighter of the other team, none before the fight / after it. */
+    _feedFoes() {
+        const L = this.game.castleLife;
+        const list = this.state === 'fight' ? this._enemies() : null;
+        for (const e of this.roster.values()) {
+            if (!e.def.elemental) continue;
+            const v = L?.byId.get(e.id);
+            if (!v || v.dead) continue;
+            if (!list) { v.foe = null; continue; }
+            const en = pickEnemy(e.team, v, list);
+            v.foe = en ? foeId(en.k, en.id) : null;
+        }
     }
 
     // ----------------------------------------------------------------- mages
@@ -320,6 +379,7 @@ export class Brawl {
             }
         } else if (this.bolts.length) this._updateBolts(dt);
         if (this._frame % 2 === 0) this._updateMarkers();
+        if (this._frame % 12 === 3) this._feedFoes();
         if (this._frame % 30 === 0) { // (no stranger on the field: a zombie nobody put there goes)
             for (const z of [...this.game.zombies]) if (!this.roster.has('z:' + z.id) && !z.isDying) this.game.removeZombie(z);
         }
