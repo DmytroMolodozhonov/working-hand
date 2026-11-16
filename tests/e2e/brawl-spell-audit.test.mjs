@@ -60,6 +60,61 @@ test('what every NPC wizard spell does to every kind of creature', { timeout: 17
                 await frames(2);
             }
         }
+        // ---- the elemental mages' own attacks, forced (not left to chance in a fight)
+        const T = window.__zns.THREE, EM = g.elementalMages;
+        const mageAt = (el, x, z) => { const e = B.spawn(el, 'A', x, z); return { e, v: L.byId.get(e.id) }; };
+        const foeAt = (kind, x, z) => { const e = B.spawn(kind, 'B', x, z); const c = e.k === 'z' ? g.zombieById.get(e.id) : e.k === 'a' ? g.animals.byId.get(e.id) : L.byId.get(e.id); return { e, c }; };
+        const posOf = (e) => g.servants.pos(e.k, e.id, new T.Vector3());
+        // water: a volley of six shards straight at a zombie 10 m away
+        {
+            const w = mageAt('water', -6, 0), f = foeAt('zombie', 6, 0), p = posOf(f.e);
+            B.start = B.start; B.state = 'fight'; // (the shards look for targets only in a fight; nobody moves by himself: the minds are off — foes are not fed)
+            let hits = 0; const orig = B.shardHit.bind(B); B.shardHit = (sh, b) => { const ok = orig(sh, b); if (ok) hits++; return ok; };
+            const hp0 = f.c.health, list = [];
+            for (let i = 0; i < 6; i++) { const from = { x: w.v.x, y: w.v.y + 2.6 + i * 0.05, z: w.v.z }; const d = new T.Vector3(p.x - from.x, p.y + 1.4 - from.y, p.z - from.z).normalize(); list.push({ p: [from.x, from.y, from.z], v: [d.x * 26, d.y * 26, d.z * 26], d: i * 0.07 }); }
+            g.iceShards.volley(w.v.id, list);
+            await frames(90);
+            out['ВОДА: залп осколков по зомби'] = `попаданий ${hits} из 6, урон ${hp0 - f.c.health}`;
+            B.shardHit = orig; B.state = 'setup';
+            B.removeFighter(f.e.k, f.e.id); B.removeFighter(w.e.k, w.e.id);
+        }
+        // air: the lift and the throw of a zombie / a cow / a knight
+        for (const kind of ['zombie', 'cow', 'knight']) {
+            const m = mageAt('air', -6, 0), f = foeAt(kind, 4, 0);
+            m.v.foe = `bf|${f.e.k}|${f.e.id}`;
+            m.v.mana = 400; m.v.maxMana = 400;
+            const foe = g.castleLife._playerPos(m.v.foe);
+            const ok = EM.airLift(m.v, foe);
+            let peak = 0, t = 0; const y0 = posOf(f.e)?.y ?? 0;
+            for (let i = 0; i < 160; i++) {
+                await frames(3);
+                m.v.elemental.liftHeld && (m.v.elemental.liftAck = true);
+                if (m.v.elemental.liftT > 0 && !m.v.elemental.carry) break;
+                const q = posOf(f.e); if (q) peak = Math.max(peak, q.y - y0);
+                EM.think(m.v, 0.05); // (the mind runs the hold: liftT counts down, the throw at the end)
+                if (!m.v.elemental.carry && i > 20) break;
+            }
+            await frames(60);
+            const q = posOf(f.e);
+            out['ВОЗДУХ: подъём и бросок — ' + kind] = `поднято: ${ok}, высота ${Math.round(peak * 10) / 10} м, улетело на ${q ? Math.round(Math.hypot(q.x - 4, q.z) * 10) / 10 : '?'} м`;
+            B.removeFighter(f.e.k, f.e.id); B.removeFighter(m.e.k, m.e.id);
+        }
+        // air: the pushes — a ring of wind and a wind blast at a zombie, a cow, a knight
+        for (const kind of ['zombie', 'cow', 'knight']) {
+            for (const name of ['WindImpulseMaxima', 'WindMaxima']) {
+                const m = mageAt('air', -3, 0), f = foeAt(kind, 3, 0);
+                m.v.foe = `bf|${f.e.k}|${f.e.id}`; m.v.mana = 400;
+                const foe = g.castleLife._playerPos(m.v.foe), p0 = posOf(f.e);
+                const imp = {}; const ci = g.creatureImpact, oa = ci.apply.bind(ci);
+                ci.apply = (c, o) => { const r = oa(c, o); imp[o.spell + ':' + r] = (imp[o.spell + ':' + r] || 0) + 1; return r; };
+                const fired = EM.cast(m.v, name, foe);
+                await frames(60);
+                ci.apply = oa;
+                const q = posOf(f.e);
+                out['ВОЗДУХ: ' + name + ' — ' + kind] = `колдуется: ${fired}, толчок ${q ? Math.round(Math.hypot(q.x - p0.x, q.z - p0.z) * 10) / 10 : '?'} м, итог ${JSON.stringify(imp)}`;
+                B.removeFighter(f.e.k, f.e.id); B.removeFighter(m.e.k, m.e.id);
+            }
+        }
         return out;
     });
     console.log('SPELL AUDIT');
