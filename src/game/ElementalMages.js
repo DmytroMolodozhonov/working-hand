@@ -324,7 +324,8 @@ export class ElementalMages {
   if(r&&v.elemental&&!v.dead&&!(v.fx&(FX.DOME|FX.SHIELD))&&this.swirling(v))v.fx=(v.fx|0)|FX.SWIRL;
   return r;
  }
-  swirling(v){const a=v.elemental,p=a.phase;return !!(v.element==='air'&&!a.liftT||a.recover||p==='Coil'||p==='Chamber'||p==='Gather'||p==='rest'||p==='Spin');}
+  swirling(v){const a=v.elemental,p=a.phase;if(v.element==='air'&&!v.fly)return false; // (the author 17.11: the air round an air mage only when he has taken off)
+  return !!(v.element==='air'&&!a.liftT||a.recover||p==='Coil'||p==='Chamber'||p==='Gather'||p==='rest'||p==='Spin');}
  _think(v,dt){
   const g=this.game,L=g.castleLife,a=v.elemental;if(!a)return false;
   if(!v.foe&&v.cs?.def&&v.cs.def.kind!=='elemental'){
