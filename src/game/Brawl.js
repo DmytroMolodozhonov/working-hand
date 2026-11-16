@@ -49,7 +49,6 @@ export class Brawl {
      */
     _muteHero(g) {
         const A = g.achievements;
-        if (A) A.off = true; // (no deed is counted at all: Achievements.gain asks it)
         if (A) for (const k of ['hit', 'fought', 'killed', 'award', 'gain', 'masterKilled', 'towerWrecked', 'checkTower', 'towerLeftHere']) if (typeof A[k] === 'function') A[k] = () => false;
         const h = g.hud;
         if (h) {
