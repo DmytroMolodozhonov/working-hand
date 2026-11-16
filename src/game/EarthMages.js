@@ -46,10 +46,10 @@ export class EarthMages {
  /** «Earthquake»: a stomp, a crack runs at the foe (his own element: half the price). Not hurt-and-running (that is the smoke screen's time); true: cast. */
  _quake(v,foe){
   const g=this.game,L=g.castleLife,a=v.earth;if(!g.spells?.cast||a.recover||v.hp<v.maxHp*.3)return false;
-  const dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz);if(d<6||d>18||!L._sees(v,foe))return false;
-  if(Math.random()>.5){a.quakeCd=3;return false;} // (his mood: not at every chance)
+  const dx=foe.x-v.x,dz=foe.z-v.z,d=Math.hypot(dx,dz);if(d<3.5||d>22||!L._sees(v,foe))return false; // (17.11: from 3.5 m — the knights come close — and to 22 m)
+  if(Math.random()>.85){a.quakeCd=2;return false;} // (his mood: not at every chance — 17.11: nearly always, the author wanted him to use it)
   if(v.mana<SPELL_COST.Earthquake*.5+E.START*.5||!this._pay(v,SPELL_COST.Earthquake))return false;
-  a.quakeCd=16;a.stitchPose=1.1;
+  a.quakeCd=8;a.stitchPose=1.1; // (17.11: every 8 s, was 16)
   const P=new THREE.Vector3(v.x,g.collision?.surfaceY?g.collision.surfaceY(v.x,v.z):v.y,v.z),D=new THREE.Vector3(dx/d,0,dz/d);
   g.spells.cast('Earthquake',P,D,'right',v.id);g.sync?.spell?.('Earthquake',P,D,'right',v.id);L._say?.(v,'Earthquake!',2);
   return true;
