@@ -329,7 +329,7 @@ export class WizardFight {
                 box.fire = null; box.spot = null; v.spot = null;
             }
         } else v.lineT = 0;
-        if (shot && spot && !spot.run && !(v.unstickT > 0)) spot = null;
+        if (shot && spot && (!spot.run || (v.keepAway && d >= 8)) && !(v.unstickT > 0)) spot = null; // (keeping away: a ready shot is taken first — he runs between the casts, not instead of them; nearer than 8 m — away first)
         // just cast: he stands in his pose a moment (and while his charge flies), only then moves on
         if (this.holding(v, dt, d)) { spot = null; v.unstickT = 0; }
         let moving = false;
@@ -686,6 +686,7 @@ export class WizardFight {
         const ux = dx / L, uz = dz / L, fy = fp.y - 1.95;
         for (const o of v.cs?.active?.values() ?? []) { // (a free wizard — a wanderer, a duellist — has no castle: nobody of his own in the line)
             if (o === v || o === foe || o.dead) continue; // (the arena's duel: the foe is a wizard of the same tower — he is the target, not «one of his own» in the way)
+            if (v.brawl && o.brawl?.team !== v.brawl.team) continue; // («Битва существ»: everyone on the field lives in ONE place — the other team is no friend: the author 17.11, two mages met and never cast, each waiting for «his own» to leave the line)
             const ox = o.x - v.x, oz = o.z - v.z;
             const f = ox * ux + oz * uz;
             if (f < 0.6 || f > L + 1.5) continue; // (one right by the foe too: a charge that misses him by a hand finds the friend)

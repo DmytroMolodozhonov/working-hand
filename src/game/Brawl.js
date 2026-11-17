@@ -194,6 +194,9 @@ export class Brawl {
             if (!v) { this.why = 'не получилось'; return null; }
             if (!isMage(def)) { v.servantOf = masterOfTeam(team); v.servantUntil = 0; } // (a knight is a servant of its team; a mage fights by his own brain: _feedFoes)
             v.brawl = { team, def };
+            // (17.11: the mage's range on the field was given to the Saviour alone — the ordinary mages kept their tower range (8–16 m) and stood idle out of reach
+            //  of an air mage at 21–24 m. Every mage of any rank: ready at once, keeps away and fights from 14–26 m, shoves a near foe back, blinks away)
+            if (isMage(def)) { v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; v.keepAway = true; v.W = { ...v.W, range: [14, 26], blink: v.W?.blink || { cd: 8 } }; }
             v.yaw = yaw;
             e = this._join('v', v.id, team, def);
         }
@@ -357,6 +360,9 @@ export class Brawl {
             if (!v || v.dead) continue;
             v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; // (in the middle of a battle a mage is on his guard: not the seconds of a first surprise before he lifts the wand — knights cross the field in two)
             if (!list) { v.foe = null; continue; }
+            // (the author 17.11: «в режиме боёв враждебность должна быть максимальная всегда у всех соперников» — every fighter of the other team is HIS
+            //  enemy for the whole fight, not one foe for 30 s: the ordinary mage's own mind drops a foe that is not held hostile, and never looks at the others)
+            if (v.cs?.hostile) for (const o of list) if (o.team !== e.team) v.cs.hostile.set(foeId(o.k, o.id), Date.now() + 600000);
             // (a foe is KEPT: the mage's own mind starts a new fight — a reaction time of seconds — at every change of the foe,
             //  so the nearest one flipping between running zombies kept him forever «reacting»: he changes only when the foe is
             //  gone, or another is much nearer for a while)
