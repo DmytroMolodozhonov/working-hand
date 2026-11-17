@@ -34,12 +34,13 @@ test('ordinary mages fight each other and an elemental mage in «Битва су
             g.spells.cast = (name, o, d, s, by, ...r) => { if (by === va.id || by === vb.id) bolts[by + ':cast:' + name] = (bolts[by + ':cast:' + name] || 0) + 1; return sc(name, o, d, s, by, ...r); };
             const hp0 = [va.hp, vb.hp];
             const started = B.start(); log.push(`start ${started} why ${B.why} state ${B.state} alive ${JSON.stringify(B.aliveCount())} roster ${[...B.roster.keys()].join(',')}`);
-            for (let t = 0; t < 80 && B.state === 'fight'; t++) {
+            const fr0 = g.frameCount;
+            for (let t = 0; t < 400 && B.state === 'fight' && g.frameCount - fr0 < 2400; t++) {
                 await sleep(500);
-                if (t % 4 === 0) for (const v of [va, vb]) log.push(`${t / 2}s ${v.id} hp ${v.hp | 0} m ${v.mana | 0} mode ${v.mode} prep ${v.prep?.spell || '-'} foe ${v.foe} d ${v.foe ? Math.hypot(v.x - (v === va ? vb : va).x, v.z - (v === va ? vb : va).z).toFixed(1) : '-'} keep ${!!v.keepAway} cmd ${v.cmd?.kind || '-'} job ${v.job || '-'} state ${v.wiz?.state || v.fightState || '-'} wiz ${!!v.wizard} cd ${(v.castCd ?? 0).toFixed(1)} wt ${v.wt?.role || '-'} eng ${v.engage ? v.engage.t.toFixed(1) + '/' + v.engage.role : '-'} hostile ${v.foe ? ((v.cs?.hostile?.get(v.foe) || 0) > Date.now()) : '-'} ready ${(() => { const F = L.wizards?.fight, other = v === va ? vb : va; if (!F || !v.foe || v.element) return '-'; const fp = L._playerPos(v.foe), d = Math.hypot(fp.x - v.x, fp.z - v.z); return F._castReady(v, d) + '/' + F.clearShot(v, fp) + '/fil' + F._friendInLine(v, fp) + ' range ' + v.W?.range; })()}`);
+                if (t % 4 === 0) for (const v of [va, vb]) log.push(`${t / 2}s ${v.id} hp ${v.hp | 0} m ${v.mana | 0} mode ${v.mode} prep ${v.prep?.spell || '-'} foe ${v.foe} d ${v.foe ? Math.hypot(v.x - (v === va ? vb : va).x, v.z - (v === va ? vb : va).z).toFixed(1) : '-'} keep ${!!v.keepAway} cmd ${v.cmd?.kind || '-'} job ${v.job || '-'} state ${v.wiz?.state || v.fightState || '-'} wiz ${!!v.wizard} cd ${(v.castCd ?? 0).toFixed(1)} wt ${v.wt?.role || '-'} eng ${v.engage ? v.engage.t.toFixed(1) + '/' + v.engage.role : '-'} hostile ${v.foe ? ((v.cs?.hostile?.get(v.foe) || 0) > Date.now()) : '-'} ready ${(() => { const F = L.wizards?.fight, other = v === va ? vb : va; if (!F || !v.foe || v.element) return '-'; const fp = L._playerPos(v.foe); if (!fp) return 'nofp'; const d = Math.hypot(fp.x - v.x, fp.z - v.z); return F._castReady(v, d) + '/' + F.clearShot(v, fp) + '/fil' + F._friendInLine(v, fp) + ' range ' + v.W?.range; })()}`);
             }
             g.duel._addBolt = add; g.spells.cast = sc;
-            res[a + '_vs_' + b] = { hp0, hp1: [va.dead ? 0 : va.hp, vb.dead ? 0 : vb.hp], bolts, log: log.slice(0, 40) };
+            res[a + '_vs_' + b] = { frames: g.frameCount - fr0, winner: B.winner, hp0, hp1: [va.dead ? 0 : va.hp, vb.dead ? 0 : vb.hp], bolts, log: log.slice(0, 40) };
         }
         return res;
     });
