@@ -67,7 +67,7 @@ WIZ.mage = WIZ.teacher; // (a wizard of a hamlet — Hamlets.js: his rank decide
 export const SUPER = {
     GROUP: ['Thunderwave', 'EarthquakeMaxima', 'BombardoMaxima', 'WindImpulseMaxima', 'Inferno'],
     BLACK: ['AvadaKedavra', 'SapiraDuel', 'Accentric'],
-    CD: { Thunderwave: 14, EarthquakeMaxima: 16, BombardoMaxima: 10, WindImpulseMaxima: 8, Inferno: 9, WindMaxima: 12, Bombardo: 7 },
+    CD: { Thunderwave: 8, EarthquakeMaxima: 9, BombardoMaxima: 6, WindImpulseMaxima: 5, Inferno: 5, WindMaxima: 8, Bombardo: 5 }, // (17.11: shorter — the author saw too few group spells)
     CROWD_R: 10, // m: enemies this close to his foe make a crowd (group spells)
 };
 

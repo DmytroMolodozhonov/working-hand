@@ -317,6 +317,7 @@ export class WizardFight {
         let spot = this._spot(v, fp, d, sq);
         if (spot && v.keepAway && d < 18) spot.run = true; // (the author 17.11: a mage, of any rank, does not let the enemy come near — he RUNS off the distance, not strolls)
         spot = this.wl.home?.spot(v, spot) ?? spot;
+        if (v.rank === 'supermage' && this._superHop(v, spot, fp, d, dt)) { L._ground(v); return true; } // (a short flight out of a pit / over to the other side)
         // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
         const shot = this._castReady(v, d) && this.clearShot(v, fp);
         // (ready, but one of his own in the line: a step to the side for a clear one)
@@ -658,6 +659,31 @@ export class WizardFight {
         return spell;
     }
 
+    /**
+     * The Supermage may take off for a moment (the author 17.11: «взлететь временно, чтобы выбраться из ямы или перелететь на другой бок»): when he is stuck
+     * (he did not move for a while: a pit, a wall of stone), or his place is on another level — he flies straight to it, a few metres up, for at most 3.5 s, and lands.
+     */
+    _superHop(v, spot, fp, d, dt) {
+        const g = this.game;
+        if (v.hopT > 0) {
+            v.hopT -= dt;
+            const to = v.hopTo, gy = g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1) : g.collision.groundY(v.x, v.z);
+            v.y += (gy + 4 - v.y) * Math.min(1, dt * 3);
+            const dx = to.x - v.x, dz = to.z - v.z, dd = Math.hypot(dx, dz) || 1, sp = Math.min(9, dd * 3 + 2);
+            v.x += (dx / dd) * sp * dt; v.z += (dz / dd) * sp * dt;
+            v.yaw = yawTo(v.x, v.z, to.x, to.z); v.speed = sp; v.mode = 'run'; v.fly = true;
+            if (dd < 1.8 || v.hopT <= 0 || v.stunT > 0) { v.fly = false; v.hopT = 0; v.vy = -0.01; v.hopCd = 6; v.speed = 0; }
+            return true;
+        }
+        v.hopCd = Math.max(0, (v.hopCd || 0) - dt);
+        if (v.hopCd > 0 || v.stunT > 0 || v.vy || v.lev || v.carriedBy || v.noWand || v.prep || !spot) return false;
+        const stuck = (v.stkN || 0) >= 1 || v.unstickT > 0, pit = Math.abs((spot.y ?? v.y) - v.y) > 2.2;
+        if (!(stuck || pit) || v.mana < SPELL_COST.Flight + 40) return false;
+        v.mana -= SPELL_COST.Flight; v.knowsFlight = true; v.hopT = 3.5; v.hopTo = { x: spot.x, z: spot.z }; v.stkN = 0; v.unstickT = 0; v.path = null;
+        try { this.wl.fx.smoke(v); } catch { /* (no effect: still flies) */ }
+        return false;
+    }
+
     /** Does this player hold a wand now (mine — my hands; a friend's — his avatar)? */
     _foeArmed(id) {
         const g = this.game;
@@ -824,7 +850,7 @@ export class WizardFight {
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
         if (!g.spells?.cast) return false;
-        if (v.savior == null) (v.spCd || (v.spCd = {}))[spell] = performance.now() + (SUPER.CD[spell] || SAVIOR.SPECIAL_CD[spell] || 8) * 1000 * 1.5; // (the Supermage: a blast / the wind not oftener than the Saviour's pause ×1.5)
+        if (v.savior == null) (v.spCd || (v.spCd = {}))[spell] = performance.now() + (SUPER.CD[spell] || SAVIOR.SPECIAL_CD[spell] || 8) * 1000; // (the Supermage: a blast / the wind not oftener than the Saviour's pause ×1.5)
         try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return false; } // (a failed spell is not entry into combat)
         g.sync?.spell?.(spell, _o, _d, 'right', v.id);
         const me = g.character.group.position;
