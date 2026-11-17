@@ -1,5 +1,5 @@
 /** Original procedural martial choreography: water yields/coils, air turns, fire strikes. */
-export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat','waterSwat','airSpin','airLash','waterFreeze','waterHurl','airSlash','airDash','airRise','airDrift','waterNeedle'];
+export const ELEMENTAL_MODES=['waterGather','waterPush','waterGuard','waterRest','airCoil','airLift','airSweep','airFlight','airRest','fireChamber','firePunch','fireKick','fireRest','fireVault','airRun','fireSwat','airSwat','waterSwat','airSpin','airLash','waterFreeze','waterHurl','airSlash','airDash','airRise','airDrift','waterNeedle','airThunder','airStorm'];
 const S=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
 export function elementalMagePose(m,T,mode,dt,t){
  const e=m.look.element;m._acroActive=mode==='fireVault'&&e==='fire'&&!!m.leftElbow; // (only a fire mage's own body stands on its hands — another's has no such joints)if(e==='earth'||!mode.startsWith(e))return 0;
@@ -84,6 +84,16 @@ export function elementalMagePose(m,T,mode,dt,t){
   if(mode==='airRise'){ // crouched low, the hands draw the air up out of the ground like pulling a rope, the knees open, the back arches, up onto the toes
    const p=S(u/.85),c=1-S(u/.3);T.hx=-.3*c+.15*p;T.hy=Math.sin(u*9)*.05;T.aLX=T.aRX=.3+2.4*p;T.aLZ=-.35-.55*p;T.aRZ=.35+.55*p;T.eL=T.eR=1.1*(1-p)+.1;
    T.headX=-.35*p;T.lL=.15;T.lR=-.12;T.kL=-.9*(1-p)-.1;T.kR=-.85*(1-p)-.1;T.earthSpread=.18;T.bounce=.1*p;
+  }
+  if(mode==='airThunder'){ // «Thunderwave»: the fists drawn in to the chest, crouched, the body coiled back — then both palms THRUST forward with a step, the body behind them
+   const g1=S(u/.5),p=S((u-.55)/.1),f=1-S((u-.8)/.4)*.6;
+   T.aLX=T.aRX=.7+.85*p*f;T.eL=T.eR=1.7*(1-p)+.05;T.aLZ=.35*(1-p)-.15*p;T.aRZ=-.35*(1-p)+.15*p;
+   T.hx=.12*g1*(1-p)-.32*p*f;T.hy=0;T.kL=-.6-.35*g1*(1-p);T.kR=-.5-.3*g1*(1-p);T.lL=.25+.4*p;T.lR=-.3;T.headX=.1;T.earthSpread=.3;T.bounce=0;
+  }
+  if(mode==='airStorm'){ // «Lightning Strike»: both arms raised to the sky, the back arched, rising onto the toes while the lightning gathers — then the right arm SWEEPS down to point at the foe
+   const up=S(u/.6),pt=S((u-2.1)/.15),f=1-S((u-2.45)/.3);
+   T.aLX=.4+2.4*up*(1-.6*pt);T.aRX=.4+2.4*up*(1-pt)+1.35*pt*f;T.aLZ=-.45-.25*up;T.aRZ=.45+.25*up*(1-pt);T.eL=T.eR=.15+.2*(1-up);
+   T.hx=.18*up*(1-pt)-.18*pt;T.headX=-.4*up*(1-pt)+.15*pt;T.hy=-.25*pt;T.kL=-.35*(1-up)-.1;T.kR=-.3*(1-up)-.1;T.lL=.2+.3*pt;T.lR=-.2;T.bounce=.08*up*(1-pt);T.earthSpread=.22;
   }
   if(mode==='airRun'){ // running with the wind: leaning in, the arms streamed back (not pumping), light long steps
    T.hx=-.35;T.hy=.08*Math.sin(t*10);T.aLX=-.45+.12*Math.sin(t*10);T.aRX=-.45-.12*Math.sin(t*10);T.aLZ=-.35;T.aRZ=.35;T.eL=T.eR=.3;T.headX=.3;T.bounce=0;
