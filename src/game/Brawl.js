@@ -142,6 +142,7 @@ export class Brawl {
         if (def.kind === 'z') {
             const zb = g._createZombie(new THREE.Vector3(x, y + 0.5, zc));
             e = this._join('z', zb.id, team, def);
+            zb.group.position.y = y + (zb.gOff ?? 1); // (the Zombie constructor always starts at y = 0.5 and ignores the height: on this land the ground is at ~10, the zombie stood inside it and was pushed out sideways — «зомби не спавнится», 17.11)
             zb.setThrall(true);
             zb.thrallOwner = masterOfTeam(team);
             zb.thrallUntil = Infinity;
