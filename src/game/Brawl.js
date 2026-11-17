@@ -82,7 +82,10 @@ export class Brawl {
     /** The ground under (x, z): the meadow is flat, a hill is not. */
     groundAt(x, z) {
         const c = this.game.collision;
-        const y = c?.groundY ? c.groundY(x, z) : null;
+        let y = c?.groundY ? c.groundY(x, z) : null;
+        // (the collision of a chunk that is not registered yet answers 0: a fighter put there stood UNDER the ground and was pushed out sideways — the author 17.11: «зомби не спавнится»; the terrain's own top layer is the truth: its block's centre is at the layer, the surface half a block above the groundY the collision gives)
+        const t = this.game.terrain?.data;
+        if (t?.topLayer && !(y > TUTORIAL.G - 3)) { const L = t.topLayer(Math.round(x), Math.round(z)); if (Number.isFinite(L) && L > TUTORIAL.G - 3) y = L - 0.5; }
         return Number.isFinite(y) ? y : TUTORIAL.G + 1;
     }
 
@@ -133,6 +136,7 @@ export class Brawl {
         if (!def || !TEAMS[team]) { this.why = 'нет такого бойца'; return null; }
         if (this.state === 'over') this.clear(); // (a new round: the old field goes)
         if (this.count() >= BRAWL.MAX) { this.why = 'на поле уже много бойцов'; return null; }
+        if (g.terrain?.data?.landMade && !g.terrain.data.landMade(x, zc)) { this.why = 'поле ещё строится — подождите секунду'; return null; }
         const z = zc, y = this.groundAt(x, zc);
         let e = null;
         if (def.kind === 'z') {
