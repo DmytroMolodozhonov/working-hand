@@ -3467,6 +3467,7 @@ export class Game {
             const ep = e ? this.servants.find(e.k, e.id) : null;
             if (ep && e.k === 'z') return { pos: ep.group.position, zombie: ep, distSq: zp.distanceToSquared(ep.group.position) };
             if (ep) { const pos = this.servants.pos(e.k, e.id).clone(); return { pos, foe: e, distSq: zp.distanceToSquared(pos) }; }
+            if (typeof z.thrallOwner === 'string' && z.thrallOwner.startsWith('brawl:')) return { pos: zp, follow: true, distSq: 0 }; // («Битва существ»: no enemy yet (before the fight, or none left) — it stands where it was put, never wanders over the strip)
             // nobody to fight: stays near its master (not too close)
             const owner = z.thrallOwner === this.localId ? this.character.group.position : this.remotes.get(z.thrallOwner)?.position;
             if (owner && zp.distanceToSquared(owner) > 16) return { pos: owner, follow: true, distSq: zp.distanceToSquared(owner) };
