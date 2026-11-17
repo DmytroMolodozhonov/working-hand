@@ -99,3 +99,16 @@ test('the air mage has a rich repertoire (15.11): wind blades, a dash, a rise, a
  for(const p of ['Sweep','Spin','Lash','Slash','Dash','Drift'])assert.ok(seen.has(p),'phase '+p);
  assert.ok(bolts.length>=3&&bolts.every(b=>b.spell==='GustDuel'&&b.vs===undefined&&b.npc),'a fan of wind blades flew');
 });
+
+test('water mage «Ледяные иглы»: four needles hand after hand (or a fan of six), paid once, then back to the cycle; broken off — back to the cycle too (17.11)',()=>{
+ for(const fan of [false,true]){
+  const f=fixture('water',400),bolts=[];f.g.duel={_addBolt:(o)=>{bolts.push(o);return o;}};f.g.castleLife._isPlayer=()=>true;
+  const rnd=Math.random;Math.random=()=>fan?0.1:0.9;
+  try{assert.equal(f.em.startNeedles(f.v,{x:0,y:2,z:-16}),true);}finally{Math.random=rnd;}
+  const mana=f.v.mana;f.step(80);
+  assert.equal(bolts.length,fan?6:4,'needles');assert.ok(bolts.every(b=>b.spell==='ShardDuel'&&b.npc));assert.ok(mana-f.v.mana<20);
+  assert.equal(f.v.elemental.needle,null);assert.notEqual(f.v.elemental.phase,'Needle');
+ }
+ const f=fixture('water',400);f.g.duel={_addBolt:(o)=>o};f.g.castleLife._isPlayer=()=>true;f.em.startNeedles(f.v,{x:0,y:2,z:-16});f.v.stunT=1;f.step(2);f.v.stunT=0;f.step(30);
+ assert.notEqual(f.v.elemental.phase,'Needle','a broken-off stroke never keeps him in its phase');
+});

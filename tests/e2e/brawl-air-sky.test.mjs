@@ -12,7 +12,7 @@ test.before(async () => { srv = await startServer(PORT); browser = await launch(
 test.after(async () => { await browser?.close(); srv?.stop(); });
 
 test('the air mage says Thunderwave and Lightning Strike', { timeout: 1700000 }, async () => {
-    const { page } = await openPage(browser, srv.url, { noCamera: true });
+    const { page } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 320, height: 200 } }); // (a tiny picture: the game runs faster without a graphics card)
     page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
     await page.addInitScript(() => { window.__ZNS_SHOT_FAST__ = true; });
     await page.reload(); await page.waitForFunction(() => !!window.__zns);
