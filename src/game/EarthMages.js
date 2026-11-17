@@ -170,7 +170,7 @@ export class EarthMages {
     const throwFirst=!s.blade&&!(a.plainThrown>0);
     if(!throwFirst&&!s.blade&&a.cycle%3===0&&v.mana>=E.BLADE_COST+E.THROW_COST+3&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
     else if(L._sees(v,foe)&&!g.brawl?.allyBlock?.(v,foe,'EarthThrow')){
-     const plain=throwFirst||Math.random()<.5;
+     const plain=throwFirst||a.cycle%2===0; // (every other attack is a throw of the plain stones; the others go round the patterns)
      const atk=v.mana<E.THROW_COST+2?'punch':plain?'throw':EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length];
      if(atk==='throw')a.plainThrown=(a.plainThrown||0)+1;
      this._phase(v,s,atk);

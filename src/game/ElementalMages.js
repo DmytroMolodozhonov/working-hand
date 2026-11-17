@@ -151,7 +151,7 @@ export class ElementalMages {
  }
  /** Out of mana (or badly hurt): he RUNS from the foe to a safe distance, then stands and gathers himself — and comes back (the author 14.11). → true while running. */
  retreat(v,foe,dt){
-  const a=v.elemental,L=this.game.castleLife,dx=v.x-foe.x,dz=v.z-foe.z,d=Math.hypot(dx,dz)||1;
+  const a=v.elemental||v.earth||(v.earth={t:0}),L=this.game.castleLife,dx=v.x-foe.x,dz=v.z-foe.z,d=Math.hypot(dx,dz)||1;
   if(d>=24){this.reposition(v,foe,dt,24);return false;}
   const side=((v.entry.seed&1)?1:-1)*(.35+.25*Math.sin((a.t||0)*.7)),foeId=v.foe;
   L._steer(v,v.x+(dx/d-dz/d*side)*8,v.z+(dz/d+dx/d*side)*8,v.walk*1.5,dt,0);if(!v.foe&&foeId)v.foe=foeId;a.hopping=true;return true;
