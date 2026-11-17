@@ -389,7 +389,7 @@ export class ElementalMages {
   * («LightningHit» — the strike of «Lightning Strike»). Half the price for his element; each its own pause. → the phase, or null.
   */
  airSky(v,foe,dist){
-  const g=this.game,a=v.elemental,now=performance.now();if(v.fly&&!a.winged)return null;
+  const g=this.game,a=v.elemental,now=performance.now(); // (in the air too: he mostly fights flying — and the sky is right over him there)
   const crowd=g.brawl?.crowdAround?.(v,foe)??0;
   if(now>=(a.thunderAt||0)&&dist>=AIR_SKY.THUNDER_MIN&&dist<=AIR_SKY.THUNDER_MAX&&v.mana>=SPELL_COST.Thunderwave*elementK('air','Thunderwave')+AIR_SKY.RESERVE&&(crowd>=2||Math.random()<AIR_SKY.THUNDER_P)&&g.castleLife._sees(v,foe)){a.thunderAt=now+AIR_SKY.THUNDER_CD*1000;return 'Thunder';}
   if(now>=(a.stormAt||0)&&dist>=AIR_SKY.STORM_MIN&&dist<=AIR_SKY.STORM_MAX&&v.mana>=SPELL_COST.LightningStrike*elementK('air','LightningStrike')+AIR_SKY.RESERVE&&Math.random()<AIR_SKY.STORM_P&&!skyVisible(g,v.x,v.y,v.z)&&lightningLand(g,{x:foe.x,y:foe.y-2,z:foe.z})){a.stormAt=now+AIR_SKY.STORM_CD*1000;return 'Storm';}
