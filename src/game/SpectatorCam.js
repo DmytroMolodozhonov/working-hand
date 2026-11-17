@@ -3,7 +3,7 @@
  *
  *   W A S D — along the view (flat), Space / E up, C / Q down (NOT Ctrl: Ctrl+W closes the browser tab — the author's game «crashed» so, 17.11), Shift faster, wheel — the speed;
  *   right mouse button held and dragged — look round (no pointer lock: the left button puts fighters, Brawl panel).
- * The hero's body follows the camera on the ground under it (the world and the creatures wake round the hero) and is hidden.
+ * The hero's body (hidden) stands in the middle of the field: the world and the creatures wake round it, the whole field is solid.
  */
 import * as THREE from 'three';
 
@@ -82,8 +82,9 @@ export class SpectatorCam {
         camera.quaternion.setFromEuler(_e.set(this.pitch, this.yaw, 0));
         const ch = this.game.character;
         if (ch?.group) {
-            const g = this.game.brawl?.groundAt(this.pos.x, this.pos.z) ?? this.pos.y - 3;
-            ch.group.position.set(this.pos.x, g, this.pos.z);
+            // (the hero's body stays in the MIDDLE of the field, not under the camera: the world's collision is made round the hero, and a fighter put far from him stood on no ground, fell to 0 and was pushed out sideways — «зомби не спавнится», 17.11)
+            const g = this.game.brawl?.groundAt(0, 0) ?? this.pos.y - 3;
+            ch.group.position.set(0, g, 0);
             ch.group.visible = false;
         }
     }
