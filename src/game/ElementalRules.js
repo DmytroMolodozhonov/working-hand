@@ -39,6 +39,8 @@ export function readyMana(element, maxMana) { return Math.min(maxMana || 30, Mat
  * `Sweep` — the sweep of both arms (a gust, or a heavy one); `Spin` — he whirls on the spot, two turns, and the air flies off him in a ring (the pushing blow at a near foe, a heavy
  * gust at a far one); `Lash` — a low lash of the arm along the ground (a gust that sweeps the foe's feet). Never the same move twice in a row.
  */
+/** The air mage's sky magic (the author 17.11): «Thunderwave» (range, pause s, the share of a lone foe) and «Lightning Strike» (only under the open sky; never at a foe within STORM_MIN m — the bolt's reach). s are the move's own moments. */
+export const AIR_SKY = { THUNDER_MIN: 4, THUNDER_MAX: 20, THUNDER_CD: 14, THUNDER_P: 0.35, THUNDER_HIT: 0.62, THUNDER_END: 1.2, STORM_MIN: 6, STORM_MAX: 30, STORM_CD: 12, STORM_P: 0.45, STORM_HIT: 2.2, STORM_END: 2.75, RESERVE: 20 };
 export const AIR_MOVES = ['Sweep', 'Spin', 'Lash', 'Slash', 'Dash', 'Rise']; // (15.11: «мало движений»: a fan of wind blades, a dash along the wind, a rise into the air that rains blades)
 export const AIR_SPIN = { RATE: 18, SPIN_T: 0.7, FIRE_T: 0.78, END_T: 1.25 }; // rad/s (two turns: 12.6 rad ≈ 4π), s
 export function nextAirMove(last, roll) {

@@ -63,7 +63,7 @@ test('a mana-empty air mage falls rather than receiving a free slow landing',()=
 
 test('air mage at 17 metres uses a gust whose real reach can touch the opponent',()=>{
  const f=fixture('air');f.g.castleLife._playerPos=()=>({x:0,y:2,z:-17});f.step(900); // (15.11: the air mage has more moves now — blades, a dash, a rise, a dance — so give him time to use a gust)
- assert.ok(f.casts.length>0);assert.ok(f.casts.every(([name])=>name==='WindMaxima'),'ordinary Wind only reaches 14 metres');
+ const wind=f.casts.filter(([name])=>/^Wind/.test(name));assert.ok(wind.length>0);assert.ok(wind.every(([name])=>name==='WindMaxima'),'ordinary Wind only reaches 14 metres'); // (17.11: he says «Thunderwave» / «Lightning Strike» too — the sky's magic; of the winds, only the far one)
 });
 
 test('air mage uses paid body-centred Wind Impulse to repel a nearby opponent',()=>{

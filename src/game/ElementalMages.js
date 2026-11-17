@@ -26,6 +26,8 @@ import { FX } from '../fx/WizardFx.js';
 import { BLOCK } from '../world/Terrain.js';
 import { createRng } from '../core/math.js';
 import { airWet } from './HydroRules.js';
+import { skyVisible, lightningLand } from './SkyRules.js';
+import { AIR_SKY } from './ElementalRules.js';
 const TITLES={water:'Маг воды',air:'Маг воздуха',fire:'Маг огня'};
 const _up0=new T.Vector3(0,1,0),_o=new T.Vector3(),_d=new T.Vector3();
 export function elementalGifts(entry){const r=createRng((entry.seed??1)^0x43b2ca19);return {hydro:{h:entry.element==='water'&&r()<.25?1:0},resist:{f:entry.element==='water'&&r()<.1?1:0}};}
@@ -380,6 +382,40 @@ export class ElementalMages {
   if(glow){for(let i=0;i<4;i++){const q=Math.random()*6.2832;glow.spawn(h.p.x+Math.cos(q)*.25,h.p.y+(Math.random()-.5)*.4,h.p.z+Math.sin(q)*.25,Math.cos(q)*1.2,.6+Math.random()*1.4,Math.sin(q)*1.2,[0xff7a1a,0xffd27a,0xff3a00][i%3],.35+Math.random()*.35,.45,{shrink:1});}
    if(Math.random()<dt*14)glow.spawn(h.p.x,h.p.y,h.p.z,h.dir.x*8,h.dir.y*8,h.dir.z*8,0xffe9a0,.2,.4,{shrink:.8});}
  }
+ /**
+  * The sky's own magic of the air mage (the author 17.11: «у магов воздуха также должны быть заклинания Thunderwave и Lightning Strike»): the same spells a player says.
+  * `Thunder` — the fists drawn to the chest, sparks crackling round them, both palms thrust: «Thunderwave» rolls out at the foe (a crowd round the foe calls it sooner);
+  * `Storm` — only under the open sky: the arms raised, the sky darkens («Storm»), lightning gathers over the palms, then the arm points and the bolt comes down on the foe
+  * («LightningHit» — the strike of «Lightning Strike»). Half the price for his element; each its own pause. → the phase, or null.
+  */
+ airSky(v,foe,dist){
+  const g=this.game,a=v.elemental,now=performance.now();if(v.fly&&!a.winged)return null;
+  const crowd=g.brawl?.crowdAround?.(v,foe)??0;
+  if(now>=(a.thunderAt||0)&&dist>=AIR_SKY.THUNDER_MIN&&dist<=AIR_SKY.THUNDER_MAX&&v.mana>=SPELL_COST.Thunderwave*elementK('air','Thunderwave')+AIR_SKY.RESERVE&&(crowd>=2||Math.random()<AIR_SKY.THUNDER_P)&&g.castleLife._sees(v,foe)){a.thunderAt=now+AIR_SKY.THUNDER_CD*1000;return 'Thunder';}
+  if(now>=(a.stormAt||0)&&dist>=AIR_SKY.STORM_MIN&&dist<=AIR_SKY.STORM_MAX&&v.mana>=SPELL_COST.LightningStrike*elementK('air','LightningStrike')+AIR_SKY.RESERVE&&Math.random()<AIR_SKY.STORM_P&&!skyVisible(g,v.x,v.y,v.z)&&lightningLand(g,{x:foe.x,y:foe.y-2,z:foe.z})){a.stormAt=now+AIR_SKY.STORM_CD*1000;return 'Storm';}
+  return null;
+ }
+ airSkyStep(v,foe,dist,dt){
+  const g=this.game,a=v.elemental,L=g.castleLife,glow=g.fx?.glow;v.speed=0;a.hopping=false;
+  const hand=_o.set(v.x-Math.sin(v.yaw)*.6,v.y+2.4,v.z-Math.cos(v.yaw)*.6);
+  if(a.phase==='Thunder'){
+   if(glow&&a.t<AIR_SKY.THUNDER_HIT){for(let i=0;i<3;i++){const q=Math.random()*6.2832,r=.35+Math.random()*.5;glow.spawn(hand.x+Math.cos(q)*r,hand.y+(Math.random()-.5)*.6,hand.z+Math.sin(q)*r,-Math.cos(q)*2,(Math.random()-.5)*2,-Math.sin(q)*2,i%2?0x88ffff:0xffffff,.1+Math.random()*.1,.25,{shrink:1.5});}}
+   if(!a.fired&&a.t>=AIR_SKY.THUNDER_HIT){a.fired=true;if(L._sees(v,foe)&&this.pay(v,SPELL_COST.Thunderwave*elementK('air','Thunderwave'))){
+    _d.set(foe.x-hand.x,0,foe.z-hand.z).normalize();g.spells.cast('Thunderwave',hand.clone(),_d.clone(),'right',v.id);g.sync?.spell?.('Thunderwave',hand,_d,'right',v.id);
+    g.fx?.lightFlash?.(hand,0x9fe8ff,4,.3,24);v.castT=.6;v.model.castNow=true;L._say?.(v,'Thunderwave!',1.6);this.engaged(v);}}
+   if(a.t>AIR_SKY.THUNDER_END){a.fired=false;a.cycle++;this.phase(v,'Coil');}
+   return;
+  }
+  // Storm: the sky darkens at once, the lightning gathers over the raised palms, then the point and the bolt
+  if(!a.stormCast){a.stormCast=true;const p=_d.set(v.x,v.y,v.z);g.spells.cast('Storm',p.clone(),_up0.clone(),null,v.id);g.sync?.spell?.('Storm',p,_up0,null,v.id);L._say?.(v,'Lightning Strike!',1.8);}
+  if(glow&&a.t<AIR_SKY.STORM_HIT){const top=_d.set(v.x,v.y+4.6,v.z);const k=Math.min(1,a.t/AIR_SKY.STORM_HIT);for(let i=0;i<2+Math.floor(k*4);i++){const q=Math.random()*6.2832,r=.2+Math.random()*(.9-.6*k);glow.spawn(top.x+Math.cos(q)*r,top.y+(Math.random()-.3)*.8,top.z+Math.sin(q)*r,(Math.random()-.5)*3,Math.random()*2,(Math.random()-.5)*3,i%3?0xdde8ff:0x9fd8ff,.12+Math.random()*.14,.25,{shrink:1.2});}
+   if(Math.random()<dt*3*k)g.fx?.lightFlash?.(top,0xcfe0ff,1.6,.08,10);}
+  if(!a.fired&&a.t>=AIR_SKY.STORM_HIT){a.fired=true;a.stormCast=false;
+   const pt=new T.Vector3(foe.x,foe.y-2,foe.z);
+   if(L._sees(v,foe)&&dist>=AIR_SKY.STORM_MIN&&lightningLand(g,pt)&&this.pay(v,SPELL_COST.LightningStrike*elementK('air','LightningStrike'))){g.spells.cast('LightningHit',pt,_d.set(0,-1,0),null,v.id);g.sync?.spell?.('LightningHit',pt,_d,null,v.id);v.castT=.5;v.model.castNow=true;this.engaged(v);}
+  }
+  if(a.t>AIR_SKY.STORM_END){a.fired=false;a.stormCast=false;a.cycle++;this.phase(v,'Coil');}
+ }
  /** A fan of `n` wind blades (duel charges) from the mage's hands at the foe (the author 15.11: the air mage had few moves): 6 mana (half for his element), a whoosh, a ring of leaves. */
  gustFan(v,foe,n){
   const g=this.game,L=g.castleLife,duel=g.duel,ref=foeRef(v.foe);if(!duel?._addBolt||(!ref&&!L._isPlayer?.(v.foe)))return false; // (any foe: a creature of «Битва существ» too — the author 16.11: the blades flew only at players, so against creatures he hurt nobody)
@@ -478,7 +514,8 @@ export class ElementalMages {
    if(a.phase==='rest')this.phase(v,'Coil');
    a.objectsCd=Math.max(0,(a.objectsCd||0)-dt);
    if(!a.liftT&&a.objectsCd<=0){a.objectsCd=12;if(this.objects.start(v)){a.cycle++;this.phase(v,'Coil');}}
-   if(a.phase==='Coil'&&a.t>.35){const mv=this.airMove(v,foe,dist,idle);a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Coil'&&a.t>.35){const mv=this.airSky(v,foe,dist)||this.airMove(v,foe,dist,idle);a.lastMove=mv;this.phase(v,mv);}
+   if(a.phase==='Thunder'||a.phase==='Storm'){this.airSkyStep(v,foe,dist,dt);if(!v.fly){v.mode='air'+a.phase;if(!v.vy)L._ground(v);}return true;}
    if(a.phase==='Spin'){
     if(a.t<AIR_SPIN.SPIN_T)v.yaw+=AIR_SPIN.RATE*dt;a.hopping=a.t<AIR_SPIN.SPIN_T; // (two turns on the spot: the body is his own to turn while he whirls)
     if(a.t>AIR_SPIN.FIRE_T&&!a.fired){a.fired=true;if(dist<23&&L._sees(v,foe)){if(dist<11&&Math.abs(foe.y-v.y-1.5)<=11&&v.mana>=SPELL_COST.WindImpulseMaxima)this.cast(v,'WindImpulseMaxima',foe);else this.cast(v,'WindMaxima',foe);}}
