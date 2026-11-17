@@ -644,7 +644,8 @@ export class WizardFight {
         const pp = foe != null ? this.life._playerPos(foe) : null, dist = pp ? Math.hypot(pp.x - v.x, pp.z - v.z) : 99;
         const crowd = this.game.brawl?.crowdAround?.(v) ?? 1;
         const roll = Math.random();
-        if (crowd >= 2 ? roll < 0.55 : roll < 0.12) {
+        const pGroup = crowd >= 5 ? 0.92 : crowd >= 3 ? 0.85 : crowd >= 2 ? 0.7 : 0.12; // (the author 17.11: he sees a crowd — he reaches for the spells that destroy a crowd, much more often than for the single ones)
+        if (roll < pGroup) {
             const ok = SUPER.GROUP.filter((n) => cd(n) && v.mana >= (SPELL_COST[n] ?? NPC_COST[n] ?? 20) + 40 && dist >= (n === 'WindImpulseMaxima' ? 0 : 5) && dist <= (n === 'WindImpulseMaxima' ? 9 : 26));
             if (ok.length) return ok[(Math.random() * ok.length) | 0];
         } else if (roll > 0.78) {

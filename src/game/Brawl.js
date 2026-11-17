@@ -523,9 +523,13 @@ export class Brawl {
         const f = v.foe && this.foePos(v.foe);
         if (!f) return 1;
         const e = this.roster.get('v:' + v.id), team = e?.team;
-        let n = 0;
-        for (const o of this._enemies()) if (o.team !== team && Math.hypot(o.x - f.x, o.z - f.z) < SUPER.CROWD_R) n++;
-        return Math.max(1, n);
+        let n = 0, near = 0;
+        for (const o of this._enemies()) {
+            if (o.team === team) continue;
+            if (Math.hypot(o.x - f.x, o.z - f.z) < SUPER.CROWD_R) n++; // (a crowd round his foe)
+            if (Math.hypot(o.x - v.x, o.z - v.z) < SUPER.CROWD_R + 6) near++; // (or a crowd coming at him)
+        }
+        return Math.max(1, n, near);
     }
 
     /** What the dead dropped: a weapon lying on the field for 15 s is taken away (hundreds of them hung in the scene — the weak cards gave up). */
