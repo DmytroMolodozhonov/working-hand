@@ -166,8 +166,15 @@ export class EarthMages {
    else if(a.t>(v.mana<E.THROW_COST+E.DRAIN*(EARTH_PHASES.orbit+1.1)?0:EARTH_PHASES.orbit*(a.aggr?.3:1))&&s.n>=1&&dist<=E.RANGE){
     a.cycle++;
     if(a.cycle%6===0&&g.levMax?.npcEarth){const id=g.levMax.npcEarth(v,foe);if(id){a.slab=id;this._stop(v.id);this._engaged(v);return true;}}
-    if(!s.blade&&a.cycle%2===0&&v.mana>=E.BLADE_COST+E.THROW_COST+3&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
-    else if(L._sees(v,foe)&&!g.brawl?.allyBlock?.(v,foe,'EarthThrow'))this._phase(v,s,v.mana<E.THROW_COST+2?'punch':EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length]); // (a friend in the line: the stones are held, he steps aside)
+    // (the author 17.11: «он максимум может ей только защищаться» — the PLAIN earth is a weapon too: the stones are thrown first, blades only after the first throw and not every time)
+    const throwFirst=!s.blade&&!(a.plainThrown>0);
+    if(!throwFirst&&!s.blade&&a.cycle%3===0&&v.mana>=E.BLADE_COST+E.THROW_COST+3&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
+    else if(L._sees(v,foe)&&!g.brawl?.allyBlock?.(v,foe,'EarthThrow')){
+     const plain=throwFirst||Math.random()<.5;
+     const atk=v.mana<E.THROW_COST+2?'punch':plain?'throw':EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length];
+     if(atk==='throw')a.plainThrown=(a.plainThrown||0)+1;
+     this._phase(v,s,atk);
+    } // (a friend in the line: the stones are held, he steps aside)
    }
   }else if(a.phase==='wall'&&a.wallPlan&&a.t>.65&&!a.fired){
    const p=a.wallPlan;a.fired=true;a.wallPlan=null;
