@@ -73,6 +73,8 @@ export class Brawl {
     _hideExtras() {
         const sc = this.game.scene;
         if (!sc) return;
+        const A = this.game.animals; // (the RUNNING book — the «runner» system's animal 'runbook': nobody on the field put it)
+        if (A?.byId) for (const a of [...A.byId.values()]) if (a.type === 'runbook' && !this.roster.has('a:' + a.id)) A._remove(a);
         for (const o of sc.children) if (o.visible && /^(magicFlora|brightFlowers|river-rocks|boom-rocks|boom-ring|reefFish|bodyFinder|apple-gold)$/.test(o.name || '')) o.visible = false;
     }
 
@@ -534,6 +536,31 @@ export class Brawl {
             if (!w._lyingAt) { w._lyingAt = now; continue; }
             if (now - w._lyingAt > 15000) g.weapons.remove(w);
         }
+    }
+
+    /**
+     * Friendly fire (the author 17.11: «защита от убийства союзников — один задевает другого, пусть расходятся и проверяют, есть ли союзник впереди»):
+     * is a fighter of the caster's OWN team in his line of fire to `fp` (a thin corridor), or — for a spell that hits a place — near the target?
+     * true: he does not cast; he steps aside (v.brawlSide) and tries again. Only the team counts: the enemy in the way is a target, not an obstacle.
+     */
+    allyBlock(v, fp, name = '') {
+        const e0 = this.roster.get('v:' + v.id);
+        if (!e0 || this.state !== 'fight') return false;
+        const s = this.game.servants, dx = fp.x - v.x, dz = fp.z - v.z, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+        const area = /Bombardo|Fireball|Inferno|Thunderwave|Earthquake|WindImpulse|Hellfire|Serpent/.test(name);
+        for (const e of this.roster.values()) {
+            if (e === e0 || e.team !== e0.team) continue;
+            const p = s.pos(e.k, e.id, _d);
+            if (!p) continue;
+            const ox = p.x - v.x, oz = p.z - v.z, along = ox * ux + oz * uz, lat = Math.abs(ox * -uz + oz * ux);
+            let hit = along > 1 && along < L + 1.2 && lat < 1.7; // (in the line)
+            if (!hit && area && Math.hypot(p.x - fp.x, p.z - fp.z) < 4.8) hit = true; // (a blast / a quake on the place where his friend stands)
+            if (!hit) continue;
+            const sg = (ox * -uz + oz * ux) > 0 ? -1 : 1; // (aside: to the other side of the friend)
+            v.brawlSide = { x: -uz * sg, z: ux * sg, t: 1.3 };
+            return true;
+        }
+        return false;
     }
 
     _isMageId(id) { const e = this.roster.get('v:' + id); return !!e && isMage(e.def); }

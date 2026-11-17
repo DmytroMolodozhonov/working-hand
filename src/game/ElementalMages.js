@@ -215,6 +215,7 @@ export class ElementalMages {
  }
  cast(v,name,foe,origin=null){
   const g=this.game;if(!g.spells?.cast)return false;
+  if(g.brawl?.allyBlock?.(v,foe,name))return false; // (a friend in the line / at the target: no cast — he steps aside, see think)
   if(origin)_o.copy(origin);
   else if(isImpulse(name))_o.set(v.x,v.y+1.5,v.z);
   else _o.set(v.x-Math.sin(v.yaw)*.9,v.y+2.7,v.z-Math.cos(v.yaw)*.9);
@@ -430,6 +431,7 @@ export class ElementalMages {
   if(v.mana<=lowMana(v.element,v.maxMana))a.recover=true;else if(a.recover&&v.mana>=readyMana(v.element,v.maxMana))a.recover=false;
   if(a.recover){if(a.liftT>0)this.endLift(v);v.fx=0;if(v.fly)this.land(v,dt);v.mana=Math.min(v.maxMana,v.mana+dt);const ran=!v.fly&&this.retreat(v,foe,dt);v.mode=v.fly?'airFlight':ran?'run':v.element+'Rest';if(!v.fly&&!v.vy)L._ground(v);return true;}
   // (the author 17.11: the same strategy for every mage — keep away, do not let the enemy come near: nearer than KITE.NEAR he runs off for a couple of seconds, then fights a moment, and runs again)
+  if(v.brawlSide?.t>0&&!v.vy&&!v.stunT&&!a.liftT&&!a.capture&&!v.fly){const sd=v.brawlSide;sd.t-=dt;a.hopping=true;L._steer(v,v.x+sd.x*6,v.z+sd.z*6,v.walk*1.5,dt,0);v.mode='run';L._ground(v);return true;} // (stepping aside from a friend in the line)
   a.kiteCd=Math.max(0,(a.kiteCd||0)-dt);
   if(dist<KITE.NEAR&&a.kiteCd<=0&&(v.element!=='air'||performance.now()-(a.pushAt??-1e9)<2500)&&!a.liftT&&!a.capture&&!a.wave&&!a.guard&&!a.shard&&!v.vy&&!v.stunT&&!v.lev&&!v.carriedBy&&!(g.hellfire?.npcs?.has(v.id))&&!(a.winged&&(v.fly||a.wings?.launch))){
    a.kiteT=(a.kiteT||0)+dt;

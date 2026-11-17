@@ -43,7 +43,7 @@ export class BrawlPanel {
             <div class="bp-cnt" id="bp-cnt"></div>
             <div class="bp-row"><button class="bp-btn" id="bp-start">⚔️ Начать бой</button><button class="bp-btn alt" id="bp-clear">🗑 Убрать всех</button></div>
             <div class="bp-row"><button class="bp-btn alt" id="bp-sweep" title="Убирает бойцов, трупы, вещи, огонь и чинит землю после взрывов">🧹 Очистить поле полностью</button></div>
-            <div class="bp-hint">Выберите бойца и щёлкните по полю: слева от полосы он будет в красной команде, справа — в синей (Shift — сразу пятерых). Лететь: W A S D, Пробел и Ctrl; осмотреться — правая кнопка мыши; колесо — скорость.</div>`;
+            <div class="bp-hint">Выберите бойца и щёлкните по полю: слева от полосы он будет в красной команде, справа — в синей (Shift — сразу пятерых). Лететь: W A S D, вверх — Пробел или E, вниз — C или Q; осмотреться — правая кнопка мыши; колесо — скорость.</div>`;
         document.body.appendChild(root);
         document.body.classList.add('brawl-on'); // (the hero's bars, slots, minimap and the camera window are of no use to a spectator)
         const banner = (this.banner = document.createElement('div'));

@@ -1,7 +1,7 @@
 /**
  * SpectatorCam.js — the player as a camera in «Битва существ» (Brawl.js): flies by the keyboard and the mouse, no web camera.
  *
- *   W A S D — along the view (flat), Space / E up, Ctrl / Q down, Shift faster, wheel — the speed;
+ *   W A S D — along the view (flat), Space / E up, C / Q down (NOT Ctrl: Ctrl+W closes the browser tab — the author's game «crashed» so, 17.11), Shift faster, wheel — the speed;
  *   right mouse button held and dragged — look round (no pointer lock: the left button puts fighters, Brawl panel).
  * The hero's body follows the camera on the ground under it (the world and the creatures wake round the hero) and is hidden.
  */
@@ -32,7 +32,7 @@ export class SpectatorCam {
         this._onKey = (e) => {
             if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'SELECT' || e.target?.tagName === 'TEXTAREA') return;
             const c = e.code;
-            if (e.type === 'keydown') { if (/^(KeyW|KeyA|KeyS|KeyD|KeyQ|KeyE|Space|ControlLeft|ShiftLeft|ShiftRight)$/.test(c)) this.keys.add(c); if (c === 'Space') e.preventDefault(); }
+            if (e.type === 'keydown') { if (/^(KeyW|KeyA|KeyS|KeyD|KeyQ|KeyE|KeyC|Space|ShiftLeft|ShiftRight)$/.test(c)) this.keys.add(c); if (c === 'Space') e.preventDefault(); }
             else this.keys.delete(c);
         };
         this._onBlur = () => { this.keys.clear(); this._look = false; };
@@ -62,7 +62,7 @@ export class SpectatorCam {
         const fast = k.has('ShiftLeft') || k.has('ShiftRight') ? SPECTATOR.FAST : 1;
         const sp = this.speed * fast * dt;
         const fw = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0), st = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
-        const up = (k.has('Space') || k.has('KeyE') ? 1 : 0) - (k.has('ControlLeft') || k.has('KeyQ') ? 1 : 0);
+        const up = (k.has('Space') || k.has('KeyE') ? 1 : 0) - (k.has('KeyC') || k.has('KeyQ') ? 1 : 0);
         // (forward along the look, level: the camera looks down at the field, and W must not dive into the ground)
         const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
         this.pos.x += (-sy * fw + cy * st) * sp;

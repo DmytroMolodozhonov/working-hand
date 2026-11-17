@@ -680,6 +680,7 @@ export class WizardFight {
      * he doesn't cast through a friend's back; he waits or steps aside for a clear line.
      */
     _friendInLine(v, fp, foe = null) {
+        if (v.brawl) return !!this.game.brawl?.allyBlock?.(v, fp, ''); // («Битва существ»: friends are the team's, not the whole place — Brawl.allyBlock)
         const dx = fp.x - v.x, dz = fp.z - v.z, L = Math.hypot(dx, dz);
         if (L < 1.5) return false;
         const ux = dx / L, uz = dz / L, fy = fp.y - 1.95;

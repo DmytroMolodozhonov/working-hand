@@ -4566,7 +4566,7 @@ export class Game {
         const duelOnly = this.duelOnly; // (the duel-only start: no animals, no roads' people, no zombies, no bosses — only the arena)
         const lean = !!this.config?.brawl; // («Битва существ»: no books, trees, plants, bosses, ships, roads' people — only the field, the teams and the fire)
         if (earth && !duelOnly) this.animals.update(dt); sysMark('animals');
-        if (earth) this.runner.update(dt); sysMark('runner');
+        if (earth && !lean) this.runner.update(dt); sysMark('runner'); // (the running book: not in the brawl field — the author 17.11)
         if (earth && !duelOnly && !lean) this.travelers?.update(dt); sysMark('travelers'); // (the people of the roads: before the people move — the riders sit where their cart is)
         if (earth && !duelOnly && !lean) this.carriages?.update(dt); sysMark('carriages');
         if (earth) this.castleLife.update(dt); sysMark('castleLife');

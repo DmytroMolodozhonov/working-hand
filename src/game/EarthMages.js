@@ -149,6 +149,7 @@ export class EarthMages {
   if(!s){s=this._start(v);if(!s){a.recover=true;v.mode='earthRest';L._ground(v);return true;}}
   s.body.set(v.x,v.y+2.4,v.z);s.yaw=v.yaw;s.phaseT=a.t;v.model.earthPoseT=a.t;
   v.mana=Math.max(0,v.mana-E.DRAIN*dt);
+  if(v.brawlSide?.t>0&&a.phase==='orbit'&&!v.vy&&!v.stunT){const sd=v.brawlSide;sd.t-=dt;a.hopping=true;L._steer(v,v.x+sd.x*6,v.z+sd.z*6,v.walk*1.5,dt,0);v.mode='run';v.model.earthPoseT=a.t;L._ground(v);return true;}
   a.kiteCd=Math.max(0,(a.kiteCd||0)-dt);
   if(dist<KITE.NEAR&&a.kiteCd<=0&&a.phase==='orbit'&&!v.vy&&!v.stunT&&g.elementalMages?.retreat){ // (the author 17.11: keeps away — see ElementalMages: runs off for a couple of seconds with the stones orbiting him, then fights)
    a.kiteT=(a.kiteT||0)+dt;
@@ -166,7 +167,7 @@ export class EarthMages {
     a.cycle++;
     if(a.cycle%6===0&&g.levMax?.npcEarth){const id=g.levMax.npcEarth(v,foe);if(id){a.slab=id;this._stop(v.id);this._engaged(v);return true;}}
     if(!s.blade&&a.cycle%2===0&&v.mana>=E.BLADE_COST+E.THROW_COST+3&&this._pay(v,E.BLADE_COST)){this._phase(v,s,'blade');L._say(v,'Лезвия!',1.8);}
-    else if(L._sees(v,foe))this._phase(v,s,v.mana<E.THROW_COST+2?'punch':EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length]);
+    else if(L._sees(v,foe)&&!g.brawl?.allyBlock?.(v,foe,'EarthThrow'))this._phase(v,s,v.mana<E.THROW_COST+2?'punch':EARTH_ATTACKS[(a.cycle-1)%EARTH_ATTACKS.length]); // (a friend in the line: the stones are held, he steps aside)
    }
   }else if(a.phase==='wall'&&a.wallPlan&&a.t>.65&&!a.fired){
    const p=a.wallPlan;a.fired=true;a.wallPlan=null;
