@@ -247,7 +247,7 @@ export class ElementalMages {
  }
  shardStep(v,foe,dt){
   const a=v.elemental,S=a.shard,g=this.game,L=g.castleLife;
-  if(v.stunT>0||v.lev||v.vy||v.dead||v.carriedBy){a.shard=null;v.fx=0;return false;}
+  if(v.stunT>0||v.lev||v.vy||v.dead||v.carriedBy){a.shard=null;v.fx=0;a.cycle++;return false;} // (broken off: the next stroke is another one)
   S.t+=dt;v.speed=0;a.hopping=false;v.model.elementPoseT=S.t;
   v.fx=S.t<SHARDS.HURL_T&&!S.hurled?FX.SHARDS:0;
   v.mode=S.t<SHARDS.FREEZE_T?'waterFreeze':'waterHurl';
@@ -279,7 +279,7 @@ export class ElementalMages {
  }
  needleStep(v,foe,dt){
   const g=this.game,a=v.elemental,N=a.needle,L=g.castleLife;
-  if(v.stunT>0||v.lev||v.vy||v.dead||v.carriedBy){a.needle=null;return false;}
+  if(v.stunT>0||v.lev||v.vy||v.dead||v.carriedBy){a.needle=null;a.cycle++;return false;}
   N.t+=dt;v.speed=0;a.hopping=false;v.model.elementPoseT=N.t;v.mode='waterNeedle';
   const fanN=NEEDLES.FAN_N;
   while(N.fan?(N.shot<fanN&&N.t>=NEEDLES.FAN_T):(N.shot<NEEDLES.N&&N.t>=NEEDLES.FIRST+N.shot*NEEDLES.STAGGER)){
@@ -479,11 +479,11 @@ export class ElementalMages {
    if(a.shard)return this.shardStep(v,foe,dt);
    if(a.needle&&this.needleStep(v,foe,dt))return true;
    if(a.capture){const b=g.vortex?.bubbles?.get(a.capture),f=g.vortex?.flights?.get(a.capture);if(b||f){v.mode=b?.phase==='ice'?'waterPush':'waterGather';if(f&&!b&&!this.pay(v,dt)){g.vortex._endFlight(f,'mana',true);}L._ground(v);return true;}a.capture=null;}
-   if(a.guard>0){a.guard-=dt;if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';}
+   if(a.guard>0){a.guard=Math.max(0,a.guard-dt);if(!this.pay(v,(v.fx&FX.DOME?1:.5)*dt)){a.guard=0;v.fx=0;a.recover=true;}v.mode='waterGuard';} // (never below 0: «!a.guard» resumes the attack — a guard of −0.01 kept him in his guard stance for ever, 17.11)
    else{v.fx=0;if(threat&&this.waterSource(v,0)&&this.pay(v,threat.bomb?20:5)){a.guard=threat.bomb?4:1.8;v.fx=threat.bomb?FX.DOME:FX.SHIELD;this.phase(v,'Guard');}}
    if(!a.guard){
     if(a.wave&&(a.wave.phase==='rise'||a.wave.phase==='aim')){v.mode='waterGather';L._ground(v);return true;}a.wave=null;
-    if(a.phase==='rest'||a.phase==='Guard')this.phase(v,'Gather');
+    if(a.phase==='rest'||a.phase==='Guard'||(a.phase==='Needle'&&!a.needle)||(a.phase==='Shard'&&!a.shard))this.phase(v,'Gather'); // (a stroke broken off — knocked, stunned, lifted: back to the cycle, never left in the broken stroke's phase for ever, 17.11)
     if(a.phase==='Gather'&&a.t>.75)this.phase(v,'Push');
     if(a.phase==='Push'&&a.t>.45&&!a.fired){a.fired=true;if(L._sees(v,foe))this.waterAttack(v,foe);}
     if(a.phase==='Push'&&a.t>1.3){a.fired=false;a.cycle++;this.phase(v,'Gather');}
