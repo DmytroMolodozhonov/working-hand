@@ -494,10 +494,25 @@ export class WizardLife {
         return FX.SWIPE;
     }
 
+    /**
+     * A fight won WITHOUT a beam clash and without a kill (the author 19.11: the wizard cast first, I answered with «Protection», then beat him — no part of
+     * his power came to me): a wizard who has cast at ME and is now knocked down (stunned, frozen, lifted, in claws) or hurt to a third of his health has lost the
+     * fight. Once per wizard: Mana.duelWonAlive (+1…+3 cells, the mastery) — it is also once per opponent in the player's life.
+     */
+    beatenCheck(v) {
+        const g = this.game, me = g.localId;
+        if (v._beatenPaid || v.dead || me == null || !v.castAtPlayers?.has(me)) return;
+        const down = v.stunT > 0.5 || v.lev || v.carriedBy;
+        if (!down && !(v.hp <= 0.35 * (v.maxHp || 1))) return;
+        v._beatenPaid = true;
+        g.mana?.duelWonAlive?.(v.id, Math.random, Math.round(v.maxMana || 0) || undefined);
+    }
+
     // ------------------------------------------------------------ thinking
     /** (host) Before the usual thinking: true = handled here. (The fight comes here — see defence.) */
     think(v, dt) {
         const W = v.W;
+        if (v.wizard) this.beatenCheck(v);
         if (W) {
             if (v.savior == null && !v.element) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
             v.castCd -= dt; v.domeCd -= dt; v.windCd -= dt; v.blinkCd -= dt;
