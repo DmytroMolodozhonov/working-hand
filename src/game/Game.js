@@ -165,6 +165,7 @@ import { TutorialNudge } from './TutorialNudge.js';
 import { School } from './School.js';
 import { PharaohLife } from './PharaohLife.js';
 import { RiverRocks } from '../world/RiverRocks.js';
+import { Threats } from './Threats.js';
 import { WaterfallFx } from '../fx/WaterfallFx.js';
 import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
@@ -855,6 +856,7 @@ export class Game {
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
         this.dismember = new Dismemberment(this); // a blade's edge cuts off arms, legs, heads (any creature)
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
+        this.threats = new Threats(this); // how the people defend themselves against several attackers: who first, when to run (Threats.js / ThreatRank.js)
         this.castleLife = new CastleLife(this); // the people of the castles
         this.arenaDuels = new ArenaDuels(this); // the duel arenas: the fans, the duels, the sign-up (ArenaDuels.js)
         this.carriages = new Carriages(this); // carts and the wizards' carriages on the roads (Carriages.js)

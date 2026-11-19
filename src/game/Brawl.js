@@ -17,6 +17,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { elementalLook } from './ElementalTestSites.js';
 import { earthLook } from './EarthMagicRules.js';
 import { SUPER } from './WizardAI.js';
+import { kindProfile, courageOf } from './ThreatRank.js';
 import { saviorEntry, GX0, SAVIOR, stageOf } from './SaviorRules.js';
 
 export const BRAWL_SITE = 'brawlfield';
@@ -30,6 +31,7 @@ export class Brawl {
         this.state = 'setup'; // 'setup' | 'fight' | 'over'
         this.winner = null;
         this.overAt = 0;
+        this._aims = new Map(); // 'k:id' → {target: 'k:id', t}: whom each fighter went for lately (the others read «it is after me» from it — ThreatRank)
         this._list = []; // (the enemy search: refilled once a frame)
         this._listAt = -1;
         this._frame = 0;
@@ -322,14 +324,53 @@ export class Brawl {
         return out;
     }
 
-    /** (Servants.enemyFor for a brawl master) the nearest living fighter of the other team: {k, id, x, z} | null. */
+    /**
+     * (Servants.enemyFor for a brawl master) the foe of one fighter: no longer just the nearest one (the author 19.11: «кто ближе, кто опаснее, на кого отвлекаться первым»):
+     * ThreatRank weighs the creatures of the other team by their power, how soon they are here, whether they are after ME, whom they have hurt, how near death they are
+     * — and the choice is kept (no running between two) until a rival is clearly worse for him. A team fighter never runs (the fight must end): the stance only shapes the target.
+     * → {k, id, x, z} | null. Thought of ≈ 3 times a second for each, the answer kept between.
+     */
     enemyFor(self, master, me) {
         if (this.state !== 'fight') return null;
         const team = teamOfMaster(master);
         if (!team) return null;
         const list = this._enemies();
-        const e = pickEnemy(team, me, list);
-        return e ? { k: e.k, id: e.id, x: e.x, z: e.z } : null;
+        const T = this.game.threats, c = self && this.game.servants?.find(self.k, self.id);
+        if (!T || !c) { const e = pickEnemy(team, me, list); return e ? { k: e.k, id: e.id, x: e.x, z: e.z } : null; }
+        const key = self.k + ':' + self.id, now = performance.now() / 1000;
+        const mind = T.mind(c);
+        if (!(c._thinkT > now) || !c._tmFoe) {
+            c._thinkT = now + 0.28 + Math.random() * 0.12;
+            const atts = [];
+            for (const e of list) if (e.team !== team) atts.push(this.attackerOf(e, key));
+            if (!atts.length) { c._tmFoe = null; return null; }
+            const ent = this.roster.get(key);
+            const P = kindProfile(ent?.type), my = { x: me.x, z: me.z, hp: this._hpFrac(self.k, c), maxHp: 20, power: P.power, reach: P.reach, speed: P.speed, ranged: P.ranged, courage: courageOf(ent?.type), armor: 0, allies: [] };
+            const d = mind.think(my, atts, T.book(c), now, { noFlee: true });
+            c._tmFoe = d.foe;
+            c._tmStance = d.stance;
+            if (d.changed && d.foe != null) this._hook?.({ ev: 'target', by: key, foe: d.foe, why: d.why });
+        }
+        const e = c._tmFoe != null ? list.find((o) => foeId(o.k, o.id) === c._tmFoe && o.team !== team) : null;
+        const pick = e || pickEnemy(team, me, list);
+        if (!pick) return null;
+        this._aims.set(key, { target: pick.k + ':' + pick.id, t: now });
+        return { k: pick.k, id: pick.id, x: pick.x, z: pick.z };
+    }
+
+    /** How much of its life a fighter has left (0…1). */
+    _hpFrac(k, c) {
+        const f = k === 'v' ? c.hp / (c.maxHp || 1) : k === 'a' ? c.hp / (c.baseHp || c.hp || 1) : k === 'z' ? c.health / (c.maxHealth || 5) : 1;
+        return Number.isFinite(f) ? Math.max(0, Math.min(1, f)) : 1;
+    }
+
+    /** A fighter of the field as an attacker of `selfKey` (ThreatRank's shape): its power by kind, its life, and whether it has chosen THIS one lately. */
+    attackerOf(e, self) {
+        const selfKey = typeof self === 'string' ? self : 'v:' + self.id;
+        const c = this.game.servants?.find(e.k, e.id), P = kindProfile(e.def?.id || e.type);
+        const a = this._aims.get(e.k + ':' + e.id), now = performance.now() / 1000;
+        const aimed = a && now - a.t < 1.6 ? (a.target === selfKey ? 1 : 0.15) : 0.45; // (it is after me / after another / not known yet)
+        return { id: foeId(e.k, e.id), x: e.x, z: e.z, hp: c ? this._hpFrac(e.k, c) : 1, power: P.power, reach: P.reach, speed: P.speed, ranged: P.ranged, aimed, down: !!(c && (c.stunT > 0 || c.down || c.lying)), airborne: !!(c && (c.fly || c.lev)) };
     }
 
     /** All the living fighters with their places, made once a frame. */
@@ -371,14 +412,19 @@ export class Brawl {
             // (a foe is KEPT: the mage's own mind starts a new fight — a reaction time of seconds — at every change of the foe,
             //  so the nearest one flipping between running zombies kept him forever «reacting»: he changes only when the foe is
             //  gone, or another is much nearer for a while)
-            const cur = v.foe && list.find((o) => foeId(o.k, o.id) === v.foe && o.team !== e.team);
-            const en = pickEnemy(e.team, v, list);
-            const dist = (o) => Math.hypot(o.x - v.x, o.z - v.z);
-            const now = performance.now();
-            if (cur && (!en || cur === en || dist(cur) < dist(en) * 1.8 || now - (v.brawlFoeAt || 0) < 6000)) continue;
-            v.foe = en ? foeId(en.k, en.id) : null;
-            v.brawlFoeAt = now;
+            // (19.11: the foe is chosen by ThreatRank — who is the danger to HIM, whom first — and kept; Threats.step also decides the stance, and for a field fighter never to run)
+            const T = this.game.threats;
+            if (T) {
+                T.step(v, 0, { event: 'feed' });
+                if (v.foe != null && !list.some((o) => foeId(o.k, o.id) === v.foe && o.team !== e.team)) v.foe = null; // (his foe is gone: the nearest of the other team, below)
+            }
+            if (!v.foe) {
+                const en = pickEnemy(e.team, v, list);
+                v.foe = en ? foeId(en.k, en.id) : null;
+                v.brawlFoeAt = performance.now();
+            }
             if (v.foe && v.cs?.hostile) v.cs.hostile.set(v.foe, Date.now() + 30000); // (the ordinary mages fight whom their place holds hostile: WizardFight)
+            if (v.foe) this._aims.set('v:' + v.id, { target: v.foe.slice(3).replace('|', ':'), t: performance.now() / 1000 }); // (whom he is after: the others read it)
         }
     }
 

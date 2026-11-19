@@ -1595,10 +1595,12 @@ export class CastleLife {
         if (g.customCreatures?.list.length && g.customCreatures.knightStep(v, dt)) return; // (a hostile creature of one's own near: the knights fight it — CustomCreatures.knightStep)
         if (v.arena && g.arenaDuels?.step(v, dt)) return; // (at the duel arena: a fan on the stands, a duellist — ArenaDuels.js)
         if (v.savior != null && this.game.savior?.drive(v, dt)) return; // (the white Saviour in the air: takes off at a danger, bombs from above, lands — Savior.js)
+        // the defence of one who fights: whom first, a change of foe in the middle of the fight, a stance, a run for it (Threats.js / ThreatRank.js)
+        if ((v.foe != null || v.threatHitAt > performance.now() / 1000 - 4) && this.game.threats?.step(v, dt)) return;
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
         if (v.role === 'king') this._kingNerve(v, dt); // (the king hides by default; he fights only when most of his guard is dead or he is cornered: KingNerve.js)
         // a hostile player in sight: knights go for them
-        if (this._fights(v) && !v.foe) {
+        if (this._fights(v) && !v.foe && this.game.threats?.mayEngage(v) !== false) { // (one who has just run does not turn back at once)
             v.lookT = (v.lookT || 0) - dt;
             if (v.lookT <= 0) {
                 v.lookT = 0.6;
@@ -2017,7 +2019,7 @@ export class CastleLife {
         const turn8 = Math.floor(Date.now() / 8000);
         const i = ((v.slotI || 0) + turn8) % n;
         const front = Math.min(n, style?.front ?? 3);
-        let engaged = i < front;
+        let engaged = i < front && v.stance !== 'guard'; // (outmatched, not yet beaten: he holds behind his shield and gives ground — ThreatRank stance 'guard')
         const base = v.slotBase ?? Math.atan2(v.z - fp.z, v.x - fp.x);
         let a = engaged ? base + (i - (front - 1) / 2) * (front === 2 ? Math.PI * 0.8 : Math.PI * 2 / 3) : base + Math.PI + (i - front) * (Math.PI * 2 / Math.max(1, n - front));
         let R = engaged ? 2.3 : 6.5;
@@ -2123,6 +2125,8 @@ export class CastleLife {
         const byCastle = new Map();
         for (const v of this.byId.values()) {
             if (v.dead || !v.foe || v.servantOf != null || !v.cs) continue;
+            if (this.game.threats?.mayEngage(v) === false) continue;
+            if (v._tm && v._tm.foe != null && v._tm.foe === v.foe) continue; // (he chooses by himself: ThreatRank counts the friends already on each foe)
             (byCastle.get(v.cs) || byCastle.set(v.cs, []).get(v.cs)).push(v);
         }
         for (const [cs, men] of byCastle) {
@@ -2928,6 +2932,7 @@ export class CastleLife {
         this._achHit(v, by);
         if (by === this.game.localId && !v.arena) this.talk?.feel?.(v, -12); // (he remembers who struck him — Attitude.js)
         markEmo(v, 'hit', 2.5);
+        this.game.threats?.noteHit(v, opts.srcRef ? `bf|${opts.srcRef.k}|${opts.srcRef.id}` : by, dmg); // (who struck him and how hard: ThreatRank remembers it, the memory fades)
         this.rel?.onHit(v, by, false); // (the three bars: the victim and who saw it — Relations.js)
         if (this._isPlayer(by) && !v.arena) this._news(v, 'hit', by, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def); // (the town remembers who struck its people)
         this.night?.noise(v, 9);
@@ -3291,7 +3296,9 @@ export class CastleLife {
         if (out === 'offended') { this._say(v, pick(knightly ? SHOUT.bumpKnight : SHOUT.offended), 3); return true; }
         // a hard blow (or the third knock): this one fights back — only them, only this player
         v.grudge = { id: by, until: now + GRUDGE_MS };
-        if (v.foe !== by) { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; v.seated = false; }
+        if (v.foe == null) { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; v.seated = false; }
+        else if (v.foe !== by) this.game.threats?.step(v, 0, { event: 'hit' }); // (already fighting somebody: not whoever struck last — ThreatRank weighs the two, Threats.step)
+        if (v.foe === by) this.game.threats?.noteHit(v, by, 0.001);
         this._say(v, pick(knightly ? SHOUT.fightBackKnight : SHOUT.fightBack), 3);
         if (by === g.localId) g.hud.setVoice?.(`😠 ${v.title} ${v.name} разозлился и дерётся с вами`, true);
         return true;
