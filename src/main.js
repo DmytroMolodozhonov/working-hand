@@ -208,7 +208,17 @@ const portal = new PortalLoader();
 // the interface as magic: a living whirl behind the menus, sparks after the cursor, soft bells (MagicUi.js + magic-ui.css)
 let magicUi = null;
 try { magicUi = new MagicUi(); } catch (e) { console.warn('MagicUi:', e?.message || e); }
-function updateProgress(percent, text) {
+// The bar follows the real time (the author 19.11: «90 % проходит быстро, а последние 10 % — медленно и неравномерно»): the early work (sounds, the world's
+// making, the camera) is 0…55 %; the shaders sent to the video card 55…80 %; the last wait (the ground, the shaders, 30 calm frames) 80…99 %. The bar never goes back.
+let progressLatch = 0;
+const PROGRESS_BANDS = { shaders: [55, 80], ready: [80, 99] };
+function updateProgress(percent, text, band = null) {
+    if (percent <= 2 && !band) progressLatch = 0; // (a new load starts)
+    const b = band && PROGRESS_BANDS[band];
+    let p = b ? b[0] + (Math.max(0, Math.min(1, band === 'shaders' || band === 'ready' ? percent : 0))) * (b[1] - b[0]) : percent >= 100 ? 100 : percent * 0.6;
+    p = Math.max(progressLatch, p);
+    if (p < 100) progressLatch = p;
+    percent = Math.round(p);
     progressBar.style.width = `${percent}%`;
     if (text && loadingStatus) loadingStatus.textContent = text;
     portal.progress(percent, text);
@@ -1434,12 +1444,12 @@ async function startGameInner(config, welcome) {
         camWaiting = true;
         if (camStatus) updateProgress(75, camStatus);
         const cameraOk = await camPromise; // (started with the world's loading — usually ready long before)
-        updateProgress(90, 'Компиляция шейдеров...');
+        updateProgress(0, 'Компиляция шейдеров...', 'shaders');
         await new Promise((r) => requestAnimationFrame(r));
         B.begin('шейдеры');
         // every shader and picture sent to the video card in pieces (the page keeps answering; the bar moves)
         // (tools/shot.mjs --fast: pictures only — the shaders compile as they are seen; never in the real game)
-        if (!window.__ZNS_SHOT_FAST__) await game.prewarmAsync((f) => updateProgress(90 + Math.round(f * 9), `Компиляция шейдеров... ${Math.round(f * 100)}%`));
+        if (!window.__ZNS_SHOT_FAST__) await game.prewarmAsync((f) => updateProgress(f, `Компиляция шейдеров... ${Math.round(f * 100)}%`, 'shaders'));
         else game._prewarmed = true; // screenshot mode also skips the synchronous fallback in start()
         B.end('шейдеры');
         game.revealed = false;
@@ -1448,7 +1458,7 @@ async function startGameInner(config, welcome) {
         if (poseService._noticed) setTimeout(() => game.hud?.notify?.('✋ ' + poseService._noticed, 9000), 1500); // (said before the game was on)
         if (net.isHost && game.sync) net.broadcast(game.sync.welcomeMessage());
         net.info = { ...(net.info || {}), mode: config.mode, playing: true }; // (shown in other players' server lists)
-        updateProgress(100, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...');
+        updateProgress(0, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...', 'ready');
 
         const reveal = () => {
             clearStartupFailure(localStorage);document.getElementById('startup-failure')?.remove();window.__startupFailed=false;
@@ -1477,7 +1487,7 @@ async function startGameInner(config, welcome) {
             // the screen closes only when the game is really ready — the ground around, the shaders, 30 smooth frames in a row
             // (Game.readyToShow; the safety stopwatch of 45 s inside it; the tests' software drawing skips only the smooth run)
             const rd = game.readyToShow(started, { needCalm: !window.__ZNS_FIXED_QUALITY__ });
-            if (!rd.ok) { updateProgress(90 + Math.round(rd.frac * 9), rd.text); return; }
+            if (!rd.ok) { updateProgress(rd.frac, rd.text, 'ready'); return; }
             if (!B._readyNoted) { B._readyNoted = true; B.note(`готово (земля, шейдеры, плавность) через ${((performance.now() - started) / 1000).toFixed(1)} с после старта`); }
             // (Creative «Где появиться»: the hero is carried to the chosen place behind this screen — no start platform seen first, no visible jump;
             //  held until the ground there is made and a few frames are drawn on it; a place that cannot be made gives up in 75 s: HeroApply says why)
