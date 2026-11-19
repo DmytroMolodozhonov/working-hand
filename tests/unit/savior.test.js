@@ -7,11 +7,14 @@ import { Savior } from '../../src/game/Savior.js';
 import { DARK_SPELLS } from '../../src/game/DarkMagic.js';
 
 test('each wizard kill uses black-magic level as its percentage chance, without a count or time window', () => {
-    for (const level of [0, 1, 5, 20, 50, 85, 100]) {
+    for (const level of [10, 20, 50, 85, 100]) {
         let yes = 0;
         for (let i = 0; i < 10000; i++) yes += saviorComes(level, () => i / 10000);
         assert.equal(yes, level * 100);
     }
+    // (19.11: only a hero with 10+ of black magic is ever visited — below it the chance is nothing, whatever the roll)
+    for (const level of [0, 1, 5, 9, 9.9]) assert.equal(saviorComes(level, () => 0), false, 'level ' + level);
+    assert.equal(saviorComes(10, () => 0), true);
     assert.equal(saviorComes(-1, () => 0), false);
     assert.equal(saviorComes(1000, () => 0.99999), true);
 });
