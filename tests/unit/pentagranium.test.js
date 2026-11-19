@@ -114,10 +114,9 @@ test('the rite: a wizard\'s body with his power taken, laid on the lit pentagram
     assert.equal(RITE.K, 0.25);
 });
 
-test('the rite does not work on: bones, a body whose power is not taken, people, another player, a body that is held, a second time', () => {
+test('the rite does not work on: bones, people, another player, a body that is held, a second time (the author 19.11: a body whose power is not taken yet DOES work)', () => {
     const cases = [
         ['bones', (b) => { b.bones = new THREE.Group(); delete b.model; }, true],
-        ['not taken', () => {}, false],
         ['a person', (b) => { delete b.wz; b.mm = 0; }, true],
         ['a player', (b) => { b.k = 'p'; }, true],
         ['held by Levitation', (b) => { b.lev = true; }, true],
@@ -130,6 +129,12 @@ test('the rite does not work on: bones, a body whose power is not taken, people,
         p._findRites();
         assert.equal(m.rites.length, 0, name);
     }
+});
+
+test('the author 19.11: a wizard killed without a duel (power not taken yet) still gives the rite', () => {
+    const { p, m } = lit();
+    p._findRites();
+    assert.equal(m.rites.length, 1);
 });
 
 test('the rite needs the body INSIDE the circle and the pentagram lit; only the pentagram\'s own caster makes it', () => {

@@ -23,7 +23,7 @@ import { ULTRA_PARS, addUltraUniforms } from '../fx/UltraUniforms.js';
  * in a cave (World: their hands, the things by them are dark) for the land itself — the land is as
  * lit as the sky reaches it (each block face's own daylight, `voxSky`), wherever the player is.
  */
-export const SKY_LIGHT = { comp: { value: 1 } };
+export const SKY_LIGHT = { comp: { value: 1 }, nv: { value: 0 } }; // (nv: the night gift «Noctis» 0…1 — the cave's dark is that much milder in the terrain's own light: voxSky below)
 
 /**
  * Invisible houses («Protection Invisible», HouseWards.js): inside each sphere [x, y, z, r] the blocks
@@ -133,6 +133,7 @@ export function applyVoxelDetail(material) {
     material.defaultAttributeValues = { ...material.defaultAttributeValues, voxWet: [0] };
     material.onBeforeCompile = (shader) => {
         shader.uniforms.uSkyComp = SKY_LIGHT.comp;
+        shader.uniforms.uNightVis = SKY_LIGHT.nv;
         shader.uniforms.uWardS = WARD_HIDE.s;
         shader.uniforms.uWardG = WARD_HIDE.g;
         shader.uniforms.uWardK = WARD_HIDE.k;
@@ -144,8 +145,8 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uSeaT = UNDERSEA.t;
         shader.uniforms.uSeaK = UNDERSEA.k;
         shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxWet;\nvarying float vVoxWet;\nattribute float voxSky;\nvarying float vVoxSky;\n' + BOOM_PARS)
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;\nvVoxWet = voxWet;');
+            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxWet;\nvarying float vVoxWet;\nattribute float voxSky;\nvarying float vVoxSky;\nuniform float uNightVis;\n' + BOOM_PARS)
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = 1.0 - (1.0 - voxSky) / (1.0 + 0.5 * uNightVis);\nvVoxWet = voxWet;');
         // a cave's dark: the sun and the sky's light (ambient, hemisphere) reach a face only as far as
         // the daylight gets in; a lamp, «Люмос», a fire light it fully
         const lightsBegin = THREE.ShaderChunk.lights_fragment_begin.replace(
