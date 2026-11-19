@@ -33,6 +33,7 @@
 import { markIntent } from './GestureLife.js';
 import { allLog } from '../core/AllLog.js';
 import * as THREE from 'three';
+import { ShowGaze } from './ShowGaze.js';
 import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
@@ -184,6 +185,7 @@ export class CastleTalk {
         this._labelText = new Map(); // good uid -> label text (rebuilt by _watchMarket)
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
+        this.showGaze = new ShowGaze(game, (side, o, d) => game.duel?._myRay?.(side, o, d), (ray) => this.commands?._ground?.(ray)); // (the people look where I point — ShowGaze.js)
         this.commands = new CommandTalk(this, journal); // plain-word commands: poses, walks, formations, spars, «не могу» (CommandTalk.js)
         this.wave = new WaveDetector(); // my hand waving to people (Attention.mayNotice)
         this._calledAt = -1e9; // when I last called out / waved
@@ -1850,6 +1852,7 @@ export class CastleTalk {
     update(dt) {
         this._flushChange(dt);
         this.commands?.sample(dt); // (where my hand points, a few times a second: the words come later than the hand)
+        this.showGaze?.update(dt); // (a hand held up and pointing: the people near look that way — ShowGaze.js)
         const g = this.game;
         const now = performance.now();
         this._attT += dt;
