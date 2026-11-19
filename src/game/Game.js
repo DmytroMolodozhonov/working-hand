@@ -5565,18 +5565,13 @@ export class Game {
             this.magicHand = side;
             this.lastMagicHand = side;
             this.lastMagicTime = Date.now();
-            const label = res.bothLevel ? 'ОБЕ' : res.side.toUpperCase();
             if (!this.isMagicActive) {
                 this.isMagicActive = true;
-                this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
+                // (the author 19.11: the plaque «ЖДУ КОМАНДУ» at the top is gone — in every mode; the voice just starts listening)
                 if (this.voice) this.voice.start();
-            } else if (this.hud.voiceText().includes('ЖДУ КОМАНДУ') || (this.hud.voiceAge() > 2500 && !this.hud.hintShowing?.())) {
-                // (a fresh game message — «Не хватает маны», a spell result — stays readable until it fades)
-                this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
             }
         } else if (this.isMagicActive && Date.now() - this.lastMagicTime > 1200) {
             this.isMagicActive = false;
-            this.hud.setVoice('', false);
             this.magicHand = null;
         }
         // Remember when both arms were up (the flight word may come a moment later)
