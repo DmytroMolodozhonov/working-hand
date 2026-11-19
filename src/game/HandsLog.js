@@ -61,6 +61,7 @@ export function cameraLine(st) {
 const SIDE = { right: 'правая', left: 'левая' };
 const f1 = (x) => (Number.isFinite(x) ? (Math.round(x * 10) / 10).toString() : '—');
 const f2 = (x) => (Number.isFinite(x) ? x.toFixed(2) : '—');
+const f3 = (x) => (Number.isFinite(x) ? x.toFixed(3) : '—');
 const deg = (rad) => `${Math.round(rad * 57.2958)}°`;
 
 /**
@@ -203,6 +204,7 @@ export class HandsLog {
         this.shake = { left: new ArmShake(), right: new ArmShake() };
         this.aimShake = new AimShake();
         this._shakeAt = 0;
+        this._chain = { t0: performance.now(), frames: 0, maxDt: 0, slow: 0, secs: 0, run: 0, up: 0, cls: { rest: { n: 0, s2: 0 }, run: { n: 0, s2: 0 }, up: { n: 0, s2: 0 } } };
     }
 
     /** A camera picture came (Game.setPose): cheap counters only. */
@@ -223,6 +225,7 @@ export class HandsLog {
     /** Every game frame; looks at the hands 10 times a second. */
     update(dt) {
         this._shakeStep(dt);
+        this._chainStep(dt);
         this._acc += dt * 1000;
         if (this._acc < HANDS.SAMPLE_MS) return;
         this._acc = 0;
@@ -279,7 +282,59 @@ export class HandsLog {
             if (line) allLog('Руки', `${SIDE[side]}: ${line}`, 'warn');
         }
         const aim = this.aimShake.take();
+        this._chainAim(aim, ch);
         if (aim.n >= 8 && (aim.degrees > 1.5 || aim.jump > 8)) allLog('Руки', `палочка: дрожь направления ${f1(aim.degrees)}°, рывок ${f1(aim.jump)}°, игра ${g.fpsNow || 0} FPS, камера ${this._poseTimes.length} поз/с`, 'warn');
+    }
+
+    // ------------------------------------------------------------ the whole chain, every 30 s (19.11: «чем дольше играю, тем хуже» — to see WHAT changes over a long game)
+    /** Every frame: the game's own frame times (a long frame is a jump of the hands' filters). */
+    _chainStep(dt) {
+        const C = this._chain, ms = dt * 1000;
+        C.frames++; if (ms > C.maxDt) C.maxDt = ms; if (ms > 50) C.slow++;
+        const now = performance.now();
+        if (now - C.t0 < 30000) return;
+        this._chainLine(now);
+    }
+
+    /** The wand's jitter of this second, by what the hero was doing: running, the arm up, or at rest. */
+    _chainAim(aim, ch) {
+        const C = this._chain;
+        const running = !!(ch.isRunning && ch.runIntensity > 0);
+        const side = this.game.wandSide?.();
+        let up = false;
+        if (side && ch.armState) up = ch.armState(side, this._upArm || (this._upArm = {})).up > 0.55; // (the wand arm raised above the shoulder's line by more than ~33°)
+        C.secs++; if (running) C.run++; if (up) C.up++;
+        if (aim.n >= 8) { const k = running ? 'run' : up ? 'up' : 'rest', c = C.cls[k]; c.n++; c.s2 += aim.degrees * aim.degrees; }
+    }
+
+    _chainLine(now) {
+        const g = this.game, ch = g.character, C = this._chain;
+        const secs = Math.max(1, C.secs), pc = (a) => `${Math.round(a * 100 / secs)}%`;
+        const cl = (k) => (C.cls[k].n ? `${f1(Math.sqrt(C.cls[k].s2 / C.cls[k].n))}° (${C.cls[k].n} с)` : '—');
+        const gs = g.poseService?.poseGuard?.arms?.takeStat?.();
+        const S = ch?.armSolver;
+        const side = g.wandSide?.() === 'left' ? 'left' : 'right';
+        const sh = S ? S[side] : null;
+        const parts = [
+            `за ${Math.round((now - C.t0) / 1000)} с — бег ${pc(C.run)}, рука с палочкой вверх ${pc(C.up)}`,
+            `палочка (дрожь): в покое ${cl('rest')}, на бегу ${cl('run')}, рука вверх ${cl('up')}`,
+        ];
+        if (gs && gs.pictures) {
+            const p = (v) => `${Math.round(v * 100 / gs.pictures)}%`;
+            parts.push(`точки руки: запястье — догадка ${p(gs.wristGuess)}, за верхом кадра ${p(gs.wristTop)}, доверие в среднем ${f2(gs.wristTrust / gs.pictures)}; локоть — догадка ${p(gs.elbowGuess)}; кость урезана ${p(gs.clamped)}, длиннейшая ${f2(gs.lenMax)}`);
+        }
+        parts.push(`кадры игры: ${C.frames} за период, самый долгий ${Math.round(C.maxDt)} мс, дольше 50 мс — ${C.slow}, ${g.fpsNow || 0} FPS`);
+        if (S && sh) parts.push(`выучено (${side === 'left' ? 'левая' : 'правая'}): плечи ${f3(S.W)}, плечо ${f3(sh.Lu)}, предплечье ${f3(sh.Lf)}, шум длины ${(sh.nu?.v >= 0 ? Math.sqrt(sh.nu.v) : 0).toFixed(4)}/${(sh.nf?.v >= 0 ? Math.sqrt(sh.nf.v) : 0).toFixed(4)}; лечений памяти руки ${S.healed | 0}`);
+        const st = this._aimSteadyState?.();
+        if (st != null) parts.push(`режим бега палочки ${st > 0.5 ? 'включён' : 'выключен'}`);
+        allLog('Руки', `цепочка: ${parts.join('; ')}`, 'info');
+        this._chain = { t0: now, frames: 0, maxDt: 0, slow: 0, secs: 0, run: 0, up: 0, cls: { rest: { n: 0, s2: 0 }, run: { n: 0, s2: 0 }, up: { n: 0, s2: 0 } } };
+    }
+
+    /** The wand steadier's run-mode weight (0…1) of the wand hand, or null. */
+    _aimSteadyState() {
+        const side = this.game.wandSide?.();
+        return side ? this.game.items?._aimSteady?.[side]?.run ?? null : null;
     }
 
     _event(side, now, text) {

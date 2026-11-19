@@ -92,3 +92,26 @@ test('running: the wand\'s own steadier holds back the step shake (2.7 Hz) but l
     const j = jitterOf(run({ move: 'still', yaw: 15, pitch: 5, runBob: true, ms: 20000, chain: { camHz: 30, drawHz: 60, latency: 100 } }).rows);
     assert.ok(j < 2.6, 'a running player\'s wand: ' + j.toFixed(2) + '° (was 4.5°)');
 });
+
+test('the hands\' journal writes a «цепочка» line with the state, the jitter by state, the guard\'s counters and what the arm has learnt', async () => {
+    const { HandsLog } = await import('../../src/game/HandsLog.js');
+    const { ALL } = await import('../../src/core/AllLog.js');
+    const base = frame({ arms: 'down', leftCurl: null, rightCurl: null }).poseLandmarks;
+    const guard = new ArmGuard({ filter: false, log: null });
+    for (let i = 0; i < 30; i++) { const p = base.map((q) => ({ ...q })); p[16] = { ...p[16], y: -0.1, visibility: 0.1 }; guard.process(p, i * 33); }
+    const st = guard.takeStat();
+    assert.ok(st.pictures >= 30 && st.wristGuess >= 20, 'the wrist guesses are counted: ' + JSON.stringify(st));
+    assert.equal(guard.takeStat().pictures, 0, 'taken and cleared');
+    for (let i = 0; i < 30; i++) { const p = base.map((q) => ({ ...q })); p[16] = { ...p[16], y: -0.1, visibility: 0.1 }; guard.process(p, 2000 + i * 33); }
+    const game = { fpsNow: 58, wandSide: () => 'right', poseService: { poseGuard: { arms: guard } }, character: { armSolver: new ArmSolver(), isRunning: true, runIntensity: 0.6, armState: () => ({ up: 0.8 }) }, items: { _aimSteady: { right: { run: 1 } } } };
+    const log = new HandsLog(game);
+    log._chain.t0 = performance.now() - 31000;
+    for (let i = 0; i < 12; i++) log._chainAim({ n: 20, degrees: 2.5, jump: 1 }, game.character);
+    const before = ALL.items.length ?? 0;
+    log._chainLine(performance.now());
+    const lines = (ALL.items.toArray ? ALL.items.toArray() : [...ALL.items]).map((e) => e.text || e.msg || JSON.stringify(e));
+    const line = lines.reverse().find((t) => /цепочка/.test(t));
+    assert.ok(line, 'a line was written (' + before + ' before)');
+    assert.match(line, /бег 100%/); assert.match(line, /на бегу 2\.5°/); assert.match(line, /запястье — догадка/); assert.match(line, /выучено/); assert.match(line, /режим бега палочки включён/);
+    assert.equal(log._chain.secs, 0, 'the window starts again');
+});

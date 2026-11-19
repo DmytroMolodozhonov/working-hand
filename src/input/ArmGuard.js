@@ -87,8 +87,13 @@ export class ArmGuard {
         this.log = log;
         this.joints = new Map();
         for (const a of ARMS) { this.joints.set(a.e, new Joint()); this.joints.set(a.w, new Joint()); }
+        this.stat = ArmGuard.newStat();
         this.reset();
     }
+
+    /** The counters the hands' journal reads (HandsLog «цепочка»): how often a point was a guess, out of the top, clamped; taken and cleared by `takeStat()`. */
+    static newStat() { return { pictures: 0, elbowGuess: 0, wristGuess: 0, wristTop: 0, elbowTop: 0, clamped: 0, wristTrust: 0, lenMax: 0 }; }
+    takeStat() { const s = this.stat; this.stat = ArmGuard.newStat(); return s; }
 
     reset() {
         for (const j of this.joints.values()) j.reset();
@@ -191,6 +196,14 @@ export class ArmGuard {
                     const a = alpha(cut, dt);
                     J.x += a * (tx - J.x); J.y += a * (ty - J.y);
                     J.z += alpha(cut * 0.6, dt) * (tz - J.z); // (the depth is the network's guess: steadier)
+                }
+                {
+                    const S = this.stat, w = name === 'wrist';
+                    if (w) { S.pictures++; S.wristTrust += J.trust; }
+                    if (J.trust < 0.5) S[w ? 'wristGuess' : 'elbowGuess']++;
+                    if (aboveTop) S[w ? 'wristTop' : 'elbowTop']++;
+                    if (clamped) S.clamped++;
+                    if (J.len > S.lenMax) S.lenMax = J.len;
                 }
                 out[k] = { x: J.x, y: J.y, z: J.z, visibility: vis, trust: J.trust };
                 this.log?.joint(arm.side, name, { vis, trust: J.trust, edge, where, clamped, jump, speed: J.speed });
