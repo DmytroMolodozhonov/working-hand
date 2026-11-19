@@ -5,7 +5,7 @@
 import { TEAMS, TEAM_IDS, FIGHTERS, FIGHTER_GROUPS, BRAWL, placePoints, teamAt } from '../game/BrawlRules.js';
 
 const CSS = `
-#brawl-panel{position:fixed;left:12px;top:12px;width:262px;max-height:calc(100vh - 24px);overflow:auto;z-index:60;background:rgba(14,12,28,.82);color:#e9e6ff;border:1px solid rgba(160,140,255,.35);border-radius:12px;padding:10px 12px;font:13px/1.35 system-ui,sans-serif;backdrop-filter:blur(4px);user-select:none}
+#brawl-panel{position:fixed;left:12px;top:12px;width:262px;max-height:calc(100vh - 24px);overflow:auto;z-index:60;background:rgba(14,12,28,.92);color:#e9e6ff;border:1px solid rgba(160,140,255,.35);border-radius:12px;padding:10px 12px;font:13px/1.35 system-ui,sans-serif;user-select:none;contain:layout paint;will-change:auto}
 #brawl-panel h3{margin:0 0 6px;font-size:15px}
 #brawl-panel .bp-teams{display:flex;gap:6px;margin-bottom:8px}
 #brawl-panel .bp-team{flex:1;border:2px solid transparent;border-radius:8px;padding:6px 4px;cursor:default;font-size:12px;color:#fff;font-weight:600;text-align:center;opacity:.65}
@@ -87,10 +87,14 @@ export class BrawlPanel {
     }
 
     _status(s) {
-        const c = this.root.querySelector('#bp-cnt');
+        // (no work for the same picture: the fight sends this a few times a second, and every write of the panel's html is a layout of the page over a moving 3D scene)
+        const key = `${s.state}|${s.winner}|${s.total.A}/${s.total.B}|${s.alive.A}/${s.alive.B}`;
+        if (key === this._key) return;
+        this._key = key;
+        const c = this._cnt || (this._cnt = this.root.querySelector('#bp-cnt'));
         const fight = s.state === 'fight' || s.state === 'over';
         c.innerHTML = TEAM_IDS.map((t) => `<span style="color:${TEAMS[t].css}">${TEAMS[t].label}: ${fight ? s.alive[t] + ' / ' + s.total[t] : s.total[t]}</span>`).join(' · ');
-        this.root.querySelector('#bp-start').disabled = s.state === 'fight';
+        (this._startBtn || (this._startBtn = this.root.querySelector('#bp-start'))).disabled = s.state === 'fight';
         const b = this.banner;
         if (s.state === 'over') {
             b.textContent = s.winner === 'draw' ? '🤝 Ничья' : `🏆 Победа: ${TEAMS[s.winner].label}`;

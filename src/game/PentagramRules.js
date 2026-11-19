@@ -4,7 +4,7 @@
  * Pentagrams.js) has its OWN picture (figureOf / figureLines: lines, not colour) and its own scroll ({kind: 'scroll', stat: 'pentagram', pent: id}):
  * a burnt scroll teaches it (the hero's `seen` list, saved); unrolled and looked at it teaches nothing. Black magic only for the black ones.
  *
- * The rite (devil): the body of a killed WIZARD (not bones) whose power the hero has already taken (Mana.killWon / duelWon — the same body) lies
+ * The rite (devil): the body of ANY killed WIZARD (not bones; the author 19.11: killed in a duel or not — a trick is enough) lies
  * inside the lit pentagram. It flares with hellfire, the body sinks into ash, and the hero gets once more `RITE.K` (25 %) of the killed wizard's
  * power ((his maximum − 30), the same formula as a kill — Mana.killGain). Once per body (`b.rit`).
  *
@@ -221,7 +221,7 @@ export function riteBody(b, pent = 'devil', { took = false, free = false } = {})
     if (b.lg) return { ok: false, why: 'legacy' }; // (a hero's body holding his own power: only he can take it, by his own spell)
     if (b.k === 'p') return { ok: false, why: 'player' }; // (another player: the power of a hero is his own, Legacy.js)
     if (!b.wz || !(b.mm > 0)) return { ok: false, why: 'no-power' }; // (people, knights, animals: no magic in them)
-    if (!free && !took) return { ok: false, why: 'not-taken' };
+    // (the author 19.11: the power can be taken from ANY killed wizard — in a duel, or by a trick, a spell, a blade: no need to have won the duel first; only 25 % of (his maximum − 30) either way)
     return { ok: true };
 }
 
@@ -232,7 +232,7 @@ export const RITE_HINT = {
     legacy: '🩸 В этом теле лежит сила самого героя — обряд над ним не нужен',
     'no-power': '🩸 В теле нет магической силы',
     done: '🩸 Эта сила уже отдана обряду — второй раз тело ничего не даст',
-    'not-taken': '🩸 Сначала заберите силу волшебника (победой в дуэли или убив его) — потом тело ляжет на пентаграмму',
+    'not-taken': '🩸 Сначала заберите силу волшебника — потом тело ляжет на пентаграмму', // (no longer asked: any killed wizard's body will do)
     blank: '🩸 Эта пентаграмма пока ничего не делает — вид есть, эффект позже',
 };
 

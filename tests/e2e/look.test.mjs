@@ -28,7 +28,7 @@ test('look: the new name, the logo, «Мои миры» first, «Создать 
     // the new fonts are vendored and load (no CDN)
     assert.ok(await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('700 20px Philosopher', 'Волшебство'); }));
     const modes = await page.$$eval('.mode-row .mode-card', (els) => els.map((e) => [e.dataset.mode, e.querySelector('.map-name').textContent]));
-    assert.deepEqual(modes, [['creative', 'Творческий'], ['freeworld', 'Выживание'], ['maps', 'Карты']]);
+    assert.deepEqual(modes, [['creative', 'Творческий'], ['freeworld', 'Выживание'], ['school', 'Школа Акселдорф'], ['maps', 'Карты'], ['brawl', 'Битва существ'], ['tutorial', 'Обучение']]); // («Битва существ» — its own card since 19.11)
     assert.match(await page.textContent('.sp-head'), /Мои миры/);
     assert.match(await page.textContent('#saved-worlds'), /нет ни одного мира/, 'no worlds yet: it says so');
     // «Отмена» closes the choice, «Создать мир» opens it again

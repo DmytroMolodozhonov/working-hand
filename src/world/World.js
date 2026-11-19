@@ -205,6 +205,7 @@ export class VoxelWorld {
     setNightVision(k) {
         if (Math.abs(k - (this.nightVision || 0)) < 0.002) return;
         this.nightVision = k;
+        SKY_LIGHT.nv.value = k; // (the terrain's own cave dark: 50 % milder — VoxelShading; the lights alone did not show in a cave: the land is lit by each face's own daylight)
         if (this._base) this.setStorm(this.storm || 0);
     }
 

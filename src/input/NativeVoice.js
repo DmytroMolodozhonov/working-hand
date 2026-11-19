@@ -159,6 +159,16 @@ export function lookAt(d, seg = {}) {
     return r;
 }
 
+/**
+ * A word that ended BEFORE the word already cast from this phrase is an old word, not a new one (the author 19.11: «Инферно… (поток огня шумит) …стоп» — the
+ * phrase stayed open, one look cast «стоп», the next found «инферно» earlier in the very same sound and cast it AGAIN, then «стоп» again — the journal shows it every time).
+ * The spells of a phrase go in the order they were said: one that ended before the cast one's end (by more than a step) is never cast after it.
+ */
+export const STALE_MS = 150;
+export function staleWord(seg, h, d) {
+    return Number.isFinite(seg?.firedEnd) && Number.isFinite(d?.t1) && Number.isFinite(h?.tail) && (d.t1 - h.tail) < seg.firedEnd - STALE_MS;
+}
+
 /** The plain spell cast at once in a fight whose «… Максима» this look heard (→ the plain spell), or null. */
 function upgradeOf(seg, h, d) {
     const base = seg.upSpell;
@@ -201,7 +211,7 @@ function lookAtRows(d, seg, lp, refRows) {
             // spell after it in the same phrase — the explosion, the echo — only when heard clearly: AFTER_FIT)
             // («Бомбардо» cast at once in a fight, the phrase ends «… Максима»: the upgrade — FIGHT_UPGRADE)
             const up = upgradeOf(next, h, d);
-            const again = !up && next.fired && (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT));
+            const again = !up && next.fired && (staleWord(next, h, d) || (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT)));
             if (!again) say = up ? { text: h.text, isFinal: true, upgrade: up } : { text: h.text, isFinal: true };
             if (!next.fired || !again) next.fired = name;
             if (up) next.upSpell = null;
@@ -214,7 +224,7 @@ function lookAtRows(d, seg, lp, refRows) {
             if (goesOnKnown(h.spell.phrase, d.knows) && !(h.tail >= MORE_WAIT) && !duelFast(h.spell.spell, d)) {
                 // «Protection…»: «Хаус» may yet come — the game waits (only an answer under fire can't: more)
                 if (next.fired !== name && next.more !== name) { say = { text: h.text, isFinal: false, more: true }; next.more = name; }
-            } else if (next.fired !== name) {
+            } else if (next.fired !== name && !staleWord(next, h, d)) {
                 // settled: nothing can follow that would make it another spell — as good as the phrase's end
                 // (in a fight «Бомбардо» is settled at once — fightNow: its «… Максима» may still upgrade it — FIGHT_UPGRADE)
                 const up = upgradeOf(next, h, d);
@@ -247,7 +257,7 @@ function lookAtRows(d, seg, lp, refRows) {
         // «ликвидейшн максима», «раскрой свои секреты», «авада кедавра» cast now, not at the phrase's end
         const byWords = talkOnly && !faint && !early ? wordsSpell(h, d) : null;
         if (byWords) {
-            if (next.fired !== byWords.canonical) {
+            if (next.fired !== byWords.canonical && !staleWord(next, h, d)) {
                 say = { text: byWords.canonical, isFinal: !!d.final, settled: !d.final, byWords: true };
                 next.fired = byWords.canonical;
                 next.settled = true;

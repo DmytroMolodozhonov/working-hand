@@ -26,7 +26,7 @@ test('seen figures are kept and restored', () => {
 test('the rite: a wizard\'s body with the power taken — yes; bones, people, players, a second time — no', () => {
     const wiz = { k: 'v', wz: true, mm: 130 };
     assert.ok(riteBody(wiz, 'devil', { took: true }).ok);
-    assert.equal(riteBody(wiz, 'devil', { took: false }).why, 'not-taken');
+    assert.ok(riteBody(wiz, 'devil', { took: false }).ok, 'the author 19.11: killed by a trick (not in a duel) is enough too');
     assert.ok(riteBody(wiz, 'devil', { free: true }).ok, 'Creative');
     assert.equal(riteBody({ ...wiz, bones: {} }, 'devil', { took: true }).why, 'bones');
     assert.equal(riteBody({ ...wiz, stage: 'bones' }, 'devil', { took: true }).why, 'bones');
