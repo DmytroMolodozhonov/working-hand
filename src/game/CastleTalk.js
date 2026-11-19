@@ -84,6 +84,7 @@ const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', p
 /** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, a piece of magic armour (ArmorTypes) (no coin pouch: it is nobody's good — CoinBelt). */
 const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }];
 const _v = new THREE.Vector3();
+const _ro = new THREE.Vector3(), _rd = new THREE.Vector3(0, 0, 1);
 /** A villager's short line when something in a talk went wrong (the reason goes to the journal). */
 const TALK_SORRY = ['Хм… прости, мысль убежала.', 'Ох, о чём это я… Давай потом.', 'Погоди-ка, сбилась мысль.', 'Повтори-ка потом, путник.'];
 /** The spells in a villager's line: the whole line, and each word / pair of words of it (a one-word spell said in a sentence). */
@@ -188,7 +189,8 @@ export class CastleTalk {
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
         this.trays = new CounterTrays(game); // the rune tray on a counter's coin plate (CounterTrays.js)
-        this.showGaze = new ShowGaze(game, (side, o, d) => game.duel?._myRay?.(side, o, d), (ray) => this.commands?._ground?.(ray), (v, a) => { // (the people look where I point, and one says what he makes of it — ShowGaze.js)
+        this.showGaze = new ShowGaze(game, (side, o, d) => { game.duel?._myRay?.(side, _ro, _rd); o.x = _ro.x; o.y = _ro.y; o.z = _ro.z; d.x = _rd.x; d.y = _rd.y; d.z = _rd.z; }, // (the duel fills real vectors; the pure ShowGaze reads plain numbers)
+         (ray) => this.commands?._ground?.(ray), (v, a) => { // (the people look where I point, and one says what he makes of it — ShowGaze.js)
             this.life._say?.(v, commentOf(a.kind, v.id), 3.5, false);
             if (a.kind === 'zombie' || a.kind === 'fire') this.life.alarm?.(a.pos, a.kind === 'fire' ? 'fire' : 'zombie', null, 12); // (a real danger shown: they take fright as at any other)
         });

@@ -15,7 +15,7 @@ export default async function (h) {
     const raise = g.character.isArmRaised;
     g.character.isArmRaised = (sd) => sd === side;
     const ray = g.duel._myRay;
-    g.duel._myRay = (sd, o, d) => { o.set(me.x, me.y + 1.5, me.z); d.set(1, 0.05, 0).normalize(); return true; };
+    g.duel._myRay = (sd, o, d) => { o.copy({ x: me.x, y: me.y + 1.5, z: me.z }); d.set(1, 0.05, 0).normalize(); return true; };
     h.bare(); h.time(0.3);
     await h.frames(240);
     const out = people.map((v) => ({ id: v.id, glance: v.glance ? [Math.round(v.glance.x), Math.round(v.glance.z), !!v.glance.show] : null }));
