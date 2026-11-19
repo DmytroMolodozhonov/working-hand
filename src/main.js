@@ -35,7 +35,7 @@ import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js
 import { renderSpecsTab } from './ui/SystemSpecsUi.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
-import { spellPhrase, PHRASE_WHY_RU, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
+import { spellPhrase, PHRASE_WHY_RU, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR, wordsOfLine, stopFirst, ownVoiceEcho } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { VoiceChat } from './net/VoiceChat.js';
@@ -827,6 +827,16 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (game?.active && game.voiceChat && !matchSpell(command)) {
         const fe = friendEcho(null, meta, performance.now());
         if (fe?.block && fe.j.verdict === 'echo') { journal(command, isFinal, meta, null, false, `не ваши слова: ${fe.why}`, 'голос друга'); return; }
+    }
+    // words (no spell) that are the game's own voice from my speakers — a merchant's line heard by my microphone: not mine, he must not answer himself (SpellPhrase.ownVoiceEcho)
+    if (game?.active && !matchSpell(command)) {
+        const now = performance.now();
+        const line = soundingLine(meta?.from ?? now - 2500, meta?.to ?? now);
+        if (line) {
+            const mine = game.voiceGate.lipsSync(now, voice._levels, voice.noiseFloor) === true || !!game.voicesDucked?.(meta?.from ?? now - 1500);
+            const echo = ownVoiceEcho(command, meta, line, mine);
+            if (echo) { journal(command, isFinal, meta, null, false, `не ваши слова: ${echo} («${String(line).slice(0, 50)}»)`, 'голос игры'); return; }
+        }
     }
     // (the words go on / are final: the early answer waits for them, or is already given)
     if (talkWait && (isFinal || talkKey(command) !== talkWaitKey)) { clearTimeout(talkWait); talkWait = null; talkWaitKey = null; }

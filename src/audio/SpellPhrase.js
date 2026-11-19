@@ -526,6 +526,24 @@ export function wordsOfLine(written, line) {
     return editsInside(w, l) <= Math.round(w.length * 0.3);
 }
 
+/**
+ * Words (no spell) that are the GAME'S OWN voice coming back through the microphone — a merchant's line from the speakers heard as mine, and he answered
+ * himself (the author 19.11: «продавец сам себя слышит в микрофоне и отвечает на вопросы самого себя»; the journal: «а гость здравствуй» over his own
+ * «А, гость. Здравствуй.», «положите пять» over «Ставка пятьдесят монет» — −68…−75 dB, the speakers sounding 34–47 % of the phrase).
+ * `line`: what the game's voices were saying while the phrase was heard (soundingLine) or null; `mine`: my mouth moved with it (the camera) or the voices were ducked.
+ * → why it is not mine, or null:
+ *   - the written words are inside the line (a little garbled) — its words;
+ *   - the speakers played a good part of the phrase and it is only just above the noise — the quiet copy of a voice, not me at my microphone.
+ */
+export const ECHO_FAR = 0.25; // share of the phrase the speakers played
+export const ECHO_SNR = 14; // dB over the noise: below it, with the speakers playing, it is the room's copy
+export function ownVoiceEcho(text, meta, line, mine = false) {
+    if (!line || mine || !text || letters(text).length < 2) return null;
+    if (wordsOfLine(text, line)) return 'это слова голоса игры, сказанные в колонках';
+    if (meta?.native && (meta.far || 0) >= ECHO_FAR && Number.isFinite(meta.snr) && meta.snr < ECHO_SNR) return `тихо (над шумом ${Math.round(meta.snr)} дБ), пока говорил голос игры — это его эхо`;
+    return null;
+}
+
 /** The phrase begins with «стоп» and goes on with a spell («стоп, раскрой свои секреты»): first stop, then cast. */
 export function stopFirst(text) {
     const w = norm(text).split(' ').filter(Boolean);
