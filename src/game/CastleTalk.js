@@ -1192,7 +1192,7 @@ export class CastleTalk {
                 s.goods = s.goods.filter((uid) => g.items.loose.has(uid));
                 if (s.goods.length >= 3 || now < s.restockAt) return;
                 s.restockAt = now + (s.goods.length ? 90000 : 0);
-                const c = stall.counter;
+                const c = stall.goodsRect || stall.counter; // (a wide counter: the goods lie on its display part, the coin plate stays empty — WizardVillages)
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
