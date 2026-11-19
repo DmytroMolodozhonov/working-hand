@@ -65,6 +65,13 @@ export class CoinDeal {
         return this._payOpen ?? this._open;
     }
 
+    /** Is a deal on right now, and how near (m²) is the nearest dealer — DealGuard (no spell by accident at a counter). */
+    dealState() {
+        if (this.game.isDeadLocal) return { deal: false, near2: 1e9 };
+        if (this._look <= 0) this._refresh();
+        return { deal: !!this._open, near2: this._near };
+    }
+
     /** The hint «only when you buy or sell» (not more often than every HINT_S, only when the player really tried). */
     hint() {
         const now = performance.now();
