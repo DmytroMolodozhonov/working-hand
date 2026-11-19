@@ -1082,8 +1082,9 @@ export class VoxelWorld {
             this.scene.fog.far = far;
             this.scene.fog.near = Math.min(this.fogNear * d * (1 - 0.7 * (this.hell || 0)) + viewBoost * 40, far * 0.5); // (hell: the red haze begins close)
             if (this.terrain) this.terrain.viewDistance = far + (this.lite ? 12 : CHUNK_MARGIN);
-            if (this.terrain) this.terrain.liteCullR = this.lite ? far + 2 : 0; // (lite: chunks wholly behind the haze are not drawn — TerrainView) // (the light mode: the land is made only a little beyond the haze — fewer chunks to make and draw)
+            if (this.terrain) this.terrain.cullR = far + 2; // (the author 19.11: what cannot be seen is not drawn — chunks wholly behind the haze are all fog colour; the background IS the fog colour — TerrainView) // (the light mode: the land is made only a little beyond the haze — fewer chunks to make and draw)
         }
+        if (this.terrain && !(this.scene.fog && this.fogFar)) this.terrain.cullR = 0; // (no fog — space, other worlds: everything is drawn as before)
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);
         if (this.sky) this.sky.update(1 / 60);
         if (this.terrain) this.terrain.update(focus);

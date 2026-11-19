@@ -79,7 +79,7 @@ export class TerrainClusters {
         let ok = true;
         for (let dz = 0; dz < N; dz++) for (let dx = 0; dx < N; dx++) {
             const cx = a * N + dx, cz = b * N + dz, key = this.keyOf(cx, cz), e = v.meshes.get(key);
-            if (!e || e.cx !== cx || e.cz !== cz) return false;
+            if (!e || e.cx !== cx || e.cz !== cz || e._cull) return false; // (a chunk hidden behind the haze is not merged: its visibility is the view's)
             if (v._rebuilding?.has(key) || v.data?.dirtyChunks?.has(key)) return false;
             for (const m of [e.ground, e.water]) {
                 const g = m.geometry;
