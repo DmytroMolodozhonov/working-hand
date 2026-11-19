@@ -1247,7 +1247,7 @@ export class Combat {
             if (this.frozenLeft > 0) {
                 this.frozenLeft = Math.max(0, this.frozenLeft - dt);
                 const hud = this.game.hud;
-                hud.setStatus?.(this.frozen ? `🧊 Вас заморозили «Айсом» — разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с` : '');
+                hud.setStatus?.(this.frozen ? `🧊 Вас заморозили «Айсом» — разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с — или скажите «Fire Maxima»` : '');
                 hud.setFrozenOverlay?.(this.frozen ? 1 : 0);
                 if (!this.frozen) hud.setVoice?.('🧊 Вы разморозились', true);
             }
@@ -1327,7 +1327,7 @@ export class Combat {
         if (this.manaOn) hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE); else hud.hideMana?.(); // (Creative with endless mana: no bar)
         if (this.stunned) return; // the stun message is shown by update()
         hud.setStatus(this.frozen
-            ? (this.game.monster?.active ? `🧊 Вы заморожены посохом Ледяной Королевы! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с` : `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`)
+            ? (this.game.monster?.active ? `🧊 Вы заморожены посохом Ледяной Королевы! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с` : `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен — спасёт «Fire Maxima»`)
             : this.chill > 0.05 ? `❄️ Вас замораживают: ${Math.round(this.chill * 100)}% — убегайте из луча!` : '');
         hud.setFrozenOverlay(this.frozen ? 1 : this.chill);
     }

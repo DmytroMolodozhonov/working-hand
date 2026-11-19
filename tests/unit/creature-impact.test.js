@@ -77,7 +77,7 @@ test('a zombie pushed hard falls on its back, lies, and gets up by itself; every
     assert.equal(ci.stateOf(z), 'up');
     assert.ok(up >= 1.2, `a real getting up takes its time: ${up.toFixed(1)} s`);
     assert.equal(piv.rotation.x, 0, 'upright again');
-    assert.ok(z.head.visible && z.leftArm.parent.parent === piv, 'its parts stay in the model');
+    assert.ok(z.head.visible && z.leftArm.parent.parent.parent === piv, 'its parts stay in the model');
 });
 
 test('a gentle push: a stagger (steps back, leans, arms flail), never a fall', () => {
@@ -114,11 +114,12 @@ test('a head punch snaps a creature\'s head back', () => {
     z.group.updateMatrixWorld(true);
     // a fist into the zombie's face (its face is +Z): along −Z
     ci.apply(z, { v: new THREE.Vector3(0, 0, -1.7), kind: 'punch', head: { lp: [0, 0.1, 0.6], dir: [0, 0, -1], speed: 7 } });
+    const rest = z.head.rotation.x; // (the new zombie's head rests nodding a little forward, not at zero)
     let peak = 0;
-    for (let i = 0; i < 12; i++) { ci.update(1 / 60); peak = Math.max(peak, -z.head.rotation.x); }
+    for (let i = 0; i < 12; i++) { ci.update(1 / 60); peak = Math.max(peak, rest - z.head.rotation.x); }
     assert.ok(peak > 0.1, `the face goes up: ${peak}`);
     step(ci, 1.5);
-    assert.ok(Math.abs(z.head.rotation.x) < 0.02);
+    assert.ok(Math.abs(z.head.rotation.x - rest) < 0.02);
 });
 
 test('animals are heavy and four-legged: a cow shrugs off what throws a pig; they fall on a side', () => {

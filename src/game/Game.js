@@ -31,6 +31,8 @@ import { VoiceGate } from './VoiceGate.js';
 import { VoxelWorld, MAP_CELL } from '../world/World.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET, BODY_H, CROUCH } from '../entities/Character.js';
 import { Zombie, ZOMBIE } from '../entities/Zombie.js';
+import { prewarmZombieTextures } from '../entities/ZombieModel.js';
+import { fireThaw } from './FireThaw.js';
 import { Chest, chestSamples } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
@@ -2167,6 +2169,8 @@ export class Game {
             this.lastCastWhy = 'в облике монстра колдовать нельзя';
             return null;
         }
+        // frozen: «Fire Maxima» melts the ice — no wand, no knowing it, no concentration (an exception: FireThaw.js)
+        { const th = fireThaw(this, name, isFinal); if (th !== undefined) return th; }
         // «стоп» takes off any «Protection» of mine first — either hand, plain or the gods', the dome — whatever else it meets below
         if (name === 'Stand' && /стоп|stop/i.test(text) && this.combat.shield) { this.combat.dropShield('🛑 Стоп — щит снят'); this.sync?.stopSpells?.(); }
         // «Shield» / «Щит» with a swarm of things up: the things close into a wall (ItemSwarm.shield) — not the hand shield
@@ -4186,6 +4190,7 @@ export class Game {
         addAll(this.breakthrough?.sampleModels?.() || []); // (the earth of «Breakthrough» rising out of the ground)
         addAll(this.levMax?.sampleModels?.() || []); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
+        try { prewarmZombieTextures(); zoo.add(new Zombie(new THREE.Scene(), new THREE.Vector3(), 0, {}).group); } catch (e) { console.error('prewarm zombie', e); } // (the new zombie: its painted atlases and its shaders at the loading screen, not at the first night)
         for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)
         // (every thing lying about — and the swords and axes — as the video card draws them: one shape each (Items.oneShape,
         // Weapon); their skinned shaders made now, not when a battle's loot first falls)

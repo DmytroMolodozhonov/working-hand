@@ -266,8 +266,11 @@ test('a zombie, an animal and the spider have their own limbs to cut', () => {
     const zb = zombieBody(z);
     const zr = cutLimb(z, zb, 'leftArm', 0.5);
     assert.ok(zr.changed);
-    z.leftArm.geometry.computeBoundingBox();
-    near(z.leftArm.geometry.boundingBox.max.y - z.leftArm.geometry.boundingBox.min.y, 0.5, 0.01);
+    // (the new zombie's arm is a shoulder, an elbow and a hand hanging from one pivot: its upper arm is the first mesh; the cut leaves 0.5 m of it)
+    const upper = z.leftArm.children.find((o) => o.isMesh);
+    upper.geometry.computeBoundingBox();
+    near(upper.geometry.boundingBox.max.y - upper.geometry.boundingBox.min.y, 0.5, 0.01);
+    assert.equal(z.leftArm.fore.children.find((o) => o.isMesh).visible, false, 'the forearm and the hand are gone');
     assert.equal(boneLines(zb).filter((l) => l.limb === 'leftArm').reduce((s, l) => s + l.len, 0), 0.5, 'the stump only');
     // the horse
     const h = animalModel('horse', 0x6b3f1e);
@@ -411,7 +414,7 @@ test('WeaponSystem: a swing through a zombie\'s arm cuts it where the edge passe
     const st = z.limbs || {};
     const name = lines[0].limb;
     assert.ok(st[name] != null, 'the arm was cut: ' + JSON.stringify(st));
-    near(st[name], 0.6, 0.12, 'in its middle');
+    near(st[name], 0.75, 0.12, 'in its middle'); // (the new zombie's arm is 1.5 m from the shoulder to the fingertips)
     assert.ok(z.limbMask & (name === 'leftArm' ? 2 : 4));
     assert.equal(game.dismember.props.length, 1, 'the arm lies on the ground');
     // a hit without the edge through a limb never cuts anything off any more
