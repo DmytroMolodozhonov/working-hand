@@ -195,7 +195,7 @@ const zombieCountDisplay = $('zombie-count-val');
 
 let selectedMode = 'creative';
 let selectedMap = null;
-let brawlPick = false; // «Карты» → «Битва существ» chosen (Brawl.js)
+let brawlPick = false; // «Битва существ» chosen — its own card beside «Карты» (Brawl.js; the author 19.11: not a part of the maps)
 let pickingMap = false; // «Создать мир» → «Карты» chosen: the maps are shown
 let cachedMaps = null;
 let isMenuVoiceActive = false;
@@ -309,7 +309,7 @@ function restoreCreateMemory(mode) {
     if (mode === 'creative') { try { heroSp.set(d?.hero); } catch (e) { heroSp.set(undefined); } }
 }
 function saveCreateMemory() {
-    if (pickingMap) return;
+    if (pickingMap || brawlPick) return;
     const patch = {};
     if (selectedMode === 'creative') {
         const hero = heroSp.read();
@@ -469,11 +469,11 @@ async function updateGameMapList(forceRefresh = false) {
     const modeRow = document.createElement('div');
     modeRow.className = 'mode-row';
     mapListDiv.appendChild(modeRow);
-    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps', tutorial: 'mode-card tutorial', school: 'mode-card tutorial school' };
-    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY], ['tutorial', TUTORIAL_ENTRY]]; // («Школа Акселдорф» — the author 07.11: a year at the school of magic) // («Обучение» — the author 07.11: beside Творческий, Выживание, Карты)
+    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps', brawl: 'mode-card brawl', tutorial: 'mode-card tutorial', school: 'mode-card tutorial school' };
+    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY], ['brawl', BRAWL_ENTRY], ['tutorial', TUTORIAL_ENTRY]]; // («Школа Акселдорф» — the author 07.11: a year at the school of magic) // («Обучение» — the author 07.11: beside Творческий, Выживание, Карты)
     for (const [id, m] of choices) {
         const card = document.createElement('div');
-        const on = id === 'maps' ? pickingMap : !pickingMap && selectedMode === id;
+        const on = id === 'maps' ? pickingMap : id === 'brawl' ? brawlPick : !pickingMap && !brawlPick && selectedMode === id;
         card.className = `map-card ${MODE_CLS[id]}` + (on ? ' selected' : '');
         card.dataset.mode = id;
         card.setAttribute('role', 'button');
@@ -481,13 +481,13 @@ async function updateGameMapList(forceRefresh = false) {
         card.innerHTML = `<span class="mode-icon">${m.icon}</span><span class="map-name">${m.label}</span>${m.wip ? '<span class="mode-wip">в разработке</span>' : ''}`;
         card.onclick = () => {
             pickingMap = id === 'maps';
-            brawlPick = false;
+            brawlPick = id === 'brawl';
             selectedMap = null;
-            selectedMode = pickingMap ? 'survival' : id;
+            selectedMode = pickingMap ? 'survival' : brawlPick ? 'freeworld' : id;
             if (pickingMap) { // (the map chosen last time is chosen again)
                 const nm = createMem.load('maps')?.map;
                 if (nm && maps[nm]) selectedMap = { ...maps[nm], name: nm };
-            } else if (id !== 'tutorial' && id !== 'school') { createMem.setLastMode(id); restoreCreateMemory(id); } // (the school's world has no settings of its own to remember)
+            } else if (id !== 'tutorial' && id !== 'school' && id !== 'brawl') { createMem.setLastMode(id); restoreCreateMemory(id); } // (the school's world has no settings of its own to remember)
             applyFps();
             updateGameMapList();
         };
@@ -496,7 +496,7 @@ async function updateGameMapList(forceRefresh = false) {
     }
     const hint = document.createElement('div');
     hint.className = 'mode-hint';
-    hint.textContent = pickingMap && brawlPick ? BRAWL_ENTRY.hint : pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
+    hint.textContent = brawlPick ? BRAWL_ENTRY.hint : pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (нажмите «Создать карту»)') : selectedMode === 'tutorial' ? TUTORIAL_ENTRY.hint : MODES[selectedMode]?.hint || '';
     mapListDiv.appendChild(hint);
     // «Обучение»: go on from the stage left off (the author 07.11: a tick, on by default; off — from the start)
     if (selectedMode === 'tutorial' && !pickingMap) {
@@ -534,16 +534,6 @@ async function updateGameMapList(forceRefresh = false) {
     grid.className = 'map-list-grid' + (pickingMap ? '' : ' hidden');
     mapListDiv.appendChild(grid);
 
-    { // («Битва существ» — the first card of «Карты»: two teams on a field, the player only watches — Brawl.js)
-        const bc = document.createElement('div');
-        bc.className = 'map-card' + (brawlPick ? ' selected' : '');
-        bc.setAttribute('role', 'button');
-        bc.dataset.brawl = '1';
-        bc.tabIndex = 0;
-        bc.innerHTML = `<div class="map-preview-canvas" style="display:flex;align-items:center;justify-content:center;font-size:44px;width:80px;height:80px">${BRAWL_ENTRY.icon}</div><div class="map-name">${BRAWL_ENTRY.label}</div>`;
-        bc.onclick = () => { pickingMap = true; brawlPick = !brawlPick; selectedMap = null; selectedMode = 'survival'; updateGameMapList(); };
-        grid.appendChild(bc);
-    }
     for (const name of sortedNames) {
         const mapData = maps[name];
         const card = document.createElement('div');
@@ -584,8 +574,8 @@ async function updateGameMapList(forceRefresh = false) {
     }
     if (creativeSettings) creativeSettings.style.display = selectedMode === 'creative' && !pickingMap ? 'block' : 'none';
     const start = $('start-btn');
-    start.disabled = pickingMap && !selectedMap && !brawlPick;
-    start.textContent = pickingMap ? (brawlPick ? '⚔️ Начать битву существ' : selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : selectedMode === 'school' ? '🏰 Создать и в школу' : '✨ Создать и играть';
+    start.disabled = pickingMap && !selectedMap;
+    start.textContent = brawlPick ? '⚔️ Начать битву существ' : pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : selectedMode === 'tutorial' ? '🎓 Начать обучение' : selectedMode === 'school' ? '🏰 Создать и в школу' : '✨ Создать и играть';
 }
 // «Карты» → «🛠️ Создать карту»: the map editor opens right here (it was a tab of its own)
 function openMapEditor(on) {
@@ -1523,7 +1513,7 @@ $('start-btn').addEventListener('click', () => {
         setMpStatus('Вы подключены к чужой игре — её запускает хост.');
         return;
     }
-    if (pickingMap && brawlPick) { startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, brawl: true, map: null, realTrees: false, worldName: 'Битва существ' }); return; } // («Битва существ»: a small bounded field, no saving — Brawl.js)
+    if (brawlPick) { startGame({ ...readConfig(), mode: 'freeworld', tutorial: true, brawl: true, map: null, realTrees: false, worldName: 'Битва существ' }); return; } // («Битва существ»: a small bounded field, no saving — Brawl.js)
     const cfg = readConfig();
     if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
@@ -1990,7 +1980,7 @@ $('mp-host-btn').addEventListener('click', async () => {
         showCodeInGame(net.code);
         selectedMode = mode;
         selectedMap = null;
-        pickingMap = false;
+        pickingMap = false; brawlPick = false;
         startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved, voiceChat: voiceChatUi.createMode() } : { ...readConfig(), mode, map: null, worldName: srvName, ...mpWorldOpts() });
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
@@ -2018,7 +2008,7 @@ $('mp-private-btn').addEventListener('click', async () => {
         renderPlayers();
         selectedMode = mode;
         selectedMap = null;
-        pickingMap = false;
+        pickingMap = false; brawlPick = false;
         startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved, voiceChat: voiceChatUi.createMode() } : { ...readConfig(), mode, map: null, worldName: 'Игра ' + code, ...mpWorldOpts() });
         showCodeInGame(code);
     } catch (e) {
