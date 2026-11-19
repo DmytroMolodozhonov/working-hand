@@ -1218,7 +1218,9 @@ export class CastleTalk {
                     // (by the buyer's edge of the counter, not in its middle: a hand reaches it from the front)
                     const x = along ? c.x0 + (c.x1 - c.x0 + 1) * f - 0.5 : frontEdge(stall, GOOD_IN);
                     const z = along ? frontEdge(stall, GOOD_IN) : c.z0 + (c.z1 - c.z0 + 1) * f - 0.5;
-                    const L = g.items.spawnLoose(item, new THREE.Vector3(x, c.top + 0.3, z));
+                    // (a wand lies along the counter, neatly — it used to fall in a random direction: the author 19.11, «палочки криво лежат»; its length is its +Y, laid flat by -90° about x)
+                    const q = item.kind === 'wand' ? new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, (along ? -Math.PI / 2 : 0) + ((k + i) % 2 ? Math.PI : 0), 0, 'YXZ')) : null;
+                    const L = g.items.spawnLoose(item, new THREE.Vector3(x, c.top + 0.3, z), q ? { quat: q } : {});
                     L.perch = c; // (its counter is its floor — Items._floorUnder)
                     s.goods.push(L.item.uid);
                     budget--;
