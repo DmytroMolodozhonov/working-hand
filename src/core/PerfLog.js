@@ -76,6 +76,14 @@ export class PerfLog {
         const draws = {}; // (shown meshes by the scene's top group: what the draw calls are made of — the author 08.11, a guest's FPS:
         //  «вызовов» 600 → 1 400 and nothing said which; a shown mesh is a draw, a shadow caster one more in the sun's pass)
         let shown = 0, shadows = 0;
+        // (who holds the video card's geometries and textures: unique ones by the scene's top group — «геом +300» alone never said whose; the author 19.11)
+        const geos = {}, texs = {};
+        const hold = (o, k) => {
+            if (o.geometry) (geos[k] || (geos[k] = new Set())).add(o.geometry);
+            const m = o.material;
+            if (m) for (const mm of Array.isArray(m) ? m : [m]) for (const key in mm) { const v = mm[key]; if (v && v.isTexture) (texs[k] || (texs[k] = new Set())).add(v); }
+            for (const c of o.children) hold(c, k);
+        };
         const walk = (o, k) => {
             if (!o.visible) return;
             if ((o.isMesh || o.isLine || o.isPoints || o.isSprite) && o.layers.mask & 1) { const e = draws[k] || (draws[k] = [0, 0]); e[0]++; shown++; if (o.castShadow) { e[1]++; shadows++; } }
@@ -93,6 +101,7 @@ export class PerfLog {
             const k = owners.get(top) || top.name || top.type;
             groups[k] = (groups[k] || 0) + c;
             walk(top, k);
+            hold(top, k);
         }
         const info = g.renderer?.info;
         const now = {
@@ -105,14 +114,35 @@ export class PerfLog {
             'зомби': g.zombies?.length ?? 0,
             'жителей': g.castleLife?.byId?.size ?? 0,
         };
-        const first = this._growth0 || (this._growth0 = { now, groups });
+        const nGeo = {}, nTex = {};
+        for (const k in geos) nGeo[k] = geos[k].size;
+        for (const k in texs) nTex[k] = texs[k].size;
+        const first = this._growth0 || (this._growth0 = { now, groups, nGeo, nTex });
         const d = (a, b) => (a - b > 0 ? `+${a - b}` : `${a - b}`);
         const parts = Object.entries(now).map(([k, v]) => `${k} ${v} (${d(v, first.now[k] ?? v)})`);
         const grew = Object.entries(groups).map(([k, v]) => [k, v - (first.groups[k] || 0)]).filter(([, v]) => v > 50)
             .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} +${v}`);
+        const heldGrew = (cur, was) => Object.entries(cur).map(([k, v]) => [k, v - (was[k] || 0)]).filter(([, v]) => v >= 8).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} +${v}`);
+        const gGeo = heldGrew(nGeo, first.nGeo), gTex = heldGrew(nTex, first.nTex);
         const top = Object.entries(draws).sort((a, b) => b[1][0] - a[1][0]).slice(0, 10).map(([k, v]) => `${k} ${v[0]}${v[1] ? ` (тень ${v[1]})` : ''}`);
         this._push(`${((performance.now() - this._t0) / 1000).toFixed(0)}с | рост (с начала игры): ${parts.join(', ')}${grew.length ? ' | выросло в сцене: ' + grew.join(', ') : ''}`);
+        if (gGeo.length || gTex.length) this._push(`${((performance.now() - this._t0) / 1000).toFixed(0)}с | чьи геометрии выросли: ${gGeo.join(', ') || '—'} | чьи текстуры выросли: ${gTex.join(', ') || '—'}`);
         this._push(`${((performance.now() - this._t0) / 1000).toFixed(0)}с | показано частей ${shown}, с тенью ${shadows} — по видам: ${top.join(', ')}`);
+    }
+
+    /** A short state of what may pile up (the video card's geometries / textures / shaders, the scene's objects, the heap, the see-through targets, the steam's bodies): a line to put beside an event. */
+    stateLine() {
+        const g = this.game, info = g.renderer?.info;
+        let objs = 0;
+        g.scene?.traverse(() => { objs++; });
+        return `геом ${info?.memory.geometries ?? '?'}, текстур ${info?.memory.textures ?? '?'}, шейдеров ${info?.programs?.length ?? '?'}, объектов ${objs}, память ${globalThis.performance?.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) + ' МБ' : '?'}, кадров игры ${g.frameCount}`
+            + (g.seeFx?.stats ? `, цели «Visible Godi» ${g.seeFx.stats.rtMade}/${g.seeFx.stats.rtFreed}` : '') + (g.steam?.stats ? `, пар: тел ${g.steam.stats.bodies}` : '');
+    }
+
+    /** `text` now, and the same state again after `afterS` seconds (what an event left behind: the author 19.11 — the game gets a little worse each time). */
+    noteWithState(text, afterS = 12) {
+        this.note(`${text} | ${this.stateLine()}`);
+        setTimeout(() => { try { this.note(`${text} → через ${afterS} с | ${this.stateLine()}`); } catch (e) { /* (the journal only) */ } }, afterS * 1000);
     }
 
     _line() {
@@ -149,7 +179,7 @@ export class PerfLog {
         if (g.net?.isHost) for (const c of g.net.conns?.values() || []) inspect(c);
         else inspect(g.net?.hostConn);
         const connection = queues.length ? ' | сеть: ' + queues.join('; ') : '';
-        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${sysTop ? 'системы ' + sysTop + ' | ' : ''}${ai}${voice ? ' | ' + voice : ''} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${connection}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
+        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${sysTop ? 'системы ' + sysTop + ' | ' : ''}${g.seeFx?.on ? `«Visible Godi» включена: второй проход ${(g.seeFx.passMs || 0).toFixed(1)} мс | ` : ''}${ai}${voice ? ' | ' + voice : ''} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${connection}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
         this.gaps.length = 0;
         this.parts = {};
         this.sys = {};

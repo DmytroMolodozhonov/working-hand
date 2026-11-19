@@ -505,6 +505,26 @@ try {
         }, [wx, wz]);
         console.log('  кто там:\n    ' + wh.join('\n    '));
     }
+    if (args.includes('--godi')) { // «Visible Godi» on and off N times: does anything pile up (geometries, textures, shaders, render targets, objects, heap)?
+        const N = parseInt(opt('godi', '8'), 10);
+        const rows = await page.evaluate(async (N) => {
+            const g = window.__zns.game, R = g.renderer, vg = g.visibleGodi, out = [];
+            const frames = (n) => new Promise((res) => { const f0 = g.frameCount; const t = setInterval(() => { if (g.frameCount - f0 >= n) { clearInterval(t); res(); } }, 50); });
+            const snap = (k) => { let objs = 0; g.scene.traverse(() => { objs++; }); out.push(`${k}: геом ${R.info.memory.geometries}, текстур ${R.info.memory.textures}, шейдеров ${R.info.programs.length}, объектов ${objs}, heap ${Math.round((performance.memory?.usedJSHeapSize || 0) / 1048576)} МБ, цели ${g.seeFx?.stats?.rtMade}/${g.seeFx?.stats?.rtFreed}`); };
+            await frames(30); snap('до');
+            for (let i = 0; i < N; i++) {
+                vg.set(true);
+                const p = g.character.group.position;
+                for (let k = 0; k < 40; k++) { g.steam.addPuff('local', p.x + Math.sin(k) * 2, p.y, p.z - 3 - k * 0.3, 1000 + k); await frames(1); }
+                await frames(40);
+                vg.set(false, 'stop');
+                await frames(120);
+                snap('раз ' + (i + 1));
+            }
+            return out;
+        }, N);
+        console.log('  Visible Godi туда-обратно:\n    ' + rows.join('\n    '));
+    }
     const r = await page.evaluate(scene, FRAMES);
     const clp = await page.evaluate(() => { const g = window.__zns.game; return g._clProf ? Object.entries(g._clProf).map(([k, v]) => `${k} ${(v / g.frameCount).toFixed(2)}`).join(', ') : null; });
     if (clp) console.log('  castleLife по частям (мс за кадр, от начала игры):', clp);

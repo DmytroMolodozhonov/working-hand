@@ -371,7 +371,16 @@ export class SeeThroughFx {
     }
 
     /** After the main picture is on the screen (Game._draw): the second picture when due, then the cloud. */
+    /** The picture of the cloud, timed: `passMs` (the average of the frames that drew the second picture) goes into the journal's frame line while it is on. */
     render(now = performance.now() / 1000) {
+        const t0 = performance.now();
+        const r = this._render(now);
+        const ms = performance.now() - t0;
+        if (r) { this.passMs = (this.passMs || ms) * 0.9 + ms * 0.1; this.passFrames = (this.passFrames || 0) + 1; }
+        return r;
+    }
+
+    _render(now) {
         const dt = this._clock ? Math.min(0.1, Math.max(0, now - this._clock)) : 0;
         this._clock = now;
         const k = 1 - Math.exp(-dt * 7);
