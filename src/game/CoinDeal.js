@@ -62,7 +62,7 @@ export class CoinDeal {
         if (g.config?.mode === 'creative') return true;
         if (g.isDeadLocal) return false;
         if (this._look <= 0) this._refresh(); // (asked before the first look: look now)
-        return this._open;
+        return this._payOpen ?? this._open;
     }
 
     /** The hint «only when you buy or sell» (not more often than every HINT_S, only when the player really tried). */
@@ -78,6 +78,7 @@ export class CoinDeal {
         this._look = DEAL.LOOK_S;
         let open = false;
         this._near = 1e9;
+        let pay = false; // (the belt's pouch may come out: a seller / the steward near, or my pouch on a counter — NOT at the pawnshop: there I only sell and the coins come to me)
         this._nearSell = 1e9; // m² to the nearest one who SELLS (not the pawnshop / shady buyer: he only buys — nothing to pay there)
         if (life && me) {
             const talk = life.talk, night = life.night;
@@ -89,11 +90,13 @@ export class CoinDeal {
                 const dx = v.x - me.x, dz = v.z - me.z;
                 this._near = Math.min(this._near, dx * dx + dz * dz);
                 const st = v.cs?.def?.stalls?.[v.entry?.stall];
-                if (!(st && (st.pawn || st.fence))) this._nearSell = Math.min(this._nearSell, dx * dx + dz * dz);
+                if (!(st && (st.pawn || st.fence))) { this._nearSell = Math.min(this._nearSell, dx * dx + dz * dz); pay = true; }
             }
-            if (!open && me && this._counterPouches(true)) open = true; // (my pouch lies on a counter: the deal is not over)
+            if (!open && me && this._counterPouches(true)) { open = true; pay = true; } // (my pouch lies on a counter: the deal is not over)
         }
-        if (open !== this._open) { this._open = open; g.inventory?._renderPouch?.(); } // (the pouch cell shows whether it opens now)
+        const was = this._payOpen ?? this._open;
+        this._payOpen = open && pay;
+        if (open !== this._open || was !== this._payOpen) { this._open = open; g.inventory?._renderPouch?.(); } // (the pouch cell shows whether it opens now)
     }
 
     /** The pouch was taken out in a deal: the player knows how (the hint below is told less and less). */

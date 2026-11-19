@@ -1250,7 +1250,7 @@ export class Inventory {
         if (!c) return;
         const o = this.pouchInfo(), sel = !!this._cyc?.pouch;
         const shut = !!(this.game.coinDeal && o.have && !this.game.coinDeal.mayTake());
-        const open = !!this.game.coinDeal?._open && o.have; // (seen only while a deal can be made: a merchant near)
+        const open = !!(this.game.coinDeal?._payOpen ?? this.game.coinDeal?._open) && o.have; // (seen only while a deal can be made: a merchant near)
         const key = o.have + '|' + o.coins + '|' + sel + '|' + shut + '|' + open;
         if (key === this._pouchKey) return;
         this._pouchKey = key;
