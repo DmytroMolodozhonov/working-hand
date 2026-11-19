@@ -29,6 +29,7 @@ import { isCold } from './IceQueen.js';
 import { WARD } from './HouseWards.js';
 import { cutLimb } from '../entities/LimbSurgery.js';
 import { SeveredPart } from './SeveredPart.js';
+import { thawRule } from './MageThaw.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3();
 const STRONG_OR_ICE = (spell) => isStrongDuel(spell) || isIceCharge(spell);
@@ -50,6 +51,7 @@ export class StrongMagic {
     constructor(game) {
         this.game = game;
         this.dots = []; // (host) {k, c, rate, left, spell, by, acc}
+        this.thaws = []; // (host) wizards frozen by the plain ice, about to say «Fire Maxima» {c, left}
         this.dazed = []; // (host) creatures in Accentric's haze: {c, k}
         this.accMe = null; // {t, by, dealt, acc}
         this.iceMe = null; // {left, rate, by, acc}
@@ -220,6 +222,9 @@ export class StrongMagic {
             this._tell(by, `🧊 ${k === 'D' ? 'Дракон' : 'Паучиха'}: ${P.why}`);
             return true;
         }
+        // a wizard of the game: the plain ice holds him only as long as he takes to answer with «Fire Maxima» (MageThaw.js); a fire mage does not take it at all
+        const mt = k === 'v' && !max ? thawRule(c) : null;
+        if (mt?.immune) { this._fizz(c, k, 0xff9a3a); g.castleLife?._say?.(c, 'Лёд? Мне — огню?', 2.5); return true; }
         // everybody else: frozen whole
         if (k === 'z') {
             if (!c.isFrozen && c.spawnIceCrystalOnBody) {
@@ -230,10 +235,12 @@ export class StrongMagic {
             c.freeze?.();
             c.stunTimer = Math.max(c.stunTimer || 0, I.time);
         } else {
-            c.stunT = Math.max(c.stunT || 0, I.time);
-            if (k === 'a' || k === 'v' || k === 'c') g.duel?._encase?.(k === 'c' ? 'c' : k, c.id, I.time);
+            const T = mt ? Math.min(I.time, mt.delay) : I.time; // (a wizard: till he answers)
+            c.stunT = Math.max(c.stunT || 0, T);
+            if (k === 'a' || k === 'v' || k === 'c') g.duel?._encase?.(k === 'c' ? 'c' : k, c.id, T);
+            if (mt && !this.thaws.some((x) => x.c === c)) this.thaws.push({ c, left: T });
         }
-        this.dot(k, c, I.dps, I.time, max ? 'IceMaxima' : 'Ice', by);
+        this.dot(k, c, I.dps, mt ? Math.min(I.time, mt.delay) : I.time, max ? 'IceMaxima' : 'Ice', by);
         this._hurt(k, c, 0.01, max ? 'IceMaxima' : 'Ice', by);
         return true;
     }
@@ -621,6 +628,17 @@ export class StrongMagic {
             if (!this._alive(d.k, d.c) || d.left <= 0) { this.dots.splice(i, 1); continue; }
             d.left -= dt; d.acc += dt;
             if (d.acc >= 0.5) { d.acc -= 0.5; this._hurt(d.k, d.c, d.rate * 0.5, d.spell, d.by); }
+        }
+        // a frozen wizard answers: «Fire Maxima!» — the ice is gone, golden sparks (MageThaw.js)
+        for (let i = this.thaws.length - 1; i >= 0; i--) {
+            const x = this.thaws[i];
+            x.left -= dt;
+            if (!this._alive('v', x.c)) { this.thaws.splice(i, 1); continue; }
+            if (x.left > 0) continue;
+            this.thaws.splice(i, 1);
+            x.c.stunT = 0;
+            g.castleLife?._say?.(x.c, 'Fire Maxima!', 2.5);
+            this._flash(this._center('v', x.c, _v), 0xffb43a);
         }
         // Accentric's haze runs out; the ice on a dragon / the spider melts
         for (let i = this.dazed.length - 1; i >= 0; i--) {
