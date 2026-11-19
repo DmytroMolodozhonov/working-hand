@@ -211,6 +211,7 @@ import { Duel } from './Duel.js';
 import { duelRange } from './DuelRange.js';
 import { QualityManager, viewDistanceScale } from './Quality.js';
 import { Ultra } from './Ultra.js';
+import { waterAt } from './CreatureSwim.js';
 import { LiteMode } from './LiteMode.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
@@ -1513,6 +1514,10 @@ export class Game {
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
+        { // (a blast on / over the water: a fountain, rings and a wave that pushes the floating things — Buoyancy.js)
+            const land = this.world?.terrain?.data, wa = land?.get ? waterAt(land, pos.x, pos.z, pos.y) : null;
+            if (wa && Math.abs(pos.y - wa.surface) < radius + 2) this.items?.waterImpact?.({ x: pos.x, y: wa.surface, z: pos.z }, radius * radius * radius * 0.6 * Math.max(0.5, power), 9, radius);
+        }
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);

@@ -1481,6 +1481,7 @@ export class CastleLife {
     /** A splash where a body goes into the water (every computer sees the drops; the host's sound). */
     _splash(v, surface, big = false) {
         const st = { splT: 0 };
+        this.game.items?.waterImpact?.(_v.set(v.x, surface, v.z), v.wizard ? 65 : 70, Math.max(1, Math.abs(v.vy || 0)) * (big ? 1 : 0.6), 0.9); // (a person falls in: a wave by his weight and speed — Buoyancy.js)
         splashes(this.game, v.x, surface, v.z, 0, big, st);
         if (big) splashes(this.game, v.x, surface, v.z, 0, big, { splT: 0 });
     }

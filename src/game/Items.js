@@ -54,6 +54,7 @@ import { V5_WAND, AimSteady, wandAimDir, wandSideAxis } from './V5WandAim.js';
 import { HandoverPeer, HANDOVER, WHY, giveWhy, takeWhy, TouchTimer } from './Handover.js';
 import { allLog } from '../core/AllLog.js';
 import { DROP, ThrowDetector, poseBehind, holdsFast, holdsWhy, handLog } from './HandRelease.js';
+import { densityOf, buoyStep, restOffset, splashSpec, waveImpulse, WATER } from './Buoyancy.js';
 import { HandTrack, launchVelocity, launchPoint, spinFor, physOf, bounce, groundSlide, massGain, speedCap } from './ThrowModel.js';
 import { waterAt } from './CreatureSwim.js';
 import { realmAt } from '../world/Planets.js';
@@ -91,6 +92,7 @@ const SECRET_BOOK_CHANCE = 0.3;
 /** (Items: the leading hand's wand swung to throw) the hint «put it in the pocket, take it with the other hand» at most this often (game ms) */
 const WAND_TRY_HINT_MS = 5 * 60 * 1000;
 const _n = new THREE.Vector3();
+const _splashAt = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
@@ -844,7 +846,8 @@ export class ItemSystem {
         if (L.afloat) {
             // floating: stays on the water while there is water (a frozen / drained pond: it falls / lies on what is there)
             const land = this.game.world?.terrain?.data, wa = land?.get ? waterAt(land, p.x, p.z, p.y - 0.5) : null;
-            if (wa && Math.abs(p.y - (wa.surface - 0.08)) < 0.6) { if (Math.abs(p.y - (wa.surface - 0.08)) > 0.02) { p.y = wa.surface - 0.08; L.sentRest = false; } return; }
+            const fy = wa ? wa.surface + (L.floatOff ?? -0.08) : 0;
+            if (wa && Math.abs(p.y - fy) < 0.6) { if (Math.abs(p.y - fy) > 0.02) { p.y = fy; L.sentRest = false; } return; }
             L.afloat = false; L.rest = false; L.sentRest = false; return;
         }
         const y0 = p.y;
@@ -1261,8 +1264,9 @@ export class ItemSystem {
         if (wet) {
             const k = 1 / (1 + 3.5 * dt);
             L.vel.x *= k; L.vel.z *= k;
-            if (P.float) { L.vel.y += ((wa.surface - 0.08 - m.position.y) * 10 - L.vel.y * 3) * dt; }
-            else { L.vel.y = Math.max(-1.3, L.vel.y * k - 4 * dt); }
+            // (the author 19.11: by what it is made of — Buoyancy.js: a wand / an apple / a book float at their own depth and bob when pushed; a coin, a sword sink, each at its own speed)
+            if (L.rho == null) { L.rho = densityOf(L.item.kind, P); L.size = Math.max(0.15, P.len || 0.3); L.floatOff = restOffset(L.rho, L.size); }
+            L.vel.y = buoyStep(L.vel.y, m.position.y, L.size, wa.surface, L.rho, dt);
             L.spin.multiplyScalar(1 / (1 + 2 * dt));
         } else if (!space) {
             L.vel.y -= L.grav * dt;
@@ -1270,7 +1274,7 @@ export class ItemSystem {
             if (L.air) L.vel.multiplyScalar(1 / (1 + (AERO[L.item.kind] ?? 0.02) * L.vel.length() * dt));
         }
         // floating still at the surface: it rests there (rocked by _restCheck's look — no stepping every frame)
-        if (wet && P.float && Math.abs(m.position.y - (wa.surface - 0.08)) < 0.12 && L.vel.lengthSq() < 0.04) {
+        if (wet && L.rho < WATER.RHO && Math.abs(m.position.y - (wa.surface + L.floatOff)) < 0.07 && L.vel.lengthSq() < 0.03) {
             L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true; L.afloat = true; return;
         }
         // spinning: a real angular velocity about its axis (the wrist's snap), slowly dying
@@ -1370,13 +1374,45 @@ export class ItemSystem {
         return id && id !== 'earth' && id !== 'space' ? sp.planets.get?.(id) || null : null;
     }
 
-    /** A thing falls into water: a splash of drops where it went in, a «плюх» by its weight and speed. */
+    /**
+     * A thing falls into water: drops, rings and a wave by its energy ½·m·v² (Buoyancy.splashSpec), a «плюх» by its weight; the wave pushes the
+     * things floating near (waterImpact). Not a fixed animation: a pebble makes a few drops, a boulder a fountain and five rings.
+     */
     _splash(L, surface) {
         const g = this.game, p = L.model.position, v = L.vel.length();
-        const n = Math.min(14, 4 + Math.round(v * 1.2));
-        for (let i = 0; i < n; i++) g.fx?.spark?.(_v2.set(p.x, surface + 0.05, p.z), 0xcfe8ff, 0.07, _n.set((Math.random() - 0.5) * 3, 1.5 + Math.random() * v * 0.35, (Math.random() - 0.5) * 3), 0.55);
+        const w = (ITEM_INFO[L.item.kind]?.weight ?? 0.3) * Math.max(1, L.item.count || 1);
+        this.waterImpact(_v2.set(p.x, surface, p.z), w, v, Math.max(0.15, physOf(L.item.kind)?.len || 0.3), L);
+    }
+
+    /**
+     * Anything falling into water at `pos` (the water's surface height) with mass kg at speed m/s: the splash, the rings on the water, the sound, and the wave
+     * that pushes every floating thing near away from the spot (and wakes it). `skip`: the thing itself. Used by items, bodies, blasts, spells.
+     */
+    waterImpact(pos, mass, speed, size = 0.3, skip = null) {
+        const g = this.game, S = splashSpec(mass, speed, size);
+        if (S.drops <= 0 && S.rings === 0) return;
+        const sx = pos.x, sy = pos.y, sz = pos.z;
+        for (let i = 0; i < S.drops; i++) {
+            const a = Math.random() * Math.PI * 2, r = Math.random() * (0.3 + S.ringSpeed * 0.12);
+            g.fx?.spark?.(_v2.set(sx + Math.cos(a) * r * 0.4, sy + 0.05, sz + Math.sin(a) * r * 0.4), i % 3 ? 0xcfe8ff : 0xffffff, 0.05 + Math.random() * 0.06, _n.set(Math.cos(a) * r, 1 + Math.random() * S.height, Math.sin(a) * r), 0.5 + Math.random() * 0.4);
+        }
+        for (let k = 0; k < S.rings; k++) { // (a ring of light-blue foam running out; a later ring a little slower and wider)
+            const n = 14 + k * 6, sp = S.ringSpeed * (1 - k * 0.14);
+            for (let i = 0; i < n; i++) {
+                const a = (i / n) * Math.PI * 2 + k * 0.2;
+                g.fx?.spark?.(_v2.set(sx, sy + 0.06, sz), k % 2 ? 0xbfe3ff : 0xeaf6ff, 0.08, _n.set(Math.cos(a) * sp, 0.15, Math.sin(a) * sp), 0.5 + k * 0.18);
+            }
+        }
         const now = performance.now();
-        if (now - (this._splashAt || -1e9) > 120) { this._splashAt = now; g.sound?.playItemHit?.('splash', v, p); }
+        if (now - (this._splashAt || -1e9) > 120) { this._splashAt = now; g.sound?.playItemHit?.('splash', Math.min(20, speed * (0.5 + S.loud)), _splashAt.set(sx, sy, sz)); }
+        // the wave: things floating or lying in the shallows nearby are pushed away, a crest lifts them
+        if (S.radius < 0.8) return;
+        for (const O of this.loose.values()) {
+            if (O === skip || O.hover || O.lev || !(O.wet || O.afloat)) continue;
+            const q = waveImpulse(O.model.position.x - sx, O.model.position.z - sz, S.E, O.size || 0.3);
+            if (!q) continue;
+            O.vel.x += q.vx; O.vel.z += q.vz; O.vel.y += q.vy; O.rest = false; O.afloat = false; O.sentRest = false;
+        }
     }
 
     /** It hits the ground / a wall at `v` m/s: a knock by its stuff (an apple's thump, a wand's clack, a book's slap, a pouch's clink). */
