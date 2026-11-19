@@ -1081,7 +1081,7 @@ export class VoxelWorld {
             if (this.duelFar) far = Math.min(far, this.duelFar); // (the duel-only start: the arena and a little round it, nothing else is made)
             this.scene.fog.far = far;
             this.scene.fog.near = Math.min(this.fogNear * d * (1 - 0.7 * (this.hell || 0)) + viewBoost * 40, far * 0.5); // (hell: the red haze begins close)
-            if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
+            if (this.terrain) this.terrain.viewDistance = far + (this.lite ? 12 : CHUNK_MARGIN); // (the light mode: the land is made only a little beyond the haze — fewer chunks to make and draw)
         }
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);
         if (this.sky) this.sky.update(1 / 60);

@@ -46,10 +46,12 @@ async function handleMessage(e){
         data = new TerrainData();
         data.generate(m.opts);
         data.skipSeaTop = !!m.skipSeaTop;
+        data.liteLook = !!self._liteLook;
         templateRecipe={opts:m.opts,skipSeaTop:!!m.skipSeaTop};templatePlanets=null;
         templateCache=m.cache&&m.opts.test&&CacheStore.available()?new BootCache({store:new CacheStore('f'+m.cache.format),build:m.cache.build,kinds:m.cache.kinds}):null;
         return;
     }
+    if (m.type === 'liteLook') { if (data) data.liteLook = !!m.on; self._liteLook = !!m.on; return; }
     if (m.type === 'ghostOn' && data?.ghost) {
         // the Castle of Ghosts in / out of this computer's land (a seer's): the next chunks are made the new way (GhostCastle.js)
         data.ghost.on = !!m.on;

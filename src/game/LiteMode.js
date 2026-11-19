@@ -92,6 +92,7 @@ export class LiteMode {
         g.quality?.setLite(on);
         if (on && g.ultra?.on) g.ultra.set(false); // (the light mode has no «Ультра»: no grass, no second picture)
         g.lite = on;
+        g.world?.terrain?.setLiteLook?.(on); // (new chunks meshed in plain colours: fewer triangles)
         g.perf?.note?.(`⚡ Лёгкий режим ${on ? 'включён' : 'выключен'} (${why})${on ? ': короткая даль, маленькая картинка, без теней и облаков' : ''}`);
         g.hud?.setVoice?.(on ? '⚡ Включён «Лёгкий режим»: игра слишком тормозила — мир виден ближе, зато плавно. Выключить можно в настройках.' : '', on);
     }

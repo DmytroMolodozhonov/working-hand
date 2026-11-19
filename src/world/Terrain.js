@@ -2640,6 +2640,7 @@ export class TerrainData {
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
         if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_LEAF) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
+        if (this.liteLook) return type === BLOCK.GRASS && !isTop ? GRASS_SIDE : (BASE_COLORS[type] ?? 0xff00ff); // (the light mode: plain colours — big merged quads, fewer triangles)
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }
         let base = BASE_COLORS[type] ?? 0xff00ff;
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;

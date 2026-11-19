@@ -986,7 +986,7 @@ export class Game {
         this.lite = false;
         this.liteMode = new LiteMode(this, config.lite, { gpuName: (typeof window !== 'undefined' && window.__zns?.gpu?.name) || '' }); // «Лёгкий режим»: no video card / a very weak one (LiteMode.js)
         this.quality.ultra = Ultra.wanted(config.ultra) && !this.liteMode._startOn; // (decided before the first apply: the shadows' kind is fixed then)
-        if (this.liteMode._startOn) { this.quality.lite = true; this.lite = true; this.liteMode.on = true; this.perf?.note?.('⚡ Лёгкий режим включён на старте (' + (config.lite === 'on' ? 'в настройках' : 'нет видеокарты или в прошлый раз игра тормозила') + ')'); }
+        if (this.liteMode._startOn) { this.quality.lite = true; this.lite = true; this.liteMode.on = true; this.world?.terrain?.setLiteLook?.(true); this.perf?.note?.('⚡ Лёгкий режим включён на старте (' + (config.lite === 'on' ? 'в настройках' : 'нет видеокарты или в прошлый раз игра тормозила') + ')'); }
         this.quality.apply(this.world);
         this.ultra = new Ultra(this); // «Ультра качество»: an addition, switched on the go (Ultra.js)
         this.ultra.set(this.quality.ultra);

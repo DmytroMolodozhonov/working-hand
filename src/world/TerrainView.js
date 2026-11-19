@@ -219,6 +219,14 @@ export class Terrain {
      * whose chunks are not as the flag says has them forgotten here and in the workers and drawn again, the nearest first as the planner asks.
      * (x, z): where the hero is — the cells round it are asked from a worker (the main thread never decides one).
      */
+    /** «Лёгкий режим» (LiteMode.js): new chunks are meshed with plain colours — no per-patch variation, so the greedy mesher merges far more faces (about a fifth fewer triangles on a hilly start). */
+    setLiteLook(on) {
+        on = !!on;
+        if (!!this.data.liteLook === on && !on) return;
+        this.data.liteLook = on;
+        if (this._workers) for (const w of this._workers) w.postMessage({ type: 'liteLook', on });
+    }
+
     ghostSync(on, x, z) {
         const d = this.data, G = d.ghost;
         if (!G) return;
