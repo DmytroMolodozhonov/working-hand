@@ -33,6 +33,7 @@ import { VoxelCharacter, PLAYER_GROUND_OFFSET, BODY_H, CROUCH } from '../entitie
 import { Zombie, ZOMBIE } from '../entities/Zombie.js';
 import { prewarmZombieTextures } from '../entities/ZombieModel.js';
 import { fireThaw } from './FireThaw.js';
+import { dealRefuses, DEAL_GUARD, DEAL_HINT } from './DealGuard.js';
 import { Chest, chestSamples } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
@@ -2150,6 +2151,13 @@ export class Game {
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
+        // at a counter, buying or selling: no spell by accident — only light (DealGuard.js)
+        if (this.coinDeal && !this.combat.frozen && dealRefuses(name, { ...this.coinDeal.dealState(), fight: this.inFight() })) {
+            this.lastCastWhy = 'сделка: сначала завершите покупку или продажу';
+            const t = performance.now();
+            if (isFinal && t - (this._dealHintAt || -1e9) > DEAL_GUARD.HINT_S * 1000) { this._dealHintAt = t; this.hud.setVoice(DEAL_HINT, true); }
+            return null;
+        }
         if (this.godhood?.noMagic) { if (isFinal) this.hud.setVoice('✨ У вас пока нет магии — подождите, сила придёт', true); this.lastCastWhy = 'нет магии (ждёт божественной силы)'; return null; } // («Почти стал богом»: Godhood.js)
         // в кулаке Дьяволоса колдовать нельзя — только «стоп» (DiabolosRules.GRAB)
         if (this.diabolos?.holding && !(name === 'Stand' && /стоп|stop/i.test(text))) {

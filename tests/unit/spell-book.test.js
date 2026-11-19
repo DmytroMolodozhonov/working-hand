@@ -39,7 +39,8 @@ test('the author\'s list: what a beginner knows outside Creative — and the Max
     for (const n of ['Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Ice', 'Frozen', 'Jolt', 'Firefighting', 'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'CreateBridge', 'Gather', 'Draw', 'Lumos', 'Accio', 'GiveMyPower'])
         assert.ok(knows(n, me), `${n}: known from the start`);
     for (const n of ['WindMaxima', 'BombardoMaxima', 'EarthquakeMaxima', 'LiquidationMaxima', 'ProtectionMaxima', 'IceMaxima', 'JoltMaxima', 'CircleAttack', 'CircleAttackMaxima',
-        'Drawdown', 'DrawdownMaxima', 'Overgrown', 'OvergrownMaxima', 'Brainrot', 'Waterball', 'WaterForming', 'AirBubble', 'AirBubbleMaxima', 'WaveAttack', 'WaveAttackMaxima',
+        // («Waterball» and «WaterForming» — «Waterbollow» — are known from the start since 19.11, the author)
+        'Drawdown', 'DrawdownMaxima', 'Overgrown', 'OvergrownMaxima', 'Brainrot', 'AirBubble', 'AirBubbleMaxima', 'WaveAttack', 'WaveAttackMaxima',
         'WaterVortex', 'WaterVortexSuperMaxima', 'FirefightingMaxima', 'LetItRain', 'Snowman', 'Unfurl', 'Furl', 'LevitationMaxima', 'CreateFloor', 'CreateWall', 'CreateDoor',
         'CreateBoard', 'CreateHouse', 'CreateCastle', 'IceCastle', 'IceBridge', 'Breakthrough', 'FireMaxima'])
         assert.ok(!knows(n, me), `${n}: only from a scroll / a book`);
