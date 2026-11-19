@@ -210,6 +210,7 @@ import { Duel } from './Duel.js';
 import { duelRange } from './DuelRange.js';
 import { QualityManager, viewDistanceScale } from './Quality.js';
 import { Ultra } from './Ultra.js';
+import { LiteMode } from './LiteMode.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
@@ -980,7 +981,10 @@ export class Game {
         this.handsLog = config.mode === 'test' ? null : new HandsLog(this); // the journal «Руки» (Общие логи)
         this.spellLog = new SpellLog({ send: config.mode !== 'test' }); // every phrase heard and what came of it (zns-spells.log)
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
-        this.quality.ultra = Ultra.wanted(config.ultra); // (decided before the first apply: the shadows' kind is fixed then)
+        this.lite = false;
+        this.liteMode = new LiteMode(this, config.lite, { gpuName: (typeof window !== 'undefined' && window.__zns?.gpu?.name) || '' }); // «Лёгкий режим»: no video card / a very weak one (LiteMode.js)
+        this.quality.ultra = Ultra.wanted(config.ultra) && !this.liteMode._startOn; // (decided before the first apply: the shadows' kind is fixed then)
+        if (this.liteMode._startOn) { this.quality.lite = true; this.lite = true; this.liteMode.on = true; this.perf?.note?.('⚡ Лёгкий режим включён на старте (' + (config.lite === 'on' ? 'в настройках' : 'нет видеокарты или в прошлый раз игра тормозила') + ')'); }
         this.quality.apply(this.world);
         this.ultra = new Ultra(this); // «Ультра качество»: an addition, switched on the go (Ultra.js)
         this.ultra.set(this.quality.ultra);
@@ -4810,6 +4814,7 @@ export class Game {
 
         sysMark('minimap+ambient');
         this.quality.update(deltaTime);
+        this.liteMode?.update(deltaTime);
         if (this.sound?.loaded) this.sound.musicDirector?.update(dt, this._musicPlace ?? null); // (the game's own music: the place → the tune, crossfaded — MusicDirector)
         sysMark('quality+music');
         const logic = performance.now() - t0;

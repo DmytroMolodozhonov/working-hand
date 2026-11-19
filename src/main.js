@@ -416,6 +416,7 @@ function readConfig() {
         graphics: ($('graphics-quality')?.value === 'ultra' ? '3' : $('graphics-quality')?.value) || 'auto', // «Ультра» = высокая + Ultra.js
         ultra: $('graphics-quality')?.value === 'ultra' || $('ultra-quality')?.value === 'on', // («Ультра качество»: Ultra.js)
         viewDistance: $('view-distance')?.value || 'medium',
+        lite: $('lite-mode')?.value || 'auto', // «Лёгкий режим» (LiteMode.js)
         resolution: $('camera-res').value,
         cameraMode: (window.__ZNS_ALLOW_TPV__ && !$('camera-mode-toggle').checked) ? 'tpv' : 'fpv', // игра только от первого лица; «tpv» — лишь для проверок
         showHands: true, // (the hands are always shown)
@@ -1684,6 +1685,7 @@ $('graphics-quality')?.addEventListener('change', (e) => {
     game?.quality?.setSetting(ultra ? '3' : e.target.value);
     game?.ultra?.set(ultra);
 });
+$('lite-mode')?.addEventListener('change', (e) => { game?.liteMode?.setSetting(e.target.value); });
 $('ultra-quality')?.addEventListener('change', (e) => { game?.ultra?.set(e.target.value === 'on'); });
 $('fps-limit')?.addEventListener('change', (e) => { if (game?.config) game.config.fpsLimit = parseInt(e.target.value, 10) || 0; });
 // the hand version changes the running game at once (settings or pause menu)
@@ -2127,7 +2129,7 @@ for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'wal
 (function rememberSettings() {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
-        'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
+        'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'lite-mode', 'view-distance', 'antialias', 'camera-mode-toggle',
         'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
