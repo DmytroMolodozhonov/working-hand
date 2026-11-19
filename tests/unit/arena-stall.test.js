@@ -143,6 +143,13 @@ test('the magic board: the duel now and how long it may last, the line, the resu
     assert.ok(fight.queue.length === BOARD.QUEUE_SHOWN + 1 && /и ещё 1/.test(fight.queue.at(-1)), 'the line: four and «и ещё»');
     assert.ok(/1\. Ольга — Средний/.test(fight.queue[0]));
     assert.ok(boardView({ ph: 'fight', pn: 'Олег', fn: 'Лиам', go: 60, maxT: 300 }, 30).head[1].text.includes(fmtTime(210)), 'the board counts the minutes on its own');
+    { // the board for the one signed up reads «Вы», not «Игрок»/his name (the author 19.11)
+        const q = [{ id: 'me', n: 'Игрок', tr: 'novice' }, { id: 'o', n: 'Олег', tr: 'adept' }];
+        const mineQ = boardView({ ph: 'idle', q }, 0, 'me'), other = boardView({ ph: 'idle', q }, 0, 'o');
+        assert.ok(mineQ.queue[0].startsWith('1. Вы') && /вас/.test(mineQ.head[1].text) && !/Игрок/.test(mineQ.queue[0]), 'my own line says you');
+        assert.ok(other.queue[0].includes('Игрок') && other.queue[1].startsWith('2. Вы'), 'the others read the names');
+        assert.ok(/Ваш черёд/.test(boardView({ ph: 'call', pn: 'Олег', pi: 'me', q: [] }, 0, 'me').head[0].text), 'my turn');
+    }
     assert.ok(/Олег, ваш черёд/.test(text(boardView({ ph: 'call', pn: 'Олег', q: [] }))) && /светящееся место/.test(text(boardView({ ph: 'call', pn: 'Олег', q: [] }))), 'your turn: the lit place');
     assert.ok(/Отсчёт/.test(text(boardView({ ph: 'count', pn: 'Олег', fn: 'Лиам', q: [] }))));
     assert.ok(/Победил Олег/.test(text(boardView({ ph: 'over', res: 'win', pn: 'Олег', co: 200, q: [] }))) && /200 монет/.test(text(boardView({ ph: 'over', res: 'win', pn: 'Олег', co: 200, q: [] }))));

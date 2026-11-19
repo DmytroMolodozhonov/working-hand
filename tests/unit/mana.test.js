@@ -78,16 +78,16 @@ test('mana: a duel won — 45% of (the opponent\'s maximum − 30), at least +1;
     assert.equal(g.combat.fatigue, g.mana.max, 'the mana in it grows too');
 });
 
-test('mana: a duel won without a kill +1…+3 at random; each opponent counts once (a win once, a kill once)', () => {
+test('mana: a duel won without a kill — 25% of his maximum above 30 (at least +1) (the author 19.11); each opponent counts once (a win once, a kill once)', () => {
     const { g } = fakeGame();
-    assert.equal(g.mana.duelWonAlive('w1', () => 0), 1);
-    assert.equal(g.mana.duelWonAlive('w1', () => 0.99), 0, 'the same one lifted again: nothing');
-    assert.equal(g.mana.duelWonAlive('w2', () => 0.99), 3);
+    assert.equal(g.mana.duelWonAlive('w1', () => 0, 70), 10, '25% of (70 − 30)');
+    assert.equal(g.mana.duelWonAlive('w1', () => 0.99, 70), 0, 'the same one lifted again: nothing');
+    assert.equal(g.mana.duelWonAlive('w2', () => 0.99), 1, 'a plain 30: at least +1');
     assert.equal(g.mana.duelWon(80, 'w1'), 23, 'then killed in a duel: the kill still counts');
     assert.equal(g.mana.duelWon(80, 'w1'), 0, 'killed again (a player came back): nothing');
-    assert.equal(g.mana.max, 30 + 1 + 3 + 23);
+    assert.equal(g.mana.max, 30 + 10 + 1 + 23);
     g.mana.onDeath();
-    assert.equal(g.mana.duelWonAlive('w1', () => 0), 1, 'after my death: earned again');
+    assert.equal(g.mana.duelWonAlive('w1', () => 0, 70), 10, 'after my death: earned again');
 });
 
 test('mana: which animals are magical', () => {
