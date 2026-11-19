@@ -169,6 +169,7 @@ export const MAXIMA_TARGETS = {
     zombies: { why: 'поднимаются группой, дрыгают ногами; отпущенные с высоты падают с ног и ушибаются (хост)' },
     castlePeople: { why: 'жители, рыцари, король, волшебники замков — поднимаются группой, машут руками; жители пугаются (castleLife.alarm)' },
     animals: { why: 'поднимаются группой, бьют ногами; падение ранит' },
+    carts: { why: 'повозка на дороге (Carriages.js): обычная «Левиоса» её не берёт, Максима поднимает целиком — с лошадьми в упряжи и седоками; пока она в воздухе, не едет; брошенная падает на колёса, с высоты ломается' },
     sailors: { why: 'с палубы — поднимаются отдельно (летят «за бортом»), отпущенные падают в воду или на палубу; поднятый корабль несёт их в своих координатах' },
     spider: { why: 'гигантская паучиха поднимается группой (дёргает лапами), падение ранит её втрое сильнее (тяжёлая)' },
     livingTrees: { why: 'живое дерево поднимается группой; падение ему не вредит — его ранит только огонь' },
@@ -676,6 +677,8 @@ export class LevitationMaxima {
         for (const n of g.canaries?.targets?.() || []) if (!n.lev) out.push({ ck: 'N', c: n, pos: centre('N', n), r: 1.3 });
         for (const n of g.tarons?.targets?.() || []) if (!n.lev) out.push({ ck: 'T', c: n, pos: centre('T', n), r: 3.2 }); // (a Taron: heavy and huge — taken slowly)
         for (const n of g.customCreatures?.targets?.() || []) if (!n.lev && n.D.H * n.scale <= 4) out.push({ ck: 'C', c: n, pos: g.customCreatures.centre(n), r: n.r }); // (a creature of one's own up to 4 m) // (the swamp canaries: carried like a living tree)
+        // a cart on the road (Carriages.js): too heavy for the plain «Левиоса», but the Maxima lifts it with its horses and riders (the author 19.11: «повозка большая — Максима должна поднять»)
+        for (const k of g.carriages?.list?.values?.() || []) if (!k.lev && !k.wreck && !k.air) out.push({ ck: 'k', c: k, pos: centre('k', k), r: 3.6 });
         for (const [id, r] of g.remotes || []) if (!r.dead) out.push({ ck: 'p', c: { id }, pos: new THREE.Vector3(r.position.x, r.position.y - 0.5, r.position.z), r: 1 });
         return out;
     }
@@ -809,6 +812,7 @@ export class LevitationMaxima {
     /** A body's middle (where the magic holds it) into `out`; returns how high that is above its feet. */
     centre(ck, c, out) {
         if (ck === 's') { const o = c.overboard; out.set(o ? o.x : c.x, (o ? o.y : c.y) + 2.4, o ? o.z : c.z); return 2.4; }
+        if (ck === 'k') { out.set(c.x, c.y + 2.6, c.z); return 2.6; }
         if (ck === 't') { out.copy(c.model.position); out.y += 4; return 4; }
         if (ck === 'N') { out.copy(c.model.position); out.y += 1.2; return 1.2; }
         if (ck === 'sp') { spiderCenter(c, out); return out.y - c.model.position.y; }
@@ -819,12 +823,14 @@ export class LevitationMaxima {
 
     _move(ck, c, d) {
         if (ck === 's') { const o = c.overboard; o.x += d.x; o.y += d.y; o.z += d.z; }
+        else if (ck === 'k') { c.x += d.x; c.y += d.y; c.z += d.z; }
         else if (ck === 't' || ck === 'sp' || ck === 'N') c.model.position.add(d);
     }
 
     _creature(ck, id) {
         const g = this.game;
         if (ck === 's') { const v = g.ships?.crew?.byId?.get(id); return v && !v.dead ? v : null; }
+        if (ck === 'k') { const k = g.carriages?.list?.get(id); return k && !k.wreck ? k : null; }
         if (ck === 't') { const t = g.livingTrees?.byId?.get(id); return t && !t.isDead ? t : null; }
         if (ck === 'N') { const n = g.canaries?.byId?.(id); return n && !n.dead ? n : null; }
         if (ck === 'T') { const n = g.tarons?.byId?.(id); return n && !n.dead ? n : null; }
@@ -1742,6 +1748,20 @@ export class LevitationMaxima {
         const g = this.game;
         for (let i = this.falls.length - 1; i >= 0; i--) {
             const f = this.falls[i];
+            if (f.ck === 'k') { // (a cart let go: it falls on its wheels; hurt by a high fall — Carriages.damage; the horses are free by then)
+                const k = f.c, K = g.carriages;
+                f.t += dt;
+                if (k.lev || k.wreck || f.t > 12 || !K?.list?.has(k.id)) { k.air = false; this.falls.splice(i, 1); continue; }
+                f.vy -= LEV_MAX.G * dt;
+                k.x += f.vx * dt; k.z += f.vz * dt; k.y += f.vy * dt;
+                const gr = K._ground(k.x, k.z, null);
+                if (k.y > gr) { K._place(k, dt); continue; }
+                k.y = gr; k.air = false; this.falls.splice(i, 1);
+                const d = f.gentle ? 0 : fallDamage(f.top - gr);
+                if (d) K.damage(k, d * 2, f.by);
+                K._place(k, 0);
+                continue;
+            }
             const p = f.c.model?.position;
             f.t += dt;
             if (!p || f.c.lev || f.c.dead || f.t > 12) { this.falls.splice(i, 1); continue; }
@@ -1781,6 +1801,7 @@ export class LevitationMaxima {
             Lv.vel.lerp(_v3.multiplyScalar(4), Math.min(1, dt * 6));
             this._move(ck, c, _v3.copy(Lv.vel).multiplyScalar(dt));
             Lv.top = Math.max(Lv.top, _v1.y - up);
+            if (ck === 'k') { c.air = true; g.carriages?._place?.(c, dt); }
             // struggling in the air
             if (ck === 's') { c.mode = 'idle'; c.speed = 0; }
             if (ck === 't') { c.walkT = (c.walkT || 0) + dt * 6; c.speed = 1; }
