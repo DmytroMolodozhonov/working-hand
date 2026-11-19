@@ -50,9 +50,9 @@ export class SecondSight {
         if (kind === 'night' ? this.night : this.sees) { ctx.hint('🌙 ' + (kind === 'night' ? SIGHT_HINT.nightHave : SIGHT_HINT.seeHave)); return false; }
         if (g.isDeadLocal || g.combat?.dead) return false;
         let found = null;
-        if (kind === 'sight' && pays) {
-            found = findIngredient({ slots: g.inventory?.slots || [], held: ['left', 'right'].map((sd) => g.items?.held?.[sd]?.item), loose: this._looseIn(ctx.m) });
-            if (!found) { ctx.hint('👁️ ' + SIGHT_HINT.noIngredient); return false; }
+        if (pays) { // (the circle of sight wants a feather / grass; the circle of night sight — the living eye of an Eye-flower)
+            found = findIngredient({ slots: g.inventory?.slots || [], held: ['left', 'right'].map((sd) => g.items?.held?.[sd]?.item), loose: this._looseIn(ctx.m) }, kind === 'night' ? SIGHT.NIGHT_INGREDIENTS : SIGHT.INGREDIENTS);
+            if (!found) { ctx.hint((kind === 'night' ? '🌙 ' + SIGHT_HINT.noEye : '👁️ ' + SIGHT_HINT.noIngredient)); return false; }
         }
         if (pays && ctx.mana < cost) { ctx.hint((kind === 'night' ? '🌙 ' : '👁️ ') + SIGHT_HINT.noMana(cost)); return false; }
         if (pays) { g.combat.fatigue -= cost; g.combat._hudKey = ''; }

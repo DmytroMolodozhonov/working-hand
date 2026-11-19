@@ -26,7 +26,8 @@
  *    fire — it burns its HP away, the riders jump off; burnt or broken: it is a wreck (no wheels,
  *    tilted), the chest falls out onto the ground. Rays (Сапира, Тандервейв, Ice…) chip it.
  *    A blade or a fist — no harm (thick oak boards, iron bands): not a weapon target.
- *    «Левиоса» — не действует: a cart with its horses in the shafts is far too heavy.
+ *    «Левиоса» — не действует: a cart with its horses in the shafts is far too heavy; «Левиоса Максима» поднимает её целиком с лошадьми и седоками
+ *    (LevitationMaxima, ck 'k': `c.lev` / `c.air` — пока она в воздухе, она не едет и не липнет к земле; брошенная падает, высокое падение её ломает).
  *    Wind, blast waves, water vortexes — do not move it (heavy, its wheels braked by the horses),
  *    but water puts its fire out.
  *  - the horses, the people on it, the chest: see above (they are creatures / a chest of their own).
@@ -377,7 +378,7 @@ export class Carriages {
 
     /** Can it go (a living horse in the harness, not broken)? */
     canGo(c) {
-        if (c.wreck) return false;
+        if (c.wreck || c.lev || c.air) return false;
         const hs = this.horsesOf(c);
         return hs.length > 0 && hs.every((a) => !a.dead && a.cart?.id === c.id && !a.lev && !(a.stunT > 0));
     }
@@ -487,7 +488,9 @@ export class Carriages {
     _place(c, dt) {
         const L = CART.LEN, W = CART.WID;
         const h = (lx, lz) => { const w = cartToWorld(c.x, c.z, c.yaw, lx, lz); return this._ground(w.x, w.z, c.y); };
-        if (!c.net) {
+        if (c.lev || c.air) { // (held up by «Левиоса Максима» / falling: the height is the magic's, not the ground's; it levels out)
+            c.pitch *= Math.exp(-(dt || 1) * 3); c.roll *= Math.exp(-(dt || 1) * 3);
+        } else if (!c.net) {
             const f = h(0, -L / 2 + 1.2), b = h(0, L / 2 - 1.2), l = h(-W / 2, 0), r = h(W / 2, 0);
             const gy = Math.max((f + b) / 2, (l + r) / 2, h(0, 0) - 0.3);
             c.y = dt ? c.y + (gy - c.y) * Math.min(1, dt * 8) : gy;
@@ -521,7 +524,7 @@ export class Carriages {
             if (a.stunT > 0 || a.vy) continue; // (knocked down: Animals moves it)
             const step = Math.hypot(p.x - hp.x, p.z - hp.z);
             hp.x = p.x; hp.z = p.z;
-            hp.y = this._ground(p.x, p.z, hp.y);
+            hp.y = this._ground(p.x, p.z, hp.y) + (c.lev || c.air ? Math.max(0, c.y - this._ground(c.x, c.z, null)) : 0); // (the cart up in the air takes its horses by the traces)
             a.group.rotation.y = c.yaw;
             a.walkT += step * 1.6;
             a.spd = dt ? step / dt : 0;

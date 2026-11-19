@@ -169,7 +169,7 @@ export class Levitation {
         for (const b of g.boards?.levTargets() || []) out.push({ kind: 'board', obj: { id: b.id }, pos: b.pos, r: 1.6 });
         for (const b of g.boats?.levTargets() || []) out.push({ kind: 'boat', obj: { id: b.id }, pos: b.pos, r: 3.2 }); // (an empty boat — Boats.js: carried to the water)
         // (things and books are the host's: a guest's hand can't carry them yet)
-        if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked && !L.swarm) out.push({ kind: 'item', obj: L, pos: L.model.position });
+        if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked && !L.swarm && !(L.item.shop && !L.item.shop.paid)) out.push({ kind: 'item', obj: L, pos: L.model.position });
         if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
         for (const b of g.books?.birds.values() || []) if (b.state !== 'fall' && !b.ward) out.push({ kind: 'bird', obj: b, pos: b.model.position }); // (the book of protection: Leviosa bounces off it)
         // a phoenix: caught, it hangs where the hand holds it, beating its wings (let go: it flies off)

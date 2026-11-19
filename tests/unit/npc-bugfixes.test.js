@@ -36,6 +36,16 @@ test('house alarm wakes its wizard and sends him OUT, with an intact ward still 
     assert.deepEqual(H.spot(v, { x: 0, z: 0 }), { ...v.cs.def.houses[0].door, run: undefined }, 'combat never chooses a place back indoors');
 });
 
+test('a blow from afar, attacker unseen: the wizard comes OUT to the sphere\'s edge on that side and waits under the ward (the author 19.11)', () => {
+    const { H, v, ward, L } = home();
+    L._playerPos = () => null; // (nobody in sight)
+    H.alarm(v, { x: 60, z: 0 }, null);
+    H.step(v, 0.1); // the way out through the door
+    H.step(v, 0.1); // then to the edge facing the bomb
+    assert.ok(v.x > 5, 'not in the doorway any more: out towards where it came from');
+    assert.ok(Math.hypot(v.x, v.z) < ward.r - 1 + 0.01, 'and never beyond the intact sphere');
+});
+
 test('intact protection: no chase when the attacker leaves, repairs spend mana; broken protection permits pursuit', () => {
     const { H, v, ward, L, g } = home();
     H.alarm(v, { x: 30, z: 0 }, 'player');

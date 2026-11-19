@@ -483,7 +483,9 @@ export function contactAgainstBox(p, r, mesh, n) {
 export function contactAgainstWorld(p, r, collision, n) {
     let best = 0;
     // Ground / terrain under the point
-    const ground = collision.surfaceY(p.x, p.z);
+    // (the floor UNDER the weapon, not the world's top surface: in a cave the roof's top is the surface, and a sword from a cave chest was pushed up through the rock
+    //  onto the ground above — the author 19.11)
+    const ground = collision.groundAt ? collision.groundAt(p.x, p.z, p.y + r + 1.2) : collision.surfaceY(p.x, p.z);
     if (p.y - r < ground) {
         // Terrain: if we're inside a raised column, prefer side push-out.
         best = ground - (p.y - r);

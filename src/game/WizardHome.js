@@ -92,6 +92,15 @@ export class WizardHome {
             v.foe = by; v.cs.hostile.set(by, Date.now() + 120000);
             return false; // WizardFight casts normally, but its positions are confined by spot().
         }
+        // The attacker is not in sight (a bomb from afar, behind a hill): the wizard does not sit indoors — the author 19.11: «не выходил из дома… он выходит, но не за
+        // защиту, и начинает битву под защитой дома». He goes to the edge of the intact sphere on the side the blow came from, faces it and waits there.
+        if (H.at && H.quiet < 25 && !v.lostWand) {
+            const goal = this.spot(v, { x: H.at.x, z: H.at.z, run: true });
+            if (goal && Math.hypot(goal.x - v.x, goal.z - v.z) > 1.5) {
+                v.foe = null; v.hunt = null; v.investigate = null;
+                if (!L._goSpot(v, goal.x, goal.z, 5.6, dt, 0.8, goal.y ?? h.door.y)) { v.mode = v.speed > 0 ? 'run' : 'idle'; L._ground(v); return true; }
+            } else this.wizards.fight?._turnTo?.(v, { x: H.at.x, y: v.y, z: H.at.z }, dt);
+        }
         v.foe = null; v.hunt = null; v.investigate = null; v.path = null; v.speed = 0; v.mode = 'idle';
         const drain = ((v.fx & FX.SHIELD) ? PVP.SHIELD_DRAIN : 0) + ((v.fx & FX.DOME) ? PVP.DOME_DRAIN : 0);
         v.mana = Math.max(0, v.mana - drain * dt);

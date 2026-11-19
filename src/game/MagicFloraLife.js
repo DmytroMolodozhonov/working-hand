@@ -13,15 +13,15 @@ import { worldPlayers, nearWorldPlayer } from './WorldPlayers.js';
 import * as THREE from 'three';
 import { BLOCK, BAKSADI_FROM_GEN } from '../world/Terrain.js';
 import { BIOMES } from '../world/Landscape.js';
-import { FLORA, FLORA_KINDS, FLORA_ORDER, FLORA_OF_ITEM, BURN_TIME, SCATTER_MAX, floraGroupIn, floraHarm, plantFoot } from './MagicFlora.js';
+import { FLORA, FLORA_KINDS, FLORA_ORDER, FLORA_OF_ITEM, BURN_TIME, SCATTER_MAX, floraGroupIn, floraHarm, plantFoot, EYE, eyeState } from './MagicFlora.js';
 import { floraBody, floraPick, floraMaterials, FLORA_MATERIAL, FLORA_VARIANTS, FLORA_CLOCK } from '../fx/FloraModels.js';
 import { newUid, ITEM_INFO } from './ItemTypes.js';
 
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const _e = new THREE.Euler(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
-const PICK_COUNT = { glowcap: 8, giantfern: 5, azureberry: 9, sunherb: 7, frostcrystal: 5, armourleaf: 4 }; // (a plant has at most this many picked parts)
+const PICK_COUNT = { glowcap: 8, giantfern: 5, azureberry: 9, sunherb: 7, frostcrystal: 5, armourleaf: 4, eyeflower: 1 }; // (a plant has at most this many picked parts)
 const BUDGET_MS = 1.2; // placing groups: at most this long a frame
-const REACH = { glowcap: 2.2, giantfern: 4.5, azureberry: 2.4, sunherb: 1.8, frostcrystal: 3, armourleaf: 2.2 }; // m round the plant: what a spell / ray touches
+const REACH = { glowcap: 2.2, giantfern: 4.5, azureberry: 2.4, sunherb: 1.8, frostcrystal: 3, armourleaf: 2.2, eyeflower: 1.2 }; // m round the plant: what a spell / ray touches
 
 export class MagicFloraLife {
     constructor(game) {
@@ -179,11 +179,46 @@ export class MagicFloraLife {
             for (const pk of pl.picks) {
                 if (n >= mesh.instanceMatrix.count) break;
                 if (pk.until > now) { mesh.setMatrixAt(n++, ZERO); continue; }
+                if (kind === 'eyeflower') { // (the eye looks about, follows a hero, blinks: eyeState; pitch > 0 looks down)
+                    const E = this._eyeOf(pl, pk);
+                    _e.set(E.pitch, pl.yaw + E.yaw, 0, 'YXZ');
+                    _m.compose(_p.set(pk.wp[0], pk.wp[1], pk.wp[2]), _q.setFromEuler(_e), _s.set(pl.scale * pk.ps, pl.scale * pk.ps * (0.06 + 0.94 * E.open), pl.scale * pk.ps));
+                    mesh.setMatrixAt(n++, _m);
+                    continue;
+                }
                 _m.compose(_p.set(pk.wp[0], pk.wp[1], pk.wp[2]), _q.setFromAxisAngle(_up, pl.yaw + pk.wp[0] * 3.1), _s.setScalar(pl.scale * pk.ps));
                 mesh.setMatrixAt(n++, _m);
             }
         }
         mesh.count = n; mesh.visible = n > 0; mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    /** The living thing this eye watches: the nearest creature within EYE.SEE_R (the hero, other players, zombies, animals, villagers) — looked for 2.5 times a second. */
+    _watched(pl, pk, now) {
+        if (pl._wt && now < pl._wt) return pl._w || null;
+        pl._wt = now + 400 + (pl.i || 0) * 37 % 200;
+        const g = this.game, R2 = EYE.SEE_R * EYE.SEE_R, x = pk.wp[0], z = pk.wp[2];
+        let best = null, bd = R2;
+        const test = (px, py, pz) => { const dx = px - x, dz = pz - z, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = { x: px, y: py, z: pz }; } };
+        const me = g.character.group.position; test(me.x, me.y, me.z);
+        for (const r of g.remotes?.values?.() || []) { const p = r.group?.position || r.pos; if (p) test(p.x, p.y, p.z); }
+        for (const q of g.zombies || []) if (!q.isDead && q.group) test(q.group.position.x, q.group.position.y, q.group.position.z);
+        for (const a of g.animals?.list || []) if (!a.dead && a.group?.position) test(a.group.position.x, a.group.position.y, a.group.position.z);
+        else if (a.model?.position && !a.dead) test(a.model.position.x, a.model.position.y, a.model.position.z);
+        for (const v of g.castleLife?.byId?.values?.() || []) if (!v.dead && Number.isFinite(v.x) && Math.abs(v.x - x) < EYE.SEE_R) test(v.x, v.y ?? pk.wp[1], v.z);
+        return (pl._w = best);
+    }
+
+    /** The eye of a flower now: its own phase, the creature it watches (EYE.SEE_R). */
+    _eyeOf(pl, pk) {
+        const W = pl.burn === 0 ? this._watched(pl, pk, this._clock) : null;
+        let see = null;
+        if (W) {
+            const dx = W.x - pk.wp[0], dz = W.z - pk.wp[2], dy = W.y + 1 - pk.wp[1], dist = Math.hypot(dx, dz);
+            let yaw = Math.atan2(dx, dz) - pl.yaw; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+            if (Math.abs(yaw) <= EYE.YAW_MAX + 0.5) see = { yaw, pitch: Math.atan2(-dy, Math.max(0.5, dist)), near: 1 - Math.max(0, dist - EYE.STARE_R) / (EYE.SEE_R - EYE.STARE_R) }; // (behind it: it does not see)
+        }
+        return eyeState(this._clock, ((pl.i ?? 0) * 0.37 + pl.x * 0.0173 + pl.z * 0.0291) % 1, see);
     }
 
     // ----------------------------------------------------------- picking
@@ -346,6 +381,12 @@ export class MagicFloraLife {
             if (!this.groups.has(e.key)) this._place(t, e, seed);
         }
 
+        // the eyes live: while a flower with an eye is near (≤ 50 m) its instance is written 20 times a second
+        this._eyeT = (this._eyeT || 0) - dt;
+        if (this._eyeT <= 0) {
+            this._eyeT = 0.05;
+            for (const pl of this.list.eyeflower || []) if (Math.abs(pl.x - me.x) + Math.abs(pl.z - me.z) < 70) { this._pickDirty.add('eyeflower'); break; }
+        }
         // instances: only the kinds that changed
         if (this._dirty.size || this._pickDirty.size) {
             for (const k of this._dirty) this._writeBody(k);

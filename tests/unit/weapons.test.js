@@ -229,3 +229,12 @@ test('particle pools keep a full-size colour buffer (no black particles)', async
     const c = pool.mesh.instanceColor.array;
     assert.ok(Math.abs(c[0] - 0x4C / 255) < 1e-6 && Math.abs(c[1] - 0xAF / 255) < 1e-6);
 });
+
+test('a weapon in a cave is held up by the CAVE floor, not pushed through the rock to the surface above (the author 19.11: a sword from a cave chest flew up)', async () => {
+    const { contactAgainstWorld } = await import('../../src/entities/Weapon.js');
+    const THREE = await import('three');
+    const coll = { surfaceY: () => 40, groundAt: () => 2, queryBoxes: () => [], walls: null, terrain: null };
+    const n = new THREE.Vector3();
+    assert.equal(contactAgainstWorld(new THREE.Vector3(0, 3, 0), 0.3, coll, n), 0, 'above the cave floor: free');
+    assert.ok(contactAgainstWorld(new THREE.Vector3(0, 1.9, 0), 0.3, coll, n) > 0 && n.y === 1, 'in the cave floor: pushed up by that floor only');
+});
