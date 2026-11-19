@@ -13,8 +13,10 @@
 import { HELM_LOCK } from './ShipTypes.js';
 
 export const HELM = {
-    GRAB_R: 0.45, CLOSE_CURL: 0.55, OPEN_CURL: 0.35, RELEASE_CURL: 0.28, RELEASE_MS: 160, CLOSE_WINDOW_MS: 900,
-    LOCK: HELM_LOCK, MAX_RATE: 9, SLIP: 0.9, RETURN: 0.12, GAIN: 1, // (the wheel turns exactly as far as the hand goes round it: the hand stays where it holds)
+    // (the author 19.11: «рука на руле — ужасно: схватывается, потом уходит»: the grip is easier to take and much harder to lose — a wider reach for the take, a long open-fingers time to let go
+    //  (a tracking drop-out of a frame or two is not a let-go), the hand may go far from the rim before it slips)
+    GRAB_R: 0.8, CLOSE_CURL: 0.5, OPEN_CURL: 0.35, RELEASE_CURL: 0.22, RELEASE_MS: 450, CLOSE_WINDOW_MS: 1400,
+    LOCK: HELM_LOCK, MAX_RATE: 9, SLIP: 2.2, RETURN: 0.12, GAIN: 1, // (the wheel turns exactly as far as the hand goes round it: the hand stays where it holds)
 };
 
 /** The polar angle of a point in the wheel's plane (0 = top, + = clockwise for the helmsman). */

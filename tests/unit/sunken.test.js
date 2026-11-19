@@ -24,10 +24,10 @@ test('the places: the same from the same seed, wrecks often, the temple rare', (
 test('a site lies only on deep, flat sea: shallow, a lake / land, or a steep bottom — no', () => {
     const site = { id: 'wreck:1,1', kind: 'wreck', x: 0, z: 0, yaw: 0.4, cls: 'pinnace' };
     assert.equal(footprint(site).length, 9);
-    assert.ok(siteFits(site, () => ({ depth: 12, floor: -15 })));
+    assert.ok(siteFits(site, () => ({ depth: 16, floor: -18 })));
     assert.equal(siteFits(site, () => ({ depth: 5, floor: -8 })), null, 'too shallow');
     assert.equal(siteFits(site, () => null), null, 'no sea there');
-    assert.equal(siteFits(site, (x) => ({ depth: 14, floor: -15 + x * 0.5 })), null, 'too steep under her');
+    assert.equal(siteFits(site, (x) => ({ depth: 16, floor: -18 + x * 0.5 })), null, 'too steep under her');
     const temple = { id: 'seaTemple:0,0', kind: 'temple', x: 0, z: 0, yaw: 0 };
     assert.equal(siteFits(temple, () => ({ depth: SUNKEN.TEMPLE_DEPTH - 1, floor: -20 })), null, 'the temple wants the deep');
 });
