@@ -10,20 +10,20 @@
  *   • an object's size is not known from its pivot: HIDE leaves a margin for a big one (a castle's pivot at its corner).
  * Pure decision (`decide`) is tested; `DistanceCull.update` walks the scene.
  */
-export const CULL = { HIDE: 90, SHOW: 60, FAR_LIMIT: 1500, CHECK_S: 0.3 };
+export const CULL = { HIDE: 90, SHOW: 60, FAR_LIMIT: 1500, CHECK_S: 0.3, HIDE_TIGHT: 55, SHOW_TIGHT: 35 }; // (TIGHT: the light mode — a short haze, a computer that counts every triangle)
 export const SKIP_NAMES = new Set(['terrain', 'sea', 'magicFlora', 'sky', 'sun', 'moon', 'stars', 'clouds', 'space']);
 
 /** d: distance from the hero (m), fogFar: where the haze ends, hidden: is it hidden by us now? → 'hide' | 'show' | null. */
-export function decide(d, fogFar, hidden) {
+export function decide(d, fogFar, hidden, hide = CULL.HIDE, show = CULL.SHOW) {
     if (!(fogFar > 0)) return hidden ? 'show' : null; // (no fog: everything back)
-    if (!hidden) return d > fogFar + CULL.HIDE && d < CULL.FAR_LIMIT ? 'hide' : null;
-    return d <= fogFar + CULL.SHOW || d >= CULL.FAR_LIMIT ? 'show' : null;
+    if (!hidden) return d > fogFar + hide && d < CULL.FAR_LIMIT ? 'hide' : null;
+    return d <= fogFar + show || d >= CULL.FAR_LIMIT ? 'show' : null;
 }
 
 export class DistanceCull {
     constructor() { this.t = 0; this.mine = new Set(); this.stats = { hidden: 0 }; this.enabled = true; }
 
-    update(dt, scene, fx, fy, fz, fogFar) {
+    update(dt, scene, fx, fy, fz, fogFar, tight = false) {
         this.t -= dt;
         if (this.t > 0) return;
         this.t = CULL.CHECK_S;
@@ -33,7 +33,7 @@ export class DistanceCull {
             const hidden = this.mine.has(o);
             if (!hidden && !o.visible) continue; // (hidden by its owner: not ours)
             const dx = o.position.x - fx, dz = o.position.z - fz, d = Math.sqrt(dx * dx + dz * dz);
-            const a = decide(d, fogFar, hidden);
+            const a = tight ? decide(d, fogFar, hidden, CULL.HIDE_TIGHT, CULL.SHOW_TIGHT) : decide(d, fogFar, hidden);
             if (a === 'hide') { o.visible = false; this.mine.add(o); }
             else if (a === 'show') { o.visible = true; this.mine.delete(o); }
         }
