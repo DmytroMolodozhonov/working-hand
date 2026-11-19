@@ -2633,10 +2633,12 @@ export class Game {
         // (the pause between two spells is for two words, not one word and its «Максима»)
         const last = this.lastSpellCastTime, lastDuel = this._lastDuelCast, early = this._interimCast;
         this.lastSpellCastTime = 0; this._lastDuelCast = 0; this._interimCast = null;
+        // (the plain spell's mana goes back BEFORE the Maxima is paid for: «paid once, at the Maxima's price» — with the plain one's 20 still taken,
+        // «Бомбардо Максима» (35) needed 55 mana and a hero with 40 only got the plain one: the author 19.11, «в основном бомбарда используется только»)
+        const refund = b.paid > 0 && this.combat?.manaOn ? Math.min(b.paid, Math.max(0, (this.combat.maxFatigue || Infinity) - this.combat.fatigue)) : 0;
+        this.combat.fatigue += refund;
         const name = this.castLocalSpell(text, true);
-        if (name) {
-            if (b.paid > 0 && this.combat?.manaOn) this.combat.fatigue = Math.min(this.combat.maxFatigue || this.combat.fatigue + b.paid, this.combat.fatigue + b.paid);
-        } else { this.lastSpellCastTime = last; this._lastDuelCast = lastDuel; this._interimCast = early; }
+        if (!name) { this.combat.fatigue -= refund; this.lastSpellCastTime = last; this._lastDuelCast = lastDuel; this._interimCast = early; } // (refused: the plain one stays paid, as it was)
         return name;
     }
 
