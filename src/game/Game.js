@@ -213,6 +213,7 @@ import { QualityManager, viewDistanceScale } from './Quality.js';
 import { Ultra } from './Ultra.js';
 import { waterAt } from './CreatureSwim.js';
 import { LiteMode } from './LiteMode.js';
+import { DistanceCull } from '../core/DistanceCull.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
@@ -4762,6 +4763,12 @@ export class Game {
         // (…while the ground round the body stays known: the body, the ships and the creatures near it still stand on it — TerrainView.keepAt)
         if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost); sysMark('world');
+        { // (what is wholly behind the haze is not drawn — DistanceCull.js; not in space / on other worlds without fog, and a test can switch it off)
+            const dc = this.distCull || (this.distCull = new DistanceCull());
+            const fog = this.scene.fog, on = !this.space?.inSpace && !!fog && !!this.world.fogFar && !(typeof window !== 'undefined' && window.__ZNS_NO_DIST_CULL__);
+            dc.enabled = on;
+            dc.update(deltaTime, this.scene, focus.x, focus.y, focus.z, on ? fog.far : 0);
+        }
         this.world.forest?.update(dt, this.character.group.position, this.camera, worldPlayers(this)); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)
