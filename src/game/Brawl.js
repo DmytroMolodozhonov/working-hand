@@ -659,7 +659,7 @@ export class Brawl {
         if (this._frame % 30 === 0) { // (no stranger on the field: a zombie nobody put there goes)
             for (const z of [...this.game.zombies]) if (!this.roster.has('z:' + z.id) && !z.isDying) this.game.removeZombie(z);
         }
-        if (this._frame % 20 === 0) this._changed(true);
+        if (this._frame % 30 === 0 && this.state !== 'setup') this._changed(true); // (the panel's counters: only while there is a fight to count)
         if (this._frame % 90 === 7) { this._tidyWeapons(); this._hideExtras(); }
     }
 
