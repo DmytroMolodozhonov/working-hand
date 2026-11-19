@@ -26,7 +26,8 @@
  *    fire — it burns its HP away, the riders jump off; burnt or broken: it is a wreck (no wheels,
  *    tilted), the chest falls out onto the ground. Rays (Сапира, Тандервейв, Ice…) chip it.
  *    A blade or a fist — no harm (thick oak boards, iron bands): not a weapon target.
- *    «Левиоса» — не действует: a cart with its horses in the shafts is far too heavy.
+ *    «Левиоса» — не действует: a cart with its horses in the shafts is far too heavy; «Левиоса Максима» поднимает её целиком с лошадьми и седоками
+ *    (LevitationMaxima, ck 'k': `c.lev` / `c.air` — пока она в воздухе, она не едет и не липнет к земле; брошенная падает, высокое падение её ломает).
  *    Wind, blast waves, water vortexes — do not move it (heavy, its wheels braked by the horses),
  *    but water puts its fire out.
  *  - the horses, the people on it, the chest: see above (they are creatures / a chest of their own).
@@ -44,6 +45,7 @@ import { crowdNear } from './CrowdSources.js';
 import { avoidStep } from './Avoid.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { mergeParts } from '../core/MergeGeometry.js';
+import { RoadSearch, ROAD } from './RoadPlan.js';
 
 export const CART = {
     LEN: 6.6, WID: 3.6, FLOOR: 1.75, SIDE: 0.85, WHEEL_R: 1.2,
@@ -377,7 +379,7 @@ export class Carriages {
 
     /** Can it go (a living horse in the harness, not broken)? */
     canGo(c) {
-        if (c.wreck) return false;
+        if (c.wreck || c.lev || c.air) return false;
         const hs = this.horsesOf(c);
         return hs.length > 0 && hs.every((a) => !a.dead && a.cart?.id === c.id && !a.lev && !(a.stunT > 0));
     }
@@ -407,6 +409,8 @@ export class Carriages {
      * a body standing in front of the horses.
      */
     drive(c, tx, tz, want, dt, o = {}) {
+        const goalD = Math.hypot(tx - c.x, tz - c.z);
+        if (want > 0) { const w = this._waypoint(c, tx, tz, goalD, dt, o); tx = w.x; tz = w.z; }
         const d = Math.hypot(tx - c.x, tz - c.z);
         if (!this.canGo(c)) want = 0;
         c.thinkT = (c.thinkT || 0) - dt;
@@ -436,6 +440,56 @@ export class Carriages {
         }
         this._place(c, dt);
         return d;
+    }
+
+    /**
+     * The whole way planned (RoadPlan.js, A* over a 4 m grid, a few cells a frame): when the straight way to the goal is not free over ~40 m — a lake, a
+     * ridge, a bay, a forest edge — or the cart got stuck, a plan is made and the cart follows its waypoints (the old look-ahead steering still
+     * avoids people and keeps it off the water between them). No plan → the goal itself, as before. Returns the point to steer at.
+     */
+    _waypoint(c, tx, tz, goalD, dt, o) {
+        const g = this.game, t = g.world?.terrain?.data;
+        const goal = { x: tx, z: tz };
+        if (!t?.floorBelow || goalD < 14) { c.plan = null; c.search = null; return goal; }
+        const now = performance.now();
+        const ux = (tx - c.x) / goalD, uz = (tz - c.z) / goalD;
+        // (a local goal: ≤ 90 m along the line to the real one — the search never covers a whole country)
+        const lg = Math.min(goalD, 90), lgx = c.x + ux * lg, lgz = c.z + uz * lg;
+        const edge = (ax, az, bx, bz) => {
+            if (t.landMade && !t.landMade(Math.round(bx), Math.round(bz))) return false; // (land not made yet: not through it — never make land in a frame)
+            const len = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / len, dz = (bz - az) / len;
+            return wayFree(g, ax, az, dx, dz, Math.ceil(len), { half: CART.WID / 2 + 0.3, rise: 1, clear: 4, avoidLand: true, into: o.into }) >= Math.floor(len);
+        };
+        // plan in progress: a few cells a frame
+        if (c.search) {
+            const st = c.search.step(30);
+            if (st !== 'run') {
+                c.plan = (st === 'found' || st === 'partial') && c.search.path?.length ? { pts: c.search.path.slice(), at: now, goal: { x: tx, z: tz } } : null;
+                c.search = null;
+                c.planFail = c.plan ? 0 : (c.planFail || 0) + 1;
+                c.planAt = now;
+            }
+        }
+        // a plan in hand: follow it (the next point once the cart is near the present one); stale or the goal moved far → drop it
+        if (c.plan) {
+            const P = c.plan;
+            if (Math.hypot(P.goal.x - tx, P.goal.z - tz) > 40 || now - P.at > 120000) c.plan = null;
+            else {
+                while (P.pts.length && Math.hypot(P.pts[0].x - c.x, P.pts[0].z - c.z) < 5) P.pts.shift();
+                if (P.pts.length) { c.stuckT = Math.min(c.stuckT || 0, 1.5); return P.pts[0]; }
+                c.plan = null; c.planAt = now - 3000; // (arrived at the plan's end: look again soon — it was a partial or a local goal)
+            }
+        }
+        // is the straight way free? then no plan is needed
+        const straight = wayFree(g, c.x, c.z, ux, uz, Math.min(40, Math.floor(goalD)), { half: CART.WID / 2 + 0.3, rise: 1, clear: 4, avoidLand: true, into: o.into });
+        if (straight >= Math.min(40, Math.floor(goalD)) - 1 && (c.stuckT || 0) < 2) return goal;
+        // not free (or stuck): plan, but not too often — a failed plan waits longer each time
+        const wait = 2500 + 3000 * Math.min(4, c.planFail || 0);
+        if (!c.search && now - (c.planAt || 0) > wait) {
+            c.search = new RoadSearch({ sx: c.x, sz: c.z, gx: lgx, gz: lgz, edgeOk: edge, maxNodes: ROAD.MAX_NODES });
+            c.planAt = now;
+        }
+        return goal;
     }
 
     /** The way to go: straight at the goal if free, else the nearest free way to it (or null). */
@@ -487,7 +541,9 @@ export class Carriages {
     _place(c, dt) {
         const L = CART.LEN, W = CART.WID;
         const h = (lx, lz) => { const w = cartToWorld(c.x, c.z, c.yaw, lx, lz); return this._ground(w.x, w.z, c.y); };
-        if (!c.net) {
+        if (c.lev || c.air) { // (held up by «Левиоса Максима» / falling: the height is the magic's, not the ground's; it levels out)
+            c.pitch *= Math.exp(-(dt || 1) * 3); c.roll *= Math.exp(-(dt || 1) * 3);
+        } else if (!c.net) {
             const f = h(0, -L / 2 + 1.2), b = h(0, L / 2 - 1.2), l = h(-W / 2, 0), r = h(W / 2, 0);
             const gy = Math.max((f + b) / 2, (l + r) / 2, h(0, 0) - 0.3);
             c.y = dt ? c.y + (gy - c.y) * Math.min(1, dt * 8) : gy;
@@ -521,7 +577,7 @@ export class Carriages {
             if (a.stunT > 0 || a.vy) continue; // (knocked down: Animals moves it)
             const step = Math.hypot(p.x - hp.x, p.z - hp.z);
             hp.x = p.x; hp.z = p.z;
-            hp.y = this._ground(p.x, p.z, hp.y);
+            hp.y = this._ground(p.x, p.z, hp.y) + (c.lev || c.air ? Math.max(0, c.y - this._ground(c.x, c.z, null)) : 0); // (the cart up in the air takes its horses by the traces)
             a.group.rotation.y = c.yaw;
             a.walkT += step * 1.6;
             a.spd = dt ? step / dt : 0;

@@ -28,7 +28,7 @@ test('magic armour stops the plain «Левиоса», never the Maxima', () => 
 });
 
 test('«на кого и на что»: every creature and thing is decided, with why', () => {
-    for (const k of ['me', 'players', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'livingTrees', 'bookBirds', 'phoenix', 'dragon', 'servants', 'ships', 'houses', 'trees', 'castleWalls', 'looseThings', 'water', 'ground']) {
+    for (const k of ['me', 'players', 'zombies', 'castlePeople', 'animals', 'carts', 'sailors', 'spider', 'livingTrees', 'bookBirds', 'phoenix', 'dragon', 'servants', 'ships', 'houses', 'trees', 'castleWalls', 'looseThings', 'water', 'ground']) {
         assert.ok(MAXIMA_TARGETS[k]?.why, k);
     }
 });
@@ -210,4 +210,25 @@ test('the carried house is drawn from its own blocks: only the outer faces, with
     const geo = voxelGeometry(cells, 0, 10, 0);
     assert.equal(geo.getAttribute('position').count, 10 * 4, 'two blocks side by side: 10 faces');
     assert.ok(geo.getAttribute('voxPat').array.some((p) => p > 0), 'planks keep their pattern');
+});
+
+
+test('a cart: «Левиоса Максима» lifts it (with its horses), it does not drive while up, and falls onto its wheels when let go (the author 19.11)', async () => {
+    const { LevitationMaxima } = await import('../../src/game/LevitationMaxima.js');
+    const cart = { id: 'k1', x: 10, y: 5, z: 20, yaw: 0, pitch: 0, roll: 0, hp: 70, wreck: false };
+    const placed = [];
+    const K = { list: new Map([['k1', cart]]), _ground: () => 5, _place: (c) => placed.push(c.y), damage: (c, d) => { c.hp -= d; } };
+    const g = { carriages: K, levitation: null };
+    const M = Object.create(LevitationMaxima.prototype); M.game = g; M._falls = [];
+    assert.equal(M._creature('k', 'k1'), cart);
+    const out = { set(x, y, z) { this.x = x; this.y = y; this.z = z; } };
+    assert.ok(M.centre('k', cart, out) > 0 && out.y > cart.y, 'held by its middle');
+    M._move('k', cart, { x: 1, y: 4, z: -2 });
+    assert.deepEqual([cart.x, cart.y, cart.z], [11, 9, 18], 'carried after the hand');
+    cart.lev = { vel: { x: 0, y: 0, z: 0 }, top: 25 };
+    M._letBody({ ck: 'k', c: cart }, false);
+    assert.equal(cart.lev, null); assert.equal(M.falls.length, 1, 'let go: it falls');
+    for (let i = 0; i < 400 && M.falls.length; i++) M._fallStep(0.05);
+    assert.equal(M.falls.length, 0); assert.equal(cart.y, 5, 'on the ground again');
+    assert.equal(cart.air, false); assert.ok(cart.hp < 70, 'a fall from a height breaks boards');
 });

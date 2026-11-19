@@ -44,6 +44,7 @@
  * heals, strikes and deaths are events everybody plays.
  */
 
+import { overflow } from './CreatureCaps.js';
 import * as THREE from 'three';
 import { newUid } from './ItemTypes.js';
 import { registerKind } from './CreatureImpact.js';
@@ -198,7 +199,21 @@ export function rageRoll(times, now, r = Math.random, chance = PHOENIX.RAGE_CHAN
 
 // ======================================================================= the model
 /** A feather lying in the XZ plane, pointing along −Z from its root (vertex colours base → tip). */
-function featherGeo(len, w, c0, c1, droop = 0, tip = null) {
+const _geoShared = new Map(); // key → a geometry every phoenix shares (a few dozen, fixed set: made once, never disposed)
+/** A plain shape made once for all phoenixes (the same triangles; before, each phoenix made its own ~98 geometries). */
+function cg(Ctor, ...args) {
+    const k = Ctor.name + args.join(',');
+    let geo = _geoShared.get(k);
+    if (!geo) { geo = new Ctor(...args); geo.userData.shared = true; _geoShared.set(k, geo); }
+    return geo;
+}
+function featherGeo(...args) {
+    const k = 'feather' + args.join(',');
+    let geo = _geoShared.get(k);
+    if (!geo) { geo = featherGeoMake(...args); geo.userData.shared = true; _geoShared.set(k, geo); }
+    return geo;
+}
+function featherGeoMake(len, w, c0, c1, droop = 0, tip = null) {
     const pos = [], col = [], idx = [];
     const N = 7, a = new THREE.Color(c0), b = new THREE.Color(c1), c = new THREE.Color(), t2 = tip != null ? new THREE.Color(tip) : null;
     for (let i = 0; i <= N; i++) {
@@ -258,9 +273,9 @@ export function phoenixModel() {
     const tilt = new THREE.Group();
     tilt.position.y = 1.25;
     g.add(tilt);
-    const torso = mesh(new THREE.SphereGeometry(1, 16, 12), crimson, tilt);
+    const torso = mesh(cg(THREE.SphereGeometry, 1, 16, 12), crimson, tilt);
     torso.scale.set(0.4, 0.42, 0.78);
-    const chest = mesh(new THREE.SphereGeometry(1, 14, 10), breast, tilt, 0, -0.06, 0.36);
+    const chest = mesh(cg(THREE.SphereGeometry, 1, 14, 10), breast, tilt, 0, -0.06, 0.36);
     chest.scale.set(0.34, 0.36, 0.42);
     // (pieces that never move apart — the same material on the same joint — become one shape at the end:
     // a phoenix drew 131 pieces)
@@ -280,7 +295,7 @@ export function phoenixModel() {
     const neck = new THREE.Group();
     neck.position.set(0, 0.2, 0.55);
     tilt.add(neck);
-    const neckMesh = mesh(new THREE.CylinderGeometry(0.11, 0.17, 0.5, 10), crimson, neck, 0, 0.25, 0);
+    const neckMesh = mesh(cg(THREE.CylinderGeometry, 0.11, 0.17, 0.5, 10), crimson, neck, 0, 0.25, 0);
     neckMesh.castShadow = true;
     // a golden ruff where the neck meets the breast
     const ruff = [];
@@ -296,20 +311,20 @@ export function phoenixModel() {
     const head = new THREE.Group();
     head.position.y = 0.48;
     neck.add(head);
-    const skull = mesh(new THREE.SphereGeometry(0.2, 14, 10), crimson, head);
+    const skull = mesh(cg(THREE.SphereGeometry, 0.2, 14, 10), crimson, head);
     skull.scale.set(1, 0.95, 1.15);
-    const cheek = mesh(new THREE.SphereGeometry(0.13, 10, 8), breast, head, 0, -0.06, 0.08);
+    const cheek = mesh(cg(THREE.SphereGeometry, 0.13, 10, 8), breast, head, 0, -0.06, 0.08);
     cheek.scale.set(1.25, 0.8, 1);
-    const beak = mesh(new THREE.ConeGeometry(0.07, 0.3, 10), gold, head, 0, -0.03, 0.33);
+    const beak = mesh(cg(THREE.ConeGeometry, 0.07, 0.3, 10), gold, head, 0, -0.03, 0.33);
     beak.rotation.x = Math.PI / 2;
-    const hook = mesh(new THREE.ConeGeometry(0.035, 0.1, 8), gold, head, 0, -0.09, 0.44);
+    const hook = mesh(cg(THREE.ConeGeometry, 0.035, 0.1, 8), gold, head, 0, -0.09, 0.44);
     hook.rotation.x = Math.PI * 0.85;
     one.push([head, [beak, hook]]);
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffd23a });
     const eyes = [], pupils = [];
     for (const s of [-1, 1]) {
-        eyes.push(mesh(new THREE.SphereGeometry(0.045, 8, 6), eyeMat, head, s * 0.15, 0.04, 0.12));
-        pupils.push(mesh(new THREE.SphereGeometry(0.024, 6, 5), dark, head, s * 0.175, 0.045, 0.14));
+        eyes.push(mesh(cg(THREE.SphereGeometry, 0.045, 8, 6), eyeMat, head, s * 0.15, 0.04, 0.12));
+        pupils.push(mesh(cg(THREE.SphereGeometry, 0.024, 6, 5), dark, head, s * 0.175, 0.045, 0.14));
     }
     one.push([head, eyes], [head, pupils]);
     // the crest: a fan of plumes rising back from the crown, gold-tipped
@@ -334,7 +349,7 @@ export function phoenixModel() {
         tilt.add(root);
         const sh = new THREE.Group();
         root.add(sh);
-        const arm = mesh(new THREE.BoxGeometry(1.05, 0.09, 0.2), crimson, sh, 0.52, 0, 0);
+        const arm = mesh(cg(THREE.BoxGeometry, 1.05, 0.09, 0.2), crimson, sh, 0.52, 0, 0);
         arm.scale.z = 1;
         const sec = [];
         for (let i = 0; i < 7; i++) {
@@ -357,7 +372,7 @@ export function phoenixModel() {
         const el = new THREE.Group();
         el.position.x = 1.05;
         sh.add(el);
-        mesh(new THREE.BoxGeometry(0.85, 0.07, 0.14), crimson, el, 0.42, 0, 0);
+        mesh(cg(THREE.BoxGeometry, 0.85, 0.07, 0.14), crimson, el, 0.42, 0, 0);
         const pri = [];
         for (let i = 0; i < 8; i++) {
             const p = new THREE.Group();
@@ -393,10 +408,10 @@ export function phoenixModel() {
             segs.push(seg);
             parent = seg;
         }
-        const eye = new THREE.Mesh(new THREE.CircleGeometry(0.12, 14), eyeGold);
+        const eye = new THREE.Mesh(cg(THREE.CircleGeometry, 0.12, 14), eyeGold);
         eye.rotation.x = -Math.PI / 2;
         eye.position.z = -L / 3 - 0.06;
-        const iris = new THREE.Mesh(new THREE.CircleGeometry(0.055, 12), eyeRed);
+        const iris = new THREE.Mesh(cg(THREE.CircleGeometry, 0.055, 12), eyeRed);
         iris.position.z = 0.003;
         eye.add(iris);
         parent.add(eye);
@@ -409,12 +424,12 @@ export function phoenixModel() {
         const hip = new THREE.Group();
         hip.position.set(s * 0.17, -0.3, 0.05);
         tilt.add(hip);
-        const thigh = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.42, 8), crimson, hip, 0, -0.21, 0);
+        const thigh = mesh(cg(THREE.CylinderGeometry, 0.13, 0.09, 0.42, 8), crimson, hip, 0, -0.21, 0);
         thigh.castShadow = true;
         const knee = new THREE.Group();
         knee.position.y = -0.42;
         hip.add(knee);
-        mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.5, 6), gold, knee, 0, -0.25, 0);
+        mesh(cg(THREE.CylinderGeometry, 0.045, 0.04, 0.5, 6), gold, knee, 0, -0.25, 0);
         const foot = new THREE.Group();
         foot.position.y = -0.5;
         knee.add(foot);
@@ -423,8 +438,8 @@ export function phoenixModel() {
             const toe = new THREE.Group();
             toe.rotation.y = a;
             foot.add(toe);
-            toes.push(mesh(new THREE.BoxGeometry(0.05, 0.04, l), gold, toe, 0, 0, l / 2));
-            const claw = mesh(new THREE.ConeGeometry(0.025, 0.08, 5), dark, toe, 0, -0.02, l + 0.03);
+            toes.push(mesh(cg(THREE.BoxGeometry, 0.05, 0.04, l), gold, toe, 0, 0, l / 2));
+            const claw = mesh(cg(THREE.ConeGeometry, 0.025, 0.08, 5), dark, toe, 0, -0.02, l + 0.03);
             claw.rotation.x = Math.PI / 2 + 0.6;
             claws.push(claw);
         }
@@ -605,7 +620,7 @@ export class Phoenixes {
     _remove(f) {
         f.one?.dispose(); f.one = null;
         this.game.scene?.remove(f.model);
-        f.model.traverse((o) => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose?.(); } });
+        f.model.traverse((o) => { if (o.isMesh) { if (!o.geometry?.userData?.shared) o.geometry?.dispose(); o.material?.dispose?.(); } });
         const i = this.list.indexOf(f);
         if (i >= 0) this.list.splice(i, 1);
     }
@@ -1291,6 +1306,7 @@ export class Phoenixes {
         // (a phoenix still in the world round a player — even one that flew off out of his AREA — keeps
         //  him from getting another: they never pile up as he walks on)
         const lonely = players.filter((P) => !this.list.some((f) => !f.dead && hdist(f.model.position, P.pos) < PHOENIX.FORGET));
+        for (const f of overflow(this.list.filter((f) => !f.dead && ['soar', 'perch', 'leave'].includes(f.state)), PHOENIX.MAX, (f) => Math.min(1e9, ...players.map((P) => hdist(P.pos, f.model.position))))) this._remove(f);
         if (!lonely.length || this.list.length >= PHOENIX.MAX || Math.random() > PHOENIX.SPAWN_CHANCE) return;
         const P = lonely[Math.floor(Math.random() * lonely.length)];
         const a = Math.random() * Math.PI * 2, r = rnd(60, 110);

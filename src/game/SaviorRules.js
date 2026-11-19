@@ -22,6 +22,7 @@ import { createRng } from '../core/math.js';
 import { SPELL_COST } from './SpellCosts.js';
 
 export const SAVIOR = {
+    MIN_DARK: 10, // the Saviour comes only for a hero with 10+ of black magic (the author 19.11); below it — never, whatever the roll
     COOLDOWN_S: 600, // s: a player is not visited again so soon (and only one Saviour in the world at a time)
     MANA: 700, // (the first Saviour; the later ones: STAGES[1])
     REST_DAYS: 2, // game days after the player beat him: no Saviour for him
@@ -97,7 +98,7 @@ export class VisitCooldown {
 }
 
 /** Each wizard killed: the true black-magic level is the percentage chance, regardless of skin whitening. */
-export const saviorComes = (level, rng = Math.random) => rng() < Math.max(0, Math.min(100, Number(level) || 0)) / 100;
+export const saviorComes = (level, rng = Math.random) => (Number(level) || 0) >= SAVIOR.MIN_DARK && rng() < Math.max(0, Math.min(100, Number(level) || 0)) / 100; // (10+ of black magic, then the chance = the level in %)
 
 /** A line of a kind, never the same twice in a row (`last`: the previous one). */
 export function saviorLine(kind, last = null, rng = Math.random) {

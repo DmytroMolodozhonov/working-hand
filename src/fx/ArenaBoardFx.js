@@ -59,8 +59,8 @@ export class ArenaBoardFx {
             set.mesh.visible = d < BOARD.SEE_R * 1.3;
             if (!set.mesh.visible) continue;
             const el = A.at ? (performance.now() - A.at) / 1000 : 0;
-            const key = boardKey(A.st, el);
-            if (key !== set.key) { set.key = key; draw(set.ctx, boardView(A.st, el)); set.tex.needsUpdate = true; }
+            const mid = this.game.localId ?? null, key = boardKey(A.st, el, mid);
+            if (key !== set.key) { set.key = key; draw(set.ctx, boardView(A.st, el, mid)); set.tex.needsUpdate = true; }
             if (cam) set.mesh.rotation.y = Math.atan2(cam.x - set.mesh.position.x, cam.z - set.mesh.position.z);
             set.mesh.material.opacity = 0.93 + 0.05 * Math.sin(performance.now() / 380); // (a hologram's breath)
         }

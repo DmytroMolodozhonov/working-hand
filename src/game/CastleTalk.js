@@ -1004,7 +1004,13 @@ export class CastleTalk {
         // looked at, walked to, talk with already, called by his trade — the author: «голос игрока не принимается жителем
         // как разговор с ним без обращения»)
         const chat = !!this.game.voiceChat?.chatting?.();
-        const best = (id && this.life.byId.get(id)) || (chat ? (this.inTalk?.() && this._partner && !this._partner.dead ? this._partner : null) : this._nearest());
+        let best = (id && this.life.byId.get(id)) || (chat ? (this.inTalk?.() && this._partner && !this._partner.dead ? this._partner : null) : this._nearest());
+        // (a deal is open with him: my «да» / «нет» is to him even if the counter's edge hides me from his eyes — the log 19.11: standing 3.5 m at the pawnshop,
+        // «не видит героя (стена между ними)», two «да» went unheard, the third from 4.3 m worked)
+        if (!best) {
+            const d = this.offer?.v;
+            if (d && !d.dead) { const me = this.game.character.group.position; if (Math.hypot(d.x - me.x, d.z - me.z) < 8 && Math.abs(d.y - (me.y - 1.95)) < 4) best = d; }
+        }
         if (!text) return best;
         const t = normalizeText(text);
         const role = ROLE_CALL.find(([re]) => re.test(t))?.[1];
@@ -1186,7 +1192,7 @@ export class CastleTalk {
                 s.goods = s.goods.filter((uid) => g.items.loose.has(uid));
                 if (s.goods.length >= 3 || now < s.restockAt) return;
                 s.restockAt = now + (s.goods.length ? 90000 : 0);
-                const c = stall.counter;
+                const c = stall.goodsRect || stall.counter; // (a wide counter: the goods lie on its display part, the coin plate stays empty — WizardVillages)
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);

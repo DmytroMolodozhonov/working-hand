@@ -36,6 +36,7 @@ export const LEVITATE = {
     DROP_DISTANCE: 0.75, // m of hand movement within DROP_WINDOW = a jerk
     DROP_WINDOW: 0.25,
     GRACE: 0.8,
+    MOVE_QUIET: 0.5, // s after the hero moved (walk, run, steps, jump) in which the hand's movement is no jerk — walking with a thing in the air does not drop it
     WIZARD_T: 10, // s a wizard can be held where there are no strength rules
     STALE: 3, // s without the caster's pose: what it held falls
 };
@@ -169,7 +170,7 @@ export class Levitation {
         for (const b of g.boards?.levTargets() || []) out.push({ kind: 'board', obj: { id: b.id }, pos: b.pos, r: 1.6 });
         for (const b of g.boats?.levTargets() || []) out.push({ kind: 'boat', obj: { id: b.id }, pos: b.pos, r: 3.2 }); // (an empty boat — Boats.js: carried to the water)
         // (things and books are the host's: a guest's hand can't carry them yet)
-        if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked && !L.swarm) out.push({ kind: 'item', obj: L, pos: L.model.position });
+        if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked && !L.swarm && !(L.item.shop && !L.item.shop.paid)) out.push({ kind: 'item', obj: L, pos: L.model.position });
         if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
         for (const b of g.books?.birds.values() || []) if (b.state !== 'fall' && !b.ward) out.push({ kind: 'bird', obj: b, pos: b.model.position }); // (the book of protection: Leviosa bounces off it)
         // a phoenix: caught, it hangs where the hand holds it, beating its wings (let go: it flies off)
@@ -538,6 +539,13 @@ export class Levitation {
 
     /** A fast, far movement of the hand relative to the body (in the body's own turn: turning round with the arm out — carrying what it holds round — is no jerk). */
     _jerked(s, ch) {
+        // Walking / running / stepping with the thing in the air (the author 19.11: «иду с предметом вперёд — он падает, магия прерывается»):
+        // the body's own motion (the steps, the arms working, the sway of the pose) moves the hand against the body — that is no jerk. While the hero
+        // moves (and half a second after) the watch is off and its history cleared; only a jerk of the hand while he stands is the «drop».
+        const gp = ch.group.position, lp = s.lastGP || (s.lastGP = new THREE.Vector3().copy(gp));
+        if (ch.isRunning || ch.stepping > 0 || ch.jumpAir || gp.distanceToSquared(lp) > 1e-4) s.movedAt = this._t;
+        lp.copy(gp);
+        if (s.movedAt != null && this._t - s.movedAt < LEVITATE.MOVE_QUIET) { s.history.length = 0; return false; }
         const hand = ch.getHandWorldPosition(s.side, _v1).sub(ch.group.position);
         if (ch.group.quaternion) hand.applyQuaternion(_q1.copy(ch.group.quaternion).invert());
         const now = this._t;

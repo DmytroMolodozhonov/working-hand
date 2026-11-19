@@ -514,7 +514,6 @@ export class WeaponSystem {
 
         // Current orientation of the weapon in the palm frame
         const qRel0 = _qPalm.clone().invert().multiply(w.quaternion);
-        const wY = _a.set(0, 1, 0).applyQuaternion(w.quaternion);
         const wX = _b.set(1, 0, 0).applyQuaternion(w.quaternion);
         // The handle lies a little diagonally in the closed hand (a real sword grip: from the
         // index finger's base knuckle to the heel of the hand). Pointing the blade forward for a
@@ -527,7 +526,9 @@ export class WeaponSystem {
         const diag = new THREE.Vector3().copy(_X).multiplyScalar(thumbS * Math.cos(GRIP_DIAGONAL)).addScaledVector(_Y, Math.sin(GRIP_DIAGONAL));
         // (a sword may be held the other way round — a reverse grip, as it was grabbed; an axe never: its head goes over the fist, the
         //  author: «секира держится перевёрнутой» — grabbed lying head-down, it stayed head-down in the hand)
-        const s = w.type === 'axe' ? 1 : wY.dot(diag) < -0.3 ? -1 : 1;
+        // (the author 19.11: «меч берётся нижней частью, вниз, а должен ВСЕГДА вверх»: a sword lying blade-down in a chest or on the ground was kept blade-down in the fist.
+        //  Now the blade always goes up from the fist, like the axe's head; the edge side below still follows how it lay)
+        const s = 1;
         // Canonical grip: blade axis = s*diag, edge towards the knuckles (e*Y, square to the blade)
         const axY = diag.multiplyScalar(s).normalize();
         // (an axe has one edge: it always faces where the fist strikes — forward, in line with the knuckles)

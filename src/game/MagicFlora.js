@@ -69,6 +69,14 @@ export const FLORA_KINDS = {
         solid: { r: 0.3, h: 1.6 }, // the stalk
         harm: { fire: 'burn', blast: 'destroy', lightning: 'burn', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
     },
+    eyeflower: {
+        id: 'eyeflower', name: 'Глазоцвет', nameMany: 'глазоцветы', icon: '👁️', item: 'eyeflower_eye', fromGen: 33, // (= EYEFLOWER_FROM_GEN in Terrain.js) (worlds of generation 33 and newer)
+        biomes: { forest: 0.4, moon: 0.7, sakura: 0.3, meadow: 0.16, autumn: 0.28, jungle: 0.3, taiga: 0.16 }, // shady and quiet places
+        group: { min: 3, max: 7, spread: 7, gap: 1.5 }, // (they grow in company)
+        salt: 6709, height: [1.15, 1.35],
+        solid: null, // (small, walked among)
+        harm: { fire: 'burn', blast: 'destroy', lightning: 'burn', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
+    },
 };
 /**
  * Where a plant's foot stands on the real ground. The ground is not flat under its mound: in the smooth world (generation 6+) the
@@ -78,7 +86,7 @@ export const FLORA_KINDS = {
  * ground — a grown-in foot, never a gap); a footprint over water / an empty column / a cliff (spread > `MAX_SPREAD`) grows nothing.
  * `t` — TerrainData (surfaceY, topLayer, get). Returns { y, spread } or null.
  */
-export const FOOT_R = { glowcap: 1.3, giantfern: 0.9, azureberry: 0.9, sunherb: 0.7, frostcrystal: 0.8, armourleaf: 0.8 }; // (m at scale 1: the mound / the foot)
+export const FOOT_R = { glowcap: 1.3, giantfern: 0.9, azureberry: 0.9, sunherb: 0.7, frostcrystal: 0.8, armourleaf: 0.8, eyeflower: 0.5 }; // (m at scale 1: the mound / the foot)
 export const MAX_SPREAD = 2; // (m: more height between the foot's points — a slope too steep for a mound)
 export function plantFoot(t, kind, x, z, scale, water) {
     const r = (FOOT_R[kind] || 0.8) * scale;
@@ -106,6 +114,7 @@ export const FLORA_ITEMS = {
     sun_herb: { name: 'Солнечница', icon: '🌼', weight: 0.05, stack: 30, heal: 1 },
     frost_shard: { name: 'Ледяная игла', icon: '❄️', weight: 0.1, stack: 20 },
     armor_leaf: { name: 'Лист бронелиста', icon: '🛡️', weight: 0.3, stack: 10 },
+    eyeflower_eye: { name: 'Глаз глазоцвета', icon: '👁️', weight: 0.2, stack: 10 },
 };
 /** Which plant an item came from (item id → kind id). */
 export const FLORA_OF_ITEM = Object.fromEntries(FLORA_ORDER.map((k) => [FLORA_KINDS[k].item, k]));
@@ -117,6 +126,7 @@ export const FLORA_ITEM_TEXT = {
     azure_berry: { color: 0x3a58c8, lines: ['Поднесите ко рту: +2 HP', 'Растёт на кустах лазурницы на лугах; ягоды вырастают снова'] },
     sun_herb: { color: 0xffb030, lines: ['Поднесите ко рту: +1 HP — жуётся горьковато', 'Целебная трава для зелий', 'Растёт золотыми кустиками на лугах и в степи'] },
     armor_leaf: { color: 0x8fb4b8, lines: ['Твёрдый лист, похожий на пластину брони', 'Нужен для пентаграммы защиты от взрывов', 'Растёт бронелистами в степях и на изумрудных холмах'] },
+    eyeflower_eye: { color: 0xd8c27a, lines: ['Живой глаз с цветка — нужен для пентаграммы ночного зрения', 'Положите его на круг, встаньте в него и заплатите ману', 'Растёт на глазоцветах в лесах и на тихих лугах; вырастает снова'] },
     frost_shard: { color: 0x9fdcff, lines: ['Холодная игла хрусталя — пригодится для зелий', 'Растёт на хрустальниках на холодном севере'] },
 };
 
@@ -211,3 +221,48 @@ export const FLORA_SPELLS = {
 
 /** Plants and the parts left on the ground after a destroyed plant: one item per ripe part (at most `max`). */
 export const SCATTER_MAX = 4;
+
+
+// ======================================================================= the Eye-flower's eye (pure: the look of the instance is made from this)
+/** The numbers of the eye (s, rad, m). */
+export const EYE = {
+    SEE_R: 16, // m: a hero this near is noticed — the eye turns to him (a stranger's look)
+    STARE_R: 4, // m: very near — it stares and blinks slowly
+    YAW_MAX: 1.45, PITCH_MAX: 0.22, WANDER_PITCH: 0.12, // how far the eye turns (rad): wide to the sides, hardly ever up or down (the author 19.11: «не вверх, а в стороны»)
+    WANDER_MIN: 1.6, WANDER_SPAN: 1.8, // s between two glances about
+    BLINK_MIN: 3.6, BLINK_SPAN: 2.6, BLINK_T: 0.24, // a blink every 3.6…6.2 s, 0.24 s long
+    REST_MIN: 16, REST_SPAN: 8, REST_T: 3.2, // the eye shuts for a rest now and then (s): closes smoothly, opens again
+    SHUT: 0.1, // how far it closes (0.1 = a slit)
+};
+const frac = (x) => x - Math.floor(x);
+const smooth = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+const gh = (n, phase) => frac(Math.sin(n * 127.1 + phase * 311.7) * 43758.5453);
+/**
+ * The state of an eye at time t (s) for a flower with this `phase` (0…1, its own — no two look alike). `see`: null, or {yaw, pitch, near} — a hero it
+ * notices (yaw/pitch of the way to him, relative to the flower's front; near 0…1). → { open (0…1), yaw, pitch } (pitch > 0 looks down).
+ */
+export function eyeState(t, phase, see = null) {
+    // glances about: every segment a new place to look at, reached in 0.4 s
+    const seg = EYE.WANDER_MIN + EYE.WANDER_SPAN * gh(1, phase);
+    const n = Math.floor((t + phase * 50) / seg), u = ((t + phase * 50) / seg - n) * seg;
+    const ty = (gh(n + 2, phase) - 0.5) * 2 * 1.25, tp = (gh(n + 3, phase) - 0.5) * 2 * EYE.WANDER_PITCH;
+    const py = (gh(n + 1, phase) - 0.5) * 2 * 1.25, pp = (gh(n + 2.5, phase) - 0.5) * 2 * EYE.WANDER_PITCH;
+    const k = smooth(u / 0.4);
+    let yaw = py + (ty - py) * k, pitch = pp + (tp - pp) * k;
+    // a hero near: the eye follows him (the nearer, the more)
+    if (see && see.near > 0) {
+        const w = Math.min(1, see.near) * 0.88;
+        yaw += (Math.max(-EYE.YAW_MAX, Math.min(EYE.YAW_MAX, see.yaw)) - yaw) * w;
+        pitch += (Math.max(-EYE.PITCH_MAX, Math.min(EYE.PITCH_MAX, see.pitch)) - pitch) * w;
+    }
+    // blink and rest
+    const stare = see && see.near > 0.8;
+    const P = (EYE.BLINK_MIN + EYE.BLINK_SPAN * gh(4, phase)) * (stare ? 1.5 : 1);
+    const b = (t + phase * P) % P;
+    let open = b < EYE.BLINK_T ? 1 - Math.sin(Math.PI * b / EYE.BLINK_T) * (1 - EYE.SHUT) : 1;
+    const C = EYE.REST_MIN + EYE.REST_SPAN * gh(5, phase);
+    const w = (t + phase * C) % C - (C - EYE.REST_T);
+    if (see && see.near > 0.25) open = Math.min(open, 0.8 + 0.1 * Math.sin(t * 0.8 + phase * 9)); // (watching: a narrowed, intrigued eye)
+    if (w > 0 && !(see && see.near > 0.3)) open = Math.min(open, 1 - Math.sin(Math.PI * w / EYE.REST_T) * (1 - EYE.SHUT)); // (not while somebody stands by: it watches)
+    return { open, yaw, pitch };
+}

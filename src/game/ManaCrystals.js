@@ -33,7 +33,7 @@ import { CappedLog } from '../core/CappedLog.js';
 import { BLOCK, CHUNK } from '../world/Terrain.js';
 
 export const CRYSTAL = {
-    CHANCE: 0.4, // share of caves with a cluster (rare)
+    CHANCE: 0.468, // share of caves with a cluster (rare; +17 % on 19.11: 0.4 → 0.468 — the random draw is the same, only the threshold moves)
     MIN: 3,
     MAX: 5,
     NEAR: 90, // m: clusters are made for caves this close

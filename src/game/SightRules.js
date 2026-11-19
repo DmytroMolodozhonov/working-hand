@@ -1,13 +1,13 @@
 /**
  * SightRules.js — the two white pentagrams of sight (pure, node-testable; the game part is SecondSight.js, the circles are Pentagranium.js):
  *
- *  night  «Pentagranium Noctis»   — 50 mana. Stand in the circle: for ever (until death) you see 50 % better in the dark — at night
+ *  night  «Pentagranium Noctis»   — 50 mana and ONE eye of an Eye-flower (Глазоцвет). Stand in the circle: for ever (until death) you see 50 % better in the dark — at night
  *                                   and in caves (the picture is brighter in the dark and the dark is seen 1.5 times as far).
  *  sight  «Pentagranium Spectris» — 150 mana and ONE feather of Spencer's bird (or a sheaf of Beslan's grass). Stand in the circle:
  *                                   for ever (until death) you see everything invisible (Invisibles.js).
  *
  * Each is learnt by burning its scroll (PentagramRules); a death takes the gift away, «Give Me My Power» brings it back (Legacy.js).
- * In Creative nothing is paid or used up, but the circle must still be stood in.
+ * In Creative nothing is paid or used up (no eye needed), but the circle must still be stood in.
  */
 
 export const SIGHT = {
@@ -17,6 +17,7 @@ export const SIGHT = {
     FOG_K: 1.5, // the darkness is seen 1.5 times as far (fog far × 1.5 at night / in a cave)
     ANIM_T: 3.2, // s: the opening of the eyes (the circle's glow and a ripple of the air)
     INGREDIENTS: ['spencerFeather', 'beslanGrass'], // the feather first (the bird's power), the grass instead
+    NIGHT_INGREDIENTS: ['eyeflower_eye'], // the circle of night sight wants a living eye (the author 19.11: «не просто пентаграмму — нужно и глазик кинуть»)
 };
 
 /** How much darker than day it is where the hero stands: 0 (day, outside) … 1 (deep night / deep in a cave). */
@@ -33,8 +34,8 @@ export const caveDim = (cave, nv) => 1 - (0.8 * cave) / (1 + SIGHT.NIGHT_K * Mat
  * The ingredient for the circle of sight: in the bag (`slots`), in the hands (`held`: [item…]) or lying inside the circle (`loose`: [{uid, item}]).
  * The feather before the grass; the bag before the circle. → { kind, from: 'slot' | 'hand' | 'loose', ref } | null. Pure.
  */
-export function findIngredient({ slots = [], held = [], loose = [] }) {
-    for (const kind of SIGHT.INGREDIENTS) {
+export function findIngredient({ slots = [], held = [], loose = [] }, kinds = SIGHT.INGREDIENTS) {
+    for (const kind of kinds) {
         for (const it of slots) if (it && it.kind === kind && (it.count ?? 1) >= 1) return { kind, from: 'slot', ref: it };
         for (const it of held) if (it && it.kind === kind && (it.count ?? 1) >= 1) return { kind, from: 'hand', ref: it };
         for (const L of loose) if (L?.item && L.item.kind === kind && (L.item.count ?? 1) >= 1) return { kind, from: 'loose', ref: L };
@@ -47,6 +48,7 @@ export const SIGHT_HINT = {
     nightHave: 'Вы уже видите в темноте лучше — ещё раз не нужно',
     seeHave: 'Вы уже видите невидимое — ещё раз не нужно',
     noMana: (n) => `Не хватает маны: нужно ${n}`,
+    noEye: 'Нужен глаз глазоцвета: положите его в сумку или в круг и встаньте снова',
     noIngredient: 'Нужно перо птички Спенсера (или пучок травы Беслана): положите его в сумку или в круг и встаньте снова',
     nightDone: '🌙 Вы стали видеть в темноте на 50 % лучше — и ночью, и в пещерах',
     seeDone: '👁️ Вы видите невидимое! Теперь вам видны птички Спенсера, трава Беслана и всё, что скрыто от других',
@@ -68,7 +70,7 @@ export const SIGHT_TARGETS = {
     dragon: { does: 'none', why: 'не действует' },
     phoenix: { does: 'none', why: 'не действует' },
     owl: { does: 'none', why: 'не действует' },
-    items: { does: 'use', why: 'перо птички Спенсера (или трава Беслана) сгорает — одно на круг зрения; в круге ночного зрения вещи не нужны' },
+    items: { does: 'use', why: 'перо птички Спенсера (или трава Беслана) сгорает — одно на круг зрения; в круге ночного зрения — глаз глазоцвета (сгорает, один на круг)' },
     ground: { does: 'stay', why: 'постоянные: остаются навсегда, как пентаграммы жизни и починки' },
     spells: { does: 'none', why: 'заклинания и удары сквозь пентаграмму идут как обычно' },
 };

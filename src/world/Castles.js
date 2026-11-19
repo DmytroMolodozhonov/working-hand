@@ -22,6 +22,7 @@
  * blocks tall, so doors are 3 wide and 5–6 high and floors 8 layers apart.
  */
 
+import { SHIP_CLASSES } from '../game/ShipTypes.js';
 import { BLOCK } from './Terrain.js';
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
@@ -1956,11 +1957,10 @@ function buildFence(p, out) {
  * Ships a port is built for (17th-century classes; the «ships» session builds the ships).
  * L × B (m), draft (m), the pier's top layer (the pier top is about 1 m under the main deck).
  */
-export const PORT_SHIPS = {
-    pinnace: { L: 44, B: 12, draft: 3.2, pierLayer: 3, ru: 'Пинас' },
-    fluyt: { L: 60, B: 15, draft: 4, pierLayer: 4, ru: 'Флейт' },
-    galleon: { L: 80, B: 20, draft: 5, pierLayer: 5, ru: 'Галеон' },
-};
+export const PORT_SHIPS = Object.fromEntries(['pinnace', 'fluyt', 'galleon'].map((id) => { // (the ships' own sizes: ShipTypes.js — one place, so a bigger ship means a bigger port: the author 19.11)
+    const c = SHIP_CLASSES[id];
+    return [id, { L: c.L, B: c.B, draft: c.draft, pierLayer: c.pierLayer, ru: c.ru }];
+}));
 /** World direction of a plan's local +v (the back of the castle) for each rotation. */
 const V_DIR = [[0, 1], [-1, 0], [0, -1], [1, 0]];
 const PIER_W = 7; // a pier is 7 wide (u_k ± 3)
@@ -1970,7 +1970,7 @@ function rotFacing(nx, nz) {
     for (let r = 0; r < 4; r++) { const d = V_DIR[r][0] * nx + V_DIR[r][1] * nz; if (d > bd) { bd = d; best = r; } }
     return best;
 }
-const HARBOUR_DEPTH = 8; // water layers dug in the harbour (≥ the galleon's draft + 2)
+const HARBOUR_DEPTH = Math.ceil(PORT_SHIPS.galleon.draft + 4); // water layers dug in the harbour (≥ the galleon's draft + 4)
 
 /** The ships of a sea castle by style. */
 function portShips(s, rng) {
@@ -2051,6 +2051,10 @@ function buildPort(p, s, rng, out) {
         const uk = Math.round(pr.uk), lDeck = n - 1, v0 = vShore + 1, v1 = vShore + pr.len;
         // stairs on the quay, the deck, the beams, the piles
         stairsV(p, uk - 3, uk + 3, vShore - n + 1, 1, n, BLOCK.PLANKS);
+        // (the last riser up onto the deck was a whole block: a body's round feet stand lower than the ramp's top edge and the 1,05 m step-up
+        //  did not reach — the author 19.11: «не могу забраться на причал, хотя там один блок». The top step is a half block: two small rises)
+        for (let u = uk - 3; u <= uk + 3; u++) p.slabAt(u, vShore, lDeck);
+        p.flushSlabs();
         p.box(uk - 3, uk + 3, lDeck, lDeck, v0, v1, BLOCK.PLANKS);
         p.box(uk - 3, uk + 3, lDeck - 1, lDeck - 1, v0, v1, BLOCK.PLANKS_DARK);
         for (let v = v0 + 2; v <= v1; v += 6) for (const du of [-3, 3]) p.box(uk + du, uk + du, deep, lDeck - 2, v, v, BLOCK.PLANKS_DARK);

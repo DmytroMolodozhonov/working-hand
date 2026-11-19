@@ -282,7 +282,7 @@ export const ZOMBIE_RIG = {
     root: (c) => c.group.userData.impPivot,
     hipLocal: (c) => { const S = zs(c); _hl[1] = 0.9 * S.y; return _hl; }, // (the hips in the pivot's frame: 0.6 up to the inner group, then 0.3 of its stretched frame)
     rootY: (c) => -0.6 * (c._ragScale ? c._ragScale.y : 1),
-    stiff: (c) => [c.head, c.body].filter(Boolean),
+    stiff: (c) => { if (c.torso) c.torso.position.y = 0; return [c.torso, c.head, c.jaw, c.body, c.leftArm?.fore, c.rightArm?.fore, c.leftLeg?.shin, c.rightLeg?.shin].filter(Boolean); }, // (the doll straightens the spine, the neck, the jaw, the elbows and the knees: the pose's own turns are off while it lies)
     head: () => null,                // (the head block sits on the body: no neck)
     limbs: (c) => [
         { obj: c.leftArm, to: P.HNL, rest: [0, -1, 0], joint: [-0.7, 1.4, 0], half: 0.6 },

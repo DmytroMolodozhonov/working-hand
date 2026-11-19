@@ -101,6 +101,7 @@ export function pocketStrike(hist, local, sx) {
 export const POCKET_DWELL = 0.2; // (the author: crossing the body must be easy — 0.2 s in the zone is enough; with the look-down 0.1 s the thing is put in within ~0.35 s)
 /** The hand away from the pocket this long (s) — the chosen slot's thing stays in it. */
 export const POCKET_PICK = 1.0;
+export const POCKET_GRAB_HOLD = 1500; // ms the pocket leaves a hand alone after it grabbed or let go of something elsewhere (a chest, the ground, coins)
 /**
  * The head bowed to look at the pocket / the pouches (the view's forward, down, in the body's own
  * space: ~20° down). Taking or putting there needs it; a glance (the wand's −0.1) does not.
@@ -611,9 +612,9 @@ export class Inventory {
     }
 
     /** The pocket on this hand's side waits until the hand has gone away from the hip (the pouches just did something). */
-    pocketHold(side) {
+    pocketHold(side, ms = 700) {
         const st = this._pocket[side];
-        if (st) { st.armed = false; st.inT = 0; st.outT = 0; st.stayT = 0; st.hold = performance.now() + 700; }
+        if (st) { st.armed = false; st.inT = 0; st.outT = 0; st.stayT = 0; st.hold = Math.max(st.hold || 0, performance.now() + ms); }
     }
 
     _fx(text, side = 'right') {
@@ -656,6 +657,12 @@ export class Inventory {
             let inPocket = side === off ? pk?.off : false;
             const emptyPocketTake = !g.items?.held[off] && !g.weapons?.hands?.[off]?.held && g.coinDeal && !g.coinDeal.mayTake();
             if (side === off && inPocket !== true && g.currentPose.purse?.off === true && (this._pocketable(off) || this._cyc?.side === off || emptyPocketTake)) inPocket = true;
+            // (the author 19.11: «беру из сундука монеты — случайно достаю другой предмет из интерфейса внизу»: whatever just came into or went out of
+            // this hand NOT through the pocket — a grab from a chest or the ground, coins, a release, a throw — the pocket leaves the hand alone for a
+            // moment: the hand is busy down there, looking at the chest, and passes the hip on its way)
+            const busy = !!(g.items?.held[side] || g.weapons?.hands?.[side]?.held);
+            if (st.wasBusy !== undefined && busy !== st.wasBusy && now - (this._tookAt?.[side] || -1e9) > 900 && now - (st.out || -1e9) > 900) this.pocketHold(side, POCKET_GRAB_HOLD);
+            st.wasBusy = busy;
             const zone = inPocket === true;
 
             if (side === off) this._pocketJournal(side, local, zone, st);
@@ -1250,7 +1257,7 @@ export class Inventory {
         if (!c) return;
         const o = this.pouchInfo(), sel = !!this._cyc?.pouch;
         const shut = !!(this.game.coinDeal && o.have && !this.game.coinDeal.mayTake());
-        const open = !!this.game.coinDeal?._open && o.have; // (seen only while a deal can be made: a merchant near)
+        const open = !!(this.game.coinDeal?._payOpen ?? this.game.coinDeal?._open) && o.have; // (seen only while a deal can be made: a merchant near)
         const key = o.have + '|' + o.coins + '|' + sel + '|' + shut + '|' + open;
         if (key === this._pouchKey) return;
         this._pouchKey = key;

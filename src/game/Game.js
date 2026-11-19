@@ -31,6 +31,9 @@ import { VoiceGate } from './VoiceGate.js';
 import { VoxelWorld, MAP_CELL } from '../world/World.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET, BODY_H, CROUCH } from '../entities/Character.js';
 import { Zombie, ZOMBIE } from '../entities/Zombie.js';
+import { prewarmZombieTextures } from '../entities/ZombieModel.js';
+import { fireThaw } from './FireThaw.js';
+import { dealRefuses, DEAL_GUARD, DEAL_HINT } from './DealGuard.js';
 import { Chest, chestSamples } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
@@ -208,13 +211,16 @@ import { Duel } from './Duel.js';
 import { duelRange } from './DuelRange.js';
 import { QualityManager, viewDistanceScale } from './Quality.js';
 import { Ultra } from './Ultra.js';
+import { waterAt } from './CreatureSwim.js';
+import { LiteMode } from './LiteMode.js';
+import { DistanceCull } from '../core/DistanceCull.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { terrainProbe } from '../world/TerrainProbe.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { WIZ_COUNTER_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -576,7 +582,8 @@ export class Game {
             arenaX2: this.gen >= ARENA_X2_FROM_GEN && !(config.mode === 'creative' && this.hero?.spawn === 'arena'), // (the real world's arenas twice as wide — DuelArenas.ARENA_X2; NOT the duel-only start: it keeps the former size)
             earthSettlements: this.gen >= EARTH_SETTLEMENTS_FROM_GEN,
             elementalSettlements:this.gen >= ELEMENTAL_SETTLEMENTS_FROM_GEN,
-            waterfalls: this.gen >= WATERFALLS_FROM_GEN, // (the rivers' waterfalls: Waterfalls.js)
+            waterfalls: this.gen >= WATERFALLS_FROM_GEN,
+            wizCounters: this.gen >= WIZ_COUNTER_FROM_GEN, // (the wizards' market lane: wide counters with a coin plate — WizardVillages.js) // (the rivers' waterfalls: Waterfalls.js)
             arenaFlat: this.gen >= ARENA_FLAT_FROM_GEN, // (an arena only where the land round it does not drop away — DuelArenas.arenaGround)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
@@ -978,7 +985,10 @@ export class Game {
         this.handsLog = config.mode === 'test' ? null : new HandsLog(this); // the journal «Руки» (Общие логи)
         this.spellLog = new SpellLog({ send: config.mode !== 'test' }); // every phrase heard and what came of it (zns-spells.log)
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
-        this.quality.ultra = Ultra.wanted(config.ultra); // (decided before the first apply: the shadows' kind is fixed then)
+        this.lite = false;
+        this.liteMode = new LiteMode(this, config.lite, { gpuName: (typeof window !== 'undefined' && window.__zns?.gpu?.name) || '' }); // «Лёгкий режим»: no video card / a very weak one (LiteMode.js)
+        this.quality.ultra = Ultra.wanted(config.ultra) && !this.liteMode._startOn; // (decided before the first apply: the shadows' kind is fixed then)
+        if (this.liteMode._startOn) { this.quality.lite = true; this.lite = true; this.liteMode.on = true; this.world?.terrain?.setLiteLook?.(true); this.perf?.note?.('⚡ Лёгкий режим включён на старте (' + (config.lite === 'on' ? 'в настройках' : 'нет видеокарты или в прошлый раз игра тормозила') + ')'); }
         this.quality.apply(this.world);
         this.ultra = new Ultra(this); // «Ультра качество»: an addition, switched on the go (Ultra.js)
         this.ultra.set(this.quality.ultra);
@@ -1506,6 +1516,10 @@ export class Game {
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
+        { // (a blast on / over the water: a fountain, rings and a wave that pushes the floating things — Buoyancy.js)
+            const land = this.world?.terrain?.data, wa = land?.get ? waterAt(land, pos.x, pos.z, pos.y) : null;
+            if (wa && Math.abs(pos.y - wa.surface) < radius + 2) this.items?.waterImpact?.({ x: pos.x, y: wa.surface, z: pos.z }, radius * radius * radius * 0.6 * Math.max(0.5, power), 9, radius);
+        }
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
@@ -2148,6 +2162,13 @@ export class Game {
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
+        // at a counter, buying or selling: no spell by accident — only light (DealGuard.js)
+        if (this.coinDeal && !this.combat.frozen && dealRefuses(name, { ...this.coinDeal.dealState(), fight: this.inFight() })) {
+            this.lastCastWhy = 'сделка: сначала завершите покупку или продажу';
+            const t = performance.now();
+            if (isFinal && t - (this._dealHintAt || -1e9) > DEAL_GUARD.HINT_S * 1000) { this._dealHintAt = t; this.hud.setVoice(DEAL_HINT, true); }
+            return null;
+        }
         if (this.godhood?.noMagic) { if (isFinal) this.hud.setVoice('✨ У вас пока нет магии — подождите, сила придёт', true); this.lastCastWhy = 'нет магии (ждёт божественной силы)'; return null; } // («Почти стал богом»: Godhood.js)
         // в кулаке Дьяволоса колдовать нельзя — только «стоп» (DiabolosRules.GRAB)
         if (this.diabolos?.holding && !(name === 'Stand' && /стоп|stop/i.test(text))) {
@@ -2167,6 +2188,8 @@ export class Game {
             this.lastCastWhy = 'в облике монстра колдовать нельзя';
             return null;
         }
+        // frozen: «Fire Maxima» melts the ice — no wand, no knowing it, no concentration (an exception: FireThaw.js)
+        { const th = fireThaw(this, name, isFinal); if (th !== undefined) return th; }
         // «стоп» takes off any «Protection» of mine first — either hand, plain or the gods', the dome — whatever else it meets below
         if (name === 'Stand' && /стоп|stop/i.test(text) && this.combat.shield) { this.combat.dropShield('🛑 Стоп — щит снят'); this.sync?.stopSpells?.(); }
         // «Shield» / «Щит» with a swarm of things up: the things close into a wall (ItemSwarm.shield) — not the hand shield
@@ -2629,10 +2652,12 @@ export class Game {
         // (the pause between two spells is for two words, not one word and its «Максима»)
         const last = this.lastSpellCastTime, lastDuel = this._lastDuelCast, early = this._interimCast;
         this.lastSpellCastTime = 0; this._lastDuelCast = 0; this._interimCast = null;
+        // (the plain spell's mana goes back BEFORE the Maxima is paid for: «paid once, at the Maxima's price» — with the plain one's 20 still taken,
+        // «Бомбардо Максима» (35) needed 55 mana and a hero with 40 only got the plain one: the author 19.11, «в основном бомбарда используется только»)
+        const refund = b.paid > 0 && this.combat?.manaOn ? Math.min(b.paid, Math.max(0, (this.combat.maxFatigue || Infinity) - this.combat.fatigue)) : 0;
+        this.combat.fatigue += refund;
         const name = this.castLocalSpell(text, true);
-        if (name) {
-            if (b.paid > 0 && this.combat?.manaOn) this.combat.fatigue = Math.min(this.combat.maxFatigue || this.combat.fatigue + b.paid, this.combat.fatigue + b.paid);
-        } else { this.lastSpellCastTime = last; this._lastDuelCast = lastDuel; this._interimCast = early; }
+        if (!name) { this.combat.fatigue -= refund; this.lastSpellCastTime = last; this._lastDuelCast = lastDuel; this._interimCast = early; } // (refused: the plain one stays paid, as it was)
         return name;
     }
 
@@ -4186,6 +4211,7 @@ export class Game {
         addAll(this.breakthrough?.sampleModels?.() || []); // (the earth of «Breakthrough» rising out of the ground)
         addAll(this.levMax?.sampleModels?.() || []); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
+        try { prewarmZombieTextures(); zoo.add(new Zombie(new THREE.Scene(), new THREE.Vector3(), 0, {}).group); } catch (e) { console.error('prewarm zombie', e); } // (the new zombie: its painted atlases and its shaders at the loading screen, not at the first night)
         for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)
         // (every thing lying about — and the swords and axes — as the video card draws them: one shape each (Items.oneShape,
         // Weapon); their skinned shaders made now, not when a battle's loot first falls)
@@ -4738,6 +4764,12 @@ export class Game {
         // (…while the ground round the body stays known: the body, the ships and the creatures near it still stand on it — TerrainView.keepAt)
         if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost); sysMark('world');
+        { // (what is wholly behind the haze is not drawn — DistanceCull.js; not in space / on other worlds without fog, and a test can switch it off)
+            const dc = this.distCull || (this.distCull = new DistanceCull());
+            const fog = this.scene.fog, on = !this.space?.inSpace && !!fog && !!this.world.fogFar && !(typeof window !== 'undefined' && window.__ZNS_NO_DIST_CULL__);
+            dc.enabled = on;
+            dc.update(deltaTime, this.scene, focus.x, focus.y, focus.z, on ? fog.far : 0, !!this.lite);
+        }
         this.world.forest?.update(dt, this.character.group.position, this.camera, worldPlayers(this)); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)
@@ -4803,6 +4835,7 @@ export class Game {
 
         sysMark('minimap+ambient');
         this.quality.update(deltaTime);
+        this.liteMode?.update(deltaTime);
         if (this.sound?.loaded) this.sound.musicDirector?.update(dt, this._musicPlace ?? null); // (the game's own music: the place → the tune, crossfaded — MusicDirector)
         sysMark('quality+music');
         const logic = performance.now() - t0;
@@ -5545,18 +5578,13 @@ export class Game {
             this.magicHand = side;
             this.lastMagicHand = side;
             this.lastMagicTime = Date.now();
-            const label = res.bothLevel ? 'ОБЕ' : res.side.toUpperCase();
             if (!this.isMagicActive) {
                 this.isMagicActive = true;
-                this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
+                // (the author 19.11: the plaque «ЖДУ КОМАНДУ» at the top is gone — in every mode; the voice just starts listening)
                 if (this.voice) this.voice.start();
-            } else if (this.hud.voiceText().includes('ЖДУ КОМАНДУ') || (this.hud.voiceAge() > 2500 && !this.hud.hintShowing?.())) {
-                // (a fresh game message — «Не хватает маны», a spell result — stays readable until it fades)
-                this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
             }
         } else if (this.isMagicActive && Date.now() - this.lastMagicTime > 1200) {
             this.isMagicActive = false;
-            this.hud.setVoice('', false);
             this.magicHand = null;
         }
         // Remember when both arms were up (the flight word may come a moment later)

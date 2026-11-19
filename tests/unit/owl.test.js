@@ -9,8 +9,8 @@ import { PHOENIX } from '../../src/game/Phoenixes.js';
 import { bossOfWords, BOSS_FINDERS, bossWords } from '../../src/game/OwlBosses.js';
 import { ACHIEVEMENTS } from '../../src/game/Achievements.js';
 
-test('owls: twice as often as phoenixes', () => {
-    assert.equal(OWL.SPAWN_CHANCE, PHOENIX.SPAWN_CHANCE * 2);
+test('owls: 1.4 × as often as phoenixes (30 % rarer than ×2)', () => {
+    assert.equal(OWL.SPAWN_CHANCE, PHOENIX.SPAWN_CHANCE * 1.4);
     assert.equal(OWL.SPAWN_MIN, PHOENIX.SPAWN_MIN);
     assert.equal(OWL.SPAWN_MAX, PHOENIX.SPAWN_MAX);
     assert.ok(OWL.HEIGHT > 1 && OWL.HEIGHT < 1.4, 'a quarter of a hero (4.8 m)');

@@ -21,8 +21,8 @@ export const START_SPELLS = new Set([
     'Sands', 'Sapira', 'Stupefy', 'Expelliarmus', 'Disarmor', 'Ice', 'Frozen', 'Jolt', 'Maxima',
     // fight and guard
     'Cardilon', 'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection',
-    // water: only «Firefighting»
-    'Firefighting',
+    // water: «Firefighting» and «Waterbollow» (the water ball; its «Water forming» goes with it — the author 19.11: «Waterbollow по умолчанию известный»)
+    'Firefighting', 'Waterball', 'WaterForming',
     // building: the campfire, a bed and its colour, a passage sewn up, gathering, a bridge (the author: «без свитка»)
     'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'Gather', 'CreateBridge',
     // the fireworks over the wand (the author: «изначально известно без свитка»)

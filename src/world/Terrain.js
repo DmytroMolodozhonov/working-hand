@@ -290,9 +290,13 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 32;
+export const WORLD_GEN = 34;
 /** The first generation with waterfalls on the rivers (Waterfalls.js: rock bluffs with water falling into the river). */
 export const WATERFALLS_FROM_GEN = 32;
+/** Generation 33: the Eye-flower (Глазоцвет — a small flower with a living eye that blinks and looks about; its eye is for the circle of night sight) grows in the wild (MagicFlora.js: `fromGen`). */
+export const EYEFLOWER_FROM_GEN = 33;
+/** Generation 34: the shops of the wizards' market lane have wide counters (7 × 3) with a rune plate for the coins and a rim round it (WizardVillages.buildMarket). */
+export const WIZ_COUNTER_FROM_GEN = 34;
 export const EARTH_SETTLEMENTS_FROM_GEN = 30;
 export const ELEMENTAL_SETTLEMENTS_FROM_GEN = 31;
 /**
@@ -738,7 +742,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false } = {}) {
         this.seed = seed;
         this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
         this.schoolMode = !!school; // («Школа Акселдорф»: the world's own land, the school castle on a terrace near the start — SchoolLand.js)
@@ -774,7 +778,7 @@ export class TerrainData {
             this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.bigHouses, this.buildings, !!knightCap);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
-            this.villages = new VillageIndex(seed, raw, this.castles, this.towers, !!arenaX2, !!wizShops);
+            this.villages = new VillageIndex(seed, raw, this.castles, this.towers, !!arenaX2, !!wizShops, !!wizCounters);
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
             const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || this.villages.landAt(ix, iz)); };
             const testIce = { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 };
@@ -2638,6 +2642,7 @@ export class TerrainData {
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
         if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_LEAF) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
+        if (this.liteLook) return type === BLOCK.GRASS && !isTop ? GRASS_SIDE : (BASE_COLORS[type] ?? 0xff00ff); // (the light mode: plain colours — big merged quads, fewer triangles)
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }
         let base = BASE_COLORS[type] ?? 0xff00ff;
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;

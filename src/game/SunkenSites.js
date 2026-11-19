@@ -9,7 +9,7 @@
  * A place is tried in every CELL m (by a hash); it stays only where the sea is deep enough and its bottom flat enough under the whole
  * footprint (`siteFits` — the game asks the land, once it is made). Nothing here is saved: what was taken is (the opened chests).
  */
-import { SHIP_CLASSES } from './ShipTypes.js';
+import { SHIP_CLASSES, SHIP_SCALE } from './ShipTypes.js';
 
 /** The world's place hash (the same as Castles.hash01 — kept here: importing Castles alone breaks its own import order). */
 export function hash01(a, b, seed) {
@@ -24,7 +24,7 @@ export const SUNKEN = {
     CELL: 150, // m: one place tried per cell
     WRECK: 0.4, // of the cells: a wreck tried
     TEMPLE: 0.0064, // of the cells: the temple tried (rare: as before, ~0.28 a km²)
-    WRECK_DEPTH: 8, // m of water over the bottom at least
+    WRECK_DEPTH: 14, // m of water over the bottom at least (8 for the old ships; they are ×2 now: draft 10 and more — ShipTypes.SHIP_SCALE)
     TEMPLE_DEPTH: 13,
     FLAT: 6, // m: the bottom under the footprint may rise and fall this much at most (4.5 → 6 with the generation-24 seabed's reefs and canyons)
     NEAR: 230, // m: a site this near is raised (its model, its chests)
@@ -92,7 +92,8 @@ const SHIFTS = [[0, 0], [25, 0], [-25, 0], [0, 25], [0, -25], [25, 25], [-25, -2
 /** The site's tries, in order: shifted near its point, turned (a wreck any way, the temple by quarters). Pure, the same on every computer. */
 export function siteVariants(site) {
     const turns = site.kind === 'temple' ? [0, Math.PI / 2] : [0, 0.8, 1.6, 2.4], out = [];
-    for (const [dx, dz] of SHIFTS) for (const t of turns) out.push({ ...site, x: site.x + dx, z: site.z + dz, yaw: site.yaw + t });
+    const k = site.kind === 'temple' ? 1 : SHIP_SCALE; // (a wreck is a ship ×SHIP_SCALE: the flat bottom is looked for twice as far)
+    for (const [dx0, dz0] of SHIFTS) for (const t of turns) { const dx = dx0 * k, dz = dz0 * k; out.push({ ...site, x: site.x + dx, z: site.z + dz, yaw: site.yaw + t }); }
     return out;
 }
 

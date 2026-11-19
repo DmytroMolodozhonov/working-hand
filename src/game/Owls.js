@@ -8,7 +8,7 @@
  * almost all the way round (±135° — 270°), cocks it to one side when curious, blinks, beats its wings,
  * lands with its wings spread wide and its talons forward, hops about on the ground.
  *
- * Where: twice as often as phoenixes (OWL.SPAWN_CHANCE = 2 × PHOENIX.SPAWN_CHANCE, the same checks),
+ * Where: 1.4 × as often as phoenixes (OWL.SPAWN_CHANCE = 1.4 × PHOENIX.SPAWN_CHANCE — 30 % rarer than the first ×2, author 19.11), never more than CAPS.owl alive (CreatureCaps),
  *   at most NEAR_MAX round a player, MAX in the world; never in space or on other planets (realmAt).
  *   They fly low over the land and often land — on the ground, a rock, a tree's crown, a roof — near
  *   people (they are not afraid of them). Farther than FORGET from every player a calm owl is gone
@@ -44,6 +44,7 @@
  *   lines are sent to the player they are for.
  */
 
+import { CAPS, overflow } from './CreatureCaps.js';
 import * as THREE from 'three';
 import { newUid } from './ItemTypes.js';
 import { registerKind } from './CreatureImpact.js';
@@ -62,8 +63,8 @@ export const OWL = {
     HP: 12, // (a scroll's lightning −20, «Авада» −25: one is enough; «Тандервейв» −8 two)
     HEIGHT: 1.2, // m standing: a quarter of a hero
     // twice as often as phoenixes: the same checks, twice the chance; the first sooner
-    SPAWN_MIN: PHOENIX.SPAWN_MIN, SPAWN_MAX: PHOENIX.SPAWN_MAX, SPAWN_CHANCE: Math.min(1, PHOENIX.SPAWN_CHANCE * 2), FIRST: [60, 150],
-    MAX: 4, NEAR_MAX: 2, FORGET: 320,
+    SPAWN_MIN: PHOENIX.SPAWN_MIN, SPAWN_MAX: PHOENIX.SPAWN_MAX, SPAWN_CHANCE: Math.min(1, PHOENIX.SPAWN_CHANCE * 1.4), FIRST: [60, 150],
+    MAX: CAPS.owl, NEAR_MAX: 2, FORGET: 320,
     ALT: [9, 20], SPEED: 8, FAST: 19, HOP: 1.3, // m above the ground, m/s
     CURIOUS_R: 9, STARE: [5, 10], STARE_COOL: 25, // m, s
     MEAT_R: 14, EAT_T: 2.6, ADORE_T: 10, FOLLOW_T: 300, KEEP_D: 9, // m, s
@@ -1077,6 +1078,7 @@ export class Owls {
         this._spawnT = rnd(OWL.SPAWN_MIN, OWL.SPAWN_MAX);
         // (owls still in the world round a player — even ones that flew off — keep more from coming)
         const players = this._players().filter((P) => this._earth(P.pos) && this.list.filter((o) => !o.dead && hdist(o.model.position, P.pos) < OWL.FORGET).length < OWL.NEAR_MAX);
+        for (const o of overflow(this.list.filter((o) => !o.dead), OWL.MAX, (o) => Math.min(1e9, ...this._players().map((P) => hdist(P.pos, o.model.position))), (o) => !o.guide && !o.search)) this._remove(o);
         if (!players.length || this.list.length >= OWL.MAX || Math.random() > OWL.SPAWN_CHANCE) return;
         const P = players[Math.floor(Math.random() * players.length)];
         const a = Math.random() * Math.PI * 2, r = rnd(45, 90);

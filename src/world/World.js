@@ -131,7 +131,7 @@ export class VoxelWorld {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
             this.meshTrees = !!opts.meshTrees; // (a world of real trees, not blocks — `realTrees`, Trees.js)
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls, !!opts.wizCounters);
             this.createSkybox();
         }
     }
@@ -405,9 +405,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, meshTrees: !!this.meshTrees });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, wizCounters, meshTrees: !!this.meshTrees });
         if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
         if (this.terrain.data.meshTrees) this.forest = new WorldTrees(this); // (real trees — drawn, hit, burnt like the start area's always were)
         this.collision.setTerrain(this.terrain);
@@ -1075,14 +1075,16 @@ export class VoxelWorld {
         if (this.scene.fog && this.fogFar) {
             // How far is drawn (settings) × what the graphics level allows; in flight the
             // view opens up by the same metres at every distance, so the land below is visible
-            const q = this.viewScale ?? 1, d = this.viewDistance ?? 1;
+            const q = this.viewScale ?? 1, d = this.lite ? Math.min(this.viewDistance ?? 1, 1) : (this.viewDistance ?? 1); // (the light mode: the player's «Прорисовка мира» does not widen it — a short view is what makes it light)
             const hk = this.hell || 0, ff = this.fogFar + (95 - this.fogFar) * hk; // (hell: the same haze by «day» and «night» — its eternal dusk)
-            let far = ff * q * (d + viewBoost * 1.2) * (1 + 0.25 * hk) * (1 - 0.4 * (this.storm || 0)) * (1 - 0.45 * (this.ghostHaze || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
+            let far = ff * q * (d + (this.lite ? 0 : viewBoost) * 1.2) * (1 + 0.25 * hk) * (1 - 0.4 * (this.storm || 0)) * (1 - 0.45 * (this.ghostHaze || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
             if (this.duelFar) far = Math.min(far, this.duelFar); // (the duel-only start: the arena and a little round it, nothing else is made)
             this.scene.fog.far = far;
             this.scene.fog.near = Math.min(this.fogNear * d * (1 - 0.7 * (this.hell || 0)) + viewBoost * 40, far * 0.5); // (hell: the red haze begins close)
-            if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
+            if (this.terrain) this.terrain.viewDistance = far + (this.lite ? 12 : CHUNK_MARGIN);
+            if (this.terrain) this.terrain.cullR = far + 2; // (the author 19.11: what cannot be seen is not drawn — chunks wholly behind the haze are all fog colour; the background IS the fog colour — TerrainView) // (the light mode: the land is made only a little beyond the haze — fewer chunks to make and draw)
         }
+        if (this.terrain && !(this.scene.fog && this.fogFar)) this.terrain.cullR = 0; // (no fog — space, other worlds: everything is drawn as before)
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);
         if (this.sky) this.sky.update(1 / 60);
         if (this.terrain) this.terrain.update(focus);

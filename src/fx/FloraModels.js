@@ -160,6 +160,8 @@ export function floraMaterials() {
         bloom: glowByColour(swayify(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, side, emissive: 0xffc040, emissiveIntensity: 1 }), 0.05), 0.55),
         crystal: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.14, metalness: 0.25, side, emissive: 0x7fc8ff, emissiveIntensity: 1 }), 0.4),
         shard: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.1, metalness: 0.3, side, emissive: 0x9fdcff, emissiveIntensity: 1 }), 0.8),
+        eyestalk: new THREE.MeshLambertMaterial({ vertexColors: true, side }), // (the Eye-flower's stalk, leaves and calyx: plain, no glow)
+        eye: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.18, metalness: 0, side: THREE.FrontSide }), // (a wet shine)
         plate: glowByColour(new THREE.MeshLambertMaterial({ vertexColors: true, side, emissive: 0x9fc8d0, emissiveIntensity: 1 }), 1.4),
         frond: glowByColour(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side, emissive: 0x6cff9a, emissiveIntensity: 1 }), 0.12),
     };
@@ -532,9 +534,65 @@ function armourPick() {
     return (_plate = B.geometry());
 }
 
+// ================================================================== EYEFLOWER (Глазоцвет)
+const EYEC = { stalk: hexRGB(0x4c7a3c), stalkDark: hexRGB(0x2f5530), leaf: hexRGB(0x5e9a46), leafDeep: hexRGB(0x2f6a3a), rim: hexRGB(0xb0587a), rimIn: hexRGB(0xe89aae), soil: hexRGB(0x3a3228), lid: hexRGB(0xcf8a7a), lidDark: hexRGB(0x8e4a52), sclera: hexRGB(0xf3ecd2), vein: hexRGB(0xc2554f), iris: hexRGB(0xb9962c), irisDeep: hexRGB(0x4f6a1c), pupil: hexRGB(0x0b0a0a) };
+/** The eye: radius of the ball (m at scale 1), where it sits over the soil. */
+export const EYE_BALL = { R: 0.27, Y: 1.14 };
+/** A broad leaf blade lying out from `o`: a cupped, pointed oval with a midrib (heading a, lift `tilt` from the horizontal). */
+function eyeLeaf(B, o, a, tilt, L, W, rnd) {
+    const A = [Math.cos(a) * Math.cos(tilt), Math.sin(tilt), Math.sin(a) * Math.cos(tilt)], S = [-Math.sin(a), 0, Math.cos(a)];
+    B.grid(5, 9, (u, v) => {
+        const s = (u - 0.5) * 2, w = W * Math.sin(Math.min(1, v * 3.4) * Math.PI / 2) * (1 - Math.pow(v, 2.2)), along = v * L, droop = v * v * L * 0.22, cup = 0.18 * s * s * w;
+        const rib = Math.exp(-((s / 0.12) ** 2)), c = lerpC(lerpC(EYEC.leafDeep, EYEC.leaf, 0.3 + 0.5 * v), [0.78, 0.92, 0.62], rib * 0.4);
+        return { p: [o[0] + A[0] * along + S[0] * s * w, o[1] + A[1] * along - droop + cup + rib * 0.012, o[2] + A[2] * along + S[2] * s * w], c: shade(c, 0.92 + rnd() * 0.08) };
+    }, false);
+}
+function eyeBody(v) {
+    const B = new Builder(), rnd = rng(6900 + v * 41);
+    B.blob(0, 0, 0, 0.5, 0.13, 0.48, (nx, ny, nz) => shade(lerpC(EYEC.soil, hexRGB(0x5a5040), 0.5 + 0.5 * Math.sin(nx * 9 + nz * 7)), 0.8 + 0.2 * ny), 9, 3);
+    // the stalk: slender, a gentle curve (the variant leans it), a little thicker under the eye
+    const lean = (v - 1) * 0.07;
+    B.tube([[0, 0.04, 0], [lean * 0.4, 0.4, 0.01], [lean * 0.8, 0.8, -0.01], [lean, EYE_BALL.Y - 0.2, 0]], (t) => 0.05 + 0.03 * t * t, (t) => lerpC(EYEC.stalkDark, EYEC.stalk, t), 7, { cap: false });
+    // leaves low on the stalk
+    for (let i = 0; i < 3; i++) eyeLeaf(B, [lean * 0.2, 0.1 + i * 0.16, 0], i * 2.1 + rnd() * 0.6 + v, 0.55 - i * 0.12, 0.62 - i * 0.07, 0.17, rnd);
+    // the cup: six sepals cradling the eye from below like a calyx (green outside, pink at the tips), following the ball's curve
+    const cx = lean, cy = EYE_BALL.Y, Rr = EYE_BALL.R + 0.035;
+    for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + rnd() * 0.2, A = [Math.sin(a), Math.cos(a)], W = 0.16 + rnd() * 0.03, top = 0.05 + rnd() * 0.25;
+        B.grid(3, 9, (u, w) => {
+            const s = (u - 0.5) * 2, phi = -1.3 + w * (1.3 + top), ww = W * Math.sin(Math.min(1, 0.25 + w * 1.5) * Math.PI / 2) * (1 - Math.pow(w, 3.2)), r = Rr * (1 + 0.07 * Math.sin(w * Math.PI));
+            const c = lerpC(lerpC(EYEC.leafDeep, EYEC.leaf, w), EYEC.rim, clamp01((w - 0.72) * 3.4));
+            return { p: [cx + A[0] * Math.cos(phi) * r + A[1] * s * ww, cy + Math.sin(phi) * r, A[1] * Math.cos(phi) * r - A[0] * s * ww], c };
+        }, false);
+    }
+    // the pick spot: the eye itself
+    const g = B.geometry();
+    g.userData.picks = [[cx, EYE_BALL.Y, 0, 1]];
+    return g;
+}
+let _eye = null;
+/** The eyeball: a sphere with lids at the poles, a veined white band, a golden iris with a black pupil in front (+Z) and a glint. */
+function eyePick() {
+    if (_eye) return _eye;
+    const B = new Builder(), R = EYE_BALL.R;
+    B.blob(0, 0, 0, R, R, R, (nx, ny, nz) => {
+        const lat = Math.abs(ny), ang = Math.acos(Math.max(-1, Math.min(1, nz))); // (angle from the front)
+        if (lat > 0.66) return shade(lerpC(EYEC.lid, EYEC.lidDark, clamp01((lat - 0.66) * 2.4)), 0.9 + 0.1 * Math.sin(nx * 14));
+        let c = lerpC(EYEC.sclera, EYEC.vein, clamp01(0.5 * Math.pow(Math.max(0, Math.sin(nx * 23 + ny * 9) * Math.sin(nz * 17 + nx * 5)), 3) + (nz < 0 ? 0.25 : 0)));
+        if (ang < 0.78) { const k = clamp01((0.78 - ang) / 0.16); c = lerpC(c, lerpC(EYEC.irisDeep, EYEC.iris, clamp01(ang / 0.62)), k); }
+        if (ang < 0.33) c = EYEC.pupil;
+        else if (ang < 0.37) c = lerpC(c, EYEC.pupil, 0.5);
+        if (Math.hypot(nx - 0.2, ny - 0.16, nz - 0.96) < 0.1) c = [1, 1, 1]; // (the glint)
+        return c;
+    }, 30, 22, -1);
+    for (let k = 0; k < B.i.length; k += 3) { const t = B.i[k + 1]; B.i[k + 1] = B.i[k + 2]; B.i[k + 2] = t; } // (a ball seen from outside: the faces turned to face out)
+    _eye = B.geometry();
+    return _eye;
+}
+
 // ================================================================== the table
-const BODY_BUILD = { glowcap: glowcapBody, giantfern: fernBody, azureberry: azureBody, sunherb: sunBody, frostcrystal: frostBody, armourleaf: armourBody };
-const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick, armourleaf: armourPick };
+const BODY_BUILD = { glowcap: glowcapBody, giantfern: fernBody, azureberry: azureBody, sunherb: sunBody, frostcrystal: frostBody, armourleaf: armourBody, eyeflower: eyeBody };
+const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick, armourleaf: armourPick, eyeflower: eyePick };
 /** Which shared material draws the body / the picked part of each kind. */
 export const FLORA_MATERIAL = {
     glowcap: { body: 'body', pick: 'glowcap' },
@@ -543,6 +601,7 @@ export const FLORA_MATERIAL = {
     sunherb: { body: 'body', pick: 'bloom' },
     frostcrystal: { body: 'crystal', pick: 'shard' },
     armourleaf: { body: 'plate', pick: 'plate' },
+    eyeflower: { body: 'eyestalk', pick: 'eye' },
 };
 /** The picked part's size factor in the hand (the item model). */
 const _body = new Map(), _pick = new Map();
@@ -563,7 +622,7 @@ export function floraPick(kind) {
 export function floraItemModel(kind) {
     const g = new THREE.Group();
     const m = new THREE.Mesh(floraPick(kind), floraMaterials()[FLORA_MATERIAL[kind].pick]);
-    const s = { glowcap: 0.34, giantfern: 0.42, azureberry: 1.1, sunherb: 1.3, frostcrystal: 0.5, armourleaf: 0.8 }[kind] || 0.4;
+    const s = { glowcap: 0.34, giantfern: 0.42, azureberry: 1.1, sunherb: 1.3, frostcrystal: 0.5, armourleaf: 0.8, eyeflower: 0.9 }[kind] || 0.4;
     m.scale.setScalar(s);
     g.add(m);
     return g;

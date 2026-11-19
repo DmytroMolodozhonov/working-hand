@@ -1356,6 +1356,7 @@ export class ArenaDuels {
         if (this.auth) this._join(A, g.localId, P.tier, P.fee); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id, tier: P.tier, stake: P.fee }); }
         const busy = this.auth ? !!A.duel : A.ph !== 'idle';
         g.hud?.setVoice?.(`💰 Ставка ${P.fee} монет принята. ${busy ? STEWARD_LINES.wait : STEWARD_LINES.soon}`, true);
+        this._say(A, busy ? 'paidWait' : 'paidSoon'); // (the steward says it aloud too: «вы записаны» — the author 19.11: he did not always)
         this.log.push('stake-paid:' + P.fee);
         return true;
     }
@@ -1475,9 +1476,9 @@ export class ArenaDuels {
     _boardState(A) {
         const g = this.game, D = A.duel, nm = (id) => g.playerName?.(id) || 'Игрок';
         const st = {
-            ph: D ? D.phase : 'idle', pn: D?.p != null ? nm(D.p) : null, fn: D?.a?.name || null, fn2: D?.b?.name || null, tr: D?.tier || null,
+            ph: D ? D.phase : 'idle', pn: D?.p != null ? nm(D.p) : null, pi: D?.p ?? null, fn: D?.a?.name || null, fn2: D?.b?.name || null, tr: D?.tier || null,
             go: D?.phase === 'fight' ? D.go : 0, maxT: this._maxT(A), night: !!g.isNight,
-            q: A.queue.list.slice(0, 6).map((id) => ({ n: nm(id), tr: A.tiers.get(id) || null })),
+            q: A.queue.list.slice(0, 6).map((id) => ({ id, n: nm(id), tr: A.tiers.get(id) || null })),
         };
         if (A.queue.length > 6) st.more = A.queue.length - 6;
         if (D?.phase === 'over') {

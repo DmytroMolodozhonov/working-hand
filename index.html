@@ -523,6 +523,15 @@
                         </select>
                     </div>
                     <div class="settings-group">
+                        <label>Лёгкий режим:</label>
+                        <select id="lite-mode">
+                            <option value="auto" selected>Авто (включится сама, если нет видеокарты или игра тормозит)</option>
+                            <option value="on">Включён (для компьютера без видеокарты)</option>
+                            <option value="off">Выключен</option>
+                        </select>
+                        <div class="setting-hint">Для компьютера без видеокарты или с очень слабой: мир виден ближе, картинка мельче, без теней и облаков — зато плавно. Игра остаётся той же.</div>
+                    </div>
+                    <div class="settings-group">
                         <label>Лимит FPS:</label>
                         <select id="fps-limit">
                             <option value="30">30 FPS</option>
