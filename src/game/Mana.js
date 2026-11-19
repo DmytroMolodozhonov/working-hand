@@ -9,7 +9,7 @@
  *     • a duel won AND the opponent wizard killed by it (a player, a tower's wizard, a wanderer):
  *       45% of (his maximum − 30), at least +1 (duelGain); killed some other way (a bomb, a sword, an ambush): 25% (killGain), the
  *       same flow-of-power animation (NPC: only after a spell released at the killer); won but he lives (lifted with Leviosa,
- *       stunned…): +1…+3 at random. Each opponent counts once (a win once, a kill once).
+ *       stunned, the arena's verdict, a fight won without a clash): 25% as a kill without a clash. Each opponent counts once (a win once, a kill once).
  *     • the first kill of each MAGICAL creature kind, to whoever struck the last blow
  *       (MAGIC_KILL: the winged pig +3 … the giant spider, a dragon +20). Ordinary creatures —
  *       horses, cows, sheep, villagers, knights, zombies, sailors — nothing.
@@ -322,7 +322,7 @@ export class Mana {
         this.masteryWon(id, false, oppMax, 0);
         if (id != null && this.duelsWon.has(String(id))) return 0;
         if (id != null) this.duelsWon.set(String(id), 'win');
-        const n = 1 + Math.min(2, Math.floor(rng() * 3));
+        const n = killGain(oppMax); // (the author 19.11: a win without a kill — on the arena or in a fight — is worth 25% of his maximum above 30, as a kill without a clash; at least +1)
         this.grow(n, 'duelAlive');
         this._say(`🔷 Победа в дуэли: +${n} к максимуму маны`);
         return n;

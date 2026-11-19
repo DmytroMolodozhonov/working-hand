@@ -24,7 +24,7 @@ export default async function (h) {
     }
     // ground profile along the pier's axis from the quay out: every step of the stair and the deck
     const col = g.collision; let prof = '';
-    for (let t = -30; t <= 20; t += 1) { const x = pr.a.x + ux * t, z = pr.a.z + uz * t; prof += (col.groundAt ? col.groundAt(x, z, 1e4) : col.surfaceY(x, z)).toFixed(1) + ' '; }
+    for (let t = -10; t <= 2; t += 0.25) { const x = pr.a.x + ux * t, z = pr.a.z + uz * t; prof += (col.groundAt ? col.groundAt(x, z, 1e4) : col.surfaceY(x, z)).toFixed(1) + ' '; }
     h.log('profile', prof);
     // the quay: the line where the land ends and the harbour water begins
     const qz = P.quay; h.log('quay', JSON.stringify(qz).slice(0, 200));

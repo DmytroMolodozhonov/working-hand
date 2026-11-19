@@ -32,18 +32,20 @@ const tierName = (tr) => TIERS[tr]?.ru || '';
  * What the board says now → { title, head: [{text, color}], queue: [text], foot }.
  * `elapsed` — seconds since the message with `st.go` (the board counts the fight's minutes on its own).
  */
-export function boardView(st, elapsed = 0) {
+export function boardView(st, elapsed = 0, me = null) {
     const s = st || {};
     const out = { title: 'АРЕНА ДУЭЛЕЙ', head: [], queue: [], foot: '' };
     const q = Array.isArray(s.q) ? s.q : [];
+    // (the board is the same for everyone, but each one reads it for himself — the author 19.11: «должно быть написано, что это ВЫ записаны, а не игрок»)
+    const mine = me != null && s.pi != null && s.pi === me;
     const who = s.pn ? `${s.pn} против ${s.fn || 'волшебника'}${s.tr ? ` (${tierName(s.tr)})` : ''}` : s.fn ? `${s.fn} и ${s.fn2 || 'волшебник'}` : 'волшебники';
     const left = Math.max(0, (s.maxT || 300) - ((s.go || 0) + elapsed));
     switch (s.ph) {
         case 'enter': case 'bow': case 'marks':
-            out.head.push({ text: s.pn ? `Выходит ${s.fn || 'волшебник'} — ждёт ${s.pn}` : `Выходят на арену: ${who}`, color: 'gold' });
+            out.head.push({ text: s.pn ? `Выходит ${s.fn || 'волшебник'} — ждёт ${mine ? 'вас' : s.pn}` : `Выходят на арену: ${who}`, color: 'gold' });
             break;
         case 'call':
-            out.head.push({ text: `${s.pn || 'Игрок'}, ваш черёд!`, color: 'gold' }, { text: 'Встаньте на светящееся место на арене', color: 'white' });
+            out.head.push({ text: mine ? 'Ваш черёд!' : `${s.pn || 'Игрок'}, ваш черёд!`, color: 'gold' }, { text: 'Встаньте на светящееся место на арене', color: 'white' });
             break;
         case 'count':
             out.head.push({ text: `Бой: ${who}`, color: 'gold' }, { text: 'Отсчёт… приготовьтесь!', color: 'white' });
@@ -53,7 +55,7 @@ export function boardView(st, elapsed = 0) {
             break;
         case 'over': {
             const r = s.res;
-            if (r === 'win') out.head.push({ text: `Победил ${s.pn || 'игрок'}!`, color: 'green' }, { text: `Выплата: ${s.co || 0} монет`, color: 'gold' });
+            if (r === 'win') out.head.push({ text: mine ? 'Вы победили!' : `Победил ${s.pn || 'игрок'}!`, color: 'green' }, { text: `Выплата: ${s.co || 0} монет`, color: 'gold' });
             else if (r === 'lose') out.head.push({ text: `Победил волшебник ${s.fn || ''}`.trim(), color: 'red' }, { text: 'Ставка проиграна', color: 'white' });
             else if (r === 'draw') out.head.push({ text: 'Время вышло — ничья', color: 'white' }, { text: s.co ? `Ставка возвращена: ${s.co} монет` : '', color: 'gold' });
             else out.head.push({ text: 'Бой окончен', color: 'white' });
@@ -61,16 +63,16 @@ export function boardView(st, elapsed = 0) {
         }
         default:
             out.head.push(s.night ? { text: 'Ночью дуэлей нет', color: 'white' } : { text: 'Арена свободна', color: 'green' });
-            if (!s.night && q.length) out.head.push({ text: `Скоро позовут: ${q[0].n}`, color: 'white' });
+            if (!s.night && q.length) out.head.push({ text: me != null && q[0].id === me ? 'Скоро позовут вас' : `Скоро позовут: ${q[0].n}`, color: 'white' });
     }
-    q.slice(0, BOARD.QUEUE_SHOWN).forEach((e, i) => out.queue.push(`${i + 1}. ${e.n} — ${tierName(e.tr)}`));
+    q.slice(0, BOARD.QUEUE_SHOWN).forEach((e, i) => out.queue.push(`${i + 1}. ${me != null && e.id === me ? 'Вы' : e.n} — ${tierName(e.tr)}`));
     if (q.length > BOARD.QUEUE_SHOWN) out.queue.push(`и ещё ${q.length - BOARD.QUEUE_SHOWN}`);
     out.foot = q.length ? 'Хотите в очередь? Выберите фигурку на прилавке' : 'Хотите сразиться? Выберите фигурку на прилавке';
     return out;
 }
 
 /** A key that changes whenever the picture must be drawn again (the board is drawn on a texture only then; the minutes — once a second). */
-export function boardKey(st, elapsed = 0) {
-    const v = boardView(st, elapsed);
+export function boardKey(st, elapsed = 0, me = null) {
+    const v = boardView(st, elapsed, me);
     return v.title + '|' + v.head.map((h) => h.text + h.color).join('|') + '|' + v.queue.join('|') + '|' + v.foot;
 }
