@@ -22,6 +22,16 @@ export default async function (h) {
         h.cam([cx + sx * side - ux * back, pr.y + up, cz + sz * side - uz * back], [cx - sx * (side ? 2 : 0) + ux * (back ? 8 : 0), pr.y - 1, cz - sz * (side ? 2 : 0) + uz * (back ? 8 : 0)]);
         await h.shot(name, { settle: 30 });
     }
+    // probe: where the shader would discard (s < -3) around the pier — '#' discard, '.' water
+    const sea = g.seaSurface.sea;
+    for (let k = -2; k <= 12; k++) {
+        let row = '';
+        for (let m = -20; m <= 40; m += 2) {
+            const x = pr.a.x + ux * (L * 0.5 + m) * 0 + dx * 0.5 + sx * k * 3 - ux * 0 + ux * m, z = pr.a.z + dz * 0.5 + sz * k * 3 + uz * m;
+            row += sea.s(x, z) < -3 ? '#' : '.';
+        }
+        h.log('probe', String(k * 3).padStart(4), row);
+    }
     // the quay: the line where the land ends and the harbour water begins
     const qz = P.quay; h.log('quay', JSON.stringify(qz).slice(0, 200));
 }
