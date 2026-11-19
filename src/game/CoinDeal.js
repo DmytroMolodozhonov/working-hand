@@ -47,6 +47,7 @@ export class CoinDeal {
         this._hintAt = -1e9;
         this._moved = false;
         this._near = 1e9; // m² to the nearest dealer
+        this._nearSell = 1e9;
         this._at = 0; // s at a counter in this deal
         this._coachAt = -1e9;
         this._coached = 0;
@@ -77,6 +78,7 @@ export class CoinDeal {
         this._look = DEAL.LOOK_S;
         let open = false;
         this._near = 1e9;
+        this._nearSell = 1e9; // m² to the nearest one who SELLS (not the pawnshop / shady buyer: he only buys — nothing to pay there)
         if (life && me) {
             const talk = life.talk, night = life.night;
             for (const v of life.byId.values()) {
@@ -86,6 +88,8 @@ export class CoinDeal {
                 open = true;
                 const dx = v.x - me.x, dz = v.z - me.z;
                 this._near = Math.min(this._near, dx * dx + dz * dz);
+                const st = v.cs?.def?.stalls?.[v.entry?.stall];
+                if (!(st && (st.pawn || st.fence))) this._nearSell = Math.min(this._nearSell, dx * dx + dz * dz);
             }
             if (!open && me && this._counterPouches(true)) open = true; // (my pouch lies on a counter: the deal is not over)
         }
@@ -98,7 +102,7 @@ export class CoinDeal {
     /** Now and then, at a counter: «to pay, take the pouch off the belt» (not when it is in a hand, empty, or learned). */
     _coach(dt) {
         const g = this.game, inv = g.inventory;
-        if (g.config?.mode === 'creative' || this._near > DEAL.COACH_NEAR * DEAL.COACH_NEAR) { this._at = 0; return; }
+        if (g.config?.mode === 'creative' || (this._nearSell ?? this._near) > DEAL.COACH_NEAR * DEAL.COACH_NEAR) { this._at = 0; return; } // (at the pawnshop the player SELLS: no «pay» coaching)
         this._at += dt;
         if (this._at < DEAL.COACH_AFTER_S || this._coached >= DEAL.COACH_MAX || this._learned >= 2) return;
         const now = performance.now();
