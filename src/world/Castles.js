@@ -2051,6 +2051,10 @@ function buildPort(p, s, rng, out) {
         const uk = Math.round(pr.uk), lDeck = n - 1, v0 = vShore + 1, v1 = vShore + pr.len;
         // stairs on the quay, the deck, the beams, the piles
         stairsV(p, uk - 3, uk + 3, vShore - n + 1, 1, n, BLOCK.PLANKS);
+        // (the last riser up onto the deck was a whole block: a body's round feet stand lower than the ramp's top edge and the 1,05 m step-up
+        //  did not reach — the author 19.11: «не могу забраться на причал, хотя там один блок». The top step is a half block: two small rises)
+        for (let u = uk - 3; u <= uk + 3; u++) p.slabAt(u, vShore, lDeck);
+        p.flushSlabs();
         p.box(uk - 3, uk + 3, lDeck, lDeck, v0, v1, BLOCK.PLANKS);
         p.box(uk - 3, uk + 3, lDeck - 1, lDeck - 1, v0, v1, BLOCK.PLANKS_DARK);
         for (let v = v0 + 2; v <= v1; v += 6) for (const du of [-3, 3]) p.box(uk + du, uk + du, deep, lDeck - 2, v, v, BLOCK.PLANKS_DARK);
