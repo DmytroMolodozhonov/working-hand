@@ -44,6 +44,7 @@ import { isWood, TREE_KINDS } from '../world/Terrain.js';
 import { mergeParts } from '../core/MergeGeometry.js';
 import { forgedGateModel, GATE_VARIANTS } from './GateModel.js';
 import { inWard } from './HouseWards.js';
+import { STYLES, styleOf, leafMaterials, damageDecals, hurtShare, chipSpot, splinterColors } from './DoorStyles.js';
 
 const WOOD_NEEDED = 12;
 const W = 1.6, H = 3.6, T = 0.18; // a full-size door
@@ -82,7 +83,7 @@ function doorMats(color) {
 const _box = new THREE.BoxGeometry(1, 1, 1);
 const _knobGeo = {};
 
-export function doorModel(color, { mirror = false, gate = false, ice = false, metal = false, forged = false, vari = 0, w: W = DOOR_W, h: H = DOOR_H } = {}) {
+export function doorModel(color, { mirror = false, gate = false, ice = false, metal = false, forged = false, vari = 0, style = null, w: W = DOOR_W, h: H = DOOR_H } = {}) {
     if (forged) return forgedGateModel({ mirror, w: W, h: H, vari }); // (the keep's gates of generation 14: forged iron — GateModel.js)
     const g = new THREE.Group();
     let { wood, dark, gold } = doorMats(color);
@@ -113,7 +114,8 @@ export function doorModel(color, { mirror = false, gate = false, ice = false, me
     const hinge = new THREE.Group();
     hinge.position.set(-m * W / 2, 0, 0);
     g.add(hinge);
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(W, H, T), wood);
+    const plain = !gate && !metal && !ice, st = plain ? (STYLES[style] ? style : 'common') : null; // (the plain wooden door has a style of its own: DoorStyles.js)
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(W, H, T), plain ? leafMaterials(st, color) : wood);
     leaf.position.set(m * W / 2, H / 2, 0);
     leaf.castShadow = true;
     hinge.add(leaf);
@@ -132,21 +134,64 @@ export function doorModel(color, { mirror = false, gate = false, ice = false, me
         for (const y of [H * 0.15, H * 0.5, H * 0.85]) for (const z of [-T / 2 - 0.02, T / 2 + 0.02]) bands.push(box(W * 0.96, 0.12, 0.04, m * W / 2, y, z));
         mesh(bands, iron(), hinge);
     } else {
-        const panels = [];
-        for (const [y, h] of [[H * 0.72, H * 0.38], [H * 0.27, H * 0.38]]) for (const z of [-T / 2 - 0.01, T / 2 + 0.01]) panels.push(box(W * 0.7, h, 0.04, m * W / 2, y, z));
-        mesh(panels, dark, hinge);
+        // (the picture on the leaf has its boards / panels / bands: what stands out of it is the hinges, and below the handle)
+        const ironM = iron(), brass = _mats.brass || (_mats.brass = new THREE.MeshStandardMaterial({ color: 0xc9a23a, metalness: 0.85, roughness: 0.32 }));
+        const straps = [], plates = [];
+        const long = st === 'banded' ? 0.95 : st === 'poor' ? 0.8 : 0.42;
+        for (const y of [H * 0.18, H * 0.82]) for (const z of [-T / 2 - 0.016, T / 2 + 0.016]) {
+            straps.push(box(long, st === 'rich' ? 0.07 : 0.11, 0.03, m * (long / 2 + 0.02), y, z));
+            if (st !== 'rich') plates.push(box(0.05, 0.05, 0.045, m * (long * 0.4), y, z * 1.4));
+        }
+        mesh(straps, st === 'rich' ? brass : ironM, hinge);
+        if (plates.length) mesh(plates, ironM, hinge);
     }
     // the handles (both faces): a golden knob, on a gate — an iron ring (the two: one shape; knob, knob2 — where they are)
     const kx = m * (W - 0.22), ky = H * 0.48, kz = T / 2 + 0.08;
+    if (plain) {
+        // the handle of the style, on both faces (the hand takes it at knob / knob2 — the same points as always)
+        const ironM = iron(), brass = _mats.brass || (_mats.brass = new THREE.MeshStandardMaterial({ color: 0xc9a23a, metalness: 0.85, roughness: 0.32 }));
+        const leather = _mats.leather || (_mats.leather = new THREE.MeshLambertMaterial({ color: 0x4a2f1a }));
+        const ring = _knobGeo.ring || (_knobGeo.ring = new THREE.TorusGeometry(0.11, 0.025, 6, 14));
+        const bigRing = _knobGeo.bigRing || (_knobGeo.bigRing = new THREE.TorusGeometry(0.16, 0.032, 6, 16));
+        const metalP = [], woodP = [], leatherP = [];
+        for (const z of [-1, 1]) {
+            const zf = z * (T / 2);
+            if (st === 'poor') { woodP.push(box(0.36, 0.055, 0.045, kx - m * 0.04, ky, zf + z * 0.045)); woodP.push(box(0.05, 0.13, 0.05, kx + m * 0.12, ky - 0.04, zf + z * 0.03)); leatherP.push({ geo: ring, pos: [kx - m * 0.18, ky - 0.05, zf + z * 0.04], scale: [0.45, 0.45, 0.45] }); }
+            else if (st === 'common') { metalP.push(box(0.15, 0.22, 0.02, kx, ky, zf + z * 0.012)); metalP.push({ geo: ring, pos: [kx, ky - 0.02, zf + z * 0.07] }); }
+            else if (st === 'rich') { metalP.push(box(0.15, 0.42, 0.018, kx, ky, zf + z * 0.01)); metalP.push(box(0.3, 0.045, 0.045, kx - m * 0.1, ky - 0.04, zf + z * 0.06)); metalP.push({ geo: _knobGeo.ball || (_knobGeo.ball = new THREE.SphereGeometry(0.09, 10, 8)), pos: [kx + m * 0.04, ky + 0.12, zf + z * 0.05], scale: [0.55, 0.55, 0.55] }); }
+            else { metalP.push({ geo: bigRing, pos: [kx, ky, zf + z * 0.075] }); metalP.push(box(0.12, 0.12, 0.02, kx, ky + 0.15, zf + z * 0.012)); }
+        }
+        if (metalP.length) mesh(metalP, st === 'rich' ? brass : ironM, hinge);
+        if (woodP.length) mesh(woodP, dark, hinge);
+        if (leatherP.length) mesh(leatherP, leather, hinge);
+        // THE LATCH: a barrel bolt over the handle on both faces — drawn back: shut, not locked (green lamp); shot across: LOCKED (red lamp)
+        const by = ky + 0.42, x0 = m * (W - 0.58), trav = m * 0.24;
+        const bolts = [], dots = [], fixed = [];
+        const boltGeo = _knobGeo.bolt || (_knobGeo.bolt = new THREE.BoxGeometry(0.36, 0.055, 0.055));
+        const lampGeo = _knobGeo.lamp || (_knobGeo.lamp = new THREE.SphereGeometry(0.068, 10, 8));
+        const green = _mats.lampG || (_mats.lampG = new THREE.MeshBasicMaterial({ color: 0x46d86a })), red = _mats.lampR || (_mats.lampR = new THREE.MeshBasicMaterial({ color: 0xe2382c }));
+        const steelRod = _mats.rod || (_mats.rod = new THREE.MeshStandardMaterial({ color: 0xd9d6cc, metalness: 0.9, roughness: 0.25 }));
+        for (const z of [-1, 1]) {
+            const zf = z * (T / 2);
+            fixed.push(box(0.54, 0.13, 0.012, x0 + m * 0.2, by, zf + z * 0.006)); // the base plate
+            fixed.push(box(0.05, 0.1, 0.07, x0 + m * 0.02, by, zf + z * 0.035), box(0.05, 0.1, 0.07, x0 + m * 0.4, by, zf + z * 0.035)); // the guides
+            fixed.push(box(0.07, 0.12, 0.05, m * (W - 0.035), by, zf + z * 0.02)); // the keeper on the free edge
+            const rod = new THREE.Mesh(boltGeo, steelRod); rod.position.set(x0 + m * 0.19, by, zf + z * 0.04); hinge.add(rod); bolts.push(rod);
+            const dot = new THREE.Mesh(lampGeo, green); dot.position.set(m * (W - 0.4), by + 0.19, zf + z * 0.04); hinge.add(dot); dots.push(dot);
+        }
+        mesh(fixed, brass, hinge);
+        g.userData.lock = { bolts, dots, base: bolts.map((b) => b.position.x), trav, cur: 0, to: 0, green, red, locked: false };
+    } else {
     const kgeo = gate ? (_knobGeo.ring || (_knobGeo.ring = new THREE.TorusGeometry(0.11, 0.025, 6, 14))) : (_knobGeo.ball || (_knobGeo.ball = new THREE.SphereGeometry(0.09, 10, 8)));
     mesh([{ geo: kgeo, pos: [kx, ky, -kz] }, { geo: kgeo, pos: [kx, ky, kz] }], gate ? (ice ? gold : iron()) : gold, hinge);
+    }
     const knob = new THREE.Object3D();
     knob.position.set(kx, ky, -kz);
     hinge.add(knob);
     const knob2 = new THREE.Object3D();
     knob2.position.set(kx, ky, kz);
     hinge.add(knob2);
-    g.userData = { hinge, knob, knob2, mirror };
+    g.userData = { ...g.userData, hinge, knob, knob2, mirror, style: st, hurtable: plain };
     return g;
 }
 
@@ -244,6 +289,7 @@ export function swingStep(a, w, dt, maxP = DOOR_HAND.MAX_A, maxN = maxP) {
 
 const _q = new THREE.Vector3();
 const _n = new THREE.Vector3();
+let _planeGeo = null;
 
 export class Doors {
     constructor(game) {
@@ -303,11 +349,17 @@ export class Doors {
         if (this.list.has(d.id)) { this._move(this.list.get(d.id), d); return; }
         // (a house door fills its opening: wider and taller than a made one — made to its size, not
         // stretched: a stretched model shears its leaf out of shape when it turns)
-        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate || !!d.banded, ice: !!d.ice, metal: !!d.metal, forged: !!d.forged, vari: d.vari | 0, w: d.w || W, h: d.h || H }); // (banded: a gate's look without a castle's lock — CastleMagic.js)
+        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate || !!d.banded, ice: !!d.ice, metal: !!d.metal, forged: !!d.forged, vari: d.vari | 0, style: d.gate || d.banded || d.metal || d.ice || d.forged || d.ship ? null : styleOf(d), w: d.w || W, h: d.h || H }); // (banded: a gate's look without a castle's lock — CastleMagic.js)
         model.position.set(d.x, d.y, d.z);
         model.rotation.y = d.ry;
         g.scene.add(model);
         const door = { ...d, model, boxId: null, holdSide: null, hand: { left: 0, right: 0 } };
+        if (model.userData.hurtable) { // (a plain wooden door can be broken: its style's strength, the chunks already knocked out of it)
+            door.style = model.userData.style; door.maxHp = STYLES[door.style].hp;
+            door.hp = d.hp != null ? d.hp : door.maxHp; door.holes = Array.isArray(d.holes) ? d.holes.slice() : [];
+            for (const h of door.holes) this._hole(door, h, false);
+            this._cracks(door);
+        }
         this.list.set(d.id, door);
         this._setAngle(door, d.a || 0);
     }
@@ -373,6 +425,7 @@ export class Doors {
                 }
             }
         }
+        this._lockVis(dt);
         // leaves swung by a push (a spell, a blast)
         this._swing(dt);
         // a body walking into an open leaf pushes it away from itself (it doesn't go through)
@@ -499,8 +552,10 @@ export class Doors {
         const g = this.game, col = g.collision, t = g.world?.terrain?.data || g.terrain?.data;
         const m = door.mirror ? -1 : 1, lw = door.w || W, dh = door.h || H;
         const c = Math.cos(door.ry), s = Math.sin(door.ry);
-        const blocked = (x, y, z) => {
-            if (t?.isSolidAt?.(x, y, z)) return true;
+        // (the leaf swings out of its own doorway: a point still inside the wall's thickness (|lz| < 0.7) or in the jamb is the frame, not an obstacle — a rounded block edge there made
+        //  the door «stick» at 9° — and a leaf stopped by a real thing keeps at least ~15°)
+        const blocked = (x, y, z, inWall = false) => {
+            if (!inWall && t?.isSolidAt?.(x, y, z)) return true;
             for (const b of col?.queryBoxes?.(x, x, z, z) || []) if (b.kind !== 'door' && y >= b.minY && y <= b.maxY && x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return true;
             return false;
         };
@@ -509,7 +564,7 @@ export class Doors {
             for (const r of [lw * 0.35, lw * 0.7, lw - 0.1]) {
                 const lx = -m * lw / 2 + m * Math.cos(a) * r, lz = -dir * Math.sin(a) * r;
                 const x = door.x + c * lx + s * lz, z = door.z - s * lx + c * lz;
-                for (const y of [door.y + 0.7, door.y + dh * 0.55]) if (blocked(x, y, z)) { lim = Math.max(0.15, a - 0.08); break outer; }
+                for (const y of [door.y + 0.7, door.y + dh * 0.55]) if (blocked(x, y, z, Math.abs(lz) < 0.7)) { lim = Math.max(0.25, a - 0.08); break outer; }
             }
         }
         if (dir < 0) door.maxN = lim; else door.maxA = lim;
@@ -903,9 +958,136 @@ export class Doors {
         this.list.delete(id);
     }
 
+    // ------------------------------------------------------------ the latch: shut / locked, to be SEEN
+    /**
+     * The barrel bolt and its lamp on each plain door within 30 m: drawn back and a GREEN lamp — the door is only shut (any hand opens it); shot across and a RED lamp — it
+     * is LOCKED (a lock, a spell, the house's own key: `locks.doorLocked`). An open leaf shows green (nothing holds it). The bolt slides over ~0.25 s and clicks.
+     */
+    _lockVis(dt) {
+        const g = this.game, me = g.character?.group?.position;
+        if (!me) return;
+        this._lvT = (this._lvT || 0) - dt;
+        const look = this._lvT <= 0;
+        if (look) this._lvT = 0.25;
+        for (const door of this.list.values()) {
+            const L = door.model.userData.lock;
+            if (!L) continue;
+            if (Math.abs(door.x - me.x) + Math.abs(door.z - me.z) > 40) continue;
+            if (look) {
+                const locked = !!g.locks?.doorLocked?.(door), shut = Math.abs(door.a) < 0.12;
+                if (locked !== L.locked) {
+                    L.locked = locked;
+                    if (L.seen) this._ring(door, 0.12); // (the bolt clicks: not at the first sight)
+                    for (const d of L.dots) d.material = locked ? L.red : L.green;
+                }
+                L.seen = true;
+                L.to = locked && shut ? 1 : 0; // (a locked leaf standing open: the lamp is red but the bolt has nothing to catch)
+            }
+            if (Math.abs(L.cur - L.to) > 0.002) {
+                L.cur += Math.sign(L.to - L.cur) * Math.min(Math.abs(L.to - L.cur), dt * 5);
+                L.bolts.forEach((b, i) => { b.position.x = L.base[i] + L.trav * L.cur; });
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ damage: a chunk, or splinters
+    _hole(door, h, anim = true) {
+        const D = damageDecals();
+        if (!D) return;
+        const hinge = door.model.userData.hinge, m = door.mirror ? -1 : 1, T2 = T / 2;
+        for (const z of [-1, 1]) {
+            const p = new THREE.Mesh(_box, D.hole);
+            p.geometry = _planeGeo || (_planeGeo = new THREE.PlaneGeometry(1, 1));
+            p.scale.set(h.r * 2.2, h.r * 2.6, 1);
+            p.position.set(m * h.x, h.y, z * (T2 + 0.012));
+            p.rotation.y = z > 0 ? 0 : Math.PI; p.rotation.z = h.rot || 0;
+            hinge.add(p);
+        }
+    }
+
+    _cracks(door) {
+        const D = damageDecals();
+        if (!D) return;
+        const stage = door.hp >= door.maxHp * 0.8 ? 0 : door.hp >= door.maxHp * 0.5 ? 1 : door.hp >= door.maxHp * 0.25 ? 2 : 3;
+        if (door.crackStage === stage) return;
+        door.crackStage = stage;
+        const hinge = door.model.userData.hinge, m = door.mirror ? -1 : 1, lw = door.w || W, dh = door.h || H;
+        if (!door.crackMeshes) {
+            door.crackMeshes = [-1, 1].map((z) => {
+                const p = new THREE.Mesh(_planeGeo || (_planeGeo = new THREE.PlaneGeometry(1, 1)), D.crack[0]);
+                p.scale.set(lw * 0.9, dh * 0.9, 1);
+                p.position.set(m * lw / 2, dh / 2, z * (T / 2 + 0.008)); p.rotation.y = z > 0 ? 0 : Math.PI;
+                hinge.add(p); return p;
+            });
+        }
+        for (const p of door.crackMeshes) { p.visible = stage > 0; if (stage > 0) p.material = D.crack[stage - 1]; }
+    }
+
+    /**
+     * A blast (or any strong shove) takes `share` of the door's strength (DoorStyles.hurtShare; ≥ 1 of what is left: it bursts). Light: a chunk knocked out of the leaf on the blast's
+     * side — splinters fly, a ragged hole, the cracks spread; the leaf jolts. Strong: `shatter`. `from`: the blast's middle. Returns 'shatter' | 'chip' | null.
+     */
+    hurt(door, share, from = null) {
+        if (!door || !door.model?.userData?.hurtable || door.wrecked || share <= 0.04) return null;
+        const g = this.game, dmg = share * door.maxHp;
+        door.hp -= dmg;
+        if (door.hp <= 0) { door.shatterFrom = from; if (g.wreck?._breakDoor) g.wreck._breakDoor(door); else { this.shatter(door, from); this.remove(door.id); } return 'shatter'; }
+        // a chunk: where, on the blast's side; deterministic (every computer knocks the same piece out)
+        const lw = door.w || W, dh = door.h || H;
+        let side = 0;
+        if (from) { const loc = this._leafLocal(door, from, _n); side = loc.x > lw / 2 ? 1 : -1; }
+        const k = (n) => { let h = Math.imul((door.holes.length + 1) * 2654435761 ^ n, 2246822519); h ^= h >>> 13; return ((h >>> 0) % 10000) / 10000; };
+        const spot = chipSpot(lw, dh, k(1), k(2), k(3), side);
+        const hole = { x: Math.round(spot.x * 100) / 100, y: Math.round(spot.y * 100) / 100, r: Math.round(spot.r * 100) / 100, rot: Math.round(k(4) * 6.28 * 100) / 100 };
+        if (door.holes.length < 6) { door.holes.push(hole); this._hole(door, hole); }
+        this._cracks(door);
+        // splinters from the hole, thrown away from the blast
+        const m = door.mirror ? -1 : 1, c = Math.cos(door.ry), s = Math.sin(door.ry);
+        const lx = -m * lw / 2 + m * Math.cos(door.a) * hole.x, lz = -Math.sin(door.a) * hole.x;
+        const wx = door.x + c * lx + s * lz, wy = door.y + hole.y, wz = door.z - s * lx + c * lz;
+        const dir = from ? _v.set(wx - from.x, 0, wz - from.z).normalize() : _v.set(Math.sin(door.ry), 0, Math.cos(door.ry));
+        this._splinters(door, wx, wy, wz, dir, 5 + Math.round(share * 10), 1);
+        g.sound?.playCrack?.(0.7);
+        this._rattle(door, true);
+        return 'chip';
+    }
+
+    /** The door bursts: boards and a cloud of splinters thrown away from `from`, a crash; the leaf is gone (its doorway open). */
+    shatter(door, from = null) {
+        const g = this.game, lw = door.w || W, dh = door.h || H, m = door.mirror ? -1 : 1, c = Math.cos(door.ry), s = Math.sin(door.ry);
+        const mid = this._leafMiddle(door, new THREE.Vector3());
+        const dir = from ? new THREE.Vector3(mid.x - from.x, 0, mid.z - from.z) : new THREE.Vector3(Math.sin(door.ry), 0, Math.cos(door.ry));
+        if (dir.lengthSq() < 1e-4) dir.set(1, 0, 0);
+        dir.normalize();
+        // the boards: along the leaf, each a different height, flung out
+        for (let i = 0; i < 7; i++) {
+            const t = (i + 0.5) / 7, lx = -m * lw / 2 + m * t * lw * Math.cos(door.a), lz = -t * lw * Math.sin(door.a);
+            const x = door.x + c * lx + s * lz, z = door.z - s * lx + c * lz;
+            this._splinters(door, x, door.y + dh * (0.15 + 0.7 * ((i * 0.37) % 1)), z, dir, 3, 2.2);
+        }
+        this._splinters(door, mid.x, mid.y, mid.z, dir, 38, 1);
+        g.fx?.lightFlash?.(mid, 0xffd9a0, 3, 0.12, 20);
+        for (let i = 0; i < 6; i++) g.fx?.smoke?.spawn?.(mid.x + (Math.random() - 0.5) * lw, door.y + Math.random() * dh, mid.z + (Math.random() - 0.5) * lw, dir.x * 1.5, 0.8, dir.z * 1.5, 0xb9a98a, 0.9 + Math.random() * 0.6, 1.2 + Math.random(), { shrink: -0.5 });
+        g.sound?.playCrack?.(1);
+        g.sound?.playExplosion?.(mid, g.character.group.position, 0.35);
+        door.wrecked = true;
+    }
+
+    /** `n` boards/splinters of the door's wood thrown from a point along `dir` (the planks pool of the ship breaking: long thin boards that tumble and lie). */
+    _splinters(door, x, y, z, dir, n, size) {
+        const fx = this.game.fx, cols = splinterColors(door.color ?? 0x7a4f2a);
+        for (let i = 0; i < n; i++) {
+            const sp = 4 + Math.random() * 10, big = size > 1.5;
+            const px = x + (Math.random() - 0.5) * 0.5, pz = z + (Math.random() - 0.5) * 0.5, py = y + (Math.random() - 0.5) * 0.5;
+            const vx = dir.x * sp + (Math.random() - 0.5) * 6, vz = dir.z * sp + (Math.random() - 0.5) * 6, vy = 2 + Math.random() * 7;
+            if (fx?.planks) fx.planks.spawn(px, py, pz, vx, vy, vz, cols[i % cols.length], big ? 0.5 + Math.random() * 0.9 : 0.18 + Math.random() * 0.4, 3 + Math.random() * 3, { shrink: 0.08, fade: false, spin: 12 });
+            else fx?.debris?.spawn(px, py, pz, vx, vy, vz, cols[i % cols.length], 0.12 + Math.random() * 0.2, 3, { shrink: 0.1, fade: false, spin: 10 });
+        }
+    }
+
     snapshot() {
         // (house doors are part of the generated world: not saved, unless carried away)
-        return [...this.list.values()].filter((d) => !d.gen || d.moved).map((d) => ({ id: d.id, x: d.x, y: d.y, z: d.z, ry: d.ry, color: d.color, a: d.a || 0, w: d.w, h: d.h, ...(d.mirror ? { mirror: 1 } : {}), ...(d.gate ? { gate: 1 } : {}) }));
+        return [...this.list.values()].filter((d) => !d.gen || d.moved).map((d) => ({ id: d.id, x: d.x, y: d.y, z: d.z, ry: d.ry, color: d.color, a: d.a || 0, w: d.w, h: d.h, ...(d.mirror ? { mirror: 1 } : {}), ...(d.gate ? { gate: 1 } : {}), ...(d.style ? { style: d.style } : {}), ...(d.hp != null && d.hp < d.maxHp ? { hp: Math.round(d.hp * 10) / 10, holes: d.holes } : {}) }));
     }
 
     restore(list) { for (const d of list || []) this._place(d); }
