@@ -109,6 +109,10 @@ export class OneEuroFilter {
     }
 
     filter(value, timeSec) {
+        // (19.11: one NaN / Infinity from the camera (a missing depth, a lost point) used to poison the state for good: x = NaN, and every later
+        //  value NaN — a limb gone or flying until the filter was reset. A non-number is ignored; a state that went bad is started anew.)
+        if (!Number.isFinite(value) || !Number.isFinite(timeSec)) return this.x === null || !Number.isFinite(this.x) ? (Number.isFinite(value) ? value : 0) : this.x;
+        if (this.x !== null && (!Number.isFinite(this.x) || !Number.isFinite(this.dx))) this.reset();
         if (this.x === null || this.lastTime === null) {
             this.x = value;
             this.lastTime = timeSec;

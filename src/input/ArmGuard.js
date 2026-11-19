@@ -66,8 +66,12 @@ export class ArmGuard {
         trustFall: 0.03, trustRise: 0.15, // s
         learnAt: 0.8, // trust over this: the bone is learnt from the picture
         maxStretch: 1.15, lenForget: 0.02, lenMinSeen: 8, // the bone's length guard
+        // A point beyond the TOP of the picture is above its parent for certain: its bone is built UP from the parent — the direction from the network's guess averaged over
+        // dirTau s (sideways at most dirSide of the bone), the length the human proportion at most (boneK × the shoulders' width). It does not need a bone
+        // seen before: an arm that is already raised when tracking (re)starts has none, and the raw guess of the point shook it by 8-10° (stress-pointing.mjs «up-clip»).
+        dirTau: 1.0, dirSide: 0.55, aspect: 16 / 9, boneK: { elbow: 0.78, wrist: 0.66 }, boneCeil: 1.08,
         minCutoff: 1.6, beta: 2.5, dCutoff: 2.0, lowTrustCut: 0.4, // the filter (Hz; speed in shoulder widths/s)
-        edgeCutoff: 1.2, // Hz: no filter of its own - a point not fully trusted still steadied this much (at zero trust)
+        edgeCutoff: 0.6, // Hz: no filter of its own - a point not fully trusted still steadied this much (at zero trust)
     };
 
     /**
@@ -143,7 +147,24 @@ export class ArmGuard {
 
                 // 2. the target: the network's point by its trust, the rest — the last good bone from the parent
                 let tx = p.x, ty = p.y, tz = p.z || 0;
-                if (J.off && J.trust < 0.999) {
+                // (the bone the network's points give, averaged: fast while the point is trusted, slow (dirTau) while it is a guess — a guess is noisy but not biased, and
+                //  its mean says how far up the arm really goes; the held bone alone would stay where the arm was last seen)
+                {
+                    const ox = p.x - parent.x, oy = p.y - parent.y, tau = J.trust > 0.8 ? 0.06 : P.dirTau, k = Math.min(1, dt / tau);
+                    if (J.gox == null) { J.gox = ox; J.goy = oy; } else { J.gox += (ox - J.gox) * k; J.goy += (oy - J.goy) * k; }
+                }
+                const aboveTop = where === 'top' && edge < 0.015 && J.trust < 0.999;
+                if (aboveTop) {
+                    // the point is out of the top: the bone goes UP from its parent — at least to the top edge, not beyond a human bone, not far sideways
+                    const capH = P.boneK[name] * sw * P.aspect * P.boneCeil; // (height units: the human proportion, never longer)
+                    let hx = J.gox * P.aspect, hy = Math.min(J.goy, -parent.y + 0.0);
+                    hx = Math.max(-Math.abs(hy) * P.dirSide, Math.min(Math.abs(hy) * P.dirSide, hx));
+                    const hl = Math.hypot(hx, hy);
+                    if (hl > capH) { hx *= capH / hl; hy *= capH / hl; }
+                    const bx = parent.x + hx / P.aspect, by = parent.y + hy;
+                    tx = bx + (tx - bx) * J.trust; ty = by + (ty - by) * J.trust;
+                    tz = (parent.z || 0) + ((tz - (parent.z || 0)) * J.trust);
+                } else if (J.off && J.trust < 0.999) {
                     const hx = parent.x + J.off.x * sw, hy = parent.y + J.off.y * sw, hz = (parent.z || 0) + J.off.z * sw;
                     tx = hx + (tx - hx) * J.trust; ty = hy + (ty - hy) * J.trust; tz = hz + (tz - hz) * J.trust;
                 }

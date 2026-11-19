@@ -523,7 +523,7 @@ export class ItemSystem {
         if (!h.q) h.q = _q.clone();
         else {
             const st = (this._aimSteady || (this._aimSteady = {}))[side] || (this._aimSteady[side] = new AimSteady());
-            h.q.slerp(_q, st.alpha(_g.set(0, 1, 0).applyQuaternion(h.q), d, Math.max(1e-3, dt)));
+            h.q.slerp(_q, st.alpha(_g.set(0, 1, 0).applyQuaternion(h.q), d, Math.max(1e-3, dt), !!(ch.isRunning && ch.runIntensity > 0))); // (running: the steps' shake is held back — V5_WAND.RUN)
         }
         h.model.quaternion.copy(h.q);
         // its own end V5_WAND_BACK behind the point in the palm, along the (steadied) wand
