@@ -23,6 +23,7 @@ function fake({ coins = [], night = false, auth = true } = {}) {
             hud: { setVoice: (t) => said.push(t) }, sound: {}, localId: 'me', sync: { arena: (m) => joined.push(m) },
         },
         _join: (A2, id, tier, stake) => joined.push({ id, tier, stake }),
+        _tryPay(A2, P) { return ArenaDuels.prototype._tryPay.call(this, A2, P); }, // (the stake's taking is its own method now: also used the moment the opponent is chosen)
     };
     return { self, A, picked, spawned, joined, said };
 }
@@ -78,4 +79,12 @@ test('the figures are half the size (the author); the steward names the stake an
     assert.equal(FIG.H, 0.5);
     assert.ok(STEWARD_LINES.put.includes('{n}'));
     assert.ok(STEWARD_LINES.closing.length > 10);
+});
+
+test('coins laid BEFORE the steward names the price count the moment it is named (the author 19.11)', () => {
+    const f = fake({ coins: [['c1', 130, 1.2, 11, 0.3]] });
+    f.self.pay = { aid: 'ar1', tier: 'adept', fee: 100, t: 0, short: null };
+    assert.equal(ArenaDuels.prototype._tryPay.call(f.self, f.A, f.self.pay), true);
+    assert.deepEqual(f.picked, ['c1']);
+    assert.deepEqual(f.joined[0], { id: 'me', tier: 'adept', stake: 100 });
 });

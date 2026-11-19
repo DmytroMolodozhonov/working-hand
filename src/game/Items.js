@@ -688,6 +688,7 @@ export class ItemSystem {
         this.releaseHand(side);
         this._outOfSolid(pos);
         this.justLet.set(item.uid, { at: performance.now(), away: false });
+        if (item.kind === 'coins') this.coinLet = { x: pos.x, y: pos.y, z: pos.z, at: performance.now(), away: false }; // (coins put down on a counter: the pile may be new stacks with other uids — the place is remembered too)
         const v = vel.clone();
         const w = spin ? spin.clone() : null;
         if (this.auth) {
@@ -875,6 +876,16 @@ export class ItemSystem {
         return now - t[side] < TOUCH_MS;
     }
 
+    /** The place where my coins were just put down still holds the hand: true — these coins are not taken yet (see the pick-up loop). */
+    _coinLocked(L, G, now) {
+        const c = this.coinLet;
+        if (now - c.at > REGRAB.MS) { this.coinLet = null; return false; }
+        const dh = Math.hypot(G.x - c.x, G.y - c.y, G.z - c.z);
+        if (dh > REGRAB.AWAY * 2) c.away = true; // (the hand has left the place: a new grip is free)
+        if (c.away) return false;
+        return Math.hypot(L.model.position.x - c.x, L.model.position.y - c.y, L.model.position.z - c.z) < 0.9 && dh < 0.9;
+    }
+
     /** May my hands take this thing again (REGRAB)? Forgets it once they may. */
     _regrabOk(L, now) {
         const e = this.justLet.get(L.item.uid);
@@ -1018,6 +1029,9 @@ export class ItemSystem {
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
                 if (this.justLet.size && !this._regrabOk(L, now)) continue; // (just put down: not back into the same fingers)
+                // (coins put down at a counter and taken again, put down, taken… — the author 19.11: «вхожу в какой-то цикл»: the pile's stacks get other uids, so the place counts:
+                // coins lying within 0.9 m of where I just let coins go are not taken by fingers that have not left that place — a new grip after the hand has moved off (REGRAB.AWAY…) or 2.5 s)
+                if (L.item.kind === 'coins' && this.coinLet && this._coinLocked(L, G, now)) continue;
                 if (L.model.position.distanceToSquared(G) > 9) continue;
                 // a good on a market counter: not before it is paid for (coins on the counter, its name said — CastleTalk);
                 // then only taken by really closing the fingers on it (a brush of the hand takes nothing)

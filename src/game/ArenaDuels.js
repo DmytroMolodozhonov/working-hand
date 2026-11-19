@@ -62,6 +62,7 @@ import { duelReport } from './DuelReport.js';
 import { ArenaDomeFx } from '../fx/ArenaDomeFx.js';
 import { DuelEndUi, AGAIN_AFTER, AGAIN_AFTER_LOSS } from '../ui/DuelEndUi.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
+import { outOfSight } from './Animals.js';
 
 const WALK = 2.3, RUN = 5.6;
 /** How many players may wait in an arena's line (the board shows four, the rest «и ещё N»). */
@@ -257,6 +258,39 @@ export class ArenaDuels {
         return false;
     }
 
+    /** Is the point out of every player's sight (far, or behind the local player's back)? The arena's people must not appear in front of the eyes. */
+    _unseen(p) {
+        const g = this.game, me = g.character.group.position;
+        const look = g.animals?._look?.(_h) || null; // (_h: the module's spare vector)
+        if (Math.hypot(me.x - p.x, me.z - p.z) < 36) return false;
+        if (Math.hypot(me.x - p.x, me.z - p.z) < 160 && look && !outOfSight(me, look, p.x, p.z, 1.2)) return false;
+        for (const r of g.remotes?.values?.() || []) if (r?.position && !r.dead && Math.hypot(r.position.x - p.x, r.position.z - p.z) < 90) return false;
+        return true;
+    }
+
+    /**
+     * (host) The arena comes to life by day with nobody close (the author 19.11: «когда игрок приходит, если сейчас день — битва уже должна быть: волшебники
+     * на местах, бой идёт между какими-то магами; только утром они подходят»): the fans are on their seats and a duel is half over — nobody sees them
+     * appear. In the morning (the first tenth of the day) or with the player at the stands, they walk in as before — from the tower's side, unseen.
+     */
+    _prime(A, cs) {
+        if (A.def.practice) return;
+        A.want = ARENA_DUEL.FANS[0] + Math.floor(Math.random() * (ARENA_DUEL.FANS[1] - ARENA_DUEL.FANS[0] + 1));
+        let n = 0;
+        for (let i = 0; i < A.want; i++) { if (this._recruit(A, cs, 'fan', null, 'seated')) n++; else break; }
+        const a = this._recruit(A, cs, 'duel', null, 'floor'), b = a ? this._recruit(A, cs, 'duel', null, 'floor') : null;
+        if (a && !b) { this._release(a, true); }
+        else if (a && b) {
+            const m = A.def.gates;
+            a.arena.side = Math.random() < 0.5 ? 0 : 1; b.arena.side = 1 - a.arena.side;
+            for (const v of [a, b]) { const at = m[v.arena.side].mark; v.x = at.x; v.y = at.y; v.z = at.z; v.path = null; v.yaw = yawTo(v.x, v.z, A.def.x, A.def.z); this.life._ground(v); }
+            A.duel = { a, b, p: null, tier: null, phase: 'fight', t: 0, go: 15 + Math.random() * 120, offT: 0, pull: null, trophy: null, said: 3 }; // (already well on: the beams fly, the fans cheer)
+            for (const v of [a, b]) v.castCd = Math.random() * 1.5;
+            this._send(A);
+        }
+        this.log.push('primed:' + n + (a && b ? ':duel' : ''));
+    }
+
     _run(A, dt) {
         const L = this.life;
         if (!L?.enabled) return;
@@ -270,9 +304,15 @@ export class ArenaDuels {
         if (live && !A.def.practice) {
             if (!A.want) A.want = ARENA_DUEL.FANS[0] + Math.floor(Math.random() * (ARENA_DUEL.FANS[1] - ARENA_DUEL.FANS[0] + 1));
             A.spawnT -= dt;
-            if (!A.duel && A.fans.size < A.want && A.spawnT <= 0) { // (the people come while the field is empty — never during a duel)
+            if (!A.duel && A.fans.size < A.want && A.spawnT <= 0 && this._unseen(A.home)) { // (the people come while the field is empty — never during a duel)
                 A.spawnT = 1.2 + Math.random() * 1.8; this._recruit(A, cs, 'fan'); }
         } else if (A.fans.size && !A.duel) { for (const v of [...A.fans]) this._release(v); A.fans.clear(); A.want = 0; } // (they leave when the field is free)
+        // (the arena has just come to life by day with the player not at its stands and not in the morning: the show is on already)
+        if (live && !A.primed) {
+            A.primed = true;
+            const pm = this.game.dayPhase?.() ?? 0.5, me = this.game.character.group.position;
+            if (pm > 0.12 && pm < 0.75 && Math.hypot(me.x - A.def.x, me.z - A.def.z) > (A.def.outer || 40) + 25 && !this.mode) this._prime(A, cs);
+        }
         this._keepSteward(A, cs, live, dt);
         // the duels: one after another (a player signed up does not wait out a long rest)
         const D = A.duel;
@@ -288,8 +328,9 @@ export class ArenaDuels {
             if (near) {
                 // (the steward gives the coins from his hand — or, with nobody there, they lie on the book as ever)
                 const w = A.steward && !A.steward.dead ? A.steward : null, b = A.def.desk.book;
-                const at = w ? new THREE.Vector3(w.x + (p.x - w.x) * 0.35, w.y + 2.6, w.z + (p.z - w.z) * 0.35) : new THREE.Vector3(b.x, b.y + 0.7, b.z);
-                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: o.coins }, at, { hover: true });
+                // (the prize lies ON his counter, not in the air — the author 19.11: «монеты должны лежать у него на прилавке»: put on the book's top, a little above it, and left to settle by the thing's own physics)
+                const at = new THREE.Vector3(b.x, b.y + 0.35, b.z);
+                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: o.coins }, at);
                 if (w) this._say(A, 'win');
                 this._fx(A, 'fanfare', b);
                 this._tell(o.id, { e: 'paid', id: A.id, coins: o.coins });
@@ -473,7 +514,7 @@ export class ArenaDuels {
     _maxT(A) { return A.def.practice ? ARENA_DUEL.PRACTICE_T : ARENA_DUEL.MAX_T; }
 
     /** (host) One more wizard of the tower for the arena: from its roster, one who is not out now. */
-    _recruit(A, cs, kind, only = null) {
+    _recruit(A, cs, kind, only = null, pre = null) {
         const L = this.life, def = cs.def, st = L.state(def.id);
         const n = def.population || 24;
         const start = 1 + Math.floor(Math.random() * (n - 1));
@@ -490,6 +531,13 @@ export class ArenaDuels {
             v.job = 'arena';
             L._ground(v);
             if (kind === 'fan') A.fans.add(v);
+            if (pre === 'seated') { // (the show is already on when the player comes: the fan is on his seat, nobody sees him walk in — _prime)
+                const seat = this._seat(A, v);
+                if (!seat) { A.fans.delete(v); v.arena = null; L._deactivate(v); return null; }
+                Object.assign(v.arena, { seat, leg: 2, vleg: 99, edged: true });
+                v.x = seat.x; v.y = seat.y; v.z = seat.z; v.yaw = seat.yaw; v.seated = true; v.path = null;
+                L._ground(v);
+            } else if (pre === 'floor') v.arena.leg = 2; // (a duellist already inside: put on his mark by _prime)
             this.log.push(kind + ':' + v.id);
             return v;
         }
@@ -528,6 +576,9 @@ export class ArenaDuels {
         // the players signed up first (the first in the queue still here, with a wand)
         const p = A.queue.take((id) => !!this._here(id));
         const tier = p != null ? A.tiers.get(p) || null : null; // (the opponent the player chose at the steward — the dolls)
+        // (the wizards come out of the tower's side: not while that spot is in the player's eyes — a player's own duel waits at most 12 s for it)
+        if (!this._unseen(A.home) && (p == null || (A.unseenWait = (A.unseenWait || 0) + 1) < 12)) { if (p != null) A.queue.list.unshift(p); A.restT = p != null ? 1 : 2; return; }
+        A.unseenWait = 0;
         const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : this._recruit(A, cs, 'duel');
         if (!a) { A.restT = 10; if (p != null) A.queue.list.unshift(p); return; }
         if (p != null) A.tiers.delete(p);
@@ -676,7 +727,7 @@ export class ArenaDuels {
             D.pay = S;
             if (S.kind === 'win') A.owed.push({ id: D.p, coins: S.coins });
             else if (S.kind === 'refund') this._tell(D.p, { e: 'pay', id: A.id, coins: S.coins, why });
-            this._tell(D.p, { e: 'end', id: A.id, r: who === 'p' ? 'win' : who === 'a' ? 'lose' : why === 'time' ? 'draw' : why, coins: S.coins, stake, kind: S.kind });
+            this._tell(D.p, { e: 'end', id: A.id, r: who === 'p' ? 'win' : who === 'a' ? 'lose' : why === 'time' ? 'draw' : why, coins: S.coins, stake, kind: S.kind, opp: D.a?.id, omax: Math.round(D.a?.maxMana || 0) });
             this.log.push(`settle:${D.p}:${S.kind}:${S.coins}`);
         }
         this._logEnd(A, D, who, why);
@@ -1241,6 +1292,7 @@ export class ArenaDuels {
         // for a pouch laid on his counter / book (_payStep), the coins are taken out of it there and the change is left
         if (!free) {
             this.pay = { aid: A.id, tier, fee, t: 0, short: null };
+            if (A.def.desk && this._tryPay(A, this.pay)) return `${L['terms_' + tier]} Монеты уже лежали на прилавке — ставка ${fee} принята.`; // (laid before he named the price: they count)
             return `${L['terms_' + tier]} ${L.put.replace('{n}', fee)}`;
         }
         const stake = 0;
@@ -1268,6 +1320,16 @@ export class ArenaDuels {
         }
         if ((P.look = (P.look || 0) - dt) > 0) return;
         P.look = 0.25;
+        this._tryPay(A, P);
+    }
+
+    /**
+     * The named stake `P` against the coins lying still on the steward's counter / book (also called at once when the opponent is chosen: the player
+     * may lay the coins BEFORE the steward names the price — the author 19.11: «монеты дал раньше, он не понял, смысл потерялся» — they wait on the counter
+     * and count the moment the stake is named). → true: paid and signed up.
+     */
+    _tryPay(A, P) {
+        const g = this.game, S = A.def.desk.stand;
         const I = g.items, spots = [A.def.desk.book, A.def.desk.front, S].filter(Boolean), mine = g.coinDeal?.mine;
         const purses = [];
         for (const L of I.loose.values()) {
@@ -1277,11 +1339,11 @@ export class ArenaDuels {
             const p = L.model.position;
             if (spots.some((q) => Math.hypot(p.x - q.x, p.z - q.z) < STEWARD.PAY_R && Math.abs(p.y - q.y) < 2.5)) purses.push(L);
         }
-        if (!purses.length) return;
+        if (!purses.length) return false;
         const have = purses.reduce((n, L) => n + (L.item.count || 0), 0);
         if (have < P.fee) {
             if (P.short !== have) { P.short = have; g.hud?.setVoice?.(`💰 На прилавке ${have} монет, а ставка — ${P.fee}. Добавьте ещё ${P.fee - have}`, true); }
-            return;
+            return false;
         }
         // the coins are taken out: a magic pouch stays lying with the change in it, a plain one is taken and the change left in its place
         const at = purses[0].model.position.clone(), magic = purses.find((L) => L.item.magic), mAt = magic?.model.position.clone();
@@ -1295,6 +1357,7 @@ export class ArenaDuels {
         const busy = this.auth ? !!A.duel : A.ph !== 'idle';
         g.hud?.setVoice?.(`💰 Ставка ${P.fee} монет принята. ${busy ? STEWARD_LINES.wait : STEWARD_LINES.soon}`, true);
         this.log.push('stake-paid:' + P.fee);
+        return true;
     }
 
     /** (host) A player signs up. */
@@ -1354,6 +1417,9 @@ export class ArenaDuels {
             case 'fend': this._friendEndShow(m); break;
             case 'end':
                 this.count = null; this.myQueue = null;
+                // (a duel won at the arena counts as a duel won — the author 19.11: «на арене волшебник уже в битве: даже если он не успел выкрикнуть заклинание и лучей не было, победа засчитывается»:
+                // the cells (+1…+3, once per opponent, the mastery too) come from the arena's own verdict, not from a beam clash — Mana.duelWonAlive)
+                if (!this.mode && m.r === 'win' && m.opp) this.game.mana?.duelWonAlive?.(m.opp, Math.random, m.omax || undefined);
                 if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
                 hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он вернёт ставку и добавит столько же: ${m.coins ?? ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? `😔 Поражение${m.stake > 0 ? ` — ставка ${m.stake} монет пропала` : ''}. Победитель бросил вашу палочку на землю — подберите её` : m.r === 'draw' ? `⏳ Пять минут прошло — ничья${m.stake > 0 ? `, ставка ${m.stake} монет возвращена` : ''}` : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;
