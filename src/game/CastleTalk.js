@@ -34,6 +34,8 @@ import { markIntent } from './GestureLife.js';
 import { allLog } from '../core/AllLog.js';
 import * as THREE from 'three';
 import { ShowGaze } from './ShowGaze.js';
+import { zonesOf, payPoint } from './StallZones.js';
+import { CounterTrays } from './CounterTrays.js';
 import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
@@ -185,6 +187,7 @@ export class CastleTalk {
         this._labelText = new Map(); // good uid -> label text (rebuilt by _watchMarket)
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
+        this.trays = new CounterTrays(game); // the rune tray on a counter's coin plate (CounterTrays.js)
         this.showGaze = new ShowGaze(game, (side, o, d) => game.duel?._myRay?.(side, o, d), (ray) => this.commands?._ground?.(ray)); // (the people look where I point — ShowGaze.js)
         this.commands = new CommandTalk(this, journal); // plain-word commands: poses, walks, formations, spars, «не могу» (CommandTalk.js)
         this.wave = new WaveDetector(); // my hand waving to people (Attention.mayNotice)
@@ -1194,7 +1197,7 @@ export class CastleTalk {
                 s.goods = s.goods.filter((uid) => g.items.loose.has(uid));
                 if (s.goods.length >= 3 || now < s.restockAt) return;
                 s.restockAt = now + (s.goods.length ? 90000 : 0);
-                const c = stall.goodsRect || stall.counter; // (a wide counter: the goods lie on its display part, the coin plate stays empty — WizardVillages)
+                const c = zonesOf(stall).goods || stall.counter; // (a counter has a goods part and an empty plate for the coins: StallZones — the wizards' lane of generation 34 builds its own)
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
@@ -1461,7 +1464,10 @@ export class CastleTalk {
             g.weapons.remove(w); g.sync?.weaponGone?.(w);
         } else { gone(); return; }
         // (one pouch with the whole sum: the pouch has no limit; picked up, its coins go into mine)
-        g.items.spawnLoose(makeMagicPouch(newUid(), Math.max(1, Math.round(price))), new THREE.Vector3(p.x, p.y + 0.3, p.z));
+        // (the pouch with the price lies on the counter's coin plate, if the counter has one — not where the thing lay, among the others)
+        let at = p;
+        for (const cs of this.life.castles.values()) { if (!cs.awake) continue; for (const st of cs.def.stalls || []) if (st.counter && onCounter(st, p)) { const pp = payPoint(st); if (pp) at = { x: pp.x, y: pp.y, z: pp.z }; } }
+        g.items.spawnLoose(makeMagicPouch(newUid(), Math.max(1, Math.round(price))), new THREE.Vector3(at.x, (at === p ? p.y : at.y) + 0.3, at.z));
     }
 
     /** A thing of mine in my hands or slots, by uid. */
@@ -1852,6 +1858,11 @@ export class CastleTalk {
     update(dt) {
         this._flushChange(dt);
         this.commands?.sample(dt); // (where my hand points, a few times a second: the words come later than the hand)
+        this._trayT = (this._trayT || 0) - dt;
+        if (this._trayT <= 0) { // (on every computer: the rune tray on each awake counter's coin plate — also at the buyers' counters, which hold no goods)
+            this._trayT = 1;
+            for (const cs of this.life.castles.values()) if (cs.awake && cs.def.stalls) cs.def.stalls.forEach((st, i) => { if (st.counter) this.trays.ensure(this._stallKey(cs.def, i), st); });
+        }
         this.showGaze?.update(dt); // (a hand held up and pointing: the people near look that way — ShowGaze.js)
         const g = this.game;
         const now = performance.now();

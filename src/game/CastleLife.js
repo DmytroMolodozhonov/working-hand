@@ -693,6 +693,7 @@ export class CastleLife {
             }
             talk.stalls.delete(key);
         });
+        if (talk?.trays && cs.def.stalls) cs.def.stalls.forEach((st, i) => talk.trays.drop(talk._stallKey(cs.def, i))); // (its counters' trays are put away with it)
         // its chests are put away too, as a village house's (an opened one is remembered — _openedChests; an
         // unlocked one — Locks): a long flight over the world left every castle's chests in the scene
         const g = this.game;

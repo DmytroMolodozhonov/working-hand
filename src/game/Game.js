@@ -4211,6 +4211,7 @@ export class Game {
         addAll(this.breakthrough?.sampleModels?.() || []); // (the earth of «Breakthrough» rising out of the ground)
         addAll(this.levMax?.sampleModels?.() || []); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
+        try { zoo.add(this.castleLife.talk.trays.sampleModel()); } catch (e) { console.error('prewarm trays', e); } // (the rune tray of a counter's coin plate — CounterTrays.js)
         try { prewarmZombieTextures(); zoo.add(new Zombie(new THREE.Scene(), new THREE.Vector3(), 0, {}).group); } catch (e) { console.error('prewarm zombie', e); } // (the new zombie: its painted atlases and its shaders at the loading screen, not at the first night)
         for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)
         // (every thing lying about — and the swords and axes — as the video card draws them: one shape each (Items.oneShape,
