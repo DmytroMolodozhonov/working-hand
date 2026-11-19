@@ -553,6 +553,7 @@
 - `WorldSave.js` — worlds are saved by themselves, all the time.
 - `Wreck.js` — things in a building that is blown apart (doors, beds, chests, window glass).
 - `ZombieSpawn.js` — zombies come out of the dark.
+- `FireThaw.js` — «Fire Maxima» от замороженного героя: лёд тает, палочка не нужна (исключающее заклинание, 19.11); тест `fire-thaw`.
 
 ### `src/entities/` — модели: герой, жители, зомби, оружие, кисти, позы (31)
 
@@ -584,7 +585,8 @@
 - `VillagerModel.js` — light voxel people for the castles: builders, farmers, merchants, knights and kings.
 - `Weapon.js` — a physical sword/axe.
 - `WeaponModels.js` — realistic procedural sword and axe.
-- `Zombie.js` — enemy AI and visuals.
+- `Zombie.js` — зомби: ум и живое тело (одна поза — бёдра, колени, плечи, локти, спина, голова, челюсть; шарканье, три удара, ползание без ног, горение на солнце, кровь из культей).
+- `ZombieModel.js` — новый скин зомби (19.11): 6 обликов, 4 нарисованные текстуры-атласа на зомби (голова с челюстью, торс, рука с предплечьем, нога с голенью), светящиеся глаза через emissive-карту; снимки — `tools/zombie-screenshots.mjs` → `docs/media/zombie/`.
 
 ### `src/fx/` — эффекты: частицы, свет, заклинания, пентаграммы (48)
 
