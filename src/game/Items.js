@@ -342,7 +342,7 @@ export class ItemSystem {
         // (c, y0, y1 in the model's own units — localToWorld scales them; r, rh in metres)
         const k = 1 / (model.scale.x || 1);
         const c = box.getCenter(new THREE.Vector3()), h = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-        return { c: c.multiplyScalar(k), r: Math.max(h.x, h.y, h.z) * 0.75, rh: Math.max(0.03, Math.min(h.x, h.z) * 0.6), y0: box.min.y * k, y1: box.max.y * k };
+        return { c: c.multiplyScalar(k), r: Math.max(h.x, h.y, h.z) * 0.75, rh: Math.max(0.03, Math.min(h.x, h.z) * 0.6), y0: box.min.y * k, y1: box.max.y * k, hx: h.x * k, hz: h.z * k };
     }
 
     /** How far the grip point G (in the fingers) is from the thing: its handle for long things, else its body. */
@@ -1015,6 +1015,17 @@ export class ItemSystem {
             if (S && ch.getHandWorldPosition) {
                 const low = GRIPPED[kind]?.axis === 'hang' ? h.model.localToWorld(_a.set(S.c.x, S.y0, S.c.z)) : h.model.localToWorld(_a.copy(S.c)).setY(_a.y - S.rh);
                 (h.low || (h.low = new THREE.Vector3())).copy(low).sub(ch.getHandWorldPosition(side, _b));
+                // (a hanging piece — armour, a robe, a backpack — is as wide as its cloth: the four lower corners keep out of a chest, a wall, a counter too, not only the lowest middle point;
+                // the author 19.11: «броня, которую надевают, проходит сквозь сундуки и камень»)
+                if (GRIPPED[kind]?.axis === 'hang' && S.hx != null && kind !== 'coins') {
+                    const hp = ch.getHandWorldPosition(side, _b), lows = h.lows || (h.lows = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
+                    for (let q = 0; q < 4; q++) {
+                        h.model.localToWorld(lows[q].set(S.c.x + (q & 1 ? S.hx : -S.hx), S.y0, S.c.z + (q & 2 ? S.hz : -S.hz)));
+                        lows[q].sub(hp);
+                    }
+                    // (and the middle of its height too: a long robe hangs past a chest's lid before its hem does)
+                    h.lows.mid = h.model.localToWorld(_a.set(S.c.x, (S.y0 + S.y1) * 0.5, S.c.z)).sub(hp).clone();
+                } else h.lows = null;
             }
         }
         if (this.justLet.size) { const t = performance.now(); for (const [uid, e] of this.justLet) if (t - e.at > REGRAB.MS) this.justLet.delete(uid); }
