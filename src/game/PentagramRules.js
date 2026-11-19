@@ -108,7 +108,7 @@ registerPentagram({
 // The pentagrams of sight (SightRules.js, SecondSight.js): drawn once, they stay; stand in the circle — a gift for good (until death).
 registerPentagram({
     id: 'night', title: 'Пентаграмма ночного зрения', dark: false, glow: 0x9fb4ff, cost: 50, permanent: true, scroll: 'PentagramNight', lines: NIGHT_LINES,
-    effect: 'Встаньте в круг и заплатите 50 маны — вы навсегда (до смерти) станете видеть в темноте на 50 % лучше: и ночью, и в пещерах.',
+    effect: 'Положите на круг глаз глазоцвета, встаньте в круг и заплатите 50 маны — вы навсегда (до смерти) станете видеть в темноте на 50 % лучше: и ночью, и в пещерах.',
 });
 registerPentagram({
     id: 'sight', title: 'Пентаграмма видения невидимых', dark: false, glow: 0xff7ad9, cost: 150, permanent: true, scroll: 'PentagramSight', lines: SIGHT_LINES,

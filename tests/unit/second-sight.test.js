@@ -58,19 +58,27 @@ test('the pentagrams of sight: white, permanent, their own names, scrolls and dr
 });
 
 test('night: stand in the circle, pay 50, the gift is yours for good — once', () => {
-    const { s, g, log, ctx } = hero({ mana: 80 });
+    const eye = slot('eyeflower_eye'); // (19.11: the circle of night sight also wants the eye of an Eye-flower — it is used up)
+    const { s, g, log, ctx } = hero({ mana: 80, slots: [eye] });
     assert.equal(s.night, false);
     assert.ok(s.useCircle('night', ctx()));
-    assert.equal(s.night, true); assert.equal(g.combat.fatigue, 30, '50 paid'); assert.equal(log.fx, 1);
+    assert.equal(s.night, true); assert.equal(g.combat.fatigue, 30, '50 paid'); assert.equal(log.fx, 1); assert.equal(eye.count, 0, 'the eye is used up');
     assert.ok(log.said.some((t) => t.includes('50 %')));
     const again = s.useCircle('night', { ...ctx(), mana: 30 });
     assert.equal(again, false); assert.equal(g.combat.fatigue, 30, 'nothing paid twice'); assert.ok(log.hints.at(-1).includes('уже'));
 });
 
 test('night: no mana — nothing is paid, nothing is given', () => {
-    const { s, g, log, ctx } = hero({ mana: 49 });
+    const eye = slot('eyeflower_eye');
+    const { s, g, log, ctx } = hero({ mana: 49, slots: [eye] });
     assert.equal(s.useCircle('night', ctx()), false);
-    assert.equal(s.night, false); assert.equal(g.combat.fatigue, 49); assert.ok(log.hints.at(-1).includes('50'));
+    assert.equal(s.night, false); assert.equal(g.combat.fatigue, 49); assert.ok(log.hints.at(-1).includes('50')); assert.equal(eye.count, 1, 'the eye is kept');
+});
+
+test('night: no eye — only a hint, nothing is paid', () => {
+    const { s, g, log, ctx } = hero({ mana: 80 });
+    assert.equal(s.useCircle('night', ctx()), false);
+    assert.equal(s.night, false); assert.equal(g.combat.fatigue, 80); assert.ok(log.hints.at(-1).includes('глаз'));
 });
 
 test('sight: needs the feather — without it only a hint; with it 150 mana and ONE feather are used up', () => {
@@ -115,7 +123,7 @@ test('a dead hero gets nothing from a circle; death takes both gifts; the body k
     const dead = hero({ slots: [slot('spencerFeather')] });
     dead.g.combat.dead = true;
     assert.equal(dead.s.useCircle('night', dead.ctx()), false);
-    const h = hero({ slots: [slot('spencerFeather')] });
+    const h = hero({ slots: [slot('spencerFeather'), slot('eyeflower_eye')] });
     h.s.useCircle('night', h.ctx()); h.s.useCircle('sight', h.ctx());
     h.g.sight = h.s; h.g.bonus = { hp: 0, fatigue: 0 }; h.g.maxHP = 20; h.g.playerHP = 20; h.g.books = { learned: new Set() };
     const rec = captureLegacy(h.g);

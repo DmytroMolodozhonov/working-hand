@@ -553,6 +553,7 @@
 - `WorldSave.js` — worlds are saved by themselves, all the time.
 - `Wreck.js` — things in a building that is blown apart (doors, beds, chests, window glass).
 - `ZombieSpawn.js` — zombies come out of the dark.
+- `DealGuard.js` — у прилавка при сделке не срабатывают случайные заклинания (только Lumos, 19.11); тест `deal-guard`.
 - `FireThaw.js` — «Fire Maxima» от замороженного героя: лёд тает, палочка не нужна (исключающее заклинание, 19.11); тест `fire-thaw`.
 
 ### `src/entities/` — модели: герой, жители, зомби, оружие, кисти, позы (31)

@@ -290,9 +290,11 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 32;
+export const WORLD_GEN = 33;
 /** The first generation with waterfalls on the rivers (Waterfalls.js: rock bluffs with water falling into the river). */
 export const WATERFALLS_FROM_GEN = 32;
+/** Generation 33: the Eye-flower (Глазоцвет — a small flower with a living eye that blinks and looks about; its eye is for the circle of night sight) grows in the wild (MagicFlora.js: `fromGen`). */
+export const EYEFLOWER_FROM_GEN = 33;
 export const EARTH_SETTLEMENTS_FROM_GEN = 30;
 export const ELEMENTAL_SETTLEMENTS_FROM_GEN = 31;
 /**
