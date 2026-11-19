@@ -11,8 +11,7 @@ import { worldPlayers } from './WorldPlayers.js';
  *    lift it; let go before it balances and it falls back. «Вингардиум Левиоса» lifts it too
  *    (and tilted in the air it pours out). «Акцио» does not work on it: it is far too heavy to
  *    fly into a hand (and would not fit in one) — Accio looks only at things and weapons.
- *  - Water: a «Waterbollow» ball thrown or dropped into its opening pours in (a small ball fills
- *    a third, one big ball fills it). Ice does not pour: a frozen ball lies on it like on any
+ *  - Water: a «Waterbollow» ball thrown or dropped into its opening pours in (a ball of any size fills it to the brim). Ice does not pour: a frozen ball lies on it like on any
  *    box until it is melted. Rain falling into an open cauldron fills it slowly.
  *  - Things thrown or dropped into the opening: in the water they dissolve (ingredients);
  *    in a dry one, or things that never dissolve (a wand, a flask…), they lie on the bottom.
@@ -672,7 +671,8 @@ export class Cauldrons {
             const atRim = d <= CAULDRON.R_IN + b.r * 0.95 && y + b.r >= H - 0.2 && y - b.r <= H + 0.3;
             if (!(over || atRim) || b.vel.y > 1) continue;
             const g = this.game;
-            const vol = (4 / 3) * Math.PI * b.r ** 3;
+            // (the author 19.11: «Waterbollow наполнил котёл лишь частью, хотя должен был полностью»: a «Waterbollow» ball pours in the whole cauldron, whatever its size)
+            const vol = Math.max((4 / 3) * Math.PI * b.r ** 3, CAULDRON.FULL);
             g.water?._splash?.(_v.set(b.pos.x, this.fy(c) + surfaceY(c.st) + 0.1, b.pos.z), 1 + b.r * 0.6, 20 + b.r * 12);
             if (this._near(c, 30)) g.sound?.playSplash?.();
             c.splashT = 1;
@@ -683,6 +683,22 @@ export class Cauldrons {
                 if (c.st.water > before) { this._event(c, 'water'); this._send(c, 'water'); }
             }
             return true;
+        }
+        return false;
+    }
+
+    /**
+     * Is `p` (a hand with a flask) in the zone where a flask is dipped: over the opening and from just above the rim down into the pot? There a quiet opening of the
+     * hand is not a throw (the author 19.11: «колба постоянно выбрасывается»: reaching deep into a low potion the camera loses the hand at the bottom of the picture and
+     * it comes back open — the flask was «dropped»); Items._letGo keeps it in the hand.
+     */
+    flaskZone(p) {
+        for (const c of this.list.values()) {
+            if (!this.upright(c)) continue;
+            const dx = p.x - c.x, dz = p.z - c.z;
+            if (dx * dx + dz * dz > (CAULDRON.R_IN + 0.3) ** 2) continue;
+            const y = p.y - this.fy(c);
+            if (y > CAULDRON.BOTTOM - 0.6 && y < H + 1.0) return true;
         }
         return false;
     }
@@ -841,7 +857,7 @@ export class Cauldrons {
                 if (!this.upright(c) || c.st.water < 0.3) continue;
                 const dx = p.x - c.x, dz = p.z - c.z, y = p.y - this.fy(c);
                 // (the flask really in the liquid: under its surface — a low level needs the hand deeper)
-                if (y < CAULDRON.BOTTOM || y > surfaceY(c.st) - 0.05 || Math.hypot(dx, dz) > innerRadius(y) - 0.05) continue;
+                if (y < CAULDRON.BOTTOM - 0.25 || y > surfaceY(c.st) + 0.3 || Math.hypot(dx, dz) > innerRadius(Math.max(y, CAULDRON.BOTTOM)) - 0.05) continue; // (19.11: a LOW potion — the flask cannot go deeper than the bottom, so its reach to the surface is allowed a margin: it was thrown out of the hand instead of filling)
                 found = { side, c };
             }
         }

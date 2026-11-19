@@ -29,6 +29,13 @@ export const QUALITY_LEVELS = [
 export const ULTRA_LEVEL = { name: 'ультра', pixelRatio: 1.25, shadowSize: 3072, shadowEvery: 1, shadowFly: 110, view: 1.0, shadows: true, soft: true, clouds: true };
 
 /**
+ * «Лёгкий режим» (LiteMode.js): for a computer with NO video card (the picture is drawn by the processor) or a very weak one.
+ * Below «очень низкая»: a small picture (blown up by the browser), no shadows, no clouds, and the world drawn only a short way
+ * (the fog and the loaded land follow `view`: ~45 m of haze — a quarter of the triangles of the lowest ordinary level).
+ */
+export const LITE_LEVEL = { name: 'лёгкий режим', pixelRatio: 0.5, shadowSize: 512, shadowEvery: 4, shadowFly: 30, view: 0.5, shadows: false, soft: false, clouds: false };
+
+/**
  * How far the world is drawn (settings → «Прорисовка мира»). The fog, the
  * loaded terrain chunks and the sea all follow this one number: the fog's
  * distances are multiplied by it, and the chunks load one chunk beyond the fog,
@@ -103,7 +110,20 @@ export class QualityManager {
     }
 
     get current() {
+        if (this.lite) return LITE_LEVEL; // (the light mode beats everything: «Авто» does not step in it, «Ультра» is off)
         return this.ultra ? ULTRA_LEVEL : QUALITY_LEVELS[this.level];
+    }
+
+    /** «Лёгкий режим» on / off (LiteMode.js). The shadows' kind is fixed at the first apply: a switch later recompiles the shaders once (we are slow already). */
+    setLite(on) {
+        if (!!this.lite === !!on) return;
+        this.lite = !!on;
+        this._bad = 0;
+        this._goodFor = 0;
+        this._sinceChange = 0;
+        if (this.lite && this._shadowsFixed) this._shadowsFixed = { on: false, soft: false };
+        else if (!this.lite && this._shadowsFixed && !this._shadowsFixed.on) this._shadowsFixed = null; // (back: decide the shadows again from the level)
+        this.apply();
     }
 
     /** Apply the current level to the renderer and the world. */
@@ -136,7 +156,7 @@ export class QualityManager {
             });
         }
         if (world) { world._cloudsWanted = q.clouds; world.sky?.setClouds(q.clouds || (world.storm || 0) > 0.1); }
-        if (world) world.viewScale = q.view;
+        if (world) { world.viewScale = q.view; world.lite = q === LITE_LEVEL; }
         // (in flight the sun's shadow covers a bigger box ahead: the cheap levels keep the small one)
         if (world) world.shadowFlyExtent = q.shadowFly;
         if (this.auto && !this.ultra) { try { localStorage.setItem('zns-quality-level', String(this.level)); } catch (e) { /* not remembered */ } }
@@ -147,7 +167,7 @@ export class QualityManager {
         const q = this.current;
         this._frame++;
         if (q.shadowEvery > 1 && this._frame % q.shadowEvery === 0) this.renderer.shadowMap.needsUpdate = true;
-        if (!this.auto || this.ultra || !(deltaTime > 0) || deltaTime > 1) return;
+        if (this.lite || !this.auto || this.ultra || !(deltaTime > 0) || deltaTime > 1) return;
         this._acc += deltaTime;
         this._frames++;
         this._sinceChange += deltaTime;

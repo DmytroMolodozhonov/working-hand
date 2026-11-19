@@ -53,6 +53,7 @@ import { earthly } from '../world/Planets.js';
 import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 import { appleTreeModel, baksadiTreeModel, pulseGolden } from './AppleTrees.js';
+import { buoyStep } from './Buoyancy.js';
 import { SwanLife, SWAN, swanSiteAt, swanSitesNear, floatY as swanFloatY } from './SwanLife.js';
 import { SeaLife, seaSiteAt, seaSitesNear, isSeaType } from './SeaLife.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
@@ -65,6 +66,9 @@ export { animalModel };
 export const RIDE_DEEP = 4;
 /** A ridden horse's speed (m/s) from the rider's run effort (0 standing … 1 a run … EFFORT_MAX frantic): WALK + PER × effort; ACC / DEC how fast
  *  he gathers / loses it (1/s); from GALLOP_U m/s he gallops. (Before: 5…15 m/s, the run measure capped at 1, the speed changed at once.) */
+/** Dead animals in water (Buoyancy.js): density kg/m³ and weight kg by kind — a swan floats high, a pig / cow / horse hang low. */
+const CARCASS_RHO = { swan: 620, sheep: 780, pig: 1030, cow: 1020, horse: 1000 };
+const CARCASS_KG = { swan: 6, sheep: 60, pig: 110, cow: 600, horse: 500 };
 export const RIDE = { WALK: 4, PER: 10, EFFORT_MAX: 2.2, ACC: 1.2, DEC: 2.2, GALLOP_U: 10 };
 /** What a horse is fed, in red apples (each 30 % that he lets you on): a golden apple 80 %, the Baksadi pear 100 % at once (the author 06.11). */
 export const FEED_W = { redApple: 1, apple: 8 / 3, baksadi_pear: 10 / 3 };
@@ -399,6 +403,9 @@ export class Animals {
 
     _remove(a) {
         const g = this.game;
+        // (whoever rides it must not ride on: the horse eaten / gone — the author 19.11 «всадник на невидимом коне»)
+        if (a.rider === g.localId) this.dismount();
+        if (a.mount) { for (const v of g.castleLife?.byId?.values?.() || []) if (v.horse === a && v.seated) g.travelers?.riders?.unseat?.(v, true); a.mount = null; }
         if (a.pen && !a.dead) g.houses?.penReturn(a.pen.id); // (a pen animal far away: it comes back with the pen)
         g.scene.remove(a.model);
         a.far?.dispose(); // (its far copy's own buffers)
@@ -1826,6 +1833,25 @@ export class Animals {
      * The body: thrown velocity, gravity (it falls into a crater, off a cliff), ground,
      * not into walls, and the others of the herd are pushed aside (no two in one place).
      */
+    /**
+     * A dead animal in water floats or sinks by what it is (Buoyancy.js): a swan (hollow bones, feathers) rides high, a sheep's wool keeps it up, a pig / a cow / a horse
+     * are about as dense as water — they float low a while, then settle; the splash going in is by its mass and speed. True: handled (it is in water).
+     */
+    _carcassInWater(a, dt, gy, base, S) {
+        const g = this.game, p = a.group.position, w = waterAt(g.terrain?.data, p.x, p.z, gy);
+        if (!w || w.depth < 0.3) { a.wetDead = false; a.floatVy = 0; return false; }
+        const v = a.vel || (a.vel = new THREE.Vector3());
+        const rho = CARCASS_RHO[a.type] ?? 1040, mass = CARCASS_KG[a.type] ?? 40, size = Math.max(0.35, (S?.size || 1) * 0.7);
+        if (!a.wetDead) { a.wetDead = true; g.items?.waterImpact?.({ x: p.x, y: w.surface, z: p.z }, mass, Math.max(1, Math.abs(v.y || 0), 2.5), size * 1.2); }
+        a.floatVy = buoyStep(a.floatVy || 0, p.y, size, w.surface, rho, dt);
+        p.y += a.floatVy * dt;
+        const floor = gy + 0.3 * (S?.size || 1);
+        if (p.y < floor) { p.y = floor; a.floatVy = Math.max(0, a.floatVy); }
+        p.x += v.x * dt; p.z += v.z * dt; v.x *= Math.max(0, 1 - 2.5 * dt); v.z *= Math.max(0, 1 - 2.5 * dt); v.y = 0;
+        a.airborne = false;
+        return true;
+    }
+
     _body(a, dt) {
         const g = this.game;
         const S = SPECIES[a.type];
@@ -1850,7 +1876,7 @@ export class Animals {
             v.x *= k; v.z *= k;
         }
         let gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
-        if (a.dead) { const w = waterAt(g.terrain?.data, p.x, p.z, gy); if (w && w.depth >= 2) gy = w.surface - base; } // (a carcass in deep water floats)
+        if (a.dead && this._carcassInWater(a, dt, gy, base, S)) return; // (the author 19.11: a swan died in the water — it must float like a thing, by its mass)
         else if (a.type === 'swan') { const w = waterAt(g.terrain?.data, p.x, p.z, gy); if (w && w.depth >= 1) gy = swanFloatY(w.surface, S.size) - base; } // (a swan floats: thrown, stunned — on the water, never sunk to the bottom)
         if (a.airborne || p.y > gy + base + 0.8) {
             // in the air: falls

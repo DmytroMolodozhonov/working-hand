@@ -211,6 +211,9 @@ import { Duel } from './Duel.js';
 import { duelRange } from './DuelRange.js';
 import { QualityManager, viewDistanceScale } from './Quality.js';
 import { Ultra } from './Ultra.js';
+import { waterAt } from './CreatureSwim.js';
+import { LiteMode } from './LiteMode.js';
+import { DistanceCull } from '../core/DistanceCull.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
@@ -981,7 +984,10 @@ export class Game {
         this.handsLog = config.mode === 'test' ? null : new HandsLog(this); // the journal «Руки» (Общие логи)
         this.spellLog = new SpellLog({ send: config.mode !== 'test' }); // every phrase heard and what came of it (zns-spells.log)
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
-        this.quality.ultra = Ultra.wanted(config.ultra); // (decided before the first apply: the shadows' kind is fixed then)
+        this.lite = false;
+        this.liteMode = new LiteMode(this, config.lite, { gpuName: (typeof window !== 'undefined' && window.__zns?.gpu?.name) || '' }); // «Лёгкий режим»: no video card / a very weak one (LiteMode.js)
+        this.quality.ultra = Ultra.wanted(config.ultra) && !this.liteMode._startOn; // (decided before the first apply: the shadows' kind is fixed then)
+        if (this.liteMode._startOn) { this.quality.lite = true; this.lite = true; this.liteMode.on = true; this.world?.terrain?.setLiteLook?.(true); this.perf?.note?.('⚡ Лёгкий режим включён на старте (' + (config.lite === 'on' ? 'в настройках' : 'нет видеокарты или в прошлый раз игра тормозила') + ')'); }
         this.quality.apply(this.world);
         this.ultra = new Ultra(this); // «Ультра качество»: an addition, switched on the go (Ultra.js)
         this.ultra.set(this.quality.ultra);
@@ -1509,6 +1515,10 @@ export class Game {
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
+        { // (a blast on / over the water: a fountain, rings and a wave that pushes the floating things — Buoyancy.js)
+            const land = this.world?.terrain?.data, wa = land?.get ? waterAt(land, pos.x, pos.z, pos.y) : null;
+            if (wa && Math.abs(pos.y - wa.surface) < radius + 2) this.items?.waterImpact?.({ x: pos.x, y: wa.surface, z: pos.z }, radius * radius * radius * 0.6 * Math.max(0.5, power), 9, radius);
+        }
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
@@ -4753,6 +4763,12 @@ export class Game {
         // (…while the ground round the body stays known: the body, the ships and the creatures near it still stand on it — TerrainView.keepAt)
         if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost); sysMark('world');
+        { // (what is wholly behind the haze is not drawn — DistanceCull.js; not in space / on other worlds without fog, and a test can switch it off)
+            const dc = this.distCull || (this.distCull = new DistanceCull());
+            const fog = this.scene.fog, on = !this.space?.inSpace && !!fog && !!this.world.fogFar && !(typeof window !== 'undefined' && window.__ZNS_NO_DIST_CULL__);
+            dc.enabled = on;
+            dc.update(deltaTime, this.scene, focus.x, focus.y, focus.z, on ? fog.far : 0, !!this.lite);
+        }
         this.world.forest?.update(dt, this.character.group.position, this.camera, worldPlayers(this)); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)
@@ -4818,6 +4834,7 @@ export class Game {
 
         sysMark('minimap+ambient');
         this.quality.update(deltaTime);
+        this.liteMode?.update(deltaTime);
         if (this.sound?.loaded) this.sound.musicDirector?.update(dt, this._musicPlace ?? null); // (the game's own music: the place → the tune, crossfaded — MusicDirector)
         sysMark('quality+music');
         const logic = performance.now() - t0;
@@ -5560,18 +5577,13 @@ export class Game {
             this.magicHand = side;
             this.lastMagicHand = side;
             this.lastMagicTime = Date.now();
-            const label = res.bothLevel ? 'ОБЕ' : res.side.toUpperCase();
             if (!this.isMagicActive) {
                 this.isMagicActive = true;
-                this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
+                // (the author 19.11: the plaque «ЖДУ КОМАНДУ» at the top is gone — in every mode; the voice just starts listening)
                 if (this.voice) this.voice.start();
-            } else if (this.hud.voiceText().includes('ЖДУ КОМАНДУ') || (this.hud.voiceAge() > 2500 && !this.hud.hintShowing?.())) {
-                // (a fresh game message — «Не хватает маны», a spell result — stays readable until it fades)
-                this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
             }
         } else if (this.isMagicActive && Date.now() - this.lastMagicTime > 1200) {
             this.isMagicActive = false;
-            this.hud.setVoice('', false);
             this.magicHand = null;
         }
         // Remember when both arms were up (the flight word may come a moment later)

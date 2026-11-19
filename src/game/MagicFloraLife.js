@@ -79,7 +79,7 @@ export class MagicFloraLife {
     /** The cells round `p` that still need to be looked at, nearest first. */
     _plan(p) {
         const players = worldPlayers(this.game);
-        const C = FLORA.CELL, R = FLORA.LOAD;
+        const C = FLORA.CELL, R = this.game.lite ? 55 : FLORA.LOAD; // (the light mode: only what is within the haze)
         const q=[], seen=new Set();
         for(const p of players) {
             const gx0=Math.floor((p.x-R)/C),gx1=Math.floor((p.x+R)/C),gz0=Math.floor((p.z-R)/C),gz1=Math.floor((p.z+R)/C);

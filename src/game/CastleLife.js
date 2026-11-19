@@ -1,3 +1,4 @@
+import { gazeAt } from './TravelerGaze.js';
 import { featherSpeed } from './Featherfall.js';
 import { fireFactor,FIRE_OK,SERPENT_KINDS } from './ResistRules.js';
 import { deathImpulse, magicalImpactKind } from './DeathImpulse.js';
@@ -1480,6 +1481,7 @@ export class CastleLife {
     /** A splash where a body goes into the water (every computer sees the drops; the host's sound). */
     _splash(v, surface, big = false) {
         const st = { splT: 0 };
+        this.game.items?.waterImpact?.(_v.set(v.x, surface, v.z), v.wizard ? 65 : 70, Math.max(1, Math.abs(v.vy || 0)) * (big ? 1 : 0.6), 0.9); // (a person falls in: a wave by his weight and speed — Buoyancy.js)
         splashes(this.game, v.x, surface, v.z, 0, big, st);
         if (big) splashes(this.game, v.x, surface, v.z, 0, big, { splT: 0 });
     }
@@ -4187,6 +4189,12 @@ export class CastleLife {
                 if (!unseen && (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
+                    if (v.party && !v.glance && !v.foe && !v.dead && !v.talking && d < 45) { // (a person of the road looks about, and keeps an eye on a stranger — TravelerGaze.js; a picture only)
+                        const ps = this._players(true);
+                        const gp = v._gzp || (v._gzp = { id: v.id }); gp.x = v.x; gp.z = v.z; gp.yaw = v.yaw; gp.ahead = v.yaw; gp.driver = v.seat === 0;
+                        const gz = gazeAt(gp, performance.now() / 1000, ps.map((q) => q.p));
+                        if (gz) v.model.lookAt(_v.set(gz.x, v.y + 3.4, gz.z)); else v.model.lookAt(null);
+                    }
                     if (v.glance) { // (he looks where I pointed — CommandTalk._begin)
                         v.glance.t -= v.animT;
                         if (v.glance.t <= 0 || v.foe) { v.glance = null; v.model.lookAt(null); }

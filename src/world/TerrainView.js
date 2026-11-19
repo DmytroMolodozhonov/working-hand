@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { TerrainData, CHUNK, chunkKey, mergeBuffers } from './Terrain.js';
 import { slotAt } from './Planets.js';
 import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
+const CLUSTER_HALF = 48; // (m: half a 3×3 square of chunks)
 import { TerrainClusters } from './TerrainClusters.js';
 import { applyUltraWater } from '../fx/UltraWater.js';
 
@@ -219,6 +220,14 @@ export class Terrain {
      * whose chunks are not as the flag says has them forgotten here and in the workers and drawn again, the nearest first as the planner asks.
      * (x, z): where the hero is — the cells round it are asked from a worker (the main thread never decides one).
      */
+    /** «Лёгкий режим» (LiteMode.js): new chunks are meshed with plain colours — no per-patch variation, so the greedy mesher merges far more faces (about a fifth fewer triangles on a hilly start). */
+    setLiteLook(on) {
+        on = !!on;
+        if (!!this.data.liteLook === on && !on) return;
+        this.data.liteLook = on;
+        if (this._workers) for (const w of this._workers) w.postMessage({ type: 'liteLook', on });
+    }
+
     ghostSync(on, x, z) {
         const d = this.data, G = d.ghost;
         if (!G) return;
@@ -713,6 +722,27 @@ export class Terrain {
         // (the far land in big pieces: let go what changed or came near — every frame, before the picture — and merge one more now and then)
         this.clusters.enabled = !(typeof window !== 'undefined' && window.__ZNS_NO_TERRAIN_CLUSTERS__);
         this.clusters.step(fx, fz);
+        // What cannot be seen is not drawn (the author 19.11): a chunk wholly behind the haze (its nearest corner beyond the fog's end) is all fog colour — the background is the same
+        // colour — so it is skipped (every triangle is the processor's work without a video card, and the card's too). Every 3rd frame; a remade chunk (shown by _fill) is hidden
+        // again at once. The far squares (TerrainClusters) beyond the haze are hidden the same way, and a culled chunk is never merged into one.
+        if (this.cullR && this._frame % 3 === 0) {
+            const R = this.cullR, H = CHUNK / 2;
+            for (const C of this.clusters.map.values()) {
+                const dx = Math.max(0, Math.abs(C.mx - fx) - CLUSTER_HALF), dz = Math.max(0, Math.abs(C.mz - fz) - CLUSTER_HALF), far = dx * dx + dz * dz > R * R;
+                for (const m of [C.land, C.water]) if (m && m.visible === far) m.visible = !far;
+            }
+            for (const e of this.meshes.values()) {
+                const dx = Math.max(0, Math.abs(e.cx * CHUNK + H - fx) - H), dz = Math.max(0, Math.abs(e.cz * CHUNK + H - fz) - H);
+                const far = dx * dx + dz * dz > R * R;
+                if (far) { if (e.ground.visible || e.water.visible) { e.ground.visible = false; e.water.visible = false; e._cull = true; } } // (only what is shown is marked: a member of a far square is already hidden by it — never shown again from here)
+                else if (e._cull) {
+                    e._cull = false;
+                    if (e.ground.geometry?.attributes?.position) e.ground.visible = true;
+                    if (e.water.geometry?.attributes?.position) e.water.visible = true;
+                }
+            }
+        } else if (!this.cullR && this._culled) { this._culled = false; for (const e of this.meshes.values()) if (e._cull) { e._cull = false; if (e.ground.geometry?.attributes?.position) e.ground.visible = true; if (e.water.geometry?.attributes?.position) e.water.visible = true; } }
+        if (this.cullR) this._culled = true;
 
         const k = this.keepAt;
         if (this._frame % 120 === 0) this.data.evictFar(Math.floor(fx / CHUNK), Math.floor(fz / CHUNK), this.radiusChunks + 4, k ? (this._keepC || (this._keepC = { cx: 0, cz: 0 }), this._keepC.cx = Math.floor(k.x / CHUNK), this._keepC.cz = Math.floor(k.z / CHUNK), this._keepC) : null);
