@@ -731,6 +731,8 @@ export class ItemSystem {
         const g = this.game, ch = g.character, h = this.held[side];
         if (!h || !d) return;
         const kind = h.item.kind, m = ITEM_INFO[kind]?.weight ?? 1;
+        // (a flask over / in a cauldron is dipped, not thrown: only a real throw — a fast swing — lets it go there; Cauldrons.flaskZone)
+        if (kind === 'flask' && d.act !== 'throw' && g.cauldrons?.flaskZone?.(h.model.position)) { handLog(`колба над котлом: разжатие руки не считается броском — колба остаётся в руке (${why})`); return; }
         const lk = _a.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion ? ch.getHeadQuaternion(_hq) : ch.group.quaternion);
         const v = launchVelocity(d, m, d.act === 'throw' ? lk : null, this._lv || (this._lv = { x: 0, y: 0, z: 0 }));
         const vel = _e.set(v.x, v.y, v.z);

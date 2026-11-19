@@ -687,6 +687,22 @@ export class Cauldrons {
         return false;
     }
 
+    /**
+     * Is `p` (a hand with a flask) in the zone where a flask is dipped: over the opening and from just above the rim down into the pot? There a quiet opening of the
+     * hand is not a throw (the author 19.11: «колба постоянно выбрасывается»: reaching deep into a low potion the camera loses the hand at the bottom of the picture and
+     * it comes back open — the flask was «dropped»); Items._letGo keeps it in the hand.
+     */
+    flaskZone(p) {
+        for (const c of this.list.values()) {
+            if (!this.upright(c)) continue;
+            const dx = p.x - c.x, dz = p.z - c.z;
+            if (dx * dx + dz * dz > (CAULDRON.R_IN + 0.3) ** 2) continue;
+            const y = p.y - this.fy(c);
+            if (y > CAULDRON.BOTTOM - 0.6 && y < H + 1.0) return true;
+        }
+        return false;
+    }
+
     /** Is the point (x, z) right over the opening of a standing cauldron (Items._floorUnder: the box top is no floor there)? */
     overOpening(x, z) {
         for (const c of this.list.values()) {
