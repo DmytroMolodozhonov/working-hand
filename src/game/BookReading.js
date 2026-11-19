@@ -48,6 +48,8 @@ export const HOLD = {
     OPEN_RATE: 3, // 1/s: how fast it opens (a loosened hand / just taken)
     CLOSE_RATE: 9, // 1/s: how fast the squeezing hand shuts it
 };
+/** The dead zone of the open book's pose (BookReading._place). */
+const DEAD = { POS: 0.014, ANG: 0.035 };
 /** A fingertip drawn across the open book turns a page (the author: «проводит пальцем по книге. И даже немного»): metres along the page, within WINDOW s, just above the paper. */
 export const SWIPE = { DIST: 0.055, WINDOW: 0.6, BACK: 0.025, ABOVE: 0.3, BELOW: 0.05, COOL: 0.5, MIN_PHI: 1.2, OMEGA: 11 };
 // a fingertip catches a page by its edge: the outer part of the page, close to it
@@ -245,6 +247,9 @@ export class BookReading {
 
     /** The end of the index finger as drawn (null: no fingers shown). */
     _tip(hand, side) {
+        // a wand in this hand: its TIP turns the pages (the finger lies along the wand, in the pen grip — the author 19.11: «когда палочку держу, страницы не переворачиваются»)
+        const g = this.game, w = g.items?.heldOf?.('wand');
+        if (w && w.side === side && g.wandMagic?.tip) return g.wandMagic.tip(this._tipV[side]);
         const seg = hand?.fingerMeshes?.index?.[2];
         if (!seg || !hand.group.visible) return null;
         seg.pivot.updateWorldMatrix(true, false);
@@ -585,6 +590,14 @@ export class BookReading {
     /** The book's pose: from the hands (turned in from how it was at first). */
     _place(s, pos, quat, dt) {
         const m = s.model;
+        // A dead zone round the book's pose (the author 19.11: «книга колеблется, нормально читать нельзя»): a tracking tremble smaller than DEAD.POS metres / DEAD.ANG
+        // radians moves nothing at all; a real move drags the pose along, DEAD.POS behind it (an exponential filter still shakes a little — a dead zone holds still).
+        const dz = s.dead || (s.dead = { pos: pos.clone(), quat: quat.clone() });
+        const dp = pos.distanceTo(dz.pos);
+        if (dp > DEAD.POS) dz.pos.lerp(pos, 1 - DEAD.POS / dp);
+        const da = quat.angleTo(dz.quat);
+        if (da > DEAD.ANG) dz.quat.slerp(quat, 1 - DEAD.ANG / da);
+        pos = dz.pos; quat = dz.quat;
         s.pos.copy(pos);
         const angle = s.quat.angleTo(quat);
         s.quat.slerp(quat, 1 - Math.exp(-dt * (angle < 0.06 ? 3 : 14)));

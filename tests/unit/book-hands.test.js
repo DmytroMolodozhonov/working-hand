@@ -312,3 +312,32 @@ test('remote tablet inspection keeps normal hand placement active and cleans up 
  const description=model.userData.remoteScroll.group;assert.equal(description.parent,g.scene);
  reader.releaseRemote(model);assert.equal(description.parent,null);assert.equal(model.visible,true);
 });
+
+test('a trembling hand does not shake the book: a dead zone holds the pose still, a real move still carries it (the author 19.11)', () => {
+    const t = bookInRightHand();
+    t.H.right.curl = t.H.right.grip = CALM;
+    t.run(2);
+    const base = t.H.right.G.clone();
+    const spine = () => t.m.localToWorld(V(0, -0.1, 0));
+    t.run(0.5);
+    const p0 = spine();
+    let worst = 0;
+    t.run(3, (i) => { // (a 6 mm shiver of the tracked hand, a different way every frame)
+        t.H.right.G.copy(base).add(V(Math.sin(i * 2.1) * 0.006, Math.cos(i * 1.7) * 0.006, Math.sin(i * 0.9) * 0.006));
+        worst = Math.max(worst, spine().distanceTo(p0));
+    });
+    assert.ok(worst < 0.0035, 'the shiver reaches the book as at most ' + worst.toFixed(4) + ' m');
+    t.H.right.G.copy(base).add(V(0.3, 0, 0));
+    t.run(1.5);
+    assert.ok(spine().distanceTo(p0) > 0.2, 'a real move of the hand is followed');
+});
+
+test('a wand in the free hand: its TIP turns the pages (the finger lies along the wand)', () => {
+    const t = bookInRightHand();
+    const tip = V(0.1, 1.5, -0.4);
+    t.g.items.held.left = { item: { kind: 'wand' }, model: new THREE.Object3D() };
+    t.g.wandMagic = { tip: (out) => out.copy(tip) };
+    const R2 = new BookReading(t.g, { learned: new Set() }, () => new THREE.Texture());
+    const got = R2._tip({ group: { visible: true }, fingerMeshes: {} }, 'left');
+    assert.ok(got && got.distanceTo(tip) < 1e-6, 'the wand tip is the page-turner');
+});
