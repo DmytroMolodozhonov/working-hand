@@ -44,6 +44,7 @@
  * heals, strikes and deaths are events everybody plays.
  */
 
+import { overflow } from './CreatureCaps.js';
 import * as THREE from 'three';
 import { newUid } from './ItemTypes.js';
 import { registerKind } from './CreatureImpact.js';
@@ -1291,6 +1292,7 @@ export class Phoenixes {
         // (a phoenix still in the world round a player — even one that flew off out of his AREA — keeps
         //  him from getting another: they never pile up as he walks on)
         const lonely = players.filter((P) => !this.list.some((f) => !f.dead && hdist(f.model.position, P.pos) < PHOENIX.FORGET));
+        for (const f of overflow(this.list.filter((f) => !f.dead && ['soar', 'perch', 'leave'].includes(f.state)), PHOENIX.MAX, (f) => Math.min(1e9, ...players.map((P) => hdist(P.pos, f.model.position))))) this._remove(f);
         if (!lonely.length || this.list.length >= PHOENIX.MAX || Math.random() > PHOENIX.SPAWN_CHANCE) return;
         const P = lonely[Math.floor(Math.random() * lonely.length)];
         const a = Math.random() * Math.PI * 2, r = rnd(60, 110);

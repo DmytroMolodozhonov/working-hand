@@ -1004,7 +1004,13 @@ export class CastleTalk {
         // looked at, walked to, talk with already, called by his trade — the author: «голос игрока не принимается жителем
         // как разговор с ним без обращения»)
         const chat = !!this.game.voiceChat?.chatting?.();
-        const best = (id && this.life.byId.get(id)) || (chat ? (this.inTalk?.() && this._partner && !this._partner.dead ? this._partner : null) : this._nearest());
+        let best = (id && this.life.byId.get(id)) || (chat ? (this.inTalk?.() && this._partner && !this._partner.dead ? this._partner : null) : this._nearest());
+        // (a deal is open with him: my «да» / «нет» is to him even if the counter's edge hides me from his eyes — the log 19.11: standing 3.5 m at the pawnshop,
+        // «не видит героя (стена между ними)», two «да» went unheard, the third from 4.3 m worked)
+        if (!best) {
+            const d = this.offer?.v;
+            if (d && !d.dead) { const me = this.game.character.group.position; if (Math.hypot(d.x - me.x, d.z - me.z) < 8 && Math.abs(d.y - (me.y - 1.95)) < 4) best = d; }
+        }
         if (!text) return best;
         const t = normalizeText(text);
         const role = ROLE_CALL.find(([re]) => re.test(t))?.[1];

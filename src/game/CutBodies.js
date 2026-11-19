@@ -97,17 +97,17 @@ export function zombieBody(z) {
     const arm = (side) => ({
         name: side + 'Arm', kind: 'arm', side,
         // the arm box (1.2 long) is turned to point forward: its shoulder end is its local +Y
-        segs: [{ obj: side === 'left' ? z.leftArm : z.rightArm, o: [0, 0.6, 0], ax: [0, -1, 0], len: 1.2, part: 'arm' }],
+        segs: [{ obj: side === 'left' ? z.leftArm : z.rightArm, o: [0, 0.62, 0], ax: [0, -1, 0], len: 1.5, part: 'arm' }], // (the shoulder end; the elbow and the hand hang from the same pivot)
     });
     const leg = (side) => ({
         name: side + 'Leg', kind: 'leg', side,
-        segs: [{ obj: side === 'left' ? z.leftLeg : z.rightLeg, o: [0, 0.6, 0], ax: [0, -1, 0], len: 1.2, part: 'leg' }],
+        segs: [{ obj: side === 'left' ? z.leftLeg : z.rightLeg, o: [0, 0.62, 0], ax: [0, -1, 0], len: 1.18, part: 'leg' }],
     });
     z._cutBody = {
         root: z,
         kind: 'zombie',
         limbs: [
-            { name: 'head', kind: 'head', line: { obj: z.group, a: [0, 1.42, 0], b: [0, 1.8, 0], w: 1.0, h: 0.8 }, parts: [z.head] },
+            { name: 'head', kind: 'head', line: { obj: z.torso || z.group, a: [0, 1.42, 0], b: [0, 1.8, 0], w: 1.0, h: 0.8 }, parts: [z.head] },
             arm('left'), arm('right'), leg('left'), leg('right'),
         ],
         blockers: [
