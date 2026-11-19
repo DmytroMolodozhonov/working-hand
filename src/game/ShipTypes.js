@@ -2,7 +2,7 @@
  * ShipTypes.js — the three kinds of 17th-century ships (pure data, Node-testable).
  *
  * Ship-local axes: x = starboard, y = up from the waterline, z = aft (the bow is −z,
- * the way the hero faces −Z). Everything is built to the hero's scale (~2.2× real).
+ * the way the hero faces −Z). Everything is built to the hero's scale (~2.2× real), then grown ×SHIP_SCALE (grow below).
  *
  * Physics numbers (per unit mass): sailK — thrust per (apparent wind)² per open sail,
  * c1/c2 — linear/quadratic water drag, turnR — the turning circle's radius (m) with the wheel hard over,
@@ -10,7 +10,32 @@
  * waveLag — how slowly the hull follows the waves (heavier = slower).
  */
 
-export const SHIP_CLASSES = {
+/** How much bigger the ships are than their first drawing (the author 19.11: «все корабли раза в два больше — морякам проще ходить»). */
+export const SHIP_SCALE = 2;
+const r1 = (n) => Math.round(n * 10) / 10;
+/**
+ * The first drawing of a class (the numbers below) grown by SHIP_SCALE: every length, height and depth ×k, the guns ×k (more room — more of them),
+ * the crew ×1.5, health ×k. Doors, stairs, rails, furniture, the wheel and the people stay the size they were: the ship is roomier, the sailors walk easier.
+ * The thrust is per unit mass (ShipPhysics.sailForce: sailK × the open share of the sails × the wind²) — the speed stays the same; the turning circle ×k.
+ */
+function grow(c, k = SHIP_SCALE) {
+    const o = { ...c };
+    for (const f of ['L', 'B', 'draft', 'deck', 'turnR']) o[f] = r1(c[f] * k);
+    if (c.lower != null) o.lower = r1(c.lower * k);
+    // (a deck above the main deck is raised only ×KH of its old height over what it stands on: a cabin twelve metres high and stairs fifteen long would be a cathedral)
+    const KH = 1.4, D2 = c.deck * k, Q2 = D2 + (c.quarter.y - c.deck) * KH;
+    const box = (b, base, base2) => (b ? { y: r1(base2 + (b.y - base) * KH), z0: r1(b.z0 * k), z1: r1(b.z1 * k) } : b);
+    o.quarter = box(c.quarter, c.deck, D2); o.poop = box(c.poop, c.quarter.y, Q2); o.fore = box(c.fore, c.deck, D2);
+    o.masts = c.masts.map((m) => ({ ...m, z: r1(m.z * k), h: r1(m.h * k) }));
+    o.cannons = Math.round(c.cannons * k);
+    o.hp = Math.round(c.hp * k);
+    o.pierLayer = Math.round(c.pierLayer + (c.deck * k - c.deck) * 0.9); // (the pier top stays about a metre under the main deck)
+    o.crew = {};
+    for (const [role, n] of Object.entries(c.crew)) o.crew[role] = n <= 1 || c.crew.blackbeard ? n : Math.round(n * 1.5); // (the black ship's skeletons stay twelve: the author's number)
+    return o;
+}
+
+const FIRST = {
     pinnace: {
         id: 'pinnace', ru: 'Пинас', L: 44, B: 12, draft: 3.2, deck: 4.6, lower: null,
         quarter: { y: 10.2, z0: 8, z1: 22 }, poop: null, fore: null,
@@ -60,6 +85,7 @@ export const SHIP_CLASSES = {
         magic: true, look: 'black', // (ShipModel SHIP_LOOKS.black)
     },
 };
+export const SHIP_CLASSES = Object.fromEntries(Object.entries(FIRST).map(([id, c]) => [id, grow(c)]));
 
 export const RAIL = 2.4; // the bulwark above every deck
 export const HELM_LOCK = 0.75 * Math.PI; // the wheel turns ±⅜ of a turn: hard over in one sweep of the hand round the rim

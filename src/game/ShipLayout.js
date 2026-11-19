@@ -190,9 +190,10 @@ function makeLayout(C) {
             // a lateen sail: a long yard slung slantwise along the ship beside the mast, its fore end
             // (the tack) low, lashed down forward of the mast, the after end high over the stern; the
             // cloth a triangle down to the clew aft, its foot above the heads at the wheel, fore-and-aft
-            const w = 0.62 * m.h, ang = 0.75, x = 1.15; // (beside the mast, not through it)
+            const w = 0.62 * m.h, ang = 0.5, x = 1.15; // (beside the mast, not through it; the yard slants ~30°, it was 43° — the furled sail looked crooked: the author 19.11)
             const foot = deckY + 5.6; // (well above the wheel's rim and the helmsman's raised hand — it was 4.2: the cloth touched the wheel on the small ships)
             let z0 = m.z - 0.3 * w * Math.cos(ang);
+            z0 = Math.max(z0, (C.id === 'pinnace' ? Q.z0 + 5 : Q.z0 + 3) + 4.5); // (the sail's fore end lashed AFT of the helmsman: it hung right over the wheel — the author 19.11)
             z0 -= Math.max(0, z0 + w * Math.cos(ang) - (C.L / 2 - 1.5)); // (the high end stays over the stern)
             const tack = { x, y: foot, z: z0 }, head = { x, y: foot + w * Math.sin(ang), z: z0 + w * Math.cos(ang) };
             const clew = { x, y: foot, z: head.z - 0.6 };

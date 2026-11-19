@@ -157,7 +157,7 @@ test('the grapnels: a ship is hauled in alongside the black ship and held there,
     T.pose.toWorld(gw.b.x, gw.b.y, gw.b.z, l);
     const tz = l.z, tx = l.x;
     B.pose.toWorld(gw.a.x, gw.a.y, gw.a.z, l);
-    assert.ok(Math.hypot(l.x - tx, l.z - tz) < 7, 'the gangways abreast');
+    assert.ok(Math.hypot(l.x - tx, l.z - tz) < 7 * 1.6, 'the gangways abreast (ships ×2: the hulls narrow more towards the gangway, 7 m was for the old size): ' + Math.hypot(l.x - tx, l.z - tz).toFixed(2) + ' dx ' + (l.x - tx).toFixed(2) + ' dz ' + (l.z - tz).toFixed(2));
 });
 
 test('the captain\'s chests: his gold and plunder; the barrel raised to reach', () => {

@@ -192,6 +192,12 @@ export class HandBlocks {
         // never goes into the counter either — the hand stops so that the thing lies on it
         const low = ch === this.game.character ? this.game.items?.held?.[side]?.low : null;
         if (low) { out[n] = out[n] || new THREE.Vector3(); out[n].copy(out[0]).add(low); n++; }
+        // (the corners of a hanging piece of armour / a robe / a bag: as wide as it is — it does not go through a chest or a wall with its side)
+        const lows = ch === this.game.character ? this.game.items?.held?.[side]?.lows : null;
+        if (lows) {
+            for (let q = 0; q < 4; q++) { out[n] = out[n] || new THREE.Vector3(); out[n].copy(out[0]).add(lows[q]); n++; }
+            if (lows.mid) { out[n] = out[n] || new THREE.Vector3(); out[n].copy(out[0]).add(lows.mid); n++; }
+        }
         this._n = n;
         return out;
     }

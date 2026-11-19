@@ -448,7 +448,7 @@ export class SailMesh {
             if (!this.lateen) this.bundle.position.set(0, s.yardY - vis * s.h - (vis > 0.02 ? 0 : 0.3), s.center.z);
             else {
                 const a = this.yardA, b = this.yardB;
-                this.bundle.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 - 0.4, (a.z + b.z) / 2);
+                this.bundle.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 0.25 - r * 0.7, (a.z + b.z) / 2); // (hugging the yard that is slung at +0.25 over the line a—b)
                 this.bundle.rotation.set(Math.atan2(b.y - a.y, b.z - a.z) * -1 + 0, 0, 0);
                 this.bundle.rotation.x = Math.PI / 2 - Math.atan2(b.y - a.y, b.z - a.z);
             }
@@ -753,17 +753,25 @@ export class ShipModel {
             const from = lines.length;
             const topY = m.top - 2;
             for (const s of [1, -1]) {
+                // the shrouds: six lines from the mast head down to the hull's side; each ends exactly ON the rail's top edge (the half width taken at THAT height:
+                // at the deck's width it floated a couple of metres out in the air — the author 19.11: «тросы будто не закреплены внизу»), with a chain-plate down the hull
+                const sh = [];
                 for (let k = 0; k < 6; k++) {
                     const z0 = m.z - 2.5 + k;
-                    const w = hw(z0, L.deck) - 0.1;
                     const deckY = L.railTopAt(z0) - 0.2;
-                    lines.push(0, topY - k * 0.8, m.z, s * w, deckY, z0);
+                    const w = hw(z0, deckY) - 0.05;
+                    const base = { x: s * w, y: deckY, z: z0 }, top = { x: 0, y: topY - k * 0.8, z: m.z };
+                    sh.push({ base, top });
+                    lines.push(top.x, top.y, top.z, base.x, base.y, base.z);
+                    const w2 = hw(z0, deckY - 1.4) - 0.02;
+                    lines.push(base.x, base.y, base.z, s * w2, deckY - 1.4, z0); // (the chain-plate: the shroud goes on down the hull's side)
                 }
-                // ratlines between the shrouds every 1.5 m
-                for (let y = L.deck + 3; y < topY - 4; y += 1.5) {
-                    const t = (y - (L.railTopAt(m.z) - 0.2)) / (topY - (L.railTopAt(m.z) - 0.2));
-                    const w0 = (hw(m.z - 2.5, L.deck) - 0.1) * (1 - t), w5 = (hw(m.z + 2.5, L.deck) - 0.1) * (1 - t);
-                    lines.push(s * w0, y, m.z - 2.5 + 2.5 * t, s * w5, y, m.z + 2.5 - 2.5 * t);
+                // ratlines: between the first and the last shroud, every 1.5 m, each end ON its shroud (the same point on the line, not a guess)
+                const lo = Math.max(sh[0].base.y, sh[5].base.y) + 1.5, hi = Math.min(sh[0].top.y, sh[5].top.y) - 1.5;
+                const at = (q, y) => { const t = (y - q.base.y) / (q.top.y - q.base.y); return { x: q.base.x + (q.top.x - q.base.x) * t, y, z: q.base.z + (q.top.z - q.base.z) * t }; };
+                for (let y = lo; y < hi; y += 1.5) {
+                    const p0 = at(sh[0], y), p5 = at(sh[5], y);
+                    lines.push(p0.x, p0.y, p0.z, p5.x, p5.y, p5.z);
                 }
             }
             mark(m.id, from);

@@ -237,6 +237,7 @@ button, input, select, textarea { font-family: inherit; }
 .map-card.mode-card.survival { --mode-a: #ff4f6d; --mode-b: #7a1030; }
 .map-card.mode-card.freeworld { --mode-a: #b18cff; --mode-b: #4b2aa8; }
 .map-card.mode-card.maps { --mode-a: #ffd76a; --mode-b: #8a6414; }
+.map-card.mode-card.brawl { --mode-a: #ff8a4f; --mode-b: #8a3a10; }
 .map-card.mode-card:hover { border-color: var(--mode-a); background-color: transparent; }
 .map-card.mode-card.selected { border: 2px solid var(--mode-a); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mode-a) 22%, transparent); }
 .mode-icon { font-size: 20px; line-height: 1; }

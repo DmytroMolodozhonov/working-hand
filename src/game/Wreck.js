@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import { isSolid } from '../world/Terrain.js';
+import { hurtShare } from './DoorStyles.js';
 
 const _v = new THREE.Vector3();
 
@@ -66,7 +67,9 @@ export class Wreck {
             if (!near(d.x, d.z) || d.lifted || g.doors.carried?.door === d || d.ship || d.ice) continue; // (a ship's door: its ship's own wood; the Ice Castle's gates: IceFixtures.js)
             // the gates of a throne room: blasts wear them (Alohomora.blast); their archway gone — they fall
             if (d.gate) { if (d.castle && !doorHeld(t, d) && !g.locks?.gates?.get(d.castle)?.broken) g.locks?._break?.(d.castle); continue; }
-            const hit = Math.hypot(d.x - pos.x, d.y + 1.8 - pos.y, d.z - pos.z) < radius + 0.8;
+            const dist = Math.hypot(d.x - pos.x, d.y + 1.8 - pos.y, d.z - pos.z), hit = dist < radius + 0.8;
+            // a plain wooden door takes a share of its strength from the blast by distance: a light one knocks a chunk out of it, a strong one bursts it (Doors.hurt, DoorStyles.hurtShare)
+            if (power > 0 && d.model?.userData?.hurtable && (hit || dist < radius + 3.3) && (doorHeld(t, d) || !d.gen)) { g.doors.hurt(d, hurtShare(dist, radius, power), pos); continue; }
             if (d.gen ? (!doorHeld(t, d) || (power > 0 && doorStruck(d, pos))) : hit) this._breakDoor(d);
         }
         // beds and chests fall to the floor below
@@ -107,6 +110,13 @@ export class Wreck {
 
     _breakDoor(d) {
         const g = this.game;
+        if (d.model?.userData?.hurtable) { // (a plain wooden door: it bursts into boards and splinters — Doors.shatter)
+            if (!d.wrecked) g.doors.shatter(d, d.shatterFrom || null);
+            g.doors.remove(d.id);
+            g.locks?.spelled?.delete(d.id);
+            if (d.gen) d.wrecked = true;
+            return;
+        }
         g.doors.remove(d.id);
         g.locks?.spelled?.delete(d.id); // (a door shut by «Lock» breaks as any other: it's a lock, not a ward)
         if (d.gen) d.wrecked = true;

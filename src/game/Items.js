@@ -342,7 +342,7 @@ export class ItemSystem {
         // (c, y0, y1 in the model's own units — localToWorld scales them; r, rh in metres)
         const k = 1 / (model.scale.x || 1);
         const c = box.getCenter(new THREE.Vector3()), h = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-        return { c: c.multiplyScalar(k), r: Math.max(h.x, h.y, h.z) * 0.75, rh: Math.max(0.03, Math.min(h.x, h.z) * 0.6), y0: box.min.y * k, y1: box.max.y * k };
+        return { c: c.multiplyScalar(k), r: Math.max(h.x, h.y, h.z) * 0.75, rh: Math.max(0.03, Math.min(h.x, h.z) * 0.6), y0: box.min.y * k, y1: box.max.y * k, hx: h.x * k, hz: h.z * k };
     }
 
     /** How far the grip point G (in the fingers) is from the thing: its handle for long things, else its body. */
@@ -688,6 +688,7 @@ export class ItemSystem {
         this.releaseHand(side);
         this._outOfSolid(pos);
         this.justLet.set(item.uid, { at: performance.now(), away: false });
+        if (item.kind === 'coins') this.coinLet = { x: pos.x, y: pos.y, z: pos.z, at: performance.now(), away: false }; // (coins put down on a counter: the pile may be new stacks with other uids — the place is remembered too)
         const v = vel.clone();
         const w = spin ? spin.clone() : null;
         if (this.auth) {
@@ -875,6 +876,16 @@ export class ItemSystem {
         return now - t[side] < TOUCH_MS;
     }
 
+    /** The place where my coins were just put down still holds the hand: true — these coins are not taken yet (see the pick-up loop). */
+    _coinLocked(L, G, now) {
+        const c = this.coinLet;
+        if (now - c.at > REGRAB.MS) { this.coinLet = null; return false; }
+        const dh = Math.hypot(G.x - c.x, G.y - c.y, G.z - c.z);
+        if (dh > REGRAB.AWAY * 2) c.away = true; // (the hand has left the place: a new grip is free)
+        if (c.away) return false;
+        return Math.hypot(L.model.position.x - c.x, L.model.position.y - c.y, L.model.position.z - c.z) < 0.9 && dh < 0.9;
+    }
+
     /** May my hands take this thing again (REGRAB)? Forgets it once they may. */
     _regrabOk(L, now) {
         const e = this.justLet.get(L.item.uid);
@@ -1004,6 +1015,17 @@ export class ItemSystem {
             if (S && ch.getHandWorldPosition) {
                 const low = GRIPPED[kind]?.axis === 'hang' ? h.model.localToWorld(_a.set(S.c.x, S.y0, S.c.z)) : h.model.localToWorld(_a.copy(S.c)).setY(_a.y - S.rh);
                 (h.low || (h.low = new THREE.Vector3())).copy(low).sub(ch.getHandWorldPosition(side, _b));
+                // (a hanging piece — armour, a robe, a backpack — is as wide as its cloth: the four lower corners keep out of a chest, a wall, a counter too, not only the lowest middle point;
+                // the author 19.11: «броня, которую надевают, проходит сквозь сундуки и камень»)
+                if (GRIPPED[kind]?.axis === 'hang' && S.hx != null && kind !== 'coins') {
+                    const hp = ch.getHandWorldPosition(side, _b), lows = h.lows || (h.lows = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
+                    for (let q = 0; q < 4; q++) {
+                        h.model.localToWorld(lows[q].set(S.c.x + (q & 1 ? S.hx : -S.hx), S.y0, S.c.z + (q & 2 ? S.hz : -S.hz)));
+                        lows[q].sub(hp);
+                    }
+                    // (and the middle of its height too: a long robe hangs past a chest's lid before its hem does)
+                    h.lows.mid = h.model.localToWorld(_a.set(S.c.x, (S.y0 + S.y1) * 0.5, S.c.z)).sub(hp).clone();
+                } else h.lows = null;
             }
         }
         if (this.justLet.size) { const t = performance.now(); for (const [uid, e] of this.justLet) if (t - e.at > REGRAB.MS) this.justLet.delete(uid); }
@@ -1018,6 +1040,9 @@ export class ItemSystem {
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
                 if (this.justLet.size && !this._regrabOk(L, now)) continue; // (just put down: not back into the same fingers)
+                // (coins put down at a counter and taken again, put down, taken… — the author 19.11: «вхожу в какой-то цикл»: the pile's stacks get other uids, so the place counts:
+                // coins lying within 0.9 m of where I just let coins go are not taken by fingers that have not left that place — a new grip after the hand has moved off (REGRAB.AWAY…) or 2.5 s)
+                if (L.item.kind === 'coins' && this.coinLet && this._coinLocked(L, G, now)) continue;
                 if (L.model.position.distanceToSquared(G) > 9) continue;
                 // a good on a market counter: not before it is paid for (coins on the counter, its name said — CastleTalk);
                 // then only taken by really closing the fingers on it (a brush of the hand takes nothing)

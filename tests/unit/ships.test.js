@@ -193,7 +193,7 @@ test('ships: every crew path can be walked (never in under a stair, never throug
         for (const [a, b] of L.edges) for (const [p, q] of [[a, b], [b, a]]) {
             const A = L.nodes[p], B = L.nodes[q], v = { x: A.x, y: A.y, z: A.z };
             let ok = false;
-            for (let i = 0; i < 600 && !ok; i++) {
+            for (let i = 0; i < 1800 && !ok; i++) {
                 const dt = 1 / 30, dx = B.x - v.x, dz = B.z - v.z, d = Math.hypot(dx, dz);
                 if (d < 0.6) { ok = true; break; }
                 const step = Math.min(d, 1.6 * dt), nx = v.x + (dx / d) * step, nz = v.z + (dz / d) * step;

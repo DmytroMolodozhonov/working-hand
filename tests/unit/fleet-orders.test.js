@@ -329,7 +329,7 @@ test('the crew\'s foes: an enemy sailor on the deck — never the master, never 
     const enemy = W.addCrew(W.foe, 6);
     // a pirate of the other ship stands on our deck
     const b = enemy[2];
-    b.ship = W.mine; b.l = { x: 1, y: 6, z: 2 };
+    b.ship = W.mine; b.l = { x: 1, y: W.mine.cls.deck, z: 2 };
     const f = W.fleet.foeFor(crew[1], W.mine);
     assert.ok(f && f.id === 'c:' + b.id, 'the boarder is the foe');
     // our own mates on the same deck are not foes
@@ -339,12 +339,12 @@ test('the crew\'s foes: an enemy sailor on the deck — never the master, never 
     assert.equal(W.fleet.foeFor(crew[1], W.mine), null, 'nobody aboard: no foe');
     // a boarder of ours on her deck: her crew is his foe; he is hers
     const ours = crew[3];
-    ours.ship = W.foe; ours.l = { x: 0, y: 6, z: 0 };
+    ours.ship = W.foe; ours.l = { x: 0, y: W.foe.cls.deck, z: 0 };
     W.fleet._intrAt = 0;
     assert.ok(W.fleet.sailorFoe(ours, W.foe)?.id.startsWith('c:foe:'));
     assert.equal(W.fleet.sailorFoe(enemy[0], W.foe)?.id, 'c:' + ours.id, 'she fights back');
     // the zombies on our deck are foes, those on the pier are not reached
-    W.game.zombies = [{ isDead: false, isFrozen: false, id: 7, gOff: 0, group: { position: { x: 1, y: 6, z: 0 } } }];
+    W.game.zombies = [{ isDead: false, isFrozen: false, id: 7, gOff: 0, group: { position: { x: 1, y: W.mine.cls.deck, z: 0 } } }];
     W.fleet._intrAt = 0;
     ours.ship = W.mine; W.fleet._zc = null;
     W.mine.pose.set(0, 0, 0, 0);

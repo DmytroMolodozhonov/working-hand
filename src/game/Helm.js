@@ -204,7 +204,9 @@ export class Helm {
                 s.pose.toWorld(H.x + Math.sin(ang) * H.rimR, H.y + Math.cos(ang) * H.rimR, H.z + 0.05, _o);
                 _w.set(_o.x, _o.y, _o.z);
                 (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_v);
-                if (_v.distanceTo(_w) > ch.BONE_LENGTH_UPPER + ch.BONE_LENGTH_LOWER + 0.55) { this.release(side); continue; }
+                // (the far spokes of a turning wheel are beyond the arm's reach from where the helmsman stands: the arm STRETCHES as far as it can — reachHand clamps — and only a
+                //  spoke gone really far is let go; before, the hand let go at 0.55 m over the reach, i.e. at every turn of the wheel)
+                if (_v.distanceTo(_w) > ch.BONE_LENGTH_UPPER + ch.BONE_LENGTH_LOWER + 2.6) { this.release(side); continue; }
                 ch.reachHand(side, _w, 1, 0.35);
                 continue;
             }
