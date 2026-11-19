@@ -500,7 +500,7 @@ export class VisibleGodi {
         if (on || !fade) { this.viewing = on; g.seeFx?.setOn?.(on); } // (while it melts the window stays and melts with it: _viewTick lets go when no steam is left)
         g.steam?.setJet?.('local', null, null, false);
         if (!on) { if (fade) g.steam.fade('local', performance.now() / 1000); else g.steam?.clear?.('local'); g.sync?.steamOff?.(!fade); }
-        g.perf?.note?.(on ? '👁️ Visible Godi: включена' : '👁️ Visible Godi: выключена' + (why ? ' (' + why + ')' : ''));
+        g.perf?.noteWithState?.(on ? '👁️ Visible Godi: включена' : '👁️ Visible Godi: выключена' + (why ? ' (' + why + ')' : '')); // (with the state of what may pile up, now and 12 s later: the journal shows what each use leaves behind)
         if (!on) {
             if (why === 'steam') g.hud.setVoice('👁️ Пар разошёлся — тучки больше нет', true);
             else if (why === 'mana') g.hud.setVoice('👁️ Мана кончилась — тучка растаяла', true);
