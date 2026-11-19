@@ -399,6 +399,9 @@ export class Animals {
 
     _remove(a) {
         const g = this.game;
+        // (whoever rides it must not ride on: the horse eaten / gone — the author 19.11 «всадник на невидимом коне»)
+        if (a.rider === g.localId) this.dismount();
+        if (a.mount) { for (const v of g.castleLife?.byId?.values?.() || []) if (v.horse === a && v.seated) g.travelers?.riders?.unseat?.(v, true); a.mount = null; }
         if (a.pen && !a.dead) g.houses?.penReturn(a.pen.id); // (a pen animal far away: it comes back with the pen)
         g.scene.remove(a.model);
         a.far?.dispose(); // (its far copy's own buffers)

@@ -586,11 +586,25 @@ export class Plants {
     /** How far below the middle of the body the object's own origin is (to write the position back). */
     _midOff(prey) { return prey.k === 'a' ? 0.4 : prey.k === 'v' ? 1.4 : 0; }
 
+    /**
+     * (host) The horse is seized: whoever sits on it is thrown off at once (the author 19.11: the horse eaten, the rider «ехал на невидимом коне»),
+     * and his party is in trouble — the riders of the roads get down and fight or flee (Travelers.trouble / Riders.unseat). A player rider is dismounted.
+     */
+    _unseatRider(a) {
+        const g = this.game;
+        if (a.rider === g.localId) g.animals?.dismount?.();
+        if (a.mount) {
+            const P = g.travelers?.parties?.get?.(a.mount.party);
+            for (const v of g.castleLife?.byId?.values?.() || []) if (v.horse === a && v.seated) g.travelers?.riders?.unseat?.(v, true);
+            if (P) g.travelers?.trouble?.(P, null);
+        }
+    }
+
     /** (host) Take hold of the prey (animals and villagers are carried by the host). */
     _hold(p, prey, on) {
         const g = this.game;
         if (!prey) return;
-        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.plantHeld = on; if (on) a._plantScale0 = a.group.scale.x; if (!on) { a.group.rotation.x = 0; if (a._plantScale0) a.group.scale.setScalar(a._plantScale0); } } }
+        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { if (on) this._unseatRider(a); a.plantHeld = on; if (on) a._plantScale0 = a.group.scale.x; if (!on) { a.group.rotation.x = 0; if (a._plantScale0) a.group.scale.setScalar(a._plantScale0); } } }
         if (prey.k === 'v') { const v = g.castleLife?.byId?.get(prey.id); if (v) { v.carriedBy = on ? p : null; if (!on) v.vy = v.vy || -0.01; } }
     }
     /** (host) The prey follows the plant: its body is put where the hunt says (a step a frame, never under the ground or into rock). */
@@ -794,9 +808,30 @@ export class Plants {
         p.vineT -= dt; if (p.vineT <= 0) { p.vineT = 0.06; this._poseVines(p, this._clock * 0.3 + p.phase); }
     }
 
+    /**
+     * A dead plant whose ground is gone (a blast dug under it): its whole foot falls with gravity to the ground below, roots and all — nothing
+     * hangs in the air (the author 19.11: after «Бомбарда» the dead carnivore's roots hung in the air). Every computer does it for itself (the land is the same).
+     */
+    _sag(p, dt) {
+        if (p._landed) return;
+        const t = this.game.terrain?.data;
+        if (!t?.get || (t.landMade && !t.landMade(Math.round(p.x), Math.round(p.z)))) return;
+        const solid = (y) => { const b = t.get(Math.round(p.x), Math.round(y + 0.5), Math.round(p.z)); return b !== BLOCK.AIR && b !== BLOCK.WATER; };
+        if (solid(p.y)) { if (!p.fallV) p._landed = true; p.fallV = 0; if (p.fallV === 0 && p._sagged) p._landed = true; return; }
+        p.fallV = Math.min(40, (p.fallV || 0) + 26 * dt);
+        let dy = p.fallV * dt;
+        // (step by step: never through a block of the new ground)
+        while (dy > 1e-4 && !solid(p.y)) { const st = Math.min(dy, 0.4); p.y -= st; dy -= st; p._sagged = true; if (solid(p.y)) break; }
+        p.root.position.y = p.y - (p.root.parent?.position?.y || 0);
+        p.mw.setPosition(p.x, p.y, p.z);
+        p.mwi.copy(p.mw).invert();
+        if (p.y < -200) p._landed = true;
+    }
+
     _fall(p, dt) {
         if (!p.root || p.root.parent == null) return;
         p.deadT += dt;
+        this._sag(p, dt);
         const style = p.deathStyle || 'cut';
         if (p.kind === 'carnivore' && style !== 'blast') {
             this._deadHead(p, dt);
