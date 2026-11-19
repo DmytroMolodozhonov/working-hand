@@ -20,6 +20,9 @@ export const SHOW = {
     LOOK_D: 40, // m: how far along the hand's line the point he looks at is (or the ground, if nearer)
     SKY: 0.6, // a hand pointing higher than this (d.y) points at the sky: nothing to look at
     QUIET_S: 2.5, // s after a spell: the hand is not a pointing finger
+    ASSESS_AFTER: 1.2, // s after they looked (the hand still held): the nearest one says what he makes of the place
+    ASSESS_R: 11, // m round the point: what he sees there
+    SAY_COOL_S: 8, // s: one person does not comment twice that soon
 };
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < String(s).length; i++) { h ^= String(s).charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
@@ -55,11 +58,48 @@ export function lookPoint(ray, ground = null) {
     return Math.hypot(ground.x - ray.o.x, ground.z - ray.o.z) < SHOW.LOOK_D ? { x: ground.x, z: ground.z } : far;
 }
 
+/**
+ * What the place I show is, as a person sees it (pure over the game's lists). → { kind, n?, pos } with kind: 'zombie' | 'fire' | 'corpse' | 'animal' | 'people' | 'item' | 'house' | 'nothing'.
+ * The most important first: a danger before a thing, a thing before an empty place.
+ */
+export function assessPlace(g, pt, speaker = null, R = SHOW.ASSESS_R) {
+    const near = (x, z, r = R) => (x - pt.x) ** 2 + (z - pt.z) ** 2 <= r * r;
+    const z = (g.zombies || []).filter((q) => !q.isDead && !q.dummy && q.group && near(q.group.position.x, q.group.position.z));
+    if (z.length) return { kind: 'zombie', n: z.length, pos: z[0].group.position };
+    const y = g.y ?? 0;
+    if (g.fire?.burningAt?.({ x: pt.x, y, z: pt.z }, R) || g.burning?.me?.left > 0 && near(g.character.group.position.x, g.character.group.position.z)) return { kind: 'fire', pos: { x: pt.x, y, z: pt.z } };
+    const c = [...(g.death?.bodies?.values?.() || [])].filter((b) => near(b.x, b.z));
+    if (c.length) return { kind: 'corpse', n: c.length, pos: { x: c[0].x, y: c[0].y, z: c[0].z } };
+    const a = (g.animals?.list || []).filter((q) => !q.dead && q.group?.position && near(q.group.position.x, q.group.position.z));
+    if (a.length) return { kind: 'animal', n: a.length, pos: a[0].group.position };
+    const people = [...(g.castleLife?.byId?.values?.() || [])].filter((q) => q !== speaker && !q.dead && near(q.x, q.z));
+    for (const [, r] of g.remotes || []) if (!r.dead && r.position && near(r.position.x, r.position.z)) people.push(r);
+    if (people.length) return { kind: 'people', n: people.length, pos: { x: pt.x, y, z: pt.z } };
+    let item = 0;
+    for (const L of g.items?.loose?.values?.() || []) { const p = L.model?.position; if (p && !L.item?.shop && near(p.x, p.z, 5)) item++; }
+    if (item) return { kind: 'item', n: item, pos: { x: pt.x, y, z: pt.z } };
+    for (const cs of g.castleLife?.castles?.values?.() || []) for (const h of cs.def?.houses || []) if (h.c && near(h.c.x, h.c.z, 9)) return { kind: 'house', pos: { x: pt.x, y, z: pt.z } };
+    return { kind: 'nothing', pos: { x: pt.x, y, z: pt.z } };
+}
+
+/** What he says about it (the words of a villager; one of a few, by his id). `armed`: a knight / a guard. */
+export const COMMENTS = {
+    zombie: ['Зомби! Там зомби — держитесь от них подальше!', 'Там бродят зомби. Лучше туда не ходить.'],
+    fire: ['Там огонь! Надо бы потушить!', 'Горит… Беда, если ветер подует сюда.'],
+    corpse: ['Ох… там лежит тело. Не к добру.', 'Там кто-то погиб. Мне тревожно.'],
+    animal: ['А, там какая-то скотина. Ничего страшного.', 'Вижу зверя вдали. Пускай себе ходит.'],
+    people: ['Там люди — вроде мирные.', 'Вижу кого-то вдалеке, спокойно стоят.'],
+    item: ['Там что-то лежит, кажется. Можно подобрать.', 'Вижу какую-то вещь на земле.'],
+    house: ['Да, там дом. Ничего необычного.', 'Там строение — крыша видна.'],
+    nothing: ['Не вижу там ничего особенного.', 'Там пусто, насколько я вижу.'],
+};
+export const commentOf = (kind, id) => { const l = COMMENTS[kind] || COMMENTS.nothing; return l[Math.floor(hash('c' + id) * l.length) % l.length]; };
+
 export class ShowGaze {
     /** `game`: the game; `rayOf(side, o, d)`: fills the hand's ray (Duel._myRay); `groundOf(ray)`: the ground point of a ray or null (CommandTalk._ground). */
-    constructor(game, rayOf = null, groundOf = null) {
-        this.game = game; this.rayOf = rayOf; this.groundOf = groundOf;
-        this.ref = null; this.held = 0; this.pending = []; this.on = false; this._t = 0; this.shown = new Set();
+    constructor(game, rayOf = null, groundOf = null, sayIt = null) {
+        this.game = game; this.rayOf = rayOf; this.groundOf = groundOf; this.sayIt = sayIt; // sayIt(person, assessment): his remark (and fear)
+        this.ref = null; this.held = 0; this.pending = []; this.on = false; this._t = 0; this.shown = new Set(); this.assessed = false; this.said = new Map();
         this._o = { x: 0, y: 0, z: 0 }; this._d = { x: 0, y: 0, z: 1 };
     }
 
@@ -92,7 +132,7 @@ export class ShowGaze {
         const d = this._d, l = Math.hypot(d.x, d.y, d.z);
         if (!(l > 0.01) || d.y / l > SHOW.SKY) { this._reset(); return; }
         const dir = { x: d.x / l, y: d.y / l, z: d.z / l };
-        if (!steady(this.ref, dir)) { this.ref = dir; this.held = 0; this.on = false; return; }
+        if (!steady(this.ref, dir)) { this.ref = dir; this.held = 0; this.on = false; this.assessed = false; return; }
         this.held += 0.1;
         if (this.held < SHOW.HOLD_S) return;
         // (held: they look; while I keep it up the glance is refreshed — the point is where the hand points NOW)
@@ -106,7 +146,17 @@ export class ShowGaze {
             this.pending.push({ v, wait: this.on ? 0.05 : delay, x: pt.x, z: pt.z });
         }
         this.on = true;
+        // (they looked, the hand is still held: the nearest one says what he makes of the place — once for this pointing)
+        if (!this.assessed && this.held >= SHOW.HOLD_S + SHOW.ASSESS_AFTER && this.sayIt) {
+            const who = viewers(list, me).map((o) => o.v).find((v) => v.glance?.show && !this.pending.some((p) => p.v === v));
+            if (who && (performance.now() - (this.said.get(who.id) || -1e9)) / 1000 > SHOW.SAY_COOL_S) {
+                this.assessed = true;
+                this.said.set(who.id, performance.now());
+                const a = assessPlace(g, pt, who);
+                this.sayIt(who, a);
+            }
+        }
     }
 
-    _reset() { this.ref = null; this.held = 0; this.on = false; }
+    _reset() { this.ref = null; this.held = 0; this.on = false; this.assessed = false; }
 }

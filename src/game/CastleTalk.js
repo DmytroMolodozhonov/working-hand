@@ -33,7 +33,7 @@
 import { markIntent } from './GestureLife.js';
 import { allLog } from '../core/AllLog.js';
 import * as THREE from 'three';
-import { ShowGaze } from './ShowGaze.js';
+import { ShowGaze, commentOf } from './ShowGaze.js';
 import { zonesOf, payPoint } from './StallZones.js';
 import { CounterTrays } from './CounterTrays.js';
 import { isApology } from './BumpRules.js';
@@ -188,7 +188,10 @@ export class CastleTalk {
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
         this.trays = new CounterTrays(game); // the rune tray on a counter's coin plate (CounterTrays.js)
-        this.showGaze = new ShowGaze(game, (side, o, d) => game.duel?._myRay?.(side, o, d), (ray) => this.commands?._ground?.(ray)); // (the people look where I point — ShowGaze.js)
+        this.showGaze = new ShowGaze(game, (side, o, d) => game.duel?._myRay?.(side, o, d), (ray) => this.commands?._ground?.(ray), (v, a) => { // (the people look where I point, and one says what he makes of it — ShowGaze.js)
+            this.life._say?.(v, commentOf(a.kind, v.id), 3.5, false);
+            if (a.kind === 'zombie' || a.kind === 'fire') this.life.alarm?.(a.pos, a.kind === 'fire' ? 'fire' : 'zombie', null, 12); // (a real danger shown: they take fright as at any other)
+        });
         this.commands = new CommandTalk(this, journal); // plain-word commands: poses, walks, formations, spars, «не могу» (CommandTalk.js)
         this.wave = new WaveDetector(); // my hand waving to people (Attention.mayNotice)
         this._calledAt = -1e9; // when I last called out / waved

@@ -80,3 +80,42 @@ test('a glance a command gave is not taken over (his own order stays)', () => {
     r.run(3);
     assert.equal(a.glance.x, 50, 'the command\'s point');
 });
+
+import { assessPlace, commentOf, COMMENTS } from '../../src/game/ShowGaze.js';
+
+test('what he makes of the place: the danger first, then bodies, animals, people, things, houses, nothing', () => {
+    const pt = { x: 0, z: -30 };
+    const at = (x, z) => ({ group: { position: { x, y: 0, z } } });
+    const base = () => ({ zombies: [], animals: { list: [] }, death: { bodies: new Map() }, items: { loose: new Map() }, castleLife: { byId: new Map(), castles: new Map() }, remotes: new Map(), character: { group: { position: { x: 0, y: 0, z: 0 } } } });
+    assert.equal(assessPlace(base(), pt).kind, 'nothing');
+    const g1 = base(); g1.zombies.push(at(2, -28));
+    assert.equal(assessPlace(g1, pt).kind, 'zombie');
+    const g2 = base(); g2.zombies.push(at(2, -28)); g2.animals.list.push(at(1, -30));
+    assert.equal(assessPlace(g2, pt).kind, 'zombie', 'the danger is first');
+    const g3 = base(); g3.death.bodies.set(1, { x: 3, y: 0, z: -31 }); g3.animals.list.push(at(1, -30));
+    assert.equal(assessPlace(g3, pt).kind, 'corpse');
+    const g4 = base(); g4.animals.list.push(at(1, -30));
+    assert.equal(assessPlace(g4, pt).kind, 'animal');
+    const g5 = base(); g5.castleLife.byId.set('v', { id: 'v', x: 2, z: -29 });
+    assert.equal(assessPlace(g5, pt).kind, 'people');
+    assert.equal(assessPlace(g5, pt, g5.castleLife.byId.get('v')).kind, 'nothing', 'not himself');
+    const g6 = base(); g6.items.loose.set('u', { item: {}, model: { position: { x: 1, y: 0, z: -29 } } });
+    assert.equal(assessPlace(g6, pt).kind, 'item');
+    const g7 = base(); g7.fire = { burningAt: () => true };
+    assert.equal(assessPlace(g7, pt).kind, 'fire');
+    const far = base(); far.zombies.push(at(80, 80));
+    assert.equal(assessPlace(far, pt).kind, 'nothing', 'a zombie far from the place shown is not there');
+    for (const k of Object.keys(COMMENTS)) assert.ok(commentOf(k, 'x').length > 5);
+});
+
+test('one remark per pointing: the nearest person who looks says it, once; another pointing — another remark after the pause', () => {
+    const a = person('a', 6, 2), b = person('b', 9, 4);
+    const r = rig({ people: [a, b] });
+    const said = [];
+    r.sg.sayIt = (v, as) => said.push([v.id, as.kind]);
+    r.run(SHOW.HOLD_S + SHOW.REACT_MIN + SHOW.REACT_SPAN + SHOW.ASSESS_AFTER + 1.5);
+    assert.equal(said.length, 1, JSON.stringify(said));
+    assert.equal(said[0][0], 'a', 'the nearest');
+    r.run(3);
+    assert.equal(said.length, 1, 'not twice for one pointing');
+});
