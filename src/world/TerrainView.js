@@ -721,6 +721,22 @@ export class Terrain {
         // (the far land in big pieces: let go what changed or came near — every frame, before the picture — and merge one more now and then)
         this.clusters.enabled = !(typeof window !== 'undefined' && window.__ZNS_NO_TERRAIN_CLUSTERS__);
         this.clusters.step(fx, fz);
+        // «Лёгкий режим»: a chunk wholly behind the haze (its nearest corner beyond the fog's end) is not drawn — it is all fog colour anyway, and for a computer without a video card
+        // every triangle is the processor's work. Every 3rd frame; a remade chunk (shown by _fill) is hidden again at once.
+        if (this.liteCullR && this._frame % 3 === 0) {
+            const R = this.liteCullR, H = CHUNK / 2;
+            for (const e of this.meshes.values()) {
+                const dx = Math.max(0, Math.abs(e.cx * CHUNK + H - fx) - H), dz = Math.max(0, Math.abs(e.cz * CHUNK + H - fz) - H);
+                const far = dx * dx + dz * dz > R * R;
+                if (far) { if (e.ground.visible) e.ground.visible = false; if (e.water.visible) e.water.visible = false; e._cull = true; }
+                else if (e._cull) {
+                    e._cull = false;
+                    if (e.ground.geometry?.attributes?.position) e.ground.visible = true;
+                    if (e.water.geometry?.attributes?.position) e.water.visible = true;
+                }
+            }
+        } else if (!this.liteCullR && this._culled) { this._culled = false; for (const e of this.meshes.values()) if (e._cull) { e._cull = false; if (e.ground.geometry?.attributes?.position) e.ground.visible = true; if (e.water.geometry?.attributes?.position) e.water.visible = true; } }
+        if (this.liteCullR) this._culled = true;
 
         const k = this.keepAt;
         if (this._frame % 120 === 0) this.data.evictFar(Math.floor(fx / CHUNK), Math.floor(fz / CHUNK), this.radiusChunks + 4, k ? (this._keepC || (this._keepC = { cx: 0, cz: 0 }), this._keepC.cx = Math.floor(k.x / CHUNK), this._keepC.cz = Math.floor(k.z / CHUNK), this._keepC) : null);
