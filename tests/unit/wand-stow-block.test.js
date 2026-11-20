@@ -22,6 +22,7 @@ test('a second wand in the OTHER hand (a trophy) can be put away while a spell g
     const inv = make({ ...t, focus: { held: () => 'Levitation' }, wandSide: () => 'right', character: { aim: {} } });
     assert.ok(inv.wandStowBlock('right'), 'the casting wand: blocked');
     assert.equal(inv.wandStowBlock('left'), '', 'the other hand\'s wand: free');
-    const aimed = make({ ...t, focus: { held: () => null }, wandSide: () => 'right', character: { aim: { left: {} } } });
-    assert.ok(aimed.wandStowBlock('left'), 'but one aimed in that hand is still a wand in use');
+    // (20.11, the author: «вторую палочку в дочерней руке не загнать в интерфейс» — `aim[side]` is where ANY held wand points, set every frame: never a block)
+    const held2 = make({ ...t, focus: { held: () => null }, wandSide: () => 'right', character: { aim: { left: { dir: {} }, right: { dir: {} } } } });
+    assert.equal(held2.wandStowBlock('left'), '', 'a second wand simply held goes away');
 });
