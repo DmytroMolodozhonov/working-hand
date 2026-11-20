@@ -5,8 +5,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchSpell } from '../../src/fx/SpellManager.js';
-import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
-import { buildFlora } from '../../src/world/FloraBuild.js';
+import * as THREE from 'three';
+import { TerrainData, BLOCK, chunkKey } from '../../src/world/Terrain.js';
+import { Flora, buildFlora } from '../../src/world/Flora.js';
 import { Flourish, GREENS } from '../../src/game/Flourish.js';
 
 test('the words: «Flourish» / «флориш» — and not everyday speech', () => {
@@ -69,4 +70,32 @@ test('Flourish greens the aimed cave floor, places flowers there, and leaves sto
     flowers.restore([[x, z, layer]]);
     assert.deepEqual(flowers.snapshot(), [[x, z, layer]]);
     assert.ok(buildFlora(t, c).box[1] < -6, 'flower vertices belong to the cave, not the grass above');
+});
+
+
+test('an edited floor hides stale meadow geometry while the worker rebuilds it', () => {
+    const data = new TerrainData();
+    data.generate({ seed: 7 });
+    const cx = 0, cz = 0, key = chunkKey(cx, cz);
+    const c = data.chunk(cx, cz);
+    const terrain = {
+        data, group: new THREE.Group(), meshes: new Map([[key, {}]]),
+        floraAsync: false, askFlora() {}, takeFlora: () => [],
+    };
+    const meadow = new Flora(terrain);
+    const focus = { x: 4, z: 4 };
+    meadow.update(focus, true);
+    const old = meadow.meshes.get(key).mesh;
+    assert.equal(old.visible, true);
+    data.set(4, data.topLayer(4, 4) + 1, 4, BLOCK.PLANKS);
+    c.rev = (c.rev || 0) + 1; // the built terrain mesh was swapped in
+    terrain.floraAsync = true;
+    meadow.update(focus);
+    assert.equal(old.visible, false);
+    terrain.takeFlora = () => [{ key, rev: c.rev, out: buildFlora(data, c) }];
+    meadow.update(focus);
+    const current = meadow.meshes.get(key).mesh;
+    assert.notEqual(current, old);
+    assert.equal(current.visible, true);
+    meadow.dispose();
 });
