@@ -506,7 +506,7 @@ export class ArenaDuels {
         let busy = false;
         for (const v of L.byId.values()) if (v.arena?.id === A.id && !v.dead && (v.arena.kind === 'leave' || (v.arena.kind === 'fan' && !v.seated)) && onArenaFloor(A.def, v.x, v.z, -1)) busy = true;
         if (busy) return false;
-        const cap = A.queue.length ? 15 : A.def.visit ? 170 : 90; // (the visitors' way round the corner and up the stair is long: they are given time to sit before the duellists come out — but a player who has signed up (and paid) is not kept waiting for them: the author 20.11, «ждал и не дождался соперника»)
+        const cap = A.queue.length ? 15 : A.def.visit ? 60 : 30; // (the visitors' way round the corner and up the stair is long: they are given time to sit before the duellists come out — but a player who has signed up (and paid) is not kept waiting for them: the author 20.11, «ждал и не дождался соперника»)
         if (!A.def.practice && A.fans.size < A.want && A.readyT < cap) return false;
         for (const v of A.fans) if (!v.seated && A.readyT < cap) return false;
         A.readyT = 0;

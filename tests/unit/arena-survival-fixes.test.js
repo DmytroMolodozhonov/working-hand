@@ -30,3 +30,13 @@ test('choose(): a player already signed up for another opponent changes his mind
     assert.ok(tells.some((m) => m.e === 'pay' && m.coins === 100), 'the stake of the middle one is given back');
     assert.ok(self.pay && self.pay.tier === 'novice', 'now the stake of the junior is asked: ' + JSON.stringify(r));
 });
+
+import { rollWizardWand } from '../../src/game/Expelliarmus.js';
+test('the wizards\' wands are their own (the author 20.11): the same person — the same wand every time; different people — different designs and woods; not one plain stick for all students', () => {
+    const mk = (id, role = 'student', seed) => ({ id, role, look: { seed } });
+    const a1 = rollWizardWand(mk('t:1', 'student', 101)), a2 = rollWizardWand(mk('t:1', 'student', 101));
+    assert.deepEqual(a1, { ...a2, uid: a1.uid }, 'the same person, the same wand');
+    const seen = new Set();
+    for (let i = 0; i < 40; i++) { const w = rollWizardWand(mk('t:' + i, 'student', i * 37 + 5)); seen.add(w.model + ':' + w.color); assert.ok(!w.plain, 'not the plain stick'); assert.ok(w.power >= 1 && w.power <= 20, 'a student\'s wand is weak'); }
+    assert.ok(seen.size >= 15, 'many different wands: ' + seen.size);
+});
