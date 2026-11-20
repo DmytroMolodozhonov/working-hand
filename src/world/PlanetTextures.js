@@ -4,15 +4,15 @@
  *
  *   rocky planets and the Moon: their very own ground (PlanetSurface.planetHeight) seen from far —
  *     the craters, the dark seas, the mesas, the ice caps you see from orbit are the ones you land on;
- *   the Earth: the game's own world round the start (TerrainData's heights: seas, lakes, rivers,
- *     beaches, forests' green, rock and snow on the mountains), the start at the north pole;
+ *   the Earth: the real Earth's continents (EarthMask.js; the author 20.11), painted by climate;
  *   the gas giants: belts and zones (Jupiter's Great Red Spot, Saturn's pale gold, Uranus' plain cyan,
  *     Neptune's deep blue with its dark spot); Venus: the cream-yellow tops of its clouds; the Sun.
  * A texel (i, j): longitude (i + .5) / w · 2π − π, latitude π/2 − (j + .5) / h · π.
  */
 
 import { planetHeight } from './PlanetSurface.js';
-import { dirToSurface, dirToEarth } from './Planets.js';
+import { dirToSurface } from './Planets.js';
+import { earthLandAt } from './EarthMask.js';
 import { createNoise2D } from '../core/math.js';
 
 const rgb = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
@@ -33,7 +33,7 @@ function lonLat(i, j, w, h, out) {
  */
 export function planetTexture(def, w, h, terrain = null) {
     const data = new Uint8ClampedArray(w * h * 4);
-    if (def.look === 'earth' && terrain) earthMap(data, w, h, terrain);
+    if (def.look === 'earth') earthMap(data, w, h); // (the real Earth's continents — no terrain needed)
     else if (def.kind === 'gas') gasMap(def, data, w, h); // (the belts seen from far: their ground's bands are under them)
     else if (def.slot != null && def.slot >= 0 && def.ground) rockyMap(def, data, w, h);
     else if (def.look === 'venus') cloudMap(def, data, w, h);
@@ -79,31 +79,39 @@ function rockyMap(def, data, w, h) {
     }
 }
 
-/** The Earth: the game's own world from far (the start at the north pole). */
-function earthMap(data, w, h, td) {
-    const H = td.rawHeight || td.heightAt, land = td.land;
-    const clim = {}, wts = new Float32Array(16), col3 = {}, fx = { mesa: 0, emer: 0, moon: 0, fant: 0 };
-    const sea = [22, 62, 128], deep = [10, 34, 86], lake = [40, 96, 170], sand = [214, 196, 138], rock = [128, 124, 118], snow = [242, 246, 248];
+/**
+ * The Earth from space: the REAL Earth's continents (the author 20.11: «как настоящая Земля» — Africa, Eurasia, the Americas, Australia,
+ * Antarctica; EarthMask.js, Natural Earth), painted by their climate: ice at the poles, tundra and forest of the north, the deserts of
+ * the dry belts, jungle on the equator, mountains' grey ridges, beaches' shallows round the coasts, the deep sea out in the ocean.
+ */
+function earthMap(data, w, h) {
+    const nA = createNoise2D(0x3e11), nB = createNoise2D(0x71c5), nC = createNoise2D(0x9d2f);
+    const sea = [18, 58, 122], deep = [8, 30, 82], shallow = [44, 128, 178], ice = [238, 244, 248];
+    const forest = [48, 112, 54], jungle = [28, 96, 48], grass = [112, 150, 70], desert = [206, 178, 118], tundra = [150, 160, 128], rock = [126, 118, 108];
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const d = lonLat(i, j, w, h, _d);
-        dirToEarth(d, _s);
-        const x = Math.round(_s.x), z = Math.round(_s.z);
-        const hh = H(x, z);
+        const lon = d.lon, lat = d.lat, al = Math.abs(lat) / (Math.PI / 2); // 0 equator … 1 pole
+        const L = earthLandAt(lon, lat);
         let c;
-        if (H.sea) c = mixc(sea, deep, Math.min(1, (H.water || 1) / 14));
-        else if (H.water) c = lake;
-        else if (H.beach) c = sand;
-        else {
-            let grass = [76, 150, 64];
-            if (land) {
-                try {
-                    land.climate(x, z, clim);
-                    land.biomes(clim, wts, 0, fx);
-                    land.colours(x, z, hh, wts, clim, col3);
-                    if (col3.grass != null) grass = rgb(col3.grass);
-                } catch (e) { /* (an older world: plain green) */ }
-            }
-            c = hh > 34 ? snow : hh > 22 ? mixc(rock, snow, (hh - 22) / 12) : hh > 14 ? mixc(grass, rock, (hh - 14) / 8) : mixc(grass, [40, 90, 40], Math.max(0, Math.min(0.4, hh / 30)));
+        if (L < 0.5) {
+            // the sea: shallows near a coast (the land a little way round), the deep far from any, ice in the polar seas
+            const r = 0.05;
+            const near = (earthLandAt(lon + r, lat) + earthLandAt(lon - r, lat) + earthLandAt(lon, lat + r) + earthLandAt(lon, lat - r) + L) / 5;
+            c = mixc(mixc(sea, deep, Math.max(0, Math.min(1, 0.55 + sph(nC, d, 5, 1) * 0.5))), shallow, Math.min(1, near * 2.6));
+            c = mixc(c, ice, Math.max(0, Math.min(1, (al - 0.8) * 5 + sph(nB, d, 9, 1) * 0.3)));
+        } else {
+            const wet = 0.5 + sph(nA, d, 3.2, 1) * 0.9; // 0 dry … 1 wet
+            const ridge = Math.max(0, 1 - Math.abs(sph(nB, d, 6.5, 1)) * 3.2); // mountain ridges
+            // the belts: jungle on the equator, deserts at 15–35° where it is dry, forest and grass between, tundra and ice up north
+            c = mixc(grass, forest, Math.max(0, Math.min(1, wet)));
+            c = mixc(c, jungle, Math.max(0, 1 - al * 3.2) * Math.max(0, Math.min(1, wet + 0.25)));
+            const dry = Math.max(0, 1 - Math.abs(al - 0.3) * 6) * Math.max(0, Math.min(1, 1.1 - wet * 1.5));
+            c = mixc(c, desert, Math.min(1, dry * 1.4));
+            c = mixc(c, tundra, Math.max(0, Math.min(1, (al - 0.62) * 5)));
+            c = mixc(c, rock, Math.min(0.7, ridge * (0.25 + al * 0.5) * (sph(nC, d, 2.4, 1) > 0 ? 1 : 0.4)));
+            c = mixc(c, ice, Math.max(0, Math.min(1, (al - 0.76) * 6 + ridge * 0.1)));
+            const k = 0.94 + 0.12 * sph(nA, d, 28, 1); // the grain of the land
+            c = [c[0] * k, c[1] * k, c[2] * k];
         }
         put(data, (j * w + i) * 4, c);
     }

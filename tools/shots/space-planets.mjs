@@ -10,13 +10,16 @@ export default async function (h, args) {
     S.cast?.(true);
     S._enterSpace('earth');
     S.testHold = true;
+    const t0 = S.now(); S.now = () => t0; // (the planets stand still for the pictures)
+    S._askTextures(); // (the planets' maps are made by a worker: waited for below)
     await h.until(() => S.realm === 'space', 20000);
     await h.frames(10);
     const ids = args?.only || ['earth', 'jupiter'];
+    h.log('radii', Object.fromEntries(S.planets.list.map((d) => [d.id, d.radius])));
     for (const id of ids) {
         const def = S.planets.get(id), t = S.now(), c = { x: 0, y: 0, z: 0 };
         planetPosition(def, t, c, S.planets);
-        const alt = args?.alt ?? 1800, R = def.radius;
+        const alt = args?.alt ?? 5000, R = def.radius;
         // the hero over the planet's day side, towards the Sun (the Sun is the origin of the plane)
         const sx = -c.x, sy = -c.y, sz = -c.z, sl = Math.hypot(sx, sy, sz);
         const d = { x: sx / sl, y: sy / sl, z: sz / sl };
@@ -25,7 +28,9 @@ export default async function (h, args) {
         S.vel.x = S.vel.y = S.vel.z = 0; S.speed = 0; S._v = 0; S._exitDir = null;
         S._place();
         h.log(id, 'radius', R, 'alt', alt, 'dist', Math.round(R + alt));
-        await h.frames(150); // (the planets' pictures come from the workers)
+        await h.until(() => S._tex.get(id) === 'done' && ids.every((q) => S._tex.get(q) === 'done'), 600000); // (the planets' pictures come from the workers)
+        h.log(id, 'map', S._tex.get(id));
+        await h.frames(30);
         const p = g.character.group.position;
         // the planet's centre in the local frame: where the hero is, minus the way back down to it
         const cl = new THREE.Vector3(p.x - d.x * (R + alt), p.y - d.y * (R + alt), p.z - d.z * (R + alt));

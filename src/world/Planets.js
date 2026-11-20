@@ -46,7 +46,7 @@
  *
  * ── Sizes ───────────────────────────────────────────────────────────────────────────────────
  *   Real data (NASA / JPL planetary fact sheets): order, sizes relative to the Earth, distances in AU,
- *   gravity, tilts, rings. Squeezed for play: radius = 600·(R/R⊕)^0.6, the Sun's 6000; distance =
+ *   gravity, tilts, rings. Squeezed for play: radius = 600·(R/R⊕) (the real ratios; the Sun's 6000 is squeezed — there is no room for the real one between the orbits); distance =
  *   32000·(a/AU)^0.7; a year of the Earth is 2 hours (Kepler's T ∝ a^1.5 for the rest); days ∝ √(real).
  *   The order and the feel (tiny Pluto far out, huge Jupiter, Saturn's rings) stay true.
  */
@@ -69,13 +69,13 @@ export const SPACE = {
     YEAR: 7200, // s: the Earth's year in the game (2 hours: the planets move slowly)
     AU: 32000, // distance scale: 32000·a^0.7
     EARTH_R: 600,
-    SUN_R: 6000,
+    SUN_R: 8000, // (a little more than Jupiter's 6726: with the planets' real sizes the Sun must stay the biggest; the real one — 65 000 — has no room between the orbits)
     HEAT_R: 15000, // nearer the Sun than this the heat grows (warning) — Mercury (16.5 km out) is just outside
     DEATH_R: 9600, // … and here nothing survives (any mode, any protection)
 };
 
 const AUd = (au) => Math.round(SPACE.AU * Math.pow(au, 0.7));
-const Rr = (r) => Math.round(SPACE.EARTH_R * Math.pow(r, 0.6));
+const Rr = (r) => Math.round(SPACE.EARTH_R * r); // (автор 20.11: размеры планет — как в реальности, относительно Земли; раньше сжимались степенью 0,6 и Юпитер был в 4 раза больше Земли вместо 11)
 const Tk = (au) => SPACE.YEAR * Math.pow(au, 1.5);
 /** A day (s) from the real solar day in Earth days: √ of it × the game's 24-minute day. */
 const DAY = (d) => Math.sign(d) * 1440 * Math.sqrt(Math.abs(d));
