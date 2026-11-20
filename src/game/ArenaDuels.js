@@ -57,6 +57,7 @@ import { foeRanks } from './SpawnSpots.js';
 import { wizardWandOf } from './Expelliarmus.js';
 import { creativeFiniteMana } from './HeroSetup.js';
 import { starterWand } from './ItemTypes.js';
+import { handLog } from './HandRelease.js';
 const FIG_DWELL = 1.5; // (s a hand rests on a figure to choose it: the author 20.11 — 0.6 s signed him up for the middle one while he was only reaching about)
 import { domeOf, domeCross, cageOf, cageClamp, CAGE } from './ArenaDome.js';
 import { duelReport } from './DuelReport.js';
@@ -1405,7 +1406,7 @@ export class ArenaDuels {
             let kept = 0;
             for (const side of ['left', 'right']) { const it = items?.held?.[side]?.item; if (it?.arenaWand) { delete it.arenaWand; inv?.heldWand?.(it); kept++; } }
             if (inv?.slots) for (const s of inv.slots) if (s?.arenaWand) { delete s.arenaWand; kept++; }
-            if (kept) this.log.push('trophy-wand-kept:' + kept);
+            if (kept) { this.log.push('trophy-wand-kept:' + kept); handLog(`арена: выигранная палочка осталась у героя навсегда (${kept})`); }
             return;
         }
         let n = 0;
@@ -1417,7 +1418,7 @@ export class ArenaDuels {
             n++;
         }
         if (inv?.slots) for (let i = 0; i < inv.slots.length; i++) if (inv.slots[i]?.arenaWand) { inv.slots[i] = null; n++; }
-        if (n) { inv._render?.(); inv.ensureStarterWand?.(); this.log.push('trophy-wand-dropped:' + n); }
+        if (n) { inv._render?.(); inv.ensureStarterWand?.(); this.log.push('trophy-wand-dropped:' + n); handLog(`арена (Творческий): палочка прошлого боя убрана (${n})`); }
     }
 
     /** This computer's player hears from the arena. */
