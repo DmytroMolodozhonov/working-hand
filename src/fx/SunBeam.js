@@ -350,7 +350,7 @@ export class SunBeam {
         if (fight) this.t = Math.min(this.t, DUR - 1.6); // (held on the clouds: it does not fade while the struggle goes on)
         else if (this.fightAt) { this.fightAt = 0; this.len = SKY; this.t = Math.min(this.t, 3.2); this.fightK = 0; } // (the struggle is over: the beam opens up and fades as it always does)
         const t = this.t;
-        if (t > DUR) { this.t = -1; this.group.visible = false; this.follow = null; this._hitOk = false; return; }
+        if (t > DUR) { this.t = -1; this.group.visible = false; this.follow = null; this._hitOk = false; this._window(0); return; }
         const fadeOut = t > DUR - 1.5 ? (DUR - t) / 1.5 : 1;
         const k = this.fightK;
         // the beam shoots up in 0.6 s
@@ -376,7 +376,7 @@ export class SunBeam {
         }
         this.ring.visible = this.disc.visible = !fight;
         for (const r of this.rays) r.visible = !fight;
-        if (!fight) this._rainOpening(t, fadeOut);
+        if (!fight) this._rainOpening(t, fadeOut); else this._window(0);
         // sparkles round the caster
         if (Math.random() < dt * (fight ? 45 : 25)) {
             const p = this.group.position;
@@ -385,23 +385,32 @@ export class SunBeam {
         }
     }
 
-    /** The plain «To the Sun» in the rain: the clouds open — a ring widening to ~60 m, the sun's disc behind it, rays pouring down. */
+    /**
+     * The plain «To the Sun» in the rain — the heavens open (the author 20.11: the flat rings were primitive, «хотел, чтобы с небесами было связано»):
+     * a ragged window tears open in the REAL sky's clouds where the beam meets them (Sky.setWindow: the cloud bank rolls back round it in a spiral,
+     * a golden rim burns along the edge, the sun of the heavens and rays pour down through it), then it closes. No flat shapes in the scene any more.
+     */
     _rainOpening(t, fadeOut) {
-        const open = Math.max(0, Math.min(1, (t - 0.5) / 2.5));
-        const R = 4 + open * 60;
-        this.ring.position.y = this.len; this.disc.position.y = this.len + 0.5;
-        this.ring.scale.setScalar(R);
-        this.ringMat.opacity = 0.75 * open * fadeOut;
-        this.disc.scale.setScalar(4 + open * 14);
-        this.discMat.opacity = 0.8 * open * fadeOut;
-        const rays = Math.max(0, Math.min(1, (t - 1.2) / 1.5));
-        this.rayMat.opacity = 0.22 * rays * fadeOut;
-        this.rays.forEach((r, i) => {
-            const a = (i / 10) * Math.PI * 2 + t * 0.15;
-            r.position.set(Math.cos(a) * R * 0.5, this.len, Math.sin(a) * R * 0.5);
-            r.rotation.set(0, -a, 0);
-            r.rotateX(0.2);
-        });
+        const x = Math.max(0, Math.min(1, (t - 0.4) / 2.8));
+        const open = 1 - Math.pow(1 - x, 3); // (tears open fast, then slows)
+        this._window(open * (t > DUR - 2.4 ? Math.max(0, (DUR - t) / 2.4) : 1));
+        this.ringMat.opacity = this.discMat.opacity = this.rayMat.opacity = 0;
+        this.ring.visible = this.disc.visible = false;
+        for (const r of this.rays) r.visible = false;
+    }
+
+    /** The window in the sky over where the beam ends, seen from my eye (k 0…1; 0 puts it away). */
+    _window(k) {
+        const g = this.game, sky = g.world?.sky, cam = g.camera?.position;
+        if (!sky?.setWindow) return;
+        if (k <= 0.001 || !cam) { if (this._winOn) { this._winOn = false; sky.setWindow(null, 0); } return; }
+        const top = this.group.position;
+        _a.set(top.x - cam.x, top.y + SKY - cam.y, top.z - cam.z);
+        const dist = Math.hypot(_a.x, _a.z);
+        if (dist > 700) { if (this._winOn) { this._winOn = false; sky.setWindow(null, 0); } return; }
+        _a.y = Math.max(_a.y, 20 + dist * 0.15); // (always up in the sky: never under the horizon)
+        this._winOn = true;
+        sky.setWindow(_a, k, 1.15 * Math.max(0.35, 1 - dist / 900));
     }
 
     /** The fight on the clouds: the heart, the dust of light along the beam, the sparks of the meeting, the warm light of the caster. */
