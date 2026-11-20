@@ -261,6 +261,7 @@ import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
 import { ZombieSpawn, worldLights, litAt, inSunlight, ZSPAWN, lightLevel } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
+import {stormSpellBlock} from './StormSpellRules.js';
 import { DivineCreation } from './DivineCreation.js';
 import { CustomPlants } from './CustomPlants.js';
 import { CustomCreatures } from './CustomCreatures.js';
@@ -646,7 +647,7 @@ export class Game {
             tornado: (from, at, casterId, side) => (at.y > 0.5 ? this.landTornado?.call(from, at, casterId, side) : this.oceanStorm?.call(from, at, casterId, side)), // (y = 1: the land tornado — LandTornado.js)
             whirlpool: (from, at, casterId, side) => this.whirlpool?.call(from, at, casterId, side), // («Maelstrom»: Whirlpool.js)
             rain: (o, casterId, side) => { this.rainFx?.cast(o, casterId === 'local' ? this.localId : casterId, side, inHell(o.x, o.z)); this.storm?.startRain(); }, // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.titans?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            lightningAt: (point, casterId, kind='Lightning') => { const LIGHTNING=kind==='LightningStrike'?DAMAGE.LightningStrike:DAMAGE.Lightning; if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); if(kind!=='LightningStrike')this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.pharaoh?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId,kind==='LightningStrike'?2:1); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3,kind==='LightningStrike'?60:30, casterId, 'lightning'); } },
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.pharaoh?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
             clearWay: (a, b) => clearWay(this, a, b),
@@ -2260,6 +2261,7 @@ export class Game {
         const offEarth = this.space?.spellBlocked(name) || this.hellGate?.spellBlocked(name); // (and hell: the water and the cold do not work there — HellRules.hellSpellBlock)
         if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
         // sky spells (lightning, the sun, rain, thunder, fireworks) need the open sky over the caster — SkyRules.js (before any mana is paid)
+        const noStorm=stormSpellBlock(this,name);if(noStorm){if(isFinal)this.hud.setVoice(noStorm,true);return null;}
         const noSky = skyBlockFor(this, name);
         if (noSky) { if (isFinal && mayTell(this._skyMsg || (this._skyMsg = {}), performance.now())) this.hud.setVoice(noSky, true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
@@ -3144,17 +3146,15 @@ export class Game {
      * creature (hold the aim ~0.5 s) — or it strikes you.
      */
     _castLightning(isFinal) {
+        const noStorm=stormSpellBlock(this,'LightningStrike');if(noStorm){if(isFinal)this.hud.setVoice(noStorm,true);return null;}
         if (this.lightning) return null;
         if (isFinal && this._poseHint('LightningStrike')) return null;
         if (!isFinal && poseHint('LightningStrike', this._poseSnap())) return null;
         const tired = this.combat.check('LightningStrike');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('LightningStrike');
-        const p = this.character.group.position.clone();
-        this.spells.cast('Storm', p, _v1.set(0, 1, 0), null, this.localId);
-        if (this.sync) this.sync.spell('Storm', p, _v1.set(0, 1, 0), null);
         this.lightning = { phase: 'gather', t: 0, aimT: 0, aim: null };
-        this.hud.setVoice('⛈️ Небо темнеет...', true);
+        this.hud.setVoice('⚡ Притягиваете молнию из грозовых туч...', true);
         return 'LightningStrike';
     }
 
@@ -3397,8 +3397,9 @@ export class Game {
             }
             lightningLand(this, point); // (a target under a roof: the bolt strikes the roof — SkyRules.lightningLand)
             const back = hand.clone().sub(point);
-            this.spells.cast('LightningBeam', point, back, null, this.localId);
-            if (this.sync) this.sync.spell('LightningBeam', point, back, null);
+            const beam=L.hammer?'LightningBeam':'LightningStrikeBeam';
+            this.spells.cast(beam, point, back, null, this.localId);
+            if (this.sync) this.sync.spell(beam, point, back, null);
             this.hud.setVoice('⚡ <span style="color:#9fd8ff">LIGHTNING STRIKE!</span>', true);
             if (!L.hammer) this.mana?.success('LightningStrike'); // (mana: the lightning went where it was aimed)
             return;
@@ -3413,10 +3414,10 @@ export class Game {
             // Held too long: it strikes you
             this.lightning = null;
             const point = ch.group.position.clone();
-            this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
-            if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
-            if (this.combat.enabled) this.combat.damage(DAMAGE.Lightning, null, 'Lightning');
-            else this.damageLocalPlayer(DAMAGE.Lightning);
+            this.spells.cast('LightningStrikeHit', point, _v1.set(0, -1, 0), null, this.localId);
+            if (this.sync) this.sync.spell('LightningStrikeHit', point, _v1.set(0, -1, 0), null);
+            if (this.combat.enabled) this.combat.damage(DAMAGE.LightningStrike, null, 'Lightning');
+            else this.damageLocalPlayer(DAMAGE.LightningStrike);
             this.hud.setVoice('⚡ Вы слишком долго держали молнию — она ударила в вас!', true);
         }
     }

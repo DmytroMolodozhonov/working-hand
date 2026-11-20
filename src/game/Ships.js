@@ -1235,14 +1235,14 @@ export class Ships {
     }
 
     /** Lightning on a mast: fire at its top. */
-    lightningAt(p, casterId) {
+    lightningAt(p, casterId,damageScale=1) {
         if (!this.auth) return;
         for (const s of this.awake) {
             s.pose.toLocal(p.x, p.y, p.z, _l);
             if (isCursed(s)) { if (Math.abs(_l.z) < s.layout.L / 2 + 4 && Math.abs(_l.x) < s.layout.B) this.curseSpark(s, _l.x, Math.max(_l.y, s.layout.deck), _l.z); continue; } // (green sparks run down its masts into the sea)
             for (const m of s.layout.masts) {
                 if (Math.hypot(_l.x, _l.z - m.z) < 6 && _l.y > s.layout.deck) {
-                    this.damage(s, 25, casterId);
+                    this.damage(s,25*Math.max(1,Math.min(2,damageScale)),casterId);
                     const sl = s.sails.find((x) => x.mast === m.id && x.open > 0.3);
                     if (sl) this.ignite(s, 0, 0, 0, sl.id, casterId); else this.ignite(s, 0, s.layout.deck, m.z + 1.5, null, casterId);
                     return;

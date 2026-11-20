@@ -68,7 +68,7 @@ test('blasts, rays and lightning reach every creature', () => {
     const blast = g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode(')));
     check('Game.explode (Bombardo and other blasts)', blast, ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
     check('the «birdRay» hook (Sapira, Thunderwave, Ice… rays)', body(g, 'birdRay: (o, d, len, width, name) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
-    check('the «lightningAt» hook', body(g, 'lightningAt: (point, casterId) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
+    check('the «lightningAt» hook', body(g, "lightningAt: (point, casterId, kind='Lightning') =>"), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
     check('the «Инферно» stream (Game._burnRay)', body(g, '    _burnRay(o, d, len, casterId) {'), ['the giant spider', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
 });
 
@@ -100,7 +100,7 @@ test('a house\'s sphere of protection («Protection House») keeps every creatur
     // the places spells look for their targets know the sphere
     const g = src('src/game/Game.js');
     assert.match(body(g, 'birdRay: (o, d, len, width, name) =>'), /wards\?\.clipRay/, 'rays stop at it');
-    assert.match(body(g, 'lightningAt: (point, casterId) =>'), /_wardLightning/, 'lightning strikes its top');
+    assert.match(body(g, "lightningAt: (point, casterId, kind='Lightning') =>"), /_wardLightning/, 'lightning strikes its top');
     assert.match(g.slice(g.indexOf('    applyExplosion('), g.indexOf('this.combat.explosion(', g.indexOf('    applyExplosion('))), /keepFor/, 'blasts keep what is inside');
     assert.match(body(src('src/game/Duel.js'), '    _fly(b, dt) {'), /wards\?\.segmentHit/, 'duel charges burst on it');
     assert.match(body(src('src/game/CreatureImpact.js'), '    apply(c, o) {'), /wards\?\.shields/, 'pushes (wind, blasts, waves) don\'t reach inside');
@@ -233,7 +233,7 @@ test('carts on the roads (Carriages.js, Travelers.js): blasts, rays, lightning, 
     const blast = g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode(')));
     assert.match(blast, /carriages\?\.hitAt/, 'Game.explode breaks a cart');
     assert.match(body(g, 'birdRay: (o, d, len, width, name) =>'), /carriages\?\.hitRay/, 'rays chip a cart');
-    assert.match(body(g, 'lightningAt: (point, casterId) =>'), /carriages\?\.hitAt/, 'lightning breaks a cart');
+    assert.match(body(g, "lightningAt: (point, casterId, kind='Lightning') =>"), /carriages\?\.hitAt/, 'lightning breaks a cart');
     assert.match(body(g, '    _burnRay(o, d, len, casterId) {'), /carriages\?\.burnAlong/, '«Инферно» sets a cart on fire');
     assert.match(src('src/game/Firefighting.js'), /carriages\?\.douse/, 'water puts a burning cart out');
     const { TARGETS, chestKind } = await import('../../src/game/Alohomora.js');
@@ -341,7 +341,7 @@ test('Captain Black Moustache and his skeletons (ships.crew): the parry, the ske
     const sl = src('src/game/Sailors.js');
     assert.match(sl.slice(sl.indexOf('    hit(v, dmg, dir, by, opts = {}) {'), sl.indexOf('    remoteHit(m) {')), /pirateBoneDamage/);
     const g = src('src/game/Game.js');
-    assert.match(body(g, 'lightningAt: (point, casterId) =>'), /crew\.hitAt\([^)]*'Lightning'\)/);
+    assert.match(body(g, "lightningAt: (point, casterId, kind='Lightning') =>"), /crew\.hitAt\([^)]*'Lightning'\)/);
     assert.match(body(g, 'birdRay: (o, d, len, width, name) =>'), /crew\.hitRay\([^)]*, name\)/);
     assert.match(g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode('))), /crew\.hitAt\([^;]*Bombardo/);
     for (const f of ['TotalDestruction', 'Hellfire', 'Cannons', 'MagicWave', 'LevitationMaxima', 'Cauldrons']) assert.match(src(`src/game/${f}.js`), /crew\??\.(hitAt|hit)\??\.?\([^;]*(kind|'|HELLFIRE|d\.name)/, `${f}: its kind to the crew`);
