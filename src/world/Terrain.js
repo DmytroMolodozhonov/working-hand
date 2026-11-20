@@ -29,6 +29,8 @@ import { SiteIndex } from './Sites.js';
 import { HamletIndex } from './Hamlets.js';
 import { ArenaIndex, ARENA_BIG } from './DuelArenas.js';
 import { DungeonIndex } from './Dungeons.js';
+import { CaveMines } from './CaveMines.js';
+import { buryCaveBones } from './CaveBones.js';
 import { GhostCastleIndex } from './GhostCastle.js';
 import { SeaIndex, SEA, seaDepth, seabedDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
@@ -86,19 +88,20 @@ export const BLOCK = {
     // THE PYRAMIDS of Pharaoh Sandy (Pyramids.js, generation 27): dressed sandstone, pale fine stone, four paints (lapis, ochre, turquoise, black), a torch put out and one
     // burning, a pressure plate. 86–94; their numbers are PB in Pyramids.js (a test keeps them equal). The next free number is 95.
     PYR_STONE: 86, PYR_BRICK: 87, PYR_BLUE: 88, PYR_RED: 89, PYR_TURQ: 90, PYR_BLACK: 91, PYR_TORCH_OFF: 92, PYR_TORCH_ON: 93, PYR_PLATE: 94,
+    BURIED_BONES: 95, BURIED_SKELETON: 96,
 };
 /** A block of hell's land (HellLand.js). */
 export const isHellBlock = (t) => t >= BLOCK.HELL_BASALT && t <= BLOCK.HELL_IRON;
 /** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
 export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_LEAF;
 /** The land itself, not built (carveColumn's `gone` leaves it out). */
-const NATURAL = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.ICE, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.WATER, BLOCK.REGOLITH, BLOCK.PLANET_ROCK, BLOCK.PLANET_ICE, BLOCK.PLANET_DARK, BLOCK.PLANET_GRASS]);
+const NATURAL = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.ICE, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.BURIED_BONES, BLOCK.BURIED_SKELETON, BLOCK.WATER, BLOCK.REGOLITH, BLOCK.PLANET_ROCK, BLOCK.PLANET_ICE, BLOCK.PLANET_DARK, BLOCK.PLANET_GRASS]);
 /** The palace's / the Ice Rod's ice (melts in fire: IceQueen.melt). */
 export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30, SOIL: 31, BONES: 32, SKELETON: 33 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -157,7 +160,7 @@ export const WATER_LEVEL_Y = -0.62;
 
 export const BASE_COLORS = {
     [BLOCK.GRASS]: 0x4CAF50, // identical to the old ground plane
-    [BLOCK.DIRT]: 0x7a5230,
+    [BLOCK.DIRT]: 0x7a5230, [BLOCK.BURIED_BONES]: 0x7a5230, [BLOCK.BURIED_SKELETON]: 0x7a5230,
     [BLOCK.STONE]: 0x8a8a8a,
     [BLOCK.SNOW]: 0xf2f6f8,
     [BLOCK.BEDROCK]: 0x3b3b3b,
@@ -244,6 +247,7 @@ export const BASE_COLORS = {
     [BLOCK.PYR_BLACK]: 0x1b1822, [BLOCK.PYR_TORCH_OFF]: 0x4a3a2a, [BLOCK.PYR_TORCH_ON]: 0xffb14a, [BLOCK.PYR_PLATE]: 0xa8743a,
 };
 Object.assign(PATTERN_OF, {
+    [BLOCK.DIRT]: PATTERN.SOIL, [BLOCK.BURIED_BONES]: PATTERN.BONES, [BLOCK.BURIED_SKELETON]: PATTERN.SKELETON,
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
     [BLOCK.CS_MOSSY]: PATTERN.COBBLE, [BLOCK.COBBLE]: PATTERN.COBBLE, [BLOCK.PATH]: PATTERN.COBBLE, [BLOCK.BRICK]: PATTERN.BRICK,
     [BLOCK.PLANKS]: PATTERN.PLANKS, [BLOCK.PLANKS_DARK]: PATTERN.PLANKS, [BLOCK.FENCE]: PATTERN.PLANKS,
@@ -290,7 +294,8 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 34;
+export const WORLD_GEN = 35;
+export const CAVE_MINES_FROM_GEN = 35;
 /** The first generation with waterfalls on the rivers (Waterfalls.js: rock bluffs with water falling into the river). */
 export const WATERFALLS_FROM_GEN = 32;
 /** Generation 33: the Eye-flower (Глазоцвет — a small flower with a living eye that blinks and looks about; its eye is for the circle of night sight) grows in the wild (MagicFlora.js: `fromGen`). */
@@ -742,7 +747,8 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false, caveMines = false } = {}) {
+        this.caveMines = caveMines && deepCaves && dungeons ? new CaveMines(this, CAVE_CELL) : null;
         this.seed = seed;
         this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
         this.schoolMode = !!school; // («Школа Акселдорф»: the world's own land, the school castle on a terrace near the start — SchoolLand.js)
@@ -823,7 +829,7 @@ export class TerrainData {
             this.hamlets = new HamletIndex(seed, raw, hnear, this.wizHuts, this.buildings, !!earthSettlements,!!elementalSettlements&&this.lush);
             // the dungeons of the wild (Dungeons.js; generation 15): ruins on the ground, halls under it — never on another site's land
             const dgNear = (x, z, r) => hnear(x, z, r) || this.hamlets.near(x, z, r).length > 0;
-            this.dungeons = dungeons && this.lush ? new DungeonIndex(seed, raw, dgNear) : null;
+            this.dungeons = dungeons && this.lush ? new DungeonIndex(seed, raw, dgNear, !!this.caveMines) : null;
             // the Castle of Ghosts (GhostCastle.js; generation 18): in the land only while the hero sees the invisible (`ghost.on`); never on another site's land
             this.ghost = ghostCastle && this.lush ? new GhostCastleIndex(seed, raw, (x, z, r) => dgNear(x, z, r) || (this.dungeons?.near(x, z, r).length > 0) || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL)) : null;
             if (this.ghost && ghostSeen) this.ghost.on = true;
@@ -959,14 +965,16 @@ export class TerrainData {
      * «Flourish» (Flourish.js): flowers asked to grow on this column's grass (FloraBuild draws one there). Kept per chunk, as `_hidden`;
      * the chunk's rev goes up so its grass is made again (here or in a worker — the list goes along: TerrainView.askFlora).
      */
-    setBloom(ix, iz) {
+    setBloom(ix, iz, layer = null) {
         const cx = ix >> SHIFT, cz = iz >> SHIFT, k = chunkKey(cx, cz);
         this._bloom = this._bloom || new Map();
         let s = this._bloom.get(k);
         if (!s) this._bloom.set(k, s = new Set());
         const col = (iz & MASK) * CHUNK + (ix & MASK);
-        if (s.has(col)) return false;
-        s.add(col);
+        // The original column keys still refer to the surface; layered keys share the same worker payload.
+        const key = layer == null ? col : (layer - MIN_LAYER + 1) * CHUNK * CHUNK + col;
+        if (s.has(key)) return false;
+        s.add(key);
         const c = this.chunks.get(k);
         if (c) { c.rev = (c.rev || 0) + 1; c.modified = true; }
         return true;
@@ -1510,6 +1518,14 @@ export class TerrainData {
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
         let lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
+        if (this.caveMines && !offEarth(c.cx * CHUNK)) {
+            const x = c.cx * CHUNK, z = c.cz * CHUNK;
+            const mines = this.caveMines.inBox(x, z, x + CHUNK - 1, z + CHUNK - 1);
+            if (mines.length) {
+                c.caved = true;
+                lists = lists.concat(mines.map(mine => mine.parts));
+            }
+        }
         if (this.school) { const sc = this.school.partsForChunk(c.cx, c.cz, CHUNK); if (sc.length) lists = lists.length ? lists.concat(sc) : sc; } // (the school Akseldorf: SchoolLand.js)
         if (this.falls) { const f = this.falls.partsForChunk(c.cx, c.cz, CHUNK); if (f.length) lists = lists.length ? lists.concat(f) : f; } // (the rivers' waterfalls: Waterfalls.js)
         if (this.pyr) { const p = this.pyr.partsForChunk(c.cx, c.cz, CHUNK); if (p.length) lists = lists.length ? lists.concat(p) : p; } // (the three pyramids: Pyramids.js)
@@ -1754,6 +1770,7 @@ export class TerrainData {
             if (lazy && !d.isBuilt && this._cellLater(false)) continue; // (building one — 1–5 ms — at most every 30 ms with the workers on)
             out.push(d);
         }
+        if (this.caveMines) out.push(...this.caveMines.inBox(x - r, z - r, x + r, z + r, lazy));
         return out;
     }
 
@@ -1948,6 +1965,7 @@ export class TerrainData {
                 }
             }
         }
+        if (c.caved && this.caveMines) for (const cave of sys) buryCaveBones(c, cave, this.seed);
     }
 
     /**
@@ -2641,6 +2659,7 @@ export class TerrainData {
 
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
+        if (type === BLOCK.DIRT) return BASE_COLORS[type];
         if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_LEAF) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
         if (this.liteLook) return type === BLOCK.GRASS && !isTop ? GRASS_SIDE : (BASE_COLORS[type] ?? 0xff00ff); // (the light mode: plain colours — big merged quads, fewer triangles)
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }

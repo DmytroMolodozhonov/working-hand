@@ -16,6 +16,8 @@
  */
 
 import * as THREE from 'three';
+import { SOIL_METRES, SOIL_SIZE, soilPixels } from './SoilTexture.js';
+import { paintCaveBones } from './CaveBones.js';
 import { ULTRA_PARS, addUltraUniforms } from '../fx/UltraUniforms.js';
 
 /**
@@ -128,11 +130,41 @@ if (uUltraOn > 0.5 && uUltraWet > 0.01) {
 }
 #include <fog_fragment>`;
 
+let groundTexture, boneTexture;
+function soilTexture() {
+    if (!groundTexture) {
+        const texture = new THREE.DataTexture(soilPixels(), SOIL_SIZE, SOIL_SIZE, THREE.RGBAFormat);
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.generateMipmaps = true;
+        texture.anisotropy = 4;
+        texture.needsUpdate = true;
+        texture.userData = { shared: true };
+        groundTexture = texture;
+    }
+    return groundTexture;
+}
+
+function bonesTexture() {
+    if (!boneTexture) {
+        if (typeof document === 'undefined') return null;
+        const canvas = document.createElement('canvas');
+        paintCaveBones(canvas);
+        boneTexture = new THREE.CanvasTexture(canvas);
+        boneTexture.flipY = false;
+        boneTexture.userData = { shared: true };
+    }
+    return boneTexture;
+}
+
 export function applyVoxelDetail(material) {
     // Lifted blocks, books and other users of this material are dry unless terrain explicitly says otherwise.
     material.defaultAttributeValues = { ...material.defaultAttributeValues, voxWet: [0] };
     material.onBeforeCompile = (shader) => {
         shader.uniforms.uSkyComp = SKY_LIGHT.comp;
+        shader.uniforms.uSoil = { value: soilTexture() };
+        shader.uniforms.uCaveBones = { value: bonesTexture() };
         shader.uniforms.uNightVis = SKY_LIGHT.nv;
         shader.uniforms.uWardS = WARD_HIDE.s;
         shader.uniforms.uWardG = WARD_HIDE.g;
@@ -161,6 +193,8 @@ export function applyVoxelDetail(material) {
             .replace('#include <common>', `#include <common>
 ${BOOM_PARS}
 uniform float uSkyComp;
+uniform sampler2D uSoil;
+uniform sampler2D uCaveBones;
 uniform float uHellT;
 uniform float uSeaY; uniform float uSeaT; uniform float uSeaK;
 float seaUnder = 0.0; // (the sea's bottom: how much this face is under the sea — set by the colour part, read by the light part)
@@ -248,6 +282,7 @@ float snowflakeAt(vec2 uv) {
     float r = vhash(vec3(cell * 8.0 + px, layerId));
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
     float pat = floor(vVoxPat + 0.5);
+    bool soil = pat >= 31.0 && pat <= 33.0;
     // generation 5's grass (pattern 14): grass whatever its colour (golden steppe, autumn, moonlit teal)
     bool lushGrass = pat == 14.0;
     if (lushGrass) pat = 0.0;
@@ -286,7 +321,21 @@ float snowflakeAt(vec2 uv) {
     if (pat < 0.5 && vVoxPos.y < uSeaY - 0.1 && vVoxWet > 0.5) detail *= 0.15; // (the sea's bottom: no blocks' pixels)
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides
     diffuseColor.rgb *= 1.0 + detail * kFine;
-    if (pat == 1.0) {
+    if (soil) {
+        // Full world-space coordinates keep the soil continuous across voxel and chunk boundaries.
+        vec2 p = uv + layerId * vec2(0.18, 0.12);
+        vec3 dirt = texture2D(uSoil, p / ${SOIL_METRES.toFixed(1)}).rgb;
+        diffuseColor.rgb = pow(dirt, vec3(2.2));
+        if (pat >= 32.0) {
+            vec2 boneUV = f;
+            float turn = floor(4.0 * vhash(vec3(cell, layerId + 164.0)));
+            if (turn > 2.5) boneUV = vec2(1.0 - f.y, f.x);
+            else if (turn > 1.5) boneUV = 1.0 - f;
+            else if (turn > 0.5) boneUV = vec2(f.y, 1.0 - f.x);
+            vec4 inclusion = texture2D(uCaveBones, vec2(boneUV.x * 0.5 + (pat == 32.0 ? 0.5 : 0.0), boneUV.y));
+            diffuseColor.rgb = mix(diffuseColor.rgb, pow(inclusion.rgb, vec3(2.2)) * 0.78, inclusion.a);
+        }
+    } else if (pat == 1.0) {
         // cut stone: blocks half a metre high, every row shifted by half
         vec2 s = n.y > 0.5 ? uv : uv * vec2(1.0, 2.0);
         float row = floor(s.y);
@@ -496,7 +545,7 @@ float snowflakeAt(vec2 uv) {
     }
     // the sea's bottom: one continuous seabed, not blocks (UNDERSEA) — sand with ripples and shells, rock grown over with algae and
     // pink coralline; the sides of a step the same stuff, only a little in the shade
-    seaUnder = pat < 0.5 ? (1.0 - smoothstep(uSeaY - 0.7, uSeaY - 0.1, vVoxPos.y)) * vVoxWet : 0.0;
+    seaUnder = (pat < 0.5 || soil) ? (1.0 - smoothstep(uSeaY - 0.7, uSeaY - 0.1, vVoxPos.y)) * vVoxWet : 0.0;
     if (seaUnder > 0.0) {
         vec2 wp = n.y > 0.5 ? vVoxPos.xz : vec2(vVoxPos.x + vVoxPos.z, vVoxPos.y * 1.3);
         float m1 = vnoise(wp / 6.0), m2 = vnoise(wp / 1.7 + 9.0), m3 = vnoise(wp / 19.0 - 4.0);
@@ -549,9 +598,9 @@ float snowflakeAt(vec2 uv) {
     float edge = smoothstep(0.0, 0.09, min(e.x, e.y));
     // (very light on flat grass so a meadow doesn't look like tiles; none on the sea's bottom)
     float edgeAmt = ((green || snowy) && n.y > 0.5 ? 0.05 : snowy ? 0.08 : 0.14) * (1.0 - seaUnder);
-    diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
+    if (!soil) diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
     // far: the patterned blocks (stone, planks, bricks…) take their average tone
-    if (pat > 0.5) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);
+    if (pat > 0.5 && !soil) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);
     // the Castle of Ghosts is ~15 % see-through (the author): every seventh pixel or so of its black stone is left out, in an even, fine scatter — near enough to see it
     if (pat >= 18.0 && pat < 23.0 && kCoarse > 0.5 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < 0.15) discard;
 }`)
@@ -595,7 +644,7 @@ float snowflakeAt(vec2 uv) {
             .replace('#include <fog_fragment>', WET_FRAG);
     };
     material.extensions = { ...(material.extensions || {}), derivatives: true }; // (fwidth on WebGL1)
-    material.customProgramCacheKey = () => 'voxel-detail-wet1';
+    material.customProgramCacheKey = () => 'voxel-detail-soil1';
     return material;
 }
 

@@ -5,7 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TerrainData, WORLD_GEN, DUNGEON_FROM_GEN } from '../../src/world/Terrain.js';
+import { BLOCK, TerrainData, WORLD_GEN, DUNGEON_FROM_GEN } from '../../src/world/Terrain.js';
 import { DUNGEON, KINDS, KIND_IDS, SURFACE_IDS, UNDER_IDS, pickKind, chestCount } from '../../src/world/DungeonRules.js';
 import { DungeonIndex } from '../../src/world/Dungeons.js';
 import { checkDungeon } from '../../src/world/DungeonCheck.js';
@@ -215,4 +215,31 @@ test('nearestRuin: a ruin on the ground among the known cells (never an undergro
     for (let gz = -6; gz <= 6; gz++) for (let gx = -6; gx <= 6; gx++) D.cellOf(gx, gz);
     const r = D.nearestRuin(0, 0);
     assert.ok(r && !r.site.under && r.d > 0);
+});
+
+test('new worlds replace the underground dungeon roll with buried galleries using a natural cave', () => {
+    const seed = 20261015;
+    const opts = { seed, mountains: true, seas: true, lush: true, deepCaves: true, dungeons: true };
+    const old = new TerrainData(); old.generate(opts);
+    const t = new TerrainData(); t.generate({ ...opts, caveMines: true });
+    let replaced = 0, generated = 0;
+    for (let gz = -4; gz <= 4; gz++) for (let gx = -4; gx <= 4; gx++) {
+        const previous = old.dungeons.cellOf(gx, gz);
+        if (!previous?.under) continue;
+        replaced++;
+        assert.equal(t.dungeons.cellOf(gx, gz), null);
+        const mine = t.caveMines.cellOf(gx, gz);
+        if (!mine) continue;
+        generated++;
+        assert.ok(mine.chests.length >= 3 && mine.chests.length <= 5);
+        assert.ok(t.cavesNear(mine.x, mine.z, 20).some(c => c.id === mine.caveId));
+        assert.ok(t.dungeonsNear(mine.x, mine.z, 40).some(d => d.id === mine.id));
+        for (const chest of mine.chests) {
+            assert.equal(t.get(chest.x, chest.y, chest.z), BLOCK.PATH);
+            assert.equal(t.get(chest.x, chest.y + 1, chest.z), BLOCK.AIR);
+            assert.ok(t.topLayer(chest.x, chest.z) >= chest.y + 9);
+        }
+    }
+    assert.equal(replaced, 5);
+    assert.equal(generated, replaced);
 });
