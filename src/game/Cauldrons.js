@@ -690,6 +690,19 @@ export class Cauldrons {
     }
 
     /**
+     * The fire under a pot that brews (ingredients in, the countdown or the brew going) does not burn down: it is a magic fire (the author 20.11: «оно не должно гаснуть,
+     * пока зелье варится»: it went out in the middle of a brew and the potion was spoiled). Campfires holds its time at the end of the flames while this is true.
+     */
+    brewNeedsFire(fireId) {
+        for (const c of this.list.values()) {
+            if (c.fire !== fireId || !this.upright(c)) continue;
+            const st = c.st;
+            if (st.phase === 'brewing' || (st.phase === 'water' && st.win > 0)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Is `p` (a hand with a flask) in the zone where a flask is dipped: over the opening and from just above the rim down into the pot? There a quiet opening of the
      * hand is not a throw (the author 19.11: «колба постоянно выбрасывается»: reaching deep into a low potion the camera loses the hand at the bottom of the picture and
      * it comes back open — the flask was «dropped»); Items._letGo keeps it in the hand.

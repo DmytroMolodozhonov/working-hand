@@ -26,3 +26,13 @@ test('water is full or none: a part-filled pot is made full', () => {
     assert.equal(c.st.water, CAULDRON.FULL);
     const e = pot(0); e.C._hostStep(e.c, 0.016, 0); assert.equal(e.c.st.water, 0, 'an empty one stays empty');
 });
+
+test('a fire under a brewing pot does not burn down (magic fire); a pot that is not brewing holds nothing', () => {
+    const b = pot(6, 'brewing'); b.c.fire = 'f1';
+    assert.equal(b.C.brewNeedsFire('f1'), true);
+    const w = pot(6, 'water'); w.c.fire = 'f1'; w.c.st.win = 12;
+    assert.equal(w.C.brewNeedsFire('f1'), true, 'the countdown for the ingredients counts');
+    w.c.st.win = 0; assert.equal(w.C.brewNeedsFire('f1'), false, 'just water: the fire burns down as any');
+    const r = pot(6, 'ready'); r.c.fire = 'f1'; assert.equal(r.C.brewNeedsFire('f1'), false, 'a ready potion needs no fire');
+    assert.equal(b.C.brewNeedsFire('other'), false);
+});

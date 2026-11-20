@@ -415,7 +415,8 @@ export class Campfires {
         const t = performance.now() / 1000;
         const cam = g.camera?.position;
         for (const f of [...this.list.values()]) {
-            f.left -= dt;
+            if (f.left <= CAMPFIRE.FADE + 5 && g.cauldrons?.brewNeedsFire?.(f.id)) f.left = Math.max(f.left, CAMPFIRE.FADE + 5); // (a brew is on it: the magic fire holds until it is done — the flames do not even shrink)
+            else f.left -= dt;
             if (f.left <= -CAMPFIRE.EMBERS) {
                 if (this.auth) this._out(f); else this._remove(f);
                 continue;
