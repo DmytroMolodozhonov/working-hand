@@ -21,8 +21,8 @@ export default async function (h) {
         roll.rotation.set(0.16, -0.18, 0.05);
         display.add(roll);
     }
-    display.add(new THREE.AmbientLight(0xfff1df, 0.9));
-    const light = new THREE.DirectionalLight(0xffe6cd, 1.2);
+    display.add(new THREE.AmbientLight(0xfff1df, 0.7));
+    const light = new THREE.DirectionalLight(0xffe6cd, 0.95);
     light.position.set(-3, 5, 5);
     display.add(light);
     h.bare();

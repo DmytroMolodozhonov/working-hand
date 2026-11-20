@@ -81,6 +81,7 @@ function faceOf(item) {
             lines: info.lines.filter((l) => holoPlain(l).trim() && !l.startsWith('Сожгите свиток')).map((l) => holoParts(l)),
             note: item.stat === 'schedule' ? '' : 'Сожгите свиток, если хотите запомнить это заклинание',
             picture: false,
+            schoolEmblem: item.stat === 'spell',
         };
     }
     const key = artKey(spec);

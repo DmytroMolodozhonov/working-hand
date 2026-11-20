@@ -452,7 +452,14 @@ export function paintParchment(x, W, H, spec) {
         const mx = W - 150, my = spec.compactPicture ? 102 : 215, radius = spec.compactPicture ? 54 : 100;
         if (spec.custom) spec.custom(x, { cx: mx, cy: my, R: radius, S }); else medallion(x, mx, my, radius, S);
         seal(x, mx + (spec.compactPicture ? 40 : 62), my + (spec.compactPicture ? 58 : 108), spec.compactPicture ? 18 : 26, S);
-    } else seal(x, W - 100, H - 78, 26, S);
+    } else {
+        if (spec.schoolEmblem) {
+            const space = H - 86 - L.bottom;
+            const radius = Math.min(78, (space - 22) / 2);
+            if (radius >= 27) medallion(x, W / 2, L.bottom + space / 2, radius, S);
+        }
+        seal(x, W - 100, H - 78, 26, S);
+    }
     if (spec.note) {
         x.font = '24px serif'; x.fillStyle = '#21180e'; x.textAlign = 'center';
         x.fillText(spec.note, W / 2, H - 56, W - 120);

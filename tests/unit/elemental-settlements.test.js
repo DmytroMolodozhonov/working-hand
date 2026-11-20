@@ -69,6 +69,13 @@ test('all settlement walking graph edges have dry support and clear headroom, in
  for(const e of ['water','air','fire'])for(let rot=0;rot<4;rot++){
   let first=true;const r=createRng(7),d=buildHamlet(4,e+'village',0,0,0,0,0,0,()=>first?(first=false,(rot+.1)/4):r());
   const at=(x,L,z)=>{let t=L<=0?B.STONE:B.AIR;for(const p of d.parts){if(x<p.x0||x>p.x1||z<p.z0||z>p.z1||L<p.L0||L>p.L1)continue;if(p.k===1||p.k===2){const q=(x-p.cx)**2+(z-p.cz)**2;if(q>p.r*p.r+p.r*.6||p.hr>=0&&q<=p.hr*p.hr+p.hr*.6)continue;if(p.k===2){const a=(Math.atan2(z-p.cz,x-p.cx)-p.a0w+Math.PI*4)%(Math.PI*2);if(a>p.span+1e-8)continue;}}t=p.t;}return t;};
+  if (e === 'fire') {
+   const lava = d.parts.find(p => p.t === B.HELL_LAVA);
+   assert.equal(lava.L0, lava.L1, 'lava is one layer deep');
+   for (let x = lava.x0; x <= lava.x1; x++) for (let z = lava.z0; z <= lava.z1; z++) {
+    if (at(x, lava.L0, z) === B.HELL_LAVA) assert.equal(at(x, lava.L0 - 1, z), B.HELL_BASALT, 'no lava above empty space');
+   }
+  }
   for(const [a,b] of d.edges){const A=d.nodes[a],C=d.nodes[b],n=Math.ceil(Math.hypot(A.x-C.x,A.z-C.z)*2);for(let i=0;i<=n;i++){
    const x=Math.round(A.x+(C.x-A.x)*i/Math.max(1,n)),z=Math.round(A.z+(C.z-A.z)*i/Math.max(1,n));
    for(const [dx,dz] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
