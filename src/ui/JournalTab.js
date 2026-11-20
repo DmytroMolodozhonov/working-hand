@@ -50,18 +50,15 @@ export function setupLogPanel(doc = document, live = null, all = null) {
         if (failed && !logs.length && !all) { pre.textContent = 'Журнал недоступен (игра открыта не через свой сервер).'; return; }
         const keep = sel.value;
         sel.textContent = '';
-        if (all) {
-            const o = doc.createElement('option');
-            o.value = ALL_ITEM; o.textContent = 'Общие логи';
-            sel.appendChild(o);
-        }
+        // (the author 19.11: the first «Общие логи» (the live list with ticks) was empty — gone; the real «Общие логи» file goes first, and is the one shown at once)
+        logs = [...logs.filter((l) => l.name === 'zns-all.log'), ...logs.filter((l) => l.name !== 'zns-all.log')];
         for (const l of logs) {
             const o = doc.createElement('option');
             o.value = l.name;
             o.textContent = `${l.title} (${l.name})`;
             sel.appendChild(o);
         }
-        if (logs.some((l) => l.name === keep) || (all && keep === ALL_ITEM)) sel.value = keep;
+        if (logs.some((l) => l.name === keep)) sel.value = keep; else if (logs.length) sel.value = logs[0].name;
         show();
     };
     sel.addEventListener('change', show);
