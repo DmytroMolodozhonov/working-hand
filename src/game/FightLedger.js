@@ -9,7 +9,7 @@
  *        + time        up to 16 %   (the seconds of real fighting; counted only while we are really fighting: near each other (NEAR_M) and something happened in the last GAP_S seconds — running away far to recover is not the fight's time (the author 20.11); 45 s is full)
  *        + variety     up to 20 %   (3,6 % for each point of worth of the different spells — what is not aimed at the foe (a stand-up, a light, an Accio) counts half: still the whole strength is spent on winning, the author 20.11 — ; the ones cast in the 6 s BEFORE the fight opened count too — the first spell flies before he answers)
  *        + clash time  4 % for every 5 s the beams really stood against each other, up to 20 %
- *        + beam clashes up to 36 %  (8 % for each clash I stood in + 4 % more for each I WON — the author 20.11: «дуэль лучами — вознаграждать в разы»)
+ *        + beam clashes 5 % once per fight for standing in one (a second, a third — nothing for the clash itself), +8 % for each clash I WON
  *        × 1,25 on all of that, if half of my spells (at least 2) were elemental magic (earth, water, fire, air — SpellElements.js)
  *        + underdog    up to 15 %   (the author 20.11: a bonus for being WEAKER — 8 % for each doubling of his strength over mine at the start of the fight: mana maximum + duel mastery)
  *        + crowd       5 % for EACH other opponent fought at the same time (the author 20.11: a wizard, an enchanted tree, anything that fights me — one has to be distracted), up to 20 %
@@ -27,7 +27,7 @@ export const FIGHT = {
     VARIETY_PER_W: 3.6, VARIETY_MAX: 20, PRE_S: 6, SUPPORT_K: 0.5,
     ALLY_PCT: 5,
     CLASH_SEC_EACH: 5, CLASH_SEC_PCT: 4, CLASH_SEC_MAX: 20, // every 5 s of a beam clash itself: +4 %, up to +20 % (the author 20.11)
-    CLASH_EACH: 8, CLASH_WON: 4, CLASH_MAX: 36, // a beam clash is the boldest fight: several times the old 2 % (the author 20.11: «в разы»)
+    CLASH_FIRST: 5, CLASH_WON: 8, CLASH_MAX: 60, // the clash itself pays ONCE per fight (5 %); a repeat — nothing; what is paid is the WIN (+8 % each) and the TIME of the clash (the author 20.11: «не само столкновение награждать, а время и победу»)
     ELEMENT_MULT: 1.25, ELEMENT_SHARE: 0.5, ELEMENT_MIN_CASTS: 2,
     CROWD_EACH: 5, CROWD_MAX: 20,
     UNDERDOG_FROM: 1.25, UNDERDOG_K: 8, UNDERDOG_MAX: 15,
@@ -156,7 +156,7 @@ export class FightLedger {
         let w = 0; for (const x of e.spells.values()) w += x;
         const variety = Math.min(FIGHT.VARIETY_MAX, w * FIGHT.VARIETY_PER_W);
         const clashTime = Math.min(FIGHT.CLASH_SEC_MAX, Math.floor((e.clashSec || 0) / FIGHT.CLASH_SEC_EACH) * FIGHT.CLASH_SEC_PCT);
-        const clash = Math.min(FIGHT.CLASH_MAX, e.clashes * FIGHT.CLASH_EACH + (e.clashWon || 0) * FIGHT.CLASH_WON) + clashTime;
+        const clash = Math.min(FIGHT.CLASH_MAX, (e.clashes > 0 ? FIGHT.CLASH_FIRST : 0) + (e.clashWon || 0) * FIGHT.CLASH_WON) + clashTime;
         const elemental = e.elem >= FIGHT.ELEMENT_MIN_CASTS && e.elem >= e.casts * FIGHT.ELEMENT_SHARE;
         const extra = (time + variety + clash) * (elemental ? FIGHT.ELEMENT_MULT : 1);
         const beauty = Math.min(FIGHT.MAX_PCT, FIGHT.MIN_PCT + extra);

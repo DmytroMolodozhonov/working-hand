@@ -64,10 +64,10 @@ test('столкновение лучей прибавляет, но не бол
     const { L, at } = ledger();
     L.foeCast('w');
     for (let i = 0; i < 10; i++) L.clash('w');
-    assert.equal(L.summary('w').parts.clash, FIGHT.CLASH_MAX);
-    const c = ledger(); c.L.foeCast('x'); c.L.clash('x'); c.L.clash('x', true);
-    assert.equal(c.L.summary('x').parts.clash, 2 * FIGHT.CLASH_EACH + FIGHT.CLASH_WON, 'каждое столкновение + добавка за выигранное');
-    assert.ok(FIGHT.CLASH_EACH >= 4 * 2, 'в разы больше прежних 2 %');
+    assert.equal(L.summary('w').parts.clash, FIGHT.CLASH_FIRST, 'десять проигранных подряд: само столкновение платит один раз');
+    const c = ledger(); c.L.foeCast('x'); c.L.clash('x'); c.L.clash('x', true); c.L.clash('x', true);
+    assert.equal(c.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 2 * FIGHT.CLASH_WON, 'одно «за участие» + каждая победа');
+    assert.equal(FIGHT.CLASH_WON, 8); assert.equal(FIGHT.CLASH_FIRST, 5);
     const e = ledger();
     e.L.foeCast('z');
     for (let i = 0; i < 3; i++) { e.at(i * 3); e.L.myCast('IceShards'); e.L.myCast('Waterball'); e.L.myCast('WaterVortex'); }
@@ -213,9 +213,9 @@ test('незаконченный бой: честный счёт волшебн�
 
 test('время самого столкновения лучей: +4 % за каждые 5 с, до +20 %; сумма с самими столкновениями ограничена общим потолком', () => {
     const a = ledger(); a.L.foeCast('x'); a.L.clash('x', false, 4.9);
-    assert.equal(a.L.summary('x').parts.clash, FIGHT.CLASH_EACH, '4,9 с — без прибавки за время');
+    assert.equal(a.L.summary('x').parts.clash, FIGHT.CLASH_FIRST, '4,9 с — без прибавки за время');
     const b = ledger(); b.L.foeCast('x'); b.L.clash('x', false, 12);
-    assert.equal(b.L.summary('x').parts.clash, FIGHT.CLASH_EACH + 2 * FIGHT.CLASH_SEC_PCT, '12 с = две пятёрки');
+    assert.equal(b.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 2 * FIGHT.CLASH_SEC_PCT, '12 с = две пятёрки');
     const c = ledger(); c.L.foeCast('x'); c.L.clash('x', true, 600);
     assert.equal(c.L.summary('x').clashTime, FIGHT.CLASH_SEC_MAX, 'потолок прибавки за время');
 });
