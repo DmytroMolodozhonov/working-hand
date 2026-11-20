@@ -57,6 +57,7 @@ import { foeRanks } from './SpawnSpots.js';
 import { wizardWandOf } from './Expelliarmus.js';
 import { creativeFiniteMana } from './HeroSetup.js';
 import { starterWand } from './ItemTypes.js';
+const FIG_DWELL = 1.5; // (s a hand rests on a figure to choose it: the author 20.11 — 0.6 s signed him up for the middle one while he was only reaching about)
 import { domeOf, domeCross, cageOf, cageClamp, CAGE } from './ArenaDome.js';
 import { duelReport } from './DuelReport.js';
 import { ArenaDomeFx } from '../fx/ArenaDomeFx.js';
@@ -370,7 +371,11 @@ export class ArenaDuels {
         }
         if (live && !A.steward) {
             A.stewT -= dt;
-            if (A.stewT <= 0) { A.stewT = 4; A.steward = this._recruitSteward(A, cs); }
+            // (the author 20.11: «заспавнился передо мной, когда я подошёл к прилавку» — he comes while his place is out of the player's sight; only a player who has stood there 30 s with nobody at the counter sees him come)
+            const S0 = A.def.desk.stand, hid = this._unseen(S0);
+            A.stewWait = hid ? 0 : (A.stewWait || 0) + dt;
+            if (A.stewT <= 0 && (hid || A.stewWait > 30)) { A.stewT = 4; A.steward = this._recruitSteward(A, cs); }
+            else if (A.stewT <= 0) A.stewT = 1;
         } else if (!live && A.steward && !A.duel && !A.queue.length) { this._release(A.steward); A.steward = null; }
         if (A.steward) this._ask(A);
     }
@@ -1241,7 +1246,7 @@ export class ArenaDuels {
             if (!h) continue;
             for (const d of dolls) if (Math.hypot(h.x - d.x, h.z - d.z) <= FIG.TOUCH_R && h.y >= d.y - 0.2 && h.y <= d.y + FIG.H + 0.3) on = d.tier;
         }
-        if (on) { A.dwell = (A.dwell || 0) + dt; if (A.dwell >= 0.6) { A.dwell = 0; A.touchT = 3; const r = this.choose(A, on); g.hud?.setVoice?.(typeof r === 'string' ? r : r.reply, true); } } else A.dwell = 0;
+        if (on) { A.dwell = (A.dwell || 0) + dt; if (A.dwell >= FIG_DWELL) { A.dwell = 0; A.touchT = 3; const r = this.choose(A, on); g.hud?.setVoice?.(typeof r === 'string' ? r : r.reply, true); } } else A.dwell = 0;
     }
 
     /**
@@ -1280,7 +1285,12 @@ export class ArenaDuels {
     choose(A, tier) {
         const g = this.game, L = STEWARD_LINES;
         if (!TIERS[tier]) return L.master;
-        const mine = this.auth ? A.queue.has(g.localId) || A.duel?.p === g.localId : !!this.myQueue;
+        let mine = this.auth ? A.queue.has(g.localId) || A.duel?.p === g.localId : !!this.myQueue;
+        // (the author 20.11: «хотел младшего, а записали на среднего» — before the duel begins a signed-up player may change his mind: the stake is given back at once and he is signed up again as he says now)
+        if (mine && this.auth && A.queue.has(g.localId) && A.duel?.p !== g.localId && !this.count && A.tiers.get(g.localId) !== tier) {
+            A.queue.prune((id) => id === g.localId); A.tiers.delete(g.localId); this._refund(A, g.localId, 'change'); this._send(A);
+            this.myQueue = null; mine = false; this.log.push('rechoose:' + tier);
+        }
         if (mine) return L.again;
         if (g.isNight) return L.night;
         if (!g.items?.wand) return L.wand;
@@ -1389,6 +1399,15 @@ export class ArenaDuels {
      */
     dropTrophyWands() {
         const g = this.game, items = g.items, inv = g.inventory;
+        // (the author 20.11: in SURVIVAL he lost a good wand won on the arena earlier — «забрали и удалили», and a plain one was given: a won wand is his for good there;
+        //  only the Creative duel («Перед дуэлью», the show) clears the won wands of the last fight)
+        if (g.config?.mode !== 'creative' && !this.mode) {
+            let kept = 0;
+            for (const side of ['left', 'right']) { const it = items?.held?.[side]?.item; if (it?.arenaWand) { delete it.arenaWand; inv?.heldWand?.(it); kept++; } }
+            if (inv?.slots) for (const s of inv.slots) if (s?.arenaWand) { delete s.arenaWand; kept++; }
+            if (kept) this.log.push('trophy-wand-kept:' + kept);
+            return;
+        }
         let n = 0;
         for (const side of ['left', 'right']) {
             const h = items?.held?.[side];
@@ -1420,7 +1439,7 @@ export class ArenaDuels {
                 this.count = null; this.myQueue = null;
                 // (a duel won at the arena counts as a duel won — the author 19.11: «на арене волшебник уже в битве: даже если он не успел выкрикнуть заклинание и лучей не было, победа засчитывается»:
                 // the cells (+1…+3, once per opponent, the mastery too) come from the arena's own verdict, not from a beam clash — Mana.duelWonAlive)
-                if (!this.mode && m.r === 'win' && m.opp) this.game.mana?.duelWonAlive?.(m.opp, Math.random, m.omax || undefined);
+                if (!this.mode && m.r === 'win') { const gain = this.game.mana?.duelWonAlive?.(m.opp ?? null, Math.random, m.omax || undefined); if (!(gain > 0)) hud?.toast?.('🔷 Над этим соперником вы уже побеждали — максимум маны за повторную победу не растёт (дуэльное мастерство растёт)', 4500); }
                 if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
                 hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он вернёт ставку и добавит столько же: ${m.coins ?? ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? `😔 Поражение${m.stake > 0 ? ` — ставка ${m.stake} монет пропала` : ''}. Победитель бросил вашу палочку на землю — подберите её` : m.r === 'draw' ? `⏳ Пять минут прошло — ничья${m.stake > 0 ? `, ставка ${m.stake} монет возвращена` : ''}` : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;

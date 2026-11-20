@@ -24,6 +24,7 @@ function fake({ coins = [], night = false, auth = true } = {}) {
         },
         _join: (A2, id, tier, stake) => joined.push({ id, tier, stake }),
         _tryPay(A2, P) { return ArenaDuels.prototype._tryPay.call(this, A2, P); }, // (the stake's taking is its own method now: also used the moment the opponent is chosen)
+        _say() {}, // (the steward says it aloud too: ArenaDuels._say — not under test here)
     };
     return { self, A, picked, spawned, joined, said };
 }
