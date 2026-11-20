@@ -319,3 +319,17 @@ test('the author: knocked down, one lies 5 s at least and 1…5 s more by chance
         assert.equal(g.knock.state, 'rising', 'after it: a squat gets one up');
     } finally { KNOCK.MIN_DOWN = keep.min; KNOCK.EXTRA_DOWN = keep.extra; }
 });
+
+test('a reel cut short by a fall leaves no lean on the body after getting up (the author 20.11: the head stayed tilted to the right)', () => {
+    const { g } = fakeGame();
+    const k = g.knock;
+    k.stagger({ dir: 'right', v: 12 });
+    assert.ok(g.character.staggerRoll < 0, 'reeling aside: leans');
+    k.knock({ dir: 'back' }); // knocked down before the reel ends
+    assert.equal(g.character.staggerRoll, 0);
+    k.state = 'up'; g.character.knockedDown = false; // (got up)
+    g.character.staggerRoll = -0.1; // (a stray value from any other path)
+    run(g, 2, STAND);
+    assert.equal(g.character.staggerRoll, 0, 'cleared');
+    assert.ok(Math.abs(g.character.group.rotation.z) < 0.01, 'upright: ' + g.character.group.rotation.z);
+});
