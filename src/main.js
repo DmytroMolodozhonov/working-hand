@@ -1390,10 +1390,11 @@ async function startGame(config, welcome = null) {
 }
 
 async function startGameInner(config, welcome) {
-    portal.start(mainMenu); // (the menu is drawn into the whirl; hidden when the swirl has opened)
+    const melted = portal.start(mainMenu); // (the menu melts into the whirl — or the passage already goes: started at the click)
     updateProgress(2, 'Инициализация...');
-    // (the author 20.11: after «Продолжить» the menu hung for seconds: the page must PAINT the whirl before the heavy work of the start begins; a hidden tab has no frames — 150 ms and on)
-    await new Promise((r) => { const t = setTimeout(r, 150); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(t); r(); })); });
+    // (the author 20.11: «сначала несколько секунд это окно, потом загрузка» — the heavy work of the start must not begin before the menu is gone and
+    //  the whirl is painted: it held the main thread and the menu hung half-melted for seconds. ≤ 0,45 s; a hidden tab has no frames — the timer goes on)
+    await Promise.race([Promise.resolve(melted).then(() => new Promise((r) => requestAnimationFrame(() => r()))), new Promise((r) => setTimeout(r, 450))]);
     const B = bootTimer;
     B.reset();
     B._readyNoted = false;
@@ -1629,8 +1630,11 @@ async function renderSavedWorlds() {
             const btn = ev?.currentTarget || row.querySelector('.world-play'), label = btn.innerHTML;
             if (btn.dataset.busy) return;
             btn.dataset.busy = '1'; btn.innerHTML = '⏳ Запуск…'; btn.style.opacity = '0.8';
+            // (the passage at once — the world's file is read from the browser and the disk meanwhile, which may take seconds: the author saw the menu hang)
+            let tut = false; try { tut = !(localStorage.getItem('zns-tutorial-asked') || localStorage.getItem('zns-tutorial-done')) && !window.__ZNS_NO_TUTORIAL_ASK__ && !navigator.webdriver; } catch { tut = false; } // (the first game's question comes over the menu — not under the passage)
+            if (!tut && !starting) { if (!window.__ZNS_NO_FULLSCREEN__) enterGameFullscreen(); portal.start(mainMenu); }
             const w = await loadWorld(id);
-            if (!w) { delete btn.dataset.busy; btn.innerHTML = label; btn.style.opacity = ''; return; }
+            if (!w) { portal.cancel(mainMenu); delete btn.dataset.busy; btn.innerHTML = label; btn.style.opacity = ''; return; }
             startGame({ ...readConfig(), mode: w.mode, map: null, seed: w.seed, saved: w });
         };
         // deleting asks first — right in the row, in the game's own look

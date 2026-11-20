@@ -405,10 +405,10 @@ export class Inventory {
         const g = this.game;
         let why = '';
         try {
-            const held = g.focus?.held?.(), ch = g.character, cast = g.wandSide?.();
+            const held = g.focus?.held?.(), cast = g.wandSide?.();
             // (the author 20.11: a SECOND wand — a trophy in the other hand — could not be put into the pocket while a spell went on the casting wand: the block is for the casting wand only)
             const other = !!(side && cast && side !== cast);
-            if (other) { if (ch?.aim?.[side]) why = 'заклинание'; }
+            if (other) { /* the second wand: spells go through the casting wand — it is never held back (20.11: `ch.aim[side]` here is where ANY held wand points, set every frame — the second wand could never be put away) */ }
             else if (held) why = (HELD_NAME(held)) ;
             else if (g.wandMagic?.light) why = 'свет на палочке'; // (20.11: NOT `ch.aim[side]` — that is where a held wand points, written every frame for ANY wand in the hand: the wand could never be put away at all; `wandMagic.active` / `spellBusy` do not exist)
         } catch (e) { /* the check never breaks a hand */ }
