@@ -319,6 +319,8 @@ export class ArenaDuels {
         this._keepSteward(A, cs, live, dt);
         // the duels: one after another (a player signed up does not wait out a long rest)
         const D = A.duel;
+        // (a player signed up and waiting: now and then he is told what is going on — the author 20.11, «ждал и ничего не слышал»)
+        if (!D && A.queue.length) { A.waitT = (A.waitT || 0) + dt; if (A.waitT > 20) { A.waitT = 0; for (const id of A.queue.list) this._tell(id, { e: 'wait', id: A.id }); } } else A.waitT = 0;
         if (!D) {
             if (A.queue.length && A.restT > 4) A.restT = 4;
             A.restT -= dt;
@@ -374,9 +376,12 @@ export class ArenaDuels {
         if (live && !A.steward) {
             A.stewT -= dt;
             // (the author 20.11: «заспавнился передо мной, когда я подошёл к прилавку» — he comes while his place is out of the player's sight; only a player who has stood there 30 s with nobody at the counter sees him come)
-            const S0 = A.def.desk.stand, hid = this._unseen(S0);
-            A.stewWait = hid ? 0 : (A.stewWait || 0) + dt;
-            if (A.stewT <= 0 && (hid || A.stewWait > 30)) { A.stewT = 4; A.steward = this._recruitSteward(A, cs); }
+            // (the author 20.11, twice: «он резко появился — так не должно быть; он либо уже есть утром, либо приходит откуда-то к прилавку»: with the desk out of sight he is
+            //  simply there (the arena comes to life by day); else he comes out of the tower's side — itself unseen — and WALKS to the counter; only a player who has stood
+            //  by an empty counter for 45 s sees him come out of the tower's door)
+            const S0 = A.def.desk.stand, hidDesk = this._unseen(S0), hidHome = this._unseen(A.home);
+            A.stewWait = hidDesk || hidHome ? 0 : (A.stewWait || 0) + dt;
+            if (A.stewT <= 0 && (hidDesk || hidHome || A.stewWait > 45)) { A.stewT = 4; A.steward = this._recruitSteward(A, cs, !hidDesk); }
             else if (A.stewT <= 0) A.stewT = 1;
         } else if (!live && A.steward && !A.duel && !A.queue.length) { this._release(A.steward); A.steward = null; }
         if (A.steward) this._ask(A);
@@ -401,12 +406,12 @@ export class ArenaDuels {
         v.steward = true;
     }
 
-    _recruitSteward(A, cs) {
+    _recruitSteward(A, cs, fromHome = false) {
         const L = this.life, def = cs.def, st = L.state(def.id), S = A.def.desk.stand, n = def.population || 24;
         for (let idx = n - 1; idx >= 1; idx--) { // (from the end of the roster: the same man every time; never the Master)
             if (cs.active.has(idx) || st.killed.has(idx)) continue;
-            const out = yawTo(A.def.x, A.def.z, S.x, S.z);
-            const v = L._activate(cs, idx, { x: S.x, y: S.y, z: S.z, yaw: out }, 'arena', { look: (look, e) => Object.assign(look, stewardLook(e.seed, e.female, def.color)) });
+            const out = yawTo(A.def.x, A.def.z, S.x, S.z), P = fromHome ? A.home : S; // (from the tower's side: he walks to the counter — _steward)
+            const v = L._activate(cs, idx, { x: P.x, y: P.y, z: P.z, yaw: fromHome ? yawTo(P.x, P.z, S.x, S.z) : out }, 'arena', { look: (look, e) => Object.assign(look, stewardLook(e.seed, e.female, def.color)) });
             if (!v) continue;
             v.arena = { id: A.id, kind: 'steward', leg: 0 };
             v.steward = true;
@@ -501,7 +506,7 @@ export class ArenaDuels {
         let busy = false;
         for (const v of L.byId.values()) if (v.arena?.id === A.id && !v.dead && (v.arena.kind === 'leave' || (v.arena.kind === 'fan' && !v.seated)) && onArenaFloor(A.def, v.x, v.z, -1)) busy = true;
         if (busy) return false;
-        const cap = A.def.visit ? 170 : 90; // (the visitors' way round the corner and up the stair is long: they are given time to sit before the duellists come out)
+        const cap = A.queue.length ? 15 : A.def.visit ? 170 : 90; // (the visitors' way round the corner and up the stair is long: they are given time to sit before the duellists come out — but a player who has signed up (and paid) is not kept waiting for them: the author 20.11, «ждал и не дождался соперника»)
         if (!A.def.practice && A.fans.size < A.want && A.readyT < cap) return false;
         for (const v of A.fans) if (!v.seated && A.readyT < cap) return false;
         A.readyT = 0;
@@ -587,7 +592,16 @@ export class ArenaDuels {
         if (!this._unseen(A.home) && (p == null || (A.unseenWait = (A.unseenWait || 0) + 1) < 12)) { if (p != null) A.queue.list.unshift(p); A.restT = p != null ? 1 : 2; return; }
         A.unseenWait = 0;
         const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : this._recruit(A, cs, 'duel');
-        if (!a) { A.restT = 10; if (p != null) A.queue.list.unshift(p); return; }
+        if (!a) {
+            A.restT = 6;
+            if (p != null) {
+                A.noFoe = (A.noFoe || 0) + 1;
+                if (A.noFoe >= 8) { A.noFoe = 0; A.tiers.delete(p); this._refund(A, p, 'nofoe'); this._tell(p, { e: 'off', id: A.id, why: 'nofoe' }); allLog('Дуэль', `арена: для ${p} не нашлось свободного волшебника за ~минуту — запись снята, ставка возвращена`); this._send(A); return; }
+                A.queue.list.unshift(p);
+            }
+            return;
+        }
+        A.noFoe = 0;
         if (p != null) A.tiers.delete(p);
         let b = null;
         if (p == null) { b = this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
@@ -1431,7 +1445,8 @@ export class ArenaDuels {
             case 'call': this.dropTrophyWands(); this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
             case 'pay': this._credit(m.coins | 0, m.why); break;
             case 'full': this.myQueue = null; hud?.setVoice?.('📜 Очередь на арену полна — подойдите позже, ставка возвращена', true); break;
-            case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : m.why === 'night' ? '🌙 Ночь — арена закрылась, ставка возвращена. Приходите днём' : '📜 Запись снята', true); break;
+            case 'wait': hud?.setVoice?.('⏳ Ваш соперник выходит на арену — ещё немного. Стойте у распорядителя или на трибуне', true); break;
+            case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'nofoe' ? '📜 Сейчас некому выйти против вас — запись снята, ставка возвращена. Попробуйте чуть позже' : m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : m.why === 'night' ? '🌙 Ночь — арена закрылась, ставка возвращена. Приходите днём' : '📜 Запись снята', true); break;
             case 'count': this.dropTrophyWands(); this.count = { t: 0 }; break;
             case 'frole': this._friendRole(m); break;
             case 'fstart': this._friendStart(m); break;
