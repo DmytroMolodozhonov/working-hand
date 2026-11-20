@@ -26,6 +26,7 @@
  */
 
 import { HELD } from './Concentration.js';
+import { tempGiftWand } from './TempGiftWand.js'; // (TEMPORARY, see the file)
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand, retireScroll, newUid } from './ItemTypes.js';
@@ -655,6 +656,7 @@ export class Inventory {
     update(dt) {
         const g = this.game;
         this.ensureCreativeApples(dt);
+        if ((this._tgT = (this._tgT || 0) - dt) <= 0) { this._tgT = 1; tempGiftWand(this.game); } // (TEMPORARY: the author's lost wand — TempGiftWand.js; delete when he says)
         this._renderCoins();
         if (!g.currentPose || g.combat.immobile) { for (const st of Object.values(this._pocket)) st.stayT = 0; this.belt._show(); this.purse._show(); this._updateHandBlock(); return; }
         const ch = g.character;
