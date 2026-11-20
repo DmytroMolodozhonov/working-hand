@@ -488,12 +488,14 @@ export class Inventory {
     select(i, side = null) {
         if (i >= 0 && this.monsterShut()) return; // (the free hand, -1, stays: it takes nothing)
         if (i === this.selected && (this.inHand || i < 0)) return;
+        const previous = this.selected;
         (this.watch ? (f) => this.watch('выбор ячейки', f) : (f) => f())(() => {
             this._putBackHand(side);
             const n = this.slots.length + 1;
             this.selected = ((((i + 1) % n) + n) % n) - 1;
             this._takeIntoHand(side);
         });
+        if (this.selected !== previous) this.game.sound?.playPocket?.('switch');
         this._render();
     }
 
@@ -691,6 +693,7 @@ export class Inventory {
             if (st.wasBusy !== undefined && busy !== st.wasBusy && now - (this._tookAt?.[side] || -1e9) > 900 && now - (st.out || -1e9) > 900) this.pocketHold(side, POCKET_GRAB_HOLD);
             st.wasBusy = busy;
             const zone = inPocket === true;
+            if (!st.inT && zone && now >= (st.hold || 0)) g.sound?.playPocket?.('enter');
 
             if (side === off) this._pocketJournal(side, local, zone, st);
             if (side === off) this._hintStep(side, local, sx, dt);
@@ -842,6 +845,7 @@ export class Inventory {
             if (this.inHand?.item === it) this.inHand = null;
             const free = this.slots.findIndex((x) => !x);
             if (free >= 0) { this.slots[free] = it; this._render(); } else if (!this.storeItem(it)) return false;
+            g.sound?.playPocket?.('wandPut');
             this._fx('🪄 Палочка в кармане', side);
             return true;
         }
@@ -849,6 +853,7 @@ export class Inventory {
         const i = this.slots.findIndex((x) => x?.kind === 'wand');
         if (i < 0) { this.game.hud.toast?.('🪄 В кармане нет палочки'); return false; }
         if (!this._fromSlot(i, side)) return false;
+        g.sound?.playPocket?.('wandTake');
         this._fx('🪄 Палочка в руке', side);
         this._render();
         return true;
