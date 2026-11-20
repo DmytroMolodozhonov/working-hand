@@ -22,6 +22,7 @@ class WandRescue(unittest.TestCase):
         self.assertTrue(any(x and x["uid"] == "OLD" and x["power"] == 49 and "arenaWand" not in x for x in slots))
         self.assertFalse(any(x and x.get("spare") for x in slots), "the stand-in is gone")
         self.assertEqual(json.loads((self.d / "w1.json").read_text())["players"]["me"]["slots"], slots, "written back")
+        self.assertGreater(got["updated"], 1, "newer than the browser's copy, so the page takes it")
 
     def test_own_wand_field_is_not_needed_and_the_strongest_lost_one_returns(self):
         # ownWand points to something else (a trophy was «my wand» once): the strongest carried wand missing now comes back

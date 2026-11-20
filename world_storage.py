@@ -165,6 +165,8 @@ class WorldStorage:
             changed = True
             print(f"  [Миры] {wid}: потерянная палочка {found['uid']} (сила {found.get('power')}) вернулась из резервной копии", flush=True)
         if changed:
+            # (the page keeps its own copy in the browser and takes the disk one only if it is NEWER: the returned wand must win over it — the author 20.11, the first version did not)
+            w["updated"] = _stamp(w) + 1
             _atomic(self.root / (wid + ".json"), _text(w))
 
     def _get_raw(self, wid):
