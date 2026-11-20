@@ -115,41 +115,41 @@ class WorldStorage:
         return w
 
     def _rescue_wand(self, w, wid):
-        """The hero's own wand is gone from the save (it was deleted by mistake) and a plain stand-in was given: the wand comes back from the newest backup that has it
-        (the author 20.11: «я хочу, чтобы она просто появилась в игре»). Only for a player who holds a stand-in (`spare`) and whose `ownWand` is nowhere in the world."""
-        if not isinstance(w, dict):
+        """The hero's own wand is gone from the save (it was deleted by mistake: a won arena wand cleared at the next duel) and a plain stand-in was given: the wand comes back
+        from the newest backup of the SAME player that has it (the author 20.11: «я хочу, чтобы она просто появилась в игре»). Only for a player who holds a stand-in (`spare`);
+        which wand: his `ownWand` if a backup has it, else the strongest one he carried (slots / hands) that is missing now."""
+        if not isinstance(w, dict) or not isinstance(w.get("players"), dict):
             return
-        present = {x.get("uid") for x in _wands(w)}
-        todo = []
-        for pl in _players(w):
-            own = pl.get("ownWand")
-            slots = pl.get("slots")
-            if not isinstance(own, str) or not isinstance(slots, list) or own in present:
-                continue
-            if not any(isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare") for x in slots) and not any(x.get("spare") for x in _hand_wands(pl)):
-                continue
-            todo.append((pl, own))
-        if not todo:
-            return
-        files = sorted(self._history(wid).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
         changed = False
-        for pl, own in todo:
+        files = None
+        for key, pl in w["players"].items():
+            if not isinstance(pl, dict) or not isinstance(pl.get("slots"), list):
+                continue
+            slots = pl["slots"]
+            hand_spare = any(x.get("spare") for x in _hand_wands(pl))
+            has_spare = hand_spare or any(isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare") for x in slots)
+            if not has_spare:
+                continue
+            present = {x.get("uid") for x in _wands(w)}
+            if files is None:
+                files = sorted(self._history(wid).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            own = pl.get("ownWand") if isinstance(pl.get("ownWand"), str) else None
             found = None
             for f in files:
                 b = _read(f, wid)
-                if b is None:
+                bp = b.get("players", {}).get(key) if b and isinstance(b.get("players"), dict) else None
+                if not isinstance(bp, dict):
                     continue
-                for x in _wands(b):
-                    if x.get("uid") == own and not x.get("spare"):
-                        found = dict(x)
-                        break
-                if found:
-                    break
+                cand = [x for x in _wands(bp) if not x.get("spare") and x.get("uid") not in present]
+                if not cand:
+                    continue
+                pick = next((x for x in cand if x.get("uid") == own), None) or max(cand, key=lambda x: x.get("power") or 0)
+                found = dict(pick)
+                break
             if not found:
                 continue
             found.pop("spare", None)
             found.pop("arenaWand", None)
-            slots = pl["slots"]
             i = next((k for k, x in enumerate(slots) if isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare")), None)
             if i is None:
                 i = next((k for k, x in enumerate(slots) if not x), None)
@@ -158,12 +158,12 @@ class WorldStorage:
                 pl["extraSlots"] = max(0, len(slots) - 5)
             else:
                 slots[i] = found
-            # (a stand-in held in a hand goes too: one wand, the own one)
             gear = pl.get("gear")
             if isinstance(gear, dict) and isinstance(gear.get("held"), list):
                 gear["held"] = [None if isinstance(h, dict) and h.get("kind") == "wand" and h.get("spare") else h for h in gear["held"]]
+            pl["ownWand"] = found["uid"]
             changed = True
-            print(f"  [Миры] {wid}: потерянная палочка {own} вернулась из резервной копии", flush=True)
+            print(f"  [Миры] {wid}: потерянная палочка {found['uid']} (сила {found.get('power')}) вернулась из резервной копии", flush=True)
         if changed:
             _atomic(self.root / (wid + ".json"), _text(w))
 

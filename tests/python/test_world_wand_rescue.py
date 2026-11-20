@@ -23,6 +23,13 @@ class WandRescue(unittest.TestCase):
         self.assertFalse(any(x and x.get("spare") for x in slots), "the stand-in is gone")
         self.assertEqual(json.loads((self.d / "w1.json").read_text())["players"]["me"]["slots"], slots, "written back")
 
+    def test_own_wand_field_is_not_needed_and_the_strongest_lost_one_returns(self):
+        # ownWand points to something else (a trophy was «my wand» once): the strongest carried wand missing now comes back
+        self.put(self.d / "w1.json", world([{"kind": "wand", "uid": "NEW", "spare": True}], "SOMETHING"))
+        self.put(self.d / "backups" / "w1" / "daily-2.json", world([{"kind": "wand", "uid": "WEAK", "power": 10}, {"kind": "wand", "uid": "OLD", "power": 49, "arenaWand": True}], "WEAK"))
+        slots = ws.WorldStorage(self.d).get("w1")["players"]["me"]["slots"]
+        self.assertEqual([x["uid"] for x in slots if x], ["OLD"])
+
     def test_stand_in_in_the_hand_goes_too(self):
         self.put(self.d / "w1.json", world([None], "OLD", [{"kind": "wand", "uid": "NEW", "spare": True}, None]))
         self.put(self.d / "backups" / "w1" / "previous.json", world([{"kind": "wand", "uid": "OLD", "power": 49}], "OLD"))
