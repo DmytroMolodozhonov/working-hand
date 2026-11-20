@@ -18,13 +18,14 @@ test('the potion: ordinary swan wings + a golden apple, one flask a cauldron', (
     assert.equal(normalizeHero({ wings: true }).wings, true);
 });
 
-test('the author\'s numbers: 10 minutes to grow, −1 HP every half a minute for 20 minutes (40 in all)', () => {
+test('the author\'s numbers: 10 minutes to grow, −1 HP every half a minute only while they grow (20 in all; the author 20.11: it must stop when the wings are grown)', () => {
     assert.equal(WINGS.GROW_S, 600);
-    assert.equal(WINGS.PAIN_S, 1200);
+    assert.equal(WINGS.PAIN_S, WINGS.GROW_S); // (was 1200: the pain went on 10 minutes after the wings were grown)
     assert.equal(growthAt(0), 0);
     assert.equal(growthAt(600), 1);
     assert.ok(growthAt(300) > 0.45 && growthAt(300) < 0.55);
-    assert.equal(painsBetween(0, 1e6), 40);
+    assert.equal(painsBetween(0, 1e6), 20);
+    assert.equal(painsBetween(600, 1200), 0, 'no pain after they are grown');
     assert.equal(painsBetween(0, 29), 0);
     assert.equal(painsBetween(29, 31), 1);
 });
@@ -45,7 +46,7 @@ function fakeGame(mode = 'freeworld', hp = 100) {
 }
 const run = (g, secs, dt = 0.5) => { for (let t = 0; t < secs; t += dt) g.wings.update(dt); };
 
-test('drunk: they grow over 10 minutes with the bar and the words; the head swims; it hurts for 20 minutes; then wings for good', () => {
+test('drunk: they grow over 10 minutes with the bar and the words; the head swims; it hurts only while they grow (10 minutes); then wings for good', () => {
     const g = fakeGame('freeworld', 100);
     const W = g.wings;
     assert.equal(W.cantDrink(), null);
@@ -60,7 +61,7 @@ test('drunk: they grow over 10 minutes with the bar and the words; the head swim
     assert.ok(W.has, 'grown');
     assert.ok(g.said.some((t) => /выросли/.test(t)));
     run(g, 700);
-    assert.equal(g.combat.hp, 100 - 40, 'the pain stopped at 20 minutes');
+    assert.equal(g.combat.hp, 100 - 20, 'the pain stopped when the wings were grown (10 minutes) — the author 20.11');
     assert.equal(W.t, null);
     assert.ok(W.model && W.model.mounts.every((m) => m.visible), 'the wings on the back');
     // the net and the save

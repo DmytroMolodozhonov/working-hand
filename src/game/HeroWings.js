@@ -25,7 +25,7 @@ import { MODEL_KIT as K, animateWings } from './AnimalModels.js';
 
 export const WINGS = {
     GROW_S: 600, // s: 10 minutes to grow full (the author)
-    PAIN_S: 1200, // s: the pain lasts 20 minutes (the author)
+    PAIN_S: 600, // s: the pain lasts while they grow — 10 minutes (the author 20.11: «крылья выросли, а ХП всё ещё списывается» — it used to go on for 20)
     PAIN_EVERY: 30, PAIN: 1, // −1 HP every half a minute (the author)
     SCALE: 4.4, // × the kit's wing (~0.6 its own span): ~2.6 m a wing spread
     MOUNT: { X: 0.3, Y: 0.6, Z: 0.42 }, // on the torso (its units = m): the back between the shoulder blades
