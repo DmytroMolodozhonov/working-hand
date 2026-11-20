@@ -244,7 +244,7 @@ export class Pentagranium {
         if (!hit) { this._why = `земля дальше ${PENT.REACH} м или луч уходит в небо`; return null; }
         const x = Math.round(hit.x), z = Math.round(hit.z);
         const y = data.floorAt?.(hit.x, hit.z, hit.y + 0.15) ?? this._height(hit.x, hit.z, hit.y);
-        if (Math.abs(hit.y - y) > 0.2) { this._why = 'луч попал в бок стены, а не в пол'; return null; } // hit must be on a floor, not the side of a wall
+        if (Math.abs(hit.y - y) > 0.2) { this._why = 'земля здесь неровная — ступенька, склон или стена: наведите на ровное место'; return null; } // hit must be on a floor, not the side of a wall
         const L = Math.floor(y + 1.45), under = data.get(x, L, z);
         if (under === BLOCK.WATER || under === BLOCK.AIR) { this._why = 'под лучом вода или пустота'; return null; }
         if (isEnchanted(under) || isEnchanted(data.get(x, L - 1, z)) || data.godGiftAt?.(x, L, z) || data.godGiftAt?.(x, L - 1, z)) { this._why = 'здесь заколдованный камень или дар богов'; return null; }
