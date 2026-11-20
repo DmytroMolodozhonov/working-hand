@@ -405,8 +405,11 @@ export class Inventory {
         const g = this.game;
         let why = '';
         try {
-            const held = g.focus?.held?.(), ch = g.character;
-            if (held) why = (HELD_NAME(held)) ;
+            const held = g.focus?.held?.(), ch = g.character, cast = g.wandSide?.();
+            // (the author 20.11: a SECOND wand — a trophy in the other hand — could not be put into the pocket while a spell went on the casting wand: the block is for the casting wand only)
+            const other = !!(side && cast && side !== cast);
+            if (other) { if (ch?.aim?.[side]) why = 'заклинание'; }
+            else if (held) why = (HELD_NAME(held)) ;
             else if (g.wandMagic?.active || g.spellBusy?.() || (side && ch?.aim?.[side])) why = 'заклинание';
         } catch (e) { /* the check never breaks a hand */ }
         if (!why) return '';

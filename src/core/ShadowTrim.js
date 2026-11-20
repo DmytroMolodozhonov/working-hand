@@ -20,7 +20,7 @@ const _sz = new THREE.Vector3();
 export function trimShadowCasters(root, min = SHADOW_TRIM.MIN) {
     let off = 0;
     root.traverse((m) => {
-        if (!m.isMesh || !m.castShadow || m.isSkinnedMesh || m.isInstancedMesh || m.name === 'head-shadow') return;
+        if (!m.isMesh || !m.castShadow || m.isSkinnedMesh || m.isInstancedMesh || m.name === 'head-shadow' || m.userData.keepShadow) return; // (keepShadow: a part that is small in itself but scaled up by its parent — the wings: the author 20.11, no wing shadow in flight)
         let big = m.userData._shadowBig;
         if (big === undefined) {
             const g = m.geometry;

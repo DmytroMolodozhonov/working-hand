@@ -320,13 +320,14 @@ export class Mana {
     }
 
     /** The clash won but the opponent `id` lives (lifted, stunned…): +1…+3 at random, once per opponent. */
-    duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE) {
+    duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE, pos = null) {
         this.masteryWon(id, false, oppMax, 0);
         if (id != null && this.duelsWon.has(String(id))) { allLog('Мана', `победа в дуэли над ${id} (живой): ячейки НЕ начислены — за этого соперника уже платили (${this.duelsWon.get(String(id))}); дуэльное мастерство начислено`); return 0; }
         if (id != null) this.duelsWon.set(String(id), 'win');
         const n = killGain(oppMax);
         allLog('Мана', `победа в дуэли над ${id} (живой): +${n} ячеек маны (максимум соперника ${Math.round(oppMax)}; формула: четверть от (максимум − ${MANA.BASE}), минимум ${MANA.DUEL_MIN}); мой максимум до: ${Math.round(this.combat?.maxFatigue || 0)}`); // (the author 19.11: a win without a kill — on the arena or in a fight — is worth 25% of his maximum above 30, as a kill without a clash; at least +1)
         this.grow(n, 'duelAlive');
+        this.powerFlow(pos, n, 'duel'); // (the power flies from the beaten wizard to me — as after a kill: the author 20.11 saw no animation after an arena win)
         this._say(`🔷 Победа в дуэли: +${n} ячеек маны${this.combat?.maxFatigue ? ` (теперь ${Math.round(this.combat.maxFatigue)})` : ''}`); // (CELLS — the maximum, not a one-time mana: the author 20.11)
         return n;
     }

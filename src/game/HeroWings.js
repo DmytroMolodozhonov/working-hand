@@ -62,6 +62,7 @@ export function attachWings(character, magic = true) {
         w.userData.side = s;
         const m = new THREE.Mesh(K.pigWingGeo(), feather);
         m.castShadow = true;
+        m.userData.keepShadow = true; // (ShadowTrim: its geometry is small, the mount scales it up — it must keep casting)
         m.name = 'wing';
         w.userData.mesh = m;
         w.add(m);
