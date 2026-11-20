@@ -1058,7 +1058,7 @@ export class Space {
         if (!id) return;
         const def = this.planets.get(id);
         if (!def) return this._nextTexture();
-        const big = id === 'earth' || id === 'jupiter' || id === 'saturn';
+        const big = id === 'earth' || id === 'jupiter' || id === 'saturn' || id === 'mars' || id === 'venus' || id === 'mercury'; // (the near rocky worlds too: 512 × 256 made their ground a coarse mosaic)
         this._tex.set(id, 'asked');
         this._texBusy = true;
         this._worker.postMessage({ type: 'tex', id, w: big ? 1024 : 512, h: big ? 512 : 256 });

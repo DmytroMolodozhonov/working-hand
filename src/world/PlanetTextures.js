@@ -35,8 +35,8 @@ export function planetTexture(def, w, h, terrain = null) {
     const data = new Uint8ClampedArray(w * h * 4);
     if (def.look === 'earth') earthMap(data, w, h); // (the real Earth's continents — no terrain needed)
     else if (def.kind === 'gas') gasMap(def, data, w, h); // (the belts seen from far: their ground's bands are under them)
+    else if (def.look === 'venus') cloudMap(def, data, w, h); // (Venus from space is its clouds, not its ground — before the ground's test: it has one too)
     else if (def.slot != null && def.slot >= 0 && def.ground) rockyMap(def, data, w, h);
-    else if (def.look === 'venus') cloudMap(def, data, w, h);
     else if (def.look === 'sun') sunMap(def, data, w, h);
     else gasMap(def, data, w, h);
     return { w, h, data };
