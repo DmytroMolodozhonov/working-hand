@@ -52,7 +52,7 @@ export class MagicFloraLife {
             const fm = FLORA_MATERIAL[kind];
             out.body[kind] = [];
             for (let v = 0; v < FLORA_VARIANTS; v++) out.body[kind].push(this._inst(floraBody(kind, v), M[fm.body], FLORA.MAX_PER_KIND));
-            out.pick[kind] = this._inst(floraPick(kind), M[fm.pick], FLORA.MAX_PER_KIND * PICK_COUNT[kind]);
+            if (fm.pick) out.pick[kind] = this._inst(floraPick(kind), M[fm.pick], FLORA.MAX_PER_KIND * PICK_COUNT[kind]);
         }
         return (this.meshes = out);
     }
@@ -69,12 +69,23 @@ export class MagicFloraLife {
     sample() {
         const M = this._ensureMeshes();
         const out = [];
-        for (const kind of FLORA_ORDER) { const g = new THREE.Group(); g.add(new THREE.Mesh(M.body[kind][0].geometry, M.body[kind][0].material), new THREE.Mesh(M.pick[kind].geometry, M.pick[kind].material)); out.push(g); }
+        for (const kind of FLORA_ORDER) {
+            const g = new THREE.Group(), body = M.body[kind][0], pick = M.pick[kind];
+            g.add(new THREE.Mesh(body.geometry, body.material));
+            if (pick) g.add(new THREE.Mesh(pick.geometry, pick.material));
+            out.push(g);
+        }
         return out;
     }
 
     // ----------------------------------------------------------- placing
-    _biomeOf(t) { return (x, z) => BIOMES[t.biomeAt(Math.floor(x), Math.floor(z))]?.id || ''; }
+    _biomeOf(t, kind) {
+        return (x, z) => {
+            const ix = Math.floor(x), iz = Math.floor(z);
+            if (kind === 'cactus') return t.pyr?.sandy(ix, iz) ? 'desert' : '';
+            return BIOMES[t.biomeAt(ix, iz)]?.id || '';
+        };
+    }
 
     /** The cells round `p` that still need to be looked at, nearest first. */
     _plan(p) {
@@ -102,7 +113,7 @@ export class MagicFloraLife {
     }
 
     _place(t, e, seed) {
-        const grp = floraGroupIn(e.kind, e.gx, e.gz, seed, this._biomeOf(t));
+        const grp = floraGroupIn(e.kind, e.gx, e.gz, seed, this._biomeOf(t, e.kind));
         if (!grp) { this.groups.set(e.key, null); return; }
         // the land of every member must be made already (never made in the frame — TerrainData.landMade)
         if (grp.members.some((m) => t.landMade && !t.landMade(m.x, m.z))) return; // (try again later)
@@ -112,7 +123,7 @@ export class MagicFloraLife {
             const x = m.x, z = m.z;
             if (Math.hypot(x, z) < 40) continue; // (the start place stays clear)
             const top = t.topLayer(x, z), b = t.get(x, top, z);
-            if (b !== BLOCK.GRASS && !(e.kind === 'frostcrystal' && b === BLOCK.SNOW)) continue;
+            if (e.kind === 'cactus' ? b !== BLOCK.SAND || !t.pyr?.sandy(x, z) : b !== BLOCK.GRASS && !(e.kind === 'frostcrystal' && b === BLOCK.SNOW)) continue;
             if (t.get(x, top + 1, z) === BLOCK.WATER || t.get(x, top + 1, z) === BLOCK.SNOW && e.kind !== 'frostcrystal') continue;
             if ((t.sites || t.castles)?.landAt?.(x, z) || t.isIsland?.(x, z)) continue; // (not in castles, villages, towers; not on islands)
             if (Math.abs(t.topLayer(x + 2, z) - top) > 2 || Math.abs(t.topLayer(x, z + 2) - top) > 2 || Math.abs(t.topLayer(x - 2, z) - top) > 2 || Math.abs(t.topLayer(x, z - 2) - top) > 2) continue; // (a steep slope: nothing grows)
@@ -172,6 +183,7 @@ export class MagicFloraLife {
 
     _writePicks(kind) {
         const M = this._ensureMeshes(), mesh = M.pick[kind], now = Date.now();
+        if (!mesh) return;
         let n = 0;
         for (const pl of this.list[kind]) {
             if (pl.burn < 0) continue;
@@ -448,7 +460,7 @@ export class MagicFloraLife {
         for (const pl of [...this.byId.values()]) this._drop(pl, false);
         this.groups.clear();
         this.group.parent?.remove(this.group);
-        if (this.meshes) { for (const kind of FLORA_ORDER) { for (const m of this.meshes.body[kind]) m.dispose?.(); this.meshes.pick[kind].dispose?.(); } }
+        if (this.meshes) { for (const kind of FLORA_ORDER) { for (const m of this.meshes.body[kind]) m.dispose?.(); this.meshes.pick[kind]?.dispose?.(); } }
     }
 }
 

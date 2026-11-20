@@ -1,7 +1,8 @@
 // The real trees (TreeBuild.js — their shapes; Terrain._meshTree — where they stand in a world made with them).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildTree, TREE_GEN, TREE_SIZES } from '../../src/world/TreeBuild.js';
+import { buildTree, LARGE_TREE, TREE_GEN, TREE_SIZES } from '../../src/world/TreeBuild.js';
+import { TREES, treeLOD } from '../../src/world/Trees.js';
 import { TerrainData, CHUNK, BLOCK, MIN_LAYER, MAX_LAYER, treeFitsChunk } from '../../src/world/Terrain.js';
 
 const shapes = [];
@@ -56,6 +57,33 @@ test('points: detailed near, light far (a forest stays smooth)', () => {
         assert.ok(far <= 2600 && far < near / 2.5, `${TREE_SIZES[k].name} ${v}: ${far} points far`);
     }
     assert.ok(sum / shapes.length <= 7000, `on average ${Math.round(sum / shapes.length)} points`);
+});
+
+test('all three new trees have thick trunks and retain their trunk on both distant meshes', () => {
+    const oak = buildTree(0, 1).info;
+    for (const kind of [LARGE_TREE.OAK, LARGE_TREE.REDWOOD, LARGE_TREE.PLANE]) {
+        for (let variant = 0; variant < LARGE_TREE.VARIANTS; variant++) {
+            const near = buildTree(kind, variant).info;
+            assert.ok(near.R0 > oak.R0 * 2, `${TREE_SIZES[kind].name} has a thick trunk`);
+            assert.ok(near.crown.lowest > 4.4);
+            for (const lod of [1, 2]) {
+                const far = buildTree(kind, variant, { far: lod }).info;
+                assert.deepEqual(far.trunk, near.trunk);
+                assert.ok(far.verts < near.verts / 2);
+            }
+        }
+    }
+});
+
+test('walking a few metres round a detail threshold does not switch the same tree repeatedly', () => {
+    for (const [lod, d] of [TREES.NEAR, TREES.FAR2].entries()) {
+        assert.equal(treeLOD((d + 2) ** 2, lod), lod);
+        assert.equal(treeLOD((d - 2) ** 2, lod + 1), lod + 1);
+        assert.equal(treeLOD((d + TREES.LOD_MARGIN + 1) ** 2, lod), lod + 1);
+    }
+    const fallen = buildTree(0, 3, { deadfall: true });
+    assert.equal(fallen.leaf.count, 0);
+    assert.ok(fallen.info.joints.length < 10 && fallen.wood.count > 100);
 });
 
 const recipe = { seed: 4242, mountains: true, seas: true, deepCaves: true, lush: true };

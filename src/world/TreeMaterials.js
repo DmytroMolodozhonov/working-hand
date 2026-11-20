@@ -269,13 +269,13 @@ function joinParts(a, b) {
 }
 
 /** A shape's geometries (made once, kept: 5 kinds × VARIANTS × 2 — a fixed number). */
-export function treeGeometry(kind, variant, far = false) {
+export function treeGeometry(kind, variant, far = false, deadfall = false) {
     const lod = far === true ? 1 : far | 0; // (0 near, 1 far, 2 very far — TreeBuild)
     far = lod;
-    const key = kind * 1000 + variant * 3 + lod;
+    const key = (kind * 1000 + variant * 3 + lod) * 2 + Number(deadfall);
     let e = _geo.get(key);
     if (!e) {
-        const t = buildTree(kind, variant, { far });
+        const t = buildTree(kind, variant, { far, deadfall });
         // full: the bark and the leaves in one shape (one material, the atlas's plain cell for the bark) — one draw a shape
         e = { wood: toGeometry(t.wood), leaf: toGeometry(t.leaf), full: toGeometry(joinParts(t.wood, t.leaf)), info: t.info };
         _geo.set(key, e);
