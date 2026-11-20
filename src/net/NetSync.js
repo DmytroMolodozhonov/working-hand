@@ -223,6 +223,7 @@ export class NetSync {
             icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
             planets: g.space?.planets.toJSON() || null, // the planets (made, changed by spells: Space.js)
             pents: g.pentagranium?.marksSnapshot() || null, // the permanent pentagrams (teleport, life, mend): sent only once when made — a newcomer saw none
+            enchantCircles: g.enchantCircles?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
@@ -313,6 +314,7 @@ export class NetSync {
         this._tryReady();
         if (msg.you && !this._gotMine) { this._gotMine = true; applyPlayerSnapshot(g, msg.you); g.inventory?.ensureStarterWand(); g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
         if (msg.pents) g.pentagranium?.netRestore?.(msg.pents); // (after my own things: their pentagrams would replace the list)
+        if (msg.enchantCircles) g.enchantCircles?.netRestore?.(msg.enchantCircles);
     }
 
     /** main.js: my loading screen closed. A guest also waits for the host's world state (it puts me where I stood). */
