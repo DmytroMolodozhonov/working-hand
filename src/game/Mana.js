@@ -209,7 +209,7 @@ export class Mana {
         this.beaten = new Set(); // opponents already beaten in a duel (this life): a known one gives less
         this.log = []; // (tests) the last few gains
         // the reward for a fight with a wizard — by the beauty of the magic (FightLedger.js): an account for each wizard
-        this.fight = new FightLedger(() => performance.now() / 1000, (name) => ({ key: SAME_SPELL[name] || name, w: spellWeight(firstSpellGain(name)) }), () => this.max + this.mastery);
+        this.fight = new FightLedger(() => performance.now() / 1000, (name) => ({ key: SAME_SPELL[name] || name, w: NOT_SPELLS.has(name) || name === 'Maxima' ? 0 : spellWeight(firstSpellGain(name)) }), () => this.max + this.mastery);
         FoeSet.onCast = (v, id) => { if (v && id != null && id === this.game.localId) this.fight.foeCast(v.id); }; // (a wizard cast at ME)
     }
 
@@ -279,10 +279,10 @@ export class Mana {
         const n = fightCells(sum.pct, oppMax, MANA.BASE);
         const m = this.masteryWon(id, killed, oppMax, oppMastery, true, sum.pct);
         L.close(key ?? '?');
-        allLog('Мана', `бой с ${id} выигран${killed ? ' (убит)' : ''}: ${Math.round(sum.pct)}% от (${Math.round(oppMax)} − ${MANA.BASE}) = +${n} ячеек; бой ${Math.round(sum.seconds)} с, заклинаний ${sum.spells}, столкновений ${sum.clashes}${sum.elemental ? ', магия стихий' : ''}${sum.underdog > 0 ? `, слабее соперника в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : ''}; мастерство +${m}`);
+        allLog('Мана', `бой с ${id} выигран${killed ? ' (убит)' : ''}: ${Math.round(sum.pct)}% от (${Math.round(oppMax)} − ${MANA.BASE}) = +${n} ячеек; бой ${Math.round(sum.seconds)} с, заклинаний ${sum.spells}, столкновений ${sum.clashes}${sum.elemental ? ', магия стихий' : ''}${sum.underdog > 0 ? `, слабее соперника в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : ''}${sum.crowd > 0 ? `, противников сразу ${sum.peak}: +${Math.round(sum.crowd)}%` : ''}; мастерство +${m}`);
         if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
         this.grow(n, killed ? 'duel' : 'duelAlive');
-        const why = [`бой ${Math.round(sum.seconds)} с`, `заклинаний: ${sum.spells}`, sum.clashes ? `столкновений: ${sum.clashes}` : null, sum.elemental ? 'магия стихий' : null, sum.underdog > 0 ? `соперник сильнее вас в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : null].filter(Boolean).join(', ');
+        const why = [`бой ${Math.round(sum.seconds)} с`, `заклинаний: ${sum.spells}`, sum.clashes ? `столкновений: ${sum.clashes}` : null, sum.elemental ? 'магия стихий' : null, sum.underdog > 0 ? `соперник сильнее вас в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : null, sum.crowd > 0 ? `противников сразу: ${sum.peak}, +${Math.round(sum.crowd)}%` : null].filter(Boolean).join(', ');
         this._say(`🔷 Победа${killed ? ', соперник повержен' : ''}: +${n} ячеек маны (${Math.round(sum.pct)}% — ${why})`);
         this.powerFlow(pos, n, 'duel');
         return n;

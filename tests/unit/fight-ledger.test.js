@@ -2,11 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FightLedger, FIGHT, ARENA, spellWeight, fightCells, fightMastery, isElemental, FoeSet, foeSet } from '../../src/game/FightLedger.js';
-import { firstSpellGain, SAME_SPELL } from '../../src/game/Mana.js';
+import { firstSpellGain, SAME_SPELL, NOT_SPELLS } from '../../src/game/Mana.js';
 
 function ledger(me = 0) {
     let t = 0;
-    const L = new FightLedger(() => t, (name) => ({ key: SAME_SPELL[name] || name, w: spellWeight(firstSpellGain(name)) }), () => me);
+    const L = new FightLedger(() => t, (name) => ({ key: SAME_SPELL[name] || name, w: NOT_SPELLS.has(name) || name === 'Maxima' ? 0 : spellWeight(firstSpellGain(name)) }), () => me);
     return { L, at: (s) => { t = s; } };
 }
 
@@ -122,4 +122,31 @@ test('бонус слабому: чем сильнее соперник прот
     // the whole at the top
     const f = ledger(30); f.L.foeCast('big'); for (let i = 0; i < 12; i++) f.L.clash('big');
     assert.ok(f.L.summary('big', false, false, 1e6).pct <= FIGHT.MAX_PCT + FIGHT.UNDERDOG_MAX);
+});
+
+test('толпа: +2 % за каждого ДРУГОГО противника, дерущегося со мной одновременно (до 10 %); один — без прибавки', () => {
+    const { L, at } = ledger();
+    at(0); L.foeCast('a');
+    assert.equal(L.summary('a').crowd, 0, 'один противник — без прибавки');
+    at(2); L.foeCast('b'); at(3); L.foeCast('c'); at(4); L.foeCast('a');
+    const s = L.summary('a');
+    assert.equal(s.peak, 3);
+    assert.equal(s.crowd, 2 * FIGHT.CROWD_EACH, 'двое других: +4 %');
+    for (const id of ['d', 'e', 'f', 'g', 'h']) { at(5); L.foeCast(id); }
+    at(6); L.foeCast('a');
+    assert.equal(L.summary('a').crowd, FIGHT.CROWD_MAX, 'потолок 10 %');
+    // an opponent that stopped fighting long ago is no crowd
+    const f = ledger(); f.at(0); f.L.foeCast('x'); f.at(100); f.L.foeCast('y'); f.L.foeCast('y');
+    assert.equal(f.L.summary('y').crowd, 0);
+});
+
+test('заклинание, брошенное за 6 с ДО начала боя (первый выстрел летит раньше ответа), входит в счёт; «стоп» и подобные — нет', () => {
+    const { L, at } = ledger();
+    at(10); L.myCast('Bombardo');
+    at(11); L.myCast('Stand'); // (a word of control: no weight)
+    at(12); L.foeCast('w');
+    assert.equal(L.summary('w').spells, 1);
+    const g = ledger();
+    g.at(0); g.L.myCast('Wind'); g.at(30); g.L.foeCast('z');
+    assert.equal(g.L.summary('z').spells, 0, 'давнее заклинание — не этого боя');
 });
