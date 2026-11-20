@@ -12,9 +12,9 @@ test('no spell: the wand goes; a held spell, a wand spell, an aimed spell: it do
     assert.ok(a.wandStowBlock('right'));
     assert.match(t.toasts[0], /стоп|концентрац/);
     a.wandStowBlock('right'); assert.equal(t.toasts.length, 1, 'the hint is not spammed');
-    assert.ok(make({ ...t, focus: { held: () => null }, wandMagic: { active: true } }).wandStowBlock('right'));
-    assert.ok(make({ ...t, focus: { held: () => null }, character: { aim: { right: {} } } }).wandStowBlock('right'));
-    assert.equal(make({ ...t, focus: { held: () => null }, character: { aim: { left: {} } } }).wandStowBlock('right'), '', 'the other hand\'s aim is not mine');
+    assert.ok(make({ ...t, focus: { held: () => null }, wandMagic: { light: { level: 1 } } }).wandStowBlock('right'), 'Lumos on the wand');
+    // (20.11, the author: «палочку нельзя положить» — the hand's aim is where ANY held wand points, set every frame: it must never block)
+    assert.equal(make({ ...t, focus: { held: () => null }, wandMagic: { light: null }, character: { aim: { right: { dir: {} }, left: { dir: {} } } } }).wandStowBlock('right'), '', 'a wand simply held goes away');
 });
 
 test('a second wand in the OTHER hand (a trophy) can be put away while a spell goes on the casting wand (the author 20.11)', () => {
