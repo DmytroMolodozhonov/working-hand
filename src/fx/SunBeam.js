@@ -260,8 +260,7 @@ export class SunBeam {
         if (this.t < 0) { this.t = 1.2; this.group.visible = true; if (o) this.group.position.copy(o); }
         if (o && d && !this.follow) {
             this.group.position.copy(o);
-            _q.setFromUnitVectors(UP, _d.copy(d).normalize());
-            this.group.quaternion.copy(_q);
+            this.group.quaternion.identity(); // (the light goes straight up, as for the caster — _followWand)
         }
     }
 
@@ -334,12 +333,11 @@ export class SunBeam {
             if (h) { o = h.origin; d = h.dir; }
         }
         if (!o || !d) return;
-        _p.copy(o); _d.copy(d).normalize();
-        if (_d.y < 0.05) _d.y = 0.05; // (a beam into the ground makes no sense: the lowest it goes is the horizon)
-        _d.normalize();
+        // (автор 20.11: основание луча идёт за кончиком палочки, а сам свет — строго вверх, к солнцу: он не качается вслед
+        //  за наклоном палочки)
+        _p.copy(o);
         this.group.position.lerp(_p, 0.85);
-        _q.setFromUnitVectors(UP, _d);
-        this.group.quaternion.slerp(_q, 0.5);
+        this.group.quaternion.slerp(_q.identity(), 0.5);
     }
 
     update(dt) {
