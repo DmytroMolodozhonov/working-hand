@@ -129,7 +129,7 @@ export class WandBelt {
                 const lookOk = this.lookingDown(TUCK_LOOK);
                 this._tuck[side] = !fresh && near && down && this._pushed[side] && this._calm[side] > CALM_S && lookOk ? this._tuck[side] + dt : 0;
                 if (rb && rb.dy > -0.7 && rb.dy < 0.5) this._diagLog(side, 'tuck', rb, ch.getHandWorldPosition(side, _v).applyMatrix4(_inv), { near, down, pushed: this._pushed[side], calm: +this._calm[side].toFixed(2), lookOk, fresh, tuck: +this._tuck[side].toFixed(2) });
-                if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
+                if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; if (inv.wandStowBlock?.(side)) continue; this._putAway(side); return; } // (a spell works: not tucked in — the hint says to stop it)
                 continue;
             }
             this._tuck[side] = 0;

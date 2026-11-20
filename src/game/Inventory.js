@@ -25,6 +25,7 @@
  * The «hand» cell shows what the hands hold. Keys 1–5 choose a slot too, 0 / ` — the free hand.
  */
 
+import { HELD } from './Concentration.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand, retireScroll, newUid } from './ItemTypes.js';
@@ -394,6 +395,25 @@ export class Inventory {
     }
 
     /** Is there room in the slots for this thing (a free slot, or room on a stack of it)? */
+    /**
+     * The wand is not put away while a spell works (the author 20.11: «если у меня концентрация или работающее заклинание — палочку в интерфейс не положить; подсказка:
+     * снимите концентрацию; любые заклинания»): a held spell (Concentration.held — water, Levitation, the shield, a beam…), the light on the wand, a spell being aimed.
+     * Returns the hint (once in a while) or '' when it may go. Pure reads: nothing else is touched.
+     */
+    wandStowBlock(side = null) {
+        const g = this.game;
+        let why = '';
+        try {
+            const held = g.focus?.held?.(), ch = g.character;
+            if (held) why = (HELD_NAME(held)) ;
+            else if (g.wandMagic?.active || g.spellBusy?.() || (side && ch?.aim?.[side])) why = 'заклинание';
+        } catch (e) { /* the check never breaks a hand */ }
+        if (!why) return '';
+        const now = performance.now();
+        if (now - (this._stowHintAt || -1e9) > 2500) { this._stowHintAt = now; g.hud?.toast?.(`🪄 Палочку не убрать, пока действует заклинание (${why}): сначала скажите «стоп» — снимите концентрацию`, 3200); }
+        return why;
+    }
+
     canStore(item) {
         return this._canSlots(item); // (the golden magic backpack takes nothing by itself: a thing goes into it only from a hand put behind the back — Items._stash)
     }
@@ -578,6 +598,7 @@ export class Inventory {
             const h = g.items?.held[side];
             // (the leading hand's wand goes only to the waistband: WandBelt; a second wand in the other hand — into a slot)
             if (!h || (h.item.kind === 'wand' && side === dom)) continue;
+            if (h.item.kind === 'wand' && this.wandStowBlock(side)) return;
             if (h.item.kind === 'coins' && this.purse.canTie(h.item)) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
             // (no room in the slots: it stays in the hand — a pouch, a scroll never vanish into a full pocket)
             if (!this.canStore(h.item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return; }
@@ -809,6 +830,7 @@ export class Inventory {
         }
         const h = g.items?.held[side];
         if (h && h.item.kind === 'wand') {
+            if (this.wandStowBlock(side)) return false; // (a spell works: the wand stays in the hand)
             if (!this.canStore(h.item)) { this.game.hud.toast?.('🪄 Палочка не помещается в карман: все ячейки заняты, она остаётся в руке'); return false; } // (never lost)
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
@@ -1427,3 +1449,4 @@ export class Inventory {
         if (typeof document !== 'undefined') document.getElementById('back-cells')?.remove();
     }
 }
+const HELD_NAME = (k) => (HELD[k]?.ru) || k;

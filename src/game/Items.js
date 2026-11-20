@@ -1714,6 +1714,7 @@ export class ItemSystem {
                 }
                 continue;
             }
+            if (h.item.kind === 'wand' && g.inventory?.wandStowBlock?.(sd)) { t[sd] = 0; continue; }
             t[sd] += dt;
             if (t[sd] < BACKPACK_WEAR.STASH_T) continue;
             t[sd] = 0;
