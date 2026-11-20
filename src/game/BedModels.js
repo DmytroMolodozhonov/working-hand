@@ -9,27 +9,56 @@
 
 import * as THREE from 'three';
 import { bedColorHex } from './BedRules.js';
+import { bedTexture } from './BedTextures.js';
 import { mergeParts } from '../core/MergeGeometry.js';
 
 export const BED = { W: 2.5, L: 5.5, top: 1.0, head: 2.1 };
 
 const _mats = new Map();
-function mat(color) {
-    if (!_mats.has(color)) {
-        const m = new THREE.MeshLambertMaterial({ color });
+function mat(color, kind = '') {
+    const key = kind ? kind + ':' + color : color;
+    if (!_mats.has(key)) {
+        const m = new THREE.MeshLambertMaterial({ color, map: kind ? bedTexture(kind) : null });
         m.userData.shared = true;
-        _mats.set(color, m);
+        _mats.set(key, m);
     }
-    return _mats.get(color);
+    return _mats.get(key);
 }
 const _geos = new Map();
+
+/** Flattened cloth boxes keep their dimensions and use soft corners and stitched face UVs. */
+function cushion(w, h, d) {
+    const key = 'cushion:' + w + ':' + h + ':' + d;
+    if (!_geos.has(key)) {
+        const geo = new THREE.BoxGeometry(w, h, d, 4, 4, 4);
+        const pos = geo.attributes.position, normal = geo.attributes.normal;
+        const radius = Math.min(h * .44, .13);
+        const inner = [w, h, d].map(n => n / 2 - radius);
+        const size = [w, h, d];
+        for (let i = 0; i < pos.count; i++) {
+            const at = [pos.getX(i), pos.getY(i), pos.getZ(i)].map((n, j) => {
+                const unit = n / size[j] * 2;
+                return Math.abs(unit) < .75 ? unit * inner[j] * 1.8 : n;
+            });
+            const core = at.map((n, j) => Math.max(-inner[j], Math.min(inner[j], n)));
+            const ray = at.map((n, j) => n - core[j]);
+            const length = Math.hypot(...ray);
+            pos.setXYZ(i, ...core.map((n, j) => n + radius * ray[j] / length));
+            normal.setXYZ(i, ...ray.map(n => n / length));
+        }
+        geo.userData.shared = true;
+        _geos.set(key, geo);
+    }
+    return _geos.get(key);
+}
+
 function boxGeo(w, h, d) {
     const k = `${w}|${h}|${d}`;
     if (!_geos.has(k)) { const b = new THREE.BoxGeometry(w, h, d); b.userData.shared = true; _geos.set(k, b); }
     return _geos.get(k);
 }
-function box(w, h, d, m, x, y, z, shadow = true) {
-    const b = new THREE.Mesh(boxGeo(w, h, d), m);
+function box(w, h, d, m, x, y, z, shadow = true, soft = false) {
+    const b = new THREE.Mesh(soft ? cushion(w, h, d) : boxGeo(w, h, d), m);
     b.position.set(x, y, z);
     b.castShadow = shadow;
     b.receiveShadow = true;
@@ -56,15 +85,15 @@ function bedShapes() {
 const UNIT = new THREE.BoxGeometry(1, 1, 1);
 
 /** The blanket material of a colour (shared). */
-export function blanketMaterial(color) { return mat(bedColorHex(color)); }
+export function blanketMaterial(color) { return mat(bedColorHex(color), 'quilt'); }
 
 /** One bed: a wooden frame, a white mattress, a pillow and a blanket in the bed's colour. */
 export function bedModel(color = 'white') {
-    const { W, L, top, head } = BED;
+    const { W, L, top } = BED;
     const g = new THREE.Group();
-    const wood = mat(0x8b5a2b), dark = mat(0x5a3a1e), sheet = mat(0xe2dac8), pillow = mat(0xffffff);
+    const wood = mat(0x956947, 'wood'), dark = mat(0x68442d, 'wood'), sheet = mat(0xe1d1b8, 'linen'), pillow = mat(0xf1e6d5, 'linen');
     const blanket = blanketMaterial(color);
-    const stripe = mat(new THREE.Color(bedColorHex(color)).multiplyScalar(0.72).getHex());
+    const stripe = mat(new THREE.Color(bedColorHex(color)).multiplyScalar(0.72).getHex(), 'linen');
     // (the pieces of one material are one shape, the same for every bed — one draw each: a castle's beds
     // drew 19 pieces apiece; legs, rails, caps — the dark wood; the frame, the head and foot boards — the light)
     const geo = _bedGeos || (_bedGeos = bedShapes());
@@ -79,11 +108,11 @@ export function bedModel(color = 'white') {
     part(geo.dark, dark);
     part(geo.wood, wood);
     // mattress, pillow, blanket (turned down at the top)
-    g.add(box(W - 0.16, 0.3, L - 0.44, sheet, 0, 0.85, 0));
-    g.add(box(W * 0.7, 0.26, 0.85, pillow, 0, top + 0.12, -L / 2 + 0.75));
+    g.add(box(W - 0.16, 0.3, L - 0.44, sheet, 0, 0.85, 0, true, true));
+    g.add(box(W * 0.7, 0.26, 0.85, pillow, 0, top + 0.12, -L / 2 + 0.75, true, true));
     const bz = L / 2 - 0.22 - L * 0.31;
     const b1 = part(geo.blanket, blanket);
-    const b2 = box(W - 0.04, 0.14, 0.32, mat(0xfbf8f0), 0, top + 0.07, L / 2 - 0.22 - L * 0.62 + 0.14);
+    const b2 = box(W - 0.04, 0.14, 0.32, mat(0xe2d2b8, 'linen'), 0, top + 0.07, L / 2 - 0.22 - L * 0.62 + 0.14);
     const s1 = box(W - 0.02, 0.13, 0.18, stripe, 0, top + 0.045, bz + L * 0.18);
     g.add(b2, s1);
     g.userData.blanket = [b1];
@@ -95,7 +124,7 @@ export function bedModel(color = 'white') {
 export function paintBed(model, color) {
     const m = blanketMaterial(color);
     for (const b of model.userData.blanket || []) b.material = m;
-    if (model.userData.stripe) model.userData.stripe.material = mat(new THREE.Color(bedColorHex(color)).multiplyScalar(0.72).getHex());
+    if (model.userData.stripe) model.userData.stripe.material = mat(new THREE.Color(bedColorHex(color)).multiplyScalar(0.72).getHex(), 'linen');
 }
 
 /** A fluffy white ball of wool (~0.6 m — the hero is big). */
