@@ -3664,6 +3664,7 @@ export class Game {
             this.vampire?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); // (the count and his bats burn as any)
             if (this.iceCastle?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId)) hit = true; // (the Ice Castle's creatures: fire is what they fear — ×2)
             if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId, {fire:true,kind:'Inferno'})) hit = true; // villagers, knights, wizards
+            this.ships?.crew?.hitRay(o, d, len, 0.4, 1, casterId, 'Inferno');
             if (this.livingTrees?.burnAlong(o, d, len, casterId)) hit = true; // (fire is what kills a living tree)
             if (this.carriages?.burnAlong(o, d, len, casterId)) hit = true; // (a cart on the road catches fire)
         }

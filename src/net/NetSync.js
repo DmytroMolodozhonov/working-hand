@@ -588,8 +588,8 @@ export class NetSync {
     }
 
     /** «Nihilis Atra»: my cone of light (the same cone on every computer — Nihilis.js). */
-    nihilis(origin, dir) {
-        this.net.send({ t: 'nhl', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)] }, true);
+    nihilis(origin, dir, casterId = this.me) {
+        this.net.send({ t: 'nhl', by: casterId, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)] }, true);
     }
 
     /** «Настоящий тёмный маг» (DarkLord.js): my rite of turning — {k: 'begin' | 'at' | 'end', id, p, t}: the others see the ball of darkness round me. */

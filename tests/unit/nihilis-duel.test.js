@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Duel, DUEL_SPELLS } from '../../src/game/Duel.js';
-import { knowsNihilis } from '../../src/game/MonsterFear.js';
+import { knowsInferno, knowsNihilis } from '../../src/game/MonsterFear.js';
 import { WizardFight } from '../../src/game/WizardFight.js';
 import { Nihilis } from '../../src/game/Nihilis.js';
 import { knows } from '../../src/game/SpellBook.js';
@@ -29,20 +29,46 @@ test('the spoken Nihilis actually casts a paid duel bolt at a wizard and keeps i
     }
 });
 
-test('one persistent knowledge roll: weak 50%, medium 80%, strong/head/Saviour 100%; both versions use the same scroll', () => {
-    for (const [rank, expected] of [['novice', 0.5], ['adept', 0.8], ['teacher', 1], ['elder', 1], ['master', 1], ['savior', 1]]) {
-        let n = 0;
+test('one persistent knowledge roll: weak 30%, medium 80%, strong/head/Saviour 100%; both versions use the same scroll', () => {
+    for (const [rank, expected] of [['novice', 0.3], ['adept', 0.8], ['teacher', 1], ['elder', 1], ['master', 1], ['savior', 1]]) {
+        let n = 0, fire = 0;
         for (let i = 0; i < 10000; i++) {
             const v = { id: 'wizard' + i, rank, ...(rank === 'savior' ? { savior: 0 } : {}) };
             assert.equal(knowsNihilis(v), knowsNihilis(v));
             n += knowsNihilis(v);
+            fire += knowsInferno(v);
         }
         assert.ok(Math.abs(n / 10000 - expected) < 0.02, rank + ': ' + n);
+        assert.ok(Math.abs(fire / 10000 - (rank === 'novice' ? 0.8 : 1)) < 0.02, rank + ': Inferno ' + fire);
     }
     assert.equal(knows('NihilisDuel', { mode: 'freeworld', spells: { Nihilis: true } }), true);
     assert.equal(knows('NihilisDuel', { mode: 'freeworld' }), false);
     assert.equal(NPC_COST.NihilisDuel, 40);
     assert.ok(DUEL_SPELLS.NihilisDuel);
+});
+
+test('a wizard answers a tree with paid Inferno and a skeleton with the paid Nihilis cone', () => {
+    for (const [skel, expected, cost] of [[false, 'Inferno', 10], [true, 'Nihilis', 40]]) {
+        const casts = [], target = { skel };
+        const fight = new WizardFight({
+            life: {},
+            game: {
+                character: { group: { position: new THREE.Vector3() } },
+                duel: { _creature: () => target, _creaturePoint: (_, p) => p.set(0, 3, -8), clashes: [] },
+                spells: { cast: (name) => casts.push(name) },
+                nihilis: { fire: () => casts.push('Nihilis') },
+            },
+        });
+        fight.clearShot = () => true;
+        const wizard = { id: 'teacher', rank: 'teacher', x: 0, y: 0, z: 0, yaw: 0, W: { cast: 1 },
+            mana: 80, maxMana: 80, group: { visible: false }, model: {} };
+        assert.equal(fight.threat(wizard, { k: 't', id: 'attacker' }), true);
+        assert.equal(wizard.prep.spell, expected);
+        wizard.prep.t = 0;
+        assert.equal(fight._prepTick(wizard, 0.01), true);
+        assert.deepEqual(casts, [expected]);
+        assert.equal(wizard.mana, 80 - cost);
+    }
 });
 
 test('NPC detects the existing visible threshold 41; a cleaned skin hides even true darkness 100', () => {
