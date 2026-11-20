@@ -73,7 +73,8 @@ export function waterAt(t, x, z, y) {
     if (t.get(ix, f + 1, iz) !== BLOCK.WATER) return null;
     let n = 1;
     while (n < 64 && t.get(ix, f + 1 + n, iz) === BLOCK.WATER) n++; // (the open sea ~50 deep)
-    return { surface: f + n - 0.5, bottom: f - 0.5, depth: n, floor: f };
+    const surface = t.waterFaceY?.(ix, f + n, iz) ?? f + n - 0.5, bottom = f - 0.5;
+    return { surface, bottom, depth: surface - bottom, floor: f };
 }
 
 /** Deep water (off the feet) at (x, z) for feet at `y`: no ground to walk on. Cheap (1–4 reads). */
@@ -82,8 +83,9 @@ export function deepAt(t, x, z, y, deep = CSWIM.DEEP) {
     const ix = Math.round(x), iz = Math.round(z);
     if (!landMade(t, ix, iz)) return false;
     const f = t.floorBelow(ix, iz, Math.floor(y + 1.5) + 1);
-    for (let k = 1; k <= deep; k++) if (t.get(ix, f + k, iz) !== BLOCK.WATER) return false;
-    return true;
+    const layers = Math.ceil(deep);
+    for (let k = 1; k <= layers; k++) if (t.get(ix, f + k, iz) !== BLOCK.WATER) return false;
+    return !t.waterFaceY || t.waterFaceY(ix, f + layers, iz) - (f - .5) >= deep;
 }
 
 /** Where the body (feet) floats in this water: `float` m under the surface (a beast: its legs under). */

@@ -196,6 +196,7 @@ export class NetSync {
             t: 'welcome',
             config: sanitizeConfig(g.config),
             explosions: g.explosions,
+            flood: g.world.terrain?.data?.floodSnapshot?.(),
             chests: [...new Set([...g.chests.filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
             airObjects: g.elementalMages?.objects.snapshot() || [],
             items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r3(L.model.position.x), r3(L.model.position.y), r3(L.model.position.z)], h: L.hover ? 1 : 0, r: L.rest ? 1 : 0 })) : [],
@@ -288,6 +289,7 @@ export class NetSync {
                 g.explosions.push(e);
             }
         });
+        g.world.terrain?.data?.restoreFlood?.(msg.flood);
         if (msg.rebuild) g.castleLife?.rebuild.restore(msg.rebuild); // (after the blasts: what was put back since)
         if (msg.ice && msg.ice.length) g.applyIce(msg.ice);
         for (const id of msg.chests || []) {
@@ -454,6 +456,14 @@ export class NetSync {
     /** Blocks I placed / removed (building, gathering, melting ice). */
     blocks(list) {
         for (let i = 0; i < list.length; i += 400) this.net.send({ t: 'blk', l: list.slice(i, i + 400) }, true);
+    }
+
+    floodPatch(list) {
+        if (this.net.isHost) for (let i = 0; i < list.length; i += 300) this.net.send({ t: 'flood', l: list.slice(i, i + 300) }, true);
+    }
+
+    floodInlet(inlet) {
+        if (this.net.isHost) this.net.send({ t: 'floodin', inlet }, true);
     }
 
     /**
@@ -1104,6 +1114,8 @@ export class NetSync {
                 break;
             }
             case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
+            case 'flood': if (!this.net.isHost && m.from === 'H' && Array.isArray(m.l)) g.terrain?.data?.applyFloodPatch?.(m.l.slice(0, 300), true); break;
+            case 'floodin': if (!this.net.isHost && m.from === 'H') g.fallFx?.breach(m.inlet); break;
             case 'fal': if (m.by !== this.me && Array.isArray(m.f)) { // (a building's pieces seen falling: its blocks are where they landed already — 'blk')
                 const list = m.f.slice(0, 200).filter((f) => Array.isArray(f?.c) && Array.isArray(f.l) && Array.isArray(f.b))
                     .map((f) => ({ cells: f.c.slice(0, 4000), d: +f.d || 0, landed: f.l.slice(0, 4000), broken: f.b.slice(0, 4000), stage: Math.min(10, f.s | 0), ...(f.x ? { crushed: true } : {}), ...(f.tl && (f.tl.axis === 'x' || f.tl.axis === 'z') ? { tilt: { axis: f.tl.axis, sg: f.tl.sg > 0 ? 1 : -1, edge: +f.tl.edge || 0, Lb: +f.tl.Lb || 0, d2: Math.min(300, +f.tl.d2 || 0) } } : {}) }));

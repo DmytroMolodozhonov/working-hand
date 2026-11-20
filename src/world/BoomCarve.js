@@ -12,20 +12,16 @@
  * a great mountain is not cut like a cake, its torn side falls back steeply; beyond that its flanks stand.
  *
  * It is a lot of blocks (a whole mountain: hundreds of thousands), so it is done as a job, a piece at a time
- * within a time budget each frame (boomStep): the columns nearest the middle first (it bursts outwards), then
- * the sea comes into what was opened under its level (a flood from the water's edge, a cell at a time), then
- * what was left hanging at the crater's rim (a castle wall cut in two) is found and falls (Collapse.js).
+ * within a time budget each frame (boomStep): the columns nearest the middle first, then whatever
+ * hangs at the rim falls (Collapse.js). The new openings are then passed to the shared flood queue.
  * The result does not depend on how the job was cut into frames: every computer gets the same crater, and a
  * save or a late joiner replays it whole (runBoom).
  *
  * Not a drawn bowl (the author: «слишком идеальная»): its rim is ragged (wider here, narrower there), its floor
  * uneven and tilted, rock knobs and ledges left standing, scree piled at the foot of its walls and heaps of rubble
  * on its floor (craterFloor, rubbleAt) — all from the crater's place, so every computer gets the same one.
- * Under the sea's level the sea comes in slowly — a front of water from the shore across the crater over a few
- * seconds (boomStep's `flow`), and near the sea that water is the sea's own (its columns marked as sea: the
- * waving sea surface is drawn there, not a lake's flat water).
  *
- *   boomJob(data, {p: [x, y, z], b: base, r: R}) → job      boomStep(job, ms, flow) → true when done
+ *   boomJob(data, {p: [x, y, z], b: base, r: R}) → job      boomStep(job, ms) → true when done
  *   runBoom(data, e) → job (done)                          boomFloor(d, base, R)
  */
 
@@ -136,9 +132,7 @@ export function boomJob(data, e) {
     return {
         data, R, base: e.b, cx: Math.round(e.p[0]), cz: Math.round(e.p[2]),
         cols: boomColumns(R), i: 0, phase: 'carve', removed: 0, castle: 0, look: craterLook(Math.round(e.p[0]), Math.round(e.p[2])),
-        wet: [], q: null, qi: 0, rimI: 0, search: null, falls: [], samples: [], spray: [], filled: 0, dug: false, done: false, gone: [],
-        // (near the sea its water is the sea's: drawn by the waving sea surface — Terrain.skipSeaTop, SeaSurface)
-        sea: !!(data.seas?.signedDist && data.seas.signedDist(Math.round(e.p[0]), Math.round(e.p[2])) > -(boomReach(R) + 10)),
+        wet: [], rimI: 0, search: null, falls: [], samples: [], dug: false, done: false, gone: [],
     };
 }
 
@@ -146,21 +140,21 @@ const isBuilt = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE; // (Terrain.isCast
 const RUBBLE = [BLOCK.GRAVEL, BLOCK.STONE, BLOCK.GRAVEL, BLOCK.DIRT];
 
 /**
- * Work on the job for up to `ms` milliseconds (Infinity: to the end); `flow`: at most this many cells of water
- * come in now (the sea pours in over seconds; Infinity: at once). @returns true when it is done.
+ * Work on the crater for up to `ms` milliseconds.
+ * @returns true when the crater is done.
  */
-export function boomStep(job, ms = 3, flow = Infinity) {
+export function boomStep(job, ms = 3) {
     if (job.done) return true;
     // (the enchanted stone breaks only near the crater's middle — EnchantedStone.ENCHANT_BREAKERS.Boom)
-    return breaking(job.data, 'Boom', job.cx, job.cz, () => carveStep(job, ms, flow));
+    return breaking(job.data, 'Boom', job.cx, job.cz, () => carveStep(job, ms));
 }
 
-function carveStep(job, ms, flow) {
+function carveStep(job, ms) {
     const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const over = () => ms !== Infinity && now() - t0 > ms;
     const data = job.data, C = job.cols;
-    let k = 0, poured = 0;
+    let k = 0;
     // 1) the columns, the middle first
     while (job.phase === 'carve') {
         if (job.i >= C.inner) { job.phase = 'rim'; break; }
@@ -219,45 +213,15 @@ function carveStep(job, ms, flow) {
         if (data.settling) data.settling.add(sj);
         else { sj.step(Infinity); job.falls.push(...sj.falls); }
     }
-    // 5) the sea comes into what was opened under its level (only from where water already is)
+    // 5) hand the crater's openings to the same hydrology as ordinary blasts.
     if (job.phase === 'flood') {
-        const R2 = (boomReach(job.R) + 1) ** 2;
-        // (filled as it is reached: each cell once; first the cells opened beside the water — a piece at a time)
-        if (!job.q) { job.q = []; job.wi = 0; }
-        const q = job.q, w = job.wet;
-        while (w && job.wi < w.length) {
-            const x = w[job.wi++], L = w[job.wi++], z = w[job.wi++];
-            if (data.get(x, L, z) === BLOCK.AIR && wetNear(data, x, L, z)) { data.fillWater(x, L, z, job.sea); q.push(x, L, z); job.filled++; }
-            if ((++k & 255) === 0 && over()) return false;
-        }
+        data._flood?.(job.wet);
         job.wet = null;
-        while (job.qi < q.length) {
-            if (poured >= flow) return false; // (the rest of the water comes in the next frames)
-            const x = q[job.qi++], L = q[job.qi++], z = q[job.qi++];
-            for (let n = 0; n < 5; n++) {
-                const nx = x + (n === 0 ? 1 : n === 1 ? -1 : 0), nz = z + (n === 2 ? 1 : n === 3 ? -1 : 0), nL = n === 4 ? L - 1 : L;
-                if (nL > 0 || nL <= MIN_LAYER) continue;
-                if ((nx - job.cx) ** 2 + (nz - job.cz) ** 2 > R2) continue;
-                if (data.get(nx, nL, nz) !== BLOCK.AIR) continue;
-                data.fillWater(nx, nL, nz, job.sea);
-                q.push(nx, nL, nz);
-                if (nL === 0 && job.spray.length < 3 * 12 && ((nx * 7 + nz * 3) & 15) === 0) job.spray.push(nx, nL, nz); // (the front of the water: its spray — Boom.js)
-                job.filled++; poured++;
-            }
-            if ((++k & 63) === 0 && over()) return false;
-        }
-        job.q = null;
         job.phase = 'done';
         job.done = true;
     }
     return job.done;
 
-}
-
-/** Is there water beside (or above) this cell? */
-function wetNear(data, x, L, z) {
-    const W = BLOCK.WATER;
-    return data.get(x, L + 1, z) === W || data.get(x + 1, L, z) === W || data.get(x - 1, L, z) === W || data.get(x, L, z + 1) === W || data.get(x, L, z - 1) === W;
 }
 
 /** A saved «Бум» (a save, a late joiner): the whole crater at once. */

@@ -62,6 +62,10 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     const cx = 5, cz = -3, x0 = cx * 32, z0 = cz * 32;
     for (let x = x0 + 26; x < x0 + 38; x++) for (let L = 0; L < 4; L++) here.set(x, here.topLayer(x, z0 + 10) + 1 + L, z0 + 10, 27);
     for (let x = x0 + 3; x < x0 + 6; x++) for (let z = z0 + 3; z < z0 + 6; z++) here.set(x, here.topLayer(x, z), z, 0);
+    for (const x of [x0 + 31, x0 + 32]) {
+        const top = here.topLayer(x, z0 + 1);
+        here.setFloodAmount(x, top + 1, z0 + 1, x === x0 + 31 ? 183 : 184);
+    }
     const chunks = [];
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
         const c = here.chunk(cx + dx, cz + dz);
@@ -74,6 +78,10 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies', 'wet']) same(got.arrays[k][f], want[k][f], `rebuilt ${k}.${f}`);
     // and the worker's own chunks are as generated again afterwards
     const fresh = make();
+    await self.onmessage({ data: { type: 'water-ground', id: 12, key: 'flood', cx, cz } });
+    const waterGround = sent.pop();
+    assert.equal(waterGround.type, 'water-ground');
+    same(waterGround.chunk.blocks, fresh.chunk(cx, cz).blocks, 'flood ground without meshing');
     await self.onmessage({ data: { type: 'build', id: 2, key: 'k2', cx, cz, fcx: cx, fcz: cz, R: 4 } });
     same(sent.pop().chunk.blocks, fresh.chunk(cx, cz).blocks, 'the worker forgot the changed copy');
     // the grass of the changed chunk
