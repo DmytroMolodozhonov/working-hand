@@ -1,5 +1,6 @@
 /** Host-driven earth discipline. Real terrain, shared Ground Vortex stones/flights, ordinary NPC bodies/armour/death. */
 import * as THREE from 'three';
+import { foeSet } from './FightLedger.js';
 import { elementalEndurance, REGEN, KITE } from './ElementalRules.js';
 import { EARTH as E, EARTH_PHASES, EARTH_STRIKES, EARTH_ATTACKS, EARTH_SHELL, WALL_COUNT, ELEMENTAL_BARE_HAND, earthSlot, earthBlockHit } from './EarthMagicRules.js';
 import { newSwarm } from './GroundVortex.js';
@@ -204,7 +205,7 @@ export class EarthMages {
   else if(a.phase==='orbit'&&!a.aggr)this._reposition(v,foe,dt,false); // (a strong foe: no hopping about — he stands and strikes)
   v.mode=modeOf(a.phase);L._ground(v);return true;
  }
- _engaged(v){if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
+ _engaged(v){if(v.foe)foeSet(v).add(v.foe);}
  _stitch(v,foe){
   const g=this.game,data=g.terrain?.data;if(!data)return false;
   const x=Math.round(v.x),z=Math.round(v.z);if(data.landMade&&!data.landMade(x,z))return false;

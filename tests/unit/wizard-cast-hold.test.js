@@ -71,27 +71,31 @@ test('the wand counts in a duel as everywhere: ×1.15 and its own bonuses; a wiz
     assert.equal(k(null, 5, wiz), 1);
 });
 
-test('«дуэльное мастерство»: +5 for a duel won, +7 and a quarter of the beaten mastery to the death; counted as mana in a duel; death takes it into the body', async () => {
+test('«дуэльное мастерство»: grows by the same share as the prize of the fight (FightLedger.fightMastery); counted as mana in a duel; death takes it into the body', async () => {
     const { Mana } = await import('../../src/game/Mana.js');
+    const { fightMastery } = await import('../../src/game/FightLedger.js');
     const { captureLegacy, absorbLegacy } = await import('../../src/game/Legacy.js');
     const { Duel } = await import('../../src/game/Duel.js');
     const { duelPower } = await import('../../src/game/WizardAI.js');
     const g = { combat: { enabled: true, fatigue: 100, maxFatigue: 100, hp: 20, maxHp: 20 }, hud: {}, remotes: new Map(), config: { mode: 'freeworld' } };
     const M = g.mana = new Mana(g);
-    M.duelWonAlive(7, Math.random, 100); M.duelWonAlive(7, Math.random, 100); M.duelWon(500, 8, null, 250);
-    assert.equal(M.mastery, 5 + 5 + 7 + 63, 'a duel won: +5 (the same foe again: +5); the Master (mastery 250) to the death: 7 + a quarter of 250');
-    { const M3 = new Mana(g); M3.masteryWon(9, true, 500, 250, false); assert.equal(M3.mastery, 5 + 38, 'killed without a clash: 5 + 15% of 250'); }
+    const small = fightMastery(5, 0), master = fightMastery(5, 250);
+    M.duelWonAlive(7, Math.random, 100, null, true); M.duelWonAlive(7, Math.random, 100, null, true); M.duelWon(500, 8, null, 250);
+    assert.ok(M.mastery >= small + master, 'an arena win; the same foe again — nothing (once per opponent); the Master (mastery 250) killed in an honest fight: at least the share of 5% (the underdog bonus adds)');
+    assert.ok(master > small, 'a stronger beaten one gives more');
+    { const M3 = new Mana(g); M3.masteryWon(9, true, 500, 250, false); assert.equal(M3.mastery, 5 + 38, 'the old way (no share given): killed without a clash: 5 + 15% of 250'); }
+    const had = M.mastery;
     const s = Duel.prototype._strength.call({ me: 'me', game: g, _npcWizard: () => null, _mastery: Duel.prototype._mastery }, 'me', 0);
-    assert.equal(s, duelPower(100 + 80, 1));
+    assert.equal(s, duelPower(100 + had, 1));
     const rec = captureLegacy(g);
     M.onDeath();
     assert.equal(M.mastery, 0);
     absorbLegacy(g, rec);
-    assert.equal(M.mastery, 80);
-    M.duelWonAlive(7, Math.random, 100);
-    assert.equal(M.mastery, 85);
+    assert.equal(M.mastery, had);
+    M.duelWonAlive(7, Math.random, 100, null, true);
+    assert.ok(M.mastery >= had + small);
     const M2 = new Mana(g); M2.restore(M.snapshot());
-    assert.equal(M2.mastery, 85);
+    assert.equal(M2.mastery, M.mastery);
 });
 
 test('before every spell a wizard says it — about a second, standing, facing the foe — only then the charge flies', async () => {

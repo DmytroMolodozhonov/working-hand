@@ -497,7 +497,7 @@ export class WizardLife {
     /**
      * A fight won WITHOUT a beam clash and without a kill (the author 19.11: the wizard cast first, I answered with «Protection», then beat him — no part of
      * his power came to me): a wizard who has cast at ME and is now knocked down (stunned, frozen, lifted, in claws) or hurt to a third of his health has lost the
-     * fight. Once per wizard: Mana.duelWonAlive (+1…+3 cells, the mastery) — it is also once per opponent in the player's life.
+     * fight. Once per wizard: Mana.duelWonAlive (the prize by the beauty of the fight — FightLedger) — it is also once per opponent in the player's life.
      */
     beatenCheck(v) {
         const g = this.game, me = g.localId;

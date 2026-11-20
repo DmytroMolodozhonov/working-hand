@@ -238,3 +238,15 @@ test('a weapon in a cave is held up by the CAVE floor, not pushed through the ro
     assert.equal(contactAgainstWorld(new THREE.Vector3(0, 3, 0), 0.3, coll, n), 0, 'above the cave floor: free');
     assert.ok(contactAgainstWorld(new THREE.Vector3(0, 1.9, 0), 0.3, coll, n) > 0 && n.y === 1, 'in the cave floor: pushed up by that floor only');
 });
+
+test('помощь прицела: далёкая свинья в стороне от линии руки — не цель; рядом и близко — цель (автор 20.11)', async () => {
+    const { pickBody } = await import('../../src/game/Duel.js');
+    const THREE = await import('three');
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const body = (x, z, r = 0.8) => ({ kind: 'a', id: 'pig', a: V(x, 1, z), b: V(x, 1, z), r });
+    const o = V(0, 1, 0), d = V(0, 0, -1);
+    assert.equal(pickBody(o, d, [body(15, -100)], 200), null, '15 м в сторону на сотне метров: ровно «мимо» — не цель');
+    assert.ok(pickBody(o, d, [body(1.5, -100)], 200), 'в двух метрах от линии: цель');
+    assert.ok(pickBody(o, d, [body(1.2, -8)], 200), 'близко, в стороне на метр: цель (как раньше)');
+    assert.ok(pickBody(o, d, [body(0, -150)], 200), 'прямо на линии: цель на любом расстоянии');
+});

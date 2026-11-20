@@ -30,6 +30,7 @@
  */
 
 import { foeRef } from './BrawlRules.js';
+import { foeSet } from './FightLedger.js';
 import * as THREE from 'three';
 import { SAVIOR, SAVIOR_SPECIAL } from './SaviorRules.js';
 import { duelRange, emptyRange } from './DuelRange.js';
@@ -588,7 +589,7 @@ export class WizardFight {
         // (a moment more: the line may clear; the target himself is never «in the way»)
         if (!this._cast(v, P.spell, P.foe, fp, P.vs, P.at)) return true; // (not facing it fully yet: still turning)
         // A noticed foe is not a fight: only a spell actually released at this player counts.
-        if (!P.at && P.foe != null) (v.castAtPlayers || (v.castAtPlayers = new Set())).add(P.foe);
+        if (!P.at && P.foe != null) foeSet(v).add(P.foe);
         v.prep = null;
         v.mana -= P.cost;
         v.castCd = Math.max(v.castCd ?? 0, P.cd);

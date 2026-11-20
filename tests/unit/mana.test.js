@@ -57,7 +57,7 @@ test('mana: the table — every spell matchSpell / SPELL_COST knows has its bonu
     assert.ok(firstSpellGain('BombardoMaxima') > firstSpellGain('Bombardo'));
 });
 
-test('mana: a duel won — 45% of (the opponent\'s maximum − 30), at least +1; a magical creature once per kind; a crystal +1 cell', () => {
+test('mana: a duel won — by the beauty of the fight (FightLedger: 5…45% of the maximum above 30), at least +1; a magical creature once per kind; a crystal +1 cell', () => {
     assert.equal(duelGain(30), 1);
     assert.equal(duelGain(20), 1);
     assert.equal(duelGain(35), 2, '2.25 → 2');
@@ -66,28 +66,29 @@ test('mana: a duel won — 45% of (the opponent\'s maximum − 30), at least +1;
     assert.equal(duelGain(530), 225);
     assert.equal(killGain(530), 125);
     const { g, toasts } = fakeGame();
-    assert.equal(g.mana.duelWon(40), 5);
-    assert.ok(toasts.some((t) => t.includes('соперник повержен: +5')));
+    assert.equal(g.mana.duelWon(40), 1, 'an honest fight with nothing in it: 5% of (40 − 30) = 0,5 → at least +1');
+    assert.ok(toasts.some((t) => t.includes('соперник повержен: +1')));
     assert.equal(g.mana.magicKill('spider'), 20);
     assert.equal(g.mana.magicKill('spider'), 0, 'the second spider: nothing');
     assert.equal(g.mana.magicKill('pegasus'), MAGIC_KILL.pegasus.n);
     assert.ok(toasts.some((t) => t.includes('Пегас: +8')));
     assert.equal(g.mana.magicKill('cow'), 0, 'an ordinary animal');
     g.mana.crystal();
-    assert.equal(g.mana.max, 30 + 5 + 20 + 8 + 1);
+    assert.equal(g.mana.max, 30 + 1 + 20 + 8 + 1);
     assert.equal(g.combat.fatigue, g.mana.max, 'the mana in it grows too');
 });
 
-test('mana: a duel won without a kill — 25% of his maximum above 30 (at least +1) (the author 19.11); each opponent counts once (a win once, a kill once)', () => {
+test('mana: a win with the opponent alive pays like a kill — 5% of his maximum above 30 for an honest fight with nothing in it (the arena counts as honest); each opponent counts once', () => {
     const { g } = fakeGame();
-    assert.equal(g.mana.duelWonAlive('w1', () => 0, 70), 10, '25% of (70 − 30)');
-    assert.equal(g.mana.duelWonAlive('w1', () => 0.99, 70), 0, 'the same one lifted again: nothing');
-    assert.equal(g.mana.duelWonAlive('w2', () => 0.99), 1, 'a plain 30: at least +1');
-    assert.equal(g.mana.duelWon(80, 'w1'), 23, 'then killed in a duel: the kill still counts');
-    assert.equal(g.mana.duelWon(80, 'w1'), 0, 'killed again (a player came back): nothing');
-    assert.equal(g.mana.max, 30 + 10 + 1 + 23);
+    assert.equal(g.mana.duelWonAlive('w1', () => 0, 70), 0, 'not an honest fight (he never fought me): nothing');
+    assert.equal(g.mana.duelWonAlive('w1', () => 0, 70, null, true), 6, 'the arena round: 5% + the underdog bonus (he is 2,3 times stronger: +9,8%) = 14,8% of (70 − 30)');
+    assert.equal(g.mana.duelWonAlive('w1', () => 0.99, 70, null, true), 0, 'the same one again: nothing');
+    assert.equal(g.mana.duelWon(80, 'w1'), 0, 'then killed: already paid for him — once per opponent');
+    const before = g.mana.max;
+    const w2 = g.mana.duelWon(80, 'w2');
+    assert.ok(w2 >= 3 && g.mana.max === before + w2, 'a new one: paid (5% + the underdog bonus of 80 against my ' + before + ')');
     g.mana.onDeath();
-    assert.equal(g.mana.duelWonAlive('w1', () => 0, 70), 10, 'after my death: earned again');
+    assert.equal(g.mana.duelWonAlive('w1', () => 0, 70, null, true), 6, 'after my death: earned again');
 });
 
 test('mana: which animals are magical', () => {
@@ -121,7 +122,7 @@ test('mana: death → back to 30 (a burnt strength scroll stays)', () => {
     g.combat.addMaxFatigue(7); // a strength scroll
     g.mana.success('Bombardo');
     g.mana.duelWon(40);
-    assert.equal(g.mana.max, 44);
+    assert.equal(g.mana.max, 40, '30 + the scroll 7 + Bombardo 2 + the fight (5% of 10 → +1)');
     g.combat.die(null, 'test');
     g.combat.revive();
     assert.equal(g.mana.max, 37, '30 + the scroll');
@@ -174,18 +175,21 @@ test('mana: a duel charge that hits counts (the first time); a clash won + the o
     duel._finishClash({ a, b, marks: [0xffffff, 0xffffff] }, 'enemy');
     assert.equal(g.mana.max, 42, 'Avada hit: its first time +10');
     assert.equal(duel.opponentDied('someone-else'), false, 'no clash won against him: not a duel');
-    assert.equal(g.mana.log.at(-1).why, 'killWiz');
-    assert.equal(g.mana.max, 43, 'a kill without a duel: 25% of nothing, still +1');
+    assert.equal(g.mana.log.at(-1).why, 'duel');
+    assert.equal(g.mana.max, 43, 'a kill without a clash with him: 5% of nothing, still +1');
     assert.equal(duel.opponentDied('enemy', 40), true);
     assert.equal(g.mana.log.at(-1).why, 'duel');
-    assert.equal(g.mana.max, 48, 'a real duel won against a maximum of 40: +5');
+    assert.equal(g.mana.max, 44, 'a real duel won against a maximum of 40: 5% + the clash 2% = 7% of 10 → +1');
     assert.equal(duel.opponentDied('enemy'), false, 'only once');
-    assert.equal(g.mana.max, 48, 'and no 25% on top');
-    duel._won = { id: 'wiz7', at: performance.now() - 9000 }; // (a clash won 9 s ago, he still lives)
+    assert.equal(g.mana.max, 44, 'and nothing on top');
+    duel._won = { id: 'wiz7', at: performance.now() - 9000 }; // (a clash won 9 s ago, he still lives — but there is no account of a fight with him: not an honest one)
+    duel._wonAlive();
+    assert.equal(g.mana.max, 44);
+    assert.equal(duel._won, null);
+    g.mana.fight.clash('wiz8'); duel._won = { id: 'wiz8', at: performance.now() - 9000, max: 90 }; // (a clash with him: an honest fight)
     duel._wonAlive();
     assert.equal(g.mana.log.at(-1).why, 'duelAlive');
-    assert.ok(g.mana.max >= 49 && g.mana.max <= 51);
-    assert.equal(duel._won, null);
+    assert.ok(g.mana.max > 44 + 4, 'a clash (7%) + the underdog bonus (90 against my ~50) of (90 − 30): more than 4 cells: ' + g.mana.max);
 });
 
 test('mana: the giant spider gives +20 to whoever killed it — the first one only', () => {
@@ -231,13 +235,13 @@ test('mana: space +20 the first time, each new planet +50 (once per life); death
     assert.equal(c.mana.discover('space'), 0, 'Creative: mana does not count');
 });
 
-test('mana: a wizard killed without a duel — 25%, once per opponent, never twice with a duel; none in Creative', () => {
+test('mana: a wizard killed in an honest fight — 5% at least, once per opponent, never twice; none in Creative', () => {
     const { g } = fakeGame();
-    assert.equal(g.mana.killWon(530, 'k1'), 125);
+    assert.equal(g.mana.killWon(530, 'k1'), 100, '5% + the underdog bonus (he is 17 times stronger: the top +15%) = 20% of (530 − 30)');
     assert.equal(g.mana.killWon(530, 'k1'), 0, 'the same one again: nothing');
     assert.equal(g.mana.duelWon(530, 'k1'), 0, 'already paid: no top-up');
-    assert.equal(g.mana.duelWon(530, 'k2'), 225);
-    assert.equal(g.mana.killWon(530, 'k2'), 0, 'a duel paid: no 25% on top');
+    assert.ok(g.mana.duelWon(530, 'k2') > 0);
+    assert.equal(g.mana.killWon(530, 'k2'), 0, 'paid: nothing on top');
     g.duel = { _won: null };
     const cre = fakeGame('creative').g;
     assert.equal(cre.mana.killWon(530, 'k3'), 0);
@@ -270,8 +274,29 @@ test('NPC kill: noticing is not combat; host and guest receive cells only after 
             applyCredit(g, packets[0][1]);
         }
         const fought = target === 'killer';
-        assert.equal(g.mana.max, fought ? 155 : 30, `${guest ? 'guest' : 'host'}: shot at ${target}`);
+        assert.equal(g.mana.max, fought ? 130 : 30, `${guest ? 'guest' : 'host'}: shot at ${target}`);
         assert.equal(g.mana.mastery > 0, fought);
         if (!fought) assert.equal(g.mana.log.length, 0, 'no cells, flow or success notification for an unearned kill');
     }
+});
+
+test('незаконченный бой (убежал, NPC потерял): половина награды, тихо; потом победа над ним доплачивает остаток; второй раз ничего (автор 20.11)', () => {
+    const { g } = fakeGame();
+    let t = 0; g.mana.fight.now = () => t;
+    t = 0; g.mana.fight.foeCast('w1', 130);
+    t = 6; g.mana.fight.foeCast('w1', 130);
+    t = 30; for (const a of g.mana.fight.abandoned()) g.mana.fightAbandoned(a);
+    assert.equal(g.mana.max, 30, 'ещё рано');
+    t = 80;
+    const before = g.mana.max;
+    for (const a of g.mana.fight.abandoned()) g.mana.fightAbandoned(a);
+    const half = g.mana.max - before;
+    assert.ok(half >= 1, 'половина выплачена: +' + half);
+    assert.equal(g.mana.duelsWon.get('w1'), 'part');
+    for (const a of [{ id: 'w1', foeMax: 130, e: { honest: true, active: 10, last: 0, spells: new Map(), casts: 0, elem: 0, clashes: 0, peak: 1, me: 30 } }]) assert.equal(g.mana.fightAbandoned(a), 0, 'этот бой уже оплачен');
+    // later: he is beaten after all — only the rest is paid
+    g.mana.fight.foeCast('w1', 130); t = 82; g.mana.fight.foeCast('w1', 130);
+    const full = g.mana.killWon(130, 'w1', null, 0, true);
+    assert.ok(full >= 0 && g.mana.duelsWon.get('w1') === 'kill', 'победа закрыла счёт');
+    assert.equal(g.mana.killWon(130, 'w1', null, 0, true), 0, 'и больше ничего');
 });

@@ -1155,6 +1155,7 @@ export class Combat {
 
     damage(amount, byId, kind) {
         if (this.dead) return;
+        if (byId != null && byId !== this.game.localId) this.game.mana?.fight?.foeCast?.(byId); // (whoever hurts me fights me — a wizard, a tree, a beast: the fight's accounts, FightLedger)
         if (this.game.spectator?.active) return; // («Битва существ»: the player is only a camera — nothing can hurt it)
         if (this.game.skin?.shrugs(kind)) { this.game.skin.slid(amount, kind); return; } // (the potion of firm skin: a plain blade's / an arrow's blow does nothing, the steel I wear takes its wear — Skin.js)
         if (this.game.dragonForm?.active) return; // (the body is inside the dragon of the potion: the dragon takes the blows — DragonForm.js)

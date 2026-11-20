@@ -1,4 +1,5 @@
 import {LEV_MAX} from './LevitationMaxima.js';
+import { foeSet } from './FightLedger.js';
 import {HOLD_FATIGUE} from './Levitation.js';
 import {duelRange,emptyRange} from './DuelRange.js';
 import { NPC_COST } from './WizardAI.js';
@@ -228,7 +229,7 @@ export class ElementalMages {
   g.spells.cast(name,_o.clone(),_d.clone(),'right',v.id);g.sync?.spell?.(name,_o,_d,'right',v.id);g.sound?.spellCast?.(name,_o);
   v.aimPitch=Math.asin(_d.y);v.castT=.6;v.model.castNow=true;this.engaged(v);return true;
  }
- engaged(v){if(v.elemental)v.elemental.atkAt=performance.now();if(v.foe)(v.castAtPlayers||(v.castAtPlayers=new Set())).add(v.foe);}
+ engaged(v){if(v.elemental)v.elemental.atkAt=performance.now();if(v.foe)foeSet(v).add(v.foe);}
  fireFoot(v,side){
   const foot=side?v.model.leftKnee:v.model.rightKnee;
   if(!foot)return null;

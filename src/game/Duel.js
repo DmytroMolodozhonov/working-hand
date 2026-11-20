@@ -242,7 +242,8 @@ export const AIM = {
     // (a real camera hand is never exactly on a small, moving target — a flying book, a running
     //  animal: the help is noticeable, but a hand pointing well beside it still misses)
     // (the author: «пусть заклинание помогает найти цель на 30% лучше» — all three ×1.3; were 0.12 / 0.21 / 3.2)
-    CONE: 0.156, // rad (~9°): how far beside a body the hand may point and still mean it
+    CONE: 0.156, // rad (~9°): how far beside a body the hand may point and still mean it…
+    MAX_SLACK: 2.4, // m: …but far away never more than this beside the body (a pig a hundred metres off is nobody's target)
     BEND: 0.273, // rad (~15.6°): the most a charge ever turns off the line it was cast along
     TURN: 4.16, // rad/s: how fast it turns while correcting (it finds the target quickly)
     // two charges flying at each other: each already turns to the meeting point (the beams are seen to come together, not to fly apart and snap)
@@ -330,7 +331,9 @@ export function pickBody(o, d, bodies, range = DUEL.RANGE) {
     for (const body of bodies) {
         rayToSegment(o, d, body.a, body.b, c);
         if (c.along > range || (c.along < 0.5 && c.dist > body.r)) continue;
-        if (Math.atan2(c.dist, c.along) > AIM.CONE + Math.atan2(body.r, c.along)) continue;
+        // the help finds a target the hand points NEAR: an angle (≈9°) up close, but never more than AIM.MAX_SLACK metres off the line far away — the author 20.11: «заклинание
+        // летит далеко… какая-то свинья, к которой я не намерен был»: at 120 m the angle alone made 19 m of «near», and a pig there held the charge flying on (and the wand busy)
+        if (c.dist > body.r + Math.min(c.along * Math.tan(AIM.CONE), AIM.MAX_SLACK)) continue;
         if (!best || c.along < best.along) best = { body, along: c.along, k: c.k, dist: c.dist, miss: Math.max(0, Math.atan2(c.dist - body.r, c.along)) };
     }
     return best;
@@ -1392,6 +1395,7 @@ export class Duel {
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
     applyToCreature(spell, c, byId, from = null, part = null, opts = null) { // (opts.clash: it won a beam clash — a robe does not turn it away)
         const wasDead = !!(c.dead || c.isDead);
+        if (byId === this.me && c.wizard && c.id != null) this.game.mana?.fight?.hit(c.id, c.maxMana || 0); // (my spell hit a wizard: the fight with him goes on — FightLedger)
         try {
             const g = this.game;
             const src = from || this._casterAt(byId, c);
@@ -1533,6 +1537,7 @@ export class Duel {
     applyToMe(spell, byId, side = 'right', opts = null) { // (opts.clash: the charge WON a beam clash — it reaches the loser whatever he wears: no armour / robe turns it away)
         this._note({ ev: 'hitMe', spell, byId });
         const g = this.game;
+        if (byId != null && byId !== this.me) g.mana?.fight?.foeCast(byId); // (somebody's charge reached me: he fights me — FightLedger)
         if (spell === 'NihilisDuel') { g.nihilis?.hitMe(byId, !!opts?.clash); return; }
         const c = g.combat;
         const p = c.center(_v1);
@@ -2214,6 +2219,7 @@ export class Duel {
         this.bolts.delete(a.id);
         this.bolts.delete(b.id);
         const winnerBolt = loser === a.by ? b : loser === b.by ? a : null;
+        { const foe = a.by === this.me ? b.by : b.by === this.me ? a.by : null; if (foe != null && foe !== this.me) this.game.mana?.fight?.clash(foe); } // (a beam clash of mine: it counts in the fight with him — FightLedger)
         this._burst(a.front, winnerBolt && c.marks ? c.marks[winnerBolt === a ? 0 : 1] : 0xffffff, 40);
         if (!winnerBolt) {
             if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ Дуэль прервана — никто не пострадал', true);
