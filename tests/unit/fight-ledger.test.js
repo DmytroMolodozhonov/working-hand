@@ -1,7 +1,7 @@
 // Награда за бой с волшебником — по красоте магии (FightLedger.js; автор 19.11–20.11)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FightLedger, FIGHT, ARENA, spellWeight, fightCells, fightMastery, isElemental, FoeSet, foeSet } from '../../src/game/FightLedger.js';
+import { winBonus, FightLedger, FIGHT, ARENA, spellWeight, fightCells, fightMastery, isElemental, FoeSet, foeSet } from '../../src/game/FightLedger.js';
 import { firstSpellGain, SAME_SPELL, NOT_SPELLS } from '../../src/game/Mana.js';
 
 function ledger(me = 0) {
@@ -66,7 +66,7 @@ test('столкновение лучей прибавляет, но не бол
     for (let i = 0; i < 10; i++) L.clash('w');
     assert.equal(L.summary('w').parts.clash, FIGHT.CLASH_FIRST, 'десять проигранных подряд: само столкновение платит один раз');
     const c = ledger(); c.L.foeCast('x'); c.L.clash('x'); c.L.clash('x', true); c.L.clash('x', true);
-    assert.equal(c.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 2 * FIGHT.CLASH_WON, 'одно «за участие» + каждая победа');
+    assert.equal(c.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 8 + 4, 'одно «за участие» + победы по убыванию: 8, потом 4');
     assert.equal(FIGHT.CLASH_WON, 8); assert.equal(FIGHT.CLASH_FIRST, 5);
     const e = ledger();
     e.L.foeCast('z');
@@ -218,4 +218,13 @@ test('время самого столкновения лучей: +4 % за к�
     assert.equal(b.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 2 * FIGHT.CLASH_SEC_PCT, '12 с = две пятёрки');
     const c = ledger(); c.L.foeCast('x'); c.L.clash('x', true, 600);
     assert.equal(c.L.summary('x').clashTime, FIGHT.CLASH_SEC_MAX, 'потолок прибавки за время');
+});
+
+test('победы лучами над ТЕМ ЖЕ противником: 8, 4, 2, 1, 1… — вдвое меньше каждый раз, но не меньше 1 (автор 20.11)', () => {
+    assert.deepEqual([1, 2, 3, 4, 5, 8].map(winBonus), [8, 12, 14, 15, 16, 19]);
+    const a = ledger(); a.L.foeCast('x');
+    for (let i = 0; i < 5; i++) a.L.clash('x', true);
+    assert.equal(a.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 16);
+    const b = ledger(); b.L.foeCast('x'); b.L.foeCast('y'); b.L.clash('x', true); b.L.clash('y', true);
+    assert.equal(b.L.summary('y').parts.clash, FIGHT.CLASH_FIRST + 8, 'у другого противника счёт свой: снова 8');
 });
