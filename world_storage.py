@@ -65,6 +65,36 @@ def _text(w):
     return json.dumps(w, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
 
+def _wands(node):
+    """Every wand (a dict with kind wand and a uid) anywhere in a world."""
+    if isinstance(node, dict):
+        if node.get("kind") == "wand" and node.get("uid"):
+            yield node
+        for v in node.values():
+            yield from _wands(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _wands(v)
+
+
+def _players(node):
+    """The player snapshots: dicts that have `slots` (the hero's cells) and `extraSlots`."""
+    if isinstance(node, dict):
+        if isinstance(node.get("slots"), list) and "extraSlots" in node:
+            yield node
+        for v in node.values():
+            yield from _players(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _players(v)
+
+
+def _hand_wands(pl):
+    g = pl.get("gear")
+    held = g.get("held") if isinstance(g, dict) else None
+    return [h for h in (held or []) if isinstance(h, dict) and h.get("kind") == "wand"]
+
+
 class WorldStorage:
     def __init__(self, directory):
         self.root = Path(directory)
@@ -76,6 +106,68 @@ class WorldStorage:
         return self.root / "backups" / wid
 
     def _get(self, wid):
+        w = self._get_raw(wid)
+        if w is not None:
+            try:
+                self._rescue_wand(w, wid)
+            except Exception as e:  # a rescue never breaks a load
+                print(f"  [Миры] {wid}: поиск потерянной палочки не удался: {e}", flush=True)
+        return w
+
+    def _rescue_wand(self, w, wid):
+        """The hero's own wand is gone from the save (it was deleted by mistake) and a plain stand-in was given: the wand comes back from the newest backup that has it
+        (the author 20.11: «я хочу, чтобы она просто появилась в игре»). Only for a player who holds a stand-in (`spare`) and whose `ownWand` is nowhere in the world."""
+        if not isinstance(w, dict):
+            return
+        present = {x.get("uid") for x in _wands(w)}
+        todo = []
+        for pl in _players(w):
+            own = pl.get("ownWand")
+            slots = pl.get("slots")
+            if not isinstance(own, str) or not isinstance(slots, list) or own in present:
+                continue
+            if not any(isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare") for x in slots) and not any(x.get("spare") for x in _hand_wands(pl)):
+                continue
+            todo.append((pl, own))
+        if not todo:
+            return
+        files = sorted(self._history(wid).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        changed = False
+        for pl, own in todo:
+            found = None
+            for f in files:
+                b = _read(f, wid)
+                if b is None:
+                    continue
+                for x in _wands(b):
+                    if x.get("uid") == own and not x.get("spare"):
+                        found = dict(x)
+                        break
+                if found:
+                    break
+            if not found:
+                continue
+            found.pop("spare", None)
+            found.pop("arenaWand", None)
+            slots = pl["slots"]
+            i = next((k for k, x in enumerate(slots) if isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare")), None)
+            if i is None:
+                i = next((k for k, x in enumerate(slots) if not x), None)
+            if i is None:
+                slots.append(found)
+                pl["extraSlots"] = max(0, len(slots) - 5)
+            else:
+                slots[i] = found
+            # (a stand-in held in a hand goes too: one wand, the own one)
+            gear = pl.get("gear")
+            if isinstance(gear, dict) and isinstance(gear.get("held"), list):
+                gear["held"] = [None if isinstance(h, dict) and h.get("kind") == "wand" and h.get("spare") else h for h in gear["held"]]
+            changed = True
+            print(f"  [Миры] {wid}: потерянная палочка {own} вернулась из резервной копии", flush=True)
+        if changed:
+            _atomic(self.root / (wid + ".json"), _text(w))
+
+    def _get_raw(self, wid):
         if self._deleted(wid):
             return None
         primary = self.root / (wid + ".json")
