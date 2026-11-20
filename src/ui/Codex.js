@@ -528,11 +528,23 @@ export function renderItemsTab(extra = []) {
     renderCats('item-cats', 'items-grid', ITEM_CATEGORIES, list, currentItemCat, (id) => { currentItemCat = id; renderItemsTab(extra); });
 }
 
+/**
+ * The order of «Механика игры» (the author 19.11, for good: «самое первое — руки, вещи и доспехи, как колдовать, мана; всё остальное второстепенно, всё вниз, всегда»):
+ * the core first (CORE_MECHANICS, in this order), then the rest as they are written, and the side things (`minor: true` — horses, the elemental mages' settlements…) last.
+ * A new section goes anywhere in MECHANICS — it is put in its place here; a side one gets `minor: true`.
+ */
+export const CORE_MECHANICS = ['Руки, вещи и доспехи', 'Как колдовать', 'Мана', 'Здоровье и смерть'];
+const MINOR_MECHANICS = new Set(['Кони и Пегас', 'Поселения магов стихий']);
+export function mechanicsOrdered(list = MECHANICS) {
+    const rank = (m) => { const c = CORE_MECHANICS.indexOf(m.title); return c >= 0 ? c : m.minor || MINOR_MECHANICS.has(m.title) ? 100 : 10; };
+    return list.map((m, i) => [m, i]).sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1]).map((x) => x[0]);
+}
+
 /** «Механика игры»: plain sections — an icon, a title, a lead line and points. */
 export function renderMechanicsTab() {
     const box = document.getElementById('mechanics-list');
     if (!box) return;
-    box.innerHTML = MECHANICS.map((m) => `
+    box.innerHTML = mechanicsOrdered().map((m) => `
         <section class="mech-card">
             <h3 class="mech-title"><span class="mech-icon">${m.icon}</span>${m.title}</h3>
             <p class="mech-lead">${m.lead}</p>
