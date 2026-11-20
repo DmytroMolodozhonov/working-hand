@@ -128,7 +128,7 @@ export function shieldHitCost(kind) {
  * shield gives way): mana a second the shield's holder pays while it is pressed. The dome («Protection Maxima») pays half
  * («держит дольше»), as against the Ice Queen. Not in the table — a one-off charge, paid once (shieldHitCost).
  */
-export const SHIELD_PRESS = { Electrum: 6 };
+export const SHIELD_PRESS = { Electrum: 2.5 }; // (автор 20.11: щит берёт вдвое меньше, чем тратит атакующий — 5/с; осада щита разорительна для того, кто давит)
 export const pressCost = (kind, dt, dome = false) => (SHIELD_PRESS[kind] || 0) * dt * (dome ? 0.5 : 1);
 
 const SHIELD_LEVEL = 0.15; // m: one hand this much higher than the other — the shield goes up at it (Combat._shieldSide)
