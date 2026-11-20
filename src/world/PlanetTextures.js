@@ -92,26 +92,27 @@ function earthMap(data, w, h) {
         const d = lonLat(i, j, w, h, _d);
         const lon = d.lon, lat = d.lat, al = Math.abs(lat) / (Math.PI / 2); // 0 equator … 1 pole
         const L = earthLandAt(lon, lat);
-        let c;
-        if (L < 0.5) {
-            // the sea: shallows near a coast (the land a little way round), the deep far from any, ice in the polar seas
-            const r = 0.05;
-            const near = (earthLandAt(lon + r, lat) + earthLandAt(lon - r, lat) + earthLandAt(lon, lat + r) + earthLandAt(lon, lat - r) + L) / 5;
-            c = mixc(mixc(sea, deep, Math.max(0, Math.min(1, 0.55 + sph(nC, d, 5, 1) * 0.5))), shallow, Math.min(1, near * 2.6));
-            c = mixc(c, ice, Math.max(0, Math.min(1, (al - 0.8) * 5 + sph(nB, d, 9, 1) * 0.3)));
-        } else {
+        // the sea: shallows near a coast (the land a little way round, 8 directions at two distances — smooth, no steps), the deep far from any, ice in the polar seas
+        let near = L;
+        for (let k = 0; k < 8; k++) { const a = k * 0.7854, ca = Math.cos(a), sa = Math.sin(a); near += earthLandAt(lon + 0.03 * ca / Math.max(0.2, Math.cos(lat)), lat + 0.03 * sa) + earthLandAt(lon + 0.07 * ca / Math.max(0.2, Math.cos(lat)), lat + 0.07 * sa); }
+        near /= 17;
+        let cs = mixc(mixc(sea, deep, Math.max(0, Math.min(1, 0.55 + sph(nC, d, 5, 1) * 0.5))), shallow, Math.min(1, near * 2.4));
+        cs = mixc(cs, ice, Math.max(0, Math.min(1, (al - 0.8) * 5 + sph(nB, d, 9, 1) * 0.3)));
+        const lk = Math.max(0, Math.min(1, (L - 0.35) / 0.3)); // (the coast: a soft edge between the sea and the land, not a step)
+        let c = cs;
+        if (lk > 0) {
             const wet = 0.5 + sph(nA, d, 3.2, 1) * 0.9; // 0 dry … 1 wet
             const ridge = Math.max(0, 1 - Math.abs(sph(nB, d, 6.5, 1)) * 3.2); // mountain ridges
             // the belts: jungle on the equator, deserts at 15–35° where it is dry, forest and grass between, tundra and ice up north
-            c = mixc(grass, forest, Math.max(0, Math.min(1, wet)));
-            c = mixc(c, jungle, Math.max(0, 1 - al * 3.2) * Math.max(0, Math.min(1, wet + 0.25)));
+            let cl = mixc(grass, forest, Math.max(0, Math.min(1, wet)));
+            cl = mixc(cl, jungle, Math.max(0, 1 - al * 3.2) * Math.max(0, Math.min(1, wet + 0.25)));
             const dry = Math.max(0, 1 - Math.abs(al - 0.3) * 6) * Math.max(0, Math.min(1, 1.1 - wet * 1.5));
-            c = mixc(c, desert, Math.min(1, dry * 1.4));
-            c = mixc(c, tundra, Math.max(0, Math.min(1, (al - 0.62) * 5)));
-            c = mixc(c, rock, Math.min(0.7, ridge * (0.25 + al * 0.5) * (sph(nC, d, 2.4, 1) > 0 ? 1 : 0.4)));
-            c = mixc(c, ice, Math.max(0, Math.min(1, (al - 0.76) * 6 + ridge * 0.1)));
+            cl = mixc(cl, desert, Math.min(1, dry * 1.4));
+            cl = mixc(cl, tundra, Math.max(0, Math.min(1, (al - 0.62) * 5)));
+            cl = mixc(cl, rock, Math.min(0.7, ridge * (0.25 + al * 0.5) * (sph(nC, d, 2.4, 1) > 0 ? 1 : 0.4)));
+            cl = mixc(cl, ice, Math.max(0, Math.min(1, (al - 0.76) * 6 + ridge * 0.1)));
             const k = 0.94 + 0.12 * sph(nA, d, 28, 1); // the grain of the land
-            c = [c[0] * k, c[1] * k, c[2] * k];
+            c = mixc(cs, [cl[0] * k, cl[1] * k, cl[2] * k], lk);
         }
         put(data, (j * w + i) * 4, c);
     }
