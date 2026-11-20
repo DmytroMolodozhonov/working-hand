@@ -58,6 +58,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { addDark } from './DarkMagic.js';
 import { BARE } from './BareHand.js';
 import { OFFERINGS } from './PentagramOfferings.js';
+import { allLog } from '../core/AllLog.js';
 import { ELEMENT_OF_PENT } from './HeroElement.js';
 import { RESIST_HINT } from './ResistRules.js';
 
@@ -108,7 +109,7 @@ const USE_TEXT = {
     fireward: 'Бросьте в круг сердцевину Ярколета, встаньте в него (150 маны): обычный огонь вас больше не берёт; адский всё ещё жжёт, но не поджигает',
     blastward: 'Бросьте в круг лист бронелиста, встаньте в него (150 маны): «Бомбарда» вас больше не ранит, другие взрывы бьют вдвое слабее — но отбросить вас они всё ещё могут',
     hydro: 'Держите шар воды «Waterbollow» (не лёд), встаньте в круг (50 маны): водяные заклинания больше не просят реки — влага берётся из воздуха (кроме пустынь)',
-    firm: 'Положите на круг волшебный камушек, встаньте в него (300 маны) — вас больше не повалит ничто, до самой смерти',
+    firm: 'Положите на круг волшебный камушек 🔮 (гладкий тёмный камушек с янтарной руной — его носят болотные карлики, канарики; изредка он бывает в лавке диковин), встаньте в круг (300 маны) — вас больше не повалит ничто, до самой смерти',
 };
 
 export class Pentagranium {
@@ -198,7 +199,7 @@ export class Pentagranium {
         if (!hand) return hint(`🩸 Поднимите палочку (руку), направьте на землю и скажите «${name}»`);
         if (g.swim?.underwater) return hint('🩸 Под водой пентаграмма не держится');
         const p = this.groundAt();
-        if (!p) return hint('🩸 Направьте палочку на землю — пентаграмма ляжет туда, куда вы указываете');
+        if (!p) { if (isFinal) allLog('Заклинания', `Pentagranium «${figureOf(id).ru}»: не получилось — ${this._why || 'нет земли под палочкой'}`); return hint('🩸 Направьте палочку на землю — пентаграмма ляжет туда, куда вы указываете' + (this._why ? ` (${this._why})` : '')); }
         const origin = _o.set(p.x, p.y, p.z);
         if (g.wards?.forbids?.(origin, origin)) return hint('🛡️ Здесь чужая защита дома — пентаграмма не держится');
         const offer = !this.creative && OFFERINGS[id] ? id : null; // (survival: the ritual of the gargoyles / the monster needs things on the circle — Offerings.js)
@@ -229,24 +230,25 @@ export class Pentagranium {
     /** Where the wand's ray meets the ground: {x, y, z} | null (water, a wall far away, up in the sky). */
     groundAt() {
         const g = this.game, data = this.data;
-        if (!data) return null;
+        this._why = '';
+        if (!data) { this._why = 'нет данных земли'; return null; }
         let origin, dir;
         if (this.aim) { origin = this.aim.origin; dir = this.aim.dir; }
         else {
             const hand = castingHand(g);
-            if (!hand) return null;
+            if (!hand) { this._why = 'нет руки с палочкой'; return null; }
             origin = hand.origin; dir = hand.dir;
         }
-        if (dir.y > -0.03) return null;
+        if (dir.y > -0.03) { this._why = 'палочка направлена не вниз (выше горизонта)'; return null; }
         const hit = data.raycast(origin, dir, PENT.REACH);
-        if (!hit) return null;
+        if (!hit) { this._why = `земля дальше ${PENT.REACH} м или луч уходит в небо`; return null; }
         const x = Math.round(hit.x), z = Math.round(hit.z);
         const y = data.floorAt?.(hit.x, hit.z, hit.y + 0.15) ?? this._height(hit.x, hit.z, hit.y);
-        if (Math.abs(hit.y - y) > 0.2) return null; // hit must be on a floor, not the side of a wall
+        if (Math.abs(hit.y - y) > 0.2) { this._why = 'земля здесь неровная — ступенька, склон или стена: наведите на ровное место'; return null; } // hit must be on a floor, not the side of a wall
         const L = Math.floor(y + 1.45), under = data.get(x, L, z);
-        if (under === BLOCK.WATER || under === BLOCK.AIR) return null;
-        if (isEnchanted(under) || isEnchanted(data.get(x, L - 1, z)) || data.godGiftAt?.(x, L, z) || data.godGiftAt?.(x, L - 1, z)) return null;
-        if (g.ships?.footprintAt?.(x, L, z)) return null;
+        if (under === BLOCK.WATER || under === BLOCK.AIR) { this._why = 'под лучом вода или пустота'; return null; }
+        if (isEnchanted(under) || isEnchanted(data.get(x, L - 1, z)) || data.godGiftAt?.(x, L, z) || data.godGiftAt?.(x, L - 1, z)) { this._why = 'здесь заколдованный камень или дар богов'; return null; }
+        if (g.ships?.footprintAt?.(x, L, z)) { this._why = 'здесь палуба корабля'; return null; }
         return { x: hit.x, y, z: hit.z };
     }
 

@@ -45,6 +45,8 @@ import { TalkFlow, STILL, readiness } from './ai/TalkFlow.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
+import { setBodyTune, TUNE_STEP } from './input/PoseInterpreter.js';
+import { drawBeltTune } from './ui/BeltTunePreview.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
 import { WORLD_GEN } from './world/Terrain.js';
 import { STAGE_TITLES as TUT_STAGES } from './game/Tutorial.js';
@@ -52,7 +54,7 @@ import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, BRAWL_ENTRY, TUTORIAL_ENTRY, 
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { sadTrombone } from './audio/MagicSound.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
-import { hookAllLog, allLog } from './core/AllLog.js';
+import { hookAllLog, allLog, ALL } from './core/AllLog.js';
 import { watchServer } from './ui/ServerLost.js';
 import { castContextLine } from './core/SpellLog.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
@@ -1388,8 +1390,11 @@ async function startGame(config, welcome = null) {
 }
 
 async function startGameInner(config, welcome) {
-    portal.start(mainMenu); // (the menu is drawn into the whirl; hidden when the swirl has opened)
+    const melted = portal.start(mainMenu); // (the menu melts into the whirl — or the passage already goes: started at the click)
     updateProgress(2, 'Инициализация...');
+    // (the author 20.11: «сначала несколько секунд это окно, потом загрузка» — the heavy work of the start must not begin before the menu is gone and
+    //  the whirl is painted: it held the main thread and the menu hung half-melted for seconds. ≤ 0,45 s; a hidden tab has no frames — the timer goes on)
+    await Promise.race([Promise.resolve(melted).then(() => new Promise((r) => requestAnimationFrame(() => r()))), new Promise((r) => setTimeout(r, 450))]);
     const B = bootTimer;
     B.reset();
     B._readyNoted = false;
@@ -1620,9 +1625,16 @@ async function renderSavedWorlds() {
         const nm = row.querySelector('.world-name');
         nm.ondblclick = rename;
         nm.onkeydown = (e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); rename(); } };
-        row.querySelector('.world-play').onclick = async () => {
+        row.querySelector('.world-play').onclick = async (ev) => {
+            // (at once: the click is seen — «Запуск…», the button is held; the world's file comes from the disk and the server first, which may take a moment: the author 20.11, «сначала несколько секунд такое окно»)
+            const btn = ev?.currentTarget || row.querySelector('.world-play'), label = btn.innerHTML;
+            if (btn.dataset.busy) return;
+            btn.dataset.busy = '1'; btn.innerHTML = '⏳ Запуск…'; btn.style.opacity = '0.8';
+            // (the passage at once — the world's file is read from the browser and the disk meanwhile, which may take seconds: the author saw the menu hang)
+            let tut = false; try { tut = !(localStorage.getItem('zns-tutorial-asked') || localStorage.getItem('zns-tutorial-done')) && !window.__ZNS_NO_TUTORIAL_ASK__ && !navigator.webdriver; } catch { tut = false; } // (the first game's question comes over the menu — not under the passage)
+            if (!tut && !starting) { if (!window.__ZNS_NO_FULLSCREEN__) enterGameFullscreen(); portal.start(mainMenu); }
             const w = await loadWorld(id);
-            if (!w) return;
+            if (!w) { portal.cancel(mainMenu); delete btn.dataset.busy; btn.innerHTML = label; btn.style.opacity = ''; return; }
             startGame({ ...readConfig(), mode: w.mode, map: null, seed: w.seed, saved: w });
         };
         // deleting asks first — right in the row, in the game's own look
@@ -1690,6 +1702,16 @@ const applyHandedness = () => {
 };
 $('handedness')?.addEventListener('change', applyHandedness);
 applyHandedness();
+// «Пояс»: the player's own shift of the pocket's and the wand's places (settings → «Игра»; the picture shows it; the camera window's hints follow)
+const applyBeltTune = () => {
+    const gp = parseInt($('belt-gap')?.value || '0', 10);
+    setBodyTune(0, gp * TUNE_STEP); // (ONE slider: the pocket and the wand nearer / farther along the belt, each by half)
+    const txt = (n, a, b) => (n === 0 ? 'по умолчанию' : n > 0 ? `${a} ${n}` : `${b} ${-n}`);
+    if ($('belt-gap-val')) $('belt-gap-val').textContent = txt(gp, 'дальше', 'ближе');
+    drawBeltTune($('belt-tune-view'), $('handedness')?.value === 'left');
+};
+for (const id of ['belt-gap', 'handedness']) $(id)?.addEventListener(id === 'handedness' ? 'change' : 'input', applyBeltTune);
+applyBeltTune();
 // «Ходьба и бег»: the usual walk (the body's bob) or the new one (steps read from the legs)
 const applyWalkMode = () => { poseService.interpreter.walkMode = $('walk-mode')?.value === 'legs' ? 'legs' : 'old'; };
 $('walk-mode')?.addEventListener('change', applyWalkMode);
@@ -1843,9 +1865,15 @@ $('pause-exit-btn').onclick = async () => {
     await leaveToMenu();
 };
 /** Save the world and go to the main menu at once (no «are you sure»: the window the player pressed «Выйти» in is the question — the duel's «ещё раз?», the boss retry). */
+/** The journal's last lines and the order to send the journals to GitHub (the author 20.11: «Сохранить и выйти» is the trigger). Never held up, never throws. */
+function sendLogsNow() {
+    try { ALL.flush(); } catch (e) { /* */ }
+    try { setTimeout(() => { fetch('/api/logs/send', { method: 'POST', keepalive: true }).catch(() => {}); }, 400); } catch (e) { /* */ }
+}
 async function leaveToMenu() {
     try { game?.sync?._sendMine?.(); } catch (e) { /* ignore */ }
     try { await Promise.race([game?.keeper?.save?.(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) { /* the page still leaves */ }
+    sendLogsNow(); // (saved and leaving the map: the journal goes to GitHub at once — server /api/logs/send, log_upload.py)
     backToMenu();
 }
 window.__zns = Object.assign(window.__zns || {}, { exitToMenu: leaveToMenu });
@@ -1853,6 +1881,7 @@ window.addEventListener('pagehide', () => {
     try { if (game?.sync) game.groundVortex?.returnAll?.(); } catch (e) { /* closing */ } // (blocks held by «Ground Vortex» back into the ground: the others see it)
     try { game?.sync?._sendMine?.(); } catch (e) { /* closing */ }
     net.sayGoodbye();
+    try { navigator.sendBeacon?.('/api/logs/send', new Blob(['{}'], { type: 'application/json' })); } catch (e) { /* closing */ } // (the window closes: the journals go on their way)
 });
 $('restart-btn').onclick = backToMenu;
 $('victory-menu-btn').onclick = backToMenu;
@@ -2151,7 +2180,7 @@ for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'wal
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'lite-mode', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
+        'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'belt-gap', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)

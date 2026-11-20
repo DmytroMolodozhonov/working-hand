@@ -158,6 +158,8 @@ class Ribbons {
  * The shapes of one pentagram of radius R at (cx, cz): the ring and the star of the figure (a ribbon each), an outer ring with
  * ticks, five small sigils at the star's points. Pure arithmetic over `h` (ground heights), exported for tests.
  */
+/** The least angle (rad) between two small sigils round the ring (about 18 of them at most). */
+export const SIGIL_GAP = 0.36;
 export function figureGeometry(cx, cz, R, pent, rot, h) {
     const rb = new Ribbons();
     const at = (a, r) => [cx + Math.cos(a) * r, cz + Math.sin(a) * r];
@@ -184,7 +186,11 @@ export function figureGeometry(cx, cz, R, pent, rot, h) {
         const a = (i / 40) * Math.PI * 2, p = at(a, R * 1.035), q = at(a, R * 1.11);
         rb.seg(h, p[0], p[1], q[0], q[1], i % 5 === 0 ? 0.16 : 0.07, i * 0.7);
     }
-    corners.forEach(([px, pz], k) => {
+    // (the author 20.11: «кружки… как будто удваиваются» — a complex drawing has dozens of knuckles, and a sigil at every one piled up into doubled circles:
+    // the sigils keep at least SIGIL_GAP rad between them, the first of each crowd stays)
+    const kept = [];
+    for (const c of corners) { const a = Math.atan2(c[1] - cz, c[0] - cx); if (kept.every((k) => Math.abs(Math.atan2(Math.sin(a - k[2]), Math.cos(a - k[2]))) >= SIGIL_GAP)) kept.push([c[0], c[1], a]); }
+    kept.forEach(([px, pz], k) => {
         const ax = Math.atan2(pz - cz, px - cx), sx = cx + Math.cos(ax) * R * 1.28, sz = cz + Math.sin(ax) * R * 1.28, r = Math.max(0.4, R * 0.1);
         const circ = [];
         for (let i = 0; i < 20; i++) circ.push([sx + Math.cos((i / 20) * Math.PI * 2) * r, sz + Math.sin((i / 20) * Math.PI * 2) * r]);

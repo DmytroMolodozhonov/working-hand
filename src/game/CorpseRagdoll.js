@@ -116,8 +116,13 @@ export class CorpseRagdoll {
         } else toModel(d, b.model.userData.vm);
     }
     step(g, dt) { const active = !this.doll.asleep; this.doll.step(guardWorld(g), dt); if (active || !this.doll.asleep) this.draw(); return active || !this.doll.asleep; }
+    /** A fresh grab (Death.liftBody): the next `hold` starts from where the chest IS — no jerk at the moment of the spell (the author 20.11). */
+    grabbed() { this._fresh = true; this._heldT = 0; }
     hold(g, at, dt) {
         const d = this.doll, k = 1 - Math.exp(-14 * dt); d.at(P.CHEST, _pt);
+        if (this._fresh) { this._fresh = false; this._off = [_pt[0] - at.x, _pt[1] - at.y, _pt[2] - at.z]; } // (the chest is where it lies; the goal glides from there to the hand's point)
+        this._heldT = (this._heldT || 0) + dt;
+        if (this._off) { const e = Math.exp(-this._heldT * 3.2); at = { x: at.x + this._off[0] * e, y: at.y + this._off[1] * e, z: at.z + this._off[2] * e }; if (e < 0.01) this._off = null; }
         const dx = (at.x - _pt[0]) * k, dy = (at.y - _pt[1]) * k, dz = (at.z - _pt[2]) * k;
         for (let i = 0; i < 33; i += 3) for (let j = 0; j < 3; j++) { const v = j === 0 ? dx : j === 1 ? dy : dz; d.x[i + j] += v; d.o[i + j] += v; }
         for (let i = 0; i < 6; i++) _pin[i] = d.x[3 + i];

@@ -1,3 +1,4 @@
+import { DarkDecay } from './DarkDecay.js';
 import {fireballBody} from './FireballRules.js';
 import {waveSource} from './WaveSource.js';
 import { ElementalMages } from './ElementalMages.js';
@@ -766,6 +767,7 @@ export class Game {
         this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
         this.darkExile = new DarkExile(this); // башня гонит чёрного мага 81+ (DarkExile.js)
         this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
+        this.darkDecay = new DarkDecay(this); // −1 за сутки живой игры (DarkDecay.js)
         this.darkLord = new DarkLordLife(this); // «настоящий тёмный маг»: на 100 уровне превращение, наряд, проклятие на доспехах, зелье (DarkLord.js)
         this.bossRetry = new BossRetry(this); // a fall in a fight with a boss at the chosen start: the window to try again (BossRetry.js)
         this.heroApply = new HeroApply(this); // «Настройки героя» Творческого мира (HeroApply.js)
@@ -4755,6 +4757,7 @@ export class Game {
         mark('мультиплеер');
 
         this.fx.update(dt); sysMark('fx');
+        this.darkDecay?.update(dt); // (a day of real play: the black magic −1 — DarkDecay.js)
         this.mana?.update(dt); sysMark('mana'); // (the beaten wizard's power flying to me)
         mark('эффекты'); // (sparks, smoke, flashes — apart from «мир», the land and its pieces)
         // See further while flying (smoothly), terrain streams in around the player

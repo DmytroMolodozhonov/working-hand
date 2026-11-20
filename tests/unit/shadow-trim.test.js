@@ -30,3 +30,13 @@ test('a scaled small mesh counts by its real size', () => {
     trimShadowCasters(root);
     assert.equal(m.castShadow, true);
 });
+
+test('a part marked keepShadow keeps casting however small its own geometry is (the wings: the mount scales them up)', async () => {
+    const THREE = await import('three');
+    const root = new THREE.Group();
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshBasicMaterial()); wing.castShadow = true; wing.userData.keepShadow = true; root.add(wing);
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial()); buckle.castShadow = true; root.add(buckle);
+    const { trimShadowCasters } = await import('../../src/core/ShadowTrim.js');
+    trimShadowCasters(root);
+    assert.equal(wing.castShadow, true); assert.equal(buckle.castShadow, false);
+});

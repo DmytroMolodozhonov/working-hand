@@ -94,3 +94,18 @@ class LogUploadTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AfterSave(unittest.TestCase):
+    def test_after_save_uploads_when_the_saves_stop(self):
+        import log_upload as lu
+        calls = []
+        orig = lu.upload_soon
+        lu.upload_soon = lambda root, games: calls.append((root, games))
+        try:
+            lu.after_save("r", "g", delay=0.05); lu.after_save("r", "g", delay=0.05)  # (a second save resets the wait: one upload)
+            import time; time.sleep(0.3)
+            self.assertEqual(calls, [("r", "g")])
+            self.assertEqual(lu.KEEP_S, 3 * 24 * 3600)
+        finally:
+            lu.upload_soon = orig

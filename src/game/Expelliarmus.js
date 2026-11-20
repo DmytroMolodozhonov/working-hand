@@ -28,6 +28,11 @@
 import { holdsWand } from './ResistRules.js';
 import * as THREE from 'three';
 import { starterWand, rollWand, newUid } from './ItemTypes.js';
+import { wandNumber, wandWoodOf } from '../entities/VillagerModel.js';
+const seededRng = (seed) => { let a = (seed | 0) >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+const hashId = (s) => { let h = 2166136261; for (let i = 0; i < String(s).length; i++) { h ^= String(s).charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+/** The number of this person's wand: by his look's seed (as the model in his hand), else by his id. */
+export const wandNumberOf = (v) => wandNumber(v?.model?.look?.seed ?? v?.look?.seed ?? hashId(v?.id ?? 'x'));
 import { DROP_TOOLS } from '../entities/VillagerModel.js';
 import { handLog } from './HandRelease.js';
 
@@ -140,9 +145,15 @@ export function knockOutOfMyHand(game, rng = Math.random, lostClash = false) {
 
 /** A wizard's own wand, rolled: a student's plain one, a robed one's strong one; a wanderer's too (no staffs in the game). */
 export function rollWizardWand(v) {
-    const w = v.robe ? (({ power, ...x }) => ({ ...x, power: Math.max(power || 0, 35 + Math.floor(Math.random() * 16)) }))(rollWand())
-        : v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand();
-    if (v.role === 'wanderer') w.plain = false; // (a wanderer's wand is a real one, not a student's)
+    // (the author 20.11: «у жителей палочки одинаковые, а должны быть как у игрока, у каждого своя»: a person's wand is HIS — the same every time (from his id), a design and a wood
+    //  of the hero's own kinds, close to the one he holds in his hand (VillagerModel.wandNumber); only a student's is plain in power, not in look)
+    const n = wandNumberOf(v);
+    const r = seededRng(n * 2654435761 + 977);
+    const w = rollWand(r);
+    w.model = (n * 3 + (n >> 3)) % 10; w.color = wandWoodOf(n); // (the wood as in his hand; the design of the hero's ten — spread over the 64)
+    if (v.robe) w.power = Math.max(w.power || 0, 35 + Math.floor(r() * 16));
+    else if (v.role === 'student') w.power = 1 + Math.floor(r() * 20);
+    if (v.role === 'wanderer') w.plain = false; // (a wanderer's wand is a real one)
     return w;
 }
 

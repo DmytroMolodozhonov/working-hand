@@ -12,6 +12,7 @@ import threading
 import time
 
 _LOCK = threading.RLock()
+_WAND_CHECKED = set()  # worlds already searched for a lost wand in this run: the backups are read ONCE (the author 20.11: starting a world took seconds — every load read every backup)
 RECENT_SLOTS = 12  # first checkpoint in each five-minute interval (~one hour)
 DAILY_SLOTS = 7   # first checkpoint each day (~one week)
 
@@ -65,6 +66,36 @@ def _text(w):
     return json.dumps(w, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
 
+def _wands(node):
+    """Every wand (a dict with kind wand and a uid) anywhere in a world."""
+    if isinstance(node, dict):
+        if node.get("kind") == "wand" and node.get("uid"):
+            yield node
+        for v in node.values():
+            yield from _wands(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _wands(v)
+
+
+def _players(node):
+    """The player snapshots: dicts that have `slots` (the hero's cells) and `extraSlots`."""
+    if isinstance(node, dict):
+        if isinstance(node.get("slots"), list) and "extraSlots" in node:
+            yield node
+        for v in node.values():
+            yield from _players(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _players(v)
+
+
+def _hand_wands(pl):
+    g = pl.get("gear")
+    held = g.get("held") if isinstance(g, dict) else None
+    return [h for h in (held or []) if isinstance(h, dict) and h.get("kind") == "wand"]
+
+
 class WorldStorage:
     def __init__(self, directory):
         self.root = Path(directory)
@@ -76,6 +107,74 @@ class WorldStorage:
         return self.root / "backups" / wid
 
     def _get(self, wid):
+        w = self._get_raw(wid)
+        if w is not None:
+            try:
+                self._rescue_wand(w, wid)
+            except Exception as e:  # a rescue never breaks a load
+                print(f"  [Миры] {wid}: поиск потерянной палочки не удался: {e}", flush=True)
+        return w
+
+    def _rescue_wand(self, w, wid):
+        """The hero's own wand is gone from the save (it was deleted by mistake: a won arena wand cleared at the next duel) and a plain stand-in was given: the wand comes back
+        from the newest backup of the SAME player that has it (the author 20.11: «я хочу, чтобы она просто появилась в игре»). Only for a player who holds a stand-in (`spare`);
+        which wand: his `ownWand` if a backup has it, else the strongest one he carried (slots / hands) that is missing now."""
+        if not isinstance(w, dict) or not isinstance(w.get("players"), dict) or wid in _WAND_CHECKED:
+            return
+        has_stand_in = any(isinstance(pl, dict) and isinstance(pl.get("slots"), list) and (any(x.get("spare") for x in _hand_wands(pl)) or any(isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare") for x in pl["slots"])) for pl in w["players"].values())
+        if not has_stand_in:
+            return  # (nothing to look for: a cheap check on every load)
+        _WAND_CHECKED.add(wid)
+        changed = False
+        files = None
+        for key, pl in w["players"].items():
+            if not isinstance(pl, dict) or not isinstance(pl.get("slots"), list):
+                continue
+            slots = pl["slots"]
+            hand_spare = any(x.get("spare") for x in _hand_wands(pl))
+            has_spare = hand_spare or any(isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare") for x in slots)
+            if not has_spare:
+                continue
+            present = {x.get("uid") for x in _wands(w)}
+            if files is None:
+                files = sorted(self._history(wid).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            own = pl.get("ownWand") if isinstance(pl.get("ownWand"), str) else None
+            found = None
+            for f in files:
+                b = _read(f, wid)
+                bp = b.get("players", {}).get(key) if b and isinstance(b.get("players"), dict) else None
+                if not isinstance(bp, dict):
+                    continue
+                cand = [x for x in _wands(bp) if not x.get("spare") and x.get("uid") not in present]
+                if not cand:
+                    continue
+                pick = next((x for x in cand if x.get("uid") == own), None) or max(cand, key=lambda x: x.get("power") or 0)
+                found = dict(pick)
+                break
+            if not found:
+                continue
+            found.pop("spare", None)
+            found.pop("arenaWand", None)
+            i = next((k for k, x in enumerate(slots) if isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare")), None)
+            if i is None:
+                i = next((k for k, x in enumerate(slots) if not x), None)
+            if i is None:
+                slots.append(found)
+                pl["extraSlots"] = max(0, len(slots) - 5)
+            else:
+                slots[i] = found
+            gear = pl.get("gear")
+            if isinstance(gear, dict) and isinstance(gear.get("held"), list):
+                gear["held"] = [None if isinstance(h, dict) and h.get("kind") == "wand" and h.get("spare") else h for h in gear["held"]]
+            pl["ownWand"] = found["uid"]
+            changed = True
+            print(f"  [Миры] {wid}: потерянная палочка {found['uid']} (сила {found.get('power')}) вернулась из резервной копии", flush=True)
+        if changed:
+            # (the page keeps its own copy in the browser and takes the disk one only if it is NEWER: the returned wand must win over it — the author 20.11, the first version did not)
+            w["updated"] = _stamp(w) + 1
+            _atomic(self.root / (wid + ".json"), _text(w))
+
+    def _get_raw(self, wid):
         if self._deleted(wid):
             return None
         primary = self.root / (wid + ".json")

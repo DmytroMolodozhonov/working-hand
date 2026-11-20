@@ -158,3 +158,11 @@ test('the magic board: the duel now and how long it may last, the line, the resu
     assert.ok(/Ночью/.test(text(boardView({ ph: 'idle', night: true, q: [] }))));
     assert.ok(BOARD.W <= 7 && BOARD.UP + BOARD.H < 12, 'a board a stall\'s size over the road');
 });
+
+test('the board shows the bots\' duels to come after the players (the author 20.11: a queue and constant fights)', async () => {
+    const { boardView } = await import('../../src/game/ArenaBoard.js');
+    const v = boardView({ ph: 'idle', q: [{ id: 'a', n: 'Игрок', tr: 'novice' }], nx: [['Аэлин', 'Борк'], ['Кел', 'Дор'], ['Ив', 'Ус']] });
+    assert.ok(v.queue.some((l) => l.startsWith('Далее: Аэлин и Борк')), v.queue.join('|'));
+    assert.ok(v.queue.length <= 5);
+    assert.ok(boardView({ ph: 'idle', night: true, nx: [['А', 'Б']] }).queue.length === 0, 'night: no duels');
+});

@@ -129,6 +129,17 @@ function placeIcon(ctx, kind, s) {
         ctx.beginPath(); ctx.moveTo(-10, -1); ctx.lineTo(0, -10); ctx.lineTo(10, -1); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#5a3a1c'; ctx.fillRect(-2, 3, 4, 6);
         ctx.fillStyle = '#9fd8ff'; ctx.fillRect(3.5, 1.5, 2.5, 2.5);
+    } else if (kind === 'myhouse') {
+        // MY house, made by the spell (the author 20.11: «свой значок — другой, можно с маленьким человечком»): a house with a golden roof and a little figure at the door
+        ctx.fillStyle = '#efe0bb'; ctx.strokeStyle = '#3a2a18';
+        ctx.beginPath(); ctx.rect(-9, -1, 13, 10); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#e0a820';
+        ctx.beginPath(); ctx.moveTo(-12, -1); ctx.lineTo(-2.5, -10); ctx.lineTo(7, -1); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#5a3a1c'; ctx.fillRect(-5, 3, 4, 6);
+        // the little man: a head, a body, two legs — beside the door
+        ctx.fillStyle = '#ffd9a8'; ctx.beginPath(); ctx.arc(8, 0.5, 2.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#3d7be0'; ctx.beginPath(); ctx.rect(6, 2.8, 4, 4); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = '#3a2a18'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(7.2, 6.8); ctx.lineTo(7.2, 9.5); ctx.moveTo(8.8, 6.8); ctx.lineTo(8.8, 9.5); ctx.stroke();
     } else if (kind === 'hamlet' || kind === 'magehamlet') {
         // a hamlet's house (Hamlets.js): a wall, a roof (violet for wizards, with a star), a door
         const mage = kind === 'magehamlet';
@@ -1060,7 +1071,7 @@ export class Hud {
             if (inside(hx, hz, R)) {
                 ctx.fillStyle = 'rgba(30, 24, 18, 0.9)'; ctx.strokeStyle = ring; ctx.lineWidth = h.mine ? 2 : 1.5;
                 ctx.beginPath(); ctx.arc(hx, hz, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                ctx.save(); ctx.translate(hx, hz + 1); placeIcon(ctx, 'house', h.mine ? 16 : 12); ctx.restore();
+                ctx.save(); ctx.translate(hx, hz + 1); placeIcon(ctx, h.mine ? 'myhouse' : 'house', h.mine ? 18 : 12); ctx.restore();
                 if (h.mine) label('Мой дом', hx, Math.max(-hh + 12, hz - R - 3));
             } else if (h.mine) {
                 const a = Math.atan2(hz, hx), m = R + 9;
@@ -1072,7 +1083,7 @@ export class Hud {
                 ctx.restore();
                 ctx.fillStyle = 'rgba(30, 24, 18, 0.9)'; ctx.strokeStyle = ring; ctx.lineWidth = 2;
                 ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                ctx.save(); ctx.translate(bx, by + 1); placeIcon(ctx, 'house', 16); ctx.restore();
+                ctx.save(); ctx.translate(bx, by + 1); placeIcon(ctx, 'myhouse', 18); ctx.restore();
                 const up = by > 0 ? -R - 6 : R + 19;
                 bigLabel(distText(Math.hypot(hx, hz) / scale), bx - Math.cos(a) * 30, by + up);
             }

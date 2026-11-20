@@ -78,6 +78,8 @@ test('the crossed pocket is easy: the wrist may pass ±20 cm around the hip, a s
     // far from the hip: the belly's middle, high up — never
     assert.ok(!hit(-0.12, 0) && !hit(0.2, 0), 'the belly / far outside');
     assert.ok(!hit(0, -0.3), 'the chest');
+    // the author 20.11: hands folded / a hand laid on the chest (the wrist ~40% of the torso above the belt) took a thing out by itself
+    assert.ok(!hit(0, -0.12) && !hit(-0.03, -0.14), 'folded arms / a hand on the chest are not the pocket');
 });
 
 test('the same-side hand (the leading one) and passing hands put nothing; the time to put is short', async () => {
@@ -99,4 +101,18 @@ test('the inner belt edge accepts a wrist slightly closer to the torso, for eith
         lm[wrist] = { ...lm[wrist], x: hip.x + (lefty ? -1 : 1) * 0.34 * T / (4 / 3), y: hip.y };
         assert.equal(bodyPlaces(lm, null, null, 4 / 3, lefty).pocket.off, true);
     }
+});
+
+test('the player\'s own tuning (settings → «Игра» → «Пояс») moves the places the game reads', async () => {
+    const { setBodyTune } = await import('../../src/input/PoseInterpreter.js');
+    try {
+        assert.equal(at({ arms: 'hang', pocket: 'cross' }).pocket, true, 'by default the hand in the pocket');
+        setBodyTune(0, 0.3); // the pocket is moved out by 0.15 torso heights: the same hand is now at the belt's inner side
+        const moved = at({ arms: 'hang', pocket: 'cross' }).pocket;
+        setBodyTune(-0.3, 0); // …and the other way: the pocket nearer to the belly
+        const other = at({ arms: 'hang', pocket: 'cross' }).pocket;
+        assert.ok(moved === true || other === true, 'a hand stays reachable by a small shift (zone 0.46 wide)');
+        setBodyTune(0.3, 0.3); // the pocket moved by 0.45: the old hand place is no longer the pocket
+        assert.notEqual(at({ arms: 'hang', pocket: 'cross' }).pocket, true, 'a big shift: the old place is not the pocket any more');
+    } finally { setBodyTune(0, 0); }
 });

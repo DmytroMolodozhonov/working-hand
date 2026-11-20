@@ -136,7 +136,8 @@ export class Knockdown {
         g.handHold?.breakAll?.('knocked');
         this.state = 'falling'; this.dir = dir || 'back'; this.t = 0; this.minDown = down; this.by = by; this.kind = kind; this.cause = cause || kind;
         this.squatT = this.bowT = 0; this.squatted = this.bowed = this.pending = false; this.noPoseT = 0; this.lift = this.liftWant = 0; ch.liftUp = 0;
-        ch.knockedDown = true; ch.fallDir = this.dir; ch.stepping = 0; ch.staggerLean = 0;
+        ch.knockedDown = true; ch.fallDir = this.dir; ch.stepping = 0; ch.staggerLean = 0; ch.staggerRoll = 0; // (a reel cut short by a fall: its sideways lean must not stay on the body after getting up — the author 20.11: «голова чуть наклонена вправо»)
+        this.braceHeld = false; ch.braceK = 0;
         if (toss > 2) { ch.group.position.y += 0.7; ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, toss); ch.onGround = false; }
         if (this.tumble) this.tumble.dir = this.dir;
         // (why I am on the ground: «вас отбросило взрывом…», «вас сбил рыцарь (Имя)»…)
@@ -257,6 +258,8 @@ export class Knockdown {
         if (this.flyT > 0) { this.flyT -= dt; if ((ch.onGround && this.t > 0.15) || ch.swimY != null) this.flyT = 0; }
         this._tumbleStep(dt);
         this._braceStep();
+        // (safety: only a reel and a fall own the body's lean; any other state — upright at once, never a lean left over)
+        if (this.state !== 'stagger' && !ch.knockedDown && (ch.staggerLean || ch.staggerRoll)) { ch.staggerLean = 0; ch.staggerRoll = 0; }
         if (this.state !== 'down') trackStand(this, g.currentPose, dt); // (knows the person's upright height before a fall)
         switch (this.state) {
             case 'stagger':

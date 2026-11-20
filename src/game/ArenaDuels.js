@@ -58,6 +58,7 @@ import { wizardWandOf } from './Expelliarmus.js';
 import { creativeFiniteMana } from './HeroSetup.js';
 import { starterWand } from './ItemTypes.js';
 import { handLog } from './HandRelease.js';
+import { allLog } from '../core/AllLog.js';
 const FIG_DWELL = 1.5; // (s a hand rests on a figure to choose it: the author 20.11 — 0.6 s signed him up for the middle one while he was only reaching about)
 import { domeOf, domeCross, cageOf, cageClamp, CAGE } from './ArenaDome.js';
 import { duelReport } from './DuelReport.js';
@@ -318,6 +319,8 @@ export class ArenaDuels {
         this._keepSteward(A, cs, live, dt);
         // the duels: one after another (a player signed up does not wait out a long rest)
         const D = A.duel;
+        // (a player signed up and waiting: now and then he is told what is going on — the author 20.11, «ждал и ничего не слышал»)
+        if (!D && A.queue.length) { A.waitT = (A.waitT || 0) + dt; if (A.waitT > 20) { A.waitT = 0; for (const id of A.queue.list) this._tell(id, { e: 'wait', id: A.id }); } } else A.waitT = 0;
         if (!D) {
             if (A.queue.length && A.restT > 4) A.restT = 4;
             A.restT -= dt;
@@ -373,9 +376,12 @@ export class ArenaDuels {
         if (live && !A.steward) {
             A.stewT -= dt;
             // (the author 20.11: «заспавнился передо мной, когда я подошёл к прилавку» — he comes while his place is out of the player's sight; only a player who has stood there 30 s with nobody at the counter sees him come)
-            const S0 = A.def.desk.stand, hid = this._unseen(S0);
-            A.stewWait = hid ? 0 : (A.stewWait || 0) + dt;
-            if (A.stewT <= 0 && (hid || A.stewWait > 30)) { A.stewT = 4; A.steward = this._recruitSteward(A, cs); }
+            // (the author 20.11, twice: «он резко появился — так не должно быть; он либо уже есть утром, либо приходит откуда-то к прилавку»: with the desk out of sight he is
+            //  simply there (the arena comes to life by day); else he comes out of the tower's side — itself unseen — and WALKS to the counter; only a player who has stood
+            //  by an empty counter for 45 s sees him come out of the tower's door)
+            const S0 = A.def.desk.stand, hidDesk = this._unseen(S0), hidHome = this._unseen(A.home);
+            A.stewWait = hidDesk || hidHome ? 0 : (A.stewWait || 0) + dt;
+            if (A.stewT <= 0 && (hidDesk || hidHome || A.stewWait > 45)) { A.stewT = 4; A.steward = this._recruitSteward(A, cs, !hidDesk); }
             else if (A.stewT <= 0) A.stewT = 1;
         } else if (!live && A.steward && !A.duel && !A.queue.length) { this._release(A.steward); A.steward = null; }
         if (A.steward) this._ask(A);
@@ -400,12 +406,12 @@ export class ArenaDuels {
         v.steward = true;
     }
 
-    _recruitSteward(A, cs) {
+    _recruitSteward(A, cs, fromHome = false) {
         const L = this.life, def = cs.def, st = L.state(def.id), S = A.def.desk.stand, n = def.population || 24;
         for (let idx = n - 1; idx >= 1; idx--) { // (from the end of the roster: the same man every time; never the Master)
             if (cs.active.has(idx) || st.killed.has(idx)) continue;
-            const out = yawTo(A.def.x, A.def.z, S.x, S.z);
-            const v = L._activate(cs, idx, { x: S.x, y: S.y, z: S.z, yaw: out }, 'arena', { look: (look, e) => Object.assign(look, stewardLook(e.seed, e.female, def.color)) });
+            const out = yawTo(A.def.x, A.def.z, S.x, S.z), P = fromHome ? A.home : S; // (from the tower's side: he walks to the counter — _steward)
+            const v = L._activate(cs, idx, { x: P.x, y: P.y, z: P.z, yaw: fromHome ? yawTo(P.x, P.z, S.x, S.z) : out }, 'arena', { look: (look, e) => Object.assign(look, stewardLook(e.seed, e.female, def.color)) });
             if (!v) continue;
             v.arena = { id: A.id, kind: 'steward', leg: 0 };
             v.steward = true;
@@ -500,7 +506,7 @@ export class ArenaDuels {
         let busy = false;
         for (const v of L.byId.values()) if (v.arena?.id === A.id && !v.dead && (v.arena.kind === 'leave' || (v.arena.kind === 'fan' && !v.seated)) && onArenaFloor(A.def, v.x, v.z, -1)) busy = true;
         if (busy) return false;
-        const cap = A.def.visit ? 170 : 90; // (the visitors' way round the corner and up the stair is long: they are given time to sit before the duellists come out)
+        const cap = A.queue.length ? 15 : A.def.visit ? 60 : 30; // (the visitors' way round the corner and up the stair is long: they are given time to sit before the duellists come out — but a player who has signed up (and paid) is not kept waiting for them: the author 20.11, «ждал и не дождался соперника»)
         if (!A.def.practice && A.fans.size < A.want && A.readyT < cap) return false;
         for (const v of A.fans) if (!v.seated && A.readyT < cap) return false;
         A.readyT = 0;
@@ -578,6 +584,30 @@ export class ArenaDuels {
     }
 
     // ------------------------------------------------------------------ the duels
+    /**
+     * (host) The announced bots' duels — «Далее» on the board (the author 20.11: «в списке будет очередь, и постоянные сражения»): up to
+     * BENCH pairs of the tower's wizards chosen ahead (names only; they are called out when their turn comes). A wizard who is out, killed
+     * or taken by the duel meanwhile is replaced when the pair is taken.
+     */
+    _bench(A, cs) {
+        const L = this.life, def = cs.def, n = def.population || 24, st = L.state(def.id);
+        const bench = A.bench || (A.bench = []);
+        if (n < 5) return bench;
+        const used = new Set(); for (const x of bench) { used.add(x.a); used.add(x.b); }
+        const free = () => { for (let k = 0; k < 40; k++) { const i = 1 + Math.floor(Math.random() * (n - 1)); if (!used.has(i) && !cs.active.has(i) && !st.killed.has(i)) { used.add(i); return i; } } return -1; };
+        while (bench.length < ARENA_DUEL.BENCH) { const a = free(), b = free(); if (a < 0 || b < 0) break; bench.push({ a, b, an: L._roster(def, a).name, bn: L._roster(def, b).name }); }
+        return bench;
+    }
+
+    /** (host) The next announced pair (or null): one of them out or dead → a fresh pair instead. */
+    _benchTake(A, cs) {
+        const st = this.life.state(cs.def.id), bench = this._bench(A, cs);
+        const x = bench.shift();
+        if (x && !cs.active.has(x.a) && !cs.active.has(x.b) && !st.killed.has(x.a) && !st.killed.has(x.b)) { this._bench(A, cs); return x; }
+        this._bench(A, cs);
+        return null;
+    }
+
     _nextDuel(A, cs) {
         // the players signed up first (the first in the queue still here, with a wand)
         const p = A.queue.take((id) => !!this._here(id));
@@ -585,11 +615,21 @@ export class ArenaDuels {
         // (the wizards come out of the tower's side: not while that spot is in the player's eyes — a player's own duel waits at most 12 s for it)
         if (!this._unseen(A.home) && (p == null || (A.unseenWait = (A.unseenWait || 0) + 1) < 12)) { if (p != null) A.queue.list.unshift(p); A.restT = p != null ? 1 : 2; return; }
         A.unseenWait = 0;
-        const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : this._recruit(A, cs, 'duel');
-        if (!a) { A.restT = 10; if (p != null) A.queue.list.unshift(p); return; }
+        const pair = p == null ? this._benchTake(A, cs) : null; // (two wizards of the board's «Далее» line: the ones announced come out)
+        const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : pair ? this._recruit(A, cs, 'duel', (i) => i === pair.a) || this._recruit(A, cs, 'duel') : this._recruit(A, cs, 'duel');
+        if (!a) {
+            A.restT = 6;
+            if (p != null) {
+                A.noFoe = (A.noFoe || 0) + 1;
+                if (A.noFoe >= 8) { A.noFoe = 0; A.tiers.delete(p); this._refund(A, p, 'nofoe'); this._tell(p, { e: 'off', id: A.id, why: 'nofoe' }); allLog('Дуэль', `арена: для ${p} не нашлось свободного волшебника за ~минуту — запись снята, ставка возвращена`); this._send(A); return; }
+                A.queue.list.unshift(p);
+            }
+            return;
+        }
+        A.noFoe = 0;
         if (p != null) A.tiers.delete(p);
         let b = null;
-        if (p == null) { b = this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
+        if (p == null) { b = (pair && this._recruit(A, cs, 'duel', (i) => i === pair.b)) || this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
         A.duel = { a, b, p, tier, phase: 'enter', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0 };
         a.arena.side = 1; // (the far mark)
         if (b) { b.arena.side = 0; if (Math.random() < 0.5) { a.arena.side = 0; b.arena.side = 1; } } // (two wizards: the marks by lot — neither has the first shot always)
@@ -1430,7 +1470,8 @@ export class ArenaDuels {
             case 'call': this.dropTrophyWands(); this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
             case 'pay': this._credit(m.coins | 0, m.why); break;
             case 'full': this.myQueue = null; hud?.setVoice?.('📜 Очередь на арену полна — подойдите позже, ставка возвращена', true); break;
-            case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : m.why === 'night' ? '🌙 Ночь — арена закрылась, ставка возвращена. Приходите днём' : '📜 Запись снята', true); break;
+            case 'wait': hud?.setVoice?.('⏳ Ваш соперник выходит на арену — ещё немного. Стойте у распорядителя или на трибуне', true); break;
+            case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'nofoe' ? '📜 Сейчас некому выйти против вас — запись снята, ставка возвращена. Попробуйте чуть позже' : m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : m.why === 'night' ? '🌙 Ночь — арена закрылась, ставка возвращена. Приходите днём' : '📜 Запись снята', true); break;
             case 'count': this.dropTrophyWands(); this.count = { t: 0 }; break;
             case 'frole': this._friendRole(m); break;
             case 'fstart': this._friendStart(m); break;
@@ -1438,9 +1479,10 @@ export class ArenaDuels {
             case 'fend': this._friendEndShow(m); break;
             case 'end':
                 this.count = null; this.myQueue = null;
+                allLog('Дуэль', `арена: итог для меня — ${m.r} (соперник ${m.opp ?? '?'}, его максимум маны ${m.omax ?? '?'}, ставка ${m.stake ?? 0}, монет ${m.coins ?? 0}, режим ${this.mode ? 'дуэльный' : 'мир'}); ячейки маны за победу: ${m.r === 'win' && !this.mode ? 'будут начислены ниже (журнал «Мана»)' : 'не положены'}`);
                 // (a duel won at the arena counts as a duel won — the author 19.11: «на арене волшебник уже в битве: даже если он не успел выкрикнуть заклинание и лучей не было, победа засчитывается»:
                 // the cells (+1…+3, once per opponent, the mastery too) come from the arena's own verdict, not from a beam clash — Mana.duelWonAlive)
-                if (!this.mode && m.r === 'win') { const gain = this.game.mana?.duelWonAlive?.(m.opp ?? null, Math.random, m.omax || undefined); if (!(gain > 0)) hud?.toast?.('🔷 Над этим соперником вы уже побеждали — максимум маны за повторную победу не растёт (дуэльное мастерство растёт)', 4500); }
+                if (!this.mode && m.r === 'win') { const ow = this.life?.byId?.get?.(m.opp), gain = this.game.mana?.duelWonAlive?.(m.opp ?? null, Math.random, m.omax || undefined, ow ? [ow.x, (ow.y ?? 0) + 2.5, ow.z] : null); if (!(gain > 0)) hud?.toast?.('🔷 Над этим соперником вы уже побеждали — максимум маны за повторную победу не растёт (дуэльное мастерство растёт)', 4500); }
                 if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
                 hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он вернёт ставку и добавит столько же: ${m.coins ?? ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? `😔 Поражение${m.stake > 0 ? ` — ставка ${m.stake} монет пропала` : ''}. Победитель бросил вашу палочку на землю — подберите её` : m.r === 'draw' ? `⏳ Пять минут прошло — ничья${m.stake > 0 ? `, ставка ${m.stake} монет возвращена` : ''}` : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;
@@ -1501,6 +1543,7 @@ export class ArenaDuels {
             q: A.queue.list.slice(0, 6).map((id) => ({ id, n: nm(id), tr: A.tiers.get(id) || null })),
         };
         if (A.queue.length > 6) st.more = A.queue.length - 6;
+        if (A.bench?.length) st.nx = A.bench.map((x) => [x.an, x.bn]); // (the bots' duels to come: «Далее»)
         if (D?.phase === 'over') {
             const w = D.result === 'a' ? D.a : D.result === 'b' ? D.b : null;
             st.res = D.p != null ? (D.result === 'p' ? 'win' : D.result === 'a' ? 'lose' : D.why === 'time' ? 'draw' : 'other') : (w ? 'bot' : D.why === 'time' ? 'draw' : 'other');
@@ -1510,7 +1553,7 @@ export class ArenaDuels {
     }
 
     /** The line's key: the board is sent again when the queue or the night changes (not every frame). */
-    _qKey(A) { return A.queue.list.join(',') + '|' + (this.game.isNight ? 'n' : 'd') + '|' + (A.duel ? A.duel.phase : 'idle'); }
+    _qKey(A) { return A.queue.list.join(',') + '|' + (A.bench || []).map((x) => x.a + '-' + x.b).join(',') + '|' + (this.game.isNight ? 'n' : 'd') + '|' + (A.duel ? A.duel.phase : 'idle'); }
 
     /** (every computer, once a second) The board over the road: the host builds it from its arena, a guest has what the host told. */
     _board(dt) {

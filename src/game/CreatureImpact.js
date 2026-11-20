@@ -305,6 +305,10 @@ export class CreatureImpact {
         const d = r.doll, x = d.x, o = d.o;
         if (!Number.isFinite(at.x) || !Number.isFinite(at.y) || !Number.isFinite(at.z)) return true; // (never a NaN into the doll: the body would vanish)
         d.at(11, _pt); // (the chest: the shoulders' middle)
+        // (the author 20.11: a dead body «дёргается» at the moment of the spell — the goal now starts at the chest's own place and glides to the hand's point)
+        if (r.off === undefined) { r.off = [_pt[0] - at.x, _pt[1] - at.y, _pt[2] - at.z]; r.heldT = 0; }
+        r.heldT += dt;
+        if (r.off !== 0) { const e = Math.exp(-r.heldT * 3.2); at = { x: at.x + r.off[0] * e, y: at.y + r.off[1] * e, z: at.z + r.off[2] * e }; if (e < 0.01) r.off = 0; }
         // the hold carries the whole body along (every point moved alike, its swing kept) — the chest to `at`, smoothly
         const k = 1 - Math.exp(-dt * 14);
         const dx = (at.x - _pt[0]) * k, dy = (at.y - _pt[1]) * k, dz = (at.z - _pt[2]) * k;

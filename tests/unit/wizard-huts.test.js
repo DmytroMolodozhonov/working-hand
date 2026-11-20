@@ -77,3 +77,14 @@ test('wizard huts: the walking nodes stand on free floor and every edge can be w
         }
     }
 });
+
+import { wandNumber } from '../../src/entities/VillagerModel.js';
+import { wizardRoster } from '../../src/game/WizardAI.js';
+test('wizards\' wands differ: the roster of a tower spreads over many of the 64 designs (the author 20.11: almost everyone had the same)', () => {
+    for (const id of ['wt3_4', 'wt10_-2', 'wv5_5']) {
+        const def = { id, kind: 'tower', stalls: [1, 2, 3], teachers: 4, houses: [1, 2, 3], population: 24 };
+        const ns = new Set(); for (let i = 1; i < 24; i++) ns.add(wandNumber(wizardRoster(def, i).seed));
+        assert.ok(ns.size >= 12, id + ': ' + ns.size + ' designs among 23 wizards');
+    }
+    for (let s = 0; s < 4000; s++) { const n = wandNumber(s * 7919); assert.ok(n >= 0 && n < 64 && Number.isInteger(n)); }
+});
