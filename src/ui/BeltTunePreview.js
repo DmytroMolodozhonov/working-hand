@@ -3,7 +3,7 @@
  * and of the wand on the belt, where they are now (solid) and where the game made them (dashed). Mirrored for a left-hander.
  * The numbers are torso heights, as in PoseInterpreter (BODY_TUNE) — the same places the camera reads and the camera window shows.
  */
-import { OFF_POCKET, OFF_POCKET_DY, BELT_AT, tuneOffsets, BODY_TUNE } from '../input/PoseInterpreter.js';
+import { OFF_POCKET, BELT_AT, tuneOffsets, BODY_TUNE } from '../input/PoseInterpreter.js';
 
 const HW = 0.37; // (the hip joints' half spread, torso heights — as an average body)
 
@@ -14,8 +14,8 @@ export function beltPlaces(leftHanded = false, tune = tuneOffsets()) {
     const pocketC = (OFF_POCKET[0] + OFF_POCKET[1]) / 2, pocketHalf = (OFF_POCKET[1] - OFF_POCKET[0]) / 2;
     const wandC = (BELT_AT.u[0] + BELT_AT.u[1]) / 2, wandHalf = (BELT_AT.u[1] - BELT_AT.u[0]) / 2;
     return {
-        pocket: { x: hipX - sgn * (pocketC + tune.pocket), half: pocketHalf, dy: (OFF_POCKET_DY[0] + OFF_POCKET_DY[1]) / 2 },
-        wand: { x: sgn * (wandC + tune.wand), half: wandHalf, dy: (BELT_AT.dy[0] + BELT_AT.dy[1]) / 2 },
+        pocket: { x: hipX - sgn * (pocketC + tune.pocket), half: pocketHalf, dy: 0 }, // (drawn on the belt: both places at one level — the zones' heights differ a little, the picture is a scheme)
+        wand: { x: sgn * (wandC + tune.wand), half: wandHalf, dy: 0 },
     };
 }
 
@@ -40,6 +40,6 @@ export function drawBeltTune(canvas, leftHanded = false) {
     zone(now.pocket, 'rgba(160,220,255,1)', false); zone(now.wand, 'rgba(255,215,106,1)', false);
     c.font = '11px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#e8f0ff';
     c.fillText('ячейка', cx + now.pocket.x * k, Y(now.pocket.dy) + 0.13 * k + 11);
-    c.fillText('палочка', cx + now.wand.x * k, Y(now.wand.dy) - 0.13 * k - 4);
+    c.fillText('палочка', cx + now.wand.x * k, Y(now.wand.dy) + 0.13 * k + 11);
     c.fillStyle = '#9fb0d8'; c.fillText(BODY_TUNE.shift || BODY_TUNE.gap ? 'пунктир — по умолчанию' : 'по умолчанию', cx, H - 3);
 }

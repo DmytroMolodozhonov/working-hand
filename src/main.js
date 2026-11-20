@@ -1704,14 +1704,13 @@ $('handedness')?.addEventListener('change', applyHandedness);
 applyHandedness();
 // «Пояс»: the player's own shift of the pocket's and the wand's places (settings → «Игра»; the picture shows it; the camera window's hints follow)
 const applyBeltTune = () => {
-    const sh = parseInt($('belt-shift')?.value || '0', 10), gp = parseInt($('belt-gap')?.value || '0', 10);
-    setBodyTune(sh * TUNE_STEP, gp * TUNE_STEP);
+    const gp = parseInt($('belt-gap')?.value || '0', 10);
+    setBodyTune(0, gp * TUNE_STEP); // (ONE slider: the pocket and the wand nearer / farther along the belt, each by half)
     const txt = (n, a, b) => (n === 0 ? 'по умолчанию' : n > 0 ? `${a} ${n}` : `${b} ${-n}`);
-    if ($('belt-shift-val')) $('belt-shift-val').textContent = txt(sh, 'к бедру', 'к животу');
     if ($('belt-gap-val')) $('belt-gap-val').textContent = txt(gp, 'дальше', 'ближе');
     drawBeltTune($('belt-tune-view'), $('handedness')?.value === 'left');
 };
-for (const id of ['belt-shift', 'belt-gap', 'handedness']) $(id)?.addEventListener(id === 'handedness' ? 'change' : 'input', applyBeltTune);
+for (const id of ['belt-gap', 'handedness']) $(id)?.addEventListener(id === 'handedness' ? 'change' : 'input', applyBeltTune);
 applyBeltTune();
 // «Ходьба и бег»: the usual walk (the body's bob) or the new one (steps read from the legs)
 const applyWalkMode = () => { poseService.interpreter.walkMode = $('walk-mode')?.value === 'legs' ? 'legs' : 'old'; };
@@ -2181,7 +2180,7 @@ for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'wal
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'lite-mode', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'belt-shift', 'belt-gap', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
+        'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'belt-gap', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
