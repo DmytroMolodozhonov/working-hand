@@ -121,7 +121,7 @@ const glReload = (why) => {
     if (tries.length >= 2) return;
     window.__glReloading = true;
     try { sessionStorage.setItem('zns-gl-retry', JSON.stringify([...tries, Date.now()])); } catch (e) { /* no storage */ }
-    rememberStartupFailure(localStorage,new Error('Видеокарта сбросила графику: '+why+' | последний шейдер: '+String(_lastShader||'—').slice(0,300)+' | с запуска страницы '+Math.round(performance.now()/1000)+' с'),window.__zns?.game?.config||{}); // (what was compiling at the drop: the banner now says it — the author 20.11 saw the same drop on every entry)
+    netLog(`🎮 сброс графики: последний шейдер ${String(_lastShader||'—').slice(0,300)}; с запуска страницы ${Math.round(performance.now()/1000)} с`); // (only the journal: the game recovers by itself — the author 20.11: «зачем показывать, если решена»)
     netLog(`🎮 графика сброшена видеокартой — перезапускаю страницу (${why})`);
     try { updateProgress(100, 'Видеокарта сбросила графику — перезапускаю игру…'); } catch (err) { /* not built yet */ }
     try { rememberWindowSize(); } catch (err) { /* */ }
@@ -228,7 +228,8 @@ function updateProgress(percent, text, band = null) {
 // Loading screen starts visible in the HTML: hide it, show the menu.
 loadingScreen.classList.add('hidden');
 loadingScreen.style.display = 'none';
-const previousStartupFailure=readStartupFailure(localStorage);
+let previousStartupFailure=readStartupFailure(localStorage);
+if(previousStartupFailure&&/^Видеокарта сбросила графику/.test(previousStartupFailure.message)){clearStartupFailure(localStorage);previousStartupFailure=null;} // (a drop the game already got over — never shown, also an old record)
 if(previousStartupFailure){showStartupFailure(mainMenu,previousStartupFailure,{compact:true});clearStartupFailure(localStorage);/* (shown once: the next launch is clean — the author 20.11, the old report stuck on every entry) */netLog('❌ предыдущий вход: '+previousStartupFailure.message);}
 
 // ------------------------------------------------------------------ tabs
