@@ -2262,7 +2262,7 @@ export class Duel {
         const w = this._won;
         if (!w || performance.now() - w.at <= 8000) return;
         this._won = null;
-        this.game.mana?.duelWonAlive(w.id, Math.random, w.max);
+        this.game.mana?.duelWonAlive(w.id, Math.random, w.max, null, false, 'выиграл столкновение, соперник жив 8 с');
     }
 
     remoteClashEnd(m) {

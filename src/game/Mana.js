@@ -211,6 +211,7 @@ export class Mana {
         this.log = []; // (tests) the last few gains
         // the reward for a fight with a wizard — by the beauty of the magic (FightLedger.js): an account for each wizard
         this.fight = new FightLedger(() => performance.now() / 1000, (name) => ({ key: SAME_SPELL[name] || name, w: NOT_SPELLS.has(name) || name === 'Maxima' ? 0 : spellWeight(firstSpellGain(name)) }), () => this.max + this.mastery);
+        this.fight.onLog = (id, text) => allLog('Мана', `бой с ${id}: ${text}`);
         FoeSet.onCast = (v, id) => { if (v && id != null && id === this.game.localId) this.fight.foeCast(v.id, v.maxMana || 0); }; // (a wizard cast at ME)
     }
 
@@ -270,8 +271,10 @@ export class Mana {
      * `killed`: he died; `fought`: the caller knows it was honest (a player, the arena); `arena`: the arena's round decides it.
      * @returns {number} the cells that grew
      */
-    fightWon(id = null, { killed = false, oppMax = MANA.BASE, oppMastery = 0, pos = null, fought = false, arena = false } = {}) {
+    fightWon(id = null, { killed = false, oppMax = MANA.BASE, oppMastery = 0, pos = null, fought = false, arena = false, via = '' } = {}) {
         const key = id != null ? String(id) : null;
+        const nowS = performance.now() / 1000;
+        if (key != null && this._paidAt?.get(key) > nowS - 3) { allLog('Мана', `бой с ${id}: повтор события победы (${via || '?'}) — игнорирую, уже оплачено секунду назад`); return 0; } // (the same win told twice in a moment — a stunned wizard, a clash and the arena at once)
         const L = this.fight;
         const sum = L.summary(key ?? '?', fought || arena, arena, (Number(oppMax) || 0) + (Number(oppMastery) || 0));
         if (!sum.honest) { allLog('Мана', `бой с ${id}: ячейки НЕ начислены — бой нечестный (он не нападал на вас), такие не считаются`); return 0; }
@@ -281,7 +284,8 @@ export class Mana {
         const n = Math.max(part ? 0 : 1, fightCells(sum.pct, oppMax, MANA.BASE) - part);
         const m = this.masteryWon(id, killed, oppMax, oppMastery, true, sum.pct);
         L.close(key ?? '?');
-        allLog('Мана', `бой с ${id} выигран${killed ? ' (убит)' : ''}: ${Math.round(sum.pct)}% от (${Math.round(oppMax)} − ${MANA.BASE}) = +${n} ячеек; бой ${Math.round(sum.seconds)} с, заклинаний ${sum.spells}, столкновений ${sum.clashes}${sum.elemental ? ', магия стихий' : ''}${sum.underdog > 0 ? `, слабее соперника в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : ''}${sum.crowd > 0 ? `, противников сразу ${sum.peak}: +${Math.round(sum.crowd)}%` : ''}${sum.ally > 0 ? `, помощники: +${sum.ally}%` : ''}; мастерство +${m}`);
+        (this._paidAt || (this._paidAt = new Map())).set(key ?? '?', nowS);
+        allLog('Мана', `бой с ${id} выигран${killed ? ' (убит)' : ''} [${via || '?'}]: ${Math.round(sum.pct)}% от (${Math.round(oppMax)} − ${MANA.BASE}) = +${n} ячеек; бой ${Math.round(sum.seconds)} с, заклинания (${sum.spells}): ${sum.names.join(', ') || '—'}, столкновений ${sum.clashes}${sum.elemental ? ', магия стихий' : ''}${sum.underdog > 0 ? `, слабее соперника в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : ''}${sum.crowd > 0 ? `, противников сразу ${sum.peak}: +${Math.round(sum.crowd)}%` : ''}${sum.ally > 0 ? `, помощники: +${sum.ally}%` : ''}; мастерство +${m}`);
         if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
         this.grow(n, killed ? 'duel' : 'duelAlive');
         const why = [`бой ${Math.round(sum.seconds)} с`, `заклинаний: ${sum.spells}`, sum.clashes ? `столкновений: ${sum.clashes}` : null, sum.elemental ? 'магия стихий' : null, sum.underdog > 0 ? `соперник сильнее вас в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : null, sum.crowd > 0 ? `противников сразу: ${sum.peak}, +${Math.round(sum.crowd)}%` : null, sum.ally > 0 ? `помощники: +${sum.ally}%` : null].filter(Boolean).join(', ');
@@ -312,10 +316,10 @@ export class Mana {
     }
 
     /** (old name) A real duel won: the opponent killed in the clash. */
-    duelWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought: true }); }
+    duelWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought: true, via: 'убит после выигранного столкновения' }); }
 
     /** (old name) The opponent killed by me without a clash: only after he fought (`fought`). */
-    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0, fought = true) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought }); }
+    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0, fought = true) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought, via: 'убит' }); }
 
     /** The beaten one's power flies to my chest: a stream of sparks (the shared pool), a flash and a chime at the end. */
     powerFlow(pos, n, how) {
@@ -357,7 +361,7 @@ export class Mana {
     }
 
     /** (old name) The fight won and the opponent `id` lives (lifted, stunned, fled, the arena's verdict): the same prize as for a kill. */
-    duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE, pos = null, arena = false) { return this.fightWon(id, { killed: false, oppMax, pos, arena, fought: arena }); }
+    duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE, pos = null, arena = false, via = '') { return this.fightWon(id, { killed: false, oppMax, pos, arena, fought: arena, via: via || (arena ? 'арена' : 'победил живым') }); }
 
     /**
      * A duel won against `id` (`kill`: to the death): «дуэльное мастерство» grows — every duel won,
@@ -425,6 +429,7 @@ export class Mana {
         this.duelsWon.clear();
         this.fight.clear();
         this.partPaid.clear();
+        this._paidAt?.clear();
         if (this._flow) this._flow.length = 0;
         this.found.clear();
         this.mastery = 0;

@@ -29,7 +29,7 @@ export const FIGHT = {
     ELEMENT_MULT: 1.25, ELEMENT_SHARE: 0.5, ELEMENT_MIN_CASTS: 2,
     CROWD_EACH: 5, CROWD_MAX: 20,
     UNDERDOG_FROM: 1.25, UNDERDOG_K: 8, UNDERDOG_MAX: 15,
-    MASTERY_BASE: 2, MASTERY_PER_PCT: 0.4, MASTERY_FOE_SHARE: 0.2,
+    MASTERY_BASE: 2, MASTERY_PER_PCT: 0.25, MASTERY_FOE_SHARE: 0.2,
     ABANDON_S: 45, ABANDON_MIN_ACTIVE_S: 3, ABANDON_K: 0.5, // an unfinished fight (I fled, he lost me): paid half after this long quiet
     DROP_S: 900, MAX_ENTRIES: 40,
 };
@@ -58,6 +58,7 @@ export class FightLedger {
     constructor(now, spellOf, strength = () => 0) {
         this.now = now; this.spellOf = spellOf; this.strength = strength; // (my strength now: mana maximum + duel mastery — noted when an account opens)
         this.map = new Map();
+        this.onLog = null; // (id, text) — the journal: how a fight began, who joined it
         this.recent = []; // my latest spells {t, name, key, w, el}: the opening one is cast before the account opens
     }
 
@@ -94,9 +95,10 @@ export class FightLedger {
     _alive(e) { return e.arena || this.now() - e.last <= FIGHT.WINDOW_S; }
 
     /** He cast at me (an NPC wizard / a player): the fight is honest and goes on. */
-    foeCast(id, foeMax = 0) { const e = this._entry(id); e.honest = true; if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
+    foeCast(id, foeMax = 0) { const e = this._entry(id); this._honest(e, id, foeMax > 0 ? 'он колдует/бьёт в вас' : 'он бьёт вас'); if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
+    _honest(e, id, why) { if (!e.honest) { e.honest = true; this.onLog?.(id, `бой начался (${why}); мана соперника ${e.foeMax || '?'}; противников сейчас ${[...this.map.values()].filter((x) => x.honest && this._alive(x)).length}`); } }
     /** A beam clash with him (won or lost). */
-    clash(id) { const e = this._entry(id); e.honest = true; e.clashes++; this._touch(e); }
+    clash(id) { const e = this._entry(id); this._honest(e, id, 'столкновение лучей'); e.clashes++; this._touch(e); }
     /** My spell hurt him: the fight goes on (honest only if he has fought back). */
     hit(id, foeMax = 0) { const e = this._entry(id); if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
     /** The arena's round: the opponent is fought honestly by the rules of the place. */
@@ -151,7 +153,7 @@ export class FightLedger {
         const crowd = Math.min(FIGHT.CROWD_MAX, Math.max(0, (e.peak || 1) - 1) * FIGHT.CROWD_EACH);
         const ally = e.ally ? FIGHT.ALLY_PCT : 0;
         const pct = Math.min(FIGHT.TOTAL_MAX, beauty + underdog + crowd + ally);
-        return { honest: true, pct, underdog, ratio: r, crowd, ally, peak: e.peak || 1, parts: { base: FIGHT.MIN_PCT, time, variety, clash }, elemental, seconds: e.active, spells: e.spells.size, clashes: e.clashes };
+        return { honest: true, pct, underdog, ratio: r, crowd, ally, names: [...e.spells.keys()], peak: e.peak || 1, parts: { base: FIGHT.MIN_PCT, time, variety, clash }, elemental, seconds: e.active, spells: e.spells.size, clashes: e.clashes };
     }
 
     close(id) { this.map.delete(String(id)); this.map.delete(ARENA); }
