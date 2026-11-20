@@ -415,12 +415,6 @@ export class MagicFloraLife {
             this._eyeT = 0.05;
             for (const pl of this.list.eyeflower || []) if (Math.abs(pl.x - me.x) + Math.abs(pl.z - me.z) < 70) { this._pickDirty.add('eyeflower'); break; }
         }
-        // instances: only the kinds that changed
-        if (this._dirty.size || this._pickDirty.size) {
-            for (const k of this._dirty) this._writeBody(k);
-            for (const k of this._pickDirty) this._writePicks(k);
-            this._dirty.clear(); this._pickDirty.clear();
-        }
         // parts grow again
         this._growT = (this._growT || 0) - dt;
         if (this._growT <= 0) {
@@ -448,6 +442,11 @@ export class MagicFloraLife {
             if (pl.burn <= 0) { pl.burn = -1; this.kill(pl, 'ash'); }
             else this._dirty.add(pl.kind);
         }
+
+        // Commit the instances after removing unsupported or burnt plants, before this frame is drawn.
+        for (const k of this._dirty) this._writeBody(k);
+        for (const k of this._pickDirty) this._writePicks(k);
+        this._dirty.clear(); this._pickDirty.clear();
 
         // the hand: pick
         this._handT -= dt;
