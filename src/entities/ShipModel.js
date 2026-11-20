@@ -13,6 +13,7 @@
  */
 
 import * as THREE from 'three';
+import { shipTextures } from './ShipTextures.js';
 import { hullHalfWidth, keelY } from '../game/ShipLayout.js';
 
 const _m = new THREE.Matrix4();
@@ -119,124 +120,24 @@ const WOOD_M = 4; // metres of hull per wood texture
 /** Seeded noise for the textures (the same look every time). */
 function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }; }
 
-/**
- * Weathered planking (grey-scale, multiplied into the vertex colours): strakes 0.45 m wide with
- * tarred seams, butt joints with iron nail heads, wavy grain, knots, darker stains and paler wear.
- * planksAcross: deck planks run along u (seams across v).
- */
-function woodCanvas(size = 512, seed = 7, { strakes = 9, nails = true, light = 222 } = {}) {
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = size;
-    const x = cv.getContext('2d');
-    const r = rng(seed);
-    x.fillStyle = `rgb(${light},${light},${light})`;
-    x.fillRect(0, 0, size, size);
-    const h = size / strakes;
-    for (let i = 0; i < strakes; i++) {
-        const y0 = i * h;
-        // each plank a little different; butt joints at random places along it
-        let u = -r() * size;
-        while (u < size) {
-            const len = size * (0.45 + r() * 0.5);
-            const shade = light - 18 + Math.floor(r() * 30);
-            x.fillStyle = `rgb(${shade},${shade - 2},${shade - 6})`;
-            x.fillRect(u, y0, len, h);
-            // grain: long wavy lines
-            for (let k = 0; k < 9; k++) {
-                const gy = y0 + 2 + r() * (h - 4), amp = 0.6 + r() * 1.8, ph = r() * 6;
-                x.strokeStyle = `rgba(60,40,20,${0.10 + r() * 0.14})`;
-                x.lineWidth = 0.6 + r() * 0.8;
-                x.beginPath();
-                for (let t = 0; t <= len; t += 8) x.lineTo(u + t, gy + Math.sin(t / (18 + k * 3) + ph) * amp);
-                x.stroke();
-            }
-            // a knot now and then
-            if (r() < 0.35) {
-                const kx = u + r() * len, ky = y0 + h * (0.3 + r() * 0.4);
-                const g = x.createRadialGradient(kx, ky, 0.5, kx, ky, h * 0.22);
-                g.addColorStop(0, 'rgba(50,30,15,0.65)'); g.addColorStop(1, 'rgba(50,30,15,0)');
-                x.fillStyle = g; x.beginPath(); x.ellipse(kx, ky, h * 0.32, h * 0.18, 0, 0, Math.PI * 2); x.fill();
-            }
-            // the butt joint and its nails
-            x.fillStyle = 'rgba(30,20,12,0.85)';
-            x.fillRect(u + len - 1, y0, 2, h);
-            if (nails) {
-                x.fillStyle = 'rgba(25,25,28,0.9)';
-                for (const ny of [0.3, 0.7]) { x.beginPath(); x.arc(u + len - 6, y0 + h * ny, 1.6, 0, Math.PI * 2); x.fill(); x.beginPath(); x.arc(u + len + 6, y0 + h * ny, 1.6, 0, Math.PI * 2); x.fill(); }
-            }
-            u += len;
-        }
-        // the tarred seam between strakes
-        x.fillStyle = 'rgba(20,14,8,0.9)';
-        x.fillRect(0, y0, size, 2);
-        x.fillStyle = 'rgba(255,255,255,0.08)';
-        x.fillRect(0, y0 + 2, size, 1);
-    }
-    // weathering: stains and paler worn patches
-    for (let k = 0; k < 40; k++) {
-        const wx = r() * size, wy = r() * size, wr = 8 + r() * 40;
-        const g = x.createRadialGradient(wx, wy, 0, wx, wy, wr);
-        const dark = r() < 0.6;
-        g.addColorStop(0, dark ? 'rgba(40,35,25,0.12)' : 'rgba(255,250,235,0.10)');
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        x.fillStyle = g; x.fillRect(wx - wr, wy - wr, wr * 2, wr * 2);
-    }
-    // fine noise
-    const img = x.getImageData(0, 0, size, size), d = img.data;
-    for (let i = 0; i < d.length; i += 4) { const n = (r() - 0.5) * 14; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
-    x.putImageData(img, 0, 0);
-    return cv;
-}
-
-/** Sailcloth: vertical cloths sewn together, a little dirty towards the foot. */
-function sailCanvas() {
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = 256;
-    const x = cv.getContext('2d');
-    const r = rng(11);
-    x.fillStyle = '#f4efe2'; x.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 8; i++) {
-        const s = 236 + Math.floor(r() * 16);
-        x.fillStyle = `rgb(${s},${s - 4},${s - 14})`;
-        x.fillRect(i * 32, 0, 32, 256);
-        x.fillStyle = 'rgba(120,100,70,0.45)'; x.fillRect(i * 32, 0, 1.5, 256); // the seam
-        x.fillStyle = 'rgba(120,100,70,0.18)'; x.fillRect(i * 32 + 4, 0, 1, 256);
-    }
-    const g = x.createLinearGradient(0, 0, 0, 256);
-    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(90,80,60,0.18)');
-    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
-    // reef points: a row of little ties
-    x.fillStyle = 'rgba(110,90,60,0.6)';
-    for (let i = 4; i < 256; i += 12) x.fillRect(i, 40, 1.5, 6);
-    return cv;
-}
-
-function canvasTex(cv) {
-    const t = new THREE.CanvasTexture(cv);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 4;
-    return t;
-}
-
 let SHARED = null;
 function shared() {
     if (SHARED) return SHARED;
     const dom = typeof document !== 'undefined';
-    const hullTex = dom ? canvasTex(woodCanvas(512, 7)) : null;
-    const deckTex = dom ? canvasTex(woodCanvas(512, 19, { strakes: 9, light: 236 })) : null;
-    const sailTex = dom ? canvasTex(sailCanvas()) : null;
-    // (matte: Lambert, no shine — wood and cloth, not plastic)
+    const { hull, deck, timber = null, sail = null, iron = null } = shipTextures();
+    const hullTex = hull?.color ?? null, deckTex = deck?.color ?? null;
     SHARED = {
-        solid: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, map: hullTex }),
+        solid: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, map: timber }),
         hull: new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide, map: hullTex,
-            bumpMap: hullTex, bumpScale: 0.12, specular: 0x17130e, shininess: 13 }),
-        deck: new THREE.MeshPhongMaterial({ map: deckTex, color: 0xa9855d, side: THREE.DoubleSide,
-            bumpMap: deckTex, bumpScale: 0.08, specular: 0x12100d, shininess: 10 }),
-        sail: new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, vertexColors: true, map: sailTex }),
+            bumpMap: hull?.relief ?? null, bumpScale: .14, specular: 0x211e18, shininess: 16 }),
+        deck: new THREE.MeshPhongMaterial({ map: deckTex, color: 0xab9481, side: THREE.DoubleSide,
+            bumpMap: deck?.relief ?? null, bumpScale: .08, specular: 0x15130f, shininess: 13 }),
+        sail: new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, vertexColors: true, map: sail }),
         rope: new THREE.LineBasicMaterial({ color: 0x3a2a1a }),
         glass: new THREE.MeshBasicMaterial({ color: 0x2a2416 }),
         lit: new THREE.MeshBasicMaterial({ color: 0xffc860 }),
         iron: new THREE.MeshLambertMaterial({ color: 0x2b2b2e }),
+        gunmetal: new THREE.MeshPhongMaterial({ vertexColors: true, map: iron, shininess: 24, specular: 0x363330 }),
         ball: new THREE.SphereGeometry(0.32, 10, 8),
         // the black ship (Blackbeard.js): tarred black deck, green fire in its lanterns, the black flag
         deckBlack: new THREE.MeshLambertMaterial({ map: deckTex, color: 0x5e4c40, side: THREE.DoubleSide }),
@@ -245,14 +146,15 @@ function shared() {
         greenFire: new THREE.MeshBasicMaterial({ color: 0x6dff8a }),
         greenDim: new THREE.MeshBasicMaterial({ color: 0x2c7a3c }),
         jolly: new THREE.MeshLambertMaterial({ map: dom ? new THREE.CanvasTexture(jollyCanvas()) : null, color: 0xffffff, side: THREE.DoubleSide }),
-        bundleBlack: new THREE.MeshLambertMaterial({ color: 0x1e1b1d }),
+        bundle: new THREE.MeshLambertMaterial({ color: 0xd9c9ac, map: sail }),
+        bundleBlack: new THREE.MeshLambertMaterial({ color: 0x2b282a, map: sail }),
     };
     SHARED.solid.userData.shared = true;
     SHARED.hull.userData.shared = true;
     return SHARED;
 }
 
-const WOOD = 0x8a5a33, DARK = 0x4a3020, BOTTOM = 0x5a3b2a, WALE = 0x2b1d14, GOLD = 0xd4a63a, IRON = 0x2f2f33, ROPE = 0x5b4630;
+const WOOD = 0x9e7756, DARK = 0x665044, BOTTOM = 0x504942, WALE = 0x39342e, GOLD = 0xd4a63a, IRON = 0x2f2f33, ROPE = 0x5b4630;
 
 /**
  * The looks of ships. 'black' — Captain Black Moustache's ship: tarred black wood, dark red bands and
@@ -382,7 +284,7 @@ export class SailMesh {
         this.base = new THREE.Color(color);
         // the rolled-up bundle along the yard
         const len = lateen ? spec.w : spec.w * 0.92;
-        this.bundle = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, len, 8), opts.ragged ? shared().bundleBlack : new THREE.MeshLambertMaterial({ color: 0xe0d5bb }));
+        this.bundle = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, len, 8), opts.ragged ? shared().bundleBlack : shared().bundle);
         this.bundle.rotation.z = Math.PI / 2;
         if (lateen) this.bundle.rotation.set(0, Math.PI / 2, 0);
         this.group = new THREE.Group();
@@ -475,7 +377,6 @@ export class SailMesh {
     dispose() {
         this.geometry.dispose();
         this.bundle.geometry.dispose();
-        if (this.bundle.material !== SHARED?.bundleBlack) this.bundle.material.dispose();
     }
 }
 
@@ -553,8 +454,9 @@ export class ShipModel {
         // Wet timbers are darkest near the water and under the projecting wales.
         const weathered = (y, z) => {
             const wet = 0.25 * Math.max(0, 1 - Math.max(0, y) / 2.4);
-            const streak = (1 + Math.sin(z * 0.39) * Math.cos(z * 0.19 + y)) * 0.055;
-            return 1 - wet - streak;
+            const streak = (1 + Math.sin(z * .39) * Math.cos(z * .19 + y)) * .05;
+            const drip = (Math.sin(z * 1.7 + .17 * Math.sin(y)) * .5 + .5) ** 3;
+            return 1 - wet - streak - drip * .16 * Math.max(0, 1 - Math.max(0, y) / 7);
         };
         for (let i = 0; i < NZ; i++) {
             const a = rings[i], b = rings[i + 1], za = zs[i], zb = zs[i + 1];
@@ -844,8 +746,11 @@ export class ShipModel {
         wheel.add(this.wheel);
         this.group.add(wheel);
         this.wheelGroup = wheel;
-        near.box(-0.35, 0.35, helm.y - 1.9, helm.y - 0.1, helm.z + 0.25, helm.z + 0.75, DARK); // the post and the drum
-        near.cyl(0.35, 0.35, 1.8, 0, helm.y - 1.0, helm.z + 0.5, 0x6b4526, 0, 0, Math.PI / 2, 8);
+        // Mount the axle and pedestal on the bow side, leaving the captain's side clear.
+        const postZ = helm.z - .59;
+        near.box(-.30, .30, helm.y - 1.9, helm.y + .10, postZ - .19, postZ + .19, DARK);
+        near.box(-.42, .42, helm.y - 1.9, helm.y - 1.74, postZ - .24, postZ + .23, WOOD);
+        near.cyl(.21, .24, .66, 0, helm.y, helm.z - .40, IRON, Math.PI / 2, 0, 0, 10);
 
         yield;
         // ------------------------------------------------------------- the guns
@@ -868,7 +773,7 @@ export class ShipModel {
             grp.position.set(g.x, g.y, g.z);
             grp.rotation.y = yaw;
             const barrel = new THREE.Group();
-            barrel.add(new THREE.Mesh(barrelGeo, S.solid));
+            barrel.add(new THREE.Mesh(barrelGeo, S.gunmetal));
             const fuse = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), S.lit);
             fuse.position.set(-1.1, 0.5, 0);
             fuse.visible = false;
@@ -903,7 +808,7 @@ export class ShipModel {
         for (const m of L.masts) {
             const fg = new THREE.PlaneGeometry(4.5, 2.6, 6, 1);
             fg.translate(2.25, 0, 0);
-            const flag = new THREE.Mesh(fg, look && !look.sunk ? S.jolly : look ? S.bundleBlack : new THREE.MeshLambertMaterial({ color: this.color, side: THREE.DoubleSide }));
+            const flag = new THREE.Mesh(fg, look && !look.sunk ? S.jolly : look ? S.bundleBlack : new THREE.MeshLambertMaterial({ color: this.color, side: THREE.DoubleSide, map: S.sail.map }));
             flag.position.set(0, m.top + 1.2, m.z);
             const pt = parts.get(m.id);
             if (pt) pt.up.cyl(0.08, 0.08, 2.6, 0, m.top + 1.0 - pt.by, 0, DARK);
@@ -1412,7 +1317,7 @@ export class ShipModel {
                 if (o.geometry !== shared().ball && o.geometry !== this._barrelGeo && o.geometry !== BARRIER?.shell && o.geometry !== BARRIER?.ring) o.geometry.dispose();
                 const m = o.material;
                 const S = shared();
-                if (m && m !== S.solid && m !== S.hull && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.deckBlack && m !== S.deckSunk && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundleBlack) m.dispose();
+                if (m && m !== S.solid && m !== S.hull && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.gunmetal && m !== S.deckBlack && m !== S.deckSunk && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundle && m !== S.bundleBlack) m.dispose();
             }
         });
         for (const s of this.sails.values()) s.dispose?.();

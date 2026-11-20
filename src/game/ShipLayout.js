@@ -222,7 +222,7 @@ function makeLayout(C) {
     // rim) — it stops bodies only, not hands, blades or blows (ShipCollision skips it for those)
     solids.push({ x0: -1.9, x1: 1.9, y0: Q.y + 0.3, y1: Q.y + 3.9, z0: helmZ + 0.3, z1: helmZ + 0.8, kind: 'helmspace' });
     solids.push({ x0: -1.9, x1: 1.9, y0: Q.y + 0.3, y1: Q.y + 3.9, z0: helmZ - 0.3, z1: helmZ + 0.3, kind: 'wheel' });
-    solids.push({ x0: -0.45, x1: 0.45, y0: Q.y, y1: Q.y + 1.9, z0: helmZ - 0.5, z1: helmZ + 0.5, kind: 'wheel' });
+    solids.push({ x0: -0.45, x1: 0.45, y0: Q.y, y1: Q.y + 1.9, z0: helmZ - .83, z1: helmZ - .36, kind: 'wheel' });
 
     // ------------------------------------------------------------ the capstan
     const mainMast = C.masts.find((m) => m.id === 'main');
