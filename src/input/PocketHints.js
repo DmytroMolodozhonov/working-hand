@@ -13,7 +13,7 @@
  * them), the wand in front of the belly a little to the left (the RIGHT hand takes it). A left-hander: all mirrored.
  * The numbers are in torso heights (shoulder → hip), so the distance to the camera does not matter.
  */
-import { OFF_POCKET, OFF_POCKET_DY, BELT_AT, beltHips } from './PoseInterpreter.js';
+import { OFF_POCKET, OFF_POCKET_DY, BELT_AT, beltHips, tuneOffsets } from './PoseInterpreter.js';
 
 /** The middles of the places, torso heights: `out` — outwards of the leading hand's hip (the pocket - the coins too: one place), `u` — towards the person's other side from the hips' middle (the wand); `dy` — below the hip line. */
 export const HINT_AT = {
@@ -63,9 +63,10 @@ export function placesFrom(out, lm, leftHanded = false, aspect = 4 / 3) {
     if (down <= 0.05 || lean > down * 1.4) return false;
     const sgn = leftHanded ? -1 : 1;
     // (outwards of the leading hip is the picture's left for a right-hander: x = hip.x − out·T/aspect)
-    out.pocket.x = hip.x - sgn * HINT_AT.pocket.out * T / aspect;
+    const to = tuneOffsets(); // (the player's own shift of the places: settings → «Игра»)
+    out.pocket.x = hip.x - sgn * (HINT_AT.pocket.out + to.pocket) * T / aspect;
     out.pocket.y = hip.y + HINT_AT.pocket.dy * T;
-    out.wand.x = mx + sgn * HINT_AT.wand.u * Tw / aspect;
+    out.wand.x = mx + sgn * (HINT_AT.wand.u + to.wand) * Tw / aspect;
     out.wand.y = my + HINT_AT.wand.dy * Tw;
     out.T = T;
     return true;
