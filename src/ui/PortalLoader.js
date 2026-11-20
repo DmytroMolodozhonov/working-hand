@@ -173,6 +173,7 @@ export class PortalLoader {
 
     /** Start the passage over the menu (`menu` — the element drawn into the swirl). */
     start(menu = null) {
+        if (this.on && this.phase !== 'off' && this.phase !== 'arrive') return this.melted; // (already going — started at the click, before the world's file was read: the author 20.11, the menu hung for seconds)
         if (!this.el) this._build();
         this._roll();
         this.el.classList.remove('done', 'arrive');
@@ -188,11 +189,16 @@ export class PortalLoader {
         if (menu) { // (the menu is drawn into the whirl: it shrinks, turns and melts — quickly, and started at once: the author saw the menu
             // hang over the loading — the loading's heavy work held back the frame that was to start its melting)
             menu.classList.remove('hidden');
-            menu.style.transition = 'transform .7s cubic-bezier(.6,0,.9,.6), filter .7s, opacity .6s';
+            // (20.11, the author: «сначала несколько секунд это окно, потом загрузка» — the start's heavy work began at once and held the main thread: the
+            //  melt (with a blur — not a compositor-only animation) froze half-way and the menu hung for seconds. Now: quick, transform and opacity only,
+            //  and the start WAITS for it to be gone (`melted`) before the heavy work begins)
+            menu.style.willChange = 'transform, opacity';
+            menu.style.transition = 'transform .32s cubic-bezier(.6,0,.9,.6), opacity .28s';
             void menu.getBoundingClientRect(); // (the transition starts from here, now — not on a later frame)
-            menu.style.transform = `scale(0.12) rotate(${this.dir * 75}deg)`; menu.style.filter = 'blur(8px) saturate(1.6)'; menu.style.opacity = '0';
-            const m = menu; setTimeout(() => { if (this.menu === m) { m.classList.add('hidden'); m.style.transform = ''; m.style.filter = ''; m.style.opacity = ''; m.style.transition = ''; this.menu = null; } }, 750);
-        }
+            menu.style.transform = `scale(0.12) rotate(${this.dir * 75}deg)`; menu.style.opacity = '0';
+            const m = menu;
+            this.melted = new Promise((res) => setTimeout(() => { if (this.menu === m) { m.classList.add('hidden'); m.style.transform = ''; m.style.opacity = ''; m.style.transition = ''; m.style.willChange = ''; this.menu = null; } res(); }, 340));
+        } else this.melted = Promise.resolve();
         document.body.classList.add('passage-on'); // (no game's HUD under the passage: the minimap, the camera's box — style.css)
         this.on = true;
         this.tt = 0; this._lastT = 0;
@@ -271,6 +277,14 @@ export class PortalLoader {
             this.el.style.setProperty('--pl-open', String(this.open));
         }
         this._raf = requestAnimationFrame((tt) => this._frame(tt));
+    }
+
+    /** The start did not go on (the world's file could not be read): the passage goes and the menu comes back as it was. */
+    cancel(menu = null) {
+        if (!this.on) return;
+        this._done = null; this._stop();
+        if (menu) { menu.classList.remove('hidden'); menu.style.transform = ''; menu.style.opacity = ''; menu.style.transition = ''; menu.style.willChange = ''; }
+        this.menu = null;
     }
 
     _stop() {
