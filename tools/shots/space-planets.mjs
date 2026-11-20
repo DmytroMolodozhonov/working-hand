@@ -42,6 +42,7 @@ export default async function (h, args) {
         g.character.group.rotation.y = Math.atan2(to.x, to.z);
         h.cam(cam.toArray(), look.toArray());
         await h.frames(30);
+        { const c = g.character, fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(g.camera.projectionMatrix, g.camera.matrixWorldInverse)); h.log('hero', { vis: c.group.visible, fpv: c._fpv, hidden: c._bodyHidden, pos: c.group.position.toArray().map(Math.round), cam: g.camera.position.toArray().map(Math.round), inFrustum: fr.intersectsObject(c.body), camLayers: g.camera.layers.mask, bodyLayer: c.body.layers.mask, mode: g.cameraMode, state: S.state, realm: S.realm }); }
         await h.shot('space-' + id, { settle: 10, light: 0 });
     }
 }
