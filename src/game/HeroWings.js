@@ -19,6 +19,7 @@
  * growing and the nausea are as said; the game saved and loaded mid-growth — the time is kept; the monster form / the dragon form — the
  * wings are hidden (the body is another's) and come back; another player — sees the wings, their growth, folded or spread (pose 'wg').
  */
+import { placeStatusBar } from '../ui/StatusStack.js';
 import * as THREE from 'three';
 import { MODEL_KIT as K, animateWings } from './AnimalModels.js';
 
@@ -198,7 +199,7 @@ export class HeroWings {
             el = this._bar = document.createElement('div');
             el.id = 'wings-grow';
             el.innerHTML = '<div class="wg-cap">🪽 Крылья растут</div><div class="wg-track"><div class="wg-fill"></div></div>';
-            document.body.appendChild(el);
+            placeStatusBar(el);
         }
         if (!el) return;
         el.style.display = k >= 0 ? 'block' : 'none';
