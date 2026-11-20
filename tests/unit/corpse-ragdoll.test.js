@@ -107,3 +107,25 @@ test('a new player corpse carries its lethal impulse across the network, without
         assert.equal(velocity(restored.death.bodies.get('kicked').doll.doll),0,'restoring a saved corpse is not another death');
     } finally {a.close();b.close();restored.close();}
 });
+
+test('a lifted corpse does not jerk at the moment of the spell: the hold starts from where the chest lies (the author 20.11)', () => {
+    const w = world();
+    try {
+        const b = player(w, 0.4);
+        frames(w);
+        assert.equal(b.doll.doll.asleep, true);
+        const P = { x: 0, y: 0, z: 0 };
+        const chest = () => { const t = [0, 0, 0]; b.doll.doll.at(11, t); return t; };
+        const before = chest();
+        w.death.liftBody(b);
+        // the goal is 0.7 m above and 0.5 m aside of the chest (the body's estimated middle is never exactly the chest)
+        const at = { x: before[0] + 0.5, y: before[1] + 0.7, z: before[2] };
+        w.death.levitateBody(b, at, 1 / 60);
+        const first = chest();
+        const jump = Math.hypot(first[0] - before[0], first[1] - before[1], first[2] - before[2]);
+        assert.ok(jump < 0.08, 'the first frame moved the chest ' + jump.toFixed(3) + ' m');
+        for (let i = 0; i < 120; i++) w.death.levitateBody(b, at, 1 / 60);
+        const end = chest();
+        assert.ok(Math.hypot(end[0] - at.x, end[1] - at.y) < 0.4, 'and it still comes to the hand');
+    } finally { w.close(); }
+});

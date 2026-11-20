@@ -728,6 +728,7 @@ export class DeathSystem {
             b.doll = new CorpseRagdoll(b);
         }
         b.doll?.doll.wake();
+        b.doll?.grabbed?.();
         b.lev = true;
         this.falling.delete(b.id);
         this._moved(b);
