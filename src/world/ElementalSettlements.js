@@ -65,7 +65,11 @@ export function buildFireSettlement(p,rng,out){
   const r=20-13*Math.max(0,y)/31,offset=Math.sin(y*.17)*1.4;
   p.cyl(offset,15,r,y,y,y%6===0?B.HELL_OBSIDIAN:B.HELL_BASALT);
  }
- p.cyl(0,15,5,24,32,B.AIR);p.cyl(0,15,4,24,27,B.HELL_LAVA);
+ // The lava sits in a solid basin recessed below the rim.
+ p.cyl(0,15,5,24,32,B.AIR);
+ p.cyl(0,15,5,24,25,B.HELL_BASALT);
+ p.cyl(0,15,5,26,28,B.HELL_OBSIDIAN,4);
+ p.cyl(0,15,4,26,26,B.HELL_LAVA);
  p.cyl(0,15,7,30,31,B.HELL_OBSIDIAN,5);
  const hall=p.node(0,-12,0,'yard');
  for(const [x,z] of [[-16,-21],[16,-21],[-27,0],[27,0]]){
@@ -78,6 +82,7 @@ export function buildFireSettlement(p,rng,out){
  for(const x of [-6,6])for(const z of [-33,-24])p.box(x,x,0,6,z,z,B.HELL_BRICK);
  p.box(-7,7,7,8,-34,-23,B.HELL_OBSIDIAN);
  out.ritual={...p.pt(0,-29),pent:'infernum',r:3};out.posts.push({...p.pt(0,-19),yaw:p.yaw(0)});
+ p.cyl(0,-12,3,-1,-1,B.HELL_BASALT);
  out.fire=p.pt(0,-12);
 }
 export function buildElementalSettlement(p,rng,out,element){

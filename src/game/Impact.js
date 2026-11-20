@@ -181,6 +181,7 @@ export const SPELL_PHYSICS = {
     SunRay: null, SunRayFire: null, // («Sun Ray»: the beam burns, it pushes nobody — SunRay.js)
     Helios: null, // («Helios»: a light — it moves nobody, burns nobody — Helios.js)
     WaterPart: null, // («Aquadivide»: it moves nobody — WaterPart.js)
+    Revivify:null, Featherfall:null,
     WaterWalk: null, // («Aquambula»: it moves nobody — WaterWalk.js)
     Reperio: null, // («Reperio»: light for my own eyes — nobody is pushed: BodyFinder.js)
     Caligo: null, // («Caligo»: a fog, nobody is pushed — DarkFog.js)

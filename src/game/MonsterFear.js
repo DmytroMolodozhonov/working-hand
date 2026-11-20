@@ -18,7 +18,7 @@ export const MFEAR = {
     SEE: 90, // m: дальше монстра не замечают (с прямой видимостью; Danger 'monster' слышат дальше, но это тревога, а не «увидел»)
     KNIGHT_ATTACK: 0.25, // доля рыцарей, которые не боятся и идут в бой
     WIZ_FLEE: { 1: 0.9, 2: 0.7, 3: 0.45, 4: 0 }, // доля бегущих волшебников: младший / средний / высокий (учитель, старейшина) / глава башни
-    DISPEL_KNOW: { 1: 0.5, 2: 0.8, 3: 1, 4: 1 }, // the cone and duel are one learned spell
+    DISPEL_KNOW: { 1: 0.3, 2: 0.8, 3: 1, 4: 1 }, // the cone and duel are one learned spell
     LAG_OTHER: [0.4, 1.4], // с: сколько жителю нужно, чтобы осознать, что это такое (не рыцарь и не маг)
     CAST_RANGE: 22, // m: с какого расстояния маг начинает говорить рассеивание (конус бьёт на 28)
     CAST_FROM: 12, // m: подходит не ближе (монстр 24-метровый, а у мага палочка)
@@ -47,6 +47,11 @@ export const isMaster = (v) => v.rank === 'master' || v.role === 'master';
 export function knowsNihilis(v) {
     const level = isMaster(v) || v.savior != null ? 4 : reactLevel(v.rank || v.role);
     return roll(v.id, 'd') < MFEAR.DISPEL_KNOW[level];
+}
+
+export function knowsInferno(v) {
+    const level = isMaster(v) || v.savior != null ? 4 : reactLevel(v.rank || v.role);
+    return level > 1 || roll(v.id, 'inferno') < 0.8;
 }
 
 /**
@@ -94,7 +99,7 @@ export const MONSTER_FEAR_TARGETS = {
     villagers: { does: 'flee', why: 'жители, торговцы, крестьяне, строители бегут от увиденного монстра (Castle.fear + Danger «monster»)' },
     knights: { does: 'mixed', why: '25% рыцарей замка не боятся и бьют монстра (v.foe), 75% бегут' },
     king: { does: 'flee', why: 'король и визирь убегают вместе, не сражаются' },
-    wizards: { does: 'mixed', why: 'младшие 90% бегут, средние 70%, высокие 45%, глава 0%; «Nihilis Atra» знают глава всегда, сильные 100%, средние 80%, младшие 50%' },
+    wizards: { does: 'mixed', why: 'младшие 90% бегут, средние 70%, высокие 45%, глава 0%; «Nihilis Atra» знают глава всегда, сильные 100%, средние 80%, младшие 30%' },
     sailors: { does: 'flee', why: 'моряки — бегут (если не на корабле в бою: у них свой бой)' },
     animals: { does: 'flee', why: 'звери убегают от монстра сами (Animals)' },
     dragons: { does: 'none', why: 'дракон не боится — у него своя логика (DragonAggro)' },

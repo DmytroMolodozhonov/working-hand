@@ -11,7 +11,8 @@ export const DAMAGE = {
     FireDuel: 8, // «Fire Vortex» as a duel charge (the fire mage's beam)
     Sands: 0, // only slows (Duel.SLOW) and shoves
     Thunderwave: 10, // everyone in the zone
-    Lightning: 20, // «Lightning Strike» and Thor's hammer
+    Lightning: 20, // Thor's hammer / ambient lightning
+    LightningStrike: 40, // the spell: twice its former damage
     Liquidation: 3,
     Earthquake: 4,
     EarthquakeMaxima: 12,

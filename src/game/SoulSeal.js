@@ -115,7 +115,7 @@ export class SoulSeal {
         const m = pg._place(id, v.id, 'soulseal', b.x, y + 0.025, b.z, 3.5, v.yaw || 0, true);
         if (!m) return null;
         pg._permanent(m); v.mana -= S.CREATE;
-        g.sync?.pentagram?.({ k: 'mark', id, by: v.id, pent: 'soulseal', x: m.x, y: m.y, z: m.z, r: m.r, rot: m.rot, perm: 1 });
+        g.sync?.pentagram?.({ k: 'mark', id, by: v.id, pent: 'soulseal', x: m.x, y: m.y, z: m.z, r: m.r, rot: m.rot, perm: 1,whiteExpiresAt:m.whiteExpiresAt });
         this.life._say(v, 'Эта тёмная сила больше не вернётся.', 3);
         return m;
     }

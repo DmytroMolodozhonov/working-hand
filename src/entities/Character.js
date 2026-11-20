@@ -16,6 +16,7 @@ import { ArmSolver } from './ArmSolver.js';
  */
 export const ARM_SMOOTH = { K: 0.5, FAST: 0.1, RAMP: 1 };
 import * as THREE from 'three';
+import { fallEntry } from '../game/PlayerFallRules.js';
 import { applyLook } from './Appearance.js';
 import { SimplifiedHand } from './SimplifiedHand.js';
 
@@ -179,6 +180,7 @@ export class VoxelCharacter {
         this.slowScale = 1; // walking speed (the ice beam's chill slows it)
         this.airTop = null; // the highest point of this fall (landing → Knockdown)
         this.landing = null; // {drop, speed, at} of the last landing
+        this._fallEntry = null;
         this.legPose = null; // {left: {hip}, right: {hip}}: the legs held so (a surfboard), not walked
         this.boardRoll = 0; // the body tilted sideways with a surfboard under it
         this.flying = false;
@@ -217,6 +219,7 @@ export class VoxelCharacter {
         this._jumpT = 0;
         this._jumpS = strength;
         this.airTop = this.group.position.y;
+        this._fallEntry = { careful: false, entrySpeed: Math.hypot(this._planar.x, this._planar.z) / (this.size || 1) };
         // (a standing jump stays in place: only a real run is carried on — a long jump)
         const sp = Math.hypot(this._planar.x, this._planar.z);
         const keep = sp > 2 ? 1 : 0;
@@ -960,9 +963,13 @@ export class VoxelCharacter {
                 this.verticalVelocity = 0;
                 this.onGround = false;
                 this.airTop = null;
+                this._fallEntry = null;
                 this.group.position.y += (Math.max(this.swimY, targetY) - y) * Math.min(1, 6 * dt);
             } else if (inAir(y, targetY, this.isCrouching, this.jumpAir, this.verticalVelocity)) {
                 // Falling into a crater / off a ledge (or up in a jump, or thrown up: «Up», a vortex) — the hero's gravity
+                if (this.airTop == null) this._fallEntry = fallEntry({ grounded: this.onGround, jumping: this.jumpAir,
+                    knocked: this.knockedDown, vy: this.verticalVelocity,
+                    speed: Math.max(Math.hypot(this._planar.x, this._planar.z), Math.hypot(px - fromX, pz - fromZ) / Math.max(dt, 1e-3)) / S });
                 this.airTop = Math.max(this.airTop ?? y, y);
                 if(this.slowFall&&this.verticalVelocity<0)this.verticalVelocity=featherSpeed(this.verticalVelocity,dt);
                 else this.verticalVelocity -= G * this.gravityK * dt;
@@ -978,14 +985,16 @@ export class VoxelCharacter {
                     // (how far it fell and how fast it hit the ground: a high fall knocks over — Knockdown.js)
                     // (the drop as it would hurt on Earth: a long slow fall on the Moon is a soft one)
                     const soft=!!this.slowFall&&-this.verticalVelocity<=FEATHER.SAFE;
-                    this.landing = { drop: soft?0:(this.airTop - this.group.position.y) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(), jump: this.jumpAir, ...(soft?{soft:true}:{}) };
+                    this.landing = { ...this._fallEntry, actualDrop: this.airTop - this.group.position.y, drop: soft?0:(this.airTop - this.group.position.y) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(), jump: this.jumpAir, ...(soft?{soft:true}:{}) };
+                    this._fallEntry = null;
                     this.jumpAir = false;
                     this.airTop = null;
                     this.verticalVelocity = 0;
                 }
             } else {
                 // (the last bit of a fall is eased onto the ground here: it lands now)
-                if (this.airTop != null) {const soft=!!this.slowFall&&-this.verticalVelocity<=FEATHER.SAFE;this.landing = { drop: soft?0:(this.airTop - targetY) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(),...(soft?{soft:true}:{}) };}
+                if (this.airTop != null) {const soft=!!this.slowFall&&-this.verticalVelocity<=FEATHER.SAFE;this.landing = { ...this._fallEntry, actualDrop: this.airTop - targetY, drop: soft?0:(this.airTop - targetY) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(),jump:this.jumpAir,...(soft?{soft:true}:{}) };}
+                this._fallEntry = null;
                 this.verticalVelocity = 0;
                 this.airTop = null;
                 this.onGround = true;

@@ -110,7 +110,7 @@ export const GOD_SPELLS = new Set([...TEMPLE_SCROLLS, 'FlyingMaxima']); // (Plan
 export const NOT_SPELLS = new Set(['GroundShield', 'Stand', 'Stop', 'Pause', 'Nox', 'Attack', 'Reveal', 'Hammer', 'WardGrow', 'ProtectionHouseGrant']);
 
 /** Other names a spell reports itself by → the spell. */
-export const SAME_SPELL = { NihilisDuel: 'Nihilis', WallRise: 'Breakthrough', WallRiseMaxima: 'BreakthroughMaxima', InfernoMaxima: 'Inferno' };
+export const SAME_SPELL = { Furl: 'Unfurl', NihilisDuel: 'Nihilis', WallRise: 'Breakthrough', WallRiseMaxima: 'BreakthroughMaxima', InfernoMaxima: 'Inferno' };
 
 /** Bonuses of a spell's second «first time» (not spells: no scroll, no words). */
 export const FIRST_EXTRA = { VisibleGodiLens: 5 };
@@ -438,7 +438,7 @@ export class Mana {
 
     restore(s) {
         if (!s) return;
-        for (const k of [...(Array.isArray(s.spells) ? s.spells : []), ...(Array.isArray(s.strong) ? s.strong : [])]) this.spellsUsed.add(k === 'Groundprud' ? 'Breakthrough' : String(k)); // («strong»: an older save)
+        for (const k of [...(Array.isArray(s.spells) ? s.spells : []), ...(Array.isArray(s.strong) ? s.strong : [])]) this.spellsUsed.add(k === 'Groundprud' ? 'Breakthrough' : SAME_SPELL[k] || String(k)); // («strong»: an older save)
         if (Array.isArray(s.kills)) for (const k of s.kills) if (MAGIC_KILL[k]) this.killsMade.add(k);
         if (Array.isArray(s.found)) for (const k of s.found) this.found.add(String(k));
         this.mastery = Math.max(this.mastery, Math.max(0, Math.min(1e6, Math.floor(Number(s.mastery) || 0))));

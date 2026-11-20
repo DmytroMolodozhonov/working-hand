@@ -168,7 +168,7 @@ test('a wizard lifted by a duel charge: hangs at the caster\'s hand, my shield t
     assert.equal(lev.lifted, null);
     me.y = 2; g.character.onGround = true;
     run(0.1);
-    assert.equal(hits.at(-1).d, fallDamage(top - 2));
+    assert.equal(hits.at(-1).d, fallDamage(top - 2) / 2); // author 20.11: player fall damage halved
     // lifted again: a shield towards them frees me
     lev.liftMe('friend', 'right');
     g.combat.shield = { type: 1 };

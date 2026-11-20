@@ -137,7 +137,7 @@ export function thermalAt(alt) {
 /** The touch of the ground at vy (m/s up, < 0 down) and vf (forward): {dmg, knock}. Soft (≤ SAFE_VY down, slow forward) — nothing. */
 export function landingHurt(vy, vf) {
     const down = Math.max(0, -(vy || 0) - LAND.SAFE_VY), fwd = Math.max(0, (vf || 0) - LAND.FWD_SAFE);
-    const dmg = Math.round(down * LAND.PER + fwd * LAND.FWD_PER);
+    const dmg = Math.round(down * LAND.PER + fwd * LAND.FWD_PER) * 0.5; // player fall damage, including a hard wing landing, is halved
     return { dmg, knock: -(vy || 0) >= LAND.KNOCK_VY || fwd > 6 };
 }
 
@@ -205,8 +205,7 @@ export class WingFlight {
             if (g.settings?.drifting) g.cameraBaseRotation += yr; else if (g.smoothBody != null) g.smoothBody += yr;
             ch.setBodyRotation?.(g.settings?.drifting ? g.cameraBaseRotation : g.smoothBody);
         }
-        if (stroke > 0) { g.sound?.playSwan?.(p, 'wings'); this._strokeAt = this.t; }
-        if (st.air) this._top = Math.max(this._top ?? -1e9, p.y - PLAYER_GROUND_OFFSET);
+        if (stroke > 0) g.sound?.playSwan?.(p, 'wings');
         if (!st.air) { if (wasAir) this._touch(0, 0); this._pose(false, arms, dt); return; }
         if (!wasAir) g.hud?.setVoice?.('🪽 Взлёт! Машите руками, иначе упадёте. Наклон вперёд — вниз, назад — вверх, вбок — поворот', true);
         if (st.hold < 0.35 && !this._toldFall) { this._toldFall = true; g.hud?.setVoice?.('🪽 Крылья устали держать — машите!', true); }
@@ -281,16 +280,13 @@ export class WingFlight {
     _touch(vy, vf) {
         const g = this.game;
         const h = landingHurt(vy, vf);
-        // (a landing teaches steadiness — not a long fall with no stroke at all: Steadiness.landed)
-        const feet = g.character.group.position.y - PLAYER_GROUND_OFFSET;
-        if (this._top != null) g.steady?.landed?.(this._top - feet, this.t - (this._strokeAt ?? -99));
-        this._top = null;
+        g.steady?.fell?.();
         this.game.character.setFlightTilt?.(0);
         this.game.character.flying = false;
         if (!h.dmg) { if (vy < -1) g.sound?.playLand?.(0.3); return; }
         g.sound?.playLand?.(1);
         g.fx && (g.fx.shake = Math.max(g.fx.shake || 0, Math.min(0.4, 0.1 + h.dmg / 40)));
-        if (h.knock) g.knock?.knock?.({ dir: 'front', down: 1.5 + Math.min(3, h.dmg * 0.15), kind: 'fall' });
+        if (h.knock) g.knock?.knock?.({ dir: 'front', down: 1.5 + Math.min(3, h.dmg * 0.15), kind: 'fall', learn: false });
         g.hud?.setVoice?.(h.dmg >= 8 ? '🪽 Вы рухнули на землю! Садитесь мягче: руки в стороны у земли' : '🪽 Жёсткая посадка', true);
         if (g.combat?.enabled) g.combat.damage(h.dmg, null, 'fall');
         else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(h.dmg, 'fall');

@@ -1,3 +1,4 @@
+import {DAMAGE} from '../game/Damage.js';
 import {BLOCK} from '../world/Terrain.js';
 /**
  * SpellManager.js — voice spells.
@@ -584,6 +585,8 @@ export class SpellManager {
             case 'Whirlpool': this.hooks.whirlpool?.(o, direction.clone(), casterId, handSide); break; // (the direction is the whirlpool's PLACE {x, 0, z}, as the Tornado's)
             case 'Tornado': this.castTornado(o, direction.clone(), casterId, handSide); break; // (the direction is the spout's PLACE {x, 0, z} — never normalised: it came down by the world's middle, far from anyone — the author: «не появился»)
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
+            case 'LightningStrikeHit': this.castLightningHit(o,casterId,null,'LightningStrike');break;
+            case 'LightningStrikeBeam': this.castLightningHit(o,casterId,o.clone().add(direction),'LightningStrike');break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;
             // (the beam: `direction` = from the target point back to the caster's hands)
@@ -919,7 +922,7 @@ export class SpellManager {
      * The lightning strikes `point` — from the sky, or (`from`) out of the caster's hands
      * in a huge crackling beam: everything right there is hit hard.
      */
-    castLightningHit(point, casterId, from = null) {
+    castLightningHit(point, casterId, from = null, kind='Lightning') {
         const hold = this._holds && this._holds.get(casterId);
         if (hold) hold.life = 0;
         const sky = from ? from.clone() : new THREE.Vector3(point.x + 8, point.y + 70, point.z - 5);
@@ -938,7 +941,7 @@ export class SpellManager {
         if (this.auth) {
             for (const z of this.zombies) {
                 if (z.isDead) continue;
-                if (z.group.position.distanceTo(point) < R + 0.5) { z.damageCooldown = 0; this._damage(z, 20, false, _b.set(0, 0, 1)); }
+                if (z.group.position.distanceTo(point) < R + 0.5) { z.damageCooldown = 0; this._damage(z, kind==='LightningStrike'?DAMAGE.LightningStrike:DAMAGE.Lightning, false, _b.set(0, 0, 1)); }
             }
             // whoever lives through it is thrown off its feet, away from the strike
             this.hooks.creatures?.('Lightning', casterId, (pos) => {
@@ -950,9 +953,9 @@ export class SpellManager {
         }
         for (const p of this._players(casterId)) {
             if (!p.local) continue;
-            if (p.center().distanceTo(point) < R + 0.5) p.hit('Lightning', point);
+            if (p.center().distanceTo(point) < R + 0.5) p.hit(kind, point);
         }
-        if (this.hooks.lightningAt) this.hooks.lightningAt(point, casterId);
+        if (this.hooks.lightningAt) this.hooks.lightningAt(point, casterId,kind);
     }
 
     // ---------------------------------------------------------- Earthquake

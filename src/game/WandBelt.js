@@ -89,8 +89,13 @@ export class WandBelt {
             const rb = g.currentPose.belt?.[side];
             // (in once, it stays in until it leaves a wider zone: the camera's jitter at the edge
             // must not throw it in and out)
+            const wasIn = this._in[side];
             this._in[side] = !!rb?.at || (this._in[side] && !!rb?.near);
             const near = this._in[side];
+            if (!wasIn && near && side === (g.dom || 'right') && this.lookingDown()
+                && (items.held[side]?.item.kind === 'wand' || (!items.held[side] && this.beltWand()))) {
+                g.sound?.playPocket?.('wandEnter');
+            }
             // a deliberate tuck: the hand was BROUGHT there — it came into the place from ≥ 0.15
             // of the torso away, within the last 3 s — a hand resting there or drifting in over
             // the edge never tucks it in
@@ -240,6 +245,7 @@ export class WandBelt {
             inv._render?.();
         } else if (!inv.storeItem(it)) { g.items.takeIntoHand(it, side); return; }
         this._at = performance.now();
+        g.sound?.playPocket?.('wandPut');
         inv._fx?.('🪄 Палочка за поясом', side);
     }
 
@@ -252,6 +258,7 @@ export class WandBelt {
         this._left[side] = false;
         this._at = performance.now();
         inv._render?.();
+        g.sound?.playPocket?.('wandTake');
         inv._fx?.('🪄 Палочка в руке', side);
     }
 

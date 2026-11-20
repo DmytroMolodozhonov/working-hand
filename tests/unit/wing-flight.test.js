@@ -14,7 +14,7 @@ test('the rules: the currents only high up, never a climb; a soft touch nothing,
     assert.equal(landingHurt(-2, 4).dmg, 0, 'a soft landing');
     assert.equal(landingHurt(-LAND.SAFE_VY, 0).dmg, 0);
     const hard = landingHurt(-20, 18);
-    assert.ok(hard.dmg >= 25 && hard.knock, `a dive into the ground: ${hard.dmg}`);
+    assert.ok(hard.dmg >= 12.5 && hard.knock, `a dive into the ground: ${hard.dmg}`); // author 20.11: player fall damage halved
     assert.ok(HERO_FLY.takeoff > 2, 'a run before the take-off');
 });
 
@@ -180,13 +180,12 @@ test('take-off strokes start with the arms up (the author 05.11: running alone t
     assert.ok(TAKEOFF.HIGH_WIN < TAKEOFF.STROKE_WIN);
 });
 
-test('a landing after a flight teaches steadiness (+1 in a few landings); a long fall with no stroke does not', async () => {
-    const { Steadiness, STEADY } = await import('../../src/game/Steadiness.js');
+test('every wing landing gives +1 steadiness, even a long fall (author 20.11)', async () => {
+    const { Steadiness } = await import('../../src/game/Steadiness.js');
     const g = { config: { mode: 'survival' }, hud: { toast() {} } };
     const s = new Steadiness(g);
     const k0 = s.skill;
-    for (let i = 0; i < 3; i++) assert.equal(s.landed(12, 1), true);
-    assert.equal(s.skill, k0 + 1, '+1 after three landings');
-    assert.equal(s.landed(STEADY.LAND_FREE_DROP + 20, STEADY.LAND_FREE_T + 5), false, 'a fall from very high, not even trying');
-    assert.equal(new Steadiness({ config: { mode: 'creative' } }).landed(5, 0), false, 'no skill counted in Creative');
+    for (let i = 0; i < 3; i++) assert.equal(s.fell(), true);
+    assert.equal(s.skill, k0 + 3, '+1 for each landing (author 20.11)');
+    assert.equal(new Steadiness({ config: { mode: 'creative' } }).fell(), false, 'no skill counted in Creative');
 });

@@ -5,6 +5,7 @@ import { ShipPose, ShipCollider } from '../../src/game/ShipCollision.js';
 import { stepShip, newShipState, mooringForces } from '../../src/game/ShipPhysics.js';
 import { SHIP_CLASSES, HELM_LOCK } from '../../src/game/ShipTypes.js';
 import { polar, unwrap, steer, rimDist, HELM } from '../../src/game/HelmMath.js';
+import { Helm } from '../../src/game/Helm.js';
 import { blastDamage, holeRadius, leakRate, stepFire, stepSinking } from '../../src/game/ShipDamage.js';
 import { packShip, unpackShip } from '../../src/game/Ships.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -13,6 +14,28 @@ import { CollisionWorld } from '../../src/world/Collision.js';
 import { rollShipLoot } from '../../src/game/ItemTypes.js';
 
 const CLASSES = ['pinnace', 'fluyt', 'galleon'];
+
+test('helm holds through brief tracking loss and does not jump when one hand is released', () => {
+    const game = { localId: 'host', character: {}, hud: { setVoice() {} } };
+    const ships = { auth: true, list: new Map(), crew: { tookWheel() {} } };
+    const helm = new Helm(game, ships);
+    const ship = { wheel: 0.5, st: { u: 4 }, awake: true, layout: { helm: { x: 0, y: 0, z: 0, rimR: 1, handleR: 1.2 } },
+        pose: { toLocal: (x, y, z, out) => Object.assign(out, { x, y, z }) } };
+    helm.grab(ship, 'left', 0.7);
+    helm.grab(ship, 'right', 1.2);
+    helm.held.left.a = 1.1;
+    helm.held.right.a = 1.8;
+    helm.update(0.1);
+    assert.equal(helm.held.right.ship, ship);
+    helm.release('left');
+    const a = helm.held.right.a;
+    helm.input = side => side === 'right' ? { G: { x: Math.sin(a), y: Math.cos(a), z: 0 }, curl: 0.8 } : null;
+    helm.update(0.1);
+    assert.equal(ship.wheel, 0.5);
+    helm.input = null;
+    for (let i = 0; i < 6; i++) helm.update(0.1);
+    assert.equal(helm.held.right, null);
+});
 
 test('ship layouts: every crew node stands on a floor, the walking graph is connected, nothing solid on a path', () => {
     for (const c of CLASSES) {

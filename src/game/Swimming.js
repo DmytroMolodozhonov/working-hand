@@ -25,6 +25,7 @@
 import { placeStatusBar } from '../ui/StatusStack.js';
 import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
+import {waterFloor} from './WaterWalk.js';
 import { StrokeDetector, SwimMotion, SWIM } from './SwimStroke.js';
 import { waterTint } from '../fx/UnderwaterLight.js';
 import { POTION_FX } from './PotionEffects.js';
@@ -104,7 +105,7 @@ export class Swimming {
         // on a surfboard: the board holds you up (SurfBoards places the body)
         if (g.boards?.mounted) { this.swimming = false; this.underwater = false; this._leave(dt); this.air = Math.min(AIR_MAX, this.air + dt * 5); this._renderHud(); return; }
         if (this.breach && this._breachStep(dt, w)) { this.swimming = false; this.underwater = false; this._updateRipples(dt); this._renderHud(); return; } // (out of the water in a leap)
-        this.swimming = !!w && w.depth >= SWIM_DEPTH * S && p.y - FEET * S < w.surface && !g.up?.rising && !g.levitation?.lifted && !g.ledge?.active && !g.waterWalk?.on; // («Up»: thrown up out of it; «Левиоса»: the caster's hand lifts me out of the water; the palms on the bank: the arms pull me out — LedgeClimb)
+        this.swimming = !!w && w.depth >= SWIM_DEPTH * S && p.y - FEET * S < w.surface && !g.up?.rising && !g.levitation?.lifted && !g.ledge?.active && (!g.waterWalk?.on || waterFloor(w.surface,p.y-FEET*S+1.1*S)===null); // («Up»: thrown up out of it; «Левиоса»: the caster's hand lifts me out of the water; the palms on the bank: the arms pull me out — LedgeClimb)
         if (this.swimming) this._swim(dt, w, pose);
         else this._leave(dt);
         this._updateRipples(dt);
