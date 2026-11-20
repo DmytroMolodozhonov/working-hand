@@ -52,8 +52,53 @@ export const cellOf = (p) => ({ x: Math.round(p.x), L: Math.floor(p.y + 1.5), z:
 const PLANES = ['x', 'z', 'y'];
 const NORMAL = { x: [1, 0, 0], z: [0, 0, 1], y: [0, 1, 0] };
 
+const planeKey = (p) => typeof p === 'string' ? p : `${p.axis}:${p.slope.toFixed(3)}:${p.intercept.toFixed(3)}`;
+const project = (c, p) => typeof p === 'string' ? c : p.axis === 'z'
+    ? { x: c.x, L: c.L, z: Math.round(p.intercept + p.slope * c.x) }
+    : { x: Math.round(p.intercept + p.slope * c.z), L: c.L, z: c.z };
+const planeNormal = (p) => typeof p === 'string' ? NORMAL[p] : p.axis === 'z' ? [-p.slope, 0, 1] : [1, 0, -p.slope];
+
+/** Fit the surviving wall on BOTH sides of the opening, independently of the wand's angle.
+ * Only thin, consistent runs count: a rock mass or a floor cannot invent a tilted wall.
+ * The returned plane follows the voxel staircase of the original construction.
+ */
+export function wallPlane(get, c, axis) {
+    const tangent = axis === 'z' ? 'x' : 'z', samples = [];
+    for (const offset of [-8, -6, -4, -2, 2, 4, 6, 8]) {
+        const u = c[tangent] + offset, runs = [];
+        let start = null;
+        for (let n = c[axis] - 9; n <= c[axis] + 9; n++) {
+            const solid = material(axis === 'z' ? get(u, c.L, n) : get(n, c.L, u));
+            if (solid && start === null) start = n;
+            if (!solid && start !== null) {
+                if (n - start <= 3) runs.push((start + n - 1) / 2);
+                start = null;
+            }
+        }
+        // Ambiguous parallel walls are not evidence for a new orientation.
+        if (runs.length === 1) samples.push([u, runs[0]]);
+    }
+    if (samples.length < 4 || !samples.some(([u]) => u < c[tangent]) || !samples.some(([u]) => u > c[tangent])) return null;
+    const meanU = samples.reduce((s, q) => s + q[0], 0) / samples.length;
+    const meanN = samples.reduce((s, q) => s + q[1], 0) / samples.length;
+    const variance = samples.reduce((s, q) => s + (q[0] - meanU) ** 2, 0);
+    const slope = samples.reduce((s, q) => s + (q[0] - meanU) * (q[1] - meanN), 0) / variance;
+    const intercept = meanN - slope * meanU;
+    if (Math.abs(slope) < 0.15 || Math.abs(slope) > 1.05 || Math.abs(intercept + slope * c[tangent] - c[axis]) > 8) return null;
+    if (samples.some(([u, n]) => Math.abs(n - intercept - slope * u) > 0.65)) return null;
+    return { axis, slope, intercept };
+}
+
 /** The 4 neighbours of a cell inside its plane. */
 function around(c, plane) {
+    if (typeof plane !== 'string') {
+        const axis = plane.axis === 'z' ? 'x' : 'z';
+        const next = (du, dy) => {
+            const q = project({ ...c, [axis]: c[axis] + du, L: c.L + dy }, plane);
+            return [q.x, q.L, q.z];
+        };
+        return [next(0, 1), next(0, -1), next(1, 0), next(-1, 0)];
+    }
     if (plane === 'x') return [[c.x, c.L + 1, c.z], [c.x, c.L - 1, c.z], [c.x, c.L, c.z + 1], [c.x, c.L, c.z - 1]];
     if (plane === 'z') return [[c.x, c.L + 1, c.z], [c.x, c.L - 1, c.z], [c.x + 1, c.L, c.z], [c.x - 1, c.L, c.z]];
     return [[c.x + 1, c.L, c.z], [c.x - 1, c.L, c.z], [c.x, c.L, c.z + 1], [c.x, c.L, c.z - 1]];
@@ -90,7 +135,7 @@ export function crossSection(get, start, plane, max = STITCH.MAX_CELLS) {
  * a tunnel, a hole through a wall or a floor) — not a niche in a wall, not the bottom of a pit.
  */
 export function throughBothSides(get, cells, plane) {
-    const [nx, ny, nz] = NORMAL[plane];
+    const [nx, ny, nz] = NORMAL[typeof plane === 'string' ? plane : plane.axis];
     let front = 0, back = 0;
     for (const c of cells) {
         if (open(get(c.x + nx, c.L + ny, c.z + nz))) front++;
@@ -150,7 +195,16 @@ const _dir = new THREE.Vector3(), _ax = new THREE.Vector3(), _up = new THREE.Vec
 export function findPassage(get, o, d, { reach = STITCH.REACH, near = STITCH.NEAR, max = STITCH.MAX_CELLS } = {}) {
     const tried = new Set();
     const why = { open: 0, wide: 0, water: 0, niche: 0, seen: 0 };
-    const keyOf = (plane, q) => `${plane}|${q.x},${q.L},${q.z}`;
+    const keyOf = (plane, q) => `${planeKey(plane)}|${q.x},${q.L},${q.z}`;
+    const planes = [...PLANES], fitted = new Set();
+    // A few bounded probes along the aim locate the wall itself, before flooding its opening.
+    for (let t = near; t <= reach; t += 2) {
+        const c = cellOf(new THREE.Vector3().copy(o).addScaledVector(d, t));
+        for (const axis of ['x', 'z']) {
+            const p = wallPlane(get, c, axis);
+            if (p && !fitted.has(planeKey(p))) { fitted.add(planeKey(p)); planes.push(p); }
+        }
+    }
     let wideTried = false;
     let best = null;
     _ax.crossVectors(d, _up);
@@ -164,11 +218,13 @@ export function findPassage(get, o, d, { reach = STITCH.REACH, near = STITCH.NEA
             const b = get(c.x, c.L, c.z);
             if (!open(b)) { if (b === BLOCK.WATER) why.water++; break; } // (the wall behind: look no further along this line)
             why.seen++;
-            for (const plane of PLANES) {
-                if (tried.has(keyOf(plane, c))) continue;
-                const s = crossSection(get, c, plane, max);
+            for (const plane of planes) {
+                const start = project(c, plane);
+                if (Math.abs(start.x - c.x) + Math.abs(start.z - c.z) > 1) continue;
+                if (tried.has(keyOf(plane, start))) continue;
+                const s = crossSection(get, start, plane, max);
                 // (every cell this flood went through gives the same answer in this plane: never tried again)
-                for (const q of s.cells || s.flooded || [c]) tried.add(keyOf(plane, q));
+                for (const q of s.cells || s.flooded || [start]) tried.add(keyOf(plane, q));
                 if (!s.cells) {
                     if (s.why === 'water') why.water++;
                     else if (ray === 0 && plane !== 'y' && !wideTried && s.flooded) { wideTried = true; if (crossSection(get, c, plane, STITCH.WIDE).cells) why.wide++; else why.open++; }
@@ -226,7 +282,7 @@ export function irisOrder(get, cells, plane) {
     const mid = new THREE.Vector3();
     for (const c of cells) mid.add(at(c));
     mid.divideScalar(cells.length);
-    const normal = new THREE.Vector3(...NORMAL[plane]);
+    const normal = new THREE.Vector3(...planeNormal(plane)).normalize();
     const u = plane === 'y' ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
     const v = new THREE.Vector3().crossVectors(normal, u).normalize();
     const rings = Math.max(...ring.values()) + 1;
