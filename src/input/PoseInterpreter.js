@@ -185,7 +185,8 @@ const mirrorHand = (h) => (h ? h.map((p) => ({ ...p, x: 1 - p.x })) : h);
 export const OFF_POCKET = [-0.36, 0.1]; // More room onto the belt, stopping before the wand's place; outside edge stays beside the hip.
 // (its height: the wrist from this far above the hip to this far below, torso heights — the author puts the hand
 // in a little higher than the hip joint: the opening of a real pocket is at the waist)
-export const OFF_POCKET_DY = [-0.6, 0.45]; // (±25 cm around the hip: the hand passes at the belt or lower, not exactly at one height)
+// (the author 20.11: hands folded / one on the chest took things out of the pocket by itself — the zone reached the chest; now the belt and lower only)
+export const OFF_POCKET_DY = [-0.3, 0.45]; // (the hand passes at the belt or lower, not exactly at one height; the chest is NOT the pocket)
 export function offHip(lm, hand, aspect = 4 / 3) {
     const hp = beltHips(lm, aspect);
     const sh = lm?.[11], el = lm?.[13], wr = lm?.[15], hip = hp?.rh;

@@ -622,7 +622,9 @@ export class Inventory {
         const h = g.items?.held[side];
         if (!h || g.weapons?.hands?.[side]?.held || g.boards?.hold) return false;
         const k = h.item.kind;
-        return k !== 'wand' && k !== 'coins' && !BACK_KINDS.has(k);
+        // (the author 20.11: a SECOND wand — a trophy won in a duel — in the secondary hand could never be put into the ordinary pocket: any wand was refused. The casting wand still goes only to the belt)
+        if (k === 'wand') return side !== (g.dom || 'right') && side !== g.wandSide?.() && !this.wandStowBlock(side);
+        return k !== 'coins' && !BACK_KINDS.has(k);
     }
 
     /**

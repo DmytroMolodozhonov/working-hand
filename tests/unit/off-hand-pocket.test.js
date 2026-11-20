@@ -78,6 +78,8 @@ test('the crossed pocket is easy: the wrist may pass ±20 cm around the hip, a s
     // far from the hip: the belly's middle, high up — never
     assert.ok(!hit(-0.12, 0) && !hit(0.2, 0), 'the belly / far outside');
     assert.ok(!hit(0, -0.3), 'the chest');
+    // the author 20.11: hands folded / a hand laid on the chest (the wrist ~40% of the torso above the belt) took a thing out by itself
+    assert.ok(!hit(0, -0.12) && !hit(-0.03, -0.14), 'folded arms / a hand on the chest are not the pocket');
 });
 
 test('the same-side hand (the leading one) and passing hands put nothing; the time to put is short', async () => {

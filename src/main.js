@@ -1390,6 +1390,8 @@ async function startGame(config, welcome = null) {
 async function startGameInner(config, welcome) {
     portal.start(mainMenu); // (the menu is drawn into the whirl; hidden when the swirl has opened)
     updateProgress(2, 'Инициализация...');
+    // (the author 20.11: after «Продолжить» the menu hung for seconds: the page must PAINT the whirl before the heavy work of the start begins; a hidden tab has no frames — 150 ms and on)
+    await new Promise((r) => { const t = setTimeout(r, 150); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(t); r(); })); });
     const B = bootTimer;
     B.reset();
     B._readyNoted = false;
