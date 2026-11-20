@@ -210,3 +210,12 @@ test('незаконченный бой: честный счёт волшебн�
     const b = ledger(); b.at(0); b.L.foeCast('x', 100); b.at(1); b.L.foeCast('x', 100); b.L.tick(1); b.at(100);
     assert.deepEqual(b.L.abandoned(), [], 'дрались меньше 3 секунд — не бой');
 });
+
+test('время самого столкновения лучей: +4 % за каждые 5 с, до +20 %; сумма с самими столкновениями ограничена общим потолком', () => {
+    const a = ledger(); a.L.foeCast('x'); a.L.clash('x', false, 4.9);
+    assert.equal(a.L.summary('x').parts.clash, FIGHT.CLASH_EACH, '4,9 с — без прибавки за время');
+    const b = ledger(); b.L.foeCast('x'); b.L.clash('x', false, 12);
+    assert.equal(b.L.summary('x').parts.clash, FIGHT.CLASH_EACH + 2 * FIGHT.CLASH_SEC_PCT, '12 с = две пятёрки');
+    const c = ledger(); c.L.foeCast('x'); c.L.clash('x', true, 600);
+    assert.equal(c.L.summary('x').clashTime, FIGHT.CLASH_SEC_MAX, 'потолок прибавки за время');
+});
