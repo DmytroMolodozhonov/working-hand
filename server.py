@@ -884,6 +884,11 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                     print(f"  [{tag or 'Игра'}] {line}")
                 return self._json(200, {"status": "ok"})
 
+            if path == "/api/logs/send":
+                # «Сохранить и выйти» (and any leaving of the map): the journals go to GitHub now — no waiting (the author 20.11)
+                log_upload.upload_soon(ROOT, GAMES_DIR)
+                return self._json(200, {"status": "ok"})
+
             if path == "/api/alllog":
                 # a batch of lines from the game's «Общие логи» (every few seconds, not per line)
                 lines = self._read_json().get("lines") or []

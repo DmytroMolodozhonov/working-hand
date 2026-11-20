@@ -52,7 +52,7 @@ import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, BRAWL_ENTRY, TUTORIAL_ENTRY, 
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { sadTrombone } from './audio/MagicSound.js';
 import { setupAllLogsPanel } from './ui/AllLogsTab.js';
-import { hookAllLog, allLog } from './core/AllLog.js';
+import { hookAllLog, allLog, ALL } from './core/AllLog.js';
 import { watchServer } from './ui/ServerLost.js';
 import { castContextLine } from './core/SpellLog.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
@@ -1843,9 +1843,15 @@ $('pause-exit-btn').onclick = async () => {
     await leaveToMenu();
 };
 /** Save the world and go to the main menu at once (no «are you sure»: the window the player pressed «Выйти» in is the question — the duel's «ещё раз?», the boss retry). */
+/** The journal's last lines and the order to send the journals to GitHub (the author 20.11: «Сохранить и выйти» is the trigger). Never held up, never throws. */
+function sendLogsNow() {
+    try { ALL.flush(); } catch (e) { /* */ }
+    try { setTimeout(() => { fetch('/api/logs/send', { method: 'POST', keepalive: true }).catch(() => {}); }, 400); } catch (e) { /* */ }
+}
 async function leaveToMenu() {
     try { game?.sync?._sendMine?.(); } catch (e) { /* ignore */ }
     try { await Promise.race([game?.keeper?.save?.(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) { /* the page still leaves */ }
+    sendLogsNow(); // (saved and leaving the map: the journal goes to GitHub at once — server /api/logs/send, log_upload.py)
     backToMenu();
 }
 window.__zns = Object.assign(window.__zns || {}, { exitToMenu: leaveToMenu });
@@ -1853,6 +1859,7 @@ window.addEventListener('pagehide', () => {
     try { if (game?.sync) game.groundVortex?.returnAll?.(); } catch (e) { /* closing */ } // (blocks held by «Ground Vortex» back into the ground: the others see it)
     try { game?.sync?._sendMine?.(); } catch (e) { /* closing */ }
     net.sayGoodbye();
+    try { navigator.sendBeacon?.('/api/logs/send', new Blob(['{}'], { type: 'application/json' })); } catch (e) { /* closing */ } // (the window closes: the journals go on their way)
 });
 $('restart-btn').onclick = backToMenu;
 $('victory-menu-btn').onclick = backToMenu;
