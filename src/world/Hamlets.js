@@ -219,16 +219,17 @@ function magicStall(p, face, ringNear) {
     const at = (a, b) => rotLot(a, b, face);
     const box = (a0, a1, l0, l1, b0, b1, t) => { const [u0, v0] = at(a0, b0), [u1, v1] = at(a1, b1); p.box(u0, u1, l0, l1, v0, v1, t); };
     const pt = (a, b, l = 0) => { const [u, v] = at(a, b); return p.pt(u, v, l); };
-    box(-1, 1, 0, 1, 15, 15, B.PLANKS_DARK); // the counter
-    box(-1, 1, 1, 1, 15, 15, B.CLOTH_WHITE);
-    box(2, 2, 0, 2, 16, 16, B.ARCANE_DARK); box(2, 2, 3, 3, 16, 16, B.ARCANE_LAMP); // a lamp post
+    // (the author 20.11: a counter of one block is thin, things went through it — now 7 long, 3 deep (b 15…17), 2 high; the seller behind at b 19)
+    box(-3, 3, 0, 0, 15, 17, B.PLANKS_DARK); // the counter
+    box(-3, 3, 1, 1, 15, 17, B.CLOTH_WHITE);
+    box(5, 5, 0, 2, 16, 16, B.ARCANE_DARK); box(5, 5, 3, 3, 16, 16, B.ARCANE_LAMP); // a lamp post
     const [fu, fv] = at(0, 13);
     const frontNode = p.node(fu, fv, 0, 'stall');
     p.link(frontNode, ringNear(fu, fv));
-    const c0 = pt(-1, 15), c1 = pt(1, 15), o = pt(0, 0), f = pt(0, -1);
+    const c0 = pt(-3, 15), c1 = pt(3, 17), o = pt(0, 0), f = pt(0, -1);
     return {
         magic: true, // (a seller of magic things: CastleTalk._restock — HamletLife.magicStallGood)
-        front: pt(0, 13), back: pt(0, 16.6), frontNode,
+        front: pt(0, 13), back: pt(0, 19), frontNode,
         counter: { x0: Math.min(c0.x, c1.x), x1: Math.max(c0.x, c1.x), z0: Math.min(c0.z, c1.z), z1: Math.max(c0.z, c1.z), top: p.L(1) - 0.5 },
         yaw: Math.atan2(-(f.x - o.x), -(f.z - o.z)), // (facing the fire)
     };
