@@ -150,3 +150,27 @@ test('заклинание, брошенное за 6 с ДО начала бо�
     g.at(0); g.L.myCast('Wind'); g.at(30); g.L.foeCast('z');
     assert.equal(g.L.summary('z').spells, 0, 'давнее заклинание — не этого боя');
 });
+
+test('не направленные на врага заклинания (встал, свет, Акцио) считаются, но вдвое меньше; помощники (Alive…) дают отдельную прибавку один раз', async () => {
+    const { ALLY_SPELLS, SUPPORT_SPELLS } = await import('../../src/game/FightLedger.js');
+    const a = ledger(); a.L.foeCast('w'); a.at(1); a.L.myCast('Up');
+    const b = ledger(); b.L.foeCast('w'); b.at(1); b.L.myCast('Hellfire');
+    assert.ok(a.L.summary('w').parts.variety > 0, 'встал — тоже считается');
+    assert.ok(SUPPORT_SPELLS.has('Up') && !SUPPORT_SPELLS.has('Inferno'));
+    const wUp = spellWeight(firstSpellGain('Up')), wUpHalf = a.L.summary('w').parts.variety / FIGHT.VARIETY_PER_W;
+    assert.ok(Math.abs(wUpHalf - wUp * FIGHT.SUPPORT_K) < 1e-9, 'вес Up вдвое меньше');
+    const c = ledger(); c.L.foeCast('w'); c.at(1); c.L.myCast('Alive'); c.at(2); c.L.myCast('Alive');
+    assert.ok(ALLY_SPELLS.has('Alive'));
+    assert.equal(c.L.summary('w').ally, FIGHT.ALLY_PCT, 'помощники: один раз, не за каждый вызов');
+    assert.equal(a.L.summary('w').ally, 0);
+});
+
+test('общий потолок: 75 %; красота + время + разнообразие + лучи — не больше 50 %', () => {
+    const f = ledger(1); f.L.foeCast('big');
+    for (let i = 0; i < 6; i++) f.L.foeCast('x' + i);
+    f.L.myCast('Alive');
+    for (let i = 0; i < 12; i++) f.L.clash('big');
+    for (let i = 0; i < 80; i++) { f.at(i); for (const n of ['Hellfire', 'Inferno', 'FireMaxima', 'Tornado', 'LightningStrike', 'Earthquake', 'IceMaxima']) f.L.myCast(n); f.L.foeCast('big'); for (let k = 0; k < 6; k++) f.L.foeCast('x' + k); }
+    const s = f.L.summary('big', false, false, 1e9);
+    assert.ok(s.pct <= FIGHT.TOTAL_MAX + 1e-9 && s.pct > 60, 'около общего потолка: ' + s.pct);
+});
