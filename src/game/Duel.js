@@ -1392,6 +1392,7 @@ export class Duel {
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
     applyToCreature(spell, c, byId, from = null, part = null, opts = null) { // (opts.clash: it won a beam clash — a robe does not turn it away)
         const wasDead = !!(c.dead || c.isDead);
+        if (byId === this.me && c.wizard && c.id != null) this.game.mana?.fight?.hit(c.id); // (my spell hit a wizard: the fight with him goes on — FightLedger)
         try {
             const g = this.game;
             const src = from || this._casterAt(byId, c);
@@ -1533,6 +1534,7 @@ export class Duel {
     applyToMe(spell, byId, side = 'right', opts = null) { // (opts.clash: the charge WON a beam clash — it reaches the loser whatever he wears: no armour / robe turns it away)
         this._note({ ev: 'hitMe', spell, byId });
         const g = this.game;
+        if (byId != null && byId !== this.me) g.mana?.fight?.foeCast(byId); // (somebody's charge reached me: he fights me — FightLedger)
         if (spell === 'NihilisDuel') { g.nihilis?.hitMe(byId, !!opts?.clash); return; }
         const c = g.combat;
         const p = c.center(_v1);
@@ -2214,6 +2216,7 @@ export class Duel {
         this.bolts.delete(a.id);
         this.bolts.delete(b.id);
         const winnerBolt = loser === a.by ? b : loser === b.by ? a : null;
+        { const foe = a.by === this.me ? b.by : b.by === this.me ? a.by : null; if (foe != null && foe !== this.me) this.game.mana?.fight?.clash(foe); } // (a beam clash of mine: it counts in the fight with him — FightLedger)
         this._burst(a.front, winnerBolt && c.marks ? c.marks[winnerBolt === a ? 0 : 1] : 0xffffff, 40);
         if (!winnerBolt) {
             if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ Дуэль прервана — никто не пострадал', true);

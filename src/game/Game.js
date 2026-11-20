@@ -1988,6 +1988,7 @@ export class Game {
         this._manaLater = false;
         this.lastCastWhy = null; // (why it did not work — the spell journal: set where a spell is refused)
         const name = this._castWithHints(text, isFinal);
+        if (name) this.mana?.fight?.myCast?.(name); // (the beauty of the fight with a wizard: each different spell — FightLedger.js)
         if (name) this.savior?.noteSpell(this.localId, name); // (the white Saviour sees a Bombardo of mine and answers in kind — Savior.js)
         if (name) { this._castAt = performance.now(); this._castName = name; this.tutorial?.onCast?.(name); this.school?.onCast?.(name); this.tutorialNudge?.onCast?.(); } // (the wand never leaves the hand while a spell is going: spellBusy; a thrown Lumos waits after another spell's gesture: WandMagic)
         // its sound (SpellMusic.SPELL_SOUND: a tune for the great ones, a short effect for the others) — the others hear it too

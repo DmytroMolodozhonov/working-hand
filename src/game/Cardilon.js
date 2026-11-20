@@ -1,5 +1,6 @@
 /** A host-confirmed interception; a guest reserves the price/shield until the reliable reply. */
 import * as THREE from 'three';
+import { foeSet } from './FightLedger.js';
 import { CARDILON as C, cardilonCost, cardilonDelay, ordinaryShield, incomingBomb, knowsCardilon } from './CardilonRules.js';
 import { CardilonLook } from '../fx/CardilonLook.js';
 import { FX } from '../fx/WizardFx.js';
@@ -136,7 +137,7 @@ export class Cardilon {
             v.mana -= 10; v.wallCd = performance.now() + 6000; v.cardilon = null;
             g.breakthrough.grow(at.o, at.d, v.id, at.plan);
             g.sync?.spell('WallRise', at.o, at.d, null, v.id);
-            if (g.castleLife._isPlayer?.(b.by)) (v.castAtPlayers || (v.castAtPlayers = new Set())).add(b.by);
+            if (g.castleLife._isPlayer?.(b.by)) foeSet(v).add(b.by);
             v.mode = 'earthrise'; v.castT = 0.7;
             g.castleLife._say(v, 'Breakthrough!', 2);
 
@@ -147,7 +148,7 @@ export class Cardilon {
         if (!this._clear(hand, b.p)) return;
         if (this._capture(s, v.id, { h: hand.toArray() })) {
             v.mana -= cardilonCost(b.power); v.fx &= ~FX.SHIELD; v.shieldT = 0; v.cardilon = null;
-            if (g.castleLife._isPlayer?.(b.by)) (v.castAtPlayers || (v.castAtPlayers = new Set())).add(b.by);
+            if (g.castleLife._isPlayer?.(b.by)) foeSet(v).add(b.by);
             v.castT = 0.5;
             g.castleLife._say(v, 'Кардилон!', 2);
             g.sound?.spellCast?.('Cardilon', hand); g.sync?.castSound?.('Cardilon', hand);
