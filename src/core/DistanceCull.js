@@ -11,7 +11,7 @@
  * Pure decision (`decide`) is tested; `DistanceCull.update` walks the scene.
  */
 export const CULL = { HIDE: 90, SHOW: 60, FAR_LIMIT: 1500, CHECK_S: 0.3, HIDE_TIGHT: 55, SHOW_TIGHT: 35 }; // (TIGHT: the light mode — a short haze, a computer that counts every triangle)
-export const SKIP_NAMES = new Set(['terrain', 'sea', 'magicFlora', 'sky', 'sun', 'moon', 'stars', 'clouds', 'space']);
+export const SKIP_NAMES = new Set(['terrain', 'sea', 'magicFlora', 'trees', 'sky', 'sun', 'moon', 'stars', 'clouds', 'space']);
 
 /** d: distance from the hero (m), fogFar: where the haze ends, hidden: is it hidden by us now? → 'hide' | 'show' | null. */
 export function decide(d, fogFar, hidden, hide = CULL.HIDE, show = CULL.SHOW) {
@@ -30,6 +30,7 @@ export class DistanceCull {
         if (!this.enabled || !scene) { this.showAll(); return; }
         for (const o of scene.children) {
             if (o.isLight || o.isCamera || o.userData?.noCull || SKIP_NAMES.has(o.name)) continue;
+            if (o.position.x === 0 && o.position.z === 0 && !this.mine.has(o)) continue; // (a shared group drawn from the world's middle — trees, grass, far shapes: its pivot is the origin, NOT where its things are; hiding it by the hero's distance from the origin made the trees vanish — the author 20.11)
             const hidden = this.mine.has(o);
             if (!hidden && !o.visible) continue; // (hidden by its owner: not ours)
             const dx = o.position.x - fx, dz = o.position.z - fz, d = Math.sqrt(dx * dx + dz * dz);

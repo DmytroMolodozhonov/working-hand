@@ -34,3 +34,9 @@ test('a throttle: not every frame; and switching off shows all back', () => {
     far.position.x = 10; c.update(0.1, scene, 0, 0, 0, 45); assert.equal(far.visible, false); // (within CHECK_S: not yet)
     c.enabled = false; c.t = 0; c.update(0.1, scene, 0, 0, 0, 45); assert.equal(far.visible, true);
 });
+
+test('a shared group at the world origin (trees…) is never hidden by the hero\'s distance from the origin', () => {
+    const trees = obj(0, 0, { name: 'trees' }), anon = obj(0, 0), scene = { children: [trees, anon] }, c = new DistanceCull();
+    c.update(1, scene, 900, 0, 900, 45);
+    assert.deepEqual([trees.visible, anon.visible], [true, true]);
+});
