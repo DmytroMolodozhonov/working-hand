@@ -121,7 +121,7 @@ const glReload = (why) => {
     if (tries.length >= 2) return;
     window.__glReloading = true;
     try { sessionStorage.setItem('zns-gl-retry', JSON.stringify([...tries, Date.now()])); } catch (e) { /* no storage */ }
-    rememberStartupFailure(localStorage,new Error('Видеокарта сбросила графику: '+why),window.__zns?.game?.config||{});
+    rememberStartupFailure(localStorage,new Error('Видеокарта сбросила графику: '+why+' | последний шейдер: '+String(_lastShader||'—').slice(0,300)+' | с запуска страницы '+Math.round(performance.now()/1000)+' с'),window.__zns?.game?.config||{}); // (what was compiling at the drop: the banner now says it — the author 20.11 saw the same drop on every entry)
     netLog(`🎮 графика сброшена видеокартой — перезапускаю страницу (${why})`);
     try { updateProgress(100, 'Видеокарта сбросила графику — перезапускаю игру…'); } catch (err) { /* not built yet */ }
     try { rememberWindowSize(); } catch (err) { /* */ }
