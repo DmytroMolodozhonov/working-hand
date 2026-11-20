@@ -1513,6 +1513,7 @@ export class Game {
         this.wreck?.afterBlast(pos, radius, power);
         // a blast in a castle or a village: the guards hear it (and want to know who)
         if (authoritative) {
+            for (const t of out.trees || []) this.sync?.treeGone?.(t.index);
             let wrecked = 0;
             for (const b of out.blocks) if (isCastleBlock(b.type)) wrecked++;
             this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true, { r: radius });
@@ -4789,6 +4790,7 @@ export class Game {
             dc.enabled = on;
             dc.update(deltaTime, this.scene, focus.x, focus.y, focus.z, on ? fog.far : 0, !!this.lite);
         }
+        if (this.authority && !this.space?.inSpace) this.world.pruneUnsupportedTrees(dt, i => this.sync?.treeGone?.(i));
         this.world.forest?.update(dt, this.character.group.position, this.camera, worldPlayers(this)); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)

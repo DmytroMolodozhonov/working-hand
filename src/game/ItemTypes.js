@@ -995,7 +995,7 @@ function describeItemBase(it) {
             return { title: '🔨 Молот Тора', color: 0xbfe3ff, lines: ['В грозу поднимите его вверх — в него ударит молния', 'Наведите на цель: молния бьёт туда (до 3 раз)', `Заряды: <b>${it.charges || 0}</b>`] };
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Поднесите к морде коня: 80%, что он даст на себя сесть', 'Пегас подпускает: 40% за золотое яблоко'] };
-        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': case 'armor_leaf': case 'eyeflower_eye': return { title: `${FLORA_ITEMS[it.kind].icon} ${FLORA_ITEMS[it.kind].name}`, color: FLORA_ITEM_TEXT[it.kind].color, lines: FLORA_ITEM_TEXT[it.kind].lines };
+        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': case 'armor_leaf': case 'eyeflower_eye': case 'cactus_spine': return { title: `${FLORA_ITEMS[it.kind].icon} ${FLORA_ITEMS[it.kind].name}`, color: FLORA_ITEM_TEXT[it.kind].color, lines: FLORA_ITEM_TEXT[it.kind].lines };
         case 'baksadi_pear': return { title: '🍐 Груша Баксади', color: 0xb98cff, lines: ['Поднесите ко рту: +12 HP — больше, чем даёт золотое яблоко', 'Растёт на огромном фиолетовом дереве Баксади', 'Нужна для зелья, снимающего проклятие тёмного мага', 'Поднесите к морде коня или Пегаса — сразу даст сесть'] };
         case 'redApple': return { title: '🍎 Яблоко', color: 0xc8202a, lines: ['Поднесите ко рту: +2 HP', 'Поднесите к морде коня: 30%, что он даст на себя сесть', 'Пегас подпускает: 9% за яблоко'] };
         case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Инферно», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
@@ -1354,7 +1354,7 @@ function buildItemModel(it) {
         case 'apple': return appleModel(it);
         case 'redApple': return appleModel(it, true);
         case 'baksadi_pear': return pearModel();
-        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': case 'armor_leaf': case 'eyeflower_eye': return floraItemModel(FLORA_OF_ITEM[it.kind]);
+        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': case 'armor_leaf': case 'eyeflower_eye': case 'cactus_spine': return floraItemModel(FLORA_OF_ITEM[it.kind]);
         case 'meat': return meatModel(false);
         case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.12, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);

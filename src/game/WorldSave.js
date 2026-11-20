@@ -448,6 +448,7 @@ export class WorldKeeper {
             explosions: g.explosions.slice(-4000),
             edits: (g.blockEdits || []).slice(-30000),
             treesGone: g.world.treesGoneList?.() || [],
+            wildPlantsGone: g.flora?.goneList?.() || [],
             treesMoved: g.world.movedTrees?.() || [], // (carried by «Левиоса Максима»: World.placeTree)
             ice: g.iceCells || [],
             chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
@@ -552,6 +553,7 @@ export function restoreWorld(game, save, THREE) {
         g.builder?.applyEdits(towers?.dropLostEdits ? towers.dropLostEdits(save.edits) : save.edits);
     }
     for (const i of save.treesGone || []) g.world.treeGoneById(i); // (one whose land is not here yet stays gone when it comes)
+    g.flora?.restoreGone?.(save.wildPlantsGone);
     g.world.restoreMovedTrees?.(save.treesMoved);
     // (the checks of the buildings after each blast: at once, in the blasts' order, unseen — Structure.js, Collapse.Settling)
     const replay = (fn) => (g.world.terrain?.data?.settling ? g.world.terrain.data.settling.replay(fn) : fn());

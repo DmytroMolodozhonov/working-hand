@@ -78,7 +78,7 @@ export const FLORA_KINDS = {
         harm: { fire: 'burn', blast: 'destroy', lightning: 'burn', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
     },
     cactus: {
-        id: 'cactus', name: 'Кактус', nameMany: 'кактусы', fromGen: 27,
+        id: 'cactus', name: 'Кактус', nameMany: 'кактусы', item: 'cactus_spine', fromGen: 27,
         biomes: { desert: .65 },
         group: { min: 2, max: 5, spread: 16, gap: 4 },
         salt: 6803, height: [2.8, 4.8],
@@ -123,9 +123,10 @@ export const FLORA_ITEMS = {
     frost_shard: { name: 'Ледяная игла', icon: '❄️', weight: 0.1, stack: 20 },
     armor_leaf: { name: 'Лист бронелиста', icon: '🛡️', weight: 0.3, stack: 10 },
     eyeflower_eye: { name: 'Глаз глазоцвета', icon: '👁️', weight: 0.2, stack: 10 },
+    cactus_spine: { name: 'Колючка кактуса', icon: '🌵', weight: .03, stack: 30 },
 };
 /** Which plant an item came from (item id → kind id). */
-export const FLORA_OF_ITEM = Object.fromEntries(FLORA_ORDER.filter(k => FLORA_KINDS[k].item).map(k => [FLORA_KINDS[k].item, k]));
+export const FLORA_OF_ITEM = Object.fromEntries(FLORA_ORDER.map(k => [FLORA_KINDS[k].item, k]));
 
 /** What the item says about itself (ItemTypes.itemInfo): usefulness first, then how to use it. */
 export const FLORA_ITEM_TEXT = {
@@ -135,6 +136,7 @@ export const FLORA_ITEM_TEXT = {
     sun_herb: { color: 0xffb030, lines: ['Поднесите ко рту: +1 HP — жуётся горьковато', 'Целебная трава для зелий', 'Растёт золотыми кустиками на лугах и в степи'] },
     armor_leaf: { color: 0x8fb4b8, lines: ['Твёрдый лист, похожий на пластину брони', 'Нужен для пентаграммы защиты от взрывов', 'Растёт бронелистами в степях и на изумрудных холмах'] },
     eyeflower_eye: { color: 0xd8c27a, lines: ['Живой глаз с цветка — нужен для пентаграммы ночного зрения', 'Положите его на круг, встаньте в него и заплатите ману', 'Растёт на глазоцветах в лесах и на тихих лугах; вырастает снова'] },
+    cactus_spine: { color: 0xc6b187, lines: ['Сухая колючка пустынного кактуса. Выпадает, когда кактус ломается.'] },
     frost_shard: { color: 0x9fdcff, lines: ['Холодная игла хрусталя — пригодится для зелий', 'Растёт на хрустальниках на холодном севере'] },
 };
 
