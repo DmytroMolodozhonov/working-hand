@@ -64,7 +64,7 @@ export {SPELL_COST} from './SpellCosts.js';
 
 
 /** Damage a spell does to me is the one every creature takes (Damage.js); here only the kinds that have a number. */
-const HIT_DAMAGE = { Inferno: 1, IceBall: 3, Thunderwave: DAMAGE.Thunderwave, Sapira: DAMAGE.Sapira, Lightning: DAMAGE.Lightning, Sands: DAMAGE.Sands, Liquidation: DAMAGE.Liquidation };
+const HIT_DAMAGE = { Inferno: 1, IceBall: 3, Thunderwave: DAMAGE.Thunderwave, Sapira: DAMAGE.Sapira, Lightning: DAMAGE.Lightning, LightningStrike:DAMAGE.LightningStrike, Sands: DAMAGE.Sands, Liquidation: DAMAGE.Liquidation };
 
 /** Bombardo damage by distance from the centre of the blast — the same for every body (Damage.blastDamage). */
 export const bombardoDamage = blastDamage;
@@ -597,6 +597,7 @@ export class Combat {
     /** Pay the fatigue of a spell that was cast. */
     /** Fatigue a spell costs (a wand in the hand saves 15%). */
     costOf(name, extra = 0) {
+        if (name === 'Revivify') return SPELL_COST.Revivify;
         const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1) * (this.game.heroElement?.k(name) ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
         return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardDispel|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * wandCostMul(w) * 10) / 10 : base; // (the plain wooden wand saves nothing)
@@ -1037,13 +1038,13 @@ export class Combat {
             return false;
         }
         // worn armour / a robe (Armor.js): the simplest magic bounces off a magic robe / the whole magic set
-        if (this.game.armor?.guard(kind)) return false;
+        if (this.game.armor?.guard(kind==='LightningStrike'?'Lightning':kind)) return false;
         if (kind === 'Inferno') {
             if (this.infernoCooldown > 0) return true;
             this.infernoCooldown = PVP.INFERNO_TICK;
         }
         // (fire from a wizard holding the dragon's wand burns 60% harder: Game.fireBoost)
-        this.damage((HIT_DAMAGE[kind] ?? 2) * Math.max(1, Math.min(3, damageScale)) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind);
+        this.damage((HIT_DAMAGE[kind] ?? 2) * Math.max(1, Math.min(3, damageScale)) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind==='LightningStrike'?'Lightning':kind);
         if (kind === 'Inferno' && !this.dead) this.game.burning?.ignite('p', this.game.localId, byId); // (the stream sets me alight)
         // its physical effect: a push, a stagger, off the feet (BodyImpact; SPELL_PHYSICS when no push is given)
         if (this.game.impact) this.game.impact.spellHit(kind, from, byId, push);

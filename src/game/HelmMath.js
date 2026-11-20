@@ -21,6 +21,7 @@ export const HELM = {
 
 /** The polar angle of a point in the wheel's plane (0 = top, + = clockwise for the helmsman). */
 export const polar = (x, y) => Math.atan2(x, y);
+export const helmRate = (speed) => HELM.MAX_RATE / (1 + Math.abs(speed) / 16);
 
 /** Keep an angle continuous across ±π. */
 export function unwrap(prev, a) {
@@ -45,10 +46,14 @@ export function steer(wheel, holds, dt, speed) {
     let want = 0;
     for (const h of holds) want += h.w0 + HELM.GAIN * (h.a - h.a0);
     want /= holds.length;
-    const rate = HELM.MAX_RATE / (1 + Math.abs(speed) / 16);
-    const next = Math.max(-HELM.LOCK, Math.min(HELM.LOCK, wheel + Math.max(-rate * dt, Math.min(rate * dt, want - wheel))));
+    const next = followWheel(wheel, want, dt, speed);
     // the wheel is hard over and the hand goes on round: the hold is moved with the hand, so that turning back answers at once
     // (no dead stretch of the circle to be gone through again — the hand did not «slip», the reference stood still)
     if (Math.abs(next) >= HELM.LOCK - 1e-9 && Math.abs(want) > Math.abs(next)) for (const h of holds) h.a0 = h.a - (next - h.w0) / HELM.GAIN;
     return next;
+}
+
+export function followWheel(wheel, want, dt, speed) {
+    const turn = helmRate(speed) * dt;
+    return Math.max(-HELM.LOCK, Math.min(HELM.LOCK, wheel + Math.max(-turn, Math.min(turn, want - wheel))));
 }

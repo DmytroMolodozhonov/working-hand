@@ -1,3 +1,12 @@
+// [duration, start Hz, end Hz, decay, cloth mix]. Shared by the local inventory cues.
+const POCKET_CUES = {
+    enter: [0.13, 530, 760, 0.036, 0.55],
+    switch: [0.075, 1050, 990, 0.014, 0.12],
+    wandEnter: [0.12, 680, 510, 0.032, 0.35],
+    wandTake: [0.15, 640, 1250, 0.041, 0.24],
+    wandPut: [0.14, 560, 260, 0.035, 0.48],
+};
+
 /**
  * SoundManager.js — music + sound effects.
  *
@@ -560,6 +569,14 @@ export class SoundManager {
         if (!this.enabled) return;
         const ctx = this.context;
         if (!ctx) return;
+        if (typeof kind !== 'string') return;
+        if (Object.hasOwn(POCKET_CUES, kind)) {
+            const key = 'pocket:' + kind;
+            const buf = this.sounds[key] || (this.sounds[key] = this._synthPocketCue(POCKET_CUES[kind]));
+            this._play(buf, 0.32);
+            return;
+        }
+        if (kind !== 'take' && kind !== 'put') return;
         this._pocketBuf = this._pocketBuf || {};
         let buf = this._pocketBuf[kind];
         if (!buf) {
@@ -578,6 +595,21 @@ export class SoundManager {
             this._pocketBuf[kind] = buf;
         }
         this._play(buf, 0.4, 0.95 + Math.random() * 0.1);
+    }
+
+    _synthPocketCue([duration, from, to, decay, cloth]) {
+        const ctx = this.context, rate = ctx.sampleRate;
+        const buffer = ctx.createBuffer(1, Math.floor(rate * duration), rate);
+        const data = buffer.getChannelData(0);
+        let seed = 13, noise = 0;
+        for (let i = 0; i < data.length; i++) {
+            const t = i / rate, phase = 2 * Math.PI * (from * t + (to - from) * t * t / (2 * duration));
+            seed = (seed * 16807) % 2147483647;
+            noise += (seed / 1073741823.5 - 1 - noise) * 0.23;
+            const envelope = Math.min(1, t / 0.004, (duration - t) / 0.014) * Math.exp(-t / decay);
+            data[i] = (0.6 * Math.sin(phase) + 0.14 * Math.sin(phase * 2.13) + cloth * noise) * envelope;
+        }
+        return buffer;
     }
 
     /** A bow being drawn: a short creak of wood and string (made here). `k` 0..1: how hard. */
@@ -769,6 +801,7 @@ export class SoundManager {
     prewarmStep() {
         if (!this.context || !this.loaded) return true;
         const list = this._warmList || (this._warmList = [
+            ...Object.entries(POCKET_CUES).map(([key, cue]) => ['pocket:' + key, () => this._synthPocketCue(cue)]),
             ['house_wood', () => this._synthKnock(170, 0.3)], ['house_block', () => this._synthKnock(320, 0.12)],
             ['house_sand', () => this._synthSizzle(0.9)], ['magic', () => this._synthChime([880, 1320, 1760], 0.9, 6)],
             ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)], ['bubblePop', () => this._synthBubblePop()],

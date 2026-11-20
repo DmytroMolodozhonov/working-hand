@@ -26,6 +26,7 @@ import { KD, fallDir, IMPACT } from './Impact.js';
 import { braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { knockMessage, lyingMessage } from './Hints.js';
 import { absoluteStops } from './FirmRules.js';
+import { PLAYER_FALL } from './PlayerFallRules.js';
 
 export const KNOCK = { MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: a fall from a blow or a spell keeps one down 5 s at least + 1…5 s by chance — nobody jumps up at once)
     FALL_T: 0.45, RISE_T: 0.7, SQUAT_T: 0.14, BOW_LOW: 0.3, BOW_UP: 0.4, NO_POSE_T: 2, AUTO_RISE: 6, STAGGER_MAX: 0.8,
@@ -112,7 +113,7 @@ export class Knockdown {
     netCode() { return this.state === 'falling' || this.state === 'down' ? KD[this.dir] : 0; }
 
     /** Off the feet: falls `dir`, lies at least `down` s, then gets up by the player's own movement. */
-    knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', cause = null, toss = 0, strength = 0.3, fly = false, tumble = 0 } = {}) {
+    knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', cause = null, toss = 0, strength = 0.3, fly = false, tumble = 0, learn = true } = {}) {
         const g = this.game, ch = g.character;
         // the monster form: nothing but the gods' spells, «Инспириус», «Total Destruction Максима» throw it down (MonsterForm.js)
         if (g.monster?.active && !g.monster.knocks(kind, cause)) { this.held?.({ dir, v: toss }); return false; }
@@ -128,7 +129,10 @@ export class Knockdown {
             this.minDown = Math.max(this.minDown, (this.state === 'down' ? this.t : 0) + down);
             return false;
         }
-        g.steady?.windFell?.(kind); // (the wind teaches to stand: every fall from «Wind» / «Wind Maxima» is +1 — Steadiness.windFell)
+        if (learn) {
+            if (g.steady?.fell) g.steady.fell();
+            else g.steady?.windFell?.(kind);
+        }
         if (g.beds?.lying) g.beds.standUp?.();
         if (g.animals?.riding) g.animals.dismount?.();
         if (g.dragonRide?.riding) g.dragonRide.stop('thrown'); // (knocked off a dragon: set down gently, the spell torn)
@@ -226,13 +230,15 @@ export class Knockdown {
         this._seenLanding = L.at;
         if (g.character.swimY != null || performance.now() < (g.impact?.gentleUntil || 0)) return;
         if (g.combat?.dead) return;
+        if (!this.down) g.steady?.fallLanded?.(L);
+        if (L.soft || (L.careful && L.drop <= PLAYER_FALL.CAREFUL_DROP)) return;
         const hard = L.drop >= IMPACT.FALL_KNOCK_DROP || L.speed >= IMPACT.FALL_KNOCK_SPEED;
         if (this.down) { g.fx.shake = Math.max(g.fx.shake || 0, 0.6); if (hard && !g.combat?.stunned && !g.combat?.frozen) this.daze(fallStrength(L)); return; }
         if (!hard) return;
         // (a short hard drop — the speed rule alone — may find a steady hero on the feet; a deep fall never: Steadiness.js)
         if (g.steady?.holds(null, { drop: L.drop, spell: false })) { g.fx.shake = Math.max(g.fx.shake || 0, 0.5); return; }
         const kb = g.knockback, ch = g.character;
-        this.knock({ dir: kb && Math.hypot(kb.x, kb.z) > 1 ? fallDir(kb.x, kb.z, ch.group.rotation.y) : 'back', kind: 'fall', strength: fallStrength(L) });
+        this.knock({ dir: kb && Math.hypot(kb.x, kb.z) > 1 ? fallDir(kb.x, kb.z, ch.group.rotation.y) : 'back', kind: 'fall', strength: fallStrength(L), learn: false });
         this.state = 'down'; this.t = 0; // (already on the ground)
         g.fx.shake = Math.max(g.fx.shake || 0, 0.9);
         g.hud?.flashColor?.('rgba(0,0,0,0.45)');

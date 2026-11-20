@@ -63,6 +63,7 @@ if (fwFall > 0.5) {
     float ut = uUltraTime;
     vec2 g;
     float foam = 0.0;
+    vec4 lkA = vec4(0.5), lkB = vec4(0.5);
     if (fwRiver > 0.5) {
         // the current: everything slides downstream (≈ 1.6 m/s), stretched along the flow
         vec2 F = fwFlow, S = vec2(-F.y, F.x);
@@ -75,10 +76,13 @@ if (fwFall > 0.5) {
         foam = smoothstep(0.74, 0.94, broad.b) * smoothstep(0.65, 0.9, fine.b) * 0.22;
         if (!top) foam *= 0.3;
     } else {
-        // the lake: the faintest drifting ripples — a mirror
-        g = vec2(cos(dot(up, vec2(0.9, 0.4)) * 1.3 + ut * 0.6), cos(dot(up, vec2(-0.5, 0.8)) * 1.7 + ut * 0.7)) * 0.012
+        // the lake: a dark, still body with slow broad swells and a fine chop of its own (two reads of the shared noise map, drifting different ways) —
+        // not a glass pane (the author 20.11: «в разы темнее… не чувствуется, что это вода»)
+        lkA = texture2D(uFreshRipple, up * 0.037 + vec2(ut * 0.0045, ut * 0.0031));
+        lkB = texture2D(uFreshRipple, up * 0.13 + vec2(-ut * 0.0083, ut * 0.0062));
+        g = (lkA.rg - 0.5) * 0.05 + (lkB.rg - 0.5) * 0.034 + vec2(cos(dot(up, vec2(0.9, 0.4)) * 1.3 + ut * 0.6), cos(dot(up, vec2(-0.5, 0.8)) * 1.7 + ut * 0.7)) * 0.012
           + vec2(sin(dot(up, vec2(0.3, -1.1)) * 3.1 - ut * 1.1), sin(dot(up, vec2(1.2, 0.7)) * 2.7 + ut * 0.9)) * 0.007;
-    }
+            }
     if (uUltraOn > 0.5) g += ultraRain(up, ut) * 0.14 * uUltraWet;
     vec3 un = normalize(uwN + vec3(g.x, 0.0, g.y));
     vec3 uV = normalize(vUltraWorld - cameraPosition);
@@ -86,13 +90,16 @@ if (fwFall > 0.5) {
     vec3 uR = reflect(uV, un);
     uR.y = abs(uR.y);
     float mirror = fwRiver > 0.5 ? 0.6 : 0.92; // (a still lake mirrors the most)
-    vec3 body = gl_FragColor.rgb * (fwRiver > 0.5 ? vec3(1.0) : vec3(0.62, 0.74, 0.65)); // (darker lake water; the sky still reflects at grazing angles)
+    // (a lake: deep dark green-teal, a little lighter where the swell lifts and a little colour of the block it lies over; the sky still reflects at grazing angles)
+    vec3 lakeBody = vec3(0.028, 0.085, 0.095) + gl_FragColor.rgb * 0.07 + vec3(0.012, 0.03, 0.024) * (lkA.b * 0.8 + lkB.b * 0.5);
+    vec3 body = fwRiver > 0.5 ? gl_FragColor.rgb : lakeBody;
     gl_FragColor.rgb = mix(body * mix(1.0, 0.85, ufr), ultraSky(uR), clamp(ufr * (fwRiver > 0.5 ? 0.9 : 1.15), 0.0, mirror));
     float usg = max(dot(uR, normalize(uUltraSunDir)), 0.0);
     gl_FragColor.rgb += uUltraSunCol * (pow(usg, fwRiver > 0.5 ? 300.0 : 1400.0) * (fwRiver > 0.5 ? 3.0 : 8.0) + pow(usg, 80.0) * 0.25) * uUltraSunVis;
     vec3 foamC = vec3(0.86, 0.92, 0.9) * (0.45 + 0.55 * max(0.0, uUltraSunCol.r * uUltraSunVis + 0.35));
     gl_FragColor.rgb = mix(gl_FragColor.rgb, foamC, clamp(foam, 0.0, 0.8));
     gl_FragColor.a = clamp(mix(gl_FragColor.a, 1.0, ufr * 0.6 + foam * 0.6), 0.0, 1.0);
+    if (fwRiver < 0.5 && top) gl_FragColor.a = max(gl_FragColor.a, 0.93); // (a lake from above: nearly opaque — the bed is a dim shape, not a clear window)
 }
 #include <fog_fragment>`;
 
@@ -112,6 +119,6 @@ export function applyUltraWater(material) {
             .replace('#include <fog_fragment>', WATER_FRAG);
     };
     const key = material.customProgramCacheKey?.bind(material);
-    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw4';
+    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw5';
     return material;
 }

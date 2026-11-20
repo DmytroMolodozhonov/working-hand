@@ -13,7 +13,7 @@
  * the flowers are in `data._bloom` (made again from it); a world saved and loaded — the snapshot; a cave — no sky needed, it grows.
  */
 import * as THREE from 'three';
-import { BLOCK } from '../world/Terrain.js';
+import { BLOCK, MIN_LAYER, MAX_LAYER } from '../world/Terrain.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 
 export const FLOURISH = { COST: 12, R: 6, REACH: 30, GRASS_T: 1.6, BLOOM_AT: 2.2, BLOOM: 0.45, KEEP: 6000 };
@@ -53,18 +53,31 @@ export class Flourish {
         if (!cell?.point || cell.type === BLOCK.WATER) return hint('🌱 Направьте палочку на землю (не на воду и не в небо) — не дальше 30 м');
         const t = g.terrain?.data;
         if (!t || (t.landMade && !t.landMade(cell.x, cell.z))) return hint('🌱 Земля там ещё не готова — подождите мгновение');
+        if (!GREENS.has(cell.type) && cell.type !== BLOCK.GRASS) return hint('🌱 Flourish действует на землю, пашню и траву');
+        if (t.get(cell.x, cell.L + 1, cell.z) !== BLOCK.AIR) return hint('🌱 Направьте палочку на открытую землю');
         const tired = g.combat?.check?.('Flourish');
         if (tired) return hint(tired);
         g.combat?.pay?.('Flourish');
-        this.start(cell.x, cell.z, g.localId, true);
+        this.start(cell.x, cell.z, g.localId, true, cell.L < t.topLayer(cell.x, cell.z) ? cell.L : null);
         g.mana?.success?.('Flourish');
         return 'Flourish';
     }
 
     /** The green ring runs out from (x, z) — on every computer the same (the blocks: the caster's edits; the flowers: `flr`). */
-    start(x, z, by, mine) {
-        this.jobs.push({ x, z, t: 0, done: new Set(), mine, by, bloomed: false });
-        this._fxBurst(x, z);
+    start(x, z, by, mine, layer = null) {
+        this.jobs.push({ x, z, layer, t: 0, done: new Set(), mine, by, bloomed: false });
+        this._fxBurst(x, z, layer);
+    }
+
+    _floor(t, x, z, layer) {
+        if (layer == null) return t.topLayer(x, z);
+        // Follow the cave floor across one-block steps without jumping to the surface.
+        for (const dy of [0, -1, 1]) {
+            const L = layer + dy;
+            const b = t.get(x, L, z);
+            if (b !== BLOCK.AIR && b !== BLOCK.WATER && t.get(x, L + 1, z) === BLOCK.AIR) return L;
+        }
+        return null;
     }
 
     update(dt) {
@@ -81,9 +94,11 @@ export class Flourish {
                     if (d > r) continue;
                     const ix = J.x + dx, iz = J.z + dz, key = ix + ',' + iz;
                     if (J.done.has(key)) continue;
-                    J.done.add(key);
                     if (t.landMade && !t.landMade(ix, iz)) continue;
-                    const L = t.topLayer(ix, iz), b = t.get(ix, L, iz);
+                    J.done.add(key);
+                    const L = this._floor(t, ix, iz, J.layer);
+                    if (L == null) continue;
+                    const b = t.get(ix, L, iz);
                     if (!GREENS.has(b) || isEnchanted(b)) continue;
                     if (g.wards?.forbids?.(g.character.group.position, _o.set(ix, L, iz))) continue;
                     if (t.get(ix, L + 1, iz) !== BLOCK.AIR) continue; // (something on it: it stays as it is)
@@ -95,7 +110,7 @@ export class Flourish {
             if (!J.bloomed && J.t >= FLOURISH.BLOOM_AT) {
                 J.bloomed = true;
                 if (J.mine) {
-                    const list = this._bloomList(J.x, J.z);
+                    const list = this._bloomList(J.x, J.z, J.layer);
                     this.applyBloom(list);
                     g.sync?.net?.send?.({ t: 'flr', l: list }, true);
                 }
@@ -105,7 +120,7 @@ export class Flourish {
     }
 
     /** The grass columns round (x, z) that flower (a share of them, the same pick from the place: a drift, not a carpet). */
-    _bloomList(x, z) {
+    _bloomList(x, z, layer = null) {
         const t = this.game.terrain?.data, out = [];
         if (!t) return out;
         for (let dz = -FLOURISH.R; dz <= FLOURISH.R; dz++) for (let dx = -FLOURISH.R; dx <= FLOURISH.R; dx++) {
@@ -113,22 +128,25 @@ export class Flourish {
             const ix = x + dx, iz = z + dz;
             const h = Math.abs(Math.sin(ix * 12.9898 + iz * 78.233) * 43758.5453) % 1;
             if (h > FLOURISH.BLOOM) continue;
-            const L = t.topLayer(ix, iz);
-            if (t.get(ix, L, iz) !== BLOCK.GRASS) continue;
-            out.push([ix, iz]);
+            if (t.landMade && !t.landMade(ix, iz)) continue;
+            const L = this._floor(t, ix, iz, layer);
+            if (L == null || t.get(ix, L, iz) !== BLOCK.GRASS) continue;
+            out.push(layer == null ? [ix, iz] : [ix, iz, L]);
         }
         return out;
     }
 
     /** The flowers on these columns (mine or from `flr`): asked of the grass; kept for the save. */
-    applyBloom(list) {
+    applyBloom(list, visual = true) {
         const g = this.game, t = g.terrain?.data;
         if (!t?.setBloom || !Array.isArray(list)) return;
-        for (const p of list.slice(0, 400)) {
+        for (const p of list.slice(0, visual ? 400 : FLOURISH.KEEP)) {
             if (!Array.isArray(p) || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
-            if (t.setBloom(p[0] | 0, p[1] | 0)) {
-                this.bloomed.push([p[0] | 0, p[1] | 0]);
-                if (Math.random() < 0.3) g.fx?.spark?.(_o.set(p[0], t.topLayer(p[0], p[1]) + 0.9, p[1]), [0xe8392c, 0x4f7fe0, 0xf5d23a, 0xd86aa8][(Math.random() * 4) | 0], 0.07, _d.set(0, 0.8, 0), 0.7);
+            const x = p[0] | 0, z = p[1] | 0, L = p[2] ?? null;
+            if (L != null && (!Number.isInteger(L) || L < MIN_LAYER || L > MAX_LAYER)) continue;
+            if (t.setBloom(x, z, L)) {
+                this.bloomed.push(L == null ? [x, z] : [x, z, L]);
+                if (visual && Math.random() < 0.3) g.fx?.spark?.(_o.set(x, (L ?? t.topLayer(x, z)) + 0.9, z), [0xe8392c, 0x4f7fe0, 0xf5d23a, 0xd86aa8][(Math.random() * 4) | 0], 0.07, _d.set(0, 0.8, 0), 0.7);
             }
         }
         if (this.bloomed.length > FLOURISH.KEEP) this.bloomed.splice(0, this.bloomed.length - FLOURISH.KEEP);
@@ -137,9 +155,9 @@ export class Flourish {
     /** (the net) Another's «Flourish»: its ring of green light; the flowers come by `flr`. */
     onNet(m) { if (m?.t === 'flr') this.applyBloom(m.l); }
 
-    _fxBurst(x, z) {
+    _fxBurst(x, z, layer = null) {
         const g = this.game, t = g.terrain?.data;
-        const y = t ? t.topLayer(x, z) + 0.8 : 0;
+        const y = t ? (layer ?? t.topLayer(x, z)) + 0.8 : 0;
         for (let i = 0; i < 36; i++) {
             const a = (i / 36) * Math.PI * 2;
             g.fx?.spark?.(_o.set(x, y, z), i % 3 ? 0x8ee05a : 0xfff3a0, 0.1, _d.set(Math.cos(a) * 4, 0.6 + Math.random(), Math.sin(a) * 4), 0.9);
@@ -148,6 +166,5 @@ export class Flourish {
     }
 
     snapshot() { return this.bloomed.length ? this.bloomed.slice(-FLOURISH.KEEP) : null; }
-    restore(list) { if (Array.isArray(list)) this.applyBloom2(list); }
-    applyBloom2(list) { const t = this.game.terrain?.data; if (!t?.setBloom) return; for (const p of list) if (Array.isArray(p) && t.setBloom(p[0] | 0, p[1] | 0)) this.bloomed.push([p[0] | 0, p[1] | 0]); }
+    restore(list) { this.applyBloom(list, false); }
 }

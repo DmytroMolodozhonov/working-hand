@@ -37,3 +37,36 @@ test('a bloom column grows a flower on its grass; the chunk is made again; the l
     G.restore(JSON.parse(JSON.stringify(F.snapshot())));
     assert.ok(t2._bloom?.size, 'the flowers back after a load');
 });
+
+test('Flourish greens the aimed cave floor, places flowers there, and leaves stone and the surface alone', () => {
+    const t = new TerrainData();
+    t.generate({ seed: 7, mountains: true });
+    const x = 80, z = 80, layer = -7;
+    const c = t.chunk(x >> 5, z >> 5);
+    for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) {
+        t.set(x + dx, layer, z + dz, dx === 0 && dz === 0 ? BLOCK.DIRT : BLOCK.STONE);
+        t.set(x + dx, layer + 1, z + dz, BLOCK.AIR);
+    }
+    const top = t.topLayer(x, z), surface = t.get(x, top, z);
+    assert.ok(top > layer + 1);
+    const game = {
+        localId: 'me', terrain: {data: t},
+        dom: 'right', wandSide: () => 'right',
+        character: {getHandDirection: (_, out) => out.set(0, -1, 0), getHandWorldPosition: (_, out) => out.set(x, -5, z)},
+        combat: {pay: () => {}},
+        builder: {
+            _hitCell: () => ({x, z, L: layer, type: t.get(x, layer, z), point: {}}),
+            _sendEdits: edits => { for (const cell of edits) t.set(...cell); },
+        },
+    };
+    const F = new Flourish(game);
+    assert.equal(F.cast(true), 'Flourish');
+    F.update(2.3);
+    assert.equal(t.get(x, layer, z), BLOCK.GRASS);
+    assert.equal(t.get(x + 1, layer, z), BLOCK.STONE);
+    assert.equal(t.get(x, top, z), surface);
+    const flowers = new Flourish(game);
+    flowers.restore([[x, z, layer]]);
+    assert.deepEqual(flowers.snapshot(), [[x, z, layer]]);
+    assert.ok(buildFlora(t, c).box[1] < -6, 'flower vertices belong to the cave, not the grass above');
+});

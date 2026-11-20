@@ -872,7 +872,7 @@ export class Duel {
         if (c.isGhost) return out.copy(c.position).add(_v2.set(0, 1.7, 0)); // (a ghost: the middle of its sheet)
         if (c.isCustom) return this.game.customCreatures.centre(c, out);
         if (c.isGargoyle) return gargoyleCenter(c, out);
-        if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, 4.5 * (c.model.userData.s || 1), 0));
+        if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, (c.skel ? 1.8 : 4.5) * (c.model.userData.s || 1), 0));
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
         if (c.x === undefined && c.group?.position) return out.copy(c.group.position).add(_v2.set(0, 1.5, 0)); // (a zombie: its group, the middle of its body)
         return out.set(c.x, c.y + 2.4, c.z);

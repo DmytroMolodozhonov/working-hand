@@ -917,6 +917,13 @@ export class LivingTrees {
             const lost = t.model.limbs || {};
             const has = (side) => lost['branch' + side] == null;
             if (!t.swing && t.nextSwing <= 0 && (has(0) || has(1)) && facesTarget(t.model.rotation.y, p.x, p.z, plan.enemy.x, plan.enemy.z, FACE.MELEE)) {
+                // An actual attack gives an attentive wizard a chance to answer before the blow.
+                const victim = plan.enemy.k === 'v' ? g.castleLife?.byId.get(plan.enemy.id) : null;
+                const fight = g.castleLife?.wizards?.fight;
+                if (victim?.wizard && fight?.helperFirst(victim, { k: 't', id: t.id, kind: t.skel ? 'servant' : 'tree',
+                    dist: Math.hypot(victim.x - p.x, victim.z - p.z), small: !!t.skel, hp: t.hp / ALIVE.HP })) {
+                    fight.threat(victim, { k: 't', id: t.id });
+                }
                 t.swing = { t: 0, target: { k: plan.enemy.k, id: plan.enemy.id }, hit: false };
                 t.swingSide = has(1 - t.swingSide) ? 1 - t.swingSide : t.swingSide;
                 t.nextSwing = ALIVE.SWING_GAP;

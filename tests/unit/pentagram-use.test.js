@@ -27,6 +27,32 @@ const put = (p, pent, x, z, by = 'me') => { const m = p._place(pent + x, by, pen
 const stand = (g, x, z) => g.character.group.position.set(x, 2.5, z);
 const run = (p, sec, dt = 0.05) => { for (let t = 0; t < sec; t += dt) p.update(dt); };
 
+test('white drawings expire after twelve minutes, including through a save or host snapshot', () => {
+    const originalNow = Date.now;
+    let now = 1000000;
+    Date.now = () => now;
+    try {
+        const { p } = stub();
+        const a = put(p, 'teleport', 0, 0);
+        assert.equal(a.whiteExpiresAt, now + 720000);
+        assert.equal(a.life, 720);
+        now += 600000;
+        const save = JSON.parse(JSON.stringify(p.marksSnapshot()));
+        const { p: loaded } = stub();
+        loaded.marksRestore(save);
+        loaded._pendingStep(1);
+        assert.equal(loaded.marks.get(a.id).life, 120);
+        now += 120000;
+        loaded._markStep(loaded.marks.get(a.id), 0.05);
+        assert.equal(loaded.marks.has(a.id), false);
+        const { p: late } = stub();
+        late.netRestore(save);
+        assert.equal(late._pending.length, 0);
+        const dark = p._place('dark', 'caster', 'devil', 0, .5, 0, 3.5, 0);
+        assert.equal(dark.whiteExpiresAt, undefined);
+    } finally { Date.now = originalNow; }
+});
+
 test('the prices of mending are the author\'s; the plan: magic first, what the mana does not reach stays as it was, whole pieces cost nothing', () => {
     assert.deepEqual(MEND_COST, { helmet: { plain: 10, magic: 20 }, chest: { plain: 20, magic: 40 }, legs: { plain: 15, magic: 30 } });
     const worn = { helmet: piece('helmet', false, 1), chest: piece('chest', true, 5), legs: piece('legs', false, 2) };

@@ -17,6 +17,7 @@
  * the spell itself is nobody else's business — it harms, frightens and moves nobody; old saves: not saved (a held spell ends with the session, like the others); host decides nothing here.
  */
 import * as THREE from 'three';
+import {PLAYER_GROUND_OFFSET} from '../entities/Character.js';
 import { castingHand } from './WandAim.js';
 
 export const WALK = {
@@ -118,8 +119,10 @@ export class WaterWalk {
         if (g.combat?.drain(WALK.DRAIN * dt, dt) === false) { this.set(false, 'mana'); return; }
         const p = ch.group.position;
         const w = g.swim?.waterAt?.(p.x, p.z, p.y - 2);
-        const feet = p.y - 1.95;
+        const feet=p.y-(PLAYER_GROUND_OFFSET-(ch.bodyDrop?.()||0))*(ch.size||1);
+        const wasOnWater=this._onWater;
         this._onWater = !!w && Math.abs(feet - w.surface) < 0.5 && ch.onGround;
+        if(this._onWater&&!wasOnWater)g.perf?.note?.('🌊 Aquambula: стоите на воде; мана '+Math.floor(g.combat?.fatigue??0));
         if (this._onWater) {
             if (!this._first) { this._first = true; g.mana?.success?.('WaterWalk'); } // (the first real step on the water: +cells, once)
             this._stepT -= dt;

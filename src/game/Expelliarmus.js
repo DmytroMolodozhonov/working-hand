@@ -173,7 +173,7 @@ export const WAND_TOOLS = new Set(['wand']);
  * (host) «Экспеллиармус» reached a castle person `v`: a wizard's wand / a knight's sword flies off.
  * → 'wand' | 'sword' | null (nothing knocked out: only the push).
  */
-export function disarmVillager(game, v, makeWand = wizardWandOf) {
+export function disarmVillager(game, v, makeWand = wizardWandOf, dropOnly = false) {
     const g = game, m = v.model;
     const kind = m?.toolKind;
     const hand = new THREE.Vector3(v.x, v.y + 2.6, v.z);
@@ -184,7 +184,9 @@ export function disarmVillager(game, v, makeWand = wizardWandOf) {
         const item = wizardWand(v, makeWand);
         // (an arena wizard's wand a player may win: in the Creative duel it is gone at the next duel — ArenaDuels.dropTrophyWands. In SURVIVAL a won wand is his for good: the author 20.11 lost a 49% wand that way)
         item.arenaWand = !!v.arena && (g.config?.mode === 'creative' || !!g.arenaDuels?.mode);
-        const f = pickFlight(g, hand);
+        const f = dropOnly
+            ? { vel: new THREE.Vector3(0, -.4, 0), spin: new THREE.Vector3(1.2, 0, .7) }
+            : pickFlight(g, hand);
         m.setHeldTool('none');
         v.noWand = true;
         v.practice = null;

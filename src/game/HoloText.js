@@ -8,6 +8,7 @@
  */
 import { SPELLS } from '../ui/Codex.js';
 import { matchSpell } from '../fx/SpellManager.js';
+import { teachKey } from './SpellBook.js';
 
 const ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ' };
 const decode = (s) => s.replace(/&(lt|gt|amp|quot|apos|nbsp|#39);/g, (_, e) => (e === '#39' ? "'" : ENTITIES[e]));
@@ -36,9 +37,12 @@ export function spellDescription(id) {
     if (id === 'Pentagranium') return { name: 'Pentagranium', desc: 'Создаёт на земле пентаграмму для обряда. Каждую фигуру нужно выучить с её собственного свитка; создание круга стоит 50 маны, а условия и цена обряда зависят от фигуры.' };
     if (!_byId) {
         _byId = new Map();
-        for (const s of SPELLS) { const k = s.name.split(' / ').map((n) => matchSpell(n)).find(Boolean); if (k && !_byId.has(k)) _byId.set(k, s); }
+        for (const s of SPELLS) {
+            const spoken = s.name.split(' / ').map((n) => matchSpell(n)).find(Boolean);
+            for (const k of [s.spell, spoken]) if (k && !_byId.has(k)) _byId.set(k, s);
+        }
     }
-    const card = _byId.get(id) || _byId.get(String(id).replace(/Maxima$/, ''));
+    const card = _byId.get(teachKey(id)) || _byId.get(id) || _byId.get(String(id).replace(/Maxima$/, ''));
     return card?.desc ? card : null;
 }
 

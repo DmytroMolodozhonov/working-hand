@@ -79,7 +79,8 @@ export function knows(name, who = {}) {
     if (who.element === 'water' && name === 'IceShards') return true; // (the ice-shards mode of his Water Vortex) // (a mage of an element knows its key spell: Water / Ground / Fire / Air Vortex — HeroElement.js)
     if (name === 'Flight') return who.mode !== 'freeworld' || !!who.flight || !!who.learned?.has?.('Flight');
     const k = teachKey(name);
-    return !!who.spells?.[k] || !!who.learned?.has?.(k) || (k === 'Breakthrough' && (!!who.spells?.Groundprud || !!who.learned?.has?.('Groundprud')));
+    return !!who.spells?.[k] || !!who.learned?.has?.(k) || (k === 'Breakthrough' && (!!who.spells?.Groundprud || !!who.learned?.has?.('Groundprud')))
+        || (k === 'Unfurl' && (!!who.spells?.Furl || !!who.learned?.has?.('Furl')));
 }
 
 /** How a spell is learned outside Creative: 'start' | 'book' | 'mana' | 'scroll' (the codex' badge). */
@@ -107,8 +108,8 @@ export function scrollKey(it) {
 /** The set of scroll keys a hero has already burnt or learnt: `who` { spells (bonus.spells), learned (books.learned), pent (the figures seen) }. */
 export function knownScrollKeys(who = {}) {
     const out = new Set();
-    for (const [k, v] of Object.entries(who.spells || {})) if (v) out.add('s:' + (k === 'Groundprud' ? 'Breakthrough' : k));
-    for (const k of who.learned || []) out.add('s:' + (k === 'Groundprud' ? 'Breakthrough' : k));
+    for (const [k, v] of Object.entries(who.spells || {})) if (v) out.add('s:' + teachKey(k));
+    for (const k of who.learned || []) out.add('s:' + teachKey(k));
     for (const k of who.pent || []) out.add('p:' + k);
     return out;
 }

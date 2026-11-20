@@ -155,7 +155,7 @@ export function absorbLegacy(g, rec) {
     if (rec.caves) g.caveMap?.merge(rec.caves);
     const M = g.mana;
     if (M && rec.mana) {
-        for (const k of rec.mana.spells || []) M.spellsUsed.add(String(k));
+        for (const k of rec.mana.spells || []) M.spellsUsed.add(k === 'Furl' ? 'Unfurl' : String(k));
         for (const k of rec.mana.kills || []) M.killsMade.add(String(k));
         for (const k of rec.mana.found || []) M.found?.add(String(k));
         M.grow(Math.max(0, Math.min(20000, Number(rec.mana.growth) || 0)), 'legacy'); // (with the gods' +100s: up to 400 of it)

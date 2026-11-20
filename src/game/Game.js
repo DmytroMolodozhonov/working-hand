@@ -221,7 +221,7 @@ import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { terrainProbe } from '../world/TerrainProbe.js';
-import { WIZ_COUNTER_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { WIZ_COUNTER_FROM_GEN, CAVE_MINES_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -261,6 +261,7 @@ import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
 import { ZombieSpawn, worldLights, litAt, inSunlight, ZSPAWN, lightLevel } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
+import {stormSpellBlock} from './StormSpellRules.js';
 import { DivineCreation } from './DivineCreation.js';
 import { CustomPlants } from './CustomPlants.js';
 import { CustomCreatures } from './CustomCreatures.js';
@@ -329,6 +330,7 @@ import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 import { restartsCreative } from './CreativeRestart.js';
 import { PotionEffects } from './PotionEffects.js';
 import { Flourish } from './Flourish.js';
+import { Revivify } from './Revivify.js';
 import { randomLook as _rollLook, cleanLook as _cleanLook } from '../entities/Appearance.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -569,6 +571,7 @@ export class Game {
             buildings: this.gen >= BUILDINGS_FROM_GEN, // (different buildings in the settlements — Buildings.js)
             apart: this.gen >= SPAWN_MAPS_FROM_GEN, // (the Creative bosses' places apart: the dragon's lair, the far ice castle, the spider's den — Terrain.SPAWN_MAPS_FROM_GEN)
             bigHouses: this.gen >= HOUSE_SIZE_FROM_GEN, // (the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig)
+            caveMines: this.gen >= CAVE_MINES_FROM_GEN,
             dungeons: this.gen >= DUNGEON_FROM_GEN, // (the ruins and the underground dungeons — Dungeons.js)
             ghostCastle: this.gen >= GHOST_CASTLE_FROM_GEN, // (the Castle of Ghosts — only a hero who sees the invisible has it in his land: GhostCastleLife.js)
             iceArena: this.gen >= ICE_ARENA_FROM_GEN, // (the Ice Queen's palace on the great ice arena — IceCastle.ICE_CASTLE.ARENA)
@@ -646,7 +649,7 @@ export class Game {
             tornado: (from, at, casterId, side) => (at.y > 0.5 ? this.landTornado?.call(from, at, casterId, side) : this.oceanStorm?.call(from, at, casterId, side)), // (y = 1: the land tornado — LandTornado.js)
             whirlpool: (from, at, casterId, side) => this.whirlpool?.call(from, at, casterId, side), // («Maelstrom»: Whirlpool.js)
             rain: (o, casterId, side) => { this.rainFx?.cast(o, casterId === 'local' ? this.localId : casterId, side, inHell(o.x, o.z)); this.storm?.startRain(); }, // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.titans?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            lightningAt: (point, casterId, kind='Lightning') => { const LIGHTNING=kind==='LightningStrike'?DAMAGE.LightningStrike:DAMAGE.Lightning; if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); if(kind!=='LightningStrike')this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.pharaoh?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId,kind==='LightningStrike'?2:1); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3,kind==='LightningStrike'?60:30, casterId, 'lightning'); } },
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.tarons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.diabolos?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.titans?.noise(point); this.diabolos?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.vampire?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.pharaoh?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
             clearWay: (a, b) => clearWay(this, a, b),
@@ -959,6 +962,7 @@ export class Game {
         this.crossedShield = new CrossedShield(this); // «Protection» by crossing the arms before the chest (CrossedArms.js)
         this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
+        this.revivify = new Revivify(this);
         this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
         this.walkRec = new WalkRecorder(this); // F8: «Ходьба» — a recording to tune walking back (WalkRecorder.js)
@@ -1825,7 +1829,7 @@ export class Game {
         }
         if (this._caveChests?.size && (this._caveUnloadT = (this._caveUnloadT || 0) - dt) <= 0) { this._caveUnloadT = 5; this._unloadCaves(p); }
         // darkness: rock above the head
-        const head = Math.floor(p.y + 2.4 + 1.5);
+        const head = Math.floor(p.y + 1.25 + 1.5);
         // rock above the head here and around (so the light doesn't flicker at the edges)
         let n = 0;
         for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) if (t.solidIn(Math.round(p.x) + dx, Math.round(p.z) + dz, head, head + 14)) n++;
@@ -1841,7 +1845,11 @@ export class Game {
         // in a cave: as dark as the daylight reaching the head (the mouth lit, deeper in dark — the
         // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
         const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;
-        let dark = sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
+        if ((this._houseLightT = (this._houseLightT || 0) - dt) <= 0) {
+            this._houseLightT = .25;
+            this._roomLight = this.houseMagic?.roomDaylight(p) || 0;
+        }
+        let dark = this._roomLight > 0 && built ? 0 : sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
         if (this.godhood?.inHall) dark = 0; // (the Hall of the Sun: no darkness at all)
         this._sunHallK = (this._sunHallK || 0) + ((this.godhood?.inHall ? 1 : 0) - (this._sunHallK || 0)) * Math.min(1, dt * 1.2);
         this.world.setSunHall?.(this._sunHallK);
@@ -1850,6 +1858,9 @@ export class Game {
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
         this.world.setIndoor?.(this._indoorK);
+        const roomFill = built ? this._roomLight : 0;
+        this._roomFill = (this._roomFill || 0) + (roomFill - (this._roomFill || 0)) * Math.min(1, dt * 3.5);
+        this.world.setHouseFill?.(this._roomFill);
         this._updateCaveMap(dt, p, !built && !!this._caveSys && (covered || sky < 0.9 || belowCaveSurface(t, p.x, p.z, p.y - PLAYER_GROUND_OFFSET)));
     }
 
@@ -2260,6 +2271,7 @@ export class Game {
         const offEarth = this.space?.spellBlocked(name) || this.hellGate?.spellBlocked(name); // (and hell: the water and the cold do not work there — HellRules.hellSpellBlock)
         if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
         // sky spells (lightning, the sun, rain, thunder, fireworks) need the open sky over the caster — SkyRules.js (before any mana is paid)
+        const noStorm=stormSpellBlock(this,name);if(noStorm){if(isFinal)this.hud.setVoice(noStorm,true);return null;}
         const noSky = skyBlockFor(this, name);
         if (noSky) { if (isFinal && mayTell(this._skyMsg || (this._skyMsg = {}), performance.now())) this.hud.setVoice(noSky, true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
@@ -2407,6 +2419,7 @@ export class Game {
         if (name === 'Caligo') return this.darkFog.cast(isFinal); // (a jet of black smoke for 10 s — DarkFog.js)
         if (name === 'Sectura') return this.slash.cast(isFinal); // (the word arms the wand; the swing lets the blade go — Slash.js)
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
+        if (name === 'Revivify') return this.revivify.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         if (name === 'Axis') return this.timeTurn.cast(isFinal); // (the turn of the planet: 2000 mana — TimeTurn.js)
@@ -3144,17 +3157,15 @@ export class Game {
      * creature (hold the aim ~0.5 s) — or it strikes you.
      */
     _castLightning(isFinal) {
+        const noStorm=stormSpellBlock(this,'LightningStrike');if(noStorm){if(isFinal)this.hud.setVoice(noStorm,true);return null;}
         if (this.lightning) return null;
         if (isFinal && this._poseHint('LightningStrike')) return null;
         if (!isFinal && poseHint('LightningStrike', this._poseSnap())) return null;
         const tired = this.combat.check('LightningStrike');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('LightningStrike');
-        const p = this.character.group.position.clone();
-        this.spells.cast('Storm', p, _v1.set(0, 1, 0), null, this.localId);
-        if (this.sync) this.sync.spell('Storm', p, _v1.set(0, 1, 0), null);
         this.lightning = { phase: 'gather', t: 0, aimT: 0, aim: null };
-        this.hud.setVoice('⛈️ Небо темнеет...', true);
+        this.hud.setVoice('⚡ Притягиваете молнию из грозовых туч...', true);
         return 'LightningStrike';
     }
 
@@ -3397,8 +3408,9 @@ export class Game {
             }
             lightningLand(this, point); // (a target under a roof: the bolt strikes the roof — SkyRules.lightningLand)
             const back = hand.clone().sub(point);
-            this.spells.cast('LightningBeam', point, back, null, this.localId);
-            if (this.sync) this.sync.spell('LightningBeam', point, back, null);
+            const beam=L.hammer?'LightningBeam':'LightningStrikeBeam';
+            this.spells.cast(beam, point, back, null, this.localId);
+            if (this.sync) this.sync.spell(beam, point, back, null);
             this.hud.setVoice('⚡ <span style="color:#9fd8ff">LIGHTNING STRIKE!</span>', true);
             if (!L.hammer) this.mana?.success('LightningStrike'); // (mana: the lightning went where it was aimed)
             return;
@@ -3413,10 +3425,10 @@ export class Game {
             // Held too long: it strikes you
             this.lightning = null;
             const point = ch.group.position.clone();
-            this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
-            if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
-            if (this.combat.enabled) this.combat.damage(DAMAGE.Lightning, null, 'Lightning');
-            else this.damageLocalPlayer(DAMAGE.Lightning);
+            this.spells.cast('LightningStrikeHit', point, _v1.set(0, -1, 0), null, this.localId);
+            if (this.sync) this.sync.spell('LightningStrikeHit', point, _v1.set(0, -1, 0), null);
+            if (this.combat.enabled) this.combat.damage(DAMAGE.LightningStrike, null, 'Lightning');
+            else this.damageLocalPlayer(DAMAGE.LightningStrike);
             this.hud.setVoice('⚡ Вы слишком долго держали молнию — она ударила в вас!', true);
         }
     }
@@ -3664,6 +3676,7 @@ export class Game {
             this.vampire?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); // (the count and his bats burn as any)
             if (this.iceCastle?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId)) hit = true; // (the Ice Castle's creatures: fire is what they fear — ×2)
             if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId, {fire:true,kind:'Inferno'})) hit = true; // villagers, knights, wizards
+            this.ships?.crew?.hitRay(o, d, len, 0.4, 1, casterId, 'Inferno');
             if (this.livingTrees?.burnAlong(o, d, len, casterId)) hit = true; // (fire is what kills a living tree)
             if (this.carriages?.burnAlong(o, d, len, casterId)) hit = true; // (a cart on the road catches fire)
         }
@@ -4656,6 +4669,7 @@ export class Game {
         this._brainrotUpkeep(dt);
         this.potionFx?.update(dt); sysMark('potionFx');
         this.wings?.update(dt); sysMark('wings'); // (they grow, they hurt, they fold or spread)
+        this.revivify?.update(dt);
         this.flourish?.update(dt); sysMark('flourish');
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)

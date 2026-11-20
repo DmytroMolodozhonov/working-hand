@@ -162,7 +162,7 @@ export class Nihilis {
         const g = this.game;
         const bodies = g.duel?._bodies?.(null) || [];
         for (const b of bodies) {
-            if (b.kind === 'p' || b.kind === 'b') continue; // (players do their own; the book-birds are white magic)
+            if (b.kind === 'p' || b.kind === 'b' || b.id === by) continue; // (players do their own; the book-birds are white magic)
             const mid = _p.copy(b.a).add(b.b).multiplyScalar(0.5);
             const inC = inCone(o, d, mid, b.r || 1) >= 0 || inCone(o, d, b.a, b.r || 1) >= 0 || inCone(o, d, b.b, b.r || 1) >= 0;
             const cr = b.kind === 'z' || b.kind === 's' || b.kind === 'D' ? null : g.duel?._creature?.(b.kind, b.id);

@@ -3,15 +3,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { START_SPELLS, BOOK_SPELLS, MANA_SPELLS, knows, teachKey } from '../../src/game/SpellBook.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
-import { FIRST_SPELL, NOT_SPELLS } from '../../src/game/Mana.js';
+import { FIRST_SPELL, NOT_SPELLS, SAME_SPELL } from '../../src/game/Mana.js';
 import { TEMPLE_SCROLLS } from '../../src/world/GodsTemple.js';
-import { SPELLS } from '../../src/ui/Codex.js';
+import { SPELLS, cardSpell } from '../../src/ui/Codex.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { rollScroll, rollLoot, rollIceQueenLoot, rollPirateLoot, rollShipLoot, rollPortLoot, LOOT_FOR, SPELL_RIBBON, SPELL_RU } from '../../src/game/ItemTypes.js';
 import { rollShopScroll, rollWizardHouseLoot } from '../../src/game/WizardShop.js';
 import { createRng } from '../../src/core/math.js';
 
 const survival = (spells = {}, learned = new Set()) => ({ mode: 'freeworld', spells, learned });
+
+test('one sail spell in the book has two voice commands and one knowledge and reward key', () => {
+    const sails = SPELLS.filter(card => ['Furl', 'Unfurl'].includes(cardSpell(card)));
+    assert.equal(sails.length, 1);
+    assert.match(sails[0].desc, /сворачивает.*разворачивает/);
+    assert.equal(matchSpell('Furl'), 'Furl');
+    assert.equal(matchSpell('Unfurl'), 'Unfurl');
+    assert.equal(SAME_SPELL.Furl, 'Unfurl');
+    for (const saved of ['Furl', 'Unfurl']) {
+        assert.ok(knows('Furl', survival({ [saved]: true })));
+        assert.ok(knows('Unfurl', survival({ [saved]: true })));
+    }
+});
 
 /** Every spell the game can be asked for. */
 function allSpells() {

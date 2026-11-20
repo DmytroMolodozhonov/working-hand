@@ -32,7 +32,7 @@ import * as THREE from 'three';
 import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
 import { stepBody, bounce, lieProbe, GUARD, guardWorld, standFree, freeSpot } from './SolidGuard.js';
-import { Ragdoll, DOLL } from './Ragdoll.js';
+import { Ragdoll, DOLL, P } from './Ragdoll.js';
 import * as RagPose from './RagdollPose.js';
 import { ANIMAL_RIG, hasDoll } from './AnimalRagdoll.js';
 
@@ -274,17 +274,50 @@ export class CreatureImpact {
     }
 
     // ---------------------------------------------------------------- «Вингардиум Левиоса» on a body: a rag doll in the air
+    _levRig(ck, c) {
+        const parts = c.model?.userData;
+        if (ck === 'a' && !c.rider && hasDoll(c.type) && parts?.legs?.length === 4 && parts.neck && parts.head) return ANIMAL_RIG;
+        return this._rig(ck, c);
+    }
+
+    levGrip(ck, c, origin, dir) {
+        const rig = this._levRig(ck, c);
+        if (rig === false) return null;
+        const d = this.levDolls?.get(ck + '|' + c.id)?.doll || (this._gripProbe ||= new Ragdoll());
+        if (d === this._gripProbe) {
+            if (ck === 'z') KINDS.z.pivot(c);
+            if (rig) RagPose.fromRig(d, rig, c);
+            else RagPose.fromModel(d, c.model);
+        }
+        let hit = null, best = .48 ** 2;
+        for (const joint of [P.HEAD, P.CHEST, P.PELVIS, P.HNL, P.HNR, P.KNL, P.KNR, P.FTL, P.FTR]) {
+            d.at(joint, _pt);
+            const x = _pt[0] - origin.x, y = _pt[1] - origin.y, z = _pt[2] - origin.z;
+            const along = x * dir.x + y * dir.y + z * dir.z;
+            const off = x * x + y * y + z * z - along * along;
+            if (along > 0 && along < 32 && off < best) { best = off; hit = joint; }
+        }
+        if (hit === P.KNL) return P.FTL;
+        if (hit === P.KNR) return P.FTR;
+        return [P.HNL, P.HNR, P.FTL, P.FTR].includes(hit) ? hit : null;
+    }
+
+    levHeadDown(ck, c) {
+        const held = this.levDolls?.get(ck + '|' + c.id);
+        return !!held && (held.grip === P.FTL || held.grip === P.FTR)
+            && held.doll.at(P.HEAD)[1] < held.doll.at(P.PELVIS)[1] - .35;
+    }
     /**
      * (host) A body lifted by «Левиоса» hangs as a rag doll (the author 05.11: «при помощи Вингардиум Левиоса у него всё ещё продолжает он
      * быть тряпичной куклой… не должна вот эта анимация проигрываться»): held by the chest at the hand's point, the arms and legs hang and
      * swing by their weight — a living one holding itself at half (Ragdoll.tone), a dead one slack. → the doll, or null (no humanoid rig:
      * an animal keeps its own kicking).
      */
-    levDoll(ck, c) {
+    levDoll(ck, c, grip = null) {
         const key = ck + '|' + c.id;
         const had = this.levDolls?.get(key);
         if (had) return had.doll;
-        const rig = this._rig(ck, c);
+        const rig = this._levRig(ck, c);
         if (rig === false) return null;
         const e = this.active.get(key);
         let doll = e?.s.rag || this.deadRags.get(key)?.doll || null;
@@ -293,7 +326,7 @@ export class CreatureImpact {
         else { doll = new Ragdoll(); RagPose.fromModel(doll, c.model); doll.launch(0, 0, 0, 0); }
         doll.tone = c.dead || c.isDead ? 0 : DOLL.TONE_LIVE;
         doll.wake();
-        (this.levDolls || (this.levDolls = new Map())).set(key, { c, ck, doll, rig });
+        (this.levDolls || (this.levDolls = new Map())).set(key, { c, ck, doll, rig, grip });
         c.rag = true;
         return doll;
     }
@@ -304,7 +337,7 @@ export class CreatureImpact {
         if (!r) return false;
         const d = r.doll, x = d.x, o = d.o;
         if (!Number.isFinite(at.x) || !Number.isFinite(at.y) || !Number.isFinite(at.z)) return true; // (never a NaN into the doll: the body would vanish)
-        d.at(11, _pt); // (the chest: the shoulders' middle)
+        d.at(r.grip ?? P.CHEST, _pt);
         // (the author 20.11: a dead body «дёргается» at the moment of the spell — the goal now starts at the chest's own place and glides to the hand's point)
         if (r.off === undefined) { r.off = [_pt[0] - at.x, _pt[1] - at.y, _pt[2] - at.z]; r.heldT = 0; }
         r.heldT += dt;
@@ -313,12 +346,13 @@ export class CreatureImpact {
         const k = 1 - Math.exp(-dt * 14);
         const dx = (at.x - _pt[0]) * k, dy = (at.y - _pt[1]) * k, dz = (at.z - _pt[2]) * k;
         for (let i = 0; i < 11; i++) { const q = i * 3; x[q] += dx; x[q + 1] += dy; x[q + 2] += dz; o[q] += dx; o[q + 1] += dy; o[q + 2] += dz; }
-        // the shoulders are where the magic grips: pinned (no fall, no spin of their own), the torso, arms and legs hang from them
+        // A limb grip pins one joint; the default chest grip pins both shoulders.
+        const first = r.grip ?? P.SHL, count = r.grip == null ? 2 : 1;
         const S = this._pinS || (this._pinS = new Float64Array(6));
-        for (let j = 0; j < 2; j++) for (let q = 0; q < 3; q++) S[j * 3 + q] = x[(1 + j) * 3 + q];
+        for (let j = 0; j < count; j++) for (let q = 0; q < 3; q++) S[j * 3 + q] = x[(first + j) * 3 + q];
         d.asleep = false; d.age = Math.min(d.age, 1);
         d.step(guardWorld(this.game), dt);
-        for (let j = 0; j < 2; j++) for (let q = 0; q < 3; q++) { x[(1 + j) * 3 + q] = S[j * 3 + q]; o[(1 + j) * 3 + q] = S[j * 3 + q]; }
+        for (let j = 0; j < count; j++) for (let q = 0; q < 3; q++) { x[(first + j) * 3 + q] = S[j * 3 + q]; o[(first + j) * 3 + q] = S[j * 3 + q]; }
         this._ragDraw(c, d, r.rig);
         d.at(12, _pt);
         if (r.rig) r.rig.place(c, _pt[0], _pt[1] - 1.9, _pt[2]);
@@ -332,6 +366,7 @@ export class CreatureImpact {
         const r = this.levDolls?.get(key);
         if (!r) return false;
         this.levDolls.delete(key);
+        if (r.grip != null) this._emit(ck, c, 'l', [null]);
         const d = r.doll;
         if (vel) d.push(vel.x, vel.y, vel.z);
         d.wake();
@@ -568,6 +603,25 @@ export class CreatureImpact {
             const K = KINDS[ck];
             const c = K?.get(this.game, id);
             if (!c || !c.group) continue;
+            if (ev === 'l') {
+                const key = ck + '|' + id;
+                if (a === null) { this._clearLiftPose(key); continue; }
+                const rig = this._levRig(ck, c);
+                if (rig === false || !Array.isArray(a) || a.length !== 33 || !a.every(Number.isFinite)) continue;
+                const poses = this.remoteLiftPoses ||= new Map();
+                let pose = poses.get(key);
+                if (!pose) {
+                    if (ck === 'z') K.pivot(c);
+                    rig?.begin?.(c);
+                    const doll = new Ragdoll(rig?.spec(c));
+                    doll.x.set(a);
+                    pose = { ck, c, rig, doll };
+                    poses.set(key, pose);
+                }
+                pose.target = a;
+                pose.ttl = .9;
+                continue;
+            }
             const e = this._state(ck, c);
             if (ev === 'k') this._knock(ck, c, e, KD_NAME[a] || 'back', b < 0 ? Infinity : Math.max(0.3, +b || 1.5) + 0.5, false, c3 > 0 ? { turns: +c3, dur: +c4 || 0.8 } : null);
             else if (ev === 'd') this._daze(ck, c, e, Math.min(30, +a || 0), false);
@@ -662,6 +716,14 @@ export class CreatureImpact {
         return this.apply(c, { v, by: casterId, spell: name, jolt: P.jolt || 0, from, always: P.always ? { down: opts.down ?? P.down } : null, down: opts.down ?? P.down, toss: P.toss || 0 });
     }
 
+    _clearLiftPose(key) {
+        const p = this.remoteLiftPoses?.get(key);
+        if (!p) return;
+        this.remoteLiftPoses.delete(key);
+        if (p.rig) p.rig.end?.(p.c);
+        else p.c.model.root.quaternion.identity();
+    }
+
     // =============================================================== frame
     update(dt) {
         const g = this.game;
@@ -702,6 +764,16 @@ export class CreatureImpact {
         if (this.levDolls?.size) for (const [key, r] of this.levDolls) {
             if (!r.c.lev || !r.c.group?.parent) { this.levDollRelease(r.ck, r.c, null); continue; }
             this._ragDraw(r.c, r.doll, r.rig);
+            if (r.grip != null && (r.poseT = (r.poseT ?? 0) - dt) <= 0) {
+                r.poseT = .1;
+                this._emit(r.ck, r.c, 'l', [Array.from(r.doll.x, r2)]);
+            }
+        }
+        if (this.remoteLiftPoses?.size) for (const [key, p] of this.remoteLiftPoses) {
+            if ((p.ttl -= dt) <= 0 || !p.c.group?.parent || KINDS[p.ck].get(g, p.c.id) !== p.c) { this._clearLiftPose(key); continue; }
+            const k = 1 - Math.exp(-dt * 19), x = p.doll.x;
+            for (let i = 0; i < x.length; i++) x[i] += k * (p.target[i] - x[i]);
+            this._ragDraw(p.c, p.doll, p.rig);
         }
         if (this._out.length && g.sync) { g.sync.creatureImpacts?.(this._out.splice(0, 200)); this._out.length = 0; }
     }

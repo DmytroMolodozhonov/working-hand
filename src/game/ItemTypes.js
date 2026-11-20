@@ -1,4 +1,6 @@
 import { pentagramTablet } from './PentagramTablet.js';
+import { scrollKey } from './SpellBook.js';
+import { paintScrollWrap, schoolOf } from '../fx/ScrollArt.js';
 /**
  * ItemTypes.js — what can be found in chests (and what animals drop), their
  * properties and their 3D models. Pure data + THREE models, no game logic.
@@ -77,12 +79,13 @@ export const WAND_DIRS = {
 /** Spells a wand can favour; a Maxima form goes with its base spell. */
 export const WAND_FAVOURITES = ['Inferno', 'Thunderwave', 'Sapira', 'Ice', 'Sands', 'Bombardo', 'Earthquake', 'Wind', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Accio', 'Protection', 'LightningStrike', 'WaveAttack', 'Lumos', 'Gather', 'Brainrot'];
 export const SPELL_RU = {
+    Revivify: 'Revivify',
     LumosFollowing: 'Lumos Following', LumosFlashlight: 'Flashlight', LumosAhead: 'Ahead',
     Inferno: 'Инферно', Thunderwave: 'Тандервейв', Sapira: 'Сапира', Ice: 'Айс', Sands: 'Даст', Bombardo: 'Бомбардо', Earthquake: 'Earthquake',
     Wind: 'Вайнд', WindMaxima: 'Вайнд Максима', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', BrainrotMaxima: 'Брейнрот Максима', Alive: 'Alive',
     WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', Inspirius: 'Inspirius', LetItRain: 'Let it rain', Tornado: 'Tornado', CreateBoat: 'Create a Boat', CreateCauldron: 'Create a Cauldron', CreateFlask: 'Create a Flask', Navigare: 'Navigare', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
-    Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', Alohomora: 'Алохомора', Lock: 'Lock', AlohomoraMaxima: 'Алохомора Максима', LevitationMaxima: 'Вингардиум Левиоса Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
+    Unfurl: 'Фёрл / Анфёрл', Furl: 'Фёрл / Анфёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', Alohomora: 'Алохомора', Lock: 'Lock', AlohomoraMaxima: 'Алохомора Максима', LevitationMaxima: 'Вингардиум Левиоса Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
     ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant', StrengthenHouse: 'Strengthen House', WardDispel: 'Dispel Ward',
     CreateHouse: 'Create a House', ImproveHouse: 'Improve a House',
     WindImpulse: 'Wind Impulse', WindImpulseMaxima: 'Wind Impulse Maxima', Drawdown: 'Drawdown', DrawdownMaxima: 'Drawdown Maxima', Liquidation: 'Liquidation', LiquidationMaxima: 'Liquidation Maxima',
@@ -330,6 +333,7 @@ export function retireStaff(it) {
 }
 
 export function retireScroll(it) {
+    if (it?.kind === 'scroll' && it.stat === 'spell' && it.spell === 'Furl') it.spell = 'Unfurl';
     if (it?.kind === 'scroll' && it.stat === 'spell' && it.spell === 'Groundprud') it.spell = 'Breakthrough';
     if (it && it.kind === 'scroll' && (it.stat === 'hp' || it.stat === 'fatigue')) {
         for (const k of Object.keys(it)) if (k !== 'uid') delete it[k];
@@ -750,17 +754,26 @@ const PENT_TOTAL = PENT_SCROLLS.reduce((a, [, w]) => a + w, 0);
 /**
  * ONE place for «a scroll already known never comes again» (the author): every scroll in `items` that the opener (LOOT_FOR.known) already knows is
  * rolled again from the general scrolls; when every scroll there is is known, the place is taken by another plain thing (never a scroll). The things are
- * changed in place; the array is returned. Without `known` (Creative, no opener) nothing changes.
+ * changed in place; the array is returned. The batch also never repeats the same knowledge, including
+ * Creative/no opener. Originals are reserved first so a reroll cannot steal a later scroll's identity.
  */
 export function freshScrolls(items, r = Math.random, known = LOOT_FOR.known) {
-    if (!known || !Array.isArray(items)) return items;
-    const stale = (x) => !!x && x.kind === 'scroll' && (x.stat === 'spell' || x.stat === 'pentagram') && known(x);
+    if (!Array.isArray(items)) return items;
+    const stale = (x) => !!scrollKey(x) && !!known?.(x);
+    const reserved = new Set(items.filter(x => !stale(x)).map(scrollKey).filter(Boolean)), seen = new Set();
     for (let i = 0; i < items.length; i++) {
-        if (!stale(items[i])) continue;
+        const key = scrollKey(items[i]);
+        if (!key) continue;
+        if (!stale(items[i]) && !seen.has(key)) { seen.add(key); continue; }
         let n = null;
-        for (let t = 0; t < 40 && !n; t++) { const c = _rollScroll(r); if (!stale(c)) n = c; }
+        for (let t = 0; t < 40 && !n; t++) {
+            const c = _rollScroll(r), k = scrollKey(c);
+            if (!stale(c) && !reserved.has(k) && !seen.has(k)) n = c;
+        }
         for (let t = 0; t < 12 && !n; t++) { const c = rollPlainItem(r); if (c.kind !== 'scroll') n = c; }
         items[i] = n || { kind: 'bread', uid: newUid(), count: 1 };
+        const next = scrollKey(items[i]);
+        if (next) seen.add(next);
     }
     return items;
 }
@@ -1087,17 +1100,41 @@ function dragonEggModel(kind) {
     return g;
 }
 
+const scrollPapers = new Map();
+
+export function scrollPaperMaterial(item) {
+    const school = schoolOf(item);
+    if (!scrollPapers.has(school)) {
+        let map = null;
+        if (typeof document !== 'undefined') {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 256;
+            paintScrollWrap(canvas.getContext('2d'), canvas.width, canvas.height, school);
+            map = new THREE.CanvasTexture(canvas);
+            map.anisotropy = 4;
+        }
+        const m = new THREE.MeshLambertMaterial({ color: map ? 0xffffff : 0xf3e2b3, map });
+        m.userData.shared = true;
+        scrollPapers.set(school, m);
+    }
+    return scrollPapers.get(school);
+}
+
 function scrollModel(it) {
     if (it?.stat === 'pentagram') return pentagramTablet(it);
     const g = new THREE.Group();
-    const paper = mat(0xf3e2b3);
-    const r = cyl(0.06, 0.06, 0.36, paper);
+    const r = cyl(0.06, 0.06, 0.36, scrollPaperMaterial(it), 0, 0, 0, 12);
     r.rotation.z = Math.PI / 2;
     g.add(r);
     const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
-    for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }
+    for (const s of [-1, 1]) {
+        const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0);
+        const ferrule = cyl(0.035, 0.035, 0.015, mat(0xb68a4c), s * 0.219, 0);
+        const trim = cyl(0.065, 0.065, 0.006, mat(0xb68a4c), s * 0.025, 0);
+        for (const part of [e, ferrule, trim]) { part.rotation.z = Math.PI / 2; g.add(part); }
+    }
     return g;
 }
 

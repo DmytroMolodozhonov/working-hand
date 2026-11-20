@@ -223,6 +223,7 @@ export class NetSync {
             icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
             planets: g.space?.planets.toJSON() || null, // the planets (made, changed by spells: Space.js)
             pents: g.pentagranium?.marksSnapshot() || null, // the permanent pentagrams (teleport, life, mend): sent only once when made — a newcomer saw none
+            enchantCircles: g.enchantCircles?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
@@ -313,6 +314,7 @@ export class NetSync {
         this._tryReady();
         if (msg.you && !this._gotMine) { this._gotMine = true; applyPlayerSnapshot(g, msg.you); g.inventory?.ensureStarterWand(); g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
         if (msg.pents) g.pentagranium?.netRestore?.(msg.pents); // (after my own things: their pentagrams would replace the list)
+        if (msg.enchantCircles) g.enchantCircles?.netRestore?.(msg.enchantCircles);
     }
 
     /** main.js: my loading screen closed. A guest also waits for the host's world state (it puts me where I stood). */
@@ -588,8 +590,8 @@ export class NetSync {
     }
 
     /** «Nihilis Atra»: my cone of light (the same cone on every computer — Nihilis.js). */
-    nihilis(origin, dir) {
-        this.net.send({ t: 'nhl', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)] }, true);
+    nihilis(origin, dir, casterId = this.me) {
+        this.net.send({ t: 'nhl', by: casterId, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)] }, true);
     }
 
     /** «Настоящий тёмный маг» (DarkLord.js): my rite of turning — {k: 'begin' | 'at' | 'end', id, p, t}: the others see the ball of darkness round me. */
@@ -1450,6 +1452,7 @@ export class NetSync {
                 if (m.from === 'H' && !this.net.isHost && typeof m.id === 'string' && m.seal) { const b = g.death?.bodies.get(m.id); if (b) g.death.sealBody(b, m.seal); }
                 break;
             }
+            case 'rvask': case 'rvdone': g.revivify?.onNet(m); break;
             case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
             case 'dlreq': if (this.net.isHost) g.death?.claims.host(m); break;
             case 'dlack': if (!this.net.isHost) g.death?.claims.reply(m); break;

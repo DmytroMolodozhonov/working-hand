@@ -1,3 +1,4 @@
+import {DAMAGE} from '../game/Damage.js';
 import {BLOCK} from '../world/Terrain.js';
 /**
  * SpellManager.js — voice spells.
@@ -138,6 +139,7 @@ export function matchSpell(text) {
     // «Да пусть создастся …» (the gods' making, DivineCreation.js): FIRST — the description after it may hold any other
     // spell's word («…замок с огнём на башнях»); only the opener at the very start of the phrase (CreationWords.js)
     if (creationWords(s)) return 'DivineCreation';
+    if (/^(revivify|ревивифай|рививифай|ревивифаи)[.!?]*$/.test(s)) return 'Revivify';
     // «Империус» («…Максима»): the whole word only — «империя», «император», «империал» are talk (imperiusWords)
     const imp = imperiusWords(s);
     if (imp) return imp;
@@ -584,6 +586,8 @@ export class SpellManager {
             case 'Whirlpool': this.hooks.whirlpool?.(o, direction.clone(), casterId, handSide); break; // (the direction is the whirlpool's PLACE {x, 0, z}, as the Tornado's)
             case 'Tornado': this.castTornado(o, direction.clone(), casterId, handSide); break; // (the direction is the spout's PLACE {x, 0, z} — never normalised: it came down by the world's middle, far from anyone — the author: «не появился»)
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
+            case 'LightningStrikeHit': this.castLightningHit(o,casterId,null,'LightningStrike');break;
+            case 'LightningStrikeBeam': this.castLightningHit(o,casterId,o.clone().add(direction),'LightningStrike');break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;
             // (the beam: `direction` = from the target point back to the caster's hands)
@@ -919,7 +923,7 @@ export class SpellManager {
      * The lightning strikes `point` — from the sky, or (`from`) out of the caster's hands
      * in a huge crackling beam: everything right there is hit hard.
      */
-    castLightningHit(point, casterId, from = null) {
+    castLightningHit(point, casterId, from = null, kind='Lightning') {
         const hold = this._holds && this._holds.get(casterId);
         if (hold) hold.life = 0;
         const sky = from ? from.clone() : new THREE.Vector3(point.x + 8, point.y + 70, point.z - 5);
@@ -938,7 +942,7 @@ export class SpellManager {
         if (this.auth) {
             for (const z of this.zombies) {
                 if (z.isDead) continue;
-                if (z.group.position.distanceTo(point) < R + 0.5) { z.damageCooldown = 0; this._damage(z, 20, false, _b.set(0, 0, 1)); }
+                if (z.group.position.distanceTo(point) < R + 0.5) { z.damageCooldown = 0; this._damage(z, kind==='LightningStrike'?DAMAGE.LightningStrike:DAMAGE.Lightning, false, _b.set(0, 0, 1)); }
             }
             // whoever lives through it is thrown off its feet, away from the strike
             this.hooks.creatures?.('Lightning', casterId, (pos) => {
@@ -950,9 +954,9 @@ export class SpellManager {
         }
         for (const p of this._players(casterId)) {
             if (!p.local) continue;
-            if (p.center().distanceTo(point) < R + 0.5) p.hit('Lightning', point);
+            if (p.center().distanceTo(point) < R + 0.5) p.hit(kind, point);
         }
-        if (this.hooks.lightningAt) this.hooks.lightningAt(point, casterId);
+        if (this.hooks.lightningAt) this.hooks.lightningAt(point, casterId,kind);
     }
 
     // ---------------------------------------------------------- Earthquake
@@ -1618,7 +1622,7 @@ export class SpellManager {
             capture: incendiary?null:() => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
             // (14.11: a thrown orb — «Bombardo», «Bombardo Maxima», «Fireball» — seen by the fire and the air mage, who beat it back: ElementalParry.js; `parry` takes it out
             // of the flight without a blast, as `capture` does, for the fireball too)
-            orb: { p: orb.position, v: vel, by: casterId, fire: !!incendiary, maxima: !!maxima },
+            orb: { id: bomb.id, p: orb.position, v: vel, by: casterId, fire: !!incendiary, maxima: !!maxima },
             parry: () => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
             life: maxima ? 3.2 : 2.6,
             onUpdate: (spell, dt) => {

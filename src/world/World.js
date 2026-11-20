@@ -131,7 +131,7 @@ export class VoxelWorld {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
             this.meshTrees = !!opts.meshTrees; // (a world of real trees, not blocks — `realTrees`, Trees.js)
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls, !!opts.wizCounters);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls, !!opts.wizCounters, !!opts.caveMines);
             this.createSkybox();
         }
     }
@@ -244,6 +244,12 @@ export class VoxelWorld {
         this.setStorm(this.storm || 0);
     }
 
+    setHouseFill(k) {
+        if (Math.abs(k - (this.houseFill || 0)) < .01) return;
+        this.houseFill = k;
+        this.setStorm(this.storm || 0);
+    }
+
     /** «Lightning Strike»: a storm darkens the world (0 = clear, 1 = full storm). */
     setStorm(k) {
         this.storm = k;
@@ -258,7 +264,9 @@ export class VoxelWorld {
         // indoors: the sun is outside; by day the light of the windows and the door fills the rooms (the walls away from
         // the sun as lit as the others), by night only a faint glow: the rooms are as dark as the night, what lights them
         // is a real light (lantern, torch, fire, «Люмос» — FireLights). Smooth with the night (`b.night` 0…1).
-        const lamp = 1 + ind * (0.8 - 0.65 * b.night), fill = 1 + ind * (0.5 - 0.4 * b.night);
+        const daylightFill = (this.houseFill || 0) * (1 - b.night) * (1 - k * .62);
+        const lamp = 1 + ind * (0.8 - 0.65 * b.night) + .42 * daylightFill;
+        const fill = 1 + ind * (0.5 - 0.4 * b.night) + .55 * daylightFill;
         const boost = lightBoost(nv, darkness(b.night, cv)); // (the night gift: ×1…1.5 as dark as it is — the same lights, no new ones)
         const gh = this.ghostHaze || 0, ghd = 1 - 0.3 * gh; // (the Castle of Ghosts' haze: a dimmer day)
         this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp * boost * ghd;
@@ -405,9 +413,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false, caveMines = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, wizCounters, meshTrees: !!this.meshTrees });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, wizCounters, caveMines, meshTrees: !!this.meshTrees });
         if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
         if (this.terrain.data.meshTrees) this.forest = new WorldTrees(this); // (real trees — drawn, hit, burnt like the start area's always were)
         this.collision.setTerrain(this.terrain);

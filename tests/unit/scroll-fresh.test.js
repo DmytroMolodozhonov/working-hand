@@ -38,6 +38,8 @@ test('a scroll already known never turns up again in a chest (thousands of chest
         for (let i = 0; i < 4000; i++) {
             const items = freshScrolls([rollScroll(r), ...rollLoot(r, { royal: true }), rollKeyItem(r)], r);
             for (const it of items) assert.ok(!scrollKnown(it, known), `repeat: ${scrollKey(it)}`);
+            const keys = items.map(scrollKey).filter(Boolean);
+            assert.equal(new Set(keys).size, keys.length, 'no duplicate knowledge in a single chest');
         }
     });
 });
@@ -56,6 +58,16 @@ test('without a "known" test (Creative, a stranger) nothing is changed', () => {
     const items = [spellScroll('Imperius'), spellScroll('Alive')];
     assert.equal(freshScrolls(items, createRng(1)), items);
     assert.equal(items[0].spell, 'Imperius');
+});
+
+test('aliases and identical tablets cannot repeat in one chest, even without an opener', () => {
+    const sail = spellScroll('Unfurl'), tablet = pentagramScroll('night', 't1');
+    const items = [sail, spellScroll('Furl'), tablet, pentagramScroll('night', 't2')];
+    freshScrolls(items, createRng(42), null);
+    const keys = items.map(scrollKey).filter(Boolean);
+    assert.equal(new Set(keys).size, keys.length);
+    assert.equal(items[0], sail);
+    assert.equal(items[2], tablet);
 });
 
 test('every scroll known: the places are taken by other plain things, never by a scroll', () => {

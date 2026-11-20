@@ -38,7 +38,9 @@ import { WIZ, SUPER, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMa
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
-import { knowsNihilis } from './MonsterFear.js';
+import { knowsInferno, knowsNihilis } from './MonsterFear.js';
+import { NIHIL } from './NihilisRules.js';
+import { INFERNO } from '../fx/InfernoStream.js';
 import { skinOf, wizardDetects } from './DarkMagic.js';
 import { DUEL, DUEL_SPELLS } from './Duel.js';
 import { PVP, SPELL_COST, shieldHitCost, pressCost } from './Combat.js';
@@ -803,19 +805,26 @@ export class WizardFight {
     }
 
     /** A duel charge from the wand at a player (the charge itself: Duel.js, seen by everybody). */
-    _cast(v, spell, foeId, fp, vs = null, at = null) {
+    _cast(v, spell, foeId, fp, vs = null, at = null, lifted = false) {
         const g = this.game, duel = g.duel;
+        if (at && (spell === 'Nihilis' || spell === 'Inferno')) {
+            const range = spell === 'Nihilis' ? NIHIL.RANGE : INFERNO.RANGE;
+            if (Math.hypot(fp.x - v.x, fp.y - v.y - 3.4, fp.z - v.z) > range) return false;
+            return this._castSpecial(v, spell, fp);
+        }
         if (SAVIOR_SPECIAL.has(spell) || (v.rank === 'supermage' && SUPER.GROUP.includes(spell))) return this._castSpecial(v, spell, fp); // (the Saviour's own: the wind, the blasts — not duel charges)
         if (!duel?._addBolt) return false;
         // «лицом к цели»: from the side or with his back — no spell; he turns first (step / pursueThreat)
-        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
-        if (v.group.visible) v.model.getWandTip(_o);
+        if (!lifted && !facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
+        if (lifted || v.group.visible) v.model.getWandTip(_o);
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         // (the wand's tip through a wall he stands against: no — the charge would start on the other side)
         const c = g.collision;
-        if (c?.lineOfSight && (!c.lineOfSight(v.x, v.y + 3.0, v.z, _o.x, _o.y, _o.z, 0.15) || c.pointBlocked?.(_o.x, _o.y, _o.z))) return false;
+        if (c?.pointBlocked?.(_o.x, _o.y, _o.z)) return false;
+        if (c?.lineOfSight && !(lifted ? c.lineOfSight(_o.x, _o.y, _o.z, fp.x, fp.y, fp.z, .15)
+            : c.lineOfSight(v.x, v.y + 3, v.z, _o.x, _o.y, _o.z, .15))) return false;
         // (somebody right before him, the wand's tip in them or through them: it starts before them — hits them)
-        duel.armStart?.(_ch.set(v.x, v.y + 3.0, v.z), _o, v.id);
+        if (!lifted) duel.armStart?.(_ch.set(v.x, v.y + 3.0, v.z), _o, v.id);
         const body = at ? null : duel._bodyOf?.('p', foeId, duel._tmpBody()); // (`at`: a creature {k, id} instead of a player)
         if (body) _d.copy(body.a).lerp(body.b, 0.55); else _d.set(fp.x, fp.y, fp.z);
         _d.sub(_o).normalize();
@@ -844,16 +853,33 @@ export class WizardFight {
      * The white Saviour's attack spells that are not duel charges (SaviorRules.SPECIAL): «Wind Maxima», «Bombardo Maxima», «Bombardo» — the very spells of the players
      * (SpellManager.cast with his id: the host runs it and tells the others, whose computers decide what it does to their hero).
      */
+    castWhileLifted(v, by) {
+        if (!v.W || v.dead || v.noWand || v.lostWand || v.stunT > 0 || v.mana < SPELL_COST.Stupefy || v.model?.toolKind !== 'wand') return false;
+        const foe = this.life._playerPos(by);
+        if (!foe || Math.hypot(foe.x - v.x, foe.z - v.z) > 28) return false;
+        if (!this._cast(v, 'Stupefy', by, foe, null, null, true)) return false;
+        v.mana -= SPELL_COST.Stupefy;
+        this.life._say?.(v, 'Остолбеней!', 2);
+        return true;
+    }
+
     _castSpecial(v, spell, fp) {
         const g = this.game;
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
         if (v.group.visible) v.model.getWandTip(_o);
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         _d.set(fp.x, fp.y, fp.z).sub(_o).normalize();
-        if (!g.spells?.cast) return false;
+        if (spell === 'Nihilis') {
+            if (!g.nihilis?.fire) return false;
+            g.nihilis.fire(_o, _d, v.id);
+            g.sync?.nihilis?.(_o, _d, v.id);
+            this.life._say?.(v, 'Nihilis Atra!', 3);
+        } else {
+            if (!g.spells?.cast) return false;
+            try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[WizardFight] cast', spell, e); return false; }
+            g.sync?.spell?.(spell, _o, _d, 'right', v.id);
+        }
         if (v.savior == null) (v.spCd || (v.spCd = {}))[spell] = performance.now() + (SUPER.CD[spell] || SAVIOR.SPECIAL_CD[spell] || 8) * 1000; // (the Supermage: a blast / the wind not oftener than the Saviour's pause ×1.5)
-        try { g.spells.cast(spell, _o.clone(), _d.clone(), 'right', v.id); } catch (e) { console.error('[Savior] cast', spell, e); g.perf?.note?.('⚠️ спаситель: ' + spell + ': ' + (e?.message || e)); return false; } // (a failed spell is not entry into combat)
-        g.sync?.spell?.(spell, _o, _d, 'right', v.id);
         const me = g.character.group.position;
         if (Math.hypot(me.x - v.x, me.z - v.z) < 60) g.sound?.spellCast?.(spell, _o);
         v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));
@@ -929,22 +955,33 @@ export class WizardFight {
 
     /**
      * (host) Hurt by a creature whose master he didn't see (a living tree, a servant): he defends himself
-     * from it — a «Джолт» at it to throw it back (a tree only reels; CreatureImpact), now and then.
+     * from it with a spell suited to the creature, then falls back to ordinary combat magic.
      */
     threat(v, ref) {
-        if (!v.W || v.noWand || v.dead || (v.castCd ?? 0) > 0 || v.stunT > 0) return false;
+        if (!v.W || v.noWand || v.dead || v.prep || v.lev || v.vy || v.stunT > 0) return false;
         const duel = this.game.duel;
         const c = duel?._creature?.(ref.k, ref.id);
         if (!c) return false;
         const at = duel._creaturePoint(c, _d.clone());
         const fp = { x: at.x, y: at.y - 0.3, z: at.z };
-        if (!this.clearShot(v, fp)) return false;
+        if (!this.clearShot(v, fp, c)) return false;
+        const dist = Math.hypot(fp.x - v.x, fp.y - v.y - 3.4, fp.z - v.z);
+        const tree = ref.k === 't' && !c.skel;
+        const skeleton = (ref.k === 't' && c.skel) || (ref.k === 'c' && c.role === 'skeleton');
+        const darkSpawn = tree || skeleton || ['g', 'G', 'V', 'H'].includes(ref.k);
+        const dispel = darkSpawn && knowsNihilis(v) && dist <= NIHIL.RANGE - 1 && v.mana >= SPELL_COST.Nihilis;
+        const burn = (tree || skeleton) && knowsInferno(v) && dist <= INFERNO.RANGE - 1
+            && v.mana >= SPELL_COST.Inferno + INFERNO.DRAIN && (v.spCd?.Inferno || 0) <= performance.now();
         // (a fire serpent: «Джолт» only scatters its flames — cold hurts it: «Айс»; FireSerpentRules.serpentHit)
-        const spell = ref.k === 'F' ? 'IceDuel' : v.role === 'master' ? 'JoltMaxima' : 'Jolt';
-        const cost = NPC_COST[spell] ?? 5;
+        const spell = tree && burn ? 'Inferno' : dispel ? 'Nihilis' : burn ? 'Inferno'
+            : ref.k === 'F' ? 'IceDuel' : v.role === 'master' ? 'JoltMaxima' : 'Jolt';
+        const cost = spell === 'Nihilis' || spell === 'Inferno' ? SPELL_COST[spell] : NPC_COST[spell] ?? 5;
         if (v.mana < cost) return false;
         // not facing it yet: he turns to it first (pursueThreat), then casts (`first`: chosen over his player foe — helperFirst)
-        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) { v.threatAt = { ref, until: this.clock + 3, first: !!v.foe }; return false; }
+        if ((v.castCd ?? 0) > 0 || !facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) {
+            if (!v.threatAt) v.threatAt = { ref, until: this.clock + 3, first: !!v.foe };
+            return false;
+        }
         // he says it first (a second), then it flies (_prepTick)
         return this._begin(v, spell, null, fp, { at: ref, cost, cd: v.W.cast * manaPace(v.mana - cost, v.maxMana) });
     }

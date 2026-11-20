@@ -35,7 +35,7 @@ export const SCHOOLS = {
 
 /** A spell → its school (the ones without a row fall back by their name, then to «Магия»). */
 const SCHOOL_OF = {
-    Hellfire: 'fire', ToTheSun: 'fire', Boom: 'fire', BombardoMaxima: 'fire', Bombardo: 'fire', Fire: 'fire', FireMaxima: 'fire', CircleAttack: 'fire', Fireworks: 'fire',
+    Fireball: 'fire', Hellfire: 'fire', ToTheSun: 'fire', Boom: 'fire', BombardoMaxima: 'fire', Bombardo: 'fire', Fire: 'fire', FireMaxima: 'fire', CircleAttack: 'fire', Fireworks: 'fire',
     FirefightingMaxima: 'water', LetItRain: 'water', Tornado: 'water', Whirlpool: 'water', CreateBoat: 'water', CreateCauldron: 'fire', CreateFlask: 'water', Navigare: 'water', Waterball: 'water', WaterWalk: 'water', WaterPart: 'water', Helios: 'light', SunRay: 'light', Kidarius: 'light', Axis: 'light', AirBubble: 'water', WaveAttack: 'water', WaterVortex: 'water', WaterVortexSuperMaxima: 'water', CreateBoard: 'water',
     IceMaxima: 'ice', IceCastle: 'ice', IceBridge: 'ice', Snowman: 'ice', Pilbidrio: 'ice', Frozen: 'ice',
     LightningStrike: 'lightning', Thunderwave: 'lightning', Electrum: 'lightning', JoltMaxima: 'lightning', Jolt: 'lightning',
@@ -43,7 +43,7 @@ const SCHOOL_OF = {
     WindImpulse: 'wind', LevitationMaxima: 'wind', LevitationSuperMaxima: 'wind', Levitation: 'wind', Wind: 'wind', Flight: 'wind',
     Alive: 'life', Overgrown: 'life', OvergrownMaxima: 'life',
     AvadaKedavra: 'dark', Sectura: 'dark', Caligo: 'dark', Spiralis: 'lightning', Die: 'dark', TotalDestruction: 'dark', Accentric: 'dark', GiveMyPower: 'dark', Invisibility: 'dark', Pentagranium: 'dark',
-    LumosFollowing: 'light', Lumos: 'light', Inspirius: 'light', ProtectionGods: 'light', ProtectionGodsMaxima: 'light', VisibleGodi: 'light',
+    Nihilis: 'light', Revivify: 'light', LumosFollowing: 'light', Lumos: 'light', Inspirius: 'light', ProtectionGods: 'light', ProtectionGodsMaxima: 'light', VisibleGodi: 'light',
     ProtectionMaxima: 'shield', Protection: 'shield',
     CreateHouse: 'build', ImproveHouse: 'build', CreateCastle: 'build',
     CreatePlanet: 'space', EnlargePlanet: 'space', TerraformPlanet: 'space', PlanetLiquidation: 'space',
@@ -84,10 +84,21 @@ function rngOf(str) {
 }
 
 /** The paper: a warm gradient, darker toward the rollers, fibres, stains, creases, burnt edges. */
-function paper(x, W, H, rnd) {
+function paper(x, W, H, rnd, S) {
     const g = x.createLinearGradient(0, 0, W, 0);
     g.addColorStop(0, '#c9a76a'); g.addColorStop(0.07, '#ecd9a6'); g.addColorStop(0.5, '#f4e8c2'); g.addColorStop(0.93, '#ecd9a6'); g.addColorStop(1, '#c9a76a');
     x.fillStyle = g; x.fillRect(0, 0, W, H);
+    if (S) {
+        // The dye pools at the edge and in the corners, leaving a bright reading surface.
+        for (const [cx, cy] of [[0, 0], [W, 0], [0, H], [W, H]]) {
+            const wash = x.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W, H) * 0.62);
+            wash.addColorStop(0, S.accent + 'c8');
+            wash.addColorStop(0.38, S.accent + '55');
+            wash.addColorStop(1, S.accent + '00');
+            x.fillStyle = wash;
+            x.fillRect(0, 0, W, H);
+        }
+    }
     // fibres
     for (let i = 0; i < 520; i++) {
         const px = rnd() * W, py = rnd() * H, len = 6 + rnd() * 22, a = rnd() * Math.PI;
@@ -117,6 +128,20 @@ function paper(x, W, H, rnd) {
         eg.addColorStop(0, 'rgba(70,40,12,0.38)'); eg.addColorStop(1, 'rgba(70,40,12,0)');
         x.fillStyle = eg;
         if (x0 === 0 && x1 === 0) x.fillRect(0, Math.min(y0, y1), W, e); else x.fillRect(Math.min(x0, x1), 0, e, H);
+    }
+}
+
+/** The outer sheet, shared by all scrolls from the same school. */
+export function paintScrollWrap(x, W, H, school) {
+    const S = SCHOOLS[school] || SCHOOLS.arcane;
+    paper(x, W, H, rngOf(school + ':wrap'), S);
+    for (const y of [H * 0.12, H * 0.88]) {
+        x.fillStyle = S.ink;
+        x.fillRect(0, y - 10, W, 20);
+        x.fillStyle = '#cfad6a';
+        x.fillRect(0, y - 11, W, 2);
+        x.fillRect(0, y + 9, W, 2);
+        runeBand(x, 8, W - 8, y, S, rngOf(school + y));
     }
 }
 
@@ -366,7 +391,7 @@ function seal(x, cx, cy, r, S) {
 export function paintParchment(x, W, H, spec) {
     const S = SCHOOLS[spec.school] || SCHOOLS.arcane;
     const rnd = rngOf(artKey(spec));
-    paper(x, W, H, rnd);
+    paper(x, W, H, rnd, S);
     // frame: a double line, the golden runes along the top and the bottom
     x.strokeStyle = S.accent; x.lineWidth = 4; x.strokeRect(34, 14, W - 68, H - 28);
     x.strokeStyle = 'rgba(160,120,50,0.8)'; x.lineWidth = 1.5; x.strokeRect(43, 23, W - 86, H - 46);
@@ -427,7 +452,14 @@ export function paintParchment(x, W, H, spec) {
         const mx = W - 150, my = spec.compactPicture ? 102 : 215, radius = spec.compactPicture ? 54 : 100;
         if (spec.custom) spec.custom(x, { cx: mx, cy: my, R: radius, S }); else medallion(x, mx, my, radius, S);
         seal(x, mx + (spec.compactPicture ? 40 : 62), my + (spec.compactPicture ? 58 : 108), spec.compactPicture ? 18 : 26, S);
-    } else seal(x, W - 100, H - 78, 26, S);
+    } else {
+        if (spec.schoolEmblem) {
+            const space = H - 86 - L.bottom;
+            const radius = Math.min(78, (space - 22) / 2);
+            if (radius >= 27) medallion(x, W / 2, L.bottom + space / 2, radius, S);
+        }
+        seal(x, W - 100, H - 78, 26, S);
+    }
     if (spec.note) {
         x.font = '24px serif'; x.fillStyle = '#21180e'; x.textAlign = 'center';
         x.fillText(spec.note, W / 2, H - 56, W - 120);

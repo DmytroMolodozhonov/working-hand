@@ -10,7 +10,7 @@
  *    DRAWS ITSELF (a bright tip runs round the ring and along the lines, sparks, light, a sound — `_animStep`); the mana is taken at the word
  *    (`CAST_COST`: not enough — nothing is made). Black ones (`dark`) alarm the people; the rite of the devil one is over the body of a killed
  *    wizard (`_findRites`: the body inside the circle, 50 mana, +25 % of his power, +1 to the black level).
- *  - The good ones stay for good (teleport, life, mend: saved, `pentMarks`); a mark is bound to its pentagram by `id`, never by its picture.
+ *  - White drawings last up to twelve minutes (saved with expiry, `pentMarks`); a mark is bound to its pentagram by `id`, never by its picture.
  *
  * Multiplayer: the pentagram and the rite go to everybody ('pgm' `mark` / `rite`): each computer draws the lines itself from the mark.
  * The credit is local to the hero whose pentagram it is (the same as every first-success and kill credit: Mana.js).
@@ -52,6 +52,7 @@ export function surfaceNear(d, x, z, y) {
 }
 import { TELEPORT } from '../world/WizardVillages.js';
 import { PENT_STAND_FROM_GEN } from '../world/Terrain.js';
+import {stampWhitePentagram,WHITE_PENTAGRAM_SECONDS} from './WhitePentagramTime.js';
 import { PentagramFx } from '../fx/PentagramFx.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -117,6 +118,7 @@ export class Pentagranium {
         this.game = game;
         this.seen = new Seen(); // the figures the hero has unrolled and looked at (saved: WorldSave)
         this.fx = new PentagramFx(game);
+        this.whiteWorldTimes=new Map();
         this.marks = new Map(); // id → a lit pentagram {id, by, pent, x, y, z, r, rot, life, hell, fade, rites[], floor[], mine, anim}
         this._n = 0;
         this._t = 0;
@@ -159,17 +161,23 @@ export class Pentagranium {
 
     /** The permanent pentagrams (good ones, drawn once): saved with the world; made again when their land is there (nothing is built in the frame the world loads in). */
     marksSnapshot() {
-        const out = [...this.marks.values()].filter((m) => m.perm && !m.world && (m.mine || this.game.authority)).map((m) => ({ id: m.id, by: m.by, pent: m.pent, x: m.x, y: m.y, z: m.z, r: m.r, rot: m.rot, pair: m.pair || null }));
-        return out.length ? out.concat(this._pending.filter((p) => !out.some((o) => o.id === p.id))) : this._pending.length ? this._pending.slice() : null;
+        const now=Date.now(),out=[...this.marks.values()].filter(m=>(m.perm||!m.dark)&&!m.world&&(m.mine||this.game.authority)).map(m=>({id:m.id,by:m.by,pent:m.pent,x:m.x,y:m.y,z:m.z,r:m.r,rot:m.rot,pair:m.pair||null,perm:m.perm?1:0,...(!m.dark?{whiteExpiresAt:Math.min(m.whiteExpiresAt||now+WHITE_PENTAGRAM_SECONDS*1000,now+m.life*1000)}:{})}));
+        for(const p of this._pending)if(!out.some(o=>o.id===p.id))out.push(p);
+        for(const [id,whiteExpiresAt] of this.whiteWorldTimes)out.push({k:'whiteWorldTimer',id,whiteExpiresAt});
+        return out.length?out:null;
     }
-    marksRestore(list) { this._pending = (Array.isArray(list) ? list : []).filter((m) => m && figureOf(m.pent) && TABLE[m.pent]?.permanent).slice(0, USE.PERM_MAX); }
+    marksRestore(list) {
+        this._pending=[];this.whiteWorldTimes.clear();this.netRestore(list);
+    }
     /** (a guest coming in) The host's permanent pentagrams — made before I came (they were sent only once, when made): added to mine. */
     netRestore(list) {
         if (!Array.isArray(list)) return;
-        for (const m of list.slice(0, USE.PERM_MAX)) {
-            if (!m || typeof m.id !== 'string' || !figureOf(m.pent) || !TABLE[m.pent]?.permanent || this.marks.has(m.id) || this._pending.some((p) => p.id === m.id)) continue;
-            if (this._pending.length >= USE.PERM_MAX) break;
-            this._pending.push({ id: m.id, by: String(m.by || ''), pent: m.pent, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.max(PENT.R_MIN, Math.min(PENT.R_MAX, +m.r || PENT.R)), rot: +m.rot || 0, pair: typeof m.pair === 'string' ? m.pair : null });
+        for(const m of list){if(m?.k==='whiteWorldTimer'&&typeof m.id==='string'&&Number.isFinite(m.whiteExpiresAt))this.whiteWorldTimes.set(m.id,m.whiteExpiresAt);}
+        for (const m of list.slice(0, USE.PERM_MAX+PENT.MAX_ALIVE)) {
+            if (!m || typeof m.id !== 'string' || !figureOf(m.pent) || (!TABLE[m.pent]?.permanent&&TABLE[m.pent]?.dark) || this.marks.has(m.id) || this._pending.some((p) => p.id === m.id)) continue;
+            if (this._pending.length >= USE.PERM_MAX+PENT.MAX_ALIVE) break;
+            if(!TABLE[m.pent]?.dark&&Number.isFinite(m.whiteExpiresAt)&&m.whiteExpiresAt<=Date.now())continue;
+            this._pending.push({whiteExpiresAt:m.whiteExpiresAt,perm:m.perm, id: m.id, by: String(m.by || ''), pent: m.pent, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.max(PENT.R_MIN, Math.min(PENT.R_MAX, +m.r || PENT.R)), rot: +m.rot || 0, pair: typeof m.pair === 'string' ? m.pair : null });
         }
     }
 
@@ -217,7 +225,7 @@ export class Pentagranium {
         mark.offer = offer;
         this._permanent(mark);
         this._others(mark);
-        g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: p.x, y: center.y, z: p.z, r: PENT.R, rot, perm: mark.perm ? 1 : 0, pair: mark.pair || null });
+        g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: p.x, y: center.y, z: p.z, r: PENT.R, rot, perm: mark.perm ? 1 : 0,whiteExpiresAt:mark.whiteExpiresAt, pair: mark.pair || null });
         if (def.darkBonus) addDark(g.dark || g, def.darkBonus, 'ritual'); // (united power: at once +30 to the dark level, 100 at most — DarkMagic.addDark clamps)
         g.mana?.success('Pentagranium'); // (the first success's cells; making a pentagram is no black magic — only the devil one's rite adds darkness)
         if (def?.dark) g.castleLife?.alarm?.({ x: p.x, y: center.y, z: p.z }, 'dark', g.localId, 6); // (only a black pentagram frightens people)
@@ -339,14 +347,14 @@ export class Pentagranium {
     _others(m) {
         const g = this.game, def = TABLE[m.pent], c = { x: m.x, y: m.y, z: m.z };
         if (!def || m.pent === 'devil') return;
-        if (m.pent === 'enchant') { g.enchantCircles?.add?.(c.x, c.y, c.z); this._remove(m.id, 'old'); return; }
+        if (m.pent === 'enchant') { g.enchantCircles?.add?.(c.x,c.y,c.z,m.id,m.whiteExpiresAt); this._remove(m.id, 'old'); return; }
         if (def.once && typeof def.use === 'function' && !m.offer) m.life = Math.min(m.life, 6); // (the gargoyles' ritual began at the word: the picture burns out)
     }
 
     /** A good pentagram (`permanent` in the table) stays for good: the oldest permanent one goes when there are too many; teleport ones are paired. */
     _permanent(m) {
         if (!TABLE[m.pent]?.permanent) return;
-        m.perm = true; m.life = Infinity;
+        m.perm = true; m.life = m.dark?Infinity:WHITE_PENTAGRAM_SECONDS;stampWhitePentagram(m,m.whiteExpiresAt);
         const perms = () => [...this.marks.values()].filter((o) => o.perm && !o.world);
         while (perms().length > USE.PERM_MAX) this._remove(perms()[0].id, 'old');
         if (m.pent === 'teleport') {
@@ -366,9 +374,10 @@ export class Pentagranium {
         for (const p of this._pending.slice()) {
             if (Math.hypot(me.x - p.x, me.z - p.z) > PENT.FAR || !data.landMade?.(Math.round(p.x), Math.round(p.z))) continue;
             this._pending.splice(this._pending.indexOf(p), 1);
+            if(!TABLE[p.pent]?.dark&&Number.isFinite(p.whiteExpiresAt)&&p.whiteExpiresAt<=Date.now())continue;
             const m = this._place(p.id, p.by, p.pent, p.x, p.y, p.z, p.r, p.rot);
             if (!m) continue;
-            m.mine = p.by === g.localId; m.perm = true; m.life = Infinity; m.t = 5; m.pair = p.pair || null;
+            m.mine = p.by === g.localId;m.perm=p.perm!==0; m.life = Infinity;stampWhitePentagram(m,p.whiteExpiresAt); m.t = 5; m.pair = p.pair || null;
             return; // (one a second: nothing heavy at once)
         }
     }
@@ -606,6 +615,7 @@ export class Pentagranium {
     /** (every computer) A pentagram is lit. */
     _place(id, by, pent, x, y, z, r, rot, anim = false) {
         if (this.marks.has(id) || !figureOf(pent)) return null;
+        if(!TABLE[pent]?.dark&&String(id).startsWith('w:')){const expires=this.whiteWorldTimes.get(id);if(expires&&expires<=Date.now())return null;this.whiteWorldTimes.set(id,expires||Date.now()+WHITE_PENTAGRAM_SECONDS*1000);}
         const temp = () => [...this.marks.values()].filter((o) => !o.perm);
         while (temp().length >= PENT.MAX_ALIVE) this._remove(temp()[0].id, 'old'); // (the lit ones of a rite: the oldest goes; the permanent ones are counted apart)
         const data = this.data;
@@ -618,6 +628,7 @@ export class Pentagranium {
         const cl = this._floorHeight(Math.round(x), Math.round(z), y);
         floor.push([Math.round(x), Math.round(z), cl]);
         const m = { id, by, pent, perm: false, pair: null, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0, drawT: anim ? PENT.DRAW_T : 0, anim: anim ? { t: 0, plan: null } : null };
+        if(!m.dark){m.life=WHITE_PENTAGRAM_SECONDS;stampWhitePentagram(m,this.whiteWorldTimes.get(id));}
         this.marks.set(id, m);
         this.fx.add(id, x, y, z, R, m.rot, (px, pz) => (data ? surfaceNear(data, px, pz, y) : y), pent, !!TABLE[pent]?.dark, TABLE[pent]?.glow ?? 0xffd98a);
         return m;
@@ -633,6 +644,7 @@ export class Pentagranium {
         this._use.delete(id);
         for (const r of m.rites) if (r.b && !r.done) this._riteEnd(m, r, true);
         const g = this.game;
+        if(why==='time'&&!m.dark&&m.world)this.whiteWorldTimes.set(m.id,Date.now());
         if (why === 'ground' && m.world) this._worldGone.add(m.world);
         if (why === 'ground' && m.mine) g.hud.setVoice('🩸 Земля под рисунком изменилась — пентаграмма погасла', true);
         if (why !== 'old') for (let i = 0; i < 16; i++) g.fx?.spark(_o.set(m.x + (Math.random() - 0.5) * m.r * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * m.r * 1.6), 0x6a0a18, 0.2, _d.set(0, 0.8, 0), 1);
@@ -657,6 +669,8 @@ export class Pentagranium {
         const g = this.game;
         m.t += dt;
         m.life -= dt;
+        if (!m.dark) stampWhitePentagram(m, m.whiteExpiresAt);
+        if (m.life <= 0) { this._remove(m.id, 'time'); return; }
         // lit: it comes up in a second, flares on a rite, goes out in its last 6 s
         const rite = m.rites.find((r) => !r.done);
         const hellWant = Math.max(rite ? 1 : 0, m.unityHell || 0, m.bareHell || 0, m.offerHell || 0); // (the rite of united power pulses the lines too: UnitedPower.js)
@@ -683,7 +697,6 @@ export class Pentagranium {
             if (why === null || why === 'защита уже сломана') { this._remove(m.id, 'old'); return; }
         }
         m.rites = m.rites.filter((r) => !r.done);
-        if (m.life <= 0) { this._remove(m.id, 'time'); return; }
         // the ground under the ring changed (broken, built, a crater)
         if ((m._gT = (m._gT || 0) - dt) <= 0) {
             m._gT = 1;
@@ -789,10 +802,13 @@ export class Pentagranium {
         if (!m) return;
         if (m.k === 'mark') {
             if (typeof m.id !== 'string' || !figureOf(m.pent)) return;
+            if (!TABLE[m.pent]?.dark && Number.isFinite(m.whiteExpiresAt) && m.whiteExpiresAt <= Date.now()) return;
             const mk = this._place(m.id, by, m.pent, +m.x || 0, +m.y || 0, +m.z || 0, Math.max(PENT.R_MIN, Math.min(PENT.R_MAX, +m.r || PENT.R)), +m.rot || 0, true); // (every computer draws the lines itself)
             if (mk) {
                 mk.mine = false;
                 if (m.perm && TABLE[m.pent]?.permanent) { mk.perm = true; mk.life = Infinity; mk.t = 5; mk.pair = typeof m.pair === 'string' ? m.pair : null; const o = mk.pair && this.marks.get(mk.pair); if (o) o.pair = mk.id; }
+                stampWhitePentagram(mk,m.whiteExpiresAt);
+                if(mk.pent==='enchant'){this.game.enchantCircles?.add?.(mk.x,mk.y,mk.z,mk.id,mk.whiteExpiresAt);this._remove(mk.id,'old');}
             }
         } else if (m.k === 'fx') {
             if (['teleport', 'life', 'mend', 'night', 'sight', 'firm', 'elwater', 'elearth', 'elfire', 'elair'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });

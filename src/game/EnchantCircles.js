@@ -13,6 +13,7 @@
  * Seen by everybody ('ench' op start / done); the level is rolled by the host and sent with 'done'.
  */
 import * as THREE from 'three';
+import {stampWhitePentagram,WHITE_PENTAGRAM_SECONDS} from './WhitePentagramTime.js';
 import { ENCHANT, ENCHANT_DRAW, ENCHANT_TIERS, enchantCost, enchantTier, canEnchant, applyEnchant, enchantKind } from './Enchant.js';
 import { glowMaterial } from '../fx/EnchantGlow.js';
 import { armorName } from './ArmorTypes.js';
@@ -116,7 +117,8 @@ export class EnchantCircles {
         return p?.knows ? !!p.knows('enchant') : true;
     }
 
-    add(x, y, z, id = null) {
+    add(x, y, z, id = null, whiteExpiresAt=null) {
+        if(Number.isFinite(whiteExpiresAt)&&whiteExpiresAt<=Date.now())return null;
         geos();
         id = id || `ec${this.list.length}_${Math.round(x)}_${Math.round(z)}`;
         if (this.list.some((c) => c.id === id)) return null;
@@ -127,7 +129,7 @@ export class EnchantCircles {
         mesh.renderOrder = 3;
         mesh.frustumCulled = true;
         this.game.scene.add(mesh);
-        const c = { id, x, y, z, mesh };
+        const c=stampWhitePentagram({id,x,y,z,mesh,dark:false,life:WHITE_PENTAGRAM_SECONDS},whiteExpiresAt);
         this.list.push(c);
         return c;
     }
@@ -135,12 +137,25 @@ export class EnchantCircles {
     remove(id) {
         const i = this.list.findIndex((c) => c.id === id);
         if (i < 0) return;
+        if(this.run?.c.id===id)this._finish();
         this.game.scene.remove(this.list[i].mesh);
         this.list.splice(i, 1);
     }
 
-    snapshot() { return this.list.map((c) => [c.id, Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100, Math.round(c.z * 100) / 100]); }
-    restore(a) { for (const c of [...this.list]) this.remove(c.id); for (const [id, x, y, z] of a || []) this.add(x, y, z, id); }
+    snapshot() { return this.list.map((c) => [c.id, Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100, Math.round(c.z * 100) / 100,Math.min(c.whiteExpiresAt,Date.now()+c.life*1000)]); }
+    restore(a) {
+        for (const c of [...this.list]) this.remove(c.id);
+        this.netRestore(a);
+    }
+
+    netRestore(list) {
+        if (!Array.isArray(list)) return;
+        for (const row of list) {
+            if (!Array.isArray(row)) continue;
+            const [id, x, y, z, expiresAt] = row;
+            if (typeof id === 'string' && [x, y, z].every(Number.isFinite)) this.add(x, y, z, id, expiresAt);
+        }
+    }
 
     /** For Game.prewarm: every look of the rite and the circle, once, so no shader is built in play. */
     sampleModels() {
@@ -185,6 +200,7 @@ export class EnchantCircles {
 
     update(dt) {
         this._t += dt;
+        for(let i=this.list.length-1;i>=0;i--){const c=this.list[i];c.life-=dt;stampWhitePentagram(c,c.whiteExpiresAt);if(c.life<=0)this.remove(c.id);}
         if (this.list.length) {
             const me = this.game.character.group.position;
             const pulse = 0.7 + 0.12 * Math.sin(this._t * 1.7);
