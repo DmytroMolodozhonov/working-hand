@@ -5,6 +5,7 @@ export default async function (h, args) {
     const g = h.g, S = g.space, THREE = h.THREE;
     const { planetPosition, SPACE } = await import('/src/world/Planets.js');
     await h.frames(20); h.bare();
+    g.character.setFirstPerson(false); // (the hero's body is in the picture)
     if (!g.flight.active) g.startFlight(true);
     S.cast?.(true);
     S._enterSpace('earth');
@@ -24,7 +25,7 @@ export default async function (h, args) {
         S.vel.x = S.vel.y = S.vel.z = 0; S.speed = 0; S._v = 0; S._exitDir = null;
         S._place();
         h.log(id, 'radius', R, 'alt', alt, 'dist', Math.round(R + alt));
-        await h.frames(40);
+        await h.frames(150); // (the planets' pictures come from the workers)
         const p = g.character.group.position;
         // the planet's centre in the local frame: where the hero is, minus the way back down to it
         const cl = new THREE.Vector3(p.x - d.x * (R + alt), p.y - d.y * (R + alt), p.z - d.z * (R + alt));
@@ -35,7 +36,7 @@ export default async function (h, args) {
         const look = p.clone().addScaledVector(to, 40);
         g.character.group.rotation.y = Math.atan2(to.x, to.z);
         h.cam(cam.toArray(), look.toArray());
-        await h.frames(6);
+        await h.frames(30);
         await h.shot('space-' + id, { settle: 10, light: 0 });
     }
 }
