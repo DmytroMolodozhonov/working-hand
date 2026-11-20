@@ -99,6 +99,7 @@ export function pocketStrike(hist, local, sx) {
 }
 
 /** s the hand must stay in the pocket (the camera: wrist at the hip, elbow bent, hand gone in). */
+export const POCKET_STAY = 1.02; // (s the hand is held in the pocket zone before the next thing comes: the author 20.11, was 2 s → 1 s 20 ms)
 export const POCKET_DWELL = 0.2; // (the author: crossing the body must be easy — 0.2 s in the zone is enough; with the look-down 0.1 s the thing is put in within ~0.35 s)
 /** The hand away from the pocket this long (s) — the chosen slot's thing stays in it. */
 export const POCKET_PICK = 1.0;
@@ -854,12 +855,12 @@ export class Inventory {
      * in a circle (the author: touch — the first, move away and touch — the second…; never thrown out).
      * Any other thing in the hand goes into a slot; an empty hand takes the next thing.
      */
-    /** Keep the other hand in the ordinary pocket: every two seconds choose the next thing, even looking ahead. */
+    /** Keep the other hand in the ordinary pocket: every POCKET_STAY (1.02 s) choose the next thing, even looking ahead. */
     pocketStay(side, zone, dt, now = performance.now()) {
         const st = this._pocket[side];
         if (!zone || side !== (this.game.dom === 'left' ? 'right' : 'left') || this.game.character?.isRunning || this.game.character?.flying) { st.stayT = 0; return false; }
         st.stayT = (st.stayT || 0) + dt;
-        if (st.stayT < 2 || now < (st.hold || 0)) return false;
+        if (st.stayT < POCKET_STAY || now < (st.hold || 0)) return false;
         st.stayT = 0; st.armed = false; st.out = now;
         const cycling = this._cyc?.side === side;
         const ok = this.pocketTouch(side);
