@@ -398,7 +398,7 @@ export class DeathSystem {
         this.stripVillager(v);
         if (drops.length && !g.config?.brawl) this.scatter(drops, { x: v.x, y, z: v.z }); // («Битва существ»: no coins, shields or steel on the field — a crowd of the dead made hundreds of objects and a weak card gave up)
         if (v.burst) return;
-        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, natural: v.naturalDeath ? 1 : undefined, ki: v.deathKick || undefined, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: v.stripped ? 1 : 0, arm: g.armor?.deadArmor?.(v) || undefined, look: lived, ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null), mh: Math.round(v.maxHp || 20), ...(v.darkKill ? { dk: 1 } : null), ...(v.crushed ? { cr: 1 } : null) }; // (mh: his maximum health, dk: killed by black magic — the rite of monstrous vitality: VitalityRules.js) (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
+        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, natural: v.naturalDeath ? 1 : undefined, ki: v.deathKick || undefined, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: v.stripped ? 1 : 0, arm: g.armor?.deadArmor?.(v) || undefined, look: lived, ...(held?.kind === 'wand' ? { wandUid: held.uid } : null), ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null), mh: Math.round(v.maxHp || 20), ...(v.darkKill ? { dk: 1 } : null), ...(v.crushed ? { cr: 1 } : null) }; // (mh: his maximum health, dk: killed by black magic — the rite of monstrous vitality: VitalityRules.js) (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
         this.addBody(b);
         g.sync?.deathBody?.(this._wire(b));
     }
@@ -1024,7 +1024,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, arm: b.arm || undefined, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined, natural: b.natural || undefined, ki: b.ki || undefined, seal: b.seal || undefined, witnesses: b.witnesses || undefined, equipment: b.equipment || undefined, cp: b.doll?.pack() || b.cp || undefined, moved: b.moved || undefined, rp: b.rp ? b.rp.map((x) => Math.round(x * 1000) / 1000) : undefined };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, arm: b.arm || undefined, lg: b.lg || undefined, wz: b.wz || undefined, wandUid: b.wandUid || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined, natural: b.natural || undefined, ki: b.ki || undefined, seal: b.seal || undefined, witnesses: b.witnesses || undefined, equipment: b.equipment || undefined, cp: b.doll?.pack() || b.cp || undefined, moved: b.moved || undefined, rp: b.rp ? b.rp.map((x) => Math.round(x * 1000) / 1000) : undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */

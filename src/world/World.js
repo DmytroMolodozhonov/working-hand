@@ -244,6 +244,12 @@ export class VoxelWorld {
         this.setStorm(this.storm || 0);
     }
 
+    setHouseFill(k) {
+        if (Math.abs(k - (this.houseFill || 0)) < .01) return;
+        this.houseFill = k;
+        this.setStorm(this.storm || 0);
+    }
+
     /** «Lightning Strike»: a storm darkens the world (0 = clear, 1 = full storm). */
     setStorm(k) {
         this.storm = k;
@@ -258,7 +264,9 @@ export class VoxelWorld {
         // indoors: the sun is outside; by day the light of the windows and the door fills the rooms (the walls away from
         // the sun as lit as the others), by night only a faint glow: the rooms are as dark as the night, what lights them
         // is a real light (lantern, torch, fire, «Люмос» — FireLights). Smooth with the night (`b.night` 0…1).
-        const lamp = 1 + ind * (0.8 - 0.65 * b.night), fill = 1 + ind * (0.5 - 0.4 * b.night);
+        const daylightFill = (this.houseFill || 0) * (1 - b.night) * (1 - k * .62);
+        const lamp = 1 + ind * (0.8 - 0.65 * b.night) + .42 * daylightFill;
+        const fill = 1 + ind * (0.5 - 0.4 * b.night) + .55 * daylightFill;
         const boost = lightBoost(nv, darkness(b.night, cv)); // (the night gift: ×1…1.5 as dark as it is — the same lights, no new ones)
         const gh = this.ghostHaze || 0, ghd = 1 - 0.3 * gh; // (the Castle of Ghosts' haze: a dimmer day)
         this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp * boost * ghd;

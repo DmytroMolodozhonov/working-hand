@@ -3353,6 +3353,37 @@ export class CastleLife {
         return true;
     }
 
+    /** Raise the very same resident or wanderer, clearing the persisted death only after the replacement exists. */
+    reviveVillager(body) {
+        if (!this.auth || body.k !== 'v' || typeof body.who !== 'string') return null;
+        const match = /^(.+):(\d+)$/.exec(body.who);
+        if (!match) return null;
+        const [, cid, n] = match, idx = Number(n);
+        const old = this.byId.get(body.who);
+        if (old && !old.dead) return null;
+        const cs = old?.cs || this.castles.get(cid) || this._runtimeById(cid);
+        if (!cs || !this._rosterRaw(cs.def, idx)) return null;
+        const st = this.state(cid);
+        if (!st.killed.has(idx) || this.justice?.isJailed(cs, idx)) return null;
+        if (old) this._deactivate(old);
+        st.killed.delete(idx);
+        const v = this._activate(cs, idx, { x: body.x, y: body.y, z: body.z, yaw: body.yaw }, old?.job || 'wander', { post: old?.post });
+        if (!v) { st.killed.add(idx); return null; }
+        v.model.setHeldTool('none');
+        v.noWand = !!v.wizard;
+        if (v.wizard && body.wandUid) v.lostWand = { uid: body.wandUid, t: 0 };
+        if (v.shieldItem) {
+            v.shieldGone = true;
+            (st.shields ||= {})[idx] = -1;
+            v.model.dropShield();
+        }
+        if (v.role === 'knight' || v.role === 'king') v.disarmed = true;
+        v.stunT = .55;
+        if (v.role === 'king') st.kingDead = false;
+        this._sendState(cs);
+        return v;
+    }
+
     _flash(v) {
         v.model.flashHit(0.15);
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.set(v.x, v.y + 2.6, v.z), v.armor > 0 ? 0xdddddd : 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.5);

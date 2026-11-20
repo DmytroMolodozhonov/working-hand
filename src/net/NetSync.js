@@ -1452,6 +1452,7 @@ export class NetSync {
                 if (m.from === 'H' && !this.net.isHost && typeof m.id === 'string' && m.seal) { const b = g.death?.bodies.get(m.id); if (b) g.death.sealBody(b, m.seal); }
                 break;
             }
+            case 'rvask': case 'rvdone': g.revivify?.onNet(m); break;
             case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
             case 'dlreq': if (this.net.isHost) g.death?.claims.host(m); break;
             case 'dlack': if (!this.net.isHost) g.death?.claims.reply(m); break;

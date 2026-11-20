@@ -139,6 +139,7 @@ export function matchSpell(text) {
     // «Да пусть создастся …» (the gods' making, DivineCreation.js): FIRST — the description after it may hold any other
     // spell's word («…замок с огнём на башнях»); only the opener at the very start of the phrase (CreationWords.js)
     if (creationWords(s)) return 'DivineCreation';
+    if (/^(revivify|ревивифай|рививифай|ревивифаи)[.!?]*$/.test(s)) return 'Revivify';
     // «Империус» («…Максима»): the whole word only — «империя», «император», «империал» are talk (imperiusWords)
     const imp = imperiusWords(s);
     if (imp) return imp;

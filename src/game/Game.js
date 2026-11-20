@@ -330,6 +330,7 @@ import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 import { restartsCreative } from './CreativeRestart.js';
 import { PotionEffects } from './PotionEffects.js';
 import { Flourish } from './Flourish.js';
+import { Revivify } from './Revivify.js';
 import { randomLook as _rollLook, cleanLook as _cleanLook } from '../entities/Appearance.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -961,6 +962,7 @@ export class Game {
         this.crossedShield = new CrossedShield(this); // «Protection» by crossing the arms before the chest (CrossedArms.js)
         this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
+        this.revivify = new Revivify(this);
         this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
         this.walkRec = new WalkRecorder(this); // F8: «Ходьба» — a recording to tune walking back (WalkRecorder.js)
@@ -1827,7 +1829,7 @@ export class Game {
         }
         if (this._caveChests?.size && (this._caveUnloadT = (this._caveUnloadT || 0) - dt) <= 0) { this._caveUnloadT = 5; this._unloadCaves(p); }
         // darkness: rock above the head
-        const head = Math.floor(p.y + 2.4 + 1.5);
+        const head = Math.floor(p.y + 1.25 + 1.5);
         // rock above the head here and around (so the light doesn't flicker at the edges)
         let n = 0;
         for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) if (t.solidIn(Math.round(p.x) + dx, Math.round(p.z) + dz, head, head + 14)) n++;
@@ -1843,7 +1845,11 @@ export class Game {
         // in a cave: as dark as the daylight reaching the head (the mouth lit, deeper in dark — the
         // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
         const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;
-        let dark = sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
+        if ((this._houseLightT = (this._houseLightT || 0) - dt) <= 0) {
+            this._houseLightT = .25;
+            this._roomLight = this.houseMagic?.roomDaylight(p) || 0;
+        }
+        let dark = this._roomLight > 0 && built ? 0 : sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
         if (this.godhood?.inHall) dark = 0; // (the Hall of the Sun: no darkness at all)
         this._sunHallK = (this._sunHallK || 0) + ((this.godhood?.inHall ? 1 : 0) - (this._sunHallK || 0)) * Math.min(1, dt * 1.2);
         this.world.setSunHall?.(this._sunHallK);
@@ -1852,6 +1858,9 @@ export class Game {
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
         this.world.setIndoor?.(this._indoorK);
+        const roomFill = built ? this._roomLight : 0;
+        this._roomFill = (this._roomFill || 0) + (roomFill - (this._roomFill || 0)) * Math.min(1, dt * 3.5);
+        this.world.setHouseFill?.(this._roomFill);
         this._updateCaveMap(dt, p, !built && !!this._caveSys && (covered || sky < 0.9 || belowCaveSurface(t, p.x, p.z, p.y - PLAYER_GROUND_OFFSET)));
     }
 
@@ -2410,6 +2419,7 @@ export class Game {
         if (name === 'Caligo') return this.darkFog.cast(isFinal); // (a jet of black smoke for 10 s — DarkFog.js)
         if (name === 'Sectura') return this.slash.cast(isFinal); // (the word arms the wand; the swing lets the blade go — Slash.js)
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
+        if (name === 'Revivify') return this.revivify.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         if (name === 'Axis') return this.timeTurn.cast(isFinal); // (the turn of the planet: 2000 mana — TimeTurn.js)
@@ -4659,6 +4669,7 @@ export class Game {
         this._brainrotUpkeep(dt);
         this.potionFx?.update(dt); sysMark('potionFx');
         this.wings?.update(dt); sysMark('wings'); // (they grow, they hurt, they fold or spread)
+        this.revivify?.update(dt);
         this.flourish?.update(dt); sysMark('flourish');
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)

@@ -79,6 +79,7 @@ export const WAND_DIRS = {
 /** Spells a wand can favour; a Maxima form goes with its base spell. */
 export const WAND_FAVOURITES = ['Inferno', 'Thunderwave', 'Sapira', 'Ice', 'Sands', 'Bombardo', 'Earthquake', 'Wind', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Accio', 'Protection', 'LightningStrike', 'WaveAttack', 'Lumos', 'Gather', 'Brainrot'];
 export const SPELL_RU = {
+    Revivify: 'Revivify',
     LumosFollowing: 'Lumos Following', LumosFlashlight: 'Flashlight', LumosAhead: 'Ahead',
     Inferno: 'Инферно', Thunderwave: 'Тандервейв', Sapira: 'Сапира', Ice: 'Айс', Sands: 'Даст', Bombardo: 'Бомбардо', Earthquake: 'Earthquake',
     Wind: 'Вайнд', WindMaxima: 'Вайнд Максима', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
