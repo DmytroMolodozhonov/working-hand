@@ -50,6 +50,7 @@ import { slowFactor, tickSlow } from './Slow.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
+import { hasPlantSupport } from '../world/PlantSupport.js';
 import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 import { appleTreeModel, baksadiTreeModel, pulseGolden } from './AppleTrees.js';
@@ -704,10 +705,7 @@ export class Animals {
             if (!tr) continue;
             const until = tr.apples.map((a) => a.until);
             if (until.some((u) => u > Date.now())) picked.set(key, until); else picked.delete(key);
-            this.game.scene.remove(tr.model);
-            this.game.collision.removeBox(tr.boxId);
-            tr.one?.dispose(); // (its one shape first: the shape of its kind and the twin material are shared — not disposed below)
-            tr.model.traverse((o) => { if (o.isMesh && !o.geometry.userData.keep) { o.geometry.dispose(); o.material.dispose(); } }); // (the trunk: shared)
+            this._dropFruitTree(tr);
         }
         for (let gz = gz0; gz <= gz1; gz++) for (let gx = gx0; gx <= gx1; gx++) {
             const key = gx + ',' + gz;
@@ -719,8 +717,29 @@ export class Animals {
             if (Math.hypot(x, z) < 40) { this.trees.set(key, null); continue; }
             if (t.landMade && !t.landMade(x, z)) continue; // (the workers have not brought that land yet: asked again in 2 s — never made here in the frame, 20–50 ms in a fast flight)
             const top = t.topLayer(x, z);
-            if (t.get(x, top, z) !== BLOCK.GRASS) { this.trees.set(key, null); continue; }
-            this.trees.set(key, this._makeTree(key, x, top - 0.5, z, kind, h(gx + 17, gz - 11), h(gx - 7, gz + 29) * Math.PI * 2, picked));
+            if (t.get(x, top, z) !== BLOCK.GRASS || top < (t.heightAt?.(x, z) ?? top)) { this.trees.set(key, null); continue; }
+            this.trees.set(key, this._makeTree(key, x, t.surfaceY?.(x, z) ?? top - .5, z, kind, h(gx + 17, gz - 11), h(gx - 7, gz + 29) * Math.PI * 2, picked));
+        }
+    }
+
+    _dropFruitTree(tr) {
+        this.game.scene.remove(tr.model);
+        this.game.collision.removeBox(tr.boxId);
+        tr.one?.dispose();
+        tr.model.traverse(o => { if (o.isMesh && !o.geometry.userData.keep) { o.geometry.dispose(); o.material.dispose(); } });
+    }
+
+    _checkFruitTreeSupport(dt) {
+        const t = this.game.terrain?.data;
+        this._fruitFloorT = (this._fruitFloorT || 0) - dt;
+        if (!t || this._fruitFloorT > 0 || t.version === this._fruitFloorVersion) return;
+        this._fruitFloorT = .5;
+        this._fruitFloorVersion = t.version;
+        for (const [key, tree] of this.trees) {
+            if (!tree || hasPlantSupport(t, tree.x, tree.y, tree.z)) continue;
+            this._dropFruitTree(tree);
+            this.trees.set(key, null);
+            this.game.sound?.playPlant?.(_v.set(tree.x, tree.y, tree.z), 'fall', .9);
         }
     }
 
@@ -2009,6 +2028,7 @@ export class Animals {
         const me = g.character.group.position;
         this._treeT -= dt;
         if (this._treeT <= 0 && !this.noWild) { this._treeT = 2; this._treesAround(me); }
+        this._checkFruitTreeSupport(dt);
         this._lookFar(me, dt);
         this.sea.frame(dt); // (the glowfins' light breathes)
         // apples grow back

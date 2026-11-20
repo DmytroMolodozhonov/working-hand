@@ -20,6 +20,7 @@
  */
 import * as THREE from 'three';
 import { BLOCK, PLANTS_FROM_GEN, BRIGHTFLOWER_FROM_GEN } from '../world/Terrain.js';
+import { hasPlantSupport } from '../world/PlantSupport.js';
 import { BIOMES } from '../world/Landscape.js';
 import { BrightFlowers } from './BrightFlower.js';
 import { newUid } from './ItemTypes.js';
@@ -112,7 +113,7 @@ export class Plants {
                 if (PLANT_KINDS[kind].biomes && !PLANT_KINDS[kind].biomes.includes(BIOMES[t.biomeAt?.(x, z) ?? 0]?.id)) continue; // (the Brightflower: warm meadows, steppes, emerald hills)
                 const id = plantId(kind, gx, gz, m.i);
                 if (this._gone.has(id)) continue;
-                ok.push({ ...m, x, z, y: top - 0.5, id });
+                ok.push({ ...m, x, z, y: t.surfaceY?.(x, z) ?? top - .5, id });
             }
             this.groups.set(key, ok.length ? this._load(kind, gx, gz, ok) : null);
             built++;
@@ -146,7 +147,7 @@ export class Plants {
         for (let i = 0; i < 3; i++) {
             const x = S.x + (i - 1) * 7, z = S.z, id = 'cexp.' + i, top = t.topLayer(x, z);
             if (this._gone.has(id)) continue;
-            members.push({ i, x, z, y: top - 0.5, id, yaw: Math.atan2(-x, -z) + (i - 1) * 0.4, h: 0.35 + 0.15 * i });
+            members.push({ i, x, z, y: t.surfaceY?.(x, z) ?? top - .5, id, yaw: Math.atan2(-x, -z) + (i - 1) * 0.4, h: 0.35 + 0.15 * i });
         }
         if (!members.length) { this.groups.set(key, null); return; }
         const grp = this._load('carnivore', 0, 0, members);
@@ -311,10 +312,7 @@ export class Plants {
     }
     /** Is there still ground (a solid block, not water) under the plant's foot? Checked twice a second, only where the land is made. */
     _grounded(p) {
-        const t = this.game.terrain?.data;
-        if (!t?.get || (t.landMade && !t.landMade(Math.round(p.x), Math.round(p.z)))) return true;
-        const top = Math.round(p.y + 0.5), b = t.get(Math.round(p.x), top, Math.round(p.z));
-        return b !== BLOCK.AIR && b !== BLOCK.WATER;
+        return hasPlantSupport(this.game.terrain?.data, p.x, p.y, p.z);
     }
     /** (host) Let go of whatever the plant holds (it died, froze, was left behind). */
     _dropHeld(p) {

@@ -78,13 +78,12 @@ test('wild plants: every kind has a shape of the right size; plants with loot ha
             else assert.ok(g.userData.picks.length >= (kind === 'eyeflower' ? 1 : 3), `${kind} has parts to pick`);
             assert.ok(g.attributes.position.count < 4500, `${kind} is cheap: ${g.attributes.position.count} vertices`);
         }
-        if (kind === 'cactus') { assert.equal(K.item, undefined); continue; }
-        assert.ok(floraPick(kind).attributes.position.count > 20);
+        assert.ok(floraPick(kind).attributes.position.count >= (kind === 'cactus' ? 8 : 21));
         assert.ok(ITEM_INFO[K.item], `${kind} gives ${K.item}`);
         assert.equal(FLORA_OF_ITEM[K.item], kind);
         assert.ok(makeItemModel({ kind: K.item }).children.length);
     }
-    assert.deepEqual(Object.keys(FLORA_ITEMS).sort(), ['armor_leaf', 'eyeflower_eye', 'azure_berry', 'frost_shard', 'fern_frond', 'glowcap_mushroom', 'sun_herb'].sort());
+    assert.deepEqual(Object.keys(FLORA_ITEMS).sort(), ['armor_leaf', 'eyeflower_eye', 'azure_berry', 'cactus_spine', 'frost_shard', 'fern_frond', 'glowcap_mushroom', 'sun_herb'].sort());
     assert.ok(foodHeal({ kind: 'azure_berry' }) > 0 && !ITEM_INFO.glowcap_mushroom.heal);
 });
 

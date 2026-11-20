@@ -613,8 +613,14 @@ function cactusBody(variant) {
     return g;
 }
 
+function cactusSpine() {
+    const B = new Builder();
+    B.cone([0, 0, 0], unit([.2, 1, .07]), .44, .045, hexRGB(0x6d5a3e), hexRGB(0xe2d3aa), 7);
+    return B.geometry();
+}
+
 const BODY_BUILD = { glowcap: glowcapBody, giantfern: fernBody, azureberry: azureBody, sunherb: sunBody, frostcrystal: frostBody, armourleaf: armourBody, eyeflower: eyeBody, cactus: cactusBody };
-const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick, armourleaf: armourPick, eyeflower: eyePick };
+const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick, armourleaf: armourPick, eyeflower: eyePick, cactus: cactusSpine };
 /** Which shared material draws the body / the picked part of each kind. */
 export const FLORA_MATERIAL = {
     glowcap: { body: 'body', pick: 'glowcap' },
@@ -624,7 +630,7 @@ export const FLORA_MATERIAL = {
     frostcrystal: { body: 'crystal', pick: 'shard' },
     armourleaf: { body: 'plate', pick: 'plate' },
     eyeflower: { body: 'eyestalk', pick: 'eye' },
-    cactus: { body: 'body' },
+    cactus: { body: 'body', pick: 'plate' },
 };
 /** The picked part's size factor in the hand (the item model). */
 const _body = new Map(), _pick = new Map();
