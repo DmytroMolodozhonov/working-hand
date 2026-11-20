@@ -15,7 +15,7 @@
  */
 
 import * as THREE from 'three';
-import { HELM, polar, unwrap, rimDist, steer } from './HelmMath.js';
+import { HELM, polar, unwrap, rimDist, steer, followWheel } from './HelmMath.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -29,7 +29,7 @@ export class Helm {
         this.ships = ships;
         this.held = { left: null, right: null }; // {ship, a0, w0, a}
         this.input = null; // (tests) side → {G: world point, curl}: instead of the tracked hands
-        this._open = { left: 0, right: 0 }; // when the hand was last open
+        this._open = { left: -Infinity, right: -Infinity }; // when the hand was last open
         this._relT = { left: 0, right: 0 };
         this._pf = { left: {}, right: {} };
         // the tracked hands' grip points, taken each frame before a holding hand is drawn on the rim:
@@ -85,14 +85,16 @@ export class Helm {
             for (const [id, r] of this.remote) {
                 const s = this.ships.list.get(id);
                 if (!s || now - r.at > 1500) { if (s && s.helmBy === r.by) s.helmBy = null; this.remote.delete(id); continue; }
-                if (s.helmBy === r.by) {
-                    const rate = HELM.MAX_RATE / (1 + Math.abs(s.st.u) / 4);
-                    s.wheel = s.wheel + Math.max(-rate * dt, Math.min(rate * dt, r.w - s.wheel));
-                }
+                if (s.helmBy === r.by) s.wheel = followWheel(s.wheel, r.w, dt, s.st.u);
             }
         }
-        if (!g.currentPose && !this.input) { this.releaseAll(); return; }
         if (g.isDeadLocal || g.combat?.dead || g.flight?.active || g.levitation?.lifted) { this.releaseAll(); return; }
+        if (!g.currentPose && !this.input) {
+            this._noPose = (this._noPose || 0) + dt * 1000;
+            if (this._noPose > HELM.RELEASE_MS) this.releaseAll();
+            return;
+        }
+        this._noPose = 0;
         const now = performance.now();
         const holds = [];
         let ship = null;
@@ -108,7 +110,13 @@ export class Helm {
                 // let go: the fingers open (for a moment), the hand pulled away, the ship gone under
                 if (h.curl < HELM.RELEASE_CURL) this._relT[side] += dt * 1000; else this._relT[side] = 0;
                 if (this._relT[side] > HELM.RELEASE_MS || d > HELM.SLIP || s.flooded || !s.awake) { this.release(side); continue; }
-                held.a = unwrap(held.a, polar(_l.x, _l.y));
+                // Close to the hub the tracked angle is ill-defined. Re-anchor on the rim.
+                if (Math.hypot(_l.x, _l.y) < s.layout.helm.rimR * 0.35) {
+                    held.hub = true;
+                } else {
+                    held.a = unwrap(held.a, polar(_l.x, _l.y));
+                    if (held.hub) { held.hub = false; held.a0 = held.a; held.w0 = s.wheel; }
+                }
                 holds.push(held);
                 ship = s;
                 continue;
@@ -117,6 +125,7 @@ export class Helm {
             if (!this._free(side) || h.curl < HELM.CLOSE_CURL || now - this._open[side] > HELM.CLOSE_WINDOW_MS) continue;
             const s = this._wheelNear(h.G);
             if (!s || s.flooded) continue;
+            if (Object.values(this.held).some(hold => hold && hold.ship !== s)) continue;
             if (s.helmBy && s.helmBy !== g.localId) continue; // somebody else steers
             this._helmLocal(s, h.G, _l);
             if (rimDist(_l.x, _l.y, _l.z, s.layout.helm.rimR, s.layout.helm.handleR) > HELM.GRAB_R) continue;
@@ -135,6 +144,9 @@ export class Helm {
     grab(s, side, a) {
         const g = this.game;
         this.held[side] = { ship: s, a0: a, w0: s.wheel, a };
+        this._open[side] = -Infinity;
+        this._relT[side] = 0;
+        this._rebase(s);
         s.helmBy = g.localId;
         const hand = g.character.getActiveHands?.()[side];
         if (hand?.setGrip) hand.setGrip(0.7);
@@ -152,9 +164,18 @@ export class Helm {
         const hand = g.character.getActiveHands?.()[side];
         if (hand?.setGrip) hand.setGrip(null);
         const s = held.ship;
+        this._rebase(s);
         if (!this.holding(s)) {
             if (s.helmBy === g.localId) s.helmBy = null;
             if (!this.ships.auth) g.sync?.net.send({ t: 'shelm', id: s.id, w: Math.round(s.wheel * 100) / 100, on: 0 });
+        }
+    }
+
+    _rebase(ship) {
+        for (const hold of Object.values(this.held)) {
+            if (hold?.ship !== ship) continue;
+            hold.a0 = hold.a;
+            hold.w0 = ship.wheel;
         }
     }
 
@@ -168,7 +189,11 @@ export class Helm {
         const s = this.ships.list.get(m.id);
         if (!s) return;
         const by = m.from;
-        if (!m.on) { if (s.helmBy === by) s.helmBy = null; this.remote.delete(s.id); return; }
+        if (!m.on) {
+            if (s.helmBy === by) s.helmBy = null;
+            if (this.remote.get(s.id)?.by === by) this.remote.delete(s.id);
+            return;
+        }
         if (s.helmBy && s.helmBy !== by && !(s.helmBy === this.game.localId && !this.holding(s))) return;
         if (!this.ships._near(s, by, 40)) return;
         s.helmBy = by;

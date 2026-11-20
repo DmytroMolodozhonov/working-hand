@@ -74,19 +74,24 @@ class Batch {
     }
 
     /** Raw triangles (already in local space): flat list of [x,y,z] triples, with a colour per triangle. */
-    tri(a, b, c, color) {
+    tri(a, b, c, color, shade = null) {
         _c.set(this.tint ? this.tint(color) : color);
         const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
         const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
         let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
         const l = Math.hypot(nx, ny, nz) || 1;
         nx /= l; ny /= l; nz /= l;
-        for (const p of [a, b, c]) { this.pos.push(p[0], p[1], p[2]); this.nor.push(nx, ny, nz); this.col.push(_c.r, _c.g, _c.b); }
+        for (const p of [a, b, c]) {
+            const k = shade ? shade(p[1], p[2]) : 1;
+            this.pos.push(p[0], p[1], p[2]);
+            this.nor.push(nx, ny, nz);
+            this.col.push(_c.r * k, _c.g * k, _c.b * k);
+        }
     }
 
-    quad(a, b, c, d, color) { this.tri(a, b, c, color); this.tri(a, c, d, color); }
+    quad(a, b, c, d, color, shade) { this.tri(a, b, c, color, shade); this.tri(a, c, d, color, shade); }
 
-    build() {
+    build(strakeVertices = 0) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
         g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
@@ -97,7 +102,8 @@ class Batch {
         for (let i = 0, j = 0; i < P.length; i += 3, j += 2) {
             const ax = Math.abs(N[i]), ay = Math.abs(N[i + 1]), az = Math.abs(N[i + 2]);
             let u, v;
-            if (ay >= ax && ay >= az) { u = P[i + 2]; v = P[i]; } // decks, tops: along z, across x
+            if (i < strakeVertices * 3) { u = P[i + 2]; v = P[i + 1]; } // continuous hull strakes around the bow
+            else if (ay >= ax && ay >= az) { u = P[i + 2]; v = P[i]; } // decks, tops: along z, across x
             else if (ax >= az) { u = P[i + 2]; v = P[i + 1]; } // the sides: along z, up y
             else { u = P[i]; v = P[i + 1]; } // ends, bulkheads: across x, up y
             uv[j] = u / WOOD_M; uv[j + 1] = v / WOOD_M;
@@ -222,7 +228,10 @@ function shared() {
     // (matte: Lambert, no shine — wood and cloth, not plastic)
     SHARED = {
         solid: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, map: hullTex }),
-        deck: new THREE.MeshLambertMaterial({ map: deckTex, color: 0xc49a66, side: THREE.DoubleSide }),
+        hull: new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide, map: hullTex,
+            bumpMap: hullTex, bumpScale: 0.12, specular: 0x17130e, shininess: 13 }),
+        deck: new THREE.MeshPhongMaterial({ map: deckTex, color: 0xa9855d, side: THREE.DoubleSide,
+            bumpMap: deckTex, bumpScale: 0.08, specular: 0x12100d, shininess: 10 }),
         sail: new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, vertexColors: true, map: sailTex }),
         rope: new THREE.LineBasicMaterial({ color: 0x3a2a1a }),
         glass: new THREE.MeshBasicMaterial({ color: 0x2a2416 }),
@@ -239,6 +248,7 @@ function shared() {
         bundleBlack: new THREE.MeshLambertMaterial({ color: 0x1e1b1d }),
     };
     SHARED.solid.userData.shared = true;
+    SHARED.hull.userData.shared = true;
     return SHARED;
 }
 
@@ -540,16 +550,23 @@ export class ShipModel {
             return WOOD;
         };
         const rings = zs.map(ring);
+        // Wet timbers are darkest near the water and under the projecting wales.
+        const weathered = (y, z) => {
+            const wet = 0.25 * Math.max(0, 1 - Math.max(0, y) / 2.4);
+            const streak = (1 + Math.sin(z * 0.39) * Math.cos(z * 0.19 + y)) * 0.055;
+            return 1 - wet - streak;
+        };
         for (let i = 0; i < NZ; i++) {
             const a = rings[i], b = rings[i + 1], za = zs[i], zb = zs[i + 1];
             for (let j = 0; j < NY; j++) {
                 const col = colorAt((a[j][1] + a[j + 1][1]) / 2);
                 for (const s of [1, -1]) {
                     const p1 = [s * a[j][0], a[j][1], za], p2 = [s * b[j][0], b[j][1], zb], p3 = [s * b[j + 1][0], b[j + 1][1], zb], p4 = [s * a[j + 1][0], a[j + 1][1], za];
-                    if (s > 0) hull.quad(p1, p2, p3, p4, col); else hull.quad(p1, p4, p3, p2, col);
+                    if (s > 0) hull.quad(p1, p2, p3, p4, col, weathered); else hull.quad(p1, p4, p3, p2, col, weathered);
                 }
             }
         }
+        const strakeVertices = hull.pos.length / 3;
         // transom (flat stern) with the gold trim and the windows
         const zt = zs[NZ];
         const tr = rings[NZ];
@@ -915,7 +932,7 @@ export class ShipModel {
             this.group.add(pivot);
             this.masts.set(id, { pivot, mesh, by: pt.by, z: pt.z, broken: false, fall: null });
         }
-        const hullMesh = new THREE.Mesh(hull.build(), S.solid);
+        const hullMesh = new THREE.Mesh(hull.build(strakeVertices), S.hull);
         hullMesh.castShadow = true;
         hullMesh.receiveShadow = true;
         this.group.add(hullMesh);
@@ -1395,7 +1412,7 @@ export class ShipModel {
                 if (o.geometry !== shared().ball && o.geometry !== this._barrelGeo && o.geometry !== BARRIER?.shell && o.geometry !== BARRIER?.ring) o.geometry.dispose();
                 const m = o.material;
                 const S = shared();
-                if (m && m !== S.solid && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.deckBlack && m !== S.deckSunk && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundleBlack) m.dispose();
+                if (m && m !== S.solid && m !== S.hull && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.deckBlack && m !== S.deckSunk && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundleBlack) m.dispose();
             }
         });
         for (const s of this.sails.values()) s.dispose?.();
