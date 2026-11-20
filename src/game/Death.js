@@ -388,7 +388,9 @@ export class DeathSystem {
         // what was in the hand falls from it (the wand, the staff, the sword, the bow…: dropHeld)
         const held = this.dropHeld(v, { x: v.x, y: v.y, z: v.z });
         // (a sword knocked out by «Экспеллиармус», or just fallen from the hand: not a second one)
-        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, dark: v.wizard && darkMageLevel(v.id, v.role === 'wanderer' ? 'wanderer' : 'lone') > 0, darkHead: v.wizard && v.dark > 0 && (v.role === 'wanderer' || (v.cs?.def?.kind === 'hamlet' && v.cs.def.people?.length === 1)), coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
+        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, dark: v.wizard && darkMageLevel(v.id, v.role === 'wanderer' ? 'wanderer' : 'lone') > 0, darkHead: v.wizard && v.dark > 0 && (v.role === 'wanderer' || (v.cs?.def?.kind === 'hamlet' && v.cs.def.people?.length === 1)), coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon') && !(v.shieldGone && d.kind === 'shield'));
+        if (v.shieldItem) for (const drop of drops) if (drop.kind === 'shield') Object.assign(drop, v.shieldItem);
+
         // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
         const steel = g.armor?.villagerLoot(v) || [];
         drops.push(...(g.soulSeal?.takeLoot(v) || [])); // (none: the armour stays on the body — «Disarmor» takes it off — Armor.deadArmor)
