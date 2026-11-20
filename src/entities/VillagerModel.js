@@ -958,7 +958,9 @@ function shieldBoxes(cc) {
  * from there). Kinds 'wand#0' … 'wand#63' (a bounded cache).
  */
 /** The number (0…63) of a person's wand design: by his look's seed (the model in his hand, and the wand that flies out of it — Expelliarmus.rollWizardWand). */
-export const wandNumber = (seed) => (((seed | 0) * 2654435761) >>> 0) % 64;
+// (the author 20.11: «у последних магов дизайн палочки один и тот же» — the old `(seed * 2654435761) >>> 0` overflowed a double: its low bits were lost and nearly everybody got wand #0.
+// Now an integer mix, the TOP six bits — spread evenly.)
+export const wandNumber = (seed) => Math.imul(Math.imul(seed | 0, 2654435761) ^ (seed >>> 15), 2246822519) >>> 26;
 export const wandWoodOf = (n) => WAND_WOODS[(n * 7) % WAND_WOODS.length];
 const WAND_WOODS = [0x1c1410, 0x4e3220, 0x7a3a2a, 0xd8cdb8, 0xb59a74, 0x8a5a30, 0xe6dccb, 0x5a2420, 0x8f6a3e, 0x2c2622];
 const WAND_TIPS = [0xe8e0c8, 0xc58bff, 0x7fe0ff, 0xff8f6b, 0x9cff9a, 0xfff2a0];
