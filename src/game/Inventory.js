@@ -410,7 +410,7 @@ export class Inventory {
             const other = !!(side && cast && side !== cast);
             if (other) { if (ch?.aim?.[side]) why = 'заклинание'; }
             else if (held) why = (HELD_NAME(held)) ;
-            else if (g.wandMagic?.active || g.spellBusy?.() || (side && ch?.aim?.[side])) why = 'заклинание';
+            else if (g.wandMagic?.light) why = 'свет на палочке'; // (20.11: NOT `ch.aim[side]` — that is where a held wand points, written every frame for ANY wand in the hand: the wand could never be put away at all; `wandMagic.active` / `spellBusy` do not exist)
         } catch (e) { /* the check never breaks a hand */ }
         if (!why) return '';
         const now = performance.now();
