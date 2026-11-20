@@ -230,3 +230,19 @@ test('«Левиоса» holds a body as a rag doll right where the magic holds 
     const yaw1 = Math.atan2(r2[2] - l2[2], r2[0] - l2[0]);
     assert.ok(Math.abs(yaw1 - yaw0) < 0.05, 'the grip does not spin it');
 });
+
+test('a foot targeted by Leviosa stays pinned and the head swings below the hips', () => {
+    const { v, ci } = world();
+    v.group.updateMatrixWorld(true);
+    const reference = ci.levDoll('v', v);
+    const foot = new THREE.Vector3().fromArray(reference.at(8));
+    ci.levDolls.delete('v|' + v.id);
+    const origin = foot.clone().add(new THREE.Vector3(0, 0, -5));
+    const grip = ci.levGrip('v', v, origin, new THREE.Vector3(0, 0, 1));
+    assert.equal(grip, 8);
+    const doll = ci.levDoll('v', v, grip);
+    const hold = foot.clone().add(new THREE.Vector3(0, 6, 0));
+    for (let i = 0; i < 240; i++) ci.levDollStep('v', v, hold, 1 / 60);
+    assert.ok(hold.distanceTo(new THREE.Vector3().fromArray(doll.at(grip))) < .15);
+    assert.equal(ci.levHeadDown('v', v), true);
+});

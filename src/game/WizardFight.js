@@ -805,7 +805,7 @@ export class WizardFight {
     }
 
     /** A duel charge from the wand at a player (the charge itself: Duel.js, seen by everybody). */
-    _cast(v, spell, foeId, fp, vs = null, at = null) {
+    _cast(v, spell, foeId, fp, vs = null, at = null, lifted = false) {
         const g = this.game, duel = g.duel;
         if (at && (spell === 'Nihilis' || spell === 'Inferno')) {
             const range = spell === 'Nihilis' ? NIHIL.RANGE : INFERNO.RANGE;
@@ -815,14 +815,16 @@ export class WizardFight {
         if (SAVIOR_SPECIAL.has(spell) || (v.rank === 'supermage' && SUPER.GROUP.includes(spell))) return this._castSpecial(v, spell, fp); // (the Saviour's own: the wind, the blasts — not duel charges)
         if (!duel?._addBolt) return false;
         // «лицом к цели»: from the side or with his back — no spell; he turns first (step / pursueThreat)
-        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
-        if (v.group.visible) v.model.getWandTip(_o);
+        if (!lifted && !facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
+        if (lifted || v.group.visible) v.model.getWandTip(_o);
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         // (the wand's tip through a wall he stands against: no — the charge would start on the other side)
         const c = g.collision;
-        if (c?.lineOfSight && (!c.lineOfSight(v.x, v.y + 3.0, v.z, _o.x, _o.y, _o.z, 0.15) || c.pointBlocked?.(_o.x, _o.y, _o.z))) return false;
+        if (c?.pointBlocked?.(_o.x, _o.y, _o.z)) return false;
+        if (c?.lineOfSight && !(lifted ? c.lineOfSight(_o.x, _o.y, _o.z, fp.x, fp.y, fp.z, .15)
+            : c.lineOfSight(v.x, v.y + 3, v.z, _o.x, _o.y, _o.z, .15))) return false;
         // (somebody right before him, the wand's tip in them or through them: it starts before them — hits them)
-        duel.armStart?.(_ch.set(v.x, v.y + 3.0, v.z), _o, v.id);
+        if (!lifted) duel.armStart?.(_ch.set(v.x, v.y + 3.0, v.z), _o, v.id);
         const body = at ? null : duel._bodyOf?.('p', foeId, duel._tmpBody()); // (`at`: a creature {k, id} instead of a player)
         if (body) _d.copy(body.a).lerp(body.b, 0.55); else _d.set(fp.x, fp.y, fp.z);
         _d.sub(_o).normalize();
@@ -851,6 +853,16 @@ export class WizardFight {
      * The white Saviour's attack spells that are not duel charges (SaviorRules.SPECIAL): «Wind Maxima», «Bombardo Maxima», «Bombardo» — the very spells of the players
      * (SpellManager.cast with his id: the host runs it and tells the others, whose computers decide what it does to their hero).
      */
+    castWhileLifted(v, by) {
+        if (!v.W || v.dead || v.noWand || v.lostWand || v.stunT > 0 || v.mana < SPELL_COST.Stupefy || v.model?.toolKind !== 'wand') return false;
+        const foe = this.life._playerPos(by);
+        if (!foe || Math.hypot(foe.x - v.x, foe.z - v.z) > 28) return false;
+        if (!this._cast(v, 'Stupefy', by, foe, null, null, true)) return false;
+        v.mana -= SPELL_COST.Stupefy;
+        this.life._say?.(v, 'Остолбеней!', 2);
+        return true;
+    }
+
     _castSpecial(v, spell, fp) {
         const g = this.game;
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
