@@ -5,12 +5,13 @@ import assert from 'node:assert/strict';
 import { ShowGaze, SHOW, steady, canNotice, viewers, lookPoint } from '../../src/game/ShowGaze.js';
 
 const person = (id, x, z, extra = {}) => ({ id, x, z, ...extra });
-function rig({ people = [], dom = 'right', raised = true, dir = { x: 0, y: 0.1, z: -1 }, ground = { x: 0, z: -30 }, busy = {} } = {}) {
+function rig({ people = [], dom = 'right', raised = true, fingers = { index: 0.1, middle: 0.9, ring: 0.9, pinky: 0.9 }, holding = null, dir = { x: 0, y: 0.1, z: -1 }, ground = { x: 0, z: -30 }, busy = {} } = {}) {
     const state = { raised, dir: { ...dir } };
     const g = {
         dom, localId: 'me', isDeadLocal: false, combat: { dead: false, immobile: false }, _castAt: -1e9, focus: { held: () => (busy.held ? 'Levitation' : null) },
         inFight: () => !!busy.fight,
-        character: { group: { position: { x: 0, y: 0, z: 0 } }, isArmRaised: (s) => state.raised && s === dom },
+        items: { held: { [dom]: holding } }, weapons: { hands: { right: {}, left: {} } },
+        character: { group: { position: { x: 0, y: 0, z: 0 } }, isArmRaised: (s) => state.raised && s === dom, getActiveHands: () => ({ [dom]: { targetState: { fingers } } }) },
         castleLife: { byId: new Map(people.map((p) => [p.id, p])) },
     };
     if (busy.cast) g._castAt = performance.now();
@@ -27,9 +28,10 @@ test('pure rules: steadiness, who may notice, the nearest few, where they look',
     for (const bad of [{ dead: true }, { sleep: true }, { foe: {} }, { fleeT: 3 }, { lev: {} }]) assert.ok(!canNotice(person('b', 5, 5, bad), me), JSON.stringify(bad));
     assert.ok(!canNotice(person('c', SHOW.NEAR + 1, 0), me), 'far');
     const many = Array.from({ length: 9 }, (_, i) => person('p' + i, i + 1, 0));
+    assert.ok(SHOW.MAX_VIEWERS <= 2 && SHOW.NEAR <= 12, 'only those close by (the author 20.11: they looked though not asked)');
     const v = viewers(many, me);
     assert.equal(v.length, SHOW.MAX_VIEWERS);
-    assert.deepEqual(v.map((x) => x.v.id), ['p0', 'p1', 'p2', 'p3'], 'the nearest');
+    assert.deepEqual(v.map((x) => x.v.id), ['p0', 'p1'].slice(0, SHOW.MAX_VIEWERS), 'the nearest');
     assert.ok(v.every((x) => x.delay >= SHOW.REACT_MIN && x.delay <= SHOW.REACT_MIN + SHOW.REACT_SPAN), 'each his own pause');
     assert.ok(new Set(v.map((x) => x.delay.toFixed(3))).size > 1, 'not all at once');
     const p = lookPoint({ o: { x: 0, y: 3, z: 0 }, d: { x: 0, y: 0, z: -1 } }, null);
@@ -118,4 +120,13 @@ test('one remark per pointing: the nearest person who looks says it, once; anoth
     assert.equal(said[0][0], 'a', 'the nearest');
     r.run(3);
     assert.equal(said.length, 1, 'not twice for one pointing');
+});
+
+test('only a real POINTING finger shows: an open or fisted hand, a wand or any thing in it, an aimed wand — nobody turns (the author 20.11)', () => {
+    const a = person('a', 5, 2);
+    for (const [name, opt] of [['open hand', { fingers: { index: 0, middle: 0, ring: 0, pinky: 0 } }], ['fist', { fingers: { index: 1, middle: 1, ring: 1, pinky: 1 } }], ['a wand in it', { holding: { item: { kind: 'wand' } } }], ['no fingers seen', { fingers: null }]]) {
+        const r = rig({ people: [a], ...opt }); r.run(3);
+        assert.ok(!a.glance, name + ': nobody looks');
+    }
+    const r = rig({ people: [a] }); r.run(3); assert.ok(a.glance, 'the index out, the rest curled, empty hand: they look');
 });

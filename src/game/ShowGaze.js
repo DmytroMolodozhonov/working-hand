@@ -10,12 +10,13 @@
 //   how long   while I keep pointing it is held; after the hand drops he looks a moment more (GLANCE_S), then goes back to his business.
 // A picture on MY computer only (every computer draws its own people's heads: nothing goes over the net — like TravelerGaze). Commands («иди туда»)
 // work as before and set their own glance (CommandTalk._begin).
+import { gestureOf } from './HandsLog.js';
 export const SHOW = {
-    NEAR: 26, // m: a person this near notices the hand
+    NEAR: 12, // m: a person this near notices the hand
     HOLD_S: 0.6, // s the hand must be held steady before they look
     STEADY: 0.13, // rad (~7.5°): the direction may drift this much
     GLANCE_S: 2.2, // s a glance lasts after the last refresh (while I keep pointing it is refreshed)
-    MAX_VIEWERS: 4,
+    MAX_VIEWERS: 2,
     REACT_MIN: 0.2, REACT_SPAN: 0.8, // s: each person's own pause before he turns
     LOOK_D: 40, // m: how far along the hand's line the point he looks at is (or the ground, if nearer)
     SKY: 0.6, // a hand pointing higher than this (d.y) points at the sky: nothing to look at
@@ -111,6 +112,11 @@ export class ShowGaze {
         if (g.focus?.held?.()) return 'держит заклинание';
         if (g.inFight?.()) return 'бой';
         if (g.tutorial?.active && g.tutorial.frozen) return 'обучение';
+        // (the author 20.11: «показывал куда-то, и жители смотрели, хотя я не просил» — only a real POINTING hand: the index out, the other fingers curled, nothing in it, no wand aimed)
+        const side = g.dom || 'right', ch = g.character;
+        if (g.items?.held?.[side] || g.weapons?.hands?.[side]?.held || g.wandMagic?.active || ch?.aim?.[side] || g.spellBusy?.()) return 'рука занята';
+        const hand = ch?.getActiveHands?.()?.[side], fingers = (hand?.targetState || hand?.currentState)?.fingers || null;
+        if (!fingers || gestureOf(fingers) !== 'указывает') return 'не указывает пальцем';
         return null;
     }
 
