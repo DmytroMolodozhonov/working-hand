@@ -65,6 +65,9 @@ test('столкновение лучей прибавляет, но не бол
     L.foeCast('w');
     for (let i = 0; i < 10; i++) L.clash('w');
     assert.equal(L.summary('w').parts.clash, FIGHT.CLASH_MAX);
+    const c = ledger(); c.L.foeCast('x'); c.L.clash('x'); c.L.clash('x', true);
+    assert.equal(c.L.summary('x').parts.clash, 2 * FIGHT.CLASH_EACH + FIGHT.CLASH_WON, 'каждое столкновение + добавка за выигранное');
+    assert.ok(FIGHT.CLASH_EACH >= 4 * 2, 'в разы больше прежних 2 %');
     const e = ledger();
     e.L.foeCast('z');
     for (let i = 0; i < 3; i++) { e.at(i * 3); e.L.myCast('IceShards'); e.L.myCast('Waterball'); e.L.myCast('WaterVortex'); }

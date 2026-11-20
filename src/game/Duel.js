@@ -2219,7 +2219,7 @@ export class Duel {
         this.bolts.delete(a.id);
         this.bolts.delete(b.id);
         const winnerBolt = loser === a.by ? b : loser === b.by ? a : null;
-        { const foe = a.by === this.me ? b.by : b.by === this.me ? a.by : null; if (foe != null && foe !== this.me) this.game.mana?.fight?.clash(foe); } // (a beam clash of mine: it counts in the fight with him — FightLedger)
+        { const foe = a.by === this.me ? b.by : b.by === this.me ? a.by : null; if (foe != null && foe !== this.me) this.game.mana?.fight?.clash(foe, !!winnerBolt && winnerBolt.by === this.me); } // (a beam clash of mine: it counts in the fight with him — FightLedger)
         this._burst(a.front, winnerBolt && c.marks ? c.marks[winnerBolt === a ? 0 : 1] : 0xffffff, 40);
         if (!winnerBolt) {
             if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ Дуэль прервана — никто не пострадал', true);
