@@ -86,9 +86,17 @@ test('without strokes it always goes down — in the clouds the wings carry long
     assert.ok(highEarly.y > lowEarly.y, `in the clouds it sinks slower: ${highEarly.y.toFixed(1)} vs ${lowEarly.y.toFixed(1)}`);
     assert.ok(highEarly.top < 0.01 && lowEarly.top < 0.01, 'never a climb without a stroke');
     const highLate = sinkAfter(WING.CLOUD_FULL + 20, 30);
-    assert.ok(highLate.vy < -5, `even in the clouds: no strokes — it falls (${highLate.vy.toFixed(1)} m/s)`);
+    // (the author 20.11: the SPREAD wings glide like a bird — a gentle slope, not a drop straight down; still always down, and the arms folded fall hard as before)
+    assert.ok(highLate.vy < -1 && highLate.vy > -4, `spread wings, no strokes: a gentle glide down (${highLate.vy.toFixed(1)} m/s)`);
     const lowLate = sinkAfter(10, 8);
-    assert.ok(lowLate.vy < -5, `low down it falls soon (${lowLate.vy.toFixed(1)} m/s)`);
+    assert.ok(lowLate.vy < -1 && lowLate.vy > -4, `low down: a glide (${lowLate.vy.toFixed(1)} m/s)`);
+    const folded = { air: true, vf: 12, vy: 0, since: 0 };
+    for (let t = 0; t < 8; t += dt) wingStep(folded, HERO_FLY, { stroke: 0, arms: 'down', alt: 10, dive: 0 }, dt);
+    assert.ok(folded.vy < -5, `the arms folded: a stoop (${folded.vy.toFixed(1)} m/s)`);
+    // the glide keeps its speed (the bird does not stop in the air and drop), and a glide covers ground: ≥ 4 m forward per metre of height lost
+    const g = { air: true, vf: 3, vy: 0, since: 5 }; let drop = 0, run = 0;
+    for (let t = 0; t < 10; t += dt) { wingStep(g, HERO_FLY, { stroke: 0, arms: 'spread', alt: 60, dive: 0 }, dt); drop -= g.vy * dt; run += g.vf * dt; }
+    assert.ok(g.vf > 6 && run / drop > 4, `a bird's slope: ${run.toFixed(0)} m forward for ${drop.toFixed(0)} m down, speed ${g.vf.toFixed(1)}`);
     assert.ok(cloudAt(10) === 0 && cloudAt(WING.CLOUD_FULL) === 1);
 });
 

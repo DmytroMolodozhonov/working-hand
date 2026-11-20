@@ -45,6 +45,9 @@ export const WING = {
     DIVE: 0.95, // × speed: the vertical speed a full forward lean gives (down)
     CLIMB: 0.75, // × speed: a full lean back (up, the speed spent)
     TURN: 1.5, // rad/s at a full sideways lean
+    // the spread wings (the arms in a T) glide like a bird's (the author 20.11: «снижаюсь прямо вниз — нереалистично; с расправленными крыльями — плавно, как птица»): the sink is a part of the forward speed
+    // (a glide angle), the speed does not drain away to a vertical plunge; folded arms fall as before.
+    GLIDE_RATIO: 6, GLIDE_V: 9, GLIDE_SINK_MIN: 1.1, GLIDE_SINK_MAX: 3.2, GLIDE_GAIN: 3.5, // forward : down; the glide speed (m/s); the sink limits; how fast the speed comes to the glide's
 };
 
 /** How much the air carries at `alt` m over the ground: 0 low … 1 in the clouds. */
@@ -78,6 +81,13 @@ export function wingStep(st, P, i, dt) {
     const fall = i.arms === 'down' ? WING.FALL_FOLDED : i.arms === 'spread' ? WING.FALL_SPREAD : WING.FALL;
     const sinkMin = WING.SINK_LOW + (WING.SINK_HIGH - WING.SINK_LOW) * c;
     let target = -(sinkMin * hold + fall * (1 - hold));
+    const gliding = i.arms === 'spread';
+    if (gliding) {
+        // a bird's glide: a gentle slope — the speed carries, the height is traded for it slowly (never a drop straight down)
+        if (st.vf < WING.GLIDE_V) st.vf = Math.min(WING.GLIDE_V, st.vf + WING.GLIDE_GAIN * dt);
+        const slope = Math.max(WING.GLIDE_SINK_MIN, Math.min(WING.GLIDE_SINK_MAX, st.vf / WING.GLIDE_RATIO));
+        target = -Math.min(slope, sinkMin * hold + slope * (1 - hold));
+    }
     if (i.arms === 'down') target = Math.min(target, -WING.FALL_FOLDED * 0.6);
     const dive = Math.max(-1, Math.min(1, i.dive || 0));
     if (dive > 0) {
@@ -92,7 +102,7 @@ export function wingStep(st, P, i, dt) {
     // the vertical speed goes to the target: up — gravity takes it; down — the air brakes or lets it fall
     if (st.vy > target) st.vy = Math.max(target, st.vy - P.gravity * (1 - 0.45 * hold) * dt); // (the beating wings bear the climb a while)
     else st.vy = Math.min(target, st.vy + P.gravity * 1.5 * dt);
-    st.vf = Math.max(0, st.vf - st.vf * (P.drag + (st.since > 1 ? 0.08 : 0)) * dt * (i.arms === 'down' ? 2 : 1));
+    st.vf = Math.max(0, st.vf - st.vf * (P.drag + (st.since > 1 && !gliding ? 0.08 : 0)) * dt * (i.arms === 'down' ? 2 : 1));
     st.hold = hold;
     return st;
 }
