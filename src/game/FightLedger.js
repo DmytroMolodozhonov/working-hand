@@ -14,6 +14,8 @@
  *        + crowd       5 % for EACH other opponent fought at the same time (the author 20.11: a wizard, an enchanted tree, anything that fights me — one has to be distracted), up to 20 %
  *        + allies      5 % once, if I called creatures to help in the fight (Alive, a snowman, the fire serpent, Imperius…: ALLY_SPELLS)
  *    the base + time + variety + clashes never give more than 50 %; with everything on top at most 75 %. The same for a kill and for a win with him alive. The «duel mastery» grows by the same share.
+ *  • An UNFINISHED fight (the author 20.11: «убежал… NPC меня потерял — всё равно засчитывается, но вдвое меньше, без анимации»): an honest account of a wizard that has been quiet for ABANDON_S
+ *    seconds (after at least ABANDON_MIN_ACTIVE_S of real fighting) is paid at ABANDON_K of the prize, quietly (Mana.fightAbandoned); a later win over him pays only the rest.
  *  • DISHONEST fights are not counted — always (the author): an NPC that never cast at me (a bomb in his sleep) gives nothing; the arena is the exception (the round is the fight).
  */
 import { ELEMENT_SPELLS } from '../ui/SpellElements.js';
@@ -28,6 +30,7 @@ export const FIGHT = {
     CROWD_EACH: 5, CROWD_MAX: 20,
     UNDERDOG_FROM: 1.25, UNDERDOG_K: 8, UNDERDOG_MAX: 15,
     MASTERY_BASE: 2, MASTERY_PER_PCT: 0.4, MASTERY_FOE_SHARE: 0.2,
+    ABANDON_S: 45, ABANDON_MIN_ACTIVE_S: 3, ABANDON_K: 0.5, // an unfinished fight (I fled, he lost me): paid half after this long quiet
     DROP_S: 900, MAX_ENTRIES: 40,
 };
 export const ARENA = '__arena';
@@ -91,11 +94,11 @@ export class FightLedger {
     _alive(e) { return e.arena || this.now() - e.last <= FIGHT.WINDOW_S; }
 
     /** He cast at me (an NPC wizard / a player): the fight is honest and goes on. */
-    foeCast(id) { const e = this._entry(id); e.honest = true; this._touch(e); }
+    foeCast(id, foeMax = 0) { const e = this._entry(id); e.honest = true; if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
     /** A beam clash with him (won or lost). */
     clash(id) { const e = this._entry(id); e.honest = true; e.clashes++; this._touch(e); }
     /** My spell hurt him: the fight goes on (honest only if he has fought back). */
-    hit(id) { const e = this._entry(id); this._touch(e); }
+    hit(id, foeMax = 0) { const e = this._entry(id); if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
     /** The arena's round: the opponent is fought honestly by the rules of the place. */
     arena(on) {
         const e = this._entry(ARENA, !!on);
@@ -152,6 +155,20 @@ export class FightLedger {
     }
 
     close(id) { this.map.delete(String(id)); this.map.delete(ARENA); }
+
+    /**
+     * The honest accounts of wizards (`foeMax` known) that went quiet: the fight was left unfinished. They are removed from the ledger and returned: [{id, foeMax}].
+     * Other quiet accounts (a beast, a tree — nothing to pay) are dropped without a word.
+     */
+    abandoned() {
+        const out = [], t = this.now();
+        for (const [k, e] of this.map) {
+            if (e.arena || t - e.last < FIGHT.ABANDON_S) continue;
+            this.map.delete(k);
+            if (e.honest && e.foeMax > 0 && e.active >= FIGHT.ABANDON_MIN_ACTIVE_S) out.push({ id: k, foeMax: e.foeMax, e });
+        }
+        return out;
+    }
     clear() { this.map.clear(); }
 }
 

@@ -1395,7 +1395,7 @@ export class Duel {
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
     applyToCreature(spell, c, byId, from = null, part = null, opts = null) { // (opts.clash: it won a beam clash — a robe does not turn it away)
         const wasDead = !!(c.dead || c.isDead);
-        if (byId === this.me && c.wizard && c.id != null) this.game.mana?.fight?.hit(c.id); // (my spell hit a wizard: the fight with him goes on — FightLedger)
+        if (byId === this.me && c.wizard && c.id != null) this.game.mana?.fight?.hit(c.id, c.maxMana || 0); // (my spell hit a wizard: the fight with him goes on — FightLedger)
         try {
             const g = this.game;
             const src = from || this._casterAt(byId, c);

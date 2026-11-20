@@ -279,3 +279,24 @@ test('NPC kill: noticing is not combat; host and guest receive cells only after 
         if (!fought) assert.equal(g.mana.log.length, 0, 'no cells, flow or success notification for an unearned kill');
     }
 });
+
+test('незаконченный бой (убежал, NPC потерял): половина награды, тихо; потом победа над ним доплачивает остаток; второй раз ничего (автор 20.11)', () => {
+    const { g } = fakeGame();
+    let t = 0; g.mana.fight.now = () => t;
+    t = 0; g.mana.fight.foeCast('w1', 130);
+    t = 6; g.mana.fight.foeCast('w1', 130);
+    t = 30; for (const a of g.mana.fight.abandoned()) g.mana.fightAbandoned(a);
+    assert.equal(g.mana.max, 30, 'ещё рано');
+    t = 80;
+    const before = g.mana.max;
+    for (const a of g.mana.fight.abandoned()) g.mana.fightAbandoned(a);
+    const half = g.mana.max - before;
+    assert.ok(half >= 1, 'половина выплачена: +' + half);
+    assert.equal(g.mana.duelsWon.get('w1'), 'part');
+    for (const a of [{ id: 'w1', foeMax: 130, e: { honest: true, active: 10, last: 0, spells: new Map(), casts: 0, elem: 0, clashes: 0, peak: 1, me: 30 } }]) assert.equal(g.mana.fightAbandoned(a), 0, 'этот бой уже оплачен');
+    // later: he is beaten after all — only the rest is paid
+    g.mana.fight.foeCast('w1', 130); t = 82; g.mana.fight.foeCast('w1', 130);
+    const full = g.mana.killWon(130, 'w1', null, 0, true);
+    assert.ok(full >= 0 && g.mana.duelsWon.get('w1') === 'kill', 'победа закрыла счёт');
+    assert.equal(g.mana.killWon(130, 'w1', null, 0, true), 0, 'и больше ничего');
+});

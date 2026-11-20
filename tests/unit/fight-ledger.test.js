@@ -174,3 +174,18 @@ test('общий потолок: 75 %; красота + время + разно�
     const s = f.L.summary('big', false, false, 1e9);
     assert.ok(s.pct <= FIGHT.TOTAL_MAX + 1e-9 && s.pct > 60, 'около общего потолка: ' + s.pct);
 });
+
+test('незаконченный бой: честный счёт волшебника, затихший на 45 с, отдаётся на выплату; зверь/дерево и бой без настоящей драки — тихо выбрасываются', () => {
+    const { L, at } = ledger();
+    at(0); L.foeCast('w', 100);
+    at(5); L.myCast('Bombardo'); L.foeCast('w', 100);
+    L.foeCast('beast'); // (no mana: nothing to pay)
+    at(30); assert.deepEqual(L.abandoned(), [], 'ещё рано');
+    at(60);
+    const a = L.abandoned();
+    assert.equal(a.length, 1); assert.equal(a[0].id, 'w'); assert.equal(a[0].foeMax, 100);
+    assert.equal(L.peek('w'), null); assert.equal(L.peek('beast'), null, 'без маны — выброшен');
+    assert.deepEqual(L.abandoned(), [], 'второй раз — нет');
+    const b = ledger(); b.at(0); b.L.foeCast('x', 100); b.at(1); b.L.foeCast('x', 100); b.at(100);
+    assert.deepEqual(b.L.abandoned(), [], 'дрались меньше 3 секунд — не бой');
+});
