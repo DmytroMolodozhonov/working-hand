@@ -10,6 +10,8 @@ export default async function (h, args) {
     S.cast?.(true);
     S._enterSpace('earth');
     S.testHold = true;
+    const cam0 = g._updateCamera.bind(g);
+    g._updateCamera = (dt) => { cam0(dt); g.character.group.visible = true; g.character.setBodyHidden(false); }; // (space hides the hero's own body — here he is the picture)
     const t0 = S.now(); S.now = () => t0; // (the planets stand still for the pictures)
     S._askTextures(); // (the planets' maps are made by a worker: waited for below)
     await h.until(() => S.realm === 'space', 20000);
@@ -27,6 +29,7 @@ export default async function (h, args) {
         S.O.x = S.P.x; S.O.y = S.P.y; S.O.z = S.P.z;
         S.vel.x = S.vel.y = S.vel.z = 0; S.speed = 0; S._v = 0; S._exitDir = null;
         S._place();
+        S._fly = () => {}; // (no drift: the hero stays where he is put)
         h.log(id, 'radius', R, 'alt', alt, 'dist', Math.round(R + alt));
         await h.until(() => S._tex.get(id) === 'done' && ids.every((q) => S._tex.get(q) === 'done'), 600000); // (the planets' pictures come from the workers)
         h.log(id, 'map', S._tex.get(id));
