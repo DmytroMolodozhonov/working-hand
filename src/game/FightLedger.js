@@ -3,10 +3,10 @@
  * быстро использовал и всё, не вступил ни в дуэль, ничего — мало получит»). Pure numbers; Mana.fightWon pays by them.
  *
  *  • A separate account for EACH wizard (you may fight several at once): it opens when the fight begins — he casts at me, a beam clash, my spell hits him, the arena round.
- *  • My spells cast while an account is alive (the last 20 s of its fighting) are written in it: each NEW spell counts once (a repeat is nothing — no spam), its worth is
+ *  • My spells cast while an account is alive (the last 45 s of its fighting) are written in it: each NEW spell counts once (a repeat is nothing — no spam), its worth is
  *    how great it is (the first-success cells of Mana.FIRST_SPELL: a light — little, «Максима» and the great ones — much).
  *  • The prize, % of (the wizard's mana maximum − 30): 5 % for any honest fight, then
- *        + time        up to 16 %   (the seconds of real fighting; a pause over 10 s counts nothing; 45 s is full)
+ *        + time        up to 16 %   (the seconds of real fighting; a pause over 30 s counts nothing (fleeing, hiding, getting up are still the fight); 45 s is full)
  *        + variety     up to 20 %   (3,6 % for each point of worth of the different spells — what is not aimed at the foe (a stand-up, a light, an Accio) counts half: still the whole strength is spent on winning, the author 20.11 — ; the ones cast in the 6 s BEFORE the fight opened count too — the first spell flies before he answers)
  *        + beam clashes up to 8 %   (2 % each)
  *        × 1,25 on all of that, if half of my spells (at least 2) were elemental magic (earth, water, fire, air — SpellElements.js)
@@ -22,7 +22,7 @@ import { ELEMENT_SPELLS } from '../ui/SpellElements.js';
 
 export const FIGHT = {
     MIN_PCT: 5, MAX_PCT: 50, TOTAL_MAX: 75,
-    TIME_PCT: 16, TIME_FULL_S: 45, GAP_S: 10, WINDOW_S: 20,
+    TIME_PCT: 16, TIME_FULL_S: 45, GAP_S: 30, WINDOW_S: 45,
     VARIETY_PER_W: 3.6, VARIETY_MAX: 20, PRE_S: 6, SUPPORT_K: 0.5,
     ALLY_PCT: 5,
     CLASH_EACH: 2, CLASH_MAX: 8,
