@@ -1871,8 +1871,10 @@ function sendLogsNow() {
     try { setTimeout(() => { fetch('/api/logs/send', { method: 'POST', keepalive: true }).catch(() => {}); }, 400); } catch (e) { /* */ }
 }
 async function leaveToMenu() {
+    // Return held terrain before saving: a live vortex otherwise makes WorldKeeper skip the save.
+    try { game?.groundVortex?.returnAll?.(); } catch (e) { /* let the save report its own result */ }
     try { game?.sync?._sendMine?.(); } catch (e) { /* ignore */ }
-    try { await Promise.race([game?.keeper?.save?.(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) { /* the page still leaves */ }
+    try { await game?.keeper?.save?.(); } catch (e) { /* the page still leaves */ }
     sendLogsNow(); // (saved and leaving the map: the journal goes to GitHub at once — server /api/logs/send, log_upload.py)
     backToMenu();
 }

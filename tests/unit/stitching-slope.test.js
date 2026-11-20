@@ -56,3 +56,11 @@ test('the patch follows the wall even when the wand approaches it obliquely', ()
 test('solid rock does not produce a fictitious tilted wall', () => {
     assert.equal(wallPlane(() => BLOCK.STONE, { x: 0, L: 2, z: 0 }, 'z'), null);
 });
+
+test('Stitching fills a two-block-deep pit with twice the old area allowance', () => {
+    const get = (x, L, z) => L <= 0 || (L <= 2 && (Math.abs(x) > 9 || Math.abs(z) > 6)) ? BLOCK.DIRT : BLOCK.AIR;
+    const found = findPassage(get, new Vector3(0, 5, 0), new Vector3(0, -1, 0));
+    assert.equal(found.plane, 'y');
+    assert.equal(found.cells.length, 2 * 19 * 13);
+    assert.ok(found.cells.every(c => c.L === 1 || c.L === 2));
+});

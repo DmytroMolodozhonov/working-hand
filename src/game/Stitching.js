@@ -158,6 +158,7 @@ export function materialOf(walls) {
  * layers (a closed little room is no pit). → the cells of all the layers, or null.
  */
 const PIT_DEPTH = 6;
+const PIT_AREA_K = 2;
 export function pitFill(get, cells, max = STITCH.MAX_CELLS) {
     // down to the bottom: a crater narrows as it goes down (some cells have air beneath, some rock)
     for (let i = 0; ; i++) {
@@ -222,7 +223,8 @@ export function findPassage(get, o, d, { reach = STITCH.REACH, near = STITCH.NEA
                 const start = project(c, plane);
                 if (Math.abs(start.x - c.x) + Math.abs(start.z - c.z) > 1) continue;
                 if (tried.has(keyOf(plane, start))) continue;
-                const s = crossSection(get, start, plane, max);
+                const limit = plane === 'y' ? max * PIT_AREA_K : max;
+                const s = crossSection(get, start, plane, limit);
                 // (every cell this flood went through gives the same answer in this plane: never tried again)
                 for (const q of s.cells || s.flooded || [start]) tried.add(keyOf(plane, q));
                 if (!s.cells) {
@@ -232,9 +234,9 @@ export function findPassage(get, o, d, { reach = STITCH.REACH, near = STITCH.NEA
                     continue;
                 }
                 let cells = s.cells;
-                const pit = plane === 'y' && open(get(cells[0].x, cells[0].L + 1, cells[0].z)) ? pitFill(get, cells, max) : null;
+                const pit = plane === 'y' && open(get(cells[0].x, cells[0].L + 1, cells[0].z)) ? pitFill(get, cells, limit) : null;
                 if (pit) cells = pit; // (the score below is by the layer found: s.cells)
-                else if (!throughBothSides(get, cells, plane)) { why.niche++; continue; }
+                else if (cells.length > max || !throughBothSides(get, cells, plane)) { why.niche++; continue; }
                 const score = s.cells.length * (1 + 0.02 * Math.hypot(yaw, pitch)) + t * 0.01;
                 if (!best || score < best.score) best = { ...s, cells, plane, score };
             }
