@@ -70,7 +70,7 @@ export const SPELL_COST = {
     Axis: 2000, // «Axis»: the gods' turn of the planet — day to night, night to day over ~10 s (a scroll of the gods — TimeTurn.js)
     Kidarius: 1000, // «Кидариус»: the gods' bolt — blows up on the target, −500 (a scroll of the gods — StrongSpells.js)
     Pilbidrio: 100, // «Пилбидрио»: −80, the body burst at ≤ 80
-    Electrum: 50, // «Электром»: then 3 a second while the lightning is held
+    Electrum: 80, // «Электром»: then 5 a second while the lightning is held
     Die: 1000, // «Дай»: the gods' — +10 a second while its beam fights in a clash
     WaveAttack: 8,
     WaveAttackMaxima: 18,

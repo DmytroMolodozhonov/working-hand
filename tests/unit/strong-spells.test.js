@@ -26,7 +26,7 @@ test('the words: «Акцентрик», «Пилбидрио», «Электр�
         ['айс максима', 'IceMaxima'], ['Frozen Maxima', 'IceMaxima'], ['ice maxima', 'IceMaxima']]) assert.equal(matchSpell(t), n, t);
     assert.equal(matchSpell('электромобиль'), null);
     assert.equal(SPELL_COST.Ice, SPELL_COST.Frozen);
-    assert.deepEqual([SPELL_COST.Ice, SPELL_COST.IceMaxima, SPELL_COST.Accentric, SPELL_COST.Pilbidrio, SPELL_COST.Electrum, SPELL_COST.Die], [5, 20, 50, 100, 50, 1000]);
+    assert.deepEqual([SPELL_COST.Ice, SPELL_COST.IceMaxima, SPELL_COST.Accentric, SPELL_COST.Pilbidrio, SPELL_COST.Electrum, SPELL_COST.Die], [5, 20, 50, 100, 80, 1000]);
     assert.deepEqual([clashPower('Accentric'), clashPower('Pilbidrio'), clashPower('Die'), clashPower('Electrum'), clashPower('Stupefy')], [1.2, 1.4, 5, 1, 1]);
     assert.ok(mayCast('Electrum', 'Electrum') && !mayCast('Electrum', 'Inferno') && mayCast('Electrum', 'Bombardo'), '«Электром» is held');
 });
@@ -170,7 +170,7 @@ test('«Электром» held on a dragon: lasts until «стоп» — not a 
     for (let t = 0; t < 6; t += 1 / 60) S.update(1 / 60);
     assert.ok(S.electrum, 'still held after 6 s');
     assert.ok(hp0 - d.hp > 100, `−20/s for 6 s: ${hp0 - d.hp}`);
-    assert.ok(Math.abs(100 - mana - 18) < 1, `3 mana/s: ${100 - mana}`);
+    assert.ok(Math.abs(100 - mana - 30) < 1, `5 mana/s: ${100 - mana}`); // (автор 20.11: 5 маны в секунду, было 3)
     assert.ok(S.stopElectrum('stop') && !S.electrum, '«стоп» ends it');
     // the hand drifts off a moment (aiming at a moving dragon): not an instant break
     S.startElectrum('right', 'D', 'd1');
