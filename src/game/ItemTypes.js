@@ -1,4 +1,5 @@
 import { pentagramTablet } from './PentagramTablet.js';
+import { scrollKey } from './SpellBook.js';
 /**
  * ItemTypes.js — what can be found in chests (and what animals drop), their
  * properties and their 3D models. Pure data + THREE models, no game logic.
@@ -82,7 +83,7 @@ export const SPELL_RU = {
     Wind: 'Вайнд', WindMaxima: 'Вайнд Максима', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', BrainrotMaxima: 'Брейнрот Максима', Alive: 'Alive',
     WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', Inspirius: 'Inspirius', LetItRain: 'Let it rain', Tornado: 'Tornado', CreateBoat: 'Create a Boat', CreateCauldron: 'Create a Cauldron', CreateFlask: 'Create a Flask', Navigare: 'Navigare', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
-    Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', Alohomora: 'Алохомора', Lock: 'Lock', AlohomoraMaxima: 'Алохомора Максима', LevitationMaxima: 'Вингардиум Левиоса Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
+    Unfurl: 'Фёрл / Анфёрл', Furl: 'Фёрл / Анфёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', Alohomora: 'Алохомора', Lock: 'Lock', AlohomoraMaxima: 'Алохомора Максима', LevitationMaxima: 'Вингардиум Левиоса Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
     ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant', StrengthenHouse: 'Strengthen House', WardDispel: 'Dispel Ward',
     CreateHouse: 'Create a House', ImproveHouse: 'Improve a House',
     WindImpulse: 'Wind Impulse', WindImpulseMaxima: 'Wind Impulse Maxima', Drawdown: 'Drawdown', DrawdownMaxima: 'Drawdown Maxima', Liquidation: 'Liquidation', LiquidationMaxima: 'Liquidation Maxima',
@@ -330,6 +331,7 @@ export function retireStaff(it) {
 }
 
 export function retireScroll(it) {
+    if (it?.kind === 'scroll' && it.stat === 'spell' && it.spell === 'Furl') it.spell = 'Unfurl';
     if (it?.kind === 'scroll' && it.stat === 'spell' && it.spell === 'Groundprud') it.spell = 'Breakthrough';
     if (it && it.kind === 'scroll' && (it.stat === 'hp' || it.stat === 'fatigue')) {
         for (const k of Object.keys(it)) if (k !== 'uid') delete it[k];
@@ -750,17 +752,26 @@ const PENT_TOTAL = PENT_SCROLLS.reduce((a, [, w]) => a + w, 0);
 /**
  * ONE place for «a scroll already known never comes again» (the author): every scroll in `items` that the opener (LOOT_FOR.known) already knows is
  * rolled again from the general scrolls; when every scroll there is is known, the place is taken by another plain thing (never a scroll). The things are
- * changed in place; the array is returned. Without `known` (Creative, no opener) nothing changes.
+ * changed in place; the array is returned. The batch also never repeats the same knowledge, including
+ * Creative/no opener. Originals are reserved first so a reroll cannot steal a later scroll's identity.
  */
 export function freshScrolls(items, r = Math.random, known = LOOT_FOR.known) {
-    if (!known || !Array.isArray(items)) return items;
-    const stale = (x) => !!x && x.kind === 'scroll' && (x.stat === 'spell' || x.stat === 'pentagram') && known(x);
+    if (!Array.isArray(items)) return items;
+    const stale = (x) => !!scrollKey(x) && !!known?.(x);
+    const reserved = new Set(items.filter(x => !stale(x)).map(scrollKey).filter(Boolean)), seen = new Set();
     for (let i = 0; i < items.length; i++) {
-        if (!stale(items[i])) continue;
+        const key = scrollKey(items[i]);
+        if (!key) continue;
+        if (!stale(items[i]) && !seen.has(key)) { seen.add(key); continue; }
         let n = null;
-        for (let t = 0; t < 40 && !n; t++) { const c = _rollScroll(r); if (!stale(c)) n = c; }
+        for (let t = 0; t < 40 && !n; t++) {
+            const c = _rollScroll(r), k = scrollKey(c);
+            if (!stale(c) && !reserved.has(k) && !seen.has(k)) n = c;
+        }
         for (let t = 0; t < 12 && !n; t++) { const c = rollPlainItem(r); if (c.kind !== 'scroll') n = c; }
         items[i] = n || { kind: 'bread', uid: newUid(), count: 1 };
+        const next = scrollKey(items[i]);
+        if (next) seen.add(next);
     }
     return items;
 }
