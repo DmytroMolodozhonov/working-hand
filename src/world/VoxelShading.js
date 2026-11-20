@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { SOIL_METRES, SOIL_SIZE, soilPixels } from './SoilTexture.js';
 import { paintCaveBones } from './CaveBones.js';
+import { buildingWoodTexture } from './BuildingWoodTexture.js';
 import { ULTRA_PARS, addUltraUniforms } from '../fx/UltraUniforms.js';
 
 /**
@@ -165,6 +166,7 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uSkyComp = SKY_LIGHT.comp;
         shader.uniforms.uSoil = { value: soilTexture() };
         shader.uniforms.uCaveBones = { value: bonesTexture() };
+        shader.uniforms.uBuildingWood = { value: buildingWoodTexture() };
         shader.uniforms.uNightVis = SKY_LIGHT.nv;
         shader.uniforms.uWardS = WARD_HIDE.s;
         shader.uniforms.uWardG = WARD_HIDE.g;
@@ -195,6 +197,7 @@ ${BOOM_PARS}
 uniform float uSkyComp;
 uniform sampler2D uSoil;
 uniform sampler2D uCaveBones;
+uniform sampler2D uBuildingWood;
 uniform float uHellT;
 uniform float uSeaY; uniform float uSeaT; uniform float uSeaK;
 float seaUnder = 0.0; // (the sea's bottom: how much this face is under the sea — set by the colour part, read by the light part)
@@ -283,6 +286,7 @@ float snowflakeAt(vec2 uv) {
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
     float pat = floor(vVoxPat + 0.5);
     bool soil = pat >= 31.0 && pat <= 33.0;
+    bool wood = pat == 4.0 || pat == 34.0;
     // generation 5's grass (pattern 14): grass whatever its colour (golden steppe, autumn, moonlit teal)
     bool lushGrass = pat == 14.0;
     if (lushGrass) pat = 0.0;
@@ -357,14 +361,13 @@ float snowflakeAt(vec2 uv) {
         float m = min(min(g.x, 1.0 - g.x) * 0.5, min(g.y, 1.0 - g.y) * 0.25);
         diffuseColor.rgb *= 1.0 + (vhash(vec3(floor(s), layerId)) - 0.5) * 0.2;
         if (m < 0.018) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.75, 0.7), 0.85);
-    } else if (pat == 4.0) {
-        // planks: four boards per block with seams, grain and staggered ends
+    } else if (wood) {
+        // Grain, seams and end joints follow the whole surface, including across chunk boundaries.
         vec2 s = n.y > 0.5 ? uv.yx : uv;
-        float board = floor(s.y * 4.0);
-        float along = s.x + vhash(vec3(board, layerId, 1.0)) * 3.0;
-        float gy = fract(s.y * 4.0), gx = fract(along / 2.0);
-        float grain = sin(along * 23.0 + vhash(vec3(board, layerId, 2.0)) * 6.0) * 0.04;
-        diffuseColor.rgb *= (1.0 + (vhash(vec3(board, floor(along / 2.0), layerId)) - 0.5) * 0.16 + grain) * (gy < 0.08 || gx < 0.015 ? 0.7 : 1.0);
+        vec2 metres = pat == 34.0 ? vec2(17.0, 4.7) : vec2(12.0, 2.6);
+        float grain = texture2D(uBuildingWood, (s + vec2(layerId * 0.23, 0.13)) / metres).r;
+        vec3 tint = mix(diffuseColor.rgb, vec3(lum) * vec3(1.13, 0.98, 0.82), 0.23);
+        diffuseColor.rgb = tint * (0.35 + 0.78 * grain);
     } else if (pat == 5.0) {
         // roof tiles: rows of rounded tiles, darker at the lower edge of each row
         vec2 s = uv * vec2(3.0, 3.0);
@@ -598,9 +601,9 @@ float snowflakeAt(vec2 uv) {
     float edge = smoothstep(0.0, 0.09, min(e.x, e.y));
     // (very light on flat grass so a meadow doesn't look like tiles; none on the sea's bottom)
     float edgeAmt = ((green || snowy) && n.y > 0.5 ? 0.05 : snowy ? 0.08 : 0.14) * (1.0 - seaUnder);
-    if (!soil) diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
+    if (!soil && !wood) diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
     // far: the patterned blocks (stone, planks, bricks…) take their average tone
-    if (pat > 0.5 && !soil) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);
+    if (pat > 0.5 && !soil && !wood) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);
     // the Castle of Ghosts is ~15 % see-through (the author): every seventh pixel or so of its black stone is left out, in an even, fine scatter — near enough to see it
     if (pat >= 18.0 && pat < 23.0 && kCoarse > 0.5 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < 0.15) discard;
 }`)
@@ -644,7 +647,7 @@ float snowflakeAt(vec2 uv) {
             .replace('#include <fog_fragment>', WET_FRAG);
     };
     material.extensions = { ...(material.extensions || {}), derivatives: true }; // (fwidth on WebGL1)
-    material.customProgramCacheKey = () => 'voxel-detail-soil1';
+    material.customProgramCacheKey = () => 'voxel-detail-wood';
     return material;
 }
 

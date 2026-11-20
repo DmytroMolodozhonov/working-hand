@@ -77,6 +77,14 @@ export const FLORA_KINDS = {
         solid: null, // (small, walked among)
         harm: { fire: 'burn', blast: 'destroy', lightning: 'burn', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
     },
+    cactus: {
+        id: 'cactus', name: 'Кактус', nameMany: 'кактусы', fromGen: 27,
+        biomes: { desert: .65 },
+        group: { min: 2, max: 5, spread: 16, gap: 4 },
+        salt: 6803, height: [2.8, 4.8],
+        solid: { r: .34, h: 2.7 },
+        harm: { fire: 'burn', blast: 'destroy', lightning: 'burn', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
+    },
 };
 /**
  * Where a plant's foot stands on the real ground. The ground is not flat under its mound: in the smooth world (generation 6+) the
@@ -117,7 +125,7 @@ export const FLORA_ITEMS = {
     eyeflower_eye: { name: 'Глаз глазоцвета', icon: '👁️', weight: 0.2, stack: 10 },
 };
 /** Which plant an item came from (item id → kind id). */
-export const FLORA_OF_ITEM = Object.fromEntries(FLORA_ORDER.map((k) => [FLORA_KINDS[k].item, k]));
+export const FLORA_OF_ITEM = Object.fromEntries(FLORA_ORDER.filter(k => FLORA_KINDS[k].item).map(k => [FLORA_KINDS[k].item, k]));
 
 /** What the item says about itself (ItemTypes.itemInfo): usefulness first, then how to use it. */
 export const FLORA_ITEM_TEXT = {

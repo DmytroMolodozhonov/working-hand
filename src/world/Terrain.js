@@ -22,6 +22,7 @@
 
 import '../core/FastMath.js'; // (Math.hypot without the garbage: the main thread and the workers alike)
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
+import { LARGE_TREE } from './TreeBuild.js';
 import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { VillageIndex } from './WizardVillages.js';
@@ -101,7 +102,7 @@ export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30, SOIL: 31, BONES: 32, SKELETON: 33 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30, SOIL: 31, BONES: 32, SKELETON: 33, TIMBER: 34 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -251,6 +252,7 @@ Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
     [BLOCK.CS_MOSSY]: PATTERN.COBBLE, [BLOCK.COBBLE]: PATTERN.COBBLE, [BLOCK.PATH]: PATTERN.COBBLE, [BLOCK.BRICK]: PATTERN.BRICK,
     [BLOCK.PLANKS]: PATTERN.PLANKS, [BLOCK.PLANKS_DARK]: PATTERN.PLANKS, [BLOCK.FENCE]: PATTERN.PLANKS,
+    [BLOCK.WOOD]: PATTERN.TIMBER, [BLOCK.BIRCH]: PATTERN.TIMBER, [BLOCK.SPRUCE]: PATTERN.TIMBER, [BLOCK.CHERRY]: PATTERN.TIMBER, [BLOCK.DARK]: PATTERN.TIMBER,
     [BLOCK.ROOF_RED]: PATTERN.TILES, [BLOCK.ROOF_BLUE]: PATTERN.TILES, [BLOCK.ROOF_SLATE]: PATTERN.TILES,
     [BLOCK.THATCH]: PATTERN.STRAW, [BLOCK.HAY]: PATTERN.STRAW, [BLOCK.WHEAT]: PATTERN.STRAW,
     [BLOCK.CARPET_RED]: PATTERN.CLOTH, [BLOCK.CARPET_BLUE]: PATTERN.CLOTH, [BLOCK.CARPET_GREEN]: PATTERN.CLOTH, [BLOCK.CLOTH_WHITE]: PATTERN.CLOTH, [BLOCK.CLOTH_YELLOW]: PATTERN.CLOTH,
@@ -1374,9 +1376,33 @@ export class TerrainData {
         const S = this.sites;
         if (S) for (const [dx, dz] of TREE_CROWN_REACH) if (S.landAt(tx + dx, tz + dz)) return;
         const r = (k) => hashLand(tx * 7 + k, tz * 13 - k, this.seed + 71 + k);
+        const wide = kind === 0 || kind === 4;
+        const variation = r(5);
+        let species, deadfall;
+        if (id < 5e9 && variation < .20 && (tx & MASK) >= 2 && (tx & MASK) < CHUNK - 2 && (tz & MASK) >= 2 && (tz & MASK) < CHUNK - 2) {
+            const biome = BIOMES[this.biomeAt(tx, tz)].id;
+            const fit = (dx, dz) => treeFitsChunk(c, tx + dx, tz + dz, h, 1);
+            const clear = !S || !TREE_CROWN_REACH.some(([dx, dz]) => S.landAt(tx + 3 * dx, tz + 3 * dz));
+            if (clear && fit(-2, 0) && fit(2, 0) && fit(0, -2) && fit(0, 2)) {
+                if (wide && (biome === 'forest' || biome === 'meadow' || biome === 'jungle')) species = LARGE_TREE.OAK;
+                if (kind === 2 && (biome === 'taiga' || biome === 'emerald')) species = LARGE_TREE.REDWOOD;
+                if (kind === 1 && (biome === 'autumn' || biome === 'sakura' || biome === 'forest')) species = LARGE_TREE.PLANE;
+            }
+        }
+        if (!species && id < 5e9 && wide && variation > .977) {
+            const i = Math.floor(r(6) * 4), axis = i < 2 ? 'x' : 'z', dir = i % 2 ? -1 : 1;
+            const H = this.heightAt;
+            let grounded = true;
+            for (let d = 2; d <= 10; d += 2) {
+                const x = tx + (axis === 'x' ? d * dir : 0), z = tz + (axis === 'z' ? d * dir : 0);
+                if (Math.abs(H(x, z) - h) > 1 || H.water || S?.landAt(x, z)) { grounded = false; break; }
+            }
+            if (grounded) deadfall = dir < 0 ? '-' + axis : axis;
+        }
         (c.trees || (c.trees = [])).push({
-            id, x: tx + 0.5 * (kind === 0 || kind === 4 ? 1 : 0), z: tz + 0.5 * (kind === 0 || kind === 4 ? 1 : 0), y: h - 0.5, kind,
-            v: Math.floor(r(1) * TREE_VARIANTS), s: Math.round((0.86 + 0.28 * r(2)) * 100) / 100, turn: Math.round(r(3) * 628) / 100, tint: Math.round((0.9 + 0.2 * r(4)) * 100) / 100,
+            id, x: tx + (wide ? .5 : 0), z: tz + (wide ? .5 : 0), y: h - 0.5, kind,
+            ...(species ? { species } : deadfall ? { deadfall } : {}),
+            v: Math.floor(r(1) * (species ? LARGE_TREE.VARIANTS : TREE_VARIANTS)), s: Math.round((0.86 + 0.28 * r(2)) * 100) / 100, turn: Math.round(r(3) * 628) / 100, tint: Math.round((0.9 + 0.2 * r(4)) * 100) / 100,
         });
     }
 
@@ -2659,7 +2685,8 @@ export class TerrainData {
 
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
-        if (type === BLOCK.DIRT) return BASE_COLORS[type];
+        const pattern = PATTERN_OF[type];
+        if (type === BLOCK.DIRT || pattern === PATTERN.PLANKS || pattern === PATTERN.TIMBER) return BASE_COLORS[type];
         if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_LEAF) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
         if (this.liteLook) return type === BLOCK.GRASS && !isTop ? GRASS_SIDE : (BASE_COLORS[type] ?? 0xff00ff); // (the light mode: plain colours — big merged quads, fewer triangles)
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }

@@ -64,8 +64,8 @@ test('the Baksadi pear heals more than a golden apple, is eaten like food, is a 
     assert.ok(makeItemModel({ kind: 'baksadi_pear' }).children.length);
 });
 
-test('wild plants: every kind has a shape of the right size, finite and with its picked part; items have stable ids', () => {
-    const H = { glowcap: [1.2, 2.2], giantfern: [3.4, 5.2], azureberry: [1.3, 2.2], sunherb: [0.8, 1.6], frostcrystal: [3, 5.2], armourleaf: [1.4, 2.4], eyeflower: [1.1, 1.9] };
+test('wild plants: every kind has a shape of the right size; plants with loot have stable item ids', () => {
+    const H = { glowcap: [1.2, 2.2], giantfern: [3.4, 5.2], azureberry: [1.3, 2.2], sunherb: [0.8, 1.6], frostcrystal: [3, 5.2], armourleaf: [1.4, 2.4], eyeflower: [1.1, 1.9], cactus: [2.8, 4.8] };
     for (const kind of FLORA_ORDER) {
         const K = FLORA_KINDS[kind];
         for (let v = 0; v < FLORA_VARIANTS; v++) {
@@ -74,9 +74,11 @@ test('wild plants: every kind has a shape of the right size, finite and with its
             g.computeBoundingBox();
             const h = g.boundingBox.max.y;
             assert.ok(h >= H[kind][0] && h <= H[kind][1], `${kind} ${v} height ${h}`);
-            assert.ok(g.userData.picks.length >= (kind === 'eyeflower' ? 1 : 3), `${kind} has parts to pick`); // (the Eye-flower has one eye)
+            if (kind === 'cactus') assert.equal(g.userData.picks.length, 0);
+            else assert.ok(g.userData.picks.length >= (kind === 'eyeflower' ? 1 : 3), `${kind} has parts to pick`);
             assert.ok(g.attributes.position.count < 4500, `${kind} is cheap: ${g.attributes.position.count} vertices`);
         }
+        if (kind === 'cactus') { assert.equal(K.item, undefined); continue; }
         assert.ok(floraPick(kind).attributes.position.count > 20);
         assert.ok(ITEM_INFO[K.item], `${kind} gives ${K.item}`);
         assert.equal(FLORA_OF_ITEM[K.item], kind);
