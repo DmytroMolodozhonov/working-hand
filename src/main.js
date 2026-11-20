@@ -229,7 +229,7 @@ function updateProgress(percent, text, band = null) {
 loadingScreen.classList.add('hidden');
 loadingScreen.style.display = 'none';
 const previousStartupFailure=readStartupFailure(localStorage);
-if(previousStartupFailure){showStartupFailure(mainMenu,previousStartupFailure,{compact:true});netLog('❌ предыдущий вход: '+previousStartupFailure.message);}
+if(previousStartupFailure){showStartupFailure(mainMenu,previousStartupFailure,{compact:true});clearStartupFailure(localStorage);/* (shown once: the next launch is clean — the author 20.11, the old report stuck on every entry) */netLog('❌ предыдущий вход: '+previousStartupFailure.message);}
 
 // ------------------------------------------------------------------ tabs
 const tabBtns = document.querySelectorAll('.tab-btn');

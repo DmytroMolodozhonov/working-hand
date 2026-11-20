@@ -15,6 +15,7 @@ export function showStartupFailure(root,report,{back=null,compact=false}={}){
  const message=document.createElement('p');message.textContent=report.message;box.appendChild(message);
  const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='Подробности ошибки';pre.textContent=startupFailureText(report);pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px';details.append(summary,pre);box.appendChild(details);
  const copy=document.createElement('button');copy.textContent='Скопировать ошибку';copy.style.cssText='margin:12px 8px 0 0;padding:8px 12px;cursor:pointer';copy.onclick=async()=>{try{await navigator.clipboard.writeText(startupFailureText(report));copy.textContent='Скопировано';}catch{details.open=true;const range=document.createRange();range.selectNodeContents(pre);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);}};box.appendChild(copy);
+ if(compact){const close=document.createElement('button');close.textContent='Закрыть';close.style.cssText=copy.style.cssText;close.onclick=()=>box.remove();box.appendChild(close);}
  if(back){const menu=document.createElement('button');menu.textContent='Вернуться в меню';menu.style.cssText=copy.style.cssText;menu.onclick=back;box.appendChild(menu);}
  root.appendChild(box);return box;
 }
