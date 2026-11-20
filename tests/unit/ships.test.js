@@ -37,6 +37,16 @@ test('helm holds through brief tracking loss and does not jump when one hand is 
     assert.equal(helm.held.right, null);
 });
 
+test('the helm pedestal is on the bow side and leaves the captain approach clear', () => {
+    for (const id of Object.keys(SHIP_CLASSES)) {
+        const layout = buildLayout(id), { helm } = layout;
+        const support = layout.solids.find(b => b.kind === 'wheel' && b.y0 === helm.stand.y);
+        assert.ok(support);
+        assert.ok(support.z1 < helm.z, id + ' pedestal');
+        assert.ok(helm.stand.z > helm.z && support.z1 < helm.stand.z - 1.5, id + ' approach');
+    }
+});
+
 test('ship layouts: every crew node stands on a floor, the walking graph is connected, nothing solid on a path', () => {
     for (const c of CLASSES) {
         const L = buildLayout(c);
