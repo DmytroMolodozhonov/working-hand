@@ -6,7 +6,7 @@
  *  • My spells cast while an account is alive (the last 45 s of its fighting) are written in it: each NEW spell counts once (a repeat is nothing — no spam), its worth is
  *    how great it is (the first-success cells of Mana.FIRST_SPELL: a light — little, «Максима» and the great ones — much).
  *  • The prize, % of (the wizard's mana maximum − 30): 5 % for any honest fight, then
- *        + time        up to 16 %   (the seconds of real fighting; a pause over 30 s counts nothing (fleeing, hiding, getting up are still the fight); 45 s is full)
+ *        + time        up to 16 %   (the seconds of real fighting; counted only while we are really fighting: near each other (NEAR_M) and something happened in the last GAP_S seconds — running away far to recover is not the fight's time (the author 20.11); 45 s is full)
  *        + variety     up to 20 %   (3,6 % for each point of worth of the different spells — what is not aimed at the foe (a stand-up, a light, an Accio) counts half: still the whole strength is spent on winning, the author 20.11 — ; the ones cast in the 6 s BEFORE the fight opened count too — the first spell flies before he answers)
  *        + beam clashes up to 8 %   (2 % each)
  *        × 1,25 on all of that, if half of my spells (at least 2) were elemental magic (earth, water, fire, air — SpellElements.js)
@@ -22,7 +22,7 @@ import { ELEMENT_SPELLS } from '../ui/SpellElements.js';
 
 export const FIGHT = {
     MIN_PCT: 5, MAX_PCT: 50, TOTAL_MAX: 75,
-    TIME_PCT: 16, TIME_FULL_S: 45, GAP_S: 30, WINDOW_S: 45,
+    TIME_PCT: 16, TIME_FULL_S: 45, GAP_S: 15, WINDOW_S: 45, NEAR_M: 50,
     VARIETY_PER_W: 3.6, VARIETY_MAX: 20, PRE_S: 6, SUPPORT_K: 0.5,
     ALLY_PCT: 5,
     CLASH_EACH: 2, CLASH_MAX: 8,
@@ -55,8 +55,8 @@ export const foeSet = (v) => v.castAtPlayers || (v.castAtPlayers = new FoeSet(v)
 
 export class FightLedger {
     /** @param {() => number} now seconds  @param {(name: string) => {key: string, w: number}} spellOf the spell's family and worth */
-    constructor(now, spellOf, strength = () => 0) {
-        this.now = now; this.spellOf = spellOf; this.strength = strength; // (my strength now: mana maximum + duel mastery — noted when an account opens)
+    constructor(now, spellOf, strength = () => 0, near = null) {
+        this.now = now; this.spellOf = spellOf; this.strength = strength; this.near = near; // (near(id): is the foe within NEAR_M of me? false → this second is not the fight's) // (my strength now: mana maximum + duel mastery — noted when an account opens)
         this.map = new Map();
         this.onLog = null; // (id, text) — the journal: how a fight began, who joined it
         this.recent = []; // my latest spells {t, name, key, w, el}: the opening one is cast before the account opens
@@ -67,7 +67,7 @@ export class FightLedger {
         let e = this.map.get(k);
         if (!e && create) {
             if (this.map.size >= FIGHT.MAX_ENTRIES) this.map.delete(this.map.keys().next().value);
-            e = { ally: false, peak: 1, t0: this.now(), me: Number(this.strength()) || 0, last: this.now(), active: 0, honest: false, spells: new Map(), casts: 0, elem: 0, clashes: 0, arena: false };
+            e = { id: k, ally: false, peak: 1, t0: this.now(), me: Number(this.strength()) || 0, last: this.now(), active: 0, honest: false, spells: new Map(), casts: 0, elem: 0, clashes: 0, arena: false };
             this.map.set(k, e);
             const t = this.now();
             for (const r of this.recent) { // (the spells cast just before: they began this fight)
@@ -82,8 +82,7 @@ export class FightLedger {
     }
 
     _touch(e) {
-        const t = this.now(), dt = t - e.last;
-        if (dt > 0 && dt <= FIGHT.GAP_S) e.active += dt;
+        const t = this.now();
         e.last = t;
         if (e.honest) { // (how many fight me at this moment: this one's crowd)
             let n = 0;
@@ -107,6 +106,16 @@ export class FightLedger {
         if (!e) return;
         if (on) { e.honest = true; e.arena = true; this._touch(e); } else e.arena = false;
     }
+    /** (every frame) The seconds of REAL fighting: an honest account with something happening in the last GAP_S s and the foe near; far away (fled, recovering) — none. */
+    tick(dt) {
+        const t = this.now();
+        for (const e of this.map.values()) {
+            if (e.arena || !e.honest || t - e.last > FIGHT.GAP_S) continue;
+            if (this.near && this.near(e.id) === false) continue;
+            e.active += dt;
+        }
+    }
+
     /** (every frame while the arena round runs) the fighting seconds. */
     arenaTick(dt) { const e = this._entry(ARENA, false); if (e?.arena) { e.active += dt; e.last = this.now(); } }
 

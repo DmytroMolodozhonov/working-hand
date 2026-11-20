@@ -284,7 +284,7 @@ test('незаконченный бой (убежал, NPC потерял): по
     const { g } = fakeGame();
     let t = 0; g.mana.fight.now = () => t;
     t = 0; g.mana.fight.foeCast('w1', 130);
-    t = 6; g.mana.fight.foeCast('w1', 130);
+    for (let s = 1; s <= 6; s++) { t = s; g.mana.fight.foeCast('w1', 130); g.mana.fight.tick(1); }
     t = 30; for (const a of g.mana.fight.abandoned()) g.mana.fightAbandoned(a);
     assert.equal(g.mana.max, 30, 'ещё рано');
     t = 80;

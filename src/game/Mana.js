@@ -210,12 +210,22 @@ export class Mana {
         this.partPaid = new Map(); // opponent id → cells already paid for an unfinished fight (a later win pays the rest)
         this.log = []; // (tests) the last few gains
         // the reward for a fight with a wizard — by the beauty of the magic (FightLedger.js): an account for each wizard
-        this.fight = new FightLedger(() => performance.now() / 1000, (name) => ({ key: SAME_SPELL[name] || name, w: NOT_SPELLS.has(name) || name === 'Maxima' ? 0 : spellWeight(firstSpellGain(name)) }), () => this.max + this.mastery);
+        this.fight = new FightLedger(() => performance.now() / 1000, (name) => ({ key: SAME_SPELL[name] || name, w: NOT_SPELLS.has(name) || name === 'Maxima' ? 0 : spellWeight(firstSpellGain(name)) }), () => this.max + this.mastery, (id) => this._foeNear(id));
         this.fight.onLog = (id, text) => allLog('Мана', `бой с ${id}: ${text}`);
         FoeSet.onCast = (v, id) => { if (v && id != null && id === this.game.localId) this.fight.foeCast(v.id, v.maxMana || 0); }; // (a wizard cast at ME)
     }
 
     get combat() { return this.game.combat; }
+
+    /** Is the foe `id` within FIGHT.NEAR_M of me? (false: he is far — a fled / flown away fight is not the fight's time; undefined: unknown → counted as near) */
+    _foeNear(id) {
+        const g = this.game, me = g.character?.group?.position;
+        const v = g.castleLife?.byId?.get?.(id) || g.animals?.byId?.get?.(id);
+        if (!me || !v) return undefined;
+        const p = v.group?.position && !Number.isFinite(v.x) ? v.group.position : v;
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.z)) return undefined;
+        return Math.hypot(p.x - me.x, p.z - me.z) <= FIGHT.NEAR_M;
+    }
 
     /** The bar's maximum now. */
     get max() { return this.combat?.maxFatigue || MANA.BASE; }
@@ -342,6 +352,7 @@ export class Mana {
         const ad = this.game.arenaDuels, on = !!(ad?.meFighting?.() && !ad.mode);
         if (on !== !!this._arenaOn) { this._arenaOn = on; this.fight.arena(on); }
         if (on) this.fight.arenaTick(dt);
+        this.fight.tick(dt); // (the seconds of real fighting: the foe near and something going on)
         if ((this._abT = (this._abT || 0) - dt) <= 0) { this._abT = 2; for (const a of this.fight.abandoned()) this.fightAbandoned(a); } // (every 2 s: the fights left unfinished)
         const list = this._flow;
         if (!list || !list.length) return;
