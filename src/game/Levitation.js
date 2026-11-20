@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { rayToSegment, segmentToSegment, BODY } from './Duel.js';
 import { refusal } from './Hints.js';
 import { AIM, aimOffset, steadyDir, applyAimOffset } from './AimHold.js';
+import { playerFallDamage, PLAYER_FALL } from './PlayerFallRules.js';
 
 export const LEVITATE = {
     RANGE: 30, // m (the heroes are big: 10 was only a few real steps — a thing on the ground was out of reach)
@@ -357,6 +358,7 @@ export class Levitation {
         if (this.myFly) this._myFlight(dt);
         if (this.fallTop != null) this._myLanding();
         if (this.myWatch) this._myWatchLanding();
+        this._ordinaryLanding();
         if (this.miss && performance.now() >= this.miss.at) this._sayMissed();
         const s = this.state;
         if (!s) return;
@@ -1008,11 +1010,13 @@ export class Levitation {
         const g = this.game, ch = g.character, W = this.myWatch, L = ch.landing, now = performance.now();
         if (L && L.at > W.since) {
             this.myWatch = null;
+            if (this._playerLandingSeen === L) return;
+            this._playerLandingSeen = L;
             if (L.soft || ch.swimY != null || now < (g.impact?.gentleUntil || 0)) return;
-            const d = fallDamage(L.drop - (W.slack || 0));
+            const d = playerFallDamage(L.drop - (W.slack || 0), L, true);
             if (!d) return;
             if (g.combat.enabled) g.combat.damage(d, W.by, 'fall');
-            else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d);
+            else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d, 'fall');
             return;
         }
         // (never left the ground, or too long ago: nothing to watch)
@@ -1144,10 +1148,10 @@ export class Levitation {
         const hard = speed >= THROW.ROLL_V;
         // (thrown by a wizard's Leviosa: a steady hero may land on their feet — unless it was a drop of 5 m or more)
         if (!g.steady?.holds('Levitation', { drop: (this.fallTop ?? p.y) - p.y })) g.knock?.knock({ dir: 'back', down: 1.5 + Math.min(3, (speed - THROW.KNOCK_V) * 0.2), by: this.fallBy, kind: 'fall', strength: Math.min(1, 0.3 + speed / 30), ...(hard ? { toss: 3, fly: true, tumble: 1 } : {}) });
-        const d = impactDamage(speed) - (wall ? 0 : fallDamage((this.fallTop ?? p.y) - p.y)); // (the height's own fall is counted by _myLanding)
+        const d = (impactDamage(speed) - (wall ? 0 : fallDamage((this.fallTop ?? p.y) - p.y))) * (wall ? 1 : PLAYER_FALL.DAMAGE_K); // height is counted by _myLanding; halve the extra landing impact too
         if (d <= 0) return;
         if (g.combat.enabled) g.combat.damage(d, this.fallBy, 'fall');
-        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d);
+        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d, 'fall');
     }
 
     /** I land after being let go up high: the fall hurts. */
@@ -1156,11 +1160,26 @@ export class Levitation {
         const ch = g.character;
         if (ch.swimY != null) { this.fallTop = null; return; }
         if (!ch.onGround) return;
-        const d = ch.landing?.soft?0:fallDamage(this.fallTop - ch.group.position.y);
+        const L = ch.landing;
+        const seen = L && this._playerLandingSeen === L;
+        const d = seen ? 0 : playerFallDamage(this.fallTop - ch.group.position.y, L || {}, true);
+        if (L) this._playerLandingSeen = L;
         this.fallTop = null;
         if (!d) return;
         if (g.combat.enabled) g.combat.damage(d, this.fallBy, 'fall');
-        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d);
+        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d, 'fall');
+    }
+
+    /** The same landing rules apply when nobody cast Leviosa: cliffs and cave ledges. */
+    _ordinaryLanding() {
+        const g = this.game, ch = g.character, L = ch?.landing;
+        if (!L || this._playerLandingSeen === L || this.lifted || this.fallTop != null || this.myWatch) return;
+        this._playerLandingSeen = L;
+        if (!ch.onGround || ch.swimY != null || g.isDeadLocal || g.combat?.dead || performance.now() < (g.impact?.gentleUntil || 0)) return;
+        const d = playerFallDamage(L.drop, L);
+        if (!d) return;
+        if (g.combat?.enabled) g.combat.damage(d, null, 'fall');
+        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d, 'fall');
     }
 
     // ---------------------------------------------------------------- network
