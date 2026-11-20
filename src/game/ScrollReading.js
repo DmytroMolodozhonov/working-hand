@@ -16,7 +16,7 @@
  */
 
 import * as THREE from 'three';
-import { describeItem, ITEM_SCALE } from './ItemTypes.js';
+import { describeItem, ITEM_SCALE, scrollPaperMaterial } from './ItemTypes.js';
 import { holoParts, holoPlain, withSpellDescription } from './HoloText.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
@@ -113,7 +113,7 @@ function buildParchment(item) {
         group.add(parch);
         return { group, parch, rollA, rollB, tex, mat, tablet: true };
     }
-    const rodMat = new THREE.MeshLambertMaterial({ color: 0xf3e2b3 });
+    const rodMat = scrollPaperMaterial(item);
     const knob = new THREE.MeshLambertMaterial({ color: 0x5a3a1e });
     const roller = () => {
         const r = new THREE.Group();
@@ -148,7 +148,7 @@ function disposeParchment(R) {
     R.group.parent?.remove(R.group);
     R.group.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
     R.mat.dispose(); R.tex.dispose();
-    if (!R.tablet) { R.rollA.children[0].material.dispose(); R.rollA.children[1].material.dispose(); }
+    if (!R.tablet) R.rollA.children[1].material.dispose();
 }
 
 export class ScrollReading {

@@ -1,5 +1,6 @@
 import { pentagramTablet } from './PentagramTablet.js';
 import { scrollKey } from './SpellBook.js';
+import { paintScrollWrap, schoolOf } from '../fx/ScrollArt.js';
 /**
  * ItemTypes.js — what can be found in chests (and what animals drop), their
  * properties and their 3D models. Pure data + THREE models, no game logic.
@@ -1098,17 +1099,41 @@ function dragonEggModel(kind) {
     return g;
 }
 
+const scrollPapers = new Map();
+
+export function scrollPaperMaterial(item) {
+    const school = schoolOf(item);
+    if (!scrollPapers.has(school)) {
+        let map = null;
+        if (typeof document !== 'undefined') {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 256;
+            paintScrollWrap(canvas.getContext('2d'), canvas.width, canvas.height, school);
+            map = new THREE.CanvasTexture(canvas);
+            map.anisotropy = 4;
+        }
+        const m = new THREE.MeshLambertMaterial({ color: map ? 0xffffff : 0xf3e2b3, map });
+        m.userData.shared = true;
+        scrollPapers.set(school, m);
+    }
+    return scrollPapers.get(school);
+}
+
 function scrollModel(it) {
     if (it?.stat === 'pentagram') return pentagramTablet(it);
     const g = new THREE.Group();
-    const paper = mat(0xf3e2b3);
-    const r = cyl(0.06, 0.06, 0.36, paper);
+    const r = cyl(0.06, 0.06, 0.36, scrollPaperMaterial(it), 0, 0, 0, 12);
     r.rotation.z = Math.PI / 2;
     g.add(r);
     const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
-    for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }
+    for (const s of [-1, 1]) {
+        const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0);
+        const ferrule = cyl(0.035, 0.035, 0.015, mat(0xb68a4c), s * 0.219, 0);
+        const trim = cyl(0.065, 0.065, 0.006, mat(0xb68a4c), s * 0.025, 0);
+        for (const part of [e, ferrule, trim]) { part.rotation.z = Math.PI / 2; g.add(part); }
+    }
     return g;
 }
 
