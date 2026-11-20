@@ -27,6 +27,7 @@
 
 import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
 import { IMPERIUS, IMPERIUS_MAXIMA } from './Imperius.js';
+import { allLog } from '../core/AllLog.js';
 import { isDark, onDarkCast, addDark } from './DarkMagic.js';
 import { HellLedger, hellKill } from './HellKills.js';
 
@@ -261,9 +262,10 @@ export class Mana {
     /** A real duel won: the opponent `id` (his mana maximum `oppMax`) beaten in the clash and killed. */
     duelWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) {
         this.masteryWon(id, true, oppMax, oppMastery);
-        if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (this one already counted)
+        if (id != null && this.duelsWon.get(String(id)) === 'kill') { allLog('Мана', `победа в дуэли над ${id} (убит): ячейки НЕ начислены — этого соперника вы уже побеждали насмерть`); return 0; } // (this one already counted)
         if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = duelGain(oppMax);
+        allLog('Мана', `победа в дуэли над ${id} (убит): +${n} ячеек маны (максимум соперника ${Math.round(oppMax)}; формула: четверть от (максимум − ${MANA.BASE}), минимум ${MANA.DUEL_MIN}); мой максимум до: ${Math.round(this.combat?.maxFatigue || 0)}`);
         this.grow(n, 'duel');
         this._say(`🔷 Победа в дуэли, соперник повержен: +${n} ячеек маны`);
         this.powerFlow(pos, n, 'duel');
@@ -320,9 +322,10 @@ export class Mana {
     /** The clash won but the opponent `id` lives (lifted, stunned…): +1…+3 at random, once per opponent. */
     duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE) {
         this.masteryWon(id, false, oppMax, 0);
-        if (id != null && this.duelsWon.has(String(id))) return 0;
+        if (id != null && this.duelsWon.has(String(id))) { allLog('Мана', `победа в дуэли над ${id} (живой): ячейки НЕ начислены — за этого соперника уже платили (${this.duelsWon.get(String(id))}); дуэльное мастерство начислено`); return 0; }
         if (id != null) this.duelsWon.set(String(id), 'win');
-        const n = killGain(oppMax); // (the author 19.11: a win without a kill — on the arena or in a fight — is worth 25% of his maximum above 30, as a kill without a clash; at least +1)
+        const n = killGain(oppMax);
+        allLog('Мана', `победа в дуэли над ${id} (живой): +${n} ячеек маны (максимум соперника ${Math.round(oppMax)}; формула: четверть от (максимум − ${MANA.BASE}), минимум ${MANA.DUEL_MIN}); мой максимум до: ${Math.round(this.combat?.maxFatigue || 0)}`); // (the author 19.11: a win without a kill — on the arena or in a fight — is worth 25% of his maximum above 30, as a kill without a clash; at least +1)
         this.grow(n, 'duelAlive');
         this._say(`🔷 Победа в дуэли: +${n} ячеек маны${this.combat?.maxFatigue ? ` (теперь ${Math.round(this.combat.maxFatigue)})` : ''}`); // (CELLS — the maximum, not a one-time mana: the author 20.11)
         return n;

@@ -58,6 +58,7 @@ import { wizardWandOf } from './Expelliarmus.js';
 import { creativeFiniteMana } from './HeroSetup.js';
 import { starterWand } from './ItemTypes.js';
 import { handLog } from './HandRelease.js';
+import { allLog } from '../core/AllLog.js';
 const FIG_DWELL = 1.5; // (s a hand rests on a figure to choose it: the author 20.11 — 0.6 s signed him up for the middle one while he was only reaching about)
 import { domeOf, domeCross, cageOf, cageClamp, CAGE } from './ArenaDome.js';
 import { duelReport } from './DuelReport.js';
@@ -1438,6 +1439,7 @@ export class ArenaDuels {
             case 'fend': this._friendEndShow(m); break;
             case 'end':
                 this.count = null; this.myQueue = null;
+                allLog('Дуэль', `арена: итог для меня — ${m.r} (соперник ${m.opp ?? '?'}, его максимум маны ${m.omax ?? '?'}, ставка ${m.stake ?? 0}, монет ${m.coins ?? 0}, режим ${this.mode ? 'дуэльный' : 'мир'}); ячейки маны за победу: ${m.r === 'win' && !this.mode ? 'будут начислены ниже (журнал «Мана»)' : 'не положены'}`);
                 // (a duel won at the arena counts as a duel won — the author 19.11: «на арене волшебник уже в битве: даже если он не успел выкрикнуть заклинание и лучей не было, победа засчитывается»:
                 // the cells (+1…+3, once per opponent, the mastery too) come from the arena's own verdict, not from a beam clash — Mana.duelWonAlive)
                 if (!this.mode && m.r === 'win') { const gain = this.game.mana?.duelWonAlive?.(m.opp ?? null, Math.random, m.omax || undefined); if (!(gain > 0)) hud?.toast?.('🔷 Над этим соперником вы уже побеждали — максимум маны за повторную победу не растёт (дуэльное мастерство растёт)', 4500); }

@@ -336,7 +336,7 @@ def frame_start(line):
 
 
 GAMES_DIR = os.path.join("logs", "games")  # one file per game (the author 05.11: «логи каждой игры… старше 2 дней — удалять»)
-GAMES_KEEP_S = 2 * 24 * 3600
+GAMES_KEEP_S = 3 * 24 * 3600
 _game_file = None
 _ANON = [
     (re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), "<почта>"),  # (an e-mail)
@@ -947,6 +947,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             if path == "/api/worlds":
                 w = self._read_json(WORLD_MAX)
                 ok = _worlds_put(w)
+                if ok: log_upload.after_save(ROOT, GAMES_DIR)  # (saved: the game may be closing — when the saves stop, the journals go to GitHub)
                 return self._json(200 if ok else 400, {"status": "ok" if ok else "error"})
             if path == "/api/maps":
                 map_data = self._read_json()

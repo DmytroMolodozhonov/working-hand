@@ -20,7 +20,8 @@ import time
 
 BRANCH = "logs"
 FOLDER = "games"
-KEEP_S = 2 * 24 * 3600
+KEEP_S = 3 * 24 * 3600  # (the author 20.11: a few days — 3; older ones go from the branch and from the folder)
+SAVE_QUIET_S = 25  # (the world was saved and no more saves came: the game is closed — the journals go up at once)
 IDLE_S = 5 * 60  # (a quiet journal: the game is over or paused — what there is goes up)
 NAME_RE = re.compile(r"^game-(\d{8})-(\d{6})\.log$")
 
@@ -28,6 +29,7 @@ _lock = threading.Lock()
 _busy = False
 _said = set()
 _timer = None
+_save_timer = None
 
 
 def _say(key, text):
@@ -164,10 +166,23 @@ def touched(root, games_dir):
     _timer.start()
 
 
+def after_save(root, games_dir, delay=None):
+    """The world was saved (every autosave, and the last one when the window closes): when saves stop for SAVE_QUIET_S, the journals go up
+    (the author 20.11: «закрыл игру и сохранил — логи сразу на GitHub», not after 5 quiet minutes)."""
+    global _save_timer
+    if _save_timer:
+        _save_timer.cancel()
+    _save_timer = threading.Timer(SAVE_QUIET_S if delay is None else delay, upload_soon, args=(root, games_dir))
+    _save_timer.daemon = True
+    _save_timer.start()
+
+
 def at_exit(root, games_dir):
     """The server stops: the last game goes up now (in this thread — at most ~2 min)."""
     if _timer:
         _timer.cancel()
+    if _save_timer:
+        _save_timer.cancel()
     try:
         if enabled(root):
             upload(root, games_dir)
