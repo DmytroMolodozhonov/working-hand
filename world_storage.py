@@ -12,6 +12,7 @@ import threading
 import time
 
 _LOCK = threading.RLock()
+_WAND_CHECKED = set()  # worlds already searched for a lost wand in this run: the backups are read ONCE (the author 20.11: starting a world took seconds — every load read every backup)
 RECENT_SLOTS = 12  # first checkpoint in each five-minute interval (~one hour)
 DAILY_SLOTS = 7   # first checkpoint each day (~one week)
 
@@ -118,8 +119,12 @@ class WorldStorage:
         """The hero's own wand is gone from the save (it was deleted by mistake: a won arena wand cleared at the next duel) and a plain stand-in was given: the wand comes back
         from the newest backup of the SAME player that has it (the author 20.11: «я хочу, чтобы она просто появилась в игре»). Only for a player who holds a stand-in (`spare`);
         which wand: his `ownWand` if a backup has it, else the strongest one he carried (slots / hands) that is missing now."""
-        if not isinstance(w, dict) or not isinstance(w.get("players"), dict):
+        if not isinstance(w, dict) or not isinstance(w.get("players"), dict) or wid in _WAND_CHECKED:
             return
+        has_stand_in = any(isinstance(pl, dict) and isinstance(pl.get("slots"), list) and (any(x.get("spare") for x in _hand_wands(pl)) or any(isinstance(x, dict) and x.get("kind") == "wand" and x.get("spare") for x in pl["slots"])) for pl in w["players"].values())
+        if not has_stand_in:
+            return  # (nothing to look for: a cheap check on every load)
+        _WAND_CHECKED.add(wid)
         changed = False
         files = None
         for key, pl in w["players"].items():

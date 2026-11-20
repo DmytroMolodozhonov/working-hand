@@ -9,6 +9,7 @@ def world(slots, own, held=None):
 
 class WandRescue(unittest.TestCase):
     def setUp(self):
+        ws._WAND_CHECKED.clear()
         self.d = Path(tempfile.mkdtemp()); (self.d / "backups" / "w1").mkdir(parents=True)
 
     def put(self, path, w):
@@ -49,6 +50,16 @@ class WandRescue(unittest.TestCase):
         self.put(self.d / "w1.json", world([{"kind": "wand", "uid": "NEW", "spare": True}], "OLD"))
         (self.d / "backups" / "w1" / "recent-1.json").unlink()
         self.assertEqual(ws.WorldStorage(self.d).get("w1")["players"]["me"]["slots"][0]["uid"], "NEW")
+
+
+
+    def test_backups_are_read_once_per_run(self):
+        self.put(self.d / "w1.json", world([{"kind": "wand", "uid": "NEW", "spare": True}], "X"))
+        store = ws.WorldStorage(self.d); store.get("w1")
+        self.assertIn("w1", ws._WAND_CHECKED)
+        self.put(self.d / "backups" / "w1" / "recent-1.json", world([{"kind": "wand", "uid": "OLD", "power": 49}], "OLD"))
+        got = store.get("w1")
+        self.assertEqual(got["players"]["me"]["slots"][0]["uid"], "NEW", "not searched again in this run")
 
 
 if __name__ == "__main__":

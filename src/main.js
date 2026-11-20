@@ -1620,9 +1620,13 @@ async function renderSavedWorlds() {
         const nm = row.querySelector('.world-name');
         nm.ondblclick = rename;
         nm.onkeydown = (e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); rename(); } };
-        row.querySelector('.world-play').onclick = async () => {
+        row.querySelector('.world-play').onclick = async (ev) => {
+            // (at once: the click is seen — «Запуск…», the button is held; the world's file comes from the disk and the server first, which may take a moment: the author 20.11, «сначала несколько секунд такое окно»)
+            const btn = ev?.currentTarget || row.querySelector('.world-play'), label = btn.innerHTML;
+            if (btn.dataset.busy) return;
+            btn.dataset.busy = '1'; btn.innerHTML = '⏳ Запуск…'; btn.style.opacity = '0.8';
             const w = await loadWorld(id);
-            if (!w) return;
+            if (!w) { delete btn.dataset.busy; btn.innerHTML = label; btn.style.opacity = ''; return; }
             startGame({ ...readConfig(), mode: w.mode, map: null, seed: w.seed, saved: w });
         };
         // deleting asks first — right in the row, in the game's own look
