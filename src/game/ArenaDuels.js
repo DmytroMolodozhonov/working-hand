@@ -584,6 +584,30 @@ export class ArenaDuels {
     }
 
     // ------------------------------------------------------------------ the duels
+    /**
+     * (host) The announced bots' duels — «Далее» on the board (the author 20.11: «в списке будет очередь, и постоянные сражения»): up to
+     * BENCH pairs of the tower's wizards chosen ahead (names only; they are called out when their turn comes). A wizard who is out, killed
+     * or taken by the duel meanwhile is replaced when the pair is taken.
+     */
+    _bench(A, cs) {
+        const L = this.life, def = cs.def, n = def.population || 24, st = L.state(def.id);
+        const bench = A.bench || (A.bench = []);
+        if (n < 5) return bench;
+        const used = new Set(); for (const x of bench) { used.add(x.a); used.add(x.b); }
+        const free = () => { for (let k = 0; k < 40; k++) { const i = 1 + Math.floor(Math.random() * (n - 1)); if (!used.has(i) && !cs.active.has(i) && !st.killed.has(i)) { used.add(i); return i; } } return -1; };
+        while (bench.length < ARENA_DUEL.BENCH) { const a = free(), b = free(); if (a < 0 || b < 0) break; bench.push({ a, b, an: L._roster(def, a).name, bn: L._roster(def, b).name }); }
+        return bench;
+    }
+
+    /** (host) The next announced pair (or null): one of them out or dead → a fresh pair instead. */
+    _benchTake(A, cs) {
+        const st = this.life.state(cs.def.id), bench = this._bench(A, cs);
+        const x = bench.shift();
+        if (x && !cs.active.has(x.a) && !cs.active.has(x.b) && !st.killed.has(x.a) && !st.killed.has(x.b)) { this._bench(A, cs); return x; }
+        this._bench(A, cs);
+        return null;
+    }
+
     _nextDuel(A, cs) {
         // the players signed up first (the first in the queue still here, with a wand)
         const p = A.queue.take((id) => !!this._here(id));
@@ -591,7 +615,8 @@ export class ArenaDuels {
         // (the wizards come out of the tower's side: not while that spot is in the player's eyes — a player's own duel waits at most 12 s for it)
         if (!this._unseen(A.home) && (p == null || (A.unseenWait = (A.unseenWait || 0) + 1) < 12)) { if (p != null) A.queue.list.unshift(p); A.restT = p != null ? 1 : 2; return; }
         A.unseenWait = 0;
-        const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : this._recruit(A, cs, 'duel');
+        const pair = p == null ? this._benchTake(A, cs) : null; // (two wizards of the board's «Далее» line: the ones announced come out)
+        const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : pair ? this._recruit(A, cs, 'duel', (i) => i === pair.a) || this._recruit(A, cs, 'duel') : this._recruit(A, cs, 'duel');
         if (!a) {
             A.restT = 6;
             if (p != null) {
@@ -604,7 +629,7 @@ export class ArenaDuels {
         A.noFoe = 0;
         if (p != null) A.tiers.delete(p);
         let b = null;
-        if (p == null) { b = this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
+        if (p == null) { b = (pair && this._recruit(A, cs, 'duel', (i) => i === pair.b)) || this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
         A.duel = { a, b, p, tier, phase: 'enter', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0 };
         a.arena.side = 1; // (the far mark)
         if (b) { b.arena.side = 0; if (Math.random() < 0.5) { a.arena.side = 0; b.arena.side = 1; } } // (two wizards: the marks by lot — neither has the first shot always)
@@ -1518,6 +1543,7 @@ export class ArenaDuels {
             q: A.queue.list.slice(0, 6).map((id) => ({ id, n: nm(id), tr: A.tiers.get(id) || null })),
         };
         if (A.queue.length > 6) st.more = A.queue.length - 6;
+        if (A.bench?.length) st.nx = A.bench.map((x) => [x.an, x.bn]); // (the bots' duels to come: «Далее»)
         if (D?.phase === 'over') {
             const w = D.result === 'a' ? D.a : D.result === 'b' ? D.b : null;
             st.res = D.p != null ? (D.result === 'p' ? 'win' : D.result === 'a' ? 'lose' : D.why === 'time' ? 'draw' : 'other') : (w ? 'bot' : D.why === 'time' ? 'draw' : 'other');
@@ -1527,7 +1553,7 @@ export class ArenaDuels {
     }
 
     /** The line's key: the board is sent again when the queue or the night changes (not every frame). */
-    _qKey(A) { return A.queue.list.join(',') + '|' + (this.game.isNight ? 'n' : 'd') + '|' + (A.duel ? A.duel.phase : 'idle'); }
+    _qKey(A) { return A.queue.list.join(',') + '|' + (A.bench || []).map((x) => x.a + '-' + x.b).join(',') + '|' + (this.game.isNight ? 'n' : 'd') + '|' + (A.duel ? A.duel.phase : 'idle'); }
 
     /** (every computer, once a second) The board over the road: the host builds it from its arena, a guest has what the host told. */
     _board(dt) {

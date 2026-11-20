@@ -19,6 +19,7 @@ export const ARENA_DUEL = {
     MAX_T: 300, // s: a duel ends at 5 minutes, won or not (the bots' too)
     COUNT: 10, // «10…1», then «Бой!»
     REWARD: 100, // coins for beating the arena's wizard
+    BENCH: 3, // bots' duels announced ahead on the board («Далее»)
     REST: [3, 8], // s between two duels (one pair goes, the next comes at once: the author 20.11 — «арена пассивная, постоянно сражаться»; was 18…40)
     FANS: [10, 18], // how many come to watch
     AVENGE: 0.45, // the share of the wizards near who attack a player who killed at the arena (never all)

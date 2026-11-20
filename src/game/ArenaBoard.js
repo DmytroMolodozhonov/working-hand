@@ -13,6 +13,7 @@
  *   go   seconds the fight has gone (at `at`, the moment of the message; the board counts on)
  *   maxT how long a duel may go (s)
  *   q    the queue: [{n: name, tr}] in order (the next first)
+ *   nx   the bots' duels to come: [[name, name]] — shown after the players of the queue («Далее»)
  *   res  how the last duel ended ('win' | 'lose' | 'draw' | 'other'), co — the coins paid out for it (win: the stake and as much again)
  *   night  no duels now
  */
@@ -67,6 +68,10 @@ export function boardView(st, elapsed = 0, me = null) {
     }
     q.slice(0, BOARD.QUEUE_SHOWN).forEach((e, i) => out.queue.push(`${i + 1}. ${me != null && e.id === me ? 'Вы' : e.n} — ${tierName(e.tr)}`));
     if (q.length > BOARD.QUEUE_SHOWN) out.queue.push(`и ещё ${q.length - BOARD.QUEUE_SHOWN}`);
+    // (the author 20.11: «в списке будет очередь, и постоянные сражения»: after the players — the wizards' duels to come, so the list is never empty)
+    const nx = Array.isArray(s.nx) ? s.nx : [];
+    const room = Math.max(0, BOARD.QUEUE_SHOWN - Math.min(q.length, BOARD.QUEUE_SHOWN));
+    if (!s.night) nx.slice(0, room).forEach((p) => out.queue.push(`Далее: ${p[0]} и ${p[1]}`));
     out.foot = q.length ? 'Хотите в очередь? Выберите фигурку на прилавке' : 'Хотите сразиться? Выберите фигурку на прилавке';
     return out;
 }
