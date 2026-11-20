@@ -63,8 +63,9 @@ function h01(a, b, c, d) {
     return (h >>> 0) / 4294967296;
 }
 
-/** How many land tornadoes a cell's slot brings, from the slot's roll n (0…1): half the spouts' rate. */
-export const landCount = (n) => (n < 0.675 ? 0 : n < 0.9 ? 1 : 2);
+/** How many land tornadoes a cell's slot brings, from the slot's roll n (0…1): 0 or 1 (rarer than the spouts). */
+// (the author 20.11: «не больше одного торнадо и реже»: one at a time — landTornadoesOf keeps the nearest — and a cell's slot brings one about a third as often as before: 12 %)
+export const landCount = (n) => (n < 0.88 ? 0 : 1);
 /** How many whirlpools a sea's slot brings, from the roll n: a third of the spouts' rate. */
 export const whirlCount = (n) => (n < 0.7167 ? 0 : 1);
 
@@ -97,6 +98,11 @@ export function landTornadoesOf(seed, t, cx, cz, landAt, out = [], radius = TORN
                 out.push({ id: `L${gx}:${gz}:${i}:${j}`, x, z, k: Math.max(0, k), born, life, spin: r(7) < 0.5 ? 1 : -1, land: true });
             }
         }
+    }
+    if (out.length > 1) { // (never more than one natural land tornado: the nearest to me)
+        let best = 0, bd = Infinity;
+        for (let k = 0; k < out.length; k++) { const d = (out[k].x - cx) ** 2 + (out[k].z - cz) ** 2; if (d < bd) { bd = d; best = k; } }
+        const keep = out[best]; out.length = 0; out.push(keep);
     }
     return out;
 }

@@ -11,9 +11,10 @@ import { BLOCK } from '../../src/world/Terrain.js';
 const spoutCount = (n) => (n < 0.35 ? 0 : n < 0.8 ? 1 : 2);
 const mean = (f) => { let s = 0; const N = 100000; for (let i = 0; i < N; i++) s += f((i + 0.5) / N); return s / N; };
 
-test('land tornadoes come half as often as spouts; whirlpools a third as often', () => {
+test('land tornadoes come much rarer than spouts (the author 20.11: rarer, and one at a time — was half as often); whirlpools a third as often', () => {
     const sp = mean(spoutCount), ld = mean(landCount), wh = mean(whirlCount);
-    assert.ok(Math.abs(sp / ld - 2) < 0.01, `spouts / land = ${sp / ld}`);
+    assert.ok(sp / ld > 5 && sp / ld < 10, `spouts / land = ${sp / ld}`);
+    for (let n = 0; n <= 1; n += 0.01) assert.ok(landCount(n) <= 1, 'never two in one slot');
     assert.ok(Math.abs(sp / wh - 3) < 0.01, `spouts / whirlpools = ${sp / wh}`);
 });
 
@@ -156,4 +157,9 @@ test('Captain Black Moustache: with the luck of 9 in 10 she creeps out, never fa
     run(P2, 40);
     assert.ok(dist(o) < 70, 'an ordinary hull of the same size is not so lucky');
     assert.equal(good !== null || bad !== null, true);
+});
+
+test('never more than one natural land tornado at a time (the author 20.11)', () => {
+    const land = () => true;
+    for (let t = 100000; t < 100000 + 3600 * 48; t += 90) assert.ok(landTornadoesOf(1234, t, 0, 0, land, []).length <= 1, 'at ' + t);
 });
