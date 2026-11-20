@@ -130,7 +130,7 @@ try {
                 g._updateCamera(0);g.camera.updateMatrixWorld(true);
                 g.animals?._lookFar(g.character.group.position,0);
                 g.scene.updateMatrixWorld(true);updateFarBatches(g.scene,g.renderer,0);
-                g.renderer.render(g.scene, g.camera);
+                if (!(g.space?.inSpace && g.space.render())) g.renderer.render(g.scene, g.camera); // (in space: the planets are drawn by Space.render, then the scene)
                 const url = g.renderer.domElement.toDataURL('image/png');
                 if (A) A.intensity = a0;
                 await window.__shotSave(n, url, to);
