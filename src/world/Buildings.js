@@ -356,10 +356,11 @@ function buildHerbalist(K) {
         for (const b of [0, 1, 2, 3]) { K.box(w, w, 2, 2, b, b, b % 2 ? B.POTION : B.BOOKS); K.box(w, w, 4, 4, b, b, b % 2 ? B.BOOKS : B.POTION); }
     }
     // the cauldron over a little fire in the back
-    K.box(-1, 0, 0, 1, 3, 4, B.CS_DARK); K.box(-1, 0, 2, 2, 3, 4, B.POTION); K.box(-1, 0, 0, 0, 3, 3, B.LANTERN);
+    K.box(2, 3, 0, 1, 4, 4, B.CS_DARK); K.box(2, 3, 2, 2, 4, 4, B.POTION); // (in the back right corner: the way behind the 2-deep counter stays wide)
     // the counter, the herbalist behind it
-    K.box(-3, 0, 0, 1, -1, -1, B.PLANKS); K.box(-3, 0, 2, 2, -1, -1, B.PLANKS_DARK);
-    for (let a = -3; a <= 0; a++) K.slab(a, -1, 2, SHAPE.SLAB);
+    // (the author 20.11: counters were one block thin — 2 deep now; the herbalist stands a block further back)
+    K.box(-3, 0, 0, 1, -1, 0, B.PLANKS); K.box(-3, 0, 2, 2, -1, 0, B.PLANKS_DARK);
+    for (let a = -3; a <= 0; a++) for (const b of [-1, 0]) K.slab(a, b, 2, SHAPE.SLAB);
     // herbs hanging from the beams: bundles of flowers, vegetables and hay
     for (const b of [-3, 0, 3]) {
         K.box(-3, 3, h - 1, h - 1, b, b, timber);
@@ -373,8 +374,8 @@ function buildHerbalist(K) {
     K.box(7, 8, 0, 0, -4, -4, 0); // the gate
     K.box(-8, -8, 0, 1, -2, 0, B.WOOD); // a woodpile at the other side
     K.keep.push([-3.5, -0.5, -5.5, -3]);
-    chests(K, -4.5, 4.5, -4.5, 4.5, [[3, 4], [-3, 4]]);
-    shopStall(K, { a0: -3, a1: 0, b0: -1, b1: -1, front: [-2, -4], back: [-1.5, 1.5], shop: 'herbs', towards: [0, -1], link: [-2, -9] });
+    chests(K, -4.5, 4.5, -4.5, 4.5, [[0, 4], [-3, 4]]);
+    shopStall(K, { a0: -3, a1: 0, b0: -1, b1: 0, front: [-2, -4], back: [-1.5, 1.5], shop: 'herbs', towards: [0, -1], link: [-2, -9] });
     return finish(K, -2, -5, -3, { r: 8 });
 }
 
