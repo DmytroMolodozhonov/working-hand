@@ -289,6 +289,8 @@ export class Cauldrons {
         const ev = stepBrew(c.st, dt, Math.random, !!(f && f.left > 0));
         if (ev) { this._event(c, ev); this._send(c, ev); }
         const st = c.st;
+        // (the author 20.11: «вода есть в чане, либо нет — и всё»: a part-filled pot — an old save, the first drops of rain — is full at once; only the «Инферно» boils it away, and only that to nothing)
+        if (this.upright(c) && (st.phase === 'empty' || st.phase === 'water') && st.water > 0.05 && st.water < CAULDRON.FULL && !c._infA) { st.water = CAULDRON.FULL; this._send(c, 'water'); }
         if ((st.phase === 'brewing' || st.win > 0 || (c.fire && st.water > 0.3 && st.heat < 1)) && (c._syncT = (c._syncT || 0) + dt) > 4) { c._syncT = 0; this._send(c); }
         // rain falling into its opening
         if (g.storm?.raining && this.upright(c) && (c.st.phase === 'empty' || c.st.phase === 'water') && c.st.water < CAULDRON.FULL) {
@@ -688,17 +690,32 @@ export class Cauldrons {
     }
 
     /**
+     * The fire under a pot that brews (ingredients in, the countdown or the brew going) does not burn down: it is a magic fire (the author 20.11: «оно не должно гаснуть,
+     * пока зелье варится»: it went out in the middle of a brew and the potion was spoiled). Campfires holds its time at the end of the flames while this is true.
+     */
+    brewNeedsFire(fireId) {
+        for (const c of this.list.values()) {
+            if (c.fire !== fireId || !this.upright(c)) continue;
+            const st = c.st;
+            if (st.phase === 'brewing' || (st.phase === 'water' && st.win > 0)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Is `p` (a hand with a flask) in the zone where a flask is dipped: over the opening and from just above the rim down into the pot? There a quiet opening of the
      * hand is not a throw (the author 19.11: «колба постоянно выбрасывается»: reaching deep into a low potion the camera loses the hand at the bottom of the picture and
      * it comes back open — the flask was «dropped»); Items._letGo keeps it in the hand.
      */
-    flaskZone(p) {
+    flaskZone(p, inner = false) {
+        // (inner: right over the opening — even a real throw is not let go there; outer: the ring round the pot, 2 m wide — any opening of the hand there is not a throw: the author 20.11, «если колба рядом с чаном, она не должна выпадать, как бы я ни пытался»)
+        const ring = inner ? CAULDRON.R_IN + 0.3 : CAULDRON.R_IN + 2.0, top = inner ? H + 1.0 : H + 3.0, bottom = inner ? CAULDRON.BOTTOM - 0.6 : CAULDRON.BOTTOM - 1.5;
         for (const c of this.list.values()) {
             if (!this.upright(c)) continue;
             const dx = p.x - c.x, dz = p.z - c.z;
-            if (dx * dx + dz * dz > (CAULDRON.R_IN + 0.3) ** 2) continue;
+            if (dx * dx + dz * dz > ring * ring) continue;
             const y = p.y - this.fy(c);
-            if (y > CAULDRON.BOTTOM - 0.6 && y < H + 1.0) return true;
+            if (y > bottom && y < top) return true;
         }
         return false;
     }
@@ -854,7 +871,7 @@ export class Cauldrons {
             if (!h || h.item.kind !== 'flask') continue;
             const p = h.model.position;
             for (const c of this.list.values()) {
-                if (!this.upright(c) || c.st.water < 0.3) continue;
+                if (!this.upright(c) || (c.st.water < 0.3 && c.st.phase !== 'ready')) continue; // (a ready potion is dipped at any level)
                 const dx = p.x - c.x, dz = p.z - c.z, y = p.y - this.fy(c);
                 // (the flask really in the liquid: under its surface — a low level needs the hand deeper)
                 if (y < CAULDRON.BOTTOM - 0.25 || y > surfaceY(c.st) + 0.3 || Math.hypot(dx, dz) > innerRadius(Math.max(y, CAULDRON.BOTTOM)) - 0.05) continue; // (19.11: a LOW potion — the flask cannot go deeper than the bottom, so its reach to the surface is allowed a margin: it was thrown out of the hand instead of filling)

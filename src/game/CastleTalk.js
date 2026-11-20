@@ -33,6 +33,9 @@
 import { markIntent } from './GestureLife.js';
 import { allLog } from '../core/AllLog.js';
 import * as THREE from 'three';
+import { ShowGaze, commentOf } from './ShowGaze.js';
+import { zonesOf, payPoint } from './StallZones.js';
+import { CounterTrays } from './CounterTrays.js';
 import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
@@ -81,6 +84,7 @@ const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', p
 /** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, a piece of magic armour (ArmorTypes) (no coin pouch: it is nobody's good — CoinBelt). */
 const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }];
 const _v = new THREE.Vector3();
+const _ro = new THREE.Vector3(), _rd = new THREE.Vector3(0, 0, 1);
 /** A villager's short line when something in a talk went wrong (the reason goes to the journal). */
 const TALK_SORRY = ['Хм… прости, мысль убежала.', 'Ох, о чём это я… Давай потом.', 'Погоди-ка, сбилась мысль.', 'Повтори-ка потом, путник.'];
 /** The spells in a villager's line: the whole line, and each word / pair of words of it (a one-word spell said in a sentence). */
@@ -184,6 +188,12 @@ export class CastleTalk {
         this._labelText = new Map(); // good uid -> label text (rebuilt by _watchMarket)
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
+        this.trays = new CounterTrays(game); // the rune tray on a counter's coin plate (CounterTrays.js)
+        this.showGaze = new ShowGaze(game, (side, o, d) => { game.duel?._myRay?.(side, _ro, _rd); o.x = _ro.x; o.y = _ro.y; o.z = _ro.z; d.x = _rd.x; d.y = _rd.y; d.z = _rd.z; }, // (the duel fills real vectors; the pure ShowGaze reads plain numbers)
+         (ray) => this.commands?._ground?.(ray), (v, a) => { // (the people look where I point, and one says what he makes of it — ShowGaze.js)
+            this.life._say?.(v, commentOf(a.kind, v.id), 3.5, false);
+            if (a.kind === 'zombie' || a.kind === 'fire') this.life.alarm?.(a.pos, a.kind === 'fire' ? 'fire' : 'zombie', null, 12); // (a real danger shown: they take fright as at any other)
+        });
         this.commands = new CommandTalk(this, journal); // plain-word commands: poses, walks, formations, spars, «не могу» (CommandTalk.js)
         this.wave = new WaveDetector(); // my hand waving to people (Attention.mayNotice)
         this._calledAt = -1e9; // when I last called out / waved
@@ -1192,7 +1202,7 @@ export class CastleTalk {
                 s.goods = s.goods.filter((uid) => g.items.loose.has(uid));
                 if (s.goods.length >= 3 || now < s.restockAt) return;
                 s.restockAt = now + (s.goods.length ? 90000 : 0);
-                const c = stall.counter;
+                const c = zonesOf(stall).goods || stall.counter; // (a counter has a goods part and an empty plate for the coins: StallZones — the wizards' lane of generation 34 builds its own)
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
@@ -1218,7 +1228,9 @@ export class CastleTalk {
                     // (by the buyer's edge of the counter, not in its middle: a hand reaches it from the front)
                     const x = along ? c.x0 + (c.x1 - c.x0 + 1) * f - 0.5 : frontEdge(stall, GOOD_IN);
                     const z = along ? frontEdge(stall, GOOD_IN) : c.z0 + (c.z1 - c.z0 + 1) * f - 0.5;
-                    const L = g.items.spawnLoose(item, new THREE.Vector3(x, c.top + 0.3, z));
+                    // (a wand lies along the counter, neatly — it used to fall in a random direction: the author 19.11, «палочки криво лежат»; its length is its +Y, laid flat by -90° about x)
+                    const q = item.kind === 'wand' ? new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, (along ? -Math.PI / 2 : 0) + ((k + i) % 2 ? Math.PI : 0), 0, 'YXZ')) : null;
+                    const L = g.items.spawnLoose(item, new THREE.Vector3(x, c.top + 0.3, z), q ? { quat: q } : {});
                     L.perch = c; // (its counter is its floor — Items._floorUnder)
                     s.goods.push(L.item.uid);
                     budget--;
@@ -1457,7 +1469,10 @@ export class CastleTalk {
             g.weapons.remove(w); g.sync?.weaponGone?.(w);
         } else { gone(); return; }
         // (one pouch with the whole sum: the pouch has no limit; picked up, its coins go into mine)
-        g.items.spawnLoose(makeMagicPouch(newUid(), Math.max(1, Math.round(price))), new THREE.Vector3(p.x, p.y + 0.3, p.z));
+        // (the pouch with the price lies on the counter's coin plate, if the counter has one — not where the thing lay, among the others)
+        let at = p;
+        for (const cs of this.life.castles.values()) { if (!cs.awake) continue; for (const st of cs.def.stalls || []) if (st.counter && onCounter(st, p)) { const pp = payPoint(st); if (pp) at = { x: pp.x, y: pp.y, z: pp.z }; } }
+        g.items.spawnLoose(makeMagicPouch(newUid(), Math.max(1, Math.round(price))), new THREE.Vector3(at.x, (at === p ? p.y : at.y) + 0.3, at.z));
     }
 
     /** A thing of mine in my hands or slots, by uid. */
@@ -1848,6 +1863,12 @@ export class CastleTalk {
     update(dt) {
         this._flushChange(dt);
         this.commands?.sample(dt); // (where my hand points, a few times a second: the words come later than the hand)
+        this._trayT = (this._trayT || 0) - dt;
+        if (this._trayT <= 0) { // (on every computer: the rune tray on each awake counter's coin plate — also at the buyers' counters, which hold no goods)
+            this._trayT = 1;
+            for (const cs of this.life.castles.values()) if (cs.awake && cs.def.stalls) cs.def.stalls.forEach((st, i) => { if (st.counter) this.trays.ensure(this._stallKey(cs.def, i), st); });
+        }
+        this.showGaze?.update(dt); // (a hand held up and pointing: the people near look that way — ShowGaze.js)
         const g = this.game;
         const now = performance.now();
         this._attT += dt;

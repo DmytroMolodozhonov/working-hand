@@ -265,7 +265,7 @@ export class Mana {
         if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = duelGain(oppMax);
         this.grow(n, 'duel');
-        this._say(`🔷 Победа в дуэли, соперник повержен: +${n} к максимуму маны`);
+        this._say(`🔷 Победа в дуэли, соперник повержен: +${n} ячеек маны`);
         this.powerFlow(pos, n, 'duel');
         return n;
     }
@@ -324,7 +324,7 @@ export class Mana {
         if (id != null) this.duelsWon.set(String(id), 'win');
         const n = killGain(oppMax); // (the author 19.11: a win without a kill — on the arena or in a fight — is worth 25% of his maximum above 30, as a kill without a clash; at least +1)
         this.grow(n, 'duelAlive');
-        this._say(`🔷 Победа в дуэли: +${n} к максимуму маны`);
+        this._say(`🔷 Победа в дуэли: +${n} ячеек маны${this.combat?.maxFatigue ? ` (теперь ${Math.round(this.combat.maxFatigue)})` : ''}`); // (CELLS — the maximum, not a one-time mana: the author 20.11)
         return n;
     }
 

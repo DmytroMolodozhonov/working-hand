@@ -43,6 +43,7 @@ import { makeWayStep } from './Crowd.js';
 import { separate } from './Pilot.js';
 import { SPACE, talkDistance } from './PersonalSpace.js';
 import { WALL, StuckWatch } from './Unstick.js';
+import { InteractionLife } from './InteractionLife.js';
 import { FLEE, threatDist, threatCost, pathPasses, openWay, escapeWay, fleeSearch } from './FleePlan.js';
 import { staffKnights } from './KnightStaff.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
@@ -333,6 +334,7 @@ export class CastleLife {
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.reb = new RebellionLife(this); // the hidden unrest of a place toward its owner (Rebellion.js)
         this.aud = new AudacityLife(this); // the player's audacity in a place: the crowd that falls on him together, the timid who leave the village (Audacity.js)
+        this.ix = new InteractionLife(this); // «любое взаимодействие — реакция как у человека» (Reaction.js)
         this.rel = new RelationsLife(this); // the three bars of every person to the hero, grudges, plots (Relations.js)
         this.social = new SocialLife(this); // goals, companions, a friend steps in, praise and sneers at magic, tired of friendship (Lives.js)
         this.justice = new JusticeLife(this); // arrests, the jail, searches (Justice.js)
@@ -693,6 +695,7 @@ export class CastleLife {
             }
             talk.stalls.delete(key);
         });
+        if (talk?.trays && cs.def.stalls) cs.def.stalls.forEach((st, i) => talk.trays.drop(talk._stallKey(cs.def, i))); // (its counters' trays are put away with it)
         // its chests are put away too, as a village house's (an opened one is remembered — _openedChests; an
         // unlocked one — Locks): a long flight over the world left every castle's chests in the scene
         const g = this.game;
@@ -2924,6 +2927,9 @@ export class CastleLife {
 
     // ------------------------------------------------------------ damage
     /** Someone hit a villager (weapons, fists, spells). */
+    /** Any dealing with a person: the engine judges it like a human would (InteractionLife.js). */
+    interact(v, kind, by, data) { return this.ix?.interact(v, kind, by, data) || null; }
+
     hit(v, dmg, dir, by, opts = {}) {
         if (!v || v.dead) return;
         const fire=opts.fire||opts.hell||FIRE_OK.has(opts.kind)||SERPENT_KINDS.has(opts.kind)||opts.kind==='Hellfire'||opts.kind==='Lava';
@@ -2935,6 +2941,7 @@ export class CastleLife {
         this._achHit(v, by);
         if (by === this.game.localId && !v.arena) this.talk?.feel?.(v, -12); // (he remembers who struck him — Attitude.js)
         markEmo(v, 'hit', 2.5);
+        if (this._isPlayer(by) && !v.arena && !(dmg >= v.hp)) this.ix?.interact(v, opts.weapon ? 'sword_hit' : opts.spell || opts.magic ? 'spell_hit_harmful' : 'punch', by, { noRel: true, power: Math.min(1.4, 0.5 + dmg / 20) }); // (he answers a blow like a person: pain, a cry, a plea or a threat — Reaction.js)
         this.game.threats?.noteHit(v, opts.srcRef ? `bf|${opts.srcRef.k}|${opts.srcRef.id}` : by, dmg); // (who struck him and how hard: ThreatRank remembers it, the memory fades)
         this.rel?.onHit(v, by, false); // (the three bars: the victim and who saw it — Relations.js)
         if (this._isPlayer(by) && !v.arena) this._news(v, 'hit', by, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def); // (the town remembers who struck its people)
@@ -4107,6 +4114,7 @@ export class CastleLife {
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this.guard.update(dt);
             this.rel?.update(dt);
+            this.ix?.update(dt);
             this.reb?.update(dt);
             this.aud?.update(dt);
             this.alog?.update(dt);

@@ -367,7 +367,7 @@ function buildLibrary(p, rng, out) {
  * twists (its upper floors drift over the lane and aside, a crooked spire, a bent chimney), its
  * open front with a counter, the seller behind it; hanging signs, lamps over the lane.
  */
-function buildMarket(p, rng, out) {
+function buildMarket(p, rng, out, wide = false) {
     const B = BLOCK;
     const walls = [B.PLASTER, B.ARCANE, B.BRICK, B.PLANKS_DARK, B.CS_SAND, B.CS_MOSSY];
     const roofs = [B.ROOF_PURPLE, B.ROOF_BLUE, B.ROOF_SLATE, B.ROOF_RED, B.ROOF_PURPLE];
@@ -393,8 +393,25 @@ function buildMarket(p, rng, out) {
             p.box(f, f, 0, 5, vc - 5, vc - 4, T); p.box(f, f, 0, 5, vc + 4, vc + 5, T);
             p.box(lo, hi, 6, 6, vc - 5, vc + 5, T);
             // the counter in the open front (2 high, 2 deep: things lie on it), cloth on it; shelves of the trade on the back wall
+            if (wide) { // (generation WIZ_COUNTER_FROM_GEN: the counter fills the whole open front, 7 wide and 3 deep; goods on its left part, an empty rune plate for the coins on the right, a rim round the plate)
+                const e = f + 2 * s, cloth = trade === 'pawn' ? B.CLOTH_YELLOW : B.CLOTH_WHITE;
+                p.box(f, e, 0, 1, vc - 3, vc + 3, B.PLANKS_DARK);
+                p.box(f, e, 1, 1, vc - 3, vc, cloth);
+                p.box(f, e, 1, 1, vc + 1, vc + 3, B.CARPET_PURPLE); // (the coin plate)
+                p.box(f + s, f + s, 1, 1, vc + 2, vc + 2, B.ARCANE_LAMP_VIOLET); // (its heart: a glowing rune …)
+                for (const [a, b] of [[f, vc + 1], [f, vc + 3], [e, vc + 1], [e, vc + 3]]) p.box(a, a, 1, 1, b, b, B.GOLD); // (… with golden corners)
+                p.box(f + s, f + s, 1, 1, vc + 1, vc + 1, B.GOLD); p.box(f + s, f + s, 1, 1, vc + 3, vc + 3, B.GOLD);
+                // the rim: a low edge on the lane side and the outer end of the plate (a pouch set down does not slide off), open towards the goods and the seller
+                p.box(f, f, 2, 2, vc + 1, vc + 3, B.PLANKS_DARK); p.box(f, e, 2, 2, vc + 3, vc + 3, B.PLANKS_DARK);
+                for (const [a, b] of [[f, vc + 3], [e, vc + 3]]) p.box(a, a, 3, 3, b, b, B.ARCANE_LAMP); // (a lamp on each corner post)
+                // a violet lamp hanging over the plate on a chain from the ceiling, another over the goods
+                for (const vv of [vc + 2, vc - 2]) { p.box(f + s, f + s, 5, 5, vv, vv, B.FENCE); p.box(f + s, f + s, 4, 4, vv, vv, vv === vc + 2 ? B.ARCANE_LAMP_VIOLET : B.ARCANE_LAMP); }
+                // gilded edge of the display part (the pawnbroker's counter shines most)
+                if (trade === 'pawn') p.box(f, f, 1, 1, vc - 3, vc, B.GOLD);
+            } else {
             p.box(f, f + s, 0, 1, vc - 2, vc + 2, B.PLANKS_DARK);
             p.box(f, f + s, 1, 1, vc - 2, vc + 2, trade === 'pawn' ? B.CLOTH_YELLOW : B.CLOTH_WHITE);
+            }
             p.box(bk - s, bk - s, 0, 4, vc - 3, vc + 3, B.PLANKS_DARK);
             p.box(bk - s, bk - s, 1, 1, vc - 3, vc + 3, shelves[trade]); p.box(bk - s, bk - s, 3, 3, vc - 3, vc + 3, shelves[trade]);
             p.box(9 * s, 9 * s, 5, 5, vc, vc, B.ARCANE_LAMP);
@@ -454,9 +471,13 @@ function buildMarket(p, rng, out) {
             p.link(fn, p.node(0, vc, 0));
             const stall = {
                 trade, front, back, frontNode: fn,
-                counter: { ...p.rect(f, f + s, vc - 2, vc + 2), top: p.L(1) - 0.5 },
+                counter: wide ? { ...p.rect(f, f + 2 * s, vc - 3, vc + 3), top: p.L(1) - 0.5 } : { ...p.rect(f, f + s, vc - 2, vc + 2), top: p.L(1) - 0.5 },
                 yaw: p.yaw(s < 0 ? -Math.PI / 2 : Math.PI / 2), // (the seller looks at the lane)
             };
+            if (wide) { // (the goods lie on the display part only; the plate stays empty for the coins: CastleTalk restock, Castles stalls)
+                stall.goodsRect = { ...p.rect(f, f + 2 * s, vc - 3, vc), top: p.L(1) - 0.5 };
+                stall.payRect = { ...p.rect(f, f + 2 * s, vc + 1, vc + 3), top: p.L(1) - 0.5 };
+            }
             if (trade === 'cauldrons') {
                 // the master of cauldrons and potions (CastleTalk / Cauldrons.js): his cauldron for sale stands by the lane's mouth
                 stall.potions = true;
@@ -581,7 +602,7 @@ function garden(p, lot, road, rng) {
 
 // ------------------------------------------------------------- the whole site
 /** The whole settlement. Returns the castle-shaped record. */
-export function buildVillageSite(seed, gx, gz, X, Z, F, rng, x2 = false, shops = false) {
+export function buildVillageSite(seed, gx, gz, X, Z, F, rng, x2 = false, shops = false, counters = false) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], pens: [], chests: [], civic: [], stalls: [], spots: [], halls: [] };
@@ -589,7 +610,7 @@ export function buildVillageSite(seed, gx, gz, X, Z, F, rng, x2 = false, shops =
     buildHall(p, rng, out);
     buildCauldronHall(p, rng, out);
     buildLibrary(p, rng, out);
-    buildMarket(p, rng, out);
+    buildMarket(p, rng, out, counters);
     if (shops) { // (generation WIZ_SHOPS_FROM_GEN: the two big shops — their own rng, the houses' lots stay rolled as before the shops took theirs)
         const hr = createRng((seed ^ (gx * 92821) ^ (gz * 68917) ^ 0x5a0b) >>> 0);
         const kit = { gable, windowHole, civicDoor };
@@ -645,8 +666,9 @@ export function villageGround(raw, X, Z) {
 
 /** Finds and remembers the settlements (the same shape of answers as CastleIndex / TowerIndex). */
 export class VillageIndex {
-    constructor(seed, raw, castles, towers, arenaX2 = false, shops = false) {
+    constructor(seed, raw, castles, towers, arenaX2 = false, shops = false, counters = false) {
         this.arenaX2 = arenaX2;
+        this.counters = counters; // (generation WIZ_COUNTER_FROM_GEN: wide counters with a coin plate in the market lane)
         this.shops = shops; // (generation WIZ_SHOPS_FROM_GEN: the potion hall and the scroll hall — ShopHalls.js)
         this.seed = seed; this.raw = raw; this.castles = castles; this.towers = towers;
         this.cells = new Map();
@@ -727,7 +749,7 @@ export class VillageIndex {
     _make(gx, gz) {
         const at = this._site(gx, gz);
         if (!at) return null;
-        return buildVillageSite(this.seed, gx, gz, at.X, at.Z, at.F, at.rng, this.arenaX2, this.shops);
+        return buildVillageSite(this.seed, gx, gz, at.X, at.Z, at.F, at.rng, this.arenaX2, this.shops, this.counters);
     }
 
     /**

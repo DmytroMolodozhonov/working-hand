@@ -189,6 +189,29 @@ export class ArmSolver {
      * z back — as the old getRelativeDirection: the picture is mirrored) and out.g (the shoulder girdle's offset).
      */
     solve(side, shoulder, elbow, wrist, aspect = 1, out = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } }, dt = 1 / 30, move = -1) {
+        // (19.11, self-healing: the state is a chain of recursions — a lengths' estimate, a noise estimate, a depth, a filter. One non-number from the camera in any of them
+        //  stays in it for good, and the arm is wrong (or gone) until the game restarts: «чем больше играешь, тем хуже». A bad state, or a bad answer, starts that arm anew.)
+        if (!this._sound(side === 'left' ? this.left : this.right)) { if (side === 'left') this.left = sideState(); else this.right = sideState(); this.healed = (this.healed | 0) + 1; }
+        const r = this._solve(side, shoulder, elbow, wrist, aspect, out, dt, move);
+        if (!(Number.isFinite(out.u.x + out.u.y + out.u.z + out.f.x + out.f.y + out.f.z + out.g.x + out.g.y + out.g.z))) {
+            if (side === 'left') this.left = sideState(); else this.right = sideState();
+            this.healed = (this.healed | 0) + 1;
+            if (!Number.isFinite(this.W)) this.W = 0;
+            return this._solve(side, shoulder, elbow, wrist, aspect, out, dt, move);
+        }
+        return r;
+    }
+
+    /** Is every number of this arm's memory a number? */
+    _sound(S) {
+        if (!Number.isFinite(this.W)) { this.W = 0; return false; }
+        for (const k of ['pv', 'Lu', 'Lf', 'zu', 'zf', 'gx', 'gy', 'gz', 'du', 'df', 'wantT']) if (!Number.isFinite(S[k])) return false;
+        for (const N of [S.nu, S.nf]) if (N && !(Number.isFinite(N.m) && Number.isFinite(N.v))) return false;
+        for (const F of [S.fu, S.ff]) if (F && !(Number.isFinite(F.x + F.y + F.z + F.w))) return false;
+        return true;
+    }
+
+    _solve(side, shoulder, elbow, wrist, aspect = 1, out = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } }, dt = 1 / 30, move = -1) {
         const S = side === 'left' ? this.left : this.right;
         const n = Math.max(0, Math.min(6, dt * 30)); this._n = n; // (the numbers are per picture at 30 a second: scaled to this frame)
         const ema = (k) => 1 - Math.pow(1 - k, n);

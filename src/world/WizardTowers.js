@@ -394,13 +394,13 @@ function furnishTower(p, room, rng, legs, o) {
         }
         case 'shop': {
             // the scroll counter at the left wall, the seller behind it
-            p.box(-9, -8, l, l + 1, -5, -1, B.PLANKS_DARK);
-            p.box(-9, -8, l + 1, l + 1, -4, -2, B.CLOTH_WHITE);
-            o.stall.front = p.pt(-6, -3, l);
+            p.box(-9, -7, l, l, -5, -1, B.PLANKS_DARK); // (3 deep, 2 high: the author 20.11 — a counter two blocks deep was thin)
+            p.box(-9, -7, l + 1, l + 1, -4, -2, B.CLOTH_WHITE);
+            o.stall.front = p.pt(-5, -3, l);
             o.stall.back = p.pt(-10.5, -3, l);
-            o.stall.frontNode = p.node(-6, -3, l, 'stall');
+            o.stall.frontNode = p.node(-5, -3, l, 'stall');
             p.link(o.stall.frontNode, p.node(0, -6, l));
-            o.stall.counter = { ...p.rect(-9, -8, -5, -1), top: p.L(l + 1) - 0.5 };
+            o.stall.counter = { ...p.rect(-9, -7, -5, -1), top: p.L(l + 1) - 0.5 };
             o.stall.yaw = p.yaw(-Math.PI / 2);
             box(6, 8, 0, 3, 3, 3, B.BOOKS);
             for (let a = 0; a < 12; a++) { const u = Math.round(2.4 * Math.cos(a * TAU / 12)), b = Math.round(9 + 2.4 * Math.sin(a * TAU / 12)); floorMark(u, u, b, b, B.RUNE); }
@@ -602,19 +602,20 @@ function potionStall(p, lot, road) {
     const at = (a, b) => { const [x, z] = rotLot(a, b, lot.face); return [lot.u + x, lot.v + z]; };
     const box = (a0, a1, l0, l1, b0, b1, t) => { const [u0, v0] = at(a0, b0), [u1, v1] = at(a1, b1); p.box(u0, u1, l0, l1, v0, v1, t); };
     const pt = (a, b, l = 0) => { const [u, v] = at(a, b); return p.pt(u, v, l); };
-    box(8, 11, 0, 1, -7, -7, B.PLANKS_DARK); // the counter
-    box(8, 11, 1, 1, -7, -7, B.CLOTH_WHITE);
+    // (the author 20.11: a thin counter of one block — now 5 long, 3 deep (b −7…−5), 2 high; the master stands behind it, the lamp post and the cauldron moved aside)
+    box(8, 12, 0, 0, -7, -5, B.PLANKS_DARK); // the counter
+    box(8, 12, 1, 1, -7, -5, B.CLOTH_WHITE);
     box(8, 8, 2, 2, -7, -7, B.POTION); // a potion bottle for a sign
-    box(11, 11, 0, 3, -5, -5, B.PLANKS_DARK); // a post with a lamp
-    box(11, 11, 4, 4, -5, -5, B.ARCANE_LAMP);
-    const [fu, fv] = at(9, -9), frontNode = p.node(fu, fv, 0, 'stall');
+    box(13, 13, 0, 3, -7, -7, B.PLANKS_DARK); // a post with a lamp
+    box(13, 13, 4, 4, -7, -7, B.ARCANE_LAMP);
+    const [fu, fv] = at(10, -9), frontNode = p.node(fu, fv, 0, 'stall');
     p.link(frontNode, road);
-    const c0 = pt(8, -7), c1 = pt(11, -7);
+    const c0 = pt(8, -7), c1 = pt(12, -5);
     const o = pt(0, 0), f = pt(0, -1);
-    const caul = pt(13.5, -5);
+    const caul = pt(16.5, -5);
     return {
         potions: true, // (Cauldrons.js / CastleTalk.js: what this master sells)
-        front: pt(9.5, -9), back: pt(9.5, -5), frontNode,
+        front: pt(10, -9), back: pt(10, -3), frontNode,
         counter: { x0: Math.min(c0.x, c1.x), x1: Math.max(c0.x, c1.x), z0: Math.min(c0.z, c1.z), z1: Math.max(c0.z, c1.z), top: p.L(1) - 0.5 },
         yaw: Math.atan2(-(f.x - o.x), -(f.z - o.z)), // (facing the road)
         cauldron: { x: caul.x, y: caul.y, z: caul.z, yaw: Math.atan2(f.x - o.x, f.z - o.z) },

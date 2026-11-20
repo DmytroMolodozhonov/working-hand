@@ -220,7 +220,7 @@ import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { terrainProbe } from '../world/TerrainProbe.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { WIZ_COUNTER_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -582,7 +582,8 @@ export class Game {
             arenaX2: this.gen >= ARENA_X2_FROM_GEN && !(config.mode === 'creative' && this.hero?.spawn === 'arena'), // (the real world's arenas twice as wide — DuelArenas.ARENA_X2; NOT the duel-only start: it keeps the former size)
             earthSettlements: this.gen >= EARTH_SETTLEMENTS_FROM_GEN,
             elementalSettlements:this.gen >= ELEMENTAL_SETTLEMENTS_FROM_GEN,
-            waterfalls: this.gen >= WATERFALLS_FROM_GEN, // (the rivers' waterfalls: Waterfalls.js)
+            waterfalls: this.gen >= WATERFALLS_FROM_GEN,
+            wizCounters: this.gen >= WIZ_COUNTER_FROM_GEN, // (the wizards' market lane: wide counters with a coin plate — WizardVillages.js) // (the rivers' waterfalls: Waterfalls.js)
             arenaFlat: this.gen >= ARENA_FLAT_FROM_GEN, // (an arena only where the land round it does not drop away — DuelArenas.arenaGround)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
@@ -4210,6 +4211,7 @@ export class Game {
         addAll(this.breakthrough?.sampleModels?.() || []); // (the earth of «Breakthrough» rising out of the ground)
         addAll(this.levMax?.sampleModels?.() || []); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
+        try { zoo.add(this.castleLife.talk.trays.sampleModel()); } catch (e) { console.error('prewarm trays', e); } // (the rune tray of a counter's coin plate — CounterTrays.js)
         try { prewarmZombieTextures(); zoo.add(new Zombie(new THREE.Scene(), new THREE.Vector3(), 0, {}).group); } catch (e) { console.error('prewarm zombie', e); } // (the new zombie: its painted atlases and its shaders at the loading screen, not at the first night)
         for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)
         // (every thing lying about — and the swords and axes — as the video card draws them: one shape each (Items.oneShape,

@@ -51,6 +51,10 @@ export const MOVES = {
     sweep: () => (t) => ({ yaw: 15 + 25 * Math.sin(2 * Math.PI * t / 1400), pitch: 5 + 8 * Math.sin(2 * Math.PI * t / 2100) }),
     // slow tracking (a careful aim: 12°/s)
     track: () => (t) => ({ yaw: -10 + 0.012 * Math.max(0, t), pitch: 3 }),
+    // the arm raised high (a spell over the head): the camera sees only the lower half of it
+    up: (o) => () => ({ yaw: o.yaw ?? 8, pitch: o.pitch ?? 78 }),
+    // raised, then lowered and raised again, every 6 s (play goes on: the arm goes up and down for an hour)
+    updown: (o) => (t) => { const ph = (t % 6000) / 6000, k = ph < 0.45 ? Math.min(1, ph / 0.1) : ph < 0.5 ? 1 : ph < 0.6 ? 1 - (ph - 0.5) / 0.1 : 0; const e = k * k * (3 - 2 * k); return { yaw: 8 + 6 * e, pitch: 5 + (o.pitch ?? 78) * e - 5 * e }; },
 };
 
 /** The chain's own numbers (what the game uses), changed by the bench to compare. */
@@ -92,15 +96,24 @@ export function run(opts = {}) {
     const sw = Math.hypot((base[11].x - base[12].x) * ASPECT, base[11].y - base[12].y) || C.scale;
     const Lu = sw * 0.78, Lf = sw * 0.66;
     const truthAt = (t, out = new THREE.Vector3()) => { const a = mv(t); return dirOf(side === 'right' ? a.yaw : -a.yaw, a.pitch, out); };
+    // (what the arm REALLY does: the intended direction plus a jogger's shake at the step rate)
+    const RUN_HZ = 2.7;
+    const armAt = (t, out = new THREE.Vector3()) => { const a = mv(t); const s = opts.runBob ? Math.sin(2 * Math.PI * RUN_HZ * t / 1000) : 0, c = opts.runBob ? Math.sin(2 * Math.PI * RUN_HZ * t / 1000 * 0.5 + 1) : 0; return dirOf((side === 'right' ? a.yaw : -a.yaw) + 3 * c, a.pitch + 4 * s, out); };
     const toPic = (P0, v, k, zs) => ({ x: P0.x - (v.x * k) / ASPECT, y: P0.y - v.y * k, z: (P0.z || 0) + (v.z * k * zs) / ASPECT });
     const picture = (t) => {
-        const d = truthAt(t);
+        const d = armAt(t);
         const pose = base.map((p) => ({ ...p }));
         const S = pose[iS];
         const E = toPic(S, d, Lu, C.zScale), W = toPic(E, d, Lf, C.zScale);
         pose[iE] = { ...pose[iE], ...E, visibility: 0.99 };
         pose[iW] = { ...pose[iW], ...W, visibility: 0.99 };
-        for (const p of pose) { p.x += g() * C.poseNoise; p.y += g() * C.poseNoise; p.z = (p.z || 0) + g() * C.poseZNoise; }
+        // (a point above the top of the picture: the network still gives it — a guess that wanders, with a low visibility that wanders too)
+        if (opts.clipTop) for (const k of [iE, iW]) {
+            const p = pose[k];
+            if (p.y < 0.03) { const out = Math.min(1, (0.03 - p.y) / 0.12); p.y += g() * 0.05 * out; p.x += g() * 0.04 * out; p.z += g() * 0.06 * out; p.visibility = Math.max(0.02, 0.99 - 0.95 * out - r() * 0.25 * out); }
+        }
+        const bobY = opts.runBob ? 0.012 * Math.sin(2 * Math.PI * RUN_HZ * t / 1000 + 0.6) : 0, bobX = opts.runBob ? 0.005 * Math.sin(2 * Math.PI * RUN_HZ * t / 2000) : 0;
+        for (const p of pose) { p.x += g() * C.poseNoise + bobX; p.y += g() * C.poseNoise + bobY; p.z = (p.z || 0) + g() * C.poseZNoise; }
         // the hand: index along the arm, the thumb up (a pointer grip), the fingers a little bent round a wand
         const y = d.clone();
         const x = new THREE.Vector3(0, -1, 0).addScaledVector(y, y.y).normalize(); // (index → little finger: down)
@@ -108,8 +121,10 @@ export function run(opts = {}) {
         const z = new THREE.Vector3().crossVectors(x, y);
         const R = new THREE.Matrix4().makeBasis(x, y, z);
         const lm = synthHand(R, { side, at: [W.x, W.y], size: sw * 0.42, bends: { middle: [1.2, 1.2, 0.8], ring: [1.3, 1.3, 0.8], pinky: [1.3, 1.3, 0.8], index: [0.3, 0.3, 0.2] } });
-        for (const p of lm) { p.x += g() * C.noise; p.y += g() * C.noise; p.z = (p.z || 0) + g() * C.zNoise + (W.z || 0); }
-        return { pose, lm };
+        for (const p of lm) { p.x += g() * C.noise + bobX; p.y += g() * C.noise + bobY; p.z = (p.z || 0) + g() * C.zNoise + (W.z || 0); }
+        // (the hand out of the picture is not found at all; or lost now and then)
+        const lost = (opts.clipTop && !opts.keepHand && W.y < -0.02) || (opts.dropEvery && Math.floor(t / 1000) % opts.dropEvery === 0 && (t % 1000) < 250);
+        return { pose, lm: lost ? null : lm };
     };
     // the camera's pictures: taken at tk, reach the game at tk + latency (± jitter), newest wins
     const step = 1000 / C.camHz, draw = 1000 / C.drawHz;
@@ -135,7 +150,7 @@ export function run(opts = {}) {
             const ts = clock - Math.max(0, age);
             const pose = guard.process(got.pic.pose, ts);
             const key = side === 'right' ? 'rightHandLandmarks' : 'leftHandLandmarks';
-            const results = { poseLandmarks: pose, [key]: hg[side].process(got.pic.lm, ts) };
+            const results = { poseLandmarks: pose, [key]: got.pic.lm ? hg[side].process(got.pic.lm, ts) : null };
             const pd = interp.process(results, video);
             pd.ts = ts;
             smoother.push(pd, clock);
@@ -149,12 +164,12 @@ export function run(opts = {}) {
         if (!want) continue;
         const target = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), want);
         if (!q) q = target.clone();
-        else q.slerp(target, steady.alpha(new THREE.Vector3(0, 1, 0).applyQuaternion(q), want, draw / 1000));
+        else q.slerp(target, steady.alpha(new THREE.Vector3(0, 1, 0).applyQuaternion(q), want, draw / 1000, !!opts.runBob));
         qOut.copy(q);
         const aim = new THREE.Vector3(0, 1, 0).applyQuaternion(qOut).normalize();
         if (clock >= 0) rows.push({ t: clock, aim, truth: truthAt(clock) });
     }
-    return { rows, truthAt };
+    return { rows, truthAt, ch, guard, hg, smoother, interp };
 }
 
 /** The metrics of one run: mean / p90 error (deg), lag (ms: the shift of the truth that fits best), jitter (deg RMS). */

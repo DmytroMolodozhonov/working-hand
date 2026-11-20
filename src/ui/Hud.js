@@ -37,6 +37,7 @@ export function setMinimapSize(pct) {
     cvs.width = Math.round(w * dpr);
     cvs.height = Math.round(h * dpr);
     document.documentElement.style.setProperty('--minimap-h', h + 'px');
+    document.documentElement.style.setProperty('--minimap-w', w + 'px');
 }
 
 if (typeof window !== 'undefined') window.addEventListener?.('resize', () => { if (setMinimapSize.pct) setMinimapSize(); });

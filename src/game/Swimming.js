@@ -22,6 +22,7 @@
  * water, arms out like a T): a big bubble around the whole body for 90 s.
  */
 
+import { placeStatusBar } from '../ui/StatusStack.js';
 import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
 import { StrokeDetector, SwimMotion, SWIM } from './SwimStroke.js';
@@ -481,7 +482,7 @@ export class Swimming {
             el = this._merEl = document.createElement('div');
             el.id = 'mermaid-bar';
             el.innerHTML = '<div class="mb-fill"></div><div class="mb-txt"></div>';
-            document.body.appendChild(el);
+            placeStatusBar(el);
             this._merFill = el.firstChild; this._merTxt = el.lastChild;
         }
         if (left < 0) { if (this._merShown) { el.style.display = 'none'; this._merShown = false; } return; }

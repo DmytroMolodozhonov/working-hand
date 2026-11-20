@@ -10,11 +10,12 @@ export function startupFailureText(r){return `${new Date(r.at).toISOString()}\n�
 export function showStartupFailure(root,report,{back=null,compact=false}={}){
  if(!root||!report)return null;
  document.getElementById('startup-failure')?.remove();
- const box=document.createElement('section');box.id='startup-failure';box.style.cssText='position:relative;z-index:1200;margin:12px auto;padding:16px;max-width:640px;max-height:60vh;overflow:auto;border:1px solid #dc9274;border-radius:12px;background:#231d25;color:#fff3e8;text-align:left;font:15px/1.5 system-ui;pointer-events:auto';
+ const box=document.createElement('section');box.id='startup-failure';box.style.cssText=(compact?'position:fixed;left:50%;bottom:12px;transform:translateX(-50%);width:min(640px,calc(100vw - 24px));max-height:40vh;margin:0;':'position:relative;margin:12px auto;max-width:640px;max-height:60vh;')+'z-index:1200;padding:16px;overflow:auto;border:1px solid #dc9274;border-radius:12px;background:#231d25;color:#fff3e8;text-align:left;font:15px/1.5 system-ui;pointer-events:auto';
  const title=document.createElement('strong');title.textContent=compact?'Последний вход завершился ошибкой':'Не удалось войти в мир';box.appendChild(title);
  const message=document.createElement('p');message.textContent=report.message;box.appendChild(message);
  const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='Подробности ошибки';pre.textContent=startupFailureText(report);pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px';details.append(summary,pre);box.appendChild(details);
  const copy=document.createElement('button');copy.textContent='Скопировать ошибку';copy.style.cssText='margin:12px 8px 0 0;padding:8px 12px;cursor:pointer';copy.onclick=async()=>{try{await navigator.clipboard.writeText(startupFailureText(report));copy.textContent='Скопировано';}catch{details.open=true;const range=document.createRange();range.selectNodeContents(pre);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);}};box.appendChild(copy);
+ if(compact){const close=document.createElement('button');close.textContent='Закрыть';close.style.cssText=copy.style.cssText;close.onclick=()=>box.remove();box.appendChild(close);}
  if(back){const menu=document.createElement('button');menu.textContent='Вернуться в меню';menu.style.cssText=copy.style.cssText;menu.onclick=back;box.appendChild(menu);}
  root.appendChild(box);return box;
 }

@@ -14,6 +14,10 @@ export const V5_WAND = {
     PALM: 0.4, // how much the hand's own turn leads the wand; the rest — the forearm (V3 points like this: «V3 points exactly where I point»)
     // the wand's own steadying (AimSteady: by its turning speed — a still wand doesn't tremble, a turn passes at once)
     STEADY: { minCutoff: 1.2, beta: 6, dCutoff: 3, dead: 0.3 },
+    // RUNNING (the author 19.11: «когда я бегаю, палочка колеблется»): the arm itself shakes with every step (2–3 Hz, a few degrees) and the steadier's speed term opened the filter to
+    // exactly that shake (it is as fast as a slow aim). While the hero runs, its cutoff is held low (cap) until the turn is really fast (over `speed` rad/s — a flick, a swing,
+    // a quick aim at a flying thing), then it opens as before. The shake (2.7 Hz) comes out ≈ 4× smaller; a slow careful aim lags ~0.1 s more, only while running.
+    RUN: { cap: 0.9, speed: 6, beta: 3 },
 };
 
 /**
@@ -31,7 +35,7 @@ export class AimSteady {
     }
 
     /** The easing (0…1) towards `target` (unit) from `cur` (unit) this frame. */
-    alpha(cur, target, dt) {
+    alpha(cur, target, dt, running = false) {
         if (!(dt > 0)) return 1;
         const o = this.o;
         const ang = cur.angleTo(target);
@@ -40,7 +44,15 @@ export class AimSteady {
         const ad = 1 / (1 + 1 / (2 * Math.PI * (o.dCutoff ?? 3) * dt));
         if (!this.has) { this.w.copy(_w); this.has = true; } else this.w.lerp(_w, ad);
         const speed = Math.max(0, this.w.length() - (o.dead ?? 0));
-        return 1 / (1 + 1 / (2 * Math.PI * (o.minCutoff + o.beta * speed) * dt));
+        let cut = o.minCutoff + o.beta * speed;
+        if (running) { // (the shake of the steps: held low until the turn is truly fast; eased in and out so the change of mode itself does not jerk)
+            const R = V5_WAND.RUN;
+            this.run = (this.run ?? 0) + (1 - (this.run ?? 0)) * Math.min(1, dt * 4);
+            const capped = Math.min(cut, R.cap + R.beta * Math.max(0, this.w.length() - R.speed));
+            cut = cut + (capped - cut) * this.run;
+        } else if (this.run) this.run = Math.max(0, this.run - dt * 4);
+        else this.run = 0;
+        return 1 / (1 + 1 / (2 * Math.PI * cut * dt));
     }
 
     reset() { this.has = false; this.w.set(0, 0, 0); }

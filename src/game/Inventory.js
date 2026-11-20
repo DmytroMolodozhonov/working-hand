@@ -25,6 +25,7 @@
  * The «hand» cell shows what the hands hold. Keys 1–5 choose a slot too, 0 / ` — the free hand.
  */
 
+import { HELD } from './Concentration.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand, retireScroll, newUid } from './ItemTypes.js';
@@ -98,6 +99,7 @@ export function pocketStrike(hist, local, sx) {
 }
 
 /** s the hand must stay in the pocket (the camera: wrist at the hip, elbow bent, hand gone in). */
+export const POCKET_STAY = 1.02; // (s the hand is held in the pocket zone before the next thing comes: the author 20.11, was 2 s → 1 s 20 ms)
 export const POCKET_DWELL = 0.2; // (the author: crossing the body must be easy — 0.2 s in the zone is enough; with the look-down 0.1 s the thing is put in within ~0.35 s)
 /** The hand away from the pocket this long (s) — the chosen slot's thing stays in it. */
 export const POCKET_PICK = 1.0;
@@ -394,6 +396,25 @@ export class Inventory {
     }
 
     /** Is there room in the slots for this thing (a free slot, or room on a stack of it)? */
+    /**
+     * The wand is not put away while a spell works (the author 20.11: «если у меня концентрация или работающее заклинание — палочку в интерфейс не положить; подсказка:
+     * снимите концентрацию; любые заклинания»): a held spell (Concentration.held — water, Levitation, the shield, a beam…), the light on the wand, a spell being aimed.
+     * Returns the hint (once in a while) or '' when it may go. Pure reads: nothing else is touched.
+     */
+    wandStowBlock(side = null) {
+        const g = this.game;
+        let why = '';
+        try {
+            const held = g.focus?.held?.(), ch = g.character;
+            if (held) why = (HELD_NAME(held)) ;
+            else if (g.wandMagic?.active || g.spellBusy?.() || (side && ch?.aim?.[side])) why = 'заклинание';
+        } catch (e) { /* the check never breaks a hand */ }
+        if (!why) return '';
+        const now = performance.now();
+        if (now - (this._stowHintAt || -1e9) > 2500) { this._stowHintAt = now; g.hud?.toast?.(`🪄 Палочку не убрать, пока действует заклинание (${why}): сначала скажите «стоп» — снимите концентрацию`, 3200); }
+        return why;
+    }
+
     canStore(item) {
         return this._canSlots(item); // (the golden magic backpack takes nothing by itself: a thing goes into it only from a hand put behind the back — Items._stash)
     }
@@ -578,6 +599,7 @@ export class Inventory {
             const h = g.items?.held[side];
             // (the leading hand's wand goes only to the waistband: WandBelt; a second wand in the other hand — into a slot)
             if (!h || (h.item.kind === 'wand' && side === dom)) continue;
+            if (h.item.kind === 'wand' && this.wandStowBlock(side)) return;
             if (h.item.kind === 'coins' && this.purse.canTie(h.item)) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
             // (no room in the slots: it stays in the hand — a pouch, a scroll never vanish into a full pocket)
             if (!this.canStore(h.item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return; }
@@ -809,6 +831,7 @@ export class Inventory {
         }
         const h = g.items?.held[side];
         if (h && h.item.kind === 'wand') {
+            if (this.wandStowBlock(side)) return false; // (a spell works: the wand stays in the hand)
             if (!this.canStore(h.item)) { this.game.hud.toast?.('🪄 Палочка не помещается в карман: все ячейки заняты, она остаётся в руке'); return false; } // (never lost)
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
@@ -832,12 +855,12 @@ export class Inventory {
      * in a circle (the author: touch — the first, move away and touch — the second…; never thrown out).
      * Any other thing in the hand goes into a slot; an empty hand takes the next thing.
      */
-    /** Keep the other hand in the ordinary pocket: every two seconds choose the next thing, even looking ahead. */
+    /** Keep the other hand in the ordinary pocket: every POCKET_STAY (1.02 s) choose the next thing, even looking ahead. */
     pocketStay(side, zone, dt, now = performance.now()) {
         const st = this._pocket[side];
         if (!zone || side !== (this.game.dom === 'left' ? 'right' : 'left') || this.game.character?.isRunning || this.game.character?.flying) { st.stayT = 0; return false; }
         st.stayT = (st.stayT || 0) + dt;
-        if (st.stayT < 2 || now < (st.hold || 0)) return false;
+        if (st.stayT < POCKET_STAY || now < (st.hold || 0)) return false;
         st.stayT = 0; st.armed = false; st.out = now;
         const cycling = this._cyc?.side === side;
         const ok = this.pocketTouch(side);
@@ -1427,3 +1450,4 @@ export class Inventory {
         if (typeof document !== 'undefined') document.getElementById('back-cells')?.remove();
     }
 }
+const HELD_NAME = (k) => (HELD[k]?.ru) || k;

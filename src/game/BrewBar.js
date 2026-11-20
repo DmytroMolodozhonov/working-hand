@@ -7,6 +7,7 @@
  * The state is read from the cauldron's `st` (the host's, or the same clock here on a guest — Cauldrons.update), so it shows on every computer.
  * What may go wrong: no cauldron near / the potion ready or spoiled / the hero far, dead or in another body — the bar hides; no document (tests) — nothing is made.
  */
+import { placeStatusBar } from '../ui/StatusStack.js';
 import { ingCount } from './Potions.js';
 
 const fmt = (s) => { s = Math.max(0, Math.ceil(s)); return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s} с`; };
@@ -35,7 +36,7 @@ export class BrewBar {
         const el = this.el = document.createElement('div');
         el.id = 'brew-bar';
         el.innerHTML = '<div class="bb-cap"></div><div class="bb-track"><div class="bb-fill"></div></div>';
-        document.body.appendChild(el);
+        placeStatusBar(el);
     }
 
     /** `s` from brewBarState, or null to hide. */

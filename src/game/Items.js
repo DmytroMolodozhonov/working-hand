@@ -525,7 +525,7 @@ export class ItemSystem {
         if (!h.q) h.q = _q.clone();
         else {
             const st = (this._aimSteady || (this._aimSteady = {}))[side] || (this._aimSteady[side] = new AimSteady());
-            h.q.slerp(_q, st.alpha(_g.set(0, 1, 0).applyQuaternion(h.q), d, Math.max(1e-3, dt)));
+            h.q.slerp(_q, st.alpha(_g.set(0, 1, 0).applyQuaternion(h.q), d, Math.max(1e-3, dt), !!(ch.isRunning && ch.runIntensity > 0))); // (running: the steps' shake is held back — V5_WAND.RUN)
         }
         h.model.quaternion.copy(h.q);
         // its own end V5_WAND_BACK behind the point in the palm, along the (steadied) wand
@@ -732,7 +732,7 @@ export class ItemSystem {
         if (!h || !d) return;
         const kind = h.item.kind, m = ITEM_INFO[kind]?.weight ?? 1;
         // (a flask over / in a cauldron is dipped, not thrown: only a real throw — a fast swing — lets it go there; Cauldrons.flaskZone)
-        if (kind === 'flask' && d.act !== 'throw' && g.cauldrons?.flaskZone?.(h.model.position)) { handLog(`колба над котлом: разжатие руки не считается броском — колба остаётся в руке (${why})`); return; }
+        if (kind === 'flask' && g.cauldrons?.flaskZone?.(h.model.position, d.act === 'throw')) { handLog(`колба над котлом: у котла колба из руки не выпадает — остаётся в руке (${why})`); return; }
         const lk = _a.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion ? ch.getHeadQuaternion(_hq) : ch.group.quaternion);
         const v = launchVelocity(d, m, d.act === 'throw' ? lk : null, this._lv || (this._lv = { x: 0, y: 0, z: 0 }));
         const vel = _e.set(v.x, v.y, v.z);
@@ -1714,6 +1714,7 @@ export class ItemSystem {
                 }
                 continue;
             }
+            if (h.item.kind === 'wand' && g.inventory?.wandStowBlock?.(sd)) { t[sd] = 0; continue; }
             t[sd] += dt;
             if (t[sd] < BACKPACK_WEAR.STASH_T) continue;
             t[sd] = 0;

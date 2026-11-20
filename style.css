@@ -2030,3 +2030,12 @@ body.passage-on #minimap-container, body.passage-on #webcam-preview, body.passag
 /* a mode still being made («Школа Акселдорф»): a small badge under its name on the card */
 .map-card .mode-wip { display: inline-block; flex: none; align-self: center; white-space: nowrap; margin-left: 10px; font-size: 0.62rem; line-height: 1.5; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #ffd27a; background: rgba(255, 170, 60, 0.14); border: 1px solid rgba(255, 190, 90, 0.4); border-radius: 6px; padding: 0 6px; }
 .world-mode.m-school { background: linear-gradient(180deg, rgba(160, 110, 255, 0.25), rgba(160, 110, 255, 0.08)); border-color: rgba(170, 130, 255, 0.5); }
+
+/* The bars of my processes (a brew, growing wings, the mermaid's time) — one column above the minimap, as wide as it is (StatusStack.js; the author 20.11) */
+#status-stack { position: fixed; left: 20px; bottom: calc(var(--minimap-h, 192px) + 20px + 12px); width: var(--minimap-w, 288px); display: flex; flex-direction: column-reverse; gap: 8px; z-index: 1200; pointer-events: none; }
+#status-stack > #brew-bar, #status-stack > #wings-grow { position: static; top: auto; bottom: auto; left: auto; transform: none; width: 100%; }
+#status-stack > #mermaid-bar { position: relative; top: auto; left: auto; transform: none; width: 100%; height: 30px; flex: none; }
+#status-stack > #mermaid-bar .mb-txt { font-size: 21px; line-height: 30px; }
+#status-stack #brew-bar .bb-cap { font-size: 13px; }
+body:has(#main-menu:not(.hidden)) #status-stack, body.passage-on #status-stack { display: none !important; }
+#status-stack #wings-grow .wg-cap { font-size: 13px; margin-bottom: 3px; }
