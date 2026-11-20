@@ -5,7 +5,7 @@ export default async function (h, args) {
     const g = h.g, S = g.space, THREE = h.THREE;
     const { planetPosition, SPACE } = await import('/src/world/Planets.js');
     await h.frames(20); h.bare();
-    g.character.setFirstPerson(false); // (the hero's body is in the picture)
+    g.cameraMode = 'tpv'; g.character.setFirstPerson(false); // (the hero's body is in the picture: not the first-person view)
     if (!g.flight.active) g.startFlight(true);
     S.cast?.(true);
     S._enterSpace('earth');
@@ -19,7 +19,7 @@ export default async function (h, args) {
     for (const id of ids) {
         const def = S.planets.get(id), t = S.now(), c = { x: 0, y: 0, z: 0 };
         planetPosition(def, t, c, S.planets);
-        const alt = args?.alt ?? 5000, R = def.radius;
+        const R = def.radius, alt = args?.alt ?? R * (args?.k ?? 1); // (one planet's radius above it: both fill the picture alike; their real sizes are in the log)
         // the hero over the planet's day side, towards the Sun (the Sun is the origin of the plane)
         const sx = -c.x, sy = -c.y, sz = -c.z, sl = Math.hypot(sx, sy, sz);
         const d = { x: sx / sl, y: sy / sl, z: sz / sl };
