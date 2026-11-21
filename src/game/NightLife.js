@@ -139,7 +139,7 @@ export class NightLife {
             this._tickT = 1;
             for (const cs of this.life.castles.values()) {
                 if (cs.heldStalls?.size) this._releaseHeld(cs);
-                if (!cs.awake || cs.def.kind === 'wander' || cs.def.kind === 'stall' || cs.def.kind === 'guest') continue; // (the Creative stall's merchant works all night)
+                if (!cs.awake || cs.def.kind === 'wander' || cs.def.kind === 'bandit' || cs.def.kind === 'stall' || cs.def.kind === 'guest') continue; // (the Creative stall's merchant works all night)
                 if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') {
                     if (cs.def.stalls?.length && cs.packPart !== part && (part === 'pack' || part === 'home')) { cs.packPart = part; this._closeStalls(cs); } // (the sellers of a settlement pack up in the evening too)
                     this._tower(cs, part);

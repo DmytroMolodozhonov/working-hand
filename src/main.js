@@ -2182,7 +2182,7 @@ for (const [id, other] of [['walk-back-threat', 'walk-back'], ['walk-back', 'wal
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'lite-mode', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'belt-gap', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
+        'show-heard-toggle', 'drift-camera', 'walk-back', 'walk-back-threat', 'handedness', 'hurt-fx-toggle', 'belt-gap', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)

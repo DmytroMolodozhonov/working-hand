@@ -83,6 +83,7 @@ test('«Механика игры»: сначала руки/вещи/доспе
     const { MECHANICS, mechanicsOrdered, CORE_MECHANICS } = await import('../../src/ui/Codex.js');
     const t = mechanicsOrdered().map((m) => m.title);
     assert.deepEqual(t.slice(0, CORE_MECHANICS.length), CORE_MECHANICS, 'ядро — первым и в таком порядке');
-    assert.deepEqual(t.slice(-2), ['Кони и Пегас', 'Поселения магов стихий'].sort((a, b) => t.indexOf(a) - t.indexOf(b)), 'побочное — последним');
+    // (21.11: the robber gangs' card is one more side section — the list's tail is these three)
+    assert.deepEqual(t.slice(-3), ['Кони и Пегас', 'Поселения магов стихий', 'Разбойные банды'].sort((a, b) => t.indexOf(a) - t.indexOf(b)), 'побочное — последним');
     assert.equal(t.length, MECHANICS.length, 'ничего не потеряно');
 });

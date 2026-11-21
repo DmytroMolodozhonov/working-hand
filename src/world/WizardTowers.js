@@ -857,11 +857,11 @@ export class TowerIndex {
         const key = type + this._key(gx, gz);
         let d = this._wander.get(key);
         if (!d) {
-            const kind = type === 'wk' ? 'errant' : type === 'wc' ? 'folk' : 'wander';
+            const kind = type === 'wk' ? 'errant' : type === 'wc' ? 'folk' : type === 'wb' ? 'bandit' : 'wander'; // ('wb': a robber gang on horses — BanditGangs.js)
             d = {
                 id: type + gx + '_' + gz, kind, gx, gz, x: (gx + 0.5) * WANDER_CELL, z: (gz + 0.5) * WANDER_CELL, F: 0,
                 wseed: this.seed, population: type === 'ww' ? 3 : 40, knights: type === 'wk' ? 99 : 0, stalls: [], houses: [], chests: [], nodes: [], edges: [], pens: [], fields: [], rooms: [], posts: [],
-                wallWalk: [], zone: 0, color: type === 'wk' ? 0x6b4a2a : 0x7a6a55, colorName: 'серые', name: kind === 'errant' ? 'Странствующие рыцари' : kind === 'folk' ? 'Путники' : 'Дороги', king: '', parts: [], _byChunk: new Map(),
+                wallWalk: [], zone: 0, color: type === 'wk' ? 0x6b4a2a : 0x7a6a55, colorName: 'серые', name: kind === 'bandit' ? 'Разбойники' : kind === 'errant' ? 'Странствующие рыцари' : kind === 'folk' ? 'Путники' : 'Дороги', king: '', parts: [], _byChunk: new Map(),
             };
             if (type === 'ww' && gx >= GX0 && gx < GX0 + 100000) { d.people = [saviorEntry(gx, gz)]; d.population = 1; } // (the white Saviour: SaviorRules.js)
             this._wander.set(key, d);

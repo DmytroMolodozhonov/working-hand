@@ -1190,6 +1190,7 @@ export class Combat {
         this.hurtAt = performance.now(); // (in a fight: the microphone listens for spells — main.js)
         this.game.castleLife?.guard?.masterHurt(this.game.localId, byId, kind); // (my knights, if I am a king: whoever did it is their first enemy — Bodyguard.js)
         this.game.hud.damageFlash();
+        this.game.hurtFx?.hit(hp0 - this.hp, byId, kind); // (the direction of the blow, blood on the glass, the heart answers — HurtFx.js)
         if (this.game.sound) this.game.sound.playHit();
         if (this.hp <= 0 && mon) { mon.fell(byId, kind); return; } // (the beast's body falls apart: the man inside lives)
         if (this.hp <= 0) this.die(byId, kind);
