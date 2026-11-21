@@ -25,14 +25,14 @@ export default async function (h, args) {
     // the wide view: eye height of the hero, over the floor
     const eye = (x, z) => ground(x, z) + 3.4;
     h.cam([spot.x, eye(spot.x, spot.z), spot.z], [spot.x + 30, eye(spot.x, spot.z) - 1.5, spot.z + 8]);
-    await h.frames(80); await h.shot('wide-1', { settle: 20 });
+    await h.frames(12); await h.shot('wide-1', { settle: 4 });
     h.cam([spot.x, eye(spot.x, spot.z), spot.z], [spot.x - 14, eye(spot.x, spot.z) - 4, spot.z - 26]);
-    await h.frames(60); await h.shot('wide-2', { settle: 10 });
+    await h.frames(10); await h.shot('wide-2', { settle: 3 });
     const look = async (name, it, d, up, side) => {
         if (!it) { h.log('no', name); return; }
         const gy = ground(it.x, it.z);
         h.cam([it.x - d * 0.7 + (side || 0), gy + up, it.z - d * 0.7], [it.x, gy + (it.k === 'log' ? 0.8 : 0.5), it.z]);
-        await h.frames(60); await h.shot(name, { settle: 10 });
+        await h.frames(10); await h.shot(name, { settle: 3 });
     };
     for (let v = 0; v < 4; v++) await look('mush' + v, near('mush', v), 4.5, 2.2);
     await look('log0', near('log', 0), 9, 3.5); await look('log1', near('log', 1), 9, 3.5);
