@@ -9,7 +9,7 @@ import { LESSONS, SUBJECTS } from './SchoolLessons.js';
 
 export const SCHOOL_SAVE_KEY = 'zns-school';
 export const YEAR = {
-    START_CELLS: 5,      // (the author: a new pupil has 5 mana cells, not 30)
+    START_CELLS: 10,     // (the author 21.11: a new pupil starts with 10 mana cells — was 5 — not 30)
     LESSON_CELLS: 3,     // (a lesson's task done: the mana grows — so the hard spells of the year's end can be cast: «Электром» 50)
     SLEEP_S: 3,          // (s lying still in the bed: the night passes)
 };
