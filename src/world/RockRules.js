@@ -79,7 +79,7 @@ export function rocksOfChunk(data, cx, cz) {
         const ground = H(Math.round(x), Math.round(z)), wet = H.water;
         if (H.sea || H.beach && ground < 0 || wet > ROCK.SHALLOW || ground < -ROCK.SHALLOW) continue;
         if (data.sites && (data.sites.landAt(Math.round(x), Math.round(z)) || data.sites.near(x, z, 6).length)) continue;
-        if (data.falls?.near(x, z, 0)) continue; // (on the bluff: the fall's own rocks are the ones at its foot)
+        if (data.falls?.near(x, z, 0) || data.bridges?.near(x, z, 1)) continue; // (on the bluff: the fall's own rocks are the ones at its foot)
         // a group: one big or medium, small ones beside it, pebbles
         const roll = h01(key, kz, seed + 45);
         const lead = roll < 0.12 ? ROCK.SIZE.big : roll < 0.45 ? ROCK.SIZE.medium : ROCK.SIZE.small;
@@ -90,7 +90,7 @@ export function rocksOfChunk(data, cx, cz) {
             const ex = x + Math.cos(a) * d, ez = z + Math.sin(a) * d;
             if (ex < x0 || ex >= x0 + ROCK.CHUNK || ez < z0 || ez >= z0 + ROCK.CHUNK) continue;
             const g2 = H(Math.round(ex), Math.round(ez)), w2 = H.water;
-            if (H.sea || w2 > ROCK.SHALLOW || g2 < -ROCK.SHALLOW || (data.falls?.near(ex, ez, 0))) continue;
+            if (H.sea || w2 > ROCK.SHALLOW || g2 < -ROCK.SHALLOW || (data.falls?.near(ex, ez, 0) || data.bridges?.near(ex, ez, 1))) continue;
             const sm = h01(key + i, kz + 9, seed + 49) < 0.45 ? ROCK.SIZE.pebble : ROCK.SIZE.small;
             out.push(make(seed, ex, ez, g2, w2, lerpR(sm, h01(key + i, kz, seed + 50)), 'm' + key + ',' + kz + 'e' + i));
         }

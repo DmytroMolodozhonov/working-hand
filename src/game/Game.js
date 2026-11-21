@@ -3,7 +3,7 @@ import {fireballBody} from './FireballRules.js';
 import {waveSource} from './WaveSource.js';
 import { ElementalMages } from './ElementalMages.js';
 import { ELEMENTAL_TESTS,elementalTestSite } from './ElementalTestSites.js';
-import {EARTH_SETTLEMENTS_FROM_GEN,ELEMENTAL_SETTLEMENTS_FROM_GEN,WATERFALLS_FROM_GEN} from '../world/Terrain.js';
+import {EARTH_SETTLEMENTS_FROM_GEN,ELEMENTAL_SETTLEMENTS_FROM_GEN,WATERFALLS_FROM_GEN,BRIDGES_FROM_GEN} from '../world/Terrain.js';
 import { EarthMages } from './EarthMages.js';
 import { earthSite,earthLook } from './EarthMagicRules.js';
 import { VillagerModel as EarthVillager, villagerLook as earthBaseLook } from '../entities/VillagerModel.js';
@@ -590,6 +590,7 @@ export class Game {
             earthSettlements: this.gen >= EARTH_SETTLEMENTS_FROM_GEN,
             elementalSettlements:this.gen >= ELEMENTAL_SETTLEMENTS_FROM_GEN,
             waterfalls: this.gen >= WATERFALLS_FROM_GEN,
+            bridges: this.gen >= BRIDGES_FROM_GEN, // (rivers of two sizes and the bridges over them — RiverBridges.js)
             wizCounters: this.gen >= WIZ_COUNTER_FROM_GEN, // (the wizards' market lane: wide counters with a coin plate — WizardVillages.js) // (the rivers' waterfalls: Waterfalls.js)
             arenaFlat: this.gen >= ARENA_FLAT_FROM_GEN, // (an arena only where the land round it does not drop away — DuelArenas.arenaGround)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)

@@ -49,7 +49,7 @@ test('the year: a lesson a day in the order of the months; the record kept and r
     const back = Y.loadRecord(store);
     assert.deepEqual(back, r);
     mem.set(Y.SCHOOL_SAVE_KEY, '{oops'); assert.equal(Y.loadRecord(store), null);
-    assert.equal(Y.YEAR.START_CELLS, 5);
+    assert.equal(Y.YEAR.START_CELLS, 10); // (21.11: 10 at the start — the author)
     // the mana the lessons grow is enough for the year's hardest spell («Электром» 50) by its lesson
     assert.ok(Y.YEAR.START_CELLS + (days.length - 1) * Y.YEAR.LESSON_CELLS >= 35);
 });
