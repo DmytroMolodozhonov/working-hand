@@ -5,13 +5,30 @@ import { PVP } from './Combat.js';
 export class WizardHome {
     constructor(wizards) { this.wizards = wizards; this.life = wizards.life; this.game = wizards.game; }
 
-    ward(v) { return v.cs?.def?.type === 'magehut' ? this.game.wards?.list.get(v.cs.wardId || 'site:' + v.cs.def.id) : null; }
+    ward(v) {
+        if (v.cs?.def?.type !== 'magehut') return null;
+        const w = this.game.wards?.list.get(v.cs.wardId || 'site:' + v.cs.def.id);
+        return w && w.hp > 0 ? w : null;
+    }
+
+    allowsPersonalShield(v, threatened = false) {
+        return v.cs?.def?.type !== 'magehut' || (threatened && !this.ward(v));
+    }
+
+    lowerPersonalShield(v) {
+        if (!(v.fx & (FX.SHIELD | FX.DOME)) || !this.ward(v)) return;
+        v.fx &= ~(FX.SHIELD | FX.DOME);
+        v.shieldT = 0; v.domeT = 0;
+    }
 
     alarm(v, at, by = null) {
         if (v.dead || v.servantOf != null || v.cs?.def?.type !== 'magehut') return false;
         if (v.sleep) this.life.night?.wake?.(v, 'alarm');
-        const old = v.homeGuard;
-        v.homeGuard = { ...old, at: { x: at.x, z: at.z }, by: by ?? old?.by ?? null, quiet: 0, exit: old?.exit ?? true };
+        this.lowerPersonalShield(v);
+        const old = v.homeGuard, h = v.cs.def.houses[0];
+        const c = h.c || this.ward(v)?.c;
+        const indoors = !c || Math.hypot(v.x - c.x, v.z - c.z) < h.r;
+        v.homeGuard = { ...old, at: { x: at.x, z: at.z }, by: by ?? old?.by ?? null, quiet: 0, exit: old?.exit ?? indoors };
         v.hunt = null; v.investigate = null; v.shelter = null; v.later = null;
         v.fleeT = 0; v.fear = null; v.seated = false; v.job = 'wander'; v.post = null; v.practice = null;
         if (!old) v.path = null;
@@ -20,7 +37,7 @@ export class WizardHome {
     }
 
     /** HouseWards calls this even when an incoming explosion is stopped outside the house. */
-    attacked(w, by) {
+    attacked(w, by, at = w.c) {
         if (!w.id.startsWith('site:')) return;
         const now = Date.now();
         if (w.npcAlarmBy === by && now < (w.npcAlarmAt || 0) + 250) return;
@@ -28,9 +45,44 @@ export class WizardHome {
         const cs = this.life.castles.get(w.id.slice(5));
         if (!cs || cs.def.type !== 'magehut') return;
         for (const v of cs.active.values()) if (v.wizard && !v.dead) {
-            const fp = this.life._playerPos(by), known = fp && this.life._knows(v, by, w.c, 'blast');
-            this.alarm(v, fp || w.c, known ? by : null);
+            // (the master of the house feels his own ward being broken — wherever the blow came from, within 160 m: he knows who it is and where; the author 21.11:
+            //  «я сломал защиту его дома — он никак не отреагировал, пошёл спать»)
+            const fp = this.life._playerPos(by), felt = !!fp && Math.hypot(fp.x - v.x, fp.z - v.z) < 160;
+            const known = fp && (felt || this.life._knows(v, by, at, 'blast'));
+            this.alarm(v, known ? fp : at, known ? by : null);
             if (known) { v.foe = by; cs.hostile.set(by, Date.now() + 120000); }
+        }
+    }
+
+    /**
+     * (host, every 0.5 s) A stranger INSIDE the house (the author 21.11: «если я вхожу в дверь, они должны просыпаться и начинать активничать — я вторгся в
+     * их дом»): the master of the house wakes at once (asleep or not), stands to defend (alarm) and goes for the intruder — unless the intruder is
+     * a friend of his (RelationRules: friendship / love ≥ 20). Once per entry: while the intruder stays he is a foe already.
+     */
+    intrusion(dt) {
+        this._intT = (this._intT || 0) - dt;
+        if (this._intT > 0) return;
+        this._intT = 0.5;
+        const L = this.life, players = L._players();
+        if (!players.length) return;
+        const now = Date.now();
+        for (const cs of L.castles.values()) {
+            if (!cs.awake || cs.def.type !== 'magehut') continue;
+            const h = cs.def.houses?.[0], c = h?.c;
+            if (!h || !c) continue;
+            for (const v of cs.active.values()) {
+                if (!v.wizard || v.dead || v.servantOf != null || v.foe) continue;
+                for (const pl of players) {
+                    if (Math.hypot(pl.p.x - c.x, pl.p.z - c.z) > h.r - 0.5 || Math.abs(pl.p.y - (h.door?.y ?? c.y)) > 7) continue;
+                    const e = L.rel?.eff?.(v);
+                    if (e && (e.fr >= 20 || e.lv >= 20)) continue; // (a friend may come in)
+                    if (v.sleep) { if (v.sleep.phase === 'lie') L.night?.wake?.(v, 'alarm', pl.id); else L.night?._drop?.(v); }
+                    this.alarm(v, pl.p, pl.id);
+                    v.foe = pl.id; cs.hostile.set(pl.id, now + 120000);
+                    L.alog?.decision(v, 'чужой вошёл в дом — просыпается и идёт на него');
+                    break;
+                }
+            }
         }
     }
 
@@ -58,7 +110,7 @@ export class WizardHome {
 
     step(v, dt) {
         if (v.cs?.def?.type !== 'magehut' || !v.W) return false;
-        if (!v.homeGuard && v.foe) this.alarm(v, this.life._playerPos(v.foe) || v, v.foe);
+        if (!v.homeGuard && v.foe && this.ward(v)) this.alarm(v, this.life._playerPos(v.foe) || v, v.foe);
         const H = v.homeGuard;
         if (!H) return false;
         const L = this.life, w = this.ward(v), h = v.cs.def.houses[0];
@@ -102,11 +154,6 @@ export class WizardHome {
             } else this.wizards.fight?._turnTo?.(v, { x: H.at.x, y: v.y, z: H.at.z }, dt);
         }
         v.foe = null; v.hunt = null; v.investigate = null; v.path = null; v.speed = 0; v.mode = 'idle';
-        const drain = ((v.fx & FX.SHIELD) ? PVP.SHIELD_DRAIN : 0) + ((v.fx & FX.DOME) ? PVP.DOME_DRAIN : 0);
-        v.mana = Math.max(0, v.mana - drain * dt);
-        v.shieldT = (v.shieldT || 0) - dt; v.domeT = (v.domeT || 0) - dt;
-        if (v.shieldT <= 0 || !v.mana) v.fx &= ~FX.SHIELD;
-        if (v.domeT <= 0 || !v.mana) v.fx &= ~FX.DOME;
         if (H.quiet > 6 && w.hp < 100 && !v.noWand) {
             const pay = Math.min(dt * 2, v.mana, 100 - w.hp);
             v.mana -= pay; w.hp += pay;

@@ -189,3 +189,32 @@ test('every wing landing gives +1 steadiness, even a long fall (author 20.11)', 
     assert.equal(s.skill, k0 + 3, '+1 for each landing (author 20.11)');
     assert.equal(new Steadiness({ config: { mode: 'creative' } }).fell(), false, 'no skill counted in Creative');
 });
+
+// (the author 21.11, a CRITICAL bug: «планировал плавно, руки в стороны, приземлился медленно — и умер от удара об землю»: the wings move the body by
+//  themselves, but the Character's own ground-following still counted the whole height of the glide as ONE FALL (`airTop` = the highest point of the
+//  flight) and on the touch `landing.drop` was ~the flight's height → fall damage of the whole height (20 HP — dead). The wings now keep the fall's
+//  count at zero while they carry, and a soft touch leaves no landing at all.)
+test('a long gentle glide with the arms spread lands softly: no fall counted from the flight\'s height, no damage', () => {
+    const g = world();
+    g.wings.grant();
+    const ch = g.character;
+    ch.group.position.y = PLAYER_GROUND_OFFSET + 90; ch.onGround = false; ch.verticalVelocity = -7;
+    const step = () => { frame(g, dt); ch.update(dt, g.collision, true); };
+    step();
+    g.arms.spread = true;
+    let seen = null;
+    for (let i = 0; i < 2000 && (g.wingFlight.airborne || i < 3); i++) { step(); if (ch.landing) seen = ch.landing; }
+    assert.equal(g.wingFlight.airborne, false, 'landed');
+    assert.deepEqual(g.hurt, [], 'the wings\' soft touch: no damage');
+    assert.ok(!seen || (seen.drop ?? 0) < 3.5, `no fall of the flight's height counted: ${seen?.drop}`);
+});
+
+test('the landing hurts by its SLOPE and speed, never by the forward speed alone (the author 21.11)', () => {
+    assert.equal(landingHurt(-1.5, 9).dmg, 0, 'a gentle glide');
+    assert.equal(landingHurt(-3, 22).dmg, 0, 'fast but flat: nothing');
+    assert.equal(landingHurt(-5, 22).dmg, 0, 'a flat, fast flare: nothing');
+    assert.equal(landingHurt(-5.5, 0).dmg, 0, 'the soft limit straight down');
+    assert.ok(landingHurt(-20, 2).dmg >= 12, 'straight down, fast: hurts');
+    assert.ok(landingHurt(-9, 9).dmg > 0 && landingHurt(-9, 9).dmg < landingHurt(-20, 2).dmg, 'a 45° plunge hurts less than a straight one');
+    assert.ok(landingHurt(-20, 2).dmg > landingHurt(-10, 2).dmg, 'the faster it falls (the longer the fall), the worse');
+});

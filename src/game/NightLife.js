@@ -273,6 +273,7 @@ export class NightLife {
         const calm = this.life.fright.quietFor(cs) > 20;
         for (const v of [...cs.active.values()]) {
             if (v.dead || v.sleep || v.watch || v.goingHome || v.pack) continue;
+            if (v.homeGuard) continue; // (the house is being attacked / was: the master stays up — the author 21.11: he went to bed in the middle of it)
             if (v.foe || v.fear || v.investigate || v.order || v.servantOf != null || v.handLink || v.lev || v.follow || v.fleeT > 0 || v.fireT > 0 || v.talking > 0) continue;
             if (v.job === 'rebuild' || !calm) continue;
             if (v.wokeAt != null && this._t - v.wokeAt < BACK_TO_BED) continue;

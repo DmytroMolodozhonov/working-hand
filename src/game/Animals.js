@@ -2091,6 +2091,7 @@ export class Animals {
                     continue;
                 }
                 if (a.plantHeld) continue; // (in a carnivorous head's tendrils: Plants.js carries it)
+                if (a.brawlManual && g.brawl?.control.step('a', a, dt)) continue;
                 if (a.imp && g.imperius?.step('a', a, dt)) continue; // («Империус»: a mind in it — ImperiusControl.step)
                 if (a.rider && a.rider !== g.localId) { if (a.model.userData.wings) this._pigBody(a, dt); continue; } // a guest rides it: their computer moves it (a Pegasus' wings beat here too)
                 if (a === this.riding) continue;

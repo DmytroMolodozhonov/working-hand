@@ -6,11 +6,12 @@ import { FX } from '../fx/WizardFx.js';
 export class WizardBlast {
     constructor(wizards) { this.wizards = wizards; }
 
-    protect(v) {
+    protect(v, threatened) {
+        if (this.wizards.home?.allowsPersonalShield(v, threatened) === false) return false;
         if (v.element || v.dead || v.noWand || v.stunT > 0 || v.lev || v.sleep) return false;
         if (v.fx & FX.DOME) { v.domeT = Math.max(v.domeT || 0, 4); return true; }
         if (v.W?.dome && (v.domeCd || 0) <= 0 && v.mana >= NPC_COST.ProtectionMaxima) {
-            this.wizards.fight._dome(v);
+            this.wizards.fight._dome(v, threatened);
             return !!(v.fx & FX.DOME);
         }
         if (!(v.fx & FX.SHIELD) && v.mana >= NPC_COST.Protection) { v.mana -= NPC_COST.Protection; v.fx |= FX.SHIELD; }
@@ -28,13 +29,18 @@ export class WizardBlast {
         for (const v of L.byId.values()) {
             if (!v.wizard || v.dead || v.noWand || v.sleep || v.stunT > 0 || v.servantOf != null || v.entry?.stranger) continue;
             if (Math.hypot(v.x - bp.x, v.z - bp.z) > sightRange(true, g.isNight) || !L._sees(v, bp)) continue;
-            witnesses.push(v);
             const dx = v.x - origin.x, dy = v.y + 2 - origin.y, dz = v.z - origin.z;
             const along = dx * dir.x + dy * dir.y + dz * dir.z, radius = name === 'BombardoMaxima' ? 14 : 8;
-            if (v.foe === by || (along > 0 && along < 75 && dx * dx + dy * dy + dz * dz - along * along < radius * radius)) attacking = true;
+            const threatened = along > 0 && along < 75 && dx * dx + dy * dy + dz * dz - along * along < radius * radius;
+            witnesses.push({ v, threatened });
+            if (v.foe === by || threatened) attacking = true;
         }
-        for (const v of witnesses) {
-            this.protect(v);
+        for (const { v, threatened } of witnesses) {
+            if (v.cs?.def?.type === 'magehut') {
+                if (!threatened) continue;
+                if (W.home?.ward(v)) { W.home.alarm(v, bp, by); continue; }
+            }
+            this.protect(v, threatened);
             if (!attacking) continue; // A distant shot into empty terrain warrants caution, not an accusation of murder.
             const now = Date.now(), canDome = !!v.W?.dome;
             v.blastThreat = { by, reply: canDome ? 'Stupefy' : 'Bombardo', until: now + 15000 };

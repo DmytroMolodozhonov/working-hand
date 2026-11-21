@@ -246,7 +246,7 @@ export const REPEAT_AFTER_MS = 0; // (meta.from already starts 200 ms before the
  */
 export function afterCast(last, spell, meta, now) {
     if (!last || !spell || !(now - last.at < 4000)) return null;
-    // («Бомбардо» cast at once in a fight, «… Максима» heard right after in the same breath: the upgrade — NativeVoice.FIGHT_UPGRADE,
+    // (a base spell cast at once in a fight, «… Максима» heard right after in the same breath: the upgrade — NativeVoice.FIGHT_UPGRADE,
     // Game.castUpgrade decides whether the plain one is still fresh; the same «Максима» twice is stopped by the phrase itself)
     if (meta?.upgrade && meta.native && spell !== last.spell) return null;
     const fit = meta?.fit;

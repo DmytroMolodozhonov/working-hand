@@ -717,7 +717,7 @@ function handAimed() {
 }
 
 /**
- * Cast what the voice heard: in a fight «Бомбардо» went at once (meta.fightNow) and its «… Максима» heard right after (meta.upgrade)
+ * Cast what the voice heard: in a fight a base spell went at once (meta.fightNow) and its «… Максима» heard right after (meta.upgrade)
  * makes the Maxima go too, paid once (Game.castUpgrade). The game's time on the cast goes to the journal (meta.gameMs).
  */
 function castVoice(command, final, meta) {

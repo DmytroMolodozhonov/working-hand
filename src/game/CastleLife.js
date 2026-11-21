@@ -2971,7 +2971,7 @@ export class CastleLife {
         if (v.wizard && (v.fx & FX.DOME) && !opts.pierce && this.wizards.fight.shieldPays(v, opts.spell ? opts.kind || 'spell' : 'melee', true)) { this._flash(v); return; }
         // a shield held up (the shield wall, the ones holding a place, a wizard's hand shield) takes a blow
         // or a spell from the front: little gets through. «Авада Кедавра» passes any shield.
-        if (dir && !opts.pierce && opts.kind !== 'Thunderwave' && (v.foe || v.shieldGuard) && this._shieldUp(v)) { // (Thunderwave comes from above: a hand shield does not stop it)
+        if (dir && !opts.pierce && opts.kind !== 'Thunderwave' && (v.foe || v.shieldGuard || v.brawlManual) && this._shieldUp(v)) { // (Thunderwave comes from above: a hand shield does not stop it)
             if (dir.x * -Math.sin(v.yaw) + dir.z * -Math.cos(v.yaw) < -0.35) {
                 if (v.shieldItem && !v.wizard && opts.spell) {
                     this._wearKnightShield(v, opts.kind || 'spell');
@@ -4241,6 +4241,7 @@ export class CastleLife {
                 }
                 v.landWaitT = 0;
                 this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
+                if (v.brawlManual && g.brawl?.control.step('v', v, dt)) continue;
                 if (v.imp && !v.dead && g.imperius?.step('v', v, dt)) continue; // («Империус»: a mind in it, not its own — ImperiusControl.step)
                 // (calm, far from every player and out of my picture — its pose waits too: it thinks every THINK_AWAY s, its
                 // time added up — a step of 0.35 m at a walk; anything happening to it — every frame again)
@@ -4279,7 +4280,7 @@ export class CastleLife {
         for (const v of [...this.byId.values()]) {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             const lv = drawLevel(d, range, { foe: v.foe, shadowNear: FAR_ONE });
-            const visible = lv !== 'none' && !(v.wizard && d < 20 && Math.abs(v.y - (me.y - 1.95)) > 9); // (a wizard on another floor of the tower: not drawn)
+            const visible = lv !== 'none' && !(v.wizard && !v.brawlManual && d < 20 && Math.abs(v.y - (me.y - 1.95)) > 9); // (a wizard on another floor of the tower: not drawn)
             v.group.visible = visible && !(v.dead && v.bodyMoved); // (its body carried off by «Левиоса»: Death's copy is it now)
             v.group.position.set(v.x, v.y + (v.seated ? VILLAGER_SIT_OFFSET : VILLAGER_FOOT_OFFSET), v.z);
             v.group.rotation.y = v.yaw;
@@ -4296,7 +4297,7 @@ export class CastleLife {
                 if (unseen && !v.model._far) v.model.setFar(true); // (out of the picture: no pose, but already one shape for when it comes into view)
                 v.group.userData.matFrozen = unseen; // (nobody sees it and, far, it casts no shadow: its ~25 matrices wait too — SceneMatrices)
                 v.model.faceOn?.(d < 38 && !unseen);
-                if (!unseen && (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
+                if (!unseen && (d < 35 || v.foe || v.brawlManual || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     if (v.party && !v.glance && !v.foe && !v.dead && !v.talking && d < 45) { // (a person of the road looks about, and keeps an eye on a stranger — TravelerGaze.js; a picture only)
@@ -4323,7 +4324,8 @@ export class CastleLife {
                     // (a builder's hammer heard: the repairs — Rebuild.js)
                     if (v.model.workStrikeNow && v.role === 'builder' && v.model.toolKind === 'hammer' && d < 40) g.sound?.playHammer?.(_v.set(v.x, v.y + 2.2, v.z), 0.8);
                 }
-                if (v.imp?.mine && v.model.strikeNow) g.imperius?.landed('v', v); // (my mind's blow: at the sword's own moment)
+                if (v.brawlManual && v.model.strikeNow) g.brawl?.control.landed('v', v);
+                else if (v.imp?.mine && v.model.strikeNow) g.imperius?.landed('v', v); // (my mind's blow: at the sword's own moment)
                 else if (this.auth && v.model.strikeNow && v.impDuty) g.imperius?.guards?.guardStrike(v); // (a knight on duty: the blow / the shove)
                 else if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
                 else if (this.auth && v.model.strikeNow && v.cmd) this.cmds.strike(v);

@@ -1112,15 +1112,15 @@ export class HouseWards {
                 broken = w.hp <= 0;
                 if (!broken) this.game.sound?.playCrack?.(_v1.set(p.x, p.y, p.z), 1.2);
             }
-            this._wounded(w, spell, by, broken);
+            this._wounded(w, spell, by, broken, false, p);
         }
         return any;
     }
 
     /** (host) The sphere took a blow: who did it is noted, its owner told; broken — it falls apart. */
-    _wounded(w, spell, by, broken, quiet = false) {
+    _wounded(w, spell, by, broken, quiet = false, at) {
         w.hitAt = this._t;
-        this.game.castleLife?.wizards?.home?.attacked(w, by);
+        this.game.castleLife?.wizards?.home?.attacked(w, by, at);
         // (who: its owner is told, wherever they are — the host's list carries it)
         w.hitKey = by != null ? this.keyOf(by) : '';
         w.hitBy = by != null ? String(this.game.playerName?.(by) || '').slice(0, 16) : '';
@@ -1143,14 +1143,16 @@ export class HouseWards {
             w.hp -= WARD.BREAK[spell];
             const broken = w.hp <= 0;
             if (!broken) this.game.sound?.playCrack?.(_v1.set(p.x, p.y, p.z), 1.4);
-            this._wounded(w, spell, by, broken);
+            this._wounded(w, spell, by, broken, false, p);
         } else if (spell === 'Accentric') {
             // (one at a time: another charge only fills it up to a new 40, it never eats faster)
             w.ac = { left: WARD.ACC_TOTAL, by };
             w.ap = [r2(p.x), r2(p.y), r2(p.z)];
             this.log.push({ ev: 'hit', id: w.id, spell, hp: w.hp, hellT: 0 });
-            this._wounded(w, spell, by, false, true);
+            this._wounded(w, spell, by, false, true, p);
             this._changed();
+        } else {
+            this.game.castleLife?.wizards?.home?.attacked(w, by, p);
         }
     }
 
@@ -1163,7 +1165,7 @@ export class HouseWards {
         w.liveAt = this._t;
         const broken = w.hp <= 0;
         if (!broken && Math.random() < 0.3) this.game.sound?.playCrack?.(_v1.set(w.ep?.[0] ?? w.c.x, w.ep?.[1] ?? w.c.y, w.ep?.[2] ?? w.c.z), 0.8);
-        this._wounded(w, 'Electrum', by, broken, true);
+        this._wounded(w, 'Electrum', by, broken, true, p);
         if (!broken && this._t - (w.sentAt ?? -1e9) > 0.25) { w.sentAt = this._t; this._changed(); }
     }
 

@@ -222,7 +222,7 @@ import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { terrainProbe } from '../world/TerrainProbe.js';
-import { WIZ_COUNTER_FROM_GEN, CAVE_MINES_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { WIZ_COUNTER_FROM_GEN, CAVE_MINES_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, patternOf, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -340,7 +340,6 @@ const DUEL_FAST = new Set(['Cardilon', 'Jolt', 'Sapira', 'Stupefy', 'AvadaKedavr
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
 const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
-const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
 const _airLook = new THREE.Vector3();
 const MANA_LATER = new Set(['FireVortex', 'Cardilon', 'Breakthrough', 'BreakthroughMaxima', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
@@ -1081,7 +1080,7 @@ export class Game {
             this.cine = new Cine(this); // (cut-scenes: the school's opening — Cine.js)
             this.school = new School(this); // («Школа Акселдорф»: the year at the school — School.js)
         } else if (config.brawl) {
-            this.brawl = new Brawl(this); // («Битва существ»: two teams on a bounded field; the player is only a camera — Brawl.js, SpectatorCam.js)
+            this.brawl = new Brawl(this);
             this.spectator = new SpectatorCam(this);
             this.brawlPanel = new BrawlPanel(this);
         } else if (config.tutorial) {
@@ -1459,9 +1458,9 @@ export class Game {
         const all = f.landed.length ? f.landed : f.broken.map(([x, L, z, t]) => [x, L - f.d, z, t]);
         for (const [x, L, z] of all) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); y0 = Math.min(y0, L - 1.5); sx += x; sy += L - 1; sz += z; }
         const c = new THREE.Vector3(sx / all.length, sy / all.length, sz / all.length);
-        const debris = f.broken.map(([x, L, z, t]) => ({ x, y: L - f.d - 1, z, color: BASE_COLORS[t] ?? 0x888888 }));
+        const debris = f.broken.map(([x, L, z, t]) => ({ x, y: L - f.d - 1, z, textureY: L - 1, pattern: patternOf(t, !!this.world.terrain?.data.lush), color: BASE_COLORS[t] ?? 0x888888 }));
         for (let i = 0; i < Math.min(40, all.length); i++) { const [x, , z] = all[Math.floor(Math.random() * all.length)]; debris.push({ x, y: y0 + 0.2, z, color: 0x9a8f80, size: 0.6 }); }
-        this.fx.debrisFrom(debris, new THREE.Vector3(c.x, y0 + 0.5, c.z), 160);
+        this.fx.debrisFrom(debris, new THREE.Vector3(c.x, y0 + 0.5, c.z), 160, true);
         // the dust: a low ring rolling out from under it, a cloud rising over it, fine grit falling back
         const size = f.cells.length, R = Math.max(x1 - x0, z1 - z0) / 2 + 1;
         const puffs = Math.min(70, 10 + size);
@@ -1528,7 +1527,7 @@ export class Game {
             this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true, { r: radius });
         }
         const debris = [];
-        for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? BASE_COLORS[b.type] ?? 0x7a5230 });
+        for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, pattern: patternOf(b.type, !!this.world.terrain?.data.lush), color: BLOCK_COLORS[b.type] ?? BASE_COLORS[b.type] ?? 0x7a5230 });
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
@@ -1547,7 +1546,7 @@ export class Game {
         this.houses?.boulders.blast(pos,radius);
         this.elementalMages?.objects.blast(pos,radius);
         this.earthMages?.blast(pos,radius); // real floating walls break after shielding this blast's actors
-        this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
+        this.fx.debrisFrom(debris, pos, 192, true);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
 
         // Weapons nearby wake up and get thrown
@@ -2480,10 +2479,7 @@ export class Game {
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
         // the player may be saying «Бомбардо Максима».
         if (name === 'Bombardo' && !isFinal) {
-            if (!this._pendingBombardo && now - this.lastSpellCastTime >= SPELL_COOLDOWN) {
-                this._pendingBombardo = { at: now };
-                setTimeout(() => this._updatePendingSpell(), BOMBARDO_WAIT + 5);
-            }
+            this.lastCastWhy = 'ждём окончание «Бомбардо» или «Максима»';
             return null;
         }
         // The microphone's final version of a phrase that was already cast
@@ -2492,7 +2488,6 @@ export class Game {
         if (isFinal && early && now - early.at < 3000) {
             if (early.name === name) { this.lastCastWhy = 'эта фраза уже сработала (промежуточная версия)'; this._interimCast = null; return null; }
         }
-        if (name === 'Bombardo' || name === 'BombardoMaxima') this._pendingBombardo = null;
         if (now - this.lastSpellCastTime < SPELL_COOLDOWN) { this.lastCastWhy = `пауза между заклинаниями: прошло ${now - this.lastSpellCastTime} мс из ${SPELL_COOLDOWN}`; if (isFinal && !early) this._why('cooldown'); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
@@ -2657,7 +2652,7 @@ export class Game {
      * that charge becomes the Maxima (the rest of its mana is paid; none left — it stays a «Джолт») — never a
      * second charge. false: no such early «Джолт» (an ordinary cast).
      */
-    /** A spell cast at once in a fight (NativeVoice.FIGHT_UPGRADE: «Бомбардо», «Фрозен», «Айс», «Джолт»): its «… Максима» may still come. */
+    /** A spell cast at once in a fight (NativeVoice.FIGHT_UPGRADE: «Фрозен», «Айс», «Джолт»): its «… Максима» may still come. */
     noteFightBase(spell, manaBefore) {
         if (!FIGHT_UPGRADE.has(spell)) return;
         const paid = Number.isFinite(manaBefore) && Number.isFinite(this.combat?.fatigue) ? Math.max(0, manaBefore - this.combat.fatigue) : 0;
@@ -2678,8 +2673,7 @@ export class Game {
         // (the pause between two spells is for two words, not one word and its «Максима»)
         const last = this.lastSpellCastTime, lastDuel = this._lastDuelCast, early = this._interimCast;
         this.lastSpellCastTime = 0; this._lastDuelCast = 0; this._interimCast = null;
-        // (the plain spell's mana goes back BEFORE the Maxima is paid for: «paid once, at the Maxima's price» — with the plain one's 20 still taken,
-        // «Бомбардо Максима» (35) needed 55 mana and a hero with 40 only got the plain one: the author 19.11, «в основном бомбарда используется только»)
+        // Refund the base spell before checking whether there is enough mana for Maxima.
         const refund = b.paid > 0 && this.combat?.manaOn ? Math.min(b.paid, Math.max(0, (this.combat.maxFatigue || Infinity) - this.combat.fatigue)) : 0;
         this.combat.fatigue += refund;
         const name = this.castLocalSpell(text, true);
@@ -3972,19 +3966,6 @@ export class Game {
         for (const b of shapes) this.iceCells.push(b);
     }
 
-    /** A «Бомбардо» that was not followed by «Максима» goes off now. */
-    _updatePendingSpell() {
-        const p = this._pendingBombardo;
-        if (!p || !this.active || Date.now() - p.at < BOMBARDO_WAIT) return;
-        this._pendingBombardo = null;
-        this.lastMagicTime = Date.now(); // the hand was raised when the word started
-        if (this.castLocalSpell('бомбардо', true)) {
-            // The microphone will still send the finished «бомбардо»: ignore it then
-            this._interimCast = { name: 'Bombardo', at: Date.now() };
-            this.hud.setVoice('✨ <span style="color:#55efc4">BOMBARDO</span>');
-        }
-    }
-
     /** Debug keys: cast in the camera direction. */
     castDebug(name) {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
@@ -4098,6 +4079,40 @@ export class Game {
         } finally { run.return?.(); } // restore hidden models/camera if compilation fails
         bootTimer.note(`прогрев: самый долгий шаг основного потока ${Math.round(maxStep)} мс`);
         progress(1);
+    }
+
+    /**
+     * Hands the video card every sample group's shaders without waiting (KHR_parallel_shader_compile: the driver links them on its
+     * own threads), then one wait for all of them. Null when the card has no such extension (then the old way, group by group).
+     */
+    _pwBatch(parts, per, skip, zoo) {
+        const r = this.renderer, gl = r.getContext?.(), ext = gl?.getExtension?.('KHR_parallel_shader_compile');
+        if (!ext) return null;
+        const before = r.info.programs?.length || 0;
+        const out = { programs: 0 };
+        out.issue = function* () {
+            const old = r.debug.deferShaderCompletion;
+            for (let i = 0; i < parts.length; i += per) {
+                if (skip.groups.has(i)) continue;
+                const part = parts.slice(i, i + per);
+                zoo.add(...part);
+                r.debug.deferShaderCompletion = true;
+                try { r.compile(this.scene, this.camera); } finally { r.debug.deferShaderCompletion = old; zoo.remove(...part); }
+                yield i;
+            }
+            out.programs = (r.info.programs?.length || 0) - before;
+        }.bind(this);
+        out.wait = async () => {
+            const pending = (r.info.programs || []).filter((p) => p.program);
+            const t0 = performance.now();
+            while (pending.length) {
+                if (gl.isContextLost?.()) throw new Error('WebGL context lost during shader warm-up');
+                for (let k = pending.length - 1; k >= 0; k--) if (gl.getProgramParameter(pending[k].program, ext.COMPLETION_STATUS_KHR)) pending.splice(k, 1);
+                if (!pending.length || performance.now() - t0 > 180000) break; // (a driver that never says «ready»: the drawing below finishes them)
+                await new Promise((res) => setTimeout(res, 8));
+            }
+        };
+        return out;
     }
 
     /** The shader warm-up's crumb: where it was when the video card dropped the context (a driver reset leaves the page dead — the next start reads this, says in the journal which sample it was, and skips it). */
@@ -4300,13 +4315,26 @@ export class Game {
             this.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isSprite || o.isLine) && o.visible) { o.visible = false; hideRest.push(o); } }); // (not the groups: a light inside one must stay on, or the shaders differ)
             this.scene.add(zoo);
             zoo.remove(...parts);
+            // all at once (the author 21.11: «ускорь загрузку выживания в 2 раза» — the shaders were 55–95 s of a 70–120 s load): the
+            // driver is handed EVERY sample's program first and links them on its own threads side by side; only then is each group
+            // drawn. Before, each group of 4 was waited for alone — the driver's threads stood idle. A start that died here falls
+            // back to the old one-group-at-a-time way, whose crumbs name the sample.
+            const batch = asyncCompile && this.renderer.compileAsync && !skip.stages.has('пачка') && this._pwBatch(parts, PER, skip, zoo);
+            if (batch) {
+                this._pwMark('пачка');
+                const t0 = performance.now();
+                for (const step of batch.issue()) yield { of };
+                yield { of, wait: batch.wait() };
+                bootTimer.note(`прогрев: ${batch.programs} шейдеров параллельно за ${Math.round(performance.now() - t0)} мс`);
+            }
             for (let i = 0; i < parts.length; i += PER) {
                 const part = parts.slice(i, i + PER);
                 if (skip.groups.has(i)) { yield { of }; continue; }
                 this._pwMark('g:' + i);
                 zoo.add(...part);
                 const t0 = performance.now();
-                if (asyncCompile && this.renderer.compileAsync) yield {of, wait:this.renderer.compileAsync(this.scene,this.camera)};
+                if (batch) this.renderer.compile(this.scene, this.camera); // (linked already: only the uniforms are looked up)
+                else if (asyncCompile && this.renderer.compileAsync) yield {of, wait:this.renderer.compileAsync(this.scene,this.camera)};
                 yield* sides();
                 const ms = performance.now() - t0;
                 if (ms > 300) (this._pwSlow || (this._pwSlow = [])).push({ ms, i, what: this._pwDescribe(part) }); // (the journal: which samples made the loading stall — a friend's complaint 06.11)
@@ -4660,7 +4688,7 @@ export class Game {
         if (earth && !duelOnly && !lean) this.vampire?.update(dt); sysMark('vampire');
         if (!duelOnly && !lean) this.titans?.update(dt); sysMark('titans');
         this.godhood?.update(dt); sysMark('godhood');
-        this.brawl?.update(dt); sysMark('brawl');
+        this.brawl?.update(dt, deltaTime); sysMark('brawl');
         this.tutorial?.update(dt); sysMark('tutorial'); // (on the planets — it knows itself where the hero is)
         this.tutorialNudge?.update(dt); sysMark('tutorialNudge'); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
         this.school?.update(dt); sysMark('school'); // («Школа Акселдорф»: School.js)
@@ -4773,7 +4801,6 @@ export class Game {
         this.cardilon.update(dt); sysMark('cardilon');
         this.spells.update(dt); sysMark('spells');
         this._updateMagicGesture();
-        this._updatePendingSpell();
         if (!isTest && earth && !duelOnly) this._spawnWaves(dt);
 
         for (const r of this.remotes.values()) r.update(dt, this.ships, this.space);
@@ -5456,6 +5483,7 @@ export class Game {
         for (let i = this.zombies.length - 1; i >= 0; i--) {
             const z = this.zombies[i];
             // («Империус»: a mind in it — mine drives it, a guest's is drawn where it is — ImperiusControl.step)
+            if (z.brawlManual && this.brawl?.control.step('z', z, dt)) continue;
             if (z.imp && (this.authority || z.imp.mine) && this.imperius?.step('z', z, dt)) { if (z.removable) this.removeZombie(z); continue; }
             if (!this.authority) {
                 // Multiplayer guest: the host moves zombies; we only animate them
@@ -5968,7 +5996,7 @@ export class Game {
             explosions: this.explosions.length,
             flight: { state: this.flight.state, speed: this.flight.speed, tilt: this.flight.tilt, pitch: this.flight.pitch },
             space: this.space ? { state: this.space.state, realm: this.space.realm, P: { ...this.space.P }, speed: this.space.speed, knows: this.space.knows() } : null,
-            stats: { ...this.stats, fx: { sparks: this.fx.sparks.active, debris: this.fx.debris.active } },
+            stats: { ...this.stats, fx: { sparks: this.fx.sparks.active, debris: this.fx.debris.active + this.fx.blockDebris.active } },
         };
     }
 }

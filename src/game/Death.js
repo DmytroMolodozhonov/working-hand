@@ -48,6 +48,9 @@ import { darkMageLevel } from './DarkMagic.js';
 import { darkMageHead, HEAD } from './HellRules.js';
 import { DARK_DEATH } from './VitalityRules.js';
 
+/** Things that hang on a living body by themselves (the coin pouch on the belt, the wand at the belt) — they fall as things when the hero dies: never on the corpse's skin. */
+export const WORN_ON_BODY = new Set(['coin-belt', 'wand-belt']);
+
 export const DEATH = {
     BODY_S: 1440, // s the body lies: one whole game day, 24 minutes (the author: «не сразу — после 24 минут игровых, или если человек поспал»); a night's sleep brings it nearer — skipTime
     BONES_S: 1200, // s the bones stay after that (20 minutes)
@@ -530,6 +533,8 @@ export class DeathSystem {
         // Copy the visual tree and plain flags, leaving optimization controllers on the living avatar.
         const copy = (o) => {
             if (o.isSprite || o.userData.farOne || o.name === 'head-shadow') return null;
+            // (автор 21.11: на мёртвом скине остались палочка с пояса и мешочек с деньгами, хотя они выпали отдельными вещами и их можно взять — «если выпали, их не должно быть на самом теле»: вещи, висящие на теле, в копию не идут)
+            if (WORN_ON_BODY.has(o.name)) return null;
             const data = o.userData;
             let c;
             try { o.userData = {}; c = o.clone(false); } finally { o.userData = data; }

@@ -28,3 +28,21 @@ test('shader warm-up supports a driver without KHR and reports context loss',asy
     const lost=renderer({lost:true});await assert.rejects(lost.r.compileAsync({},{}),/context lost/);
     assert.deepEqual(lost.calls,['deferred']);assert.equal(lost.r.debug.deferShaderCompletion,undefined);
 });
+
+// The game's warm-up hands the card EVERY group's shaders first, then waits once (21.11: groups of 4 waited alone — the driver's threads stood idle).
+test('the warm-up issues all sample groups deferred, skips the crumbed ones, then waits for all programs at once', async () => {
+    const { Game } = await import('../../src/game/Game.js').catch(() => ({}));
+    if (!Game) return; // (Game needs a browser for some imports — then the e2e bench --fake-khr covers it)
+    const programs = [], polls = new Map(), seen = [];
+    const r = { debug: {}, info: { programs }, getContext: () => gl,
+        compile() { seen.push({ deferred: this.debug.deferShaderCompletion === true, n: zoo.children.length }); programs.push({ program: {} }); } };
+    const gl = { getExtension: () => ({ COMPLETION_STATUS_KHR: 1 }), isContextLost: () => false, getProgramParameter: (p) => { const k = (polls.get(p) || 0) + 1; polls.set(p, k); return k > 2; } };
+    const zoo = { children: [], add(...a) { this.children.push(...a); }, remove(...a) { this.children = this.children.filter((c) => !a.includes(c)); } };
+    const b = Game.prototype._pwBatch.call({ renderer: r, scene: {}, camera: {} }, [1, 2, 3, 4, 5, 6, 7, 8, 9], 4, { groups: new Set([4]) }, zoo);
+    for (const _ of b.issue());
+    assert.deepEqual(seen, [{ deferred: true, n: 4 }, { deferred: true, n: 1 }]);
+    assert.equal(b.programs, 2); assert.equal(zoo.children.length, 0); assert.notEqual(r.debug.deferShaderCompletion, true);
+    await b.wait();
+    for (const p of programs) assert.ok(polls.get(p.program) >= 3);
+    assert.equal(Game.prototype._pwBatch.call({ renderer: { ...r, getContext: () => ({ getExtension: () => null }) } }, [], 4, { groups: new Set() }, zoo), null);
+});
