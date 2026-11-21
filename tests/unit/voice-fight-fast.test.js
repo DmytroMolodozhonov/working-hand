@@ -1,5 +1,5 @@
 // Бой: заклинание — сразу (жалоба автора: «в дуэли заклинания недостаточно быстро выкидываются»).
-// «Бомбардо»/«Фрозен» в бою не ждут «… Максиму» (FIGHT_UPGRADE: Максима следом — усиление), громкие колонки дуэли без друга
+// «Фрозен» в бою не ждёт «… Максиму» (FIGHT_UPGRADE: Максима следом — усиление), громкие колонки дуэли без друга
 // на сервере не задерживают боевое слово до конца фразы (fightClear), строка задержки по этапам — SpellLog.latencyStages.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,27 +31,18 @@ function firstSay(r, d) {
 }
 const said = (text) => rows.filter((r) => r.kind === 'spell' && r.text === text);
 
-test('бой: «бомбардо» — сразу (settled, fightNow), вне боя — ждёт «… Максиму»', () => {
-    let fast = 0, wait = 0;
-    for (const r of said('бомбардо')) {
-        const f = firstSay(r, { duel: true, far: 0 });
-        if (f.say?.settled && f.say.fightNow) fast++;
-        const p = firstSay(r, { duel: false, far: 0 });
-        if (p.say?.more || (p.say && p.quiet >= f.quiet)) wait++;
+test('изученная Bombardo Maxima откладывает обычную Bombardo до конца фразы', () => {
+    for (const duel of [true, false]) {
+        for (const r of said('бомбардо')) {
+            const p = withQuiet(r, 15);
+            const o = lookAt({ id: 1, final: false, ...p, duel }, {});
+            assert.ok(!o.say?.settled, 'ordinary Bombardo never casts from a paused fragment');
+            const end = lookAt({ id: 1, final: true, ...p, duel }, o.seg);
+            assert.equal(ms(end.say?.text ?? ''), 'Bombardo');
+        }
     }
-    assert.ok(fast >= 1, `в бою «бомбардо» сработало сразу ${fast} из 2`);
-    assert.ok(wait >= 1, 'вне боя «бомбардо» по-прежнему ждёт продолжения');
-});
-
-test('бой: «… Максима» после «бомбардо», сработавшего сразу, — усиление, а не «уже было»', () => {
-    for (const r of said('бомбардо максима')) {
-        const o = lookAt({ id: 1, final: true, T: r.T, lp: r.lp, far: 0, duel: true }, { fired: 'бомбардо', settled: true, upSpell: 'Bombardo' });
-        if (!o.heard.sure) continue;
-        assert.equal(o.say?.upgrade, 'Bombardo');
-        // (без быстрого «бомбардо» — прежнее правило: продолжение той же фразы второй раз не колдуется)
-        const old = lookAt({ id: 1, final: true, T: r.T, lp: r.lp, far: 0, duel: true }, { fired: 'бомбардо', settled: true });
-        assert.equal(old.say, null);
-    }
+    const fast = said('бомбардо').some((r) => firstSay(r, { duel: true, far: 0, knows: (s) => s !== 'BombardoMaxima' }).say?.settled);
+    assert.ok(fast, 'ordinary Bombardo can fire early if Maxima is unknown');
     assert.equal(FIGHT_UPGRADE.get('Frozen'), 'IceMaxima');
 });
 
@@ -103,12 +94,12 @@ import { LETTERS, SPACE as SP } from '../../src/audio/SpellSpotter.js';
 import { PENT_PIECE } from '../../src/input/NativeVoice.js';
 import { matchSpell as ms } from '../../src/fx/SpellManager.js';
 /** Строки нейросети «как будто сказано» `text`: каждая буква — 2 шага, между словами пауза. */
-function spoken(text, quiet = 25) {
+function spoken(text, quiet = 25, pause = 2) {
     const rows = [];
     const put = (k) => { const r = new Float32Array(V).fill(-12); r[k] = 0; rows.push(r); };
     for (let i = 0; i < 4; i++) put(BLANK);
     for (const ch of text) {
-        if (ch === ' ') { put(SP); put(BLANK); put(BLANK); continue; }
+        if (ch === ' ') { put(SP); for (let i = 0; i < pause; i++) put(BLANK); continue; }
         const k = LETTERS.indexOf(ch);
         if (k < 0) continue;
         put(k); put(BLANK);
@@ -119,8 +110,8 @@ function spoken(text, quiet = 25) {
     return { T: rows.length, lp };
 }
 /** Все взгляды на фразу (посреди и в конце) → заклинания, которые игра получила бы. */
-function castsOf(text, d = {}) {
-    const { T, lp } = spoken(text);
+function castsOf(text, d = {}, pause = 2) {
+    const { T, lp } = spoken(text, 25, pause);
     const out = [];
     let seg = {};
     for (let k = 10; k <= T; k += 2) {
@@ -128,12 +119,17 @@ function castsOf(text, d = {}) {
         const p = lp.subarray(0, k * V);
         const o = lookAt({ id: 1, final, T: k, lp: b64(p), t1: k * 40, far: 0, q: 0.3, ...d }, seg);
         seg = o.seg;
-        const name = o.say && !o.say.talkOnly ? ms(o.say.text) : null;
+        const name = o.say && !o.say.talkOnly && (o.say.settled || o.say.isFinal) ? ms(o.say.text) : null;
         if (name) out.push(name);
         if (final) break;
     }
     return out;
 }
+test('«Бомбардо … Максима» с паузой выпускает один заряд Maxima даже в бою', () => {
+    assert.deepEqual(castsOf('бомбардо максима', { duel: true }, 12), ['BombardoMaxima']);
+    assert.deepEqual(castsOf('бомбардо', { duel: true }), ['Bombardo']);
+});
+
 test('«Пентаграниум …» в кусках: из фразы не срабатывает ни одно другое заклинание (в бою и нет)', () => {
     const pieces = ['энтегранью инферно', 'етграни инферно', 'интегранюинтернум', 'пентограним инфернум', 'пентаграниум инфернус',
         'пентаграниум спектрис', 'пентаграниум монструм', 'пентаграниум ноктис', 'пентаграниум фирмитас', 'етграни овергроун'];

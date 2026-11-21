@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { frameFromHands, edgeInBook, halfQuat, bookFromHinge, frameOnPalm, openFor } from '../../src/game/BookPhysics.js';
 import { makeSpellBookModel, setBookAngle, BOOK } from '../../src/game/BookModel.js';
+import { BookReading } from '../../src/game/BookReading.js';
 import { SimplifiedHand, BOOK_GRIP } from '../../src/entities/SimplifiedHand.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -111,4 +112,25 @@ test('a hand round a book: each finger closes only until it touches it — never
     for (let i = 0; i < 4; i++) J[i] = a[i] + (b[i] - a[i]) * t;
     h._setFinger('index', J);
     assert.equal(h._fingerIn('index', [box], 0.035), true, 'the index finger lies on it');
+});
+
+test('the reading pose settles farther from the eyes and holds through tiny hand tremors', () => {
+    const R = Object.create(BookReading.prototype);
+    const group = new THREE.Group(), head = new THREE.Object3D();
+    head.position.copy(eye);
+    group.add(head);
+    R.game = { character: { group, head } };
+    const m = makeSpellBookModel();
+    const pos = V(0, 1.65, 1.8);
+    const quat = new THREE.Quaternion();
+    const s = { model: m, phi: 2.6, pos: pos.clone(), quat: quat.clone() };
+    for (let step = 0; step < 60; step++) R._place(s, pos, quat, 1 / 60);
+    assert.ok(eye.z - m.position.z > 0.8);
+    const stable = m.position.clone(), q = m.quaternion.clone();
+    for (let step = 0; step < 30; step++) {
+        const dx = (step % 2 ? -1 : 1) * 0.005;
+        R._place(s, pos.clone().add(V(dx, -dx, 0)), quat.clone().setFromEuler(new THREE.Euler(dx, dx, 0)), 1 / 60);
+    }
+    assert.ok(m.position.distanceTo(stable) < 0.001);
+    assert.ok(m.quaternion.angleTo(q) < 0.001);
 });

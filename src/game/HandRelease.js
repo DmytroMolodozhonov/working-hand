@@ -61,6 +61,10 @@ export const THROW = {
     // (the wand: a swing down to the ground — bending to it, a hand thrust at it, a spell at it — is
     // no throw: the hand must stay above the waist through the swing and the letting go)
     STRICT_LOW: -1.0, // the hand this far below the shoulder (the body's space; the arm is 1.9 long): down at the hip, the ground
+    // For books the hand must make a full fist and then visibly open after the swing.
+    BOOK_HOLD: 0.84,
+    BOOK_OPEN: 0.22,
+    BOOK_LATE_MS: 380,
     LOW_WRIST: 0.12, // (the pose: the wrist this much below the shoulder in the picture — no wind-up)
 };
 
@@ -181,7 +185,8 @@ export class ThrowDetector {
      *   behind the shoulder); weight (the thing's)
      * @returns {null|{speed:number, vRel:number[], vWorld:number[], at:number}} the throw, at the fingers' opening
      */
-    update({ now, hand, shoulder, vRel, vWorld, curl, tracked, behind = false, weight = 1, blurOk = false, strict = false }) {
+    update({ now, hand, shoulder, vRel, vWorld, curl, tracked, behind = false, weight = 1, blurOk = false, strict = false, book = false, fist = curl }) {
+        if (book && !tracked) { this.reset(); return null; }
         const speed = Math.hypot(vRel.x, vRel.y, vRel.z);
         const up = hand.y - shoulder.y;
         if (!this.peak && (up > THROW.UP || hand.z - shoulder.z > THROW.BACK || behind)) {
@@ -195,17 +200,19 @@ export class ThrowDetector {
         }
         if (this.cock && !this.peak && now - this.cockAt > (strict ? THROW.STRICT_WINDOW_MS : THROW.WINDOW_MS)) this.cock = null;
         if (!this.cock) return null;
-        if (tracked && curl > THROW.HOLD) { this.held = true; this.heldAt = now; } // (a real throw starts with the thing held)
+        if (tracked && (book ? fist >= THROW.BOOK_HOLD : curl > THROW.HOLD)) { this.held = true; this.heldAt = now; } // (a real throw starts with the thing held)
         const need = (strict ? THROW.STRICT_BASE : THROW.SPEED) + THROW.PER_KG * weight;
-        if (this.held && speed > need && (-vRel.z > 0 || vRel.y < 0) && (!strict || ((this.back || (this.high && -vRel.y > 0.5 * speed)) && hand.y - shoulder.y > THROW.STRICT_LOW))
+        if (this.held && (!book || (curl > THROW.BOOK_OPEN && now - this.heldAt < THROW.BOOK_LATE_MS)) && speed > need && (-vRel.z > 0 || vRel.y < 0) && (!strict || ((this.back || (this.high && -vRel.y > 0.5 * speed)) && hand.y - shoulder.y > THROW.STRICT_LOW))
             && Math.hypot(hand.x - this.cock.x, hand.y - this.cock.y, hand.z - this.cock.z) > (strict ? THROW.STRICT_TRAVEL : THROW.TRAVEL)
             && (!this.peak || speed > this.peak.speed)) this.peak = { speed, vRel: [vRel.x, vRel.y, vRel.z], vWorld: [...vWorld], at: now };
         if (!this.peak) return null;
-        if (now - this.peak.at > (strict ? THROW.STRICT_LATE_MS : THROW.LATE_MS)) { this.reset(`замах ${this.peak.speed.toFixed(1)} м/с был, но пальцы не разжались вовремя (${strict ? 'нужно' : 'нужно'} curl<${strict ? THROW.STRICT_OPEN : THROW.OPEN})`); return null; } // the fist kept hold: a chop, not a throw
+        const open = book ? THROW.BOOK_OPEN : strict ? THROW.STRICT_OPEN : THROW.OPEN;
+        const late = book ? THROW.BOOK_LATE_MS : strict ? THROW.STRICT_LATE_MS : THROW.LATE_MS;
+        if (now - this.peak.at > late) { this.reset(`замах ${this.peak.speed.toFixed(1)} м/с был, но пальцы не разжались вовремя (нужно curl<${open})`); return null; } // the fist kept hold: a chop, not a throw
         // (the wand let go down at the hip / the ground: the hand went down to it, no throw)
         if (strict && hand.y - shoulder.y < THROW.STRICT_LOW) { this.reset('бросок вниз, к земле — не считается'); return null; }
         // (the wand: the fingers seen really opening, just after they were seen holding it in the swing)
-        if (tracked && (strict ? curl < THROW.STRICT_OPEN && now - this.heldAt < THROW.STRICT_HELD_MS : curl < THROW.OPEN)) { const p = this.peak; this.reset(); return p; } // (a hand lost in the blur waits ≤ LATE_MS)
+        if (tracked && curl < open && (!strict || now - this.heldAt < THROW.STRICT_HELD_MS)) { const p = this.peak; this.reset(); return p; } // (a hand lost in the blur waits ≤ LATE_MS)
         if (tracked && curl > THROW.HOLD) this.seenHold = true; // (seen still gripping after the swing: a chop)
         // the camera lost the hand in the swing's blur: a strong swing FORWARD (not down, as a blow is)
         // that has come to its end lets go — people throw this way and the fingers are rarely seen opening
@@ -213,7 +220,7 @@ export class ThrowDetector {
         // (only after a real wind-up behind the shoulder; never the wand — its pinch is often unseen)
         // (a light thing — an apple, a stone, a pouch: a hand by the head counts as a wind-up too, an overhand throw
         // is that; a sword, an axe swung from by the head is a blow — only from behind the shoulder)
-        if (blurOk && !strict && (this.back || weight < 1) && !tracked && !this.seenHold && this.blurred(speed)) { const p = this.peak; this.reset(); return p; }
+        if (blurOk && !strict && !book && (this.back || weight < 1) && !tracked && !this.seenHold && this.blurred(speed)) { const p = this.peak; this.reset(); return p; }
         return null;
     }
 }

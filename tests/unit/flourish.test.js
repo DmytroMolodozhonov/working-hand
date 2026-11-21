@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import * as THREE from 'three';
 import { TerrainData, BLOCK, chunkKey } from '../../src/world/Terrain.js';
+import { SHAPE } from '../../src/world/BlockShapes.js';
 import { Flora, buildFlora } from '../../src/world/Flora.js';
 import { Flourish, GREENS } from '../../src/game/Flourish.js';
 
@@ -45,9 +46,11 @@ test('Flourish greens the aimed cave floor, places flowers there, and leaves sto
     const x = 80, z = 80, layer = -7;
     const c = t.chunk(x >> 5, z >> 5);
     for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) {
-        t.set(x + dx, layer, z + dz, dx === 0 && dz === 0 ? BLOCK.DIRT : BLOCK.STONE);
+        t.set(x + dx, layer, z + dz, (dx === 0 && dz === 0) || (dx === 4 && dz === 0) ? BLOCK.DIRT : BLOCK.STONE);
         t.set(x + dx, layer + 1, z + dz, BLOCK.AIR);
     }
+    t.set(x + 4, layer, z, BLOCK.DIRT, SHAPE.RAMP_PX);
+    const edits = [];
     const top = t.topLayer(x, z), surface = t.get(x, top, z);
     assert.ok(top > layer + 1);
     const game = {
@@ -57,13 +60,18 @@ test('Flourish greens the aimed cave floor, places flowers there, and leaves sto
         combat: {pay: () => {}},
         builder: {
             _hitCell: () => ({x, z, L: layer, type: t.get(x, layer, z), point: {}}),
-            _sendEdits: edits => { for (const cell of edits) t.set(...cell); },
+            _sendEdits: cells => edits.push(...cells),
         },
     };
     const F = new Flourish(game);
     assert.equal(F.cast(true), 'Flourish');
-    F.update(2.3);
+    F.update(0.2);
     assert.equal(t.get(x, layer, z), BLOCK.GRASS);
+    assert.equal(t.get(x + 4, layer, z), BLOCK.DIRT, 'the ring has not reached the outer dirt yet');
+    F.update(2.1);
+    assert.equal(t.get(x + 4, layer, z), BLOCK.GRASS);
+    assert.equal(t.shapeAt(x + 4, layer, z), SHAPE.RAMP_PX);
+    assert.deepEqual(edits, [[x, layer, z, BLOCK.GRASS, 0], [x + 4, layer, z, BLOCK.GRASS, SHAPE.RAMP_PX]]);
     assert.equal(t.get(x + 1, layer, z), BLOCK.STONE);
     assert.equal(t.get(x, top, z), surface);
     const flowers = new Flourish(game);

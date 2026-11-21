@@ -42,14 +42,15 @@ export const HOLD = {
     SLIP: 1.0, // m: hands this much further apart than the open book reaches (arms spread wide) — the cover slips out of the second hand…
     SLIP_T: 0.3, // …after this long (s) (a little wider it just lies flat between them: nothing lets go by accident)
     OPEN_BLEND: 0.12, // s: the book turns from the fist's way into the reading pose (it is open at once)
-    FWD: 0.1, // m: the spine stands off the palm toward the reader (the book is close to the eyes)
+    FWD: -0.02, // m: leave a little more room between the pages and the reader
     SQUEEZE0: 0.62, // the hand's closing up to this: the book stays fully open…
     SQUEEZE1: 0.95, // …and from this on it is shut (between — as much as the fist is squeezed)
     OPEN_RATE: 3, // 1/s: how fast it opens (a loosened hand / just taken)
     CLOSE_RATE: 9, // 1/s: how fast the squeezing hand shuts it
 };
 /** The dead zone of the open book's pose (BookReading._place). */
-const DEAD = { POS: 0.014, ANG: 0.035 };
+const DEAD = { POS: 0.025, ANG: 0.06 };
+const MIN_EYE_DISTANCE = 0.83;
 /** A fingertip drawn across the open book turns a page (the author: «проводит пальцем по книге. И даже немного»): metres along the page, within WINDOW s, just above the paper. */
 export const SWIPE = { DIST: 0.055, WINDOW: 0.6, BACK: 0.025, ABOVE: 0.3, BELOW: 0.05, COOL: 0.5, MIN_PHI: 1.2, OMEGA: 11 };
 // a fingertip catches a page by its edge: the outer part of the page, close to it
@@ -170,9 +171,15 @@ export class BookReading {
         this._tipV = { left: new THREE.Vector3(), right: new THREE.Vector3() };
     }
 
-    /** The hand that owns the book in Items, while it is open in the hands (no throwing then). */
+    /** The hand that owns the book in Items, while it is open in the hands. */
     get readingSide() {
         return this.s ? this.s.owner : null;
+    }
+
+    get twoHanded() { return this.s?.mode === 'two'; }
+
+    finishThrow(side) {
+        if (this.s?.owner === side) this._end(false);
     }
 
     /** Is this hand busy with the book (holding a cover)? — it doesn't take other things then. */
@@ -382,6 +389,17 @@ export class BookReading {
         if (!this.s) { this._fist(hb, dt); this.readCam = null; return; }
         const s = this.s;
         s.owner = hb.side;
+        // Apply body translation before filtering, so walking doesn't pull the hands away from the book.
+        const body = g.character.group.position;
+        s.body ??= body.clone();
+        const drift = (this._bodyDrift ||= new THREE.Vector3()).subVectors(body, s.body);
+        s.body.copy(body);
+        s.pos.add(drift);
+        s.dead?.pos.add(drift);
+        s.from?.pos.add(drift);
+        s.gripP?.add(drift);
+        s.pL?.add(drift);
+        s.pR?.add(drift);
         if (s.mode === 'two') this._two(s, dt);
         else this._one(s, dt);
         if (!this.s) return;
@@ -501,9 +519,14 @@ export class BookReading {
      * free: an index finger drawn across the book turns a page (`_swipe`).
      */
     _one(s, dt) {
-        const g = this.game;
         const H = s.hold[s.half];
         const h = this._hand(H);
+        if (s.dead && this.game.character.isHandTracked?.(H) === false) {
+            this._let[H] = this._grab[H] = 0;
+            this._place(s, s.dead.pos, s.dead.quat, dt);
+            s.swp = null;
+            return;
+        }
         // the squeeze: as open as the fist is loose
         const c = this._closed(h);
         // Holding a book already curls the fingers. Close only for a sustained EXTRA squeeze,
@@ -511,8 +534,9 @@ export class BookReading {
         s.gripBase ??= c;
         s.gripSmooth = (s.gripSmooth ?? c) + (c - (s.gripSmooth ?? c)) * (1 - Math.exp(-dt * 8));
         const close0 = Math.max(HOLD.SQUEEZE0, Math.min(0.95, s.gripBase + 0.12));
-        s.squeezeT = s.gripSmooth > close0 ? (s.squeezeT || 0) + dt : 0;
-        const k = s.squeezeT < 0.25 ? 1 : Math.max(0, 1 - (s.gripSmooth - close0) / (1 - close0));
+        const close1 = Math.max(HOLD.SQUEEZE1, close0 + 0.04);
+        s.squeezeT = c > close0 && s.gripSmooth > close0 ? (s.squeezeT || 0) + dt : 0;
+        const k = s.squeezeT < 0.25 ? 1 : Math.max(0, 1 - (s.gripSmooth - close0) / (close1 - close0));
         const want = HOLD.ONE_HAND_PHI * k;
         s.phi += (want - s.phi) * Math.min(1, dt * (want < s.phi ? HOLD.CLOSE_RATE : HOLD.OPEN_RATE));
         const { P } = this._palm(h);
@@ -527,24 +551,16 @@ export class BookReading {
         }
         this._place(s, f1.pos, f1.quat, dt);
         this._fitHand(H, this._spineBoxes(s.model));
-        // the holding hand opens: on an open palm turned up the book lies on it; a stretched
-        // arm that opens drops it (the only way it falls); otherwise the fingers keep it
-        const open = this._dwell(this._let, H, h.curl < HOLD.OPEN_CURL, dt) >= HOLD.LET_GO_T;
-        const palmUp = F ? F.y > 0.5 : !!h.palmUp;
-        if (!s.support && open) {
-            if (palmUp) {
-                s.support = true;
-                s.from = { pos: s.model.position.clone(), quat: s.model.quaternion.clone(), t: 0, T: HOLD.SLIDE_T };
-            } else if (h.ext) {
-                this._let[H] = 0;
-                this._end(false);
-                g.items._throw(H, new THREE.Vector3(), { why: 'книга: вытянутая рука разжата' });
-                return;
-            }
-        } else if (s.support) {
-            if (open && !palmUp && h.ext) { this._let[H] = 0; this._end(false); g.items._throw(H, new THREE.Vector3(), { why: 'книга: вытянутая рука разжата' }); return; }
-            // the fingers close on it again: it is held where it lies
-            if (this._dwell(this._grab, H, h.curl > HOLD.GRAB_CURL, dt) >= HOLD.GRAB_T) { this._grab[H] = 0; s.support = false; s.steady = null; }
+        // Rest on an upturned palm after a deliberate hold. Opening the fingers never drops the book.
+        const palmUp = F ? F.y > 0.68 : !!h.palmUp;
+        if (!s.support && this._dwell(this._let, H, palmUp && h.curl < HOLD.OPEN_CURL, dt) >= HOLD.LET_GO_T) {
+            this._let[H] = 0;
+            s.support = true;
+            s.from = { pos: s.model.position.clone(), quat: s.model.quaternion.clone(), t: 0, T: HOLD.SLIDE_T };
+        } else if (s.support && this._dwell(this._grab, H, h.curl > HOLD.GRAB_CURL || (F && F.y < 0.32), dt) >= HOLD.GRAB_T) {
+            this._grab[H] = 0;
+            s.support = false;
+            s.steady = null;
         }
         // the free hand: turns the pages with a swipe of the finger
         const Fr = other(H);
@@ -592,15 +608,27 @@ export class BookReading {
         const m = s.model;
         // A dead zone round the book's pose (the author 19.11: «книга колеблется, нормально читать нельзя»): a tracking tremble smaller than DEAD.POS metres / DEAD.ANG
         // radians moves nothing at all; a real move drags the pose along, DEAD.POS behind it (an exponential filter still shakes a little — a dead zone holds still).
+        if (s.phi >= HOLD.CLOSED_PHI) {
+            const eye = this._eye(this._placeEye ||= new THREE.Vector3());
+            const offset = (this._placeOffset ||= new THREE.Vector3()).subVectors(pos, eye).setY(0);
+            const d = offset.length();
+            if (d < MIN_EYE_DISTANCE) {
+                if (d < 0.001) offset.set(0, 0, -1).applyQuaternion(this.game.character.group.quaternion).setY(0).normalize();
+                else offset.divideScalar(d);
+                pos = (this._placeTarget ||= new THREE.Vector3()).copy(pos).addScaledVector(offset, MIN_EYE_DISTANCE - d);
+            }
+        }
         const dz = s.dead || (s.dead = { pos: pos.clone(), quat: quat.clone() });
         const dp = pos.distanceTo(dz.pos);
         if (dp > DEAD.POS) dz.pos.lerp(pos, 1 - DEAD.POS / dp);
         const da = quat.angleTo(dz.quat);
         if (da > DEAD.ANG) dz.quat.slerp(quat, 1 - DEAD.ANG / da);
-        pos = dz.pos; quat = dz.quat;
-        s.pos.copy(pos);
+        quat = dz.quat;
+        const travel = s.pos.distanceTo(dz.pos);
+        s.pos.lerp(dz.pos, 1 - Math.exp(-dt * (travel < 0.18 ? 7 : 17)));
+        pos = s.pos;
         const angle = s.quat.angleTo(quat);
-        s.quat.slerp(quat, 1 - Math.exp(-dt * (angle < 0.06 ? 3 : 14)));
+        s.quat.slerp(quat, 1 - Math.exp(-dt * (angle < 0.12 ? 5 : 12)));
         quat = s.quat;
         const fr = s.from;
         const T = fr?.T || HOLD.BLEND_T;
@@ -830,7 +858,7 @@ export class BookReading {
         const cam = g.camera;
         const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect);
         const vfov = THREE.MathUtils.degToRad(cam.fov);
-        const dist = Math.max(2 * w / 0.88 / (2 * Math.tan(hfov / 2)), BOOK.H * (ITEM_SCALE.book || 1.6) / 0.88 / (2 * Math.tan(vfov / 2)));
+        const dist = Math.max(2 * w / 0.79 / (2 * Math.tan(hfov / 2)), BOOK.H * (ITEM_SCALE.book || 1.6) / 0.79 / (2 * Math.tan(vfov / 2)));
         this.readCam = { at, from: (this._from || (this._from = new THREE.Vector3())).copy(at).addScaledVector(n, dist), k: Math.min(1, (s.phi - 1.0) * 1.2) };
     }
 

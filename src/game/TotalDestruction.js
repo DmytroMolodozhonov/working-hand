@@ -23,7 +23,8 @@ import { breaking } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { RUIN, ruinSample, hash01 } from '../world/Ruin.js';
 import { keepIn } from './HouseWards.js';
-import { BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
+import { blockFragments, fragmentMaterial } from '../fx/VoxelFragments.js';
+import { BASE_COLORS, isCastleBlock, patternOf } from '../world/Terrain.js';
 import { DAMAGE, blastDamage } from './Damage.js';
 const BLAST = DAMAGE.BlastPeak;
 import { MAXIMA_POWER } from '../fx/SpellManager.js';
@@ -58,15 +59,13 @@ const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _v = new THREE.Vector3();
-const _c = new THREE.Color();
 const DUST = [0x9a8f80, 0x8a7d6c, 0xa89c8a, 0x7b7064];
 
 export class TotalDestruction {
     constructor(game) {
         this.game = game;
         this.list = []; // destructions going on (mine and others')
-        this.geo = new THREE.BoxGeometry(1, 1, 1);
-        this.mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+        this.mat = fragmentMaterial();
     }
 
     /** Is one of mine still going (one at a time)? */
@@ -341,14 +340,12 @@ export class TotalDestruction {
         const cells = [];
         for (let i = 0; i < all.length; i += step) cells.push(all[Math.floor(i)]);
         // the rubble is in the data already: drawn when the blocks have come down on it
-        d.rubbleKeys = (out.rubble || []).map(([x, L, z]) => `${x},${L},${z}`);
+        d.rubbleKeys = out.rubble || [];
         if (d.rubbleKeys.length) data?.hideCells?.(d.rubbleKeys);
         if (!cells.length) return;
-        const mesh = new THREE.InstancedMesh(this.geo, this.mat, cells.length);
+        const mesh = blockFragments(cells, this.mat, data);
         mesh.castShadow = !d.band; // (a wave's bands: many at once — no shadows)
-        mesh.frustumCulled = false;
-        d.blocks = cells.map(([x, L, z, t], i) => {
-            mesh.setColorAt(i, _c.setHex(BASE_COLORS[t] ?? 0x888888));
+        d.blocks = cells.map(([x, L, z, t]) => {
             const h = hash01(x, L, z, 21);
             const floor = data ? data.floorBelow(x, z, L) : L - 4; // (where it comes down: the ruins, a cave's floor)
             return {
@@ -358,7 +355,6 @@ export class TotalDestruction {
                 size: 1, t, gone: false,
             };
         });
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         g.scene.add(mesh);
         d.mesh = mesh;
         this._draw(d);
@@ -380,7 +376,8 @@ export class TotalDestruction {
                     // it breaks on the ruins: dust and a few chips
                     if (puffs++ < 6) {
                         g.fx.smoke.spawn(b.x, b.to + 0.3, b.z, (Math.random() - 0.5) * 1.5, 0.6 + Math.random(), (Math.random() - 0.5) * 1.5, DUST[(Math.random() * DUST.length) | 0], 1 + Math.random() * 1.2, 2 + Math.random(), { shrink: -0.3, spin: 1 });
-                        g.fx.debris.spawn(b.x, b.to + 0.4, b.z, (Math.random() - 0.5) * 4, 2 + Math.random() * 3, (Math.random() - 0.5) * 4, BASE_COLORS[b.t] ?? 0x888888, 0.3 + Math.random() * 0.25, 1.5, { shrink: 0.12, fade: false, spin: 10 });
+                        g.fx.blockDebris.spawn(b.x, b.to + 0.4, b.z, (Math.random() - 0.5) * 4, 2 + Math.random() * 3, (Math.random() - 0.5) * 4,
+                            BASE_COLORS[b.t] ?? 0x888888, 0.3 + Math.random() * 0.25, 1.5, { shrink: 0.12, fade: false, spin: 10, pattern: patternOf(b.t) });
                     }
                 }
             }
@@ -404,7 +401,7 @@ export class TotalDestruction {
     }
 
     _endFall(d) {
-        if (d.mesh) { this.game.scene.remove(d.mesh); d.mesh.dispose(); d.mesh = null; }
+        if (d.mesh) { this.game.scene.remove(d.mesh); d.mesh.dispose(); d.mesh.geometry.dispose(); d.mesh = null; }
         if (d.rubbleKeys) { this.game.world.terrain?.data?.showCells?.(d.rubbleKeys); d.rubbleKeys = null; }
         d.done = true;
     }

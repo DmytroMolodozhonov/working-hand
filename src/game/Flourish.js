@@ -102,8 +102,11 @@ export class Flourish {
                     if (!GREENS.has(b) || isEnchanted(b)) continue;
                     if (g.wards?.forbids?.(g.character.group.position, _o.set(ix, L, iz))) continue;
                     if (t.get(ix, L + 1, iz) !== BLOCK.AIR) continue; // (something on it: it stays as it is)
-                    edits.push([ix, L, iz, BLOCK.GRASS]);
-                    if (Math.random() < 0.25) g.fx?.spark?.(_o.set(ix, L + 0.6, iz), 0x7fd34a, 0.08, _d.set(0, 1.2 + Math.random(), 0), 0.6);
+                    const shape = t.shapeAt?.(ix, L, iz) || 0;
+                    t.set(ix, L, iz, BLOCK.GRASS, shape);
+                    if (t.get(ix, L, iz) !== BLOCK.GRASS) continue;
+                    edits.push([ix, L, iz, BLOCK.GRASS, shape]);
+                    if (Math.random() < 0.25) g.fx?.spark?.(_o.set(ix, L - 0.45, iz), 0x7fd34a, 0.08, _d.set(0, 1.2 + Math.random(), 0), 0.6);
                 }
                 if (edits.length) g.builder?._sendEdits?.(edits, false);
             }
@@ -146,7 +149,7 @@ export class Flourish {
             if (L != null && (!Number.isInteger(L) || L < MIN_LAYER || L > MAX_LAYER)) continue;
             if (t.setBloom(x, z, L)) {
                 this.bloomed.push(L == null ? [x, z] : [x, z, L]);
-                if (visual && Math.random() < 0.3) g.fx?.spark?.(_o.set(x, (L ?? t.topLayer(x, z)) + 0.9, z), [0xe8392c, 0x4f7fe0, 0xf5d23a, 0xd86aa8][(Math.random() * 4) | 0], 0.07, _d.set(0, 0.8, 0), 0.7);
+                if (visual && Math.random() < 0.3) g.fx?.spark?.(_o.set(x, (L ?? t.topLayer(x, z)) - 0.35, z), [0xe8392c, 0x4f7fe0, 0xf5d23a, 0xd86aa8][(Math.random() * 4) | 0], 0.07, _d.set(0, 0.8, 0), 0.7);
             }
         }
         if (this.bloomed.length > FLOURISH.KEEP) this.bloomed.splice(0, this.bloomed.length - FLOURISH.KEEP);
@@ -157,7 +160,7 @@ export class Flourish {
 
     _fxBurst(x, z, layer = null) {
         const g = this.game, t = g.terrain?.data;
-        const y = t ? (layer ?? t.topLayer(x, z)) + 0.8 : 0;
+        const y = t ? (layer ?? t.topLayer(x, z)) - 0.35 : 0;
         for (let i = 0; i < 36; i++) {
             const a = (i / 36) * Math.PI * 2;
             g.fx?.spark?.(_o.set(x, y, z), i % 3 ? 0x8ee05a : 0xfff3a0, 0.1, _d.set(Math.cos(a) * 4, 0.6 + Math.random(), Math.sin(a) * 4), 0.9);

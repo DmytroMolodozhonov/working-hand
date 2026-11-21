@@ -1085,7 +1085,7 @@ export class ItemSystem {
             // (nor the wand while the hand or the wand rests against the ground, a wall — the author: the ground at the
             // hands' height, the wand touched it and fell — and a moment after: _touching; coins are still laid on a
             // counter by opening the hand on it)
-            // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
+            // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a two-handed book or a scroll being read, or the other hand taking it)
             // (nor a wand while a spell is going — swinging it to cast never throws it)
             // (the pawnshop / the shady buyer: the OFF hand held out over his counter and opened lays any thing on it — even a wand)
             if (side === g.off && ch.armState && !holdsFast(ch) && (this._buyerPut(side, h, gt, ch) || this._chestPut(side, h, gt, ch) || this._cauldronPut(side, h, gt, ch))) continue;
@@ -1093,7 +1093,7 @@ export class ItemSystem {
             // the author's apple fell out while eating — the mouth never lets go)
             const atMouth = this._nearMouth(side, h, ch, gt);
             const justTook = now - h.since < TAKE_GRACE_MS;
-            if (kind === 'fishingRod' || atMouth || justTook || holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && (g.gear?.nock || ch.isRunning || (this._runAt != null && gt - this._runAt < 600))) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            if (kind === 'fishingRod' || atMouth || justTook || holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && (g.gear?.nock || ch.isRunning || (this._runAt != null && gt - this._runAt < 600))) || (kind === 'book' && g.books?.reading?.twoHanded) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 // (the journal «Предметы»: the fingers open, but something forbids letting go — what)
                 if (ch.isHandTracked?.(side) && (ch.getGripCurl?.(side) ?? 1) < DROP.CLOSED) {
                     this._dropTry(side, kind, (kind === 'fishingRod' ? 'заброс выпускает леску, а не удочку — остаётся в руке' : null) || (atMouth ? 'еда у рта — не выпадает' : null) || (justTook ? 'вещь только что взята — рука отходит, это не бросок' : null) || holdsWhy(ch, now)
@@ -1102,7 +1102,7 @@ export class ItemSystem {
                         || (kind === 'wand' && g.spellBusy?.() ? 'идёт заклинание — палочку не бросить' : null)
                         || (kind === 'bow' && g.gear?.nock ? 'на тетиве стрела' : null)
                         || (kind === 'bow' ? 'бег: лук не выпадает, пока вы бежите' : null)
-                        || ((kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) ? 'вещь читается' : null)
+                        || ((kind === 'book' && g.books?.reading?.twoHanded) || (kind === 'scroll' && g.scrolls?.readingSide) ? 'вещь читается' : null)
                         || (this._otherHandTakes(side, h) ? 'вещь закреплена: другая рука держит её (правило двух рук)' : null)
                         || 'руки не готовы');
                 }
@@ -1111,6 +1111,18 @@ export class ItemSystem {
             const arm = ch.armState(side, this._arm[side]);
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
             const tk = this._trk[side], weight = ITEM_INFO[kind]?.weight ?? 1;
+            if (kind === 'book') {
+                const fingers = ch.getActiveHands?.()[side]?.targetState?.fingers;
+                const grip = fingers ? Math.min(fingers.index, fingers.middle, fingers.ring, fingers.pinky) : (ch.getHoldCurl?.(side) ?? curl);
+                const opening = fingers ? Math.max(fingers.index, fingers.middle, fingers.ring, fingers.pinky) : curl;
+                const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(),
+                    curl: opening, fist: grip, tracked, behind: poseBehind(g.currentPose, side), weight, book: true });
+                if (thr) {
+                    g.books?.reading?.finishThrow(side);
+                    this._letGo(side, tk.swing(tt), 'бросок книги: полный хват, замах и раскрытие кисти');
+                }
+                continue;
+            }
             // the LEADING hand's wand (the one that casts): it must never fly off by accident — only a real throw (a wind-up
             // behind the shoulder, a fast long swing, the fingers seen holding it and then seen opening wide), never an
             // opened hand (the author holds it by one finger, the other four open). Its flight is read from the hand's memory.

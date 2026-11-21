@@ -81,11 +81,11 @@ export const DUEL_FIT = 0.5;
 export const DUEL_QUIET = 80;
 /**
  * In a fight (a duel, an arena duel, a charge flying at me — d.duel) these spells do not wait for their «… Максима» either (the
- * author: «Бомбардо» and «Фрозен» came 0.55–0.6 s after the last letter, the tower's head answers in 0.15–0.35 s): the plain one is
+ * author: the tower's head answers in 0.15–0.35 s): the plain one is
  * cast at once, and a «… Максима» heard right after it in the same breath makes the Maxima go too, the plain one's mana given back
- * (Game.castUpgrade, UPGRADE_MS) — so «Бомбардо Максима» is never lost. Only spells whose one longer form is their Maxima.
+ * (Game.castUpgrade, UPGRADE_MS) — only spells whose one longer form is their Maxima. «Бомбардо» waits for the end of the phrase.
  */
-export const FIGHT_UPGRADE = new Map([['Bombardo', 'BombardoMaxima'], ['Frozen', 'IceMaxima'], ['Ice', 'IceMaxima'], ['Jolt', 'JoltMaxima']]);
+export const FIGHT_UPGRADE = new Map([['Frozen', 'IceMaxima'], ['Ice', 'IceMaxima'], ['Jolt', 'JoltMaxima']]);
 /** ms after the plain spell in which its «… Максима» still upgrades it (Game.castUpgrade). */
 export const UPGRADE_MS = 1500;
 /** How much better than needed the «… Максима» must fit to upgrade (a tail of noise after the plain word is no «Максима»). */
@@ -209,7 +209,6 @@ function lookAtRows(d, seg, lp, refRows) {
             // (already cast as settled from this phrase: its end is no second word — nor a piece of it heard
             // again: «Бомбардо Максима» cast, its end read as «Бомбардо», is no second «Бомбардо»; another
             // spell after it in the same phrase — the explosion, the echo — only when heard clearly: AFTER_FIT)
-            // («Бомбардо» cast at once in a fight, the phrase ends «… Максима»: the upgrade — FIGHT_UPGRADE)
             const up = upgradeOf(next, h, d);
             const again = !up && next.fired && (staleWord(next, h, d) || (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT)));
             if (!again) say = up ? { text: h.text, isFinal: true, upgrade: up } : { text: h.text, isFinal: true };
@@ -221,14 +220,15 @@ function lookAtRows(d, seg, lp, refRows) {
             // or, when what plays is the game's own voices (it knows their words: GameVoices) and the spell is
             // clear: at the wizards' tower the spell waited for the phrase's end, 2–3 s, behind their talk)
             // (a longer spell only the hero knows is worth the wait: none known — cast now)
-            if (goesOnKnown(h.spell.phrase, d.knows) && !(h.tail >= MORE_WAIT) && !duelFast(h.spell.spell, d)) {
+            const longer = goesOnKnown(h.spell.phrase, d.knows);
+            const waitForEnd = h.spell.spell === 'Bombardo';
+            if (longer && (waitForEnd || (!(h.tail >= MORE_WAIT) && !duelFast(h.spell.spell, d)))) {
                 // «Protection…»: «Хаус» may yet come — the game waits (only an answer under fire can't: more)
                 if (next.fired !== name && next.more !== name) { say = { text: h.text, isFinal: false, more: true }; next.more = name; }
             } else if (next.fired !== name && !staleWord(next, h, d)) {
                 // settled: nothing can follow that would make it another spell — as good as the phrase's end
-                // (in a fight «Бомбардо» is settled at once — fightNow: its «… Максима» may still upgrade it — FIGHT_UPGRADE)
                 const up = upgradeOf(next, h, d);
-                const fightNow = !up && !!d.duel && FIGHT_UPGRADE.has(h.spell.spell) && goesOnKnown(h.spell.phrase, d.knows);
+                const fightNow = !up && !!d.duel && FIGHT_UPGRADE.has(h.spell.spell) && longer;
                 say = { text: h.text, isFinal: false, settled: true, ...(up ? { upgrade: up } : null), ...(fightNow ? { fightNow: true } : null) };
                 next.fired = name;
                 next.settled = true;
