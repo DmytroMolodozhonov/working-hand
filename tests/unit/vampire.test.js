@@ -83,3 +83,11 @@ test('«Где появиться»: у замка графа — на подх�
     assert.ok((fx * gx + fz * gz) / Math.hypot(gx, gz) > 0.95, 'смотрит на ворота');
     assert.equal(farTarget('vampire', {}), null, 'в старом мире замка нет');
 });
+
+test('the count\'s cloud is seen only as far as the castle itself is drawn (the author 21.11)', async () => {
+    const { cloudSee } = await import('../../src/game/VampireLife.js');
+    assert.equal(cloudSee(300).see, 300, 'a short draw distance: the cloud no farther than the castle');
+    assert.ok(cloudSee(300).fade <= 300 * 0.35 + 1e-9);
+    assert.equal(cloudSee(5000).see, 800, 'a far one: still not beyond 800 m');
+    assert.equal(cloudSee(undefined).see, 800);
+});

@@ -29,13 +29,19 @@ import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { stormDeck } from './GargoyleRitual.js';
 
 const ACTIVE_R = 240, GONE_R = 320; // m: the castle's life is made / put away
-const CLOUD = { R: VAMP.DARK_R + 80, H: 95, SEE: 1200, SEE_FADE: 800, FADE_T: 8 }; // his cloud (the author 06.11: «тёмная туча, как у горгулий, только больше»): radius, m over the floor, seen from (the author 07.11: «слишком издалека вижу тучи» — no more than 1,2 km, thickening gradually from there (fully thick within 400 m), not all at once from 2,2 km), s to melt away
+const CLOUD = { R: VAMP.DARK_R + 80, H: 95, SEE: 800, SEE_FADE: 500, FADE_T: 8 }; // his cloud (the author 06.11: «тёмная туча, как у горгулий, только больше»): radius, m over the floor, seen from (the author 07.11: «слишком издалека вижу тучи» — no more than 1,2 km, thickening gradually from there (fully thick within 400 m), not all at once from 2,2 km), s to melt away
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const r2 = (x) => Math.round(x * 100) / 100;
 
 // ------------------------------------------------------------------ the models (shared shapes, made once)
 let _batGeo = null, _batMat = null, _batTime = { value: 0 };
+/** How far his cloud is seen (m) and the span it comes out of the haze over: never farther than the world is drawn (the castle itself), never beyond CLOUD.SEE. */
+export function cloudSee(viewDistance) {
+    const see = Number.isFinite(viewDistance) && viewDistance > 0 ? Math.min(CLOUD.SEE, viewDistance) : CLOUD.SEE;
+    return { see, fade: Math.min(CLOUD.SEE_FADE, see * 0.35) };
+}
+
 /** One bat (span BATS.SPAN): a furry body, ears, the membranes on finger-bones (vertex colours: the membrane lighter where thin, the bones dark), red eyes. `wing` attribute: −1…1 along the span (0 the body) — the video card beats it. */
 function batGeometry() {
     if (_batGeo) return _batGeo;
@@ -246,14 +252,17 @@ export class VampireLife {
         const g = this.game, P = this.plan;
         const want = this.state.cleared ? 0 : 1;
         this._cloudK = (this._cloudK ?? want) + Math.sign(want - (this._cloudK ?? want)) * Math.min(Math.abs(want - (this._cloudK ?? want)), dt / CLOUD.FADE_T);
-        const show = d < CLOUD.SEE && this._cloudK > 0.003 && !g.space?.offEarth;
+        // (автор 21.11: «темнота над его замком слишком далеко видна — только если игрок видит замок»: туча видна не дальше границы прорисовки мира — той, до
+        //  которой рисуется сам замок на скале — и выходит из дымки на последней трети этого расстояния)
+        const { see, fade: seeFade } = cloudSee(g.world?.terrain?.viewDistance);
+        const show = d < see && this._cloudK > 0.003 && !g.space?.offEarth;
         if (!show) { if (this._decks) for (const m of this._decks) m.visible = false; return; }
         if (!this._decks) { this._decks = [0, 1].map((i) => { const m = stormDeck(CLOUD.R - i * 40, 31.7 + i * 9.1); g.scene.add(m); return m; }); this._cloudT = 0; this._flashT = 4; this._flash = 0; }
         this._cloudT += dt;
         this._flashT -= dt;
-        if (this._flashT <= 0) { this._flashT = 5 + Math.random() * 12; this._flash = 1; if (d < 600) g.sound?.playTitan?.(_v.set(P.x + (Math.random() - 0.5) * 300, P.floor + CLOUD.H, P.z + (Math.random() - 0.5) * 300), 'thunder', 0.5); }
+        if (this._flashT <= 0) { this._flashT = 5 + Math.random() * 12; this._flash = 1; if (d < Math.min(600, see)) g.sound?.playTitan?.(_v.set(P.x + (Math.random() - 0.5) * 300, P.floor + CLOUD.H, P.z + (Math.random() - 0.5) * 300), 'thunder', 0.5); }
         this._flash = Math.max(0, this._flash - dt * 2.5);
-        const f0 = Math.min(1, Math.max(0, (CLOUD.SEE - d) / CLOUD.SEE_FADE)), far = f0 * f0 * (3 - 2 * f0); // (it comes out of the haze: fully thick only within SEE − SEE_FADE)
+        const f0 = Math.min(1, Math.max(0, (see - d) / seeFade)), far = f0 * f0 * (3 - 2 * f0); // (it comes out of the haze: fully thick only within SEE − SEE_FADE)
         this._decks.forEach((m, i) => {
             m.visible = far > 0.003;
             m.position.set(P.x, P.floor + CLOUD.H + i * 18, P.z);
