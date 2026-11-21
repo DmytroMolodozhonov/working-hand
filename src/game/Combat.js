@@ -606,7 +606,11 @@ export class Combat {
 
     pay(name, extra = 0) {
         this.paidCount = (this.paidCount || 0) + 1; // (mana: a spell that was paid for may count as a success)
-        if (this.manaOn) this.fatigue = Math.max(0, this.fatigue - this.costOf(name, extra));
+        if (this.manaOn) {
+            const cost = this.costOf(name, extra), had = this.fatigue;
+            this.fatigue = Math.max(0, this.fatigue - cost);
+            if (cost > 0) allLog('Мана', `заплачено за «${name}»: −${Math.round(cost)} (было ${Math.round(had)}, осталось ${Math.round(this.fatigue)} из ${Math.round(this.maxFatigue || 0)})`); // (автор 21.11: «почему я потратил так много?» — каждая плата видна)
+        }
     }
 
     /** Mana back a second: the base pace × the mantle × the achievements × the cells of the maximum (ManaRegen.js). */
