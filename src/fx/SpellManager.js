@@ -469,6 +469,27 @@ export function hellfireWords(text) {
     return /(^| )адск[а-я]* (огон|огн|пламя)/.test(t) && /(^| )(прид[а-я]*|приди|явись|гряди)( |$)/.test(t) ? 2 : 0;
 }
 
+/** A gust through the dust and the smoke (the clouds of a collapse are `fx.smoke`; the grit — `fx.sand`): blown on and thinned (Particles.blow). */
+export function windSmoke(fx, origin, direction, range, cone, power, radial) {
+    if (!fx) return;
+    const speed = 5 + 3 * power, thin = power > 1 ? 0.7 : 0.45, c = Math.cos(cone);
+    fx.smoke?.blow?.(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, range, c, speed, thin, radial);
+    fx.sand?.blow?.(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, range, c, speed * 0.8, thin * 0.6, radial);
+}
+
+/**
+ * A gust on a door's leaf close up (see castWind): `p` — the point of the leaf the gust is asked about. Right at it (≤ 0.6 m): along the aim, whatever the
+ * angle; within 3.5 m and ~63° of the aim: along the aim blended towards the leaf. A little weaker than the main cone's push. null: out of reach.
+ */
+function closeDoorPush(origin, direction, p, strength, range) {
+    const to = _a.subVectors(p, origin), dist = to.length();
+    if (dist > 3.5) return null;
+    const dirTo = dist > 1e-4 ? to.divideScalar(dist) : direction;
+    if (dist > 0.6 && direction.angleTo(dirTo) > 1.1) return null;
+    const k = 0.8 * strength * (1 - 0.6 * dist / range);
+    return _b.copy(direction).lerp(dirTo, 0.4).setY(0).normalize().multiplyScalar(k).setY(k * 0.3);
+}
+
 export class SpellManager {
     /**
      * @param {THREE.Scene} scene
@@ -1201,7 +1222,12 @@ export class SpellManager {
         // Ghosts: the gust blows them away (they fly off frightened and come back — Ghosts.blow)
         this.hooks.windGhosts?.(origin, direction, power, casterId);
         // Doors: the gust swings the leaves it reaches (every computer the same — Doors.blow; a locked one only rattles)
-        this.hooks.doors?.((p) => push(p), origin);
+        // Doors, close up: the wand right at a leaf (the tip is pulled back to 5 cm from it — Duel.armStart) and aimed a little aside, or the leaf beside the hand
+        // (the author 21.11: «Вайнд часто плохо работает, особенно у двери — палочка очень близко»): the gust the cone did not reach still swings a leaf
+        // within 3.5 m when the aim is within ~63° of it (and always right at the leaf) — along the aim, a little weaker
+        this.hooks.doors?.((p) => push(p) || closeDoorPush(origin, direction, p, strength, range), origin);
+        // The dust of fallen buildings and the smoke: blown away and thinned (Particles.blow)
+        windSmoke(this.fx, origin, direction, range, cone, power, false);
     }
 
     // ---------------------------------------------------------- Wind Maxima, the wand up
@@ -1239,6 +1265,7 @@ export class SpellManager {
         }
         this.hooks.impulseWorld?.('WindMaxima', origin, R, push, casterId);
         this.hooks.doors?.((p) => push(p), origin);
+        windSmoke(this.fx, origin, _a.set(0, 1, 0), R, Math.PI, 3, true); // (the ring scatters the dust and the smoke all round)
         if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => { const v = body(pos); return v && v.clone(); }, 'WindMaxima');
         // the front: runs out, puts out each fire as it comes to it
         const wave = this.hooks.windRingBegin?.(origin, casterId) || null;

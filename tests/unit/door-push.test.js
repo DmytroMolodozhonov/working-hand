@@ -156,3 +156,23 @@ test('real Wind reaches the top of a door at point blank, for mirrored and rotat
         assert.equal(d.spin,0,'locked doors still hold');
     }
 });
+
+test('Wind close to a door (the author 21.11): the wand right at the leaf aimed a little aside, or beside the hand — still swings it; aimed away — not', async () => {
+    const { SpellManager } = await import('../../src/fx/SpellManager.js');
+    const run = (dist, lat, yawOff) => {
+        const D = fake(), d = door({ x: 0, y: 0, z: 0, a: 0, ry: 0, w: 3, h: 5 }); D.list.set('x', d);
+        const center = D._leafMiddle(d, new THREE.Vector3()), normal = D._leafNormal(d, new THREE.Vector3());
+        const side = new THREE.Vector3(normal.z, 0, -normal.x);
+        const origin = center.clone().addScaledVector(normal, -dist).addScaledVector(side, lat); origin.y = 3;
+        const toC = center.clone().sub(origin).setY(0).normalize();
+        const direction = toC.applyAxisAngle(new THREE.Vector3(0, 1, 0), yawOff); direction.y = 0.05; direction.normalize();
+        const gust = { auth: true, zombies: [], fx: { spark() {} }, _fx() {}, hooks: { doors: (push, from) => D.blow(push, from) } };
+        SpellManager.prototype.castWind.call(gust, origin, direction, 'me');
+        return (d.spin || 0) !== 0;
+    };
+    assert.ok(run(0.05, 0, 0.9), 'the tip 5 cm from the leaf, aimed 50° aside');
+    assert.ok(run(0.3, 1.2, 0.6), 'the hand beside the leaf, aimed a little aside');
+    assert.ok(run(1.5, 0, 0.3) && run(2.5, 0, 0), 'the plain cone still works');
+    assert.ok(!run(0.8, 0, Math.PI * 0.8), 'aimed away from the door: nothing');
+    assert.ok(!run(6, 0, 1.4), 'far and aside: nothing');
+});

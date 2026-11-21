@@ -157,6 +157,36 @@ export class ParticlePool {
         return n;
     }
 
+    /**
+     * A gust of wind through the particles (the author 21.11: «Вайнд» и «Вайнд Максима» должны помогать рассеивать пыль от разрушающихся зданий» —
+     * and the smoke with it): every particle within `range` of the origin (ox, oy, oz) and, unless `radial`, in the cone round the unit direction
+     * (dx, dy, dz) (`cosCone`: its cosine; point blank — everything ahead) is thrown on with `speed` (less far out) and THINS: its life (and the
+     * fade's span with it — no pop) is cut by up to `thin` at the hand, so a cloud is torn into streaks and gone sooner. `radial`: a ring of wind
+     * round the caster (outward, a little up). Returns how many were touched.
+     */
+    blow(ox, oy, oz, dx, dy, dz, range, cosCone, speed, thin = 0.5, radial = false) {
+        const P = this.pos, V = this.vel, r2 = range * range;
+        let n = 0;
+        for (let i = 0, i3 = 0; i < this.active; i++, i3 += 3) {
+            const tx = P[i3] - ox, ty = P[i3 + 1] - oy, tz = P[i3 + 2] - oz, d2 = tx * tx + ty * ty + tz * tz;
+            if (d2 >= r2) continue;
+            const d = Math.sqrt(d2) || 1e-3, ux = tx / d, uy = ty / d, uz = tz / d;
+            const f = 1 - 0.6 * d / range, k = speed * f;
+            if (radial) {
+                const h = Math.hypot(tx, tz) || 1;
+                V[i3] += tx / h * k; V[i3 + 1] += k * 0.25; V[i3 + 2] += tz / h * k;
+            } else {
+                const cos = ux * dx + uy * dy + uz * dz;
+                if (d > 2.5 ? cos < cosCone : cos < 0) continue;
+                V[i3] += (dx * 0.75 + ux * 0.25) * k; V[i3 + 1] += (dy * 0.75 + uy * 0.25) * k + k * 0.1; V[i3 + 2] += (dz * 0.75 + uz * 0.25) * k;
+            }
+            const s = 1 - Math.min(0.8, thin * f);
+            this.life[i] *= s; this.maxLife[i] *= s;
+            n++;
+        }
+        return n;
+    }
+
     _kill(i) {
         const last = --this.active;
         if (i === last) return;
