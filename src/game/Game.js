@@ -49,6 +49,7 @@ import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
 import { HurtFx } from './HurtFx.js';
+import { BanditGangs } from './BanditGangs.js';
 import { Combat, PVP, bombardoDamage, sampleShieldModels, setShieldGlow } from './Combat.js';
 import { isDivine } from './ProtectionGods.js';
 import { chestCoins } from './CastleTreasure.js';
@@ -880,6 +881,7 @@ export class Game {
         this.castleLife = new CastleLife(this); // the people of the castles
         this.arenaDuels = new ArenaDuels(this); // the duel arenas: the fans, the duels, the sign-up (ArenaDuels.js)
         this.carriages = new Carriages(this); // carts and the wizards' carriages on the roads (Carriages.js)
+        this.bandits = new BanditGangs(this); // robber gangs on horses: swordsmen and archers, four strategies, the dead hero's things (BanditGangs.js)
         this.travelers = new Travelers(this); // the people of the roads: wanderers, knights errant, carts (Travelers.js)
         this.ships = new Ships(this); // the ships of the sea castles: decks, sails, the wheel, crews, cannons
         this.onFlame.push((o, d, len, casterId) => this.ships.igniteAlong(o, d, len, casterId)); // («Инферно» sets sails and decks on fire)
@@ -4651,7 +4653,7 @@ export class Game {
         const lean = !!this.config?.brawl; // («Битва существ»: no books, trees, plants, bosses, ships, roads' people — only the field, the teams and the fire)
         if (earth && !duelOnly) this.animals.update(dt); sysMark('animals');
         if (earth && !lean) this.runner.update(dt); sysMark('runner'); // (the running book: not in the brawl field — the author 17.11)
-        if (earth && !duelOnly && !lean) this.travelers?.update(dt); sysMark('travelers'); // (the people of the roads: before the people move — the riders sit where their cart is)
+        if (earth && !duelOnly && !lean) { this.travelers?.update(dt); this.bandits?.update(dt); } sysMark('travelers'); // (the people of the roads: before the people move — the riders sit where their cart is)
         if (earth && !duelOnly && !lean) this.carriages?.update(dt); sysMark('carriages');
         if (earth) this.castleLife.update(dt); sysMark('castleLife');
         if (earth) this.arenaDuels?.update(dt); sysMark('arenaDuels'); // (the duel arenas: after the people moved)
@@ -5929,6 +5931,7 @@ export class Game {
         this.fleet?.dispose();
         this.blackbeard?.dispose();
         this.travelers?.dispose();
+        this.bandits?.dispose();
         this.carriages?.dispose();
         this.phoenixes?.dispose();
         this.owls?.dispose();

@@ -43,7 +43,7 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife', 'heka'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, ...ELEMENTAL_MODES, 'soar', 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthPunch','earthKick','earthSweep','earthHammer','earthRest'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES, ...ELEMENTAL_MODES, 'soar', 'earthrise', 'earthLift','earthOrbit','earthWall','earthCocoon','earthBlade','earthThrow','earthPunch','earthKick','earthSweep','earthHammer','earthRest', 'rideAttack', 'rideShoot'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 const ARENA_SET = new Set(ARENA_MODES);
@@ -1704,7 +1704,7 @@ export class VillagerModel {
         this._acroActive=mode==='fireVault'&&this.look.element==='fire'&&!!this.leftElbow; // (only a fire mage's body stands on its hands: an ordinary person given the mode has no elbows to stand on — the test of every mode crashed)
         if(!this._acroActive)this.pelvis.rotation.z=0;
         if(mode==='dead'||SLEEP_MODES.has(mode))this._airWings?.set(1,0);
-        if (mode === 'attack') { this._atkT = 0; this.attackPhase = 0; }
+        if (mode === 'attack' || mode === 'rideAttack') { this._atkT = 0; this.attackPhase = 0; }
         if (mode === 'work') this._workT = 0;
         if (mode === 'dead') { this._deadT = 0; this._deadDone = false; }
         if (SLEEP_MODES.has(prev) && !SLEEP_MODES.has(mode)) this._leaveSleep();
@@ -1751,7 +1751,7 @@ export class VillagerModel {
         let breathe = 0.015;
 
         // ---- legs: walk / run cycle
-        const loco = mode !== 'sit' && mode !== 'ride' && mode !== 'bow' && mode !== 'sitCheer' && speed > 0.05;
+        const loco = mode !== 'sit' && mode !== 'ride' && mode !== 'rideAttack' && mode !== 'rideShoot' && mode !== 'bow' && mode !== 'sitCheer' && speed > 0.05;
         if (loco) {
             const G = GAITS[this.style.gait] || GAITS.plain;
             const gk = clamp01(1 - (speed - 2.5) / 2.5); // (the own walk shows at a walk; a run is a run for anybody)
@@ -1807,6 +1807,7 @@ export class VillagerModel {
                 rate = 50;
                 break;
             }
+            case 'rideAttack': // (a bandit's sword from the saddle: the legs as a rider's, the arm as in a blow — BanditGangs.js)
             case 'attack': {
                 const prev = this._atkT;
                 this._atkT += dt;
@@ -1820,6 +1821,7 @@ export class VillagerModel {
                 T.aRX = arm; T.wrist = wr; T.hy = tw; T.aRZ = z;
                 T.hx = p > 0.4 && p < 0.7 ? -0.15 : -0.05;
                 if (this.shield) { T.block = 0.45; T.aLX = 0.6; T.aLZ = 0.25; } else { T.aLX = 0.5; T.aLZ = -0.2; }
+                if (mode === 'rideAttack') { T.lL = T.lR = 1.0; T.kL = T.kR = -1.25; T.hx = 0.12; T.aLX = 0.85; T.aLZ = -0.12; T.block = 0; } // (leaning into the blow, the reins in the other hand)
                 rate = 60;
                 break;
             }
@@ -1896,6 +1898,7 @@ export class VillagerModel {
                 rate = 30;
                 break;
             }
+            case 'rideShoot': // (an archer in the saddle: the legs as a rider's, the body turned to the target by `aimSide` — BanditGangs.js)
             case 'shoot':
                 // the bow arm straight out at the target, the other hand drawing the string back to the chin
                 T.aRX = Math.PI / 2 + this.aimPitch; T.aRZ = 0.08;
@@ -1903,6 +1906,7 @@ export class VillagerModel {
                 T.aLX = Math.PI / 2 + this.aimPitch * 0.8 - 0.15; T.aLZ = -0.75;
                 T.hx = -0.05; T.hy = 0.25;
                 T.headX = -this.aimPitch * 0.5; T.headY = -0.2;
+                if (mode === 'rideShoot') { T.lL = T.lR = 1.0; T.kL = T.kR = -1.25; T.hy = Math.max(-1.45, Math.min(1.45, this.aimSide || 0)); T.headY = -0.2 - T.hy * 0.25; }
                 rate = 20;
                 break;
             case 'practice':
@@ -2051,7 +2055,7 @@ export class VillagerModel {
         const kh = 1 - Math.exp(-8 * dt); // the head turns at its own pace
         for (const key of POSE_KEYS) P[key] += (T[key] - P[key]) * (key === 'headY' ? kh : k);
         const choreSit = mode === 'chore' && SIT_CHORES.has(this.chore);
-        this._apply(t, breathe, mode === 'sit' || mode === 'situp' || mode === 'ride' || mode === 'sitCheer' || choreSit);
+        this._apply(t, breathe, mode === 'sit' || mode === 'situp' || mode === 'ride' || mode === 'rideAttack' || mode === 'rideShoot' || mode === 'sitCheer' || choreSit);
         if(this._airWings){const flight=mode==='airFlight'||mode==='airLift'&&speed>.05;this._airWings.set(1,flight?1:mode==='airRun'?.5:.1,flight||mode==='airRun'?Math.sin(t*Math.PI*2/.6):0,.15);}
         if (this.chore) this._choreAfter(t, dt, mode === 'chore');
     }

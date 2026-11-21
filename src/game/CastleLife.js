@@ -226,6 +226,7 @@ export function rosterEntry(def, idx) {
 }
 
 export function roleTitle(e) {
+    if (e.title) return e.title; // (a robber: «Разбойник» / «Разбойница» — BanditGangs.js)
     return (e.trade && tradeTitle(e.trade, e.female)) || (e.female ? ROLE_NAMES_F : ROLE_NAMES)[e.role];
 }
 
@@ -595,7 +596,7 @@ export class CastleLife {
             }
         }
         for (const cs of this.castles.values()) {
-            if (!cs.awake || seen.has(cs.def.id) || cs.def.kind === 'wander') continue; // (wanderers keep their own pace)
+            if (!cs.awake || seen.has(cs.def.id) || cs.def.kind === 'wander' || cs.def.kind === 'bandit') continue; // (wanderers keep their own pace; so do the robbers' gangs — BanditGangs.js)
             const far = players.every((pl) => Math.max(Math.abs(pl.p.x - cs.def.x), Math.abs(pl.p.z - cs.def.z)) > cs.def.zone + SLEEP);
             // (a fight chased far from the place: whoever of its people is still near a player — or fighting — does not vanish with it)
             if (far && !this._heldAwake(cs, players)) this._sleep(cs);
@@ -2842,15 +2843,16 @@ export class CastleLife {
         const fp = this._playerPos(v.foe);
         // (a giant foe — the monster form ×7, MonsterForm.js: the sword reaches its legs from beside them)
         const fs = v.foe === this.game.localId ? this.game.character?.size || 1 : this.game.remotes?.get(v.foe)?.character?.size || 1;
-        if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4 + 0.48 * (fs - 1)) return;
-        if (Math.abs(fp.y - 1.95 * fs - v.y) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
+        const saddle = !!(v.bandit && v.seated); // (a robber in the saddle: v.y is the seat's top, the sword reaches further from a horse — BanditGangs.js)
+        if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4 + (saddle ? 1.7 : 0) + 0.48 * (fs - 1)) return;
+        if (Math.abs(fp.y - 1.95 * fs - (saddle ? v.y - 3.2 : v.y)) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.MELEE)) return; // («лицом к цели»: a swing from the side / behind cuts the air)
         if (confusedMiss(v)) return; // (lost in Accentric's haze: the swing cuts the air — StrongSpells)
         const sq = v.cs?.squads?.get(v.foe);
         if (sq) sq.blows++;
         // (its sword knocked out by «Экспеллиармус»: fists)
         const base = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : Math.max(STATS[v.role].dmg, v.mob || v.hd ? v.mobDmg || 1 : 0); // (the crowd's / the house's fork / hammer / knife: 2, an axe 3)
-        const dmg = Math.round(base * wantedTactics(this.wantedLevel(v.foe)).dmg); // (a known murderer: they hit harder)
+        const dmg = Math.round(base * (saddle ? 1.4 : 1) * wantedTactics(this.wantedLevel(v.foe)).dmg); // (a known murderer: they hit harder; a blow from a galloping horse harder still)
         if (v.foe === this.game.localId) this.struck(dmg, v.x, v.z, v.title);
         else this.game.sync?.villagerStrike?.(v.foe, dmg, v.x, v.z, v.title);
     }
@@ -3648,6 +3650,7 @@ export class CastleLife {
     /** Who saw it? If anyone did (or the victim lives to tell), the castle turns on `by`. */
     _offence(cs, by, victim, killed, pos, opts = {}) {
         const g = this.game;
+        if (cs.def.kind === 'bandit') return false; // (a robber killed or hurt is no crime: nobody comes for the one who did it — BanditGangs.js)
         const st = this.state(cs.def.id);
         if (by === st.owner) return false; // (the king may do as he likes)
         if (isForgiven(st.ranks, by)) return false; // (and his friend: what he does is forgiven — Ranks.js)
