@@ -209,6 +209,7 @@ export function darkMageLevel(id, kind) {
 const WIZ = new Set(['student', 'teacher', 'seller', 'wanderer', 'townwiz', 'mage']);
 /** Уровень тьмы жителя-мага места `def` (0 — не чёрный): странник, дом одиночки, малое поселение, город. По id — одинаково у всех. */
 export function darkOfEntry(def, e, id) {
+    if (e?.dark > 0 && e.role === 'wanderer') return e.dark | 0; // (a dark raider: his level is set by his entry — DarkRaiders.js)
     if (!e || !WIZ.has(e.role) || e.elder || def?.kind === 'tower') return 0;
     const kind = def?.kind === 'wander' || e.role === 'wanderer' ? 'wanderer' : def?.kind === 'hamlet' ? (e.role === 'seller' ? 'merchant' : def.people?.length === 1 ? 'lone' : 'small') : def?.kind === 'wizvillage' ? 'small' : e.town ? 'town' : null;
     return kind ? darkMageLevel(id, kind) : 0;

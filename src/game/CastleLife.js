@@ -3650,7 +3650,7 @@ export class CastleLife {
     /** Who saw it? If anyone did (or the victim lives to tell), the castle turns on `by`. */
     _offence(cs, by, victim, killed, pos, opts = {}) {
         const g = this.game;
-        if (cs.def.kind === 'bandit') return false; // (a robber killed or hurt is no crime: nobody comes for the one who did it — BanditGangs.js)
+        if (cs.def.kind === 'bandit' || cs.def.outlaw) return false; // (a robber / a dark raider killed or hurt is no crime: nobody comes for the one who did it — BanditGangs.js)
         const st = this.state(cs.def.id);
         if (by === st.owner) return false; // (the king may do as he likes)
         if (isForgiven(st.ranks, by)) return false; // (and his friend: what he does is forgiven — Ranks.js)

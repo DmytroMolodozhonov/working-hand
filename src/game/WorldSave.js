@@ -535,6 +535,7 @@ export class WorldKeeper {
             iceCastle: g.iceCastle?.snapshot() || null, // the Ice Castle: the queen dead or her health, the monsters, seen on the map (IceQueen.js; its melted ice — the block edits)
             ships: g.ships?.snapshot() || [], // ships that moved, burnt, sank, were captured…
             guns: g.ships?.cannons.snapshot() || [],
+            raid: g.bandits?.snapshot?.() || undefined, // (the world's play time: no robbers in the first two days — BanditGangs.js)
             players: this.players,
         };
     }
@@ -590,6 +591,7 @@ export function restoreWorld(game, save, THREE) {
     retireScrollsIn(save); // (the loose things, the bodies, the chests… of an old save: the retired scrolls become apples)
     const g = game;
     if (!save) return;
+    g.bandits?.restore?.(save.raid);
     const floodLand = g.world.terrain?.data;
     if (floodLand && save.flood) floodLand.loadingFloodState = true;
     if (Array.isArray(save.edits) && save.edits.length) {

@@ -78,3 +78,53 @@ test('a gang is made once and only for a hero that can be hurt', () => {
     assert.equal(new BanditGangs({ ...g, arenaDuels: { mode: {} } }).enabled(), false, 'the duel mode: none');
     assert.equal(new BanditGangs({ ...g, combat: { enabled: true, dead: true } }).enabled(), false, 'a dead hero: none');
 });
+
+import { RAID, raiderStats, isWizPlace, settleOk } from '../../src/game/DarkRaiders.js';
+import { DAY_MS, RAID_FREE_DAYS, inCaveAt } from '../../src/game/BanditGangs.js';
+import { darkOfEntry } from '../../src/game/DarkMagic.js';
+import { OUTFIT_KINDS, OUTFIT_RU } from '../../src/entities/VillagerOutfits.js';
+
+test('dark raiders: black magic 40…80, mana 50…100 cells, the rank by the mana; both ends come up', () => {
+    const dk = new Set(), mn = new Set();
+    for (let i = 0; i < 3000; i++) {
+        const s = raiderStats();
+        assert.ok(s.dark >= 40 && s.dark <= 80 && s.mana >= 50 && s.mana <= 100);
+        assert.equal(s.rank, s.mana < 75 ? 'novice' : 'adept');
+        dk.add(s.dark); mn.add(s.mana);
+    }
+    assert.ok(dk.has(40) && dk.has(80) && mn.has(50) && mn.has(100));
+    assert.deepEqual(raiderStats(() => 0), { dark: 40, mana: 50, rank: 'novice' });
+    assert.deepEqual(raiderStats(() => 0.9999), { dark: 80, mana: 100, rank: 'adept' });
+});
+
+test('dark raiders: their level is the entry\'s own (the marks on the body); the black robe exists but is never rolled for an ordinary wizard', () => {
+    assert.equal(darkOfEntry({ kind: 'wander' }, { role: 'wanderer', dark: 63 }, 'x'), 63);
+    assert.ok(!OUTFIT_KINDS.includes('blackmage') && OUTFIT_RU.blackmage);
+});
+
+test('dark raiders: mostly near wizards\' places; a wizards\' place is a tower, a wizards\' settlement or a wizards\' hamlet', () => {
+    assert.ok(isWizPlace({ kind: 'tower' }) && isWizPlace({ kind: 'wizvillage' }) && isWizPlace({ kind: 'hamlet', mage: true }));
+    assert.ok(!isWizPlace({ kind: 'hamlet' }) && !isWizPlace({ kind: 'castle' }) && !isWizPlace(null));
+    assert.equal(settleOk(2, () => 0.99), true);
+    assert.equal(settleOk(0, () => 0.99), false);
+    assert.equal(settleOk(0, () => 0.05), true, 'a few come from nowhere');
+    let near = 0; for (let i = 0; i < 2000; i++) if (settleOk(0)) near++;
+    assert.ok(near / 2000 < 0.25);
+});
+
+test('the first two days are quiet (play time kept in the save); a cave is no place for a raid', () => {
+    const b = new BanditGangs({ combat: { enabled: true }, animals: {} });
+    assert.equal(b.open(), false);
+    b.playMs = RAID_FREE_DAYS * DAY_MS - 1; assert.equal(b.open(), false);
+    b.playMs = RAID_FREE_DAYS * DAY_MS; assert.equal(b.open(), true);
+    const c = new BanditGangs({ combat: { enabled: true }, animals: {} });
+    c.restore(b.snapshot()); assert.equal(c.open(), true, 'kept with the world');
+    c.restore({ playMs: 5 }); assert.equal(c.open(), false);
+    // underground: the hero's own flag, or the depth below the original surface
+    const pos = { x: 0, y: 10, z: 0 };
+    assert.equal(inCaveAt({ _inCave: true, character: { group: { position: pos } } }, pos), true);
+    assert.equal(inCaveAt({ terrain: { data: { heightAt: () => 40 } } }, { x: 0, y: 10, z: 0 }), true, '30 m below the surface');
+    assert.equal(inCaveAt({ terrain: { data: { heightAt: () => 10 } } }, { x: 0, y: 12, z: 0 }), false, 'on the ground');
+    assert.equal(inCaveAt({ space: { offEarth: true }, terrain: { data: { heightAt: () => 99 } } }, pos), false, 'off the Earth: no caves');
+    assert.ok(RAID.NEAR[0] > 90);
+});

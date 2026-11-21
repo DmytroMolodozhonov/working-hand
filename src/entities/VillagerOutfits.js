@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 
 export const OUTFIT_KINDS = ['archmage', 'fire', 'druid', 'frost', 'astrologer'];
-export const OUTFIT_RU = { archmage: 'архимаг', fire: 'огненный маг', druid: 'друид', frost: 'маг льда', astrologer: 'звездочёт' };
+export const OUTFIT_RU = { blackmage: 'чёрный маг', archmage: 'архимаг', fire: 'огненный маг', druid: 'друид', frost: 'маг льда', astrologer: 'звездочёт' };
 export const OUTFIT_ROLES = new Set(['wanderer', 'townwiz', 'mage']); // (never the tower's student / teacher / seller / master)
 
 const GOLD = 0xe0b43c, GOLD_DARK = 0xa8841f;
@@ -28,6 +28,8 @@ const PALETTE = {
     // the Supermage (Brawl.js «Сверхмаг»; never rolled for a random wizard: not in OUTFIT_KINDS): black-violet robe, gold and a cold cyan glow
     supermage: { robe: [0x2a1450, 0x331a5e, 0x24104a], trim: 0x0e0620, hat: 0x1a0c38, accent: 0x6ae8ff, hatKind: 'wizardWide' },
     astrologer: { robe: [0x2c2f7a, 0x1f2866, 0x362a70], trim: 0x14143a, hat: 0x2c2f7a, accent: GOLD, hatKind: 'wizard' },
+    // the dark raiders (DarkRaiders.js; never rolled for a random wizard: not in OUTFIT_KINDS): a near-black robe with blood-red trim and a hood
+    blackmage: { robe: [0x160a10, 0x1d0b14, 0x120912], trim: 0x4a0a18, hat: 0x0f070d, accent: 0xb01a38, hatKind: 'cowl' },
 };
 
 /** Fill the look of an outfit's wizard (colours, the hat); `pick` is the look's own deterministic chooser. */
@@ -92,6 +94,19 @@ export function outfitBody(L, B) {
             bx(B, 0.18, 2.0, 0.06, -0.15, 0.0, -0.66, GOLD, 0, 0, 0.55); bx(B, 0.34, 0.34, 0.06, 0.2, -0.3, -0.7, GOLD, 0, 0, Math.PI / 4);
             for (let i = 0; i < 16; i++) { const a = i * 2.4; bx(B, 0.07, 0.07, 0.03, Math.cos(a) * 0.5, 0.4 - (i % 8) * 0.34 - (i > 7 ? 0.1 : 0), -0.47 - (i % 8) * 0.045, 0xfff2a0, 0, 0, Math.PI / 4); }
             break;
+        case 'blackmage': { // a torn black cape lined with blood, spiked pauldrons, a crimson rune sash, jagged hem, a bone clasp at the throat (DarkRaiders.js)
+            bx(B, 1.5, 2.7, 0.07, 0, -0.8, 0.56, 0x0c0508, 0.06); bx(B, 1.44, 2.7, 0.04, 0, -0.8, 0.52, 0x5a0a1a, 0.06); // the cape and its blood-red lining
+            for (let i = -3; i <= 3; i++) bx(B, 0.2, 0.55 + (i & 1) * 0.3, 0.06, i * 0.22, -2.25, 0.58, 0x0c0508, 0, 0, i * 0.05); // its torn lower edge
+            for (const sx of [-1, 1]) {
+                bx(B, 0.95, 0.3, 1.0, sx * 0.8, 0.68, 0, 0x1a0a10, 0, 0, sx * 0.18); bx(B, 0.98, 0.05, 1.04, sx * 0.8, 0.5, 0, 0xb01a38); // the pauldrons and their red edge
+                bx(B, 0.12, 0.6, 0.12, sx * 1.0, 1.05, 0, 0x2a0e16, 0, 0, -sx * 0.35); bx(B, 0.09, 0.4, 0.09, sx * 1.2, 0.95, -0.1, 0x2a0e16, 0, 0, -sx * 0.6); // spikes
+            }
+            bx(B, 0.2, 2.0, 0.06, -0.2, -0.05, -0.66, 0xb01a38, 0, 0, 0.5); // the sash
+            for (let i = 0; i < 6; i++) bx(B, 0.07, 0.12, 0.03, -0.55 + i * 0.22, 0.65 - i * 0.34, -0.7, 0xff5a70, 0, 0, 0.5); // its runes, burning a little
+            bx(B, 0.3, 0.16, 0.1, 0, 0.72, -0.5, 0xe8e0cc); bx(B, 0.1, 0.3, 0.1, 0, 0.56, -0.52, 0xe8e0cc); // a bone clasp
+            for (let i = 0; i < 9; i++) bx(B, 0.12, 0.34 + (i % 3) * 0.2, 0.1, -0.6 + i * 0.15, hem + 0.05, -(0.55 + flare * 0.3), 0x6a0f20, 0, 0, (i - 4) * 0.05); // jagged red hem
+            break;
+        }
         case 'supermage': // a long cape lined with cyan, gold mantle with spikes, a glowing sash and rune row, a cyan gem at the throat
             bx(B, 1.5, 2.9, 0.08, 0, -0.9, 0.58, 0x120828, 0.05); bx(B, 1.46, 2.9, 0.05, 0, -0.9, 0.53, 0x2a8fb0, 0.05); bx(B, 1.54, 0.08, 0.12, 0, -2.3, 0.6, GOLD);
             for (const sx of [-1, 1]) { bx(B, 0.95, 0.32, 1.05, sx * 0.8, 0.68, 0, 0x1a0c38, 0, 0, sx * 0.16); bx(B, 0.98, 0.06, 1.08, sx * 0.8, 0.5, 0, GOLD); for (let k = 0; k < 3; k++) bx(B, 0.12, 0.42, 0.12, sx * (0.6 + k * 0.28), 0.92 + k * 0.06, 0, GOLD, 0, 0, -sx * (0.2 + k * 0.15)); }

@@ -29,9 +29,20 @@ import { aimArrow } from './KnightTactics.js';
 import { outOfSight } from './Animals.js';
 import { newUid } from './ItemTypes.js';
 import { earthly } from '../world/Planets.js';
+import { belowCaveSurface } from './CavePlace.js';
 import { WANDER_GRID } from '../world/WizardTowers.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { allLog } from '../core/AllLog.js';
+
+/** The world's first days are quiet (the author 21.11: no robbers, no dark raiders in the first two days of the game): a day is 24 minutes of play. */
+export const DAY_MS = 24 * 60 * 1000;
+export const RAID_FREE_DAYS = 2;
+/** Is this place underground (a cave)? The local hero's own flag, else the depth under the surface. Robbers do not come there and do not follow in. */
+export function inCaveAt(g, p) {
+    if (!p || g.space?.offEarth) return false;
+    if (g._inCave && p === g.character?.group?.position) return true;
+    return belowCaveSurface(g.terrain?.data || g.world?.terrain?.data, p.x, p.z, p.y - 1.95);
+}
 
 export const BANDIT = {
     EVERY: 25, // s between tries to send a gang
@@ -47,6 +58,7 @@ export const BANDIT = {
     REACH: 4.2, // m: a sword's blow from the saddle
     PASS_AWAY: 14, // m a rider goes on past the target before he wheels
     RING_R: [13, 21], // m: the archers' ring
+    CAVE_LINES: ['В нору за ним не полезем!', 'Пусть сидит в своей дыре.', 'Ищи ветра в поле — нам туда нельзя.'],
     SHOOT_EVERY: [1.4, 2.6], DRAW_T: 0.9, // s
     ARROW_SPEED: 42, ARROW_DMG: 3,
     LOOT_R: 9, LOOT_T: 22, LOOT_MAX: 14, // s, items
@@ -138,6 +150,7 @@ export class BanditGangs {
     constructor(game) {
         this.game = game;
         this.gangs = new Map();
+        this.playMs = 0; // the world's play time (the first days are quiet; saved with the world)
         this._t = BANDIT.EVERY * 0.6;
         this._n = 0;
         this._checkT = 0;
@@ -148,6 +161,11 @@ export class BanditGangs {
 
     get auth() { return this.game.authority; }
     get life() { return this.game.castleLife; }
+
+    /** The first RAID_FREE_DAYS days of the world: nobody comes. */
+    open() { return this.playMs >= RAID_FREE_DAYS * DAY_MS; }
+    snapshot() { return { playMs: Math.round(this.playMs) }; }
+    restore(s) { if (s && Number.isFinite(s.playMs)) this.playMs = Math.max(0, s.playMs); }
 
     /** May a gang come now: a hero that can be hurt, not a lesson, not a school, not a duel, not a camera. */
     enabled() {
@@ -172,10 +190,11 @@ export class BanditGangs {
     _update(dt) {
         const L = this.life;
         if (!this.auth || !L?.enabled || !L.index) return;
+        this.playMs += dt * 1000;
         this._t -= dt;
         if (this._t <= 0) {
             this._t = BANDIT.EVERY * (0.8 + Math.random() * 0.4);
-            if (this.enabled() && this.gangs.size < Math.min(BANDIT.MAX_ALL, BANDIT.MAX * Math.max(1, L._players().length)) && Math.random() < (this.game.isNight ? BANDIT.CHANCE_NIGHT : BANDIT.CHANCE)) this.spawnNear();
+            if (this.open() && this.enabled() && this.gangs.size < Math.min(BANDIT.MAX_ALL, BANDIT.MAX * Math.max(1, L._players().length)) && Math.random() < (this.game.isNight ? BANDIT.CHANCE_NIGHT : BANDIT.CHANCE)) this.spawnNear();
         }
         this._checkT -= dt;
         const check = this._checkT <= 0;
@@ -192,6 +211,7 @@ export class BanditGangs {
         if (!players.length) return false;
         const pl = o.player || players[Math.floor(Math.random() * players.length)];
         if (!earthly(pl.p)) return false;
+        if (inCaveAt(g, pl.p)) return false; // (nobody comes to a cave: a hero underground is left alone)
         if (idx.landAt?.(Math.round(pl.p.x), Math.round(pl.p.z))) return false; // (in a castle, a village, a tower: no robbers)
         const look = pl.id === g.localId ? g.animals?._look?.(_look) : null;
         for (let k = 0; k < 14; k++) {
@@ -300,6 +320,8 @@ export class BanditGangs {
                 else if (P.phase !== 'loot' && P.phase !== 'leave') this._leave(P, false);
                 P.target = null;
             }
+            // the hero went underground: riders do not follow a man into a cave — they give it up (he can hide)
+            if (tg && P.phase !== 'leave' && P.phase !== 'loot' && inCaveAt(g, tg.id === g.localId ? g.character.group.position : tg.p)) { this._say(P, pick(BANDIT.CAVE_LINES)); this._leave(P, false); }
             // nerve
             if (P.phase !== 'loot' && P.phase !== 'leave' && broken(alive.length, P.n)) this._leave(P, true);
             if (this._gone(P, alive)) { this._remove(P); return; }

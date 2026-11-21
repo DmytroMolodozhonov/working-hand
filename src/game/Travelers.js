@@ -404,6 +404,7 @@ export class Travelers {
     // ---------------------------------------------------------------- the people (from CastleLife._think)
     /** (host) One step of a traveller (jobs 'road' and 'cart'). True: handled. */
     step(v, dt) {
+        if (v.raider) return this.game.darkRaiders?.step(v, dt) ?? false; // (a dark raider with no foe yet: DarkRaiders.js)
         if (v.bandit) return this.game.bandits?.step(v) ?? false; // (a robber of a gang: in the saddle BanditGangs leads him; down — an ordinary knight)
         const P = v.party, L = this.life;
         if (!P) { v.job = 'wander'; return false; }
