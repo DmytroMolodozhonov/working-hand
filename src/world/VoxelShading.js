@@ -21,13 +21,14 @@ import { ROCK_METRES, ROCK_SIZE, rockPixels } from './RockTexture.js';
 import { paintCaveBones } from './CaveBones.js';
 import { buildingWoodTexture } from './BuildingWoodTexture.js';
 import { ULTRA_PARS, addUltraUniforms } from '../fx/UltraUniforms.js';
+import { CLOUD_SHADE_GLSL, addCloudUniforms } from './CloudShade.js';
 
 /**
  * The daylight in the world's lights: `comp` undoes the dimming of the lights round a player deep
  * in a cave (World: their hands, the things by them are dark) for the land itself — the land is as
  * lit as the sky reaches it (each block face's own daylight, `voxSky`), wherever the player is.
  */
-export const SKY_LIGHT = { comp: { value: 1 }, nv: { value: 0 } }; // (nv: the night gift «Noctis» 0…1 — the cave's dark is that much milder in the terrain's own light: voxSky below)
+export const SKY_LIGHT = { comp: { value: 1 }, nv: { value: 0 }, shade: { value: 1 }, greenSat: { value: 0.84 } }; // (nv: the night gift «Noctis» 0…1 — the cave's dark is that much milder in the terrain's own light: voxSky below)
 
 /**
  * Invisible houses («Protection Invisible», HouseWards.js): inside each sphere [x, y, z, r] the blocks
@@ -167,6 +168,9 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uCaveBones = { value: bonesTexture() };
         shader.uniforms.uBuildingWood = { value: buildingWoodTexture() };
         shader.uniforms.uNightVis = SKY_LIGHT.nv;
+        shader.uniforms.uCornerShade = SKY_LIGHT.shade;
+        shader.uniforms.uGreenSat = SKY_LIGHT.greenSat;
+        addCloudUniforms(shader); // (the corners' soft shade: 1 on — 0 only for a before/after picture)
         shader.uniforms.uWardS = WARD_HIDE.s;
         shader.uniforms.uWardG = WARD_HIDE.g;
         shader.uniforms.uWardK = WARD_HIDE.k;
@@ -178,18 +182,18 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uSeaT = UNDERSEA.t;
         shader.uniforms.uSeaK = UNDERSEA.k;
         shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxWet;\nvarying float vVoxWet;\nattribute float voxGeology;\nvarying float vVoxGeology;\nattribute float voxSky;\nvarying float vVoxSky;\nuniform float uNightVis;\n' + BOOM_PARS)
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = 1.0 - (1.0 - voxSky) / (1.0 + 0.5 * uNightVis);\nvVoxWet = voxWet;\nvVoxGeology = voxGeology;');
+            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxWet;\nvarying float vVoxWet;\nvarying float vVoxShade;\nattribute float voxGeology;\nvarying float vVoxGeology;\nattribute float voxSky;\nvarying float vVoxSky;\nuniform float uNightVis;\nuniform float uCornerShade;\n' + BOOM_PARS)
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = 1.0 - (1.0 - voxSky) / (1.0 + 0.5 * uNightVis);\nfloat voxWetF = step(0.5, voxWet);\nvVoxWet = voxWetF;\nvVoxShade = 1.0 - 0.17 * uCornerShade * clamp((voxWet - 0.50196 * voxWetF) * 6.0714, 0.0, 3.0);\nvVoxGeology = voxGeology;');
         // a cave's dark: the sun and the sky's light (ambient, hemisphere) reach a face only as far as
         // the daylight gets in; a lamp, «Люмос», a fire light it fully
         const lightsBegin = THREE.ShaderChunk.lights_fragment_begin.replace(
             'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );',
-            'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );\n\t\tdirectLight.color *= vVoxSky * uSkyComp;');
+            'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );\n\t\tdirectLight.color *= vVoxSky * uSkyComp * mix(1.0, vVoxShade, 0.5) * cloudShade(vVoxPos.xz);');
         shader.fragmentShader = shader.fragmentShader
             .replace('#include <clipping_planes_pars_fragment>', WARD_HIDE_PARS)
             .replace('#include <clipping_planes_fragment>', WARD_HIDE_FRAG)
             .replace('#include <lights_fragment_begin>', lightsBegin)
-            .replace('#include <lights_fragment_maps>', '#if defined( RE_IndirectDiffuse )\n\tirradiance *= vVoxSky * uSkyComp;\n#endif\n#include <lights_fragment_maps>')
+            .replace('#include <lights_fragment_maps>', '#if defined( RE_IndirectDiffuse )\n\tirradiance *= vVoxSky * uSkyComp * vVoxShade;\n#endif\n#include <lights_fragment_maps>')
             .replace('#include <aomap_fragment>', '#include <aomap_fragment>\n' + BOOM_GLOW)
             .replace('#include <common>', `#include <common>
 ${BOOM_PARS}
@@ -224,6 +228,10 @@ float hellE = 0.0; // (hell's glowing blocks: how much and what colour they shin
 vec3 hellC = vec3(0.0);
 varying float vVoxSky;
 varying float vVoxWet;
+varying float vVoxShade;
+uniform float uCornerShade;
+uniform float uGreenSat;
+${CLOUD_SHADE_GLSL}
 varying float vVoxGeology;
 varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
@@ -632,6 +640,9 @@ float snowflakeAt(vec2 uv) {
         }
         diffuseColor.rgb = mix(diffuseColor.rgb, col * (n.y > 0.5 ? 1.0 : 0.88), seaUnder);
     }
+    // living green, not plastic (the author 21.11: «слишком игрушечно»): the grass's colour a little less saturated and towards
+    // olive — a real meadow is never the pure green of a paint box; the golden steppe, the autumn and the snow keep their own
+    if (green && !snowy) { float gl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(vec3(gl), diffuseColor.rgb, uGreenSat) * mix(vec3(1.0), vec3(0.97, 0.95, 0.87), uCornerShade); }
     // soft edge darkening (fake ambient occlusion along block borders)
     vec2 e = min(f, 1.0 - f);
     float edge = smoothstep(0.0, 0.09, min(e.x, e.y));
