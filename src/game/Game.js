@@ -173,6 +173,7 @@ import { School } from './School.js';
 import { PharaohLife } from './PharaohLife.js';
 import { RiverRocks } from '../world/RiverRocks.js';
 import { ForestFloor } from '../world/ForestFloor.js';
+import { NatureAmbience } from './NatureAmbience.js';
 import { Threats } from './Threats.js';
 import { WaterfallFx } from '../fx/WaterfallFx.js';
 import { Temple } from './Temple.js';
@@ -951,6 +952,7 @@ export class Game {
         this.godhood = new Godhood(this); // who killed all seven titans: a god — immortal, the Hall of the Sun (Godhood.js)
         this.titans = new Titans(this); // the seven titans on their planets (Titans.js, TitanRules.js)
         this.fallFx = new WaterfallFx(this); // the spray, the roar and the rainbow of the waterfalls (WaterfallFx.js)
+        this.nature = new NatureAmbience(this); // the small voices of the forest and the shore (NatureAmbience.js)
         this.forestFloor = new ForestFloor(this); // the undergrowth of the forest: logs, stumps, ferns, mushrooms, bushes (ForestFloor.js; generation 36)
         this.riverRocks = new RiverRocks(this); // the boulders by the rivers and at the waterfalls' feet (RiverRocks.js; generation 32)
         this.pharaoh = new PharaohLife(this); // Pharaoh Sandy's pyramids: the mummies, the guards, the traps, the torches (PharaohLife.js)
@@ -4691,6 +4693,7 @@ export class Game {
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
         if (earth && !duelOnly && !lean) this.iceCastle.update(dt); sysMark('iceCastle');
         if (earth && !duelOnly && !lean) this.pharaoh?.update(dt); sysMark('pharaoh');
+        if (earth && !duelOnly && !lean) this.nature?.update(dt, this.character.group.position);
         if (earth && !duelOnly && !lean) this.forestFloor?.update(dt, this.character.group.position);
         else if (this.forestFloor?.group.visible) this.forestFloor.group.visible = false;
         if (earth && !duelOnly && !lean) this.riverRocks?.update(dt, this.character.group.position);

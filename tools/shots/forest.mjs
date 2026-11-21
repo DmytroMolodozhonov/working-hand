@@ -4,16 +4,18 @@ export default async function (h, args) {
     h.log('gen', g.gen, 'floor', !!g.forestFloor);
     let spot = args?.x != null ? { x: args.x, z: args.z } : null;
     if (!spot) {
-        outer: for (let r = 0; r < 60; r++) for (let gz = -r; gz <= r; gz++) for (let gx = -r; gx <= r; gx++) {
+        outer: for (let r = 0; r < 30; r++) for (let gz = -r; gz <= r; gz++) for (let gx = -r; gx <= r; gx++) {
             if (Math.max(Math.abs(gx), Math.abs(gz)) !== r) continue;
-            const x = gx * 24, z = gz * 24;
+            const x = gx * 40, z = gz * 40;
             if (data.biomeAt(x, z) === 1 && data.land.grove(x, z) > 1.1 && data.biomeAt(x + 40, z) === 1 && data.biomeAt(x - 40, z + 20) === 1) { spot = { x, z }; break outer; }
         }
     }
     h.log('spot', JSON.stringify(spot));
     if (!spot) return;
     g.dayPhase = () => 0.3; h.time(0.3);
+    h.log('going');
     await h.go(spot.x, data.heightAt(spot.x, spot.z) + 8, spot.z, true);
+    h.log('arrived');
     await h.frames(400);
     const ff = g.forestFloor; h.log('chunks', ff.chunks.size, 'drawn', ff.stats.drawn);
     const items = []; for (const c of ff.chunks.values()) for (const it of c.items) items.push(it);
