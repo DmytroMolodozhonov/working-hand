@@ -46,8 +46,6 @@ export const BOOM = {
     SHOCK_T: 1.8, // s the shock wave takes to reach HARM_R
     MIN_RELIEF: 5, // m above the land round it: a hill (or a building) — its middle is looked for in its mass; lower: plain land, torn where the hand points
     BUDGET: 2.5, // ms a frame for the crater
-    FLOW: 3000, // cells of water a second at least, as the sea pours into the crater
-    FLOOD_T: 8, // s: about this long for the sea to fill it (the cells opened under its level ÷ this a second)
     ROCKS: 200, // the flying rocks (one instanced mesh)
 };
 
@@ -358,10 +356,7 @@ export class Boom {
         // the crater, a few ms a frame
         if (b.job && !b.job.done) {
             const j = b.job;
-            // (the sea pours in over a few seconds: so many cells of water a second — a front crossing the crater)
-            if (j.phase === 'flood' && !b.flowRate) b.flowRate = Math.max(BOOM.FLOW, (j.wet?.length || 0) / 3 / BOOM.FLOOD_T);
-            boomStep(j, BOOM.BUDGET, j.phase === 'flood' ? Math.max(60, Math.ceil(b.flowRate * dt)) : Infinity);
-            this._spray(b);
+            boomStep(j, BOOM.BUDGET);
             const s = b.job.samples;
             // a few of the torn blocks fly as rocks (the pool takes what it can; the dust takes the rest)
             const debris = [];
@@ -416,19 +411,6 @@ export class Boom {
         }
         this._afterLook(b, dt);
         if (b.t > 9 && (!b.job || b.job.done)) this._end(b);
-    }
-
-    /** The front of the water pouring in: spray and foam where it runs, the roar of it now and then. */
-    _spray(b) {
-        const g = this.game, fx = g.fx, sp = b.job.spray;
-        if (!sp.length) return;
-        for (let i = 0; i + 2 < sp.length; i += 3) {
-            const x = sp[i], z = sp[i + 2], y = 0.2;
-            fx?.smoke?.spawn(x, y, z, (Math.random() - 0.5) * 3, 2 + Math.random() * 4, (Math.random() - 0.5) * 3, Math.random() < 0.5 ? 0xe8f4ff : 0xbfdcef, 1.2 + Math.random() * 1.6, 1.2 + Math.random(), { shrink: -0.6, spin: 1 });
-            fx?.debris?.spawn(x, y, z, (Math.random() - 0.5) * 4, 3 + Math.random() * 4, (Math.random() - 0.5) * 4, 0x9fd0f0, 0.12 + Math.random() * 0.15, 1, { shrink: 0.2, fade: true, spin: 2 });
-        }
-        if ((b.splashT = (b.splashT || 0) - 1) <= 0) { b.splashT = 20; g.sound?.playSplashAt?.(_v.set(sp[0], 0, sp[2]), 0.8); }
-        sp.length = 0;
     }
 
     /** The crater is dug: what was left hanging falls, the castle's people learn of it, the doors and things fall. */

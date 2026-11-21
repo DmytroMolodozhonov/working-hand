@@ -52,6 +52,10 @@ async function handleMessage(e){
         return;
     }
     if (m.type === 'liteLook') { if (data) data.liteLook = !!m.on; self._liteLook = !!m.on; return; }
+    if (m.type === 'water-ground' && data) {
+        self.postMessage({ type: 'water-ground', id: m.id, key: m.key, chunk: data.chunk(m.cx, m.cz) });
+        return;
+    }
     if (m.type === 'ghostOn' && data?.ghost) {
         // the Castle of Ghosts in / out of this computer's land (a seer's): the next chunks are made the new way (GhostCastle.js)
         data.ghost.on = !!m.on;

@@ -603,6 +603,13 @@ export class Game {
         if (this.dayCycle) this.world.setDayPhase(this.dayPhase());
         this.collision = this.world.collision;
         this.terrain = this.world.terrain;
+        if (this.terrain) {
+            const land = this.terrain.data;
+            land.deferFloods = true;
+            land.floodAuthority = () => this.authority;
+            land.onFloodPatch = patch => this.sync?.floodPatch?.(patch);
+            land.onFloodInlet = inlet => { this.fallFx?.breach(inlet); this.sync?.floodInlet?.(inlet); };
+        }
         // the sea (generation-2 worlds): its waves, the same on every computer (src/world/Sea.js)
         const seas = this.terrain?.data?.seas;
         // (what the terrain made of a column: land, sea, or a castle's harbour — calm behind its breakwater)
@@ -3800,7 +3807,7 @@ export class Game {
         if (!data) return null;
         const ix = Math.round(x), iz = Math.round(z), L = Math.floor(y + 1.5);
         const b = data.get(ix, L, iz);
-        if (b === BLOCK.WATER) return 'water';
+        if (b === BLOCK.WATER) return data.isWaterAt?.(x, y, z) === false ? null : 'water';
         // the moving sea surface (waves above the still water blocks)
         if (this.sea && L >= 1 && data.isSeaColumn?.(ix, iz) && y < WATER_LEVEL_Y + this.sea.height(x, z)) return 'water';
         if (b && b !== BLOCK.AIR && b !== BLOCK.WHEAT && b !== BLOCK.FLOWERS && b !== BLOCK.VEG) return 'solid'; // (the flame goes over plants)
@@ -4644,7 +4651,9 @@ export class Game {
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
         if (earth && !duelOnly && !lean) this.iceCastle.update(dt); sysMark('iceCastle');
         if (earth && !duelOnly && !lean) this.pharaoh?.update(dt); sysMark('pharaoh');
-        if (earth && !duelOnly && !lean) { this.riverRocks?.update(dt, this.character.group.position); this.fallFx?.update(dt, this.character.group.position); } else if (this.riverRocks?.group.visible) this.riverRocks.group.visible = false;
+        if (earth && !duelOnly && !lean) this.riverRocks?.update(dt, this.character.group.position);
+        else if (this.riverRocks?.group.visible) this.riverRocks.group.visible = false;
+        if (earth && !duelOnly) this.fallFx?.update(dt, this.character.group.position, !lean);
         if (earth && !duelOnly && !lean) this.vampire?.update(dt); sysMark('vampire');
         if (!duelOnly && !lean) this.titans?.update(dt); sysMark('titans');
         this.godhood?.update(dt); sysMark('godhood');
@@ -5837,6 +5846,7 @@ export class Game {
         this.fishPier?.dispose();
         this.rainFx?.dispose();
         this.seaSurface?.dispose();
+        this.fallFx?.dispose();
         this.steam?.dispose();
         this.airFx?.dispose();
         this.featherfall?.dispose();

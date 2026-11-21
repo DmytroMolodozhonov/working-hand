@@ -39,6 +39,7 @@ varying vec3 vWPos;
 
 const FRAG_HEAD = /* glsl */ `
 uniform float uTime;
+uniform float uFlowLight;
 varying vec4 vFlow;
 varying vec3 vWPos;
 float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -50,12 +51,12 @@ float wNoise(vec2 p) {
 `;
 
 /** The flowing-water material (Phong lighting kept so it sits in the scene like the lake). */
-export function createFlowMaterial() {
+export function createFlowMaterial(light = 1) {
     const mat = new THREE.MeshPhongMaterial({
         color: 0x2f8fe0, emissive: 0x062a4a, specular: 0xffffff, shininess: 140,
         transparent: true, opacity: 0.62, depthWrite: false, side: THREE.FrontSide,
     });
-    const uniforms = { uTime: { value: 0 } };
+    const uniforms = { uTime: { value: 0 }, uFlowLight: { value: light } };
     mat.userData.uniforms = uniforms;
     mat.onBeforeCompile = (shader) => {
         Object.assign(shader.uniforms, uniforms);
@@ -89,6 +90,7 @@ export function createFlowMaterial() {
                 float foam = smoothstep(0.55, 0.85, fn + vFlow.z * 0.75 - 0.25) * clamp(vFlow.z * 1.6, 0.0, 1.0);
                 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.97, 1.0), foam);
                 totalEmissiveRadiance += vec3(0.5, 0.55, 0.6) * foam;
+                totalEmissiveRadiance *= uFlowLight;
                 diffuseColor.a = clamp(diffuseColor.a * (0.75 + 0.9 * fres) + foam * 0.5, 0.0, 0.97);`);
     };
     mat.customProgramCacheKey = () => 'water-flow';
@@ -103,7 +105,7 @@ export function createFlowMaterial() {
  * `points`: an array of {x, y, z}; `radius`: a number or an array (one per point).
  */
 export class WaterFlow {
-    constructor(scene, { maxVerts = 40000, radial = 12 } = {}) {
+    constructor(scene, { maxVerts = 40000, radial = 12, light = 1 } = {}) {
         this.scene = scene;
         this.radial = radial;
         this.maxVerts = maxVerts;
@@ -125,7 +127,7 @@ export class WaterFlow {
         g.setIndex(this.aIdx);
         g.setDrawRange(0, 0);
         this.geo = g;
-        this.mat = createFlowMaterial();
+        this.mat = createFlowMaterial(light);
         this.mesh = new THREE.Mesh(g, this.mat);
         this.mesh.frustumCulled = false;
         this.mesh.renderOrder = 2;
