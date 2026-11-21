@@ -45,9 +45,44 @@ export class WizardHome {
         const cs = this.life.castles.get(w.id.slice(5));
         if (!cs || cs.def.type !== 'magehut') return;
         for (const v of cs.active.values()) if (v.wizard && !v.dead) {
-            const fp = this.life._playerPos(by), known = fp && this.life._knows(v, by, at, 'blast');
+            // (the master of the house feels his own ward being broken — wherever the blow came from, within 160 m: he knows who it is and where; the author 21.11:
+            //  «я сломал защиту его дома — он никак не отреагировал, пошёл спать»)
+            const fp = this.life._playerPos(by), felt = !!fp && Math.hypot(fp.x - v.x, fp.z - v.z) < 160;
+            const known = fp && (felt || this.life._knows(v, by, at, 'blast'));
             this.alarm(v, known ? fp : at, known ? by : null);
             if (known) { v.foe = by; cs.hostile.set(by, Date.now() + 120000); }
+        }
+    }
+
+    /**
+     * (host, every 0.5 s) A stranger INSIDE the house (the author 21.11: «если я вхожу в дверь, они должны просыпаться и начинать активничать — я вторгся в
+     * их дом»): the master of the house wakes at once (asleep or not), stands to defend (alarm) and goes for the intruder — unless the intruder is
+     * a friend of his (RelationRules: friendship / love ≥ 20). Once per entry: while the intruder stays he is a foe already.
+     */
+    intrusion(dt) {
+        this._intT = (this._intT || 0) - dt;
+        if (this._intT > 0) return;
+        this._intT = 0.5;
+        const L = this.life, players = L._players();
+        if (!players.length) return;
+        const now = Date.now();
+        for (const cs of L.castles.values()) {
+            if (!cs.awake || cs.def.type !== 'magehut') continue;
+            const h = cs.def.houses?.[0], c = h?.c;
+            if (!h || !c) continue;
+            for (const v of cs.active.values()) {
+                if (!v.wizard || v.dead || v.servantOf != null || v.foe) continue;
+                for (const pl of players) {
+                    if (Math.hypot(pl.p.x - c.x, pl.p.z - c.z) > h.r - 0.5 || Math.abs(pl.p.y - (h.door?.y ?? c.y)) > 7) continue;
+                    const e = L.rel?.eff?.(v);
+                    if (e && (e.fr >= 20 || e.lv >= 20)) continue; // (a friend may come in)
+                    if (v.sleep) { if (v.sleep.phase === 'lie') L.night?.wake?.(v, 'alarm', pl.id); else L.night?._drop?.(v); }
+                    this.alarm(v, pl.p, pl.id);
+                    v.foe = pl.id; cs.hostile.set(pl.id, now + 120000);
+                    L.alog?.decision(v, 'чужой вошёл в дом — просыпается и идёт на него');
+                    break;
+                }
+            }
         }
     }
 

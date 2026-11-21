@@ -639,6 +639,7 @@ export class WizardLife {
                 for (const cs of L.castles.values()) if (cs.awake && isWizHome(cs.def) && cs.wizNight !== g.isNight && !(cs.wizAlarmUntil > Date.now())) { cs.wizNight = g.isNight; this._staff(cs); }
             }
             this.seals.update(dt);
+            this.home?.intrusion?.(dt); // (a stranger in the master's house: he wakes and goes for him — WizardHome.intrusion)
             this._practice(dt, wizards);
             this.fight.update(dt); // (the circles after a foe: plans and roles)
             const night = g.isNight;

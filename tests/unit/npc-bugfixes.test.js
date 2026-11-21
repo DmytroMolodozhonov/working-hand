@@ -213,3 +213,37 @@ test('an intact ward also blocks escaping route detours; a broken ward allows th
     H.keep(v, before);
     assert.equal(v.x, 14);
 });
+
+test('the master of the house FEELS his ward being broken from afar: he knows who and goes for him, even if the caster was not in sight (the author 21.11)', () => {
+    const { H, v, ward, L } = home();
+    L._knows = () => false; // (nobody saw the cast)
+    L._playerPos = () => ({ x: 100, y: 2, z: 0 }); // (the lightning came from 100 m)
+    H.attacked(ward, 'player', { x: 20, y: 1, z: 0 });
+    assert.equal(v.sleep, false, 'woken');
+    assert.equal(v.foe, 'player', 'he knows who it is');
+    // (too far — 200 m: he does not feel it)
+    const b = home(); b.L._knows = () => false; b.L._playerPos = () => ({ x: 200, y: 2, z: 0 });
+    b.H.attacked(b.ward, 'player', { x: 20, y: 1, z: 0 });
+    assert.equal(b.v.foe, undefined, 'out of his sense');
+});
+
+test('a stranger INSIDE the house wakes the master and he goes for him; a friend may come in; asleep or awake — the same (the author 21.11)', () => {
+    const { H, v, L } = home();
+    v.cs.awake = true; v.sleep = { phase: 'lie' }; L.night.wake = (x) => { x.sleep = null; return true; };
+    L.rel = { eff: () => ({ fr: 0, lv: 0, sub: 0 }) };
+    L._players = () => [{ id: 'p', p: { x: 0, y: 0, z: 2 } }];
+    H.intrusion(1);
+    assert.equal(v.sleep, null, 'woken');
+    assert.equal(v.foe, 'p', 'goes for the intruder');
+    assert.ok(v.cs.hostile.has('p'), 'and the place remembers him');
+    // outside the house (door at z = 8, the house is r 6 round the centre): nothing
+    const o = home(); o.v.cs.awake = true; o.v.sleep = { phase: 'lie' }; o.L.night.wake = (x) => { x.sleep = null; return true; }; o.L.rel = { eff: () => ({ fr: 0, lv: 0 }) };
+    o.L._players = () => [{ id: 'p', p: { x: 0, y: 0, z: 11 } }];
+    o.H.intrusion(1);
+    assert.ok(o.v.sleep, 'still asleep — nobody inside'); assert.equal(o.v.foe, undefined);
+    // a friend: let in
+    const f = home(); f.v.cs.awake = true; f.v.sleep = { phase: 'lie' }; f.L.night.wake = (x) => { x.sleep = null; return true; }; f.L.rel = { eff: () => ({ fr: 40, lv: 0 }) };
+    f.L._players = () => [{ id: 'p', p: { x: 0, y: 0, z: 2 } }];
+    f.H.intrusion(1);
+    assert.ok(f.v.sleep && f.v.foe === undefined, 'a friend sleeps on');
+});
