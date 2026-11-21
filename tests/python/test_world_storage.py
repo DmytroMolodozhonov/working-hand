@@ -21,6 +21,17 @@ class WorldStorageTests(unittest.TestCase):
         self.store = WorldStorage(self.root)
         self.primary = self.root / "wtest.json"
 
+    def test_autosave_does_not_reread_the_world_each_time(self):
+        """The author 21.11: every autosave read and rewrote the whole previous world (the server froze the voice for seconds): the last text is remembered in this run."""
+        self.store.put(world(1, 150))
+        with patch.object(WorldStorage, "_get", side_effect=AssertionError("the previous world was read from disk again")):
+            self.assertTrue(self.store.put(world(2, 160)))
+            self.assertTrue(self.store.put(world(3, 170)))
+        self.assertEqual(json.loads(self.primary.read_text())["updated"], 3)
+        # an older copy never undoes a newer save (the cache knows the stamp)
+        self.assertTrue(self.store.put(world(2, 1)))
+        self.assertEqual(json.loads(self.primary.read_text())["updated"], 3)
+
     def test_corruption_recovers_same_world_and_both_players(self):
         self.store.put(world(1, 150))
         self.store.put(world(2, 160))

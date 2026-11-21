@@ -15,6 +15,8 @@ _LOCK = threading.RLock()
 _WAND_CHECKED = set()  # worlds already searched for a lost wand in this run: the backups are read ONCE (the author 20.11: starting a world took seconds — every load read every backup)
 RECENT_SLOTS = 12  # first checkpoint in each five-minute interval (~one hour)
 DAILY_SLOTS = 7   # first checkpoint each day (~one week)
+PREVIOUS_EVERY = 60  # s between two writes of the hot spare «previous.json»
+_LAST = {}  # wid -> what this run wrote last: {stamp, seed, text, prev_at} (see put)
 
 
 def safe_id(value):
@@ -212,28 +214,43 @@ class WorldStorage:
         with _LOCK:
             if self._deleted(wid):
                 return False  # A stale browser copy must not undo an explicit deletion.
-            previous = self._get(wid)
-            if previous and _stamp(previous) > _stamp(w):
+            # (the author 21.11: «мини-фризы, голос доходит через 2 секунды» — every autosave read the whole previous world back, parsed it and wrote it out
+            #  again: seconds of the server's Python holding the lock that also serves the voice and the camera. What this process wrote last is remembered
+            #  — its stamp, seed and text — and used as «previous»; the disk is read only for a world not written yet in this run.)
+            last = _LAST.get(wid)
+            if last is not None and not (self.root / (wid + ".json")).exists():
+                last = None
+            if last is not None:
+                p_stamp, p_seed, old_text = last["stamp"], last["seed"], last["text"]
+            else:
+                previous = self._get(wid)
+                p_stamp, p_seed, old_text = (_stamp(previous), previous.get("seed"), _text(previous)) if previous else (None, None, text)
+            if p_stamp is not None and p_stamp > _stamp(w):
                 return True
-            if previous and previous.get("seed") != w.get("seed"):
+            if p_stamp is not None and p_seed != w.get("seed"):
                 return False  # Same ID cannot silently become a different world.
             history = self._history(wid)
             now = time.time()
-            old_text = _text(previous) if previous else text
-            # Hot spare every save; history is bounded, independent of world age.
-            _atomic(history / "previous.json", old_text)
+            # Hot spare: the state before this one, at most every PREVIOUS_EVERY s (it was every save: a multi-megabyte write and sync each time).
+            if last is None or now - last.get("prev_at", 0) >= PREVIOUS_EVERY:
+                _atomic(history / "previous.json", old_text)
+                prev_at = now
+            else:
+                prev_at = last.get("prev_at", 0)
             for label, period, count in (("recent", 300, RECENT_SLOTS), ("daily", 86400, DAILY_SLOTS)):
                 bucket = int(now // period)
                 target = history / f"{label}-{bucket % count}.json"
                 if not target.exists() or target.stat().st_mtime < bucket * period:
                     _atomic(target, old_text)
             _atomic(self.root / (wid + ".json"), text)
+            _LAST[wid] = {"stamp": _stamp(w), "seed": w.get("seed"), "text": text, "prev_at": prev_at}
         return True
 
     def delete(self, wid):
         if not safe_id(wid):
             return
         with _LOCK:
+            _LAST.pop(wid, None)
             w = self._get(wid)
             # A recoverable tombstone hides the world, including its backup copies.
             _atomic(self.root / "deleted" / (wid + ".json"), _text(w or {"id": wid}))
