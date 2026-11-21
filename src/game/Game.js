@@ -172,6 +172,8 @@ import { TutorialNudge } from './TutorialNudge.js';
 import { School } from './School.js';
 import { PharaohLife } from './PharaohLife.js';
 import { RiverRocks } from '../world/RiverRocks.js';
+import { ForestFloor } from '../world/ForestFloor.js';
+import { NatureAmbience } from './NatureAmbience.js';
 import { Threats } from './Threats.js';
 import { WaterfallFx } from '../fx/WaterfallFx.js';
 import { Temple } from './Temple.js';
@@ -950,6 +952,8 @@ export class Game {
         this.godhood = new Godhood(this); // who killed all seven titans: a god — immortal, the Hall of the Sun (Godhood.js)
         this.titans = new Titans(this); // the seven titans on their planets (Titans.js, TitanRules.js)
         this.fallFx = new WaterfallFx(this); // the spray, the roar and the rainbow of the waterfalls (WaterfallFx.js)
+        this.nature = new NatureAmbience(this); // the small voices of the forest and the shore (NatureAmbience.js)
+        this.forestFloor = new ForestFloor(this); // the undergrowth of the forest: logs, stumps, ferns, mushrooms, bushes (ForestFloor.js; generation 36)
         this.riverRocks = new RiverRocks(this); // the boulders by the rivers and at the waterfalls' feet (RiverRocks.js; generation 32)
         this.pharaoh = new PharaohLife(this); // Pharaoh Sandy's pyramids: the mummies, the guards, the traps, the torches (PharaohLife.js)
         this.vampire = new VampireLife(this); // Count Sracula's castle: the count, his fifty bats, ten skeleton guards, the clouds over his land (VampireLife.js)
@@ -1414,6 +1418,7 @@ export class Game {
         // a wand makes my Bombardo destroy more
         if ((casterId === 'local' || casterId === this.localId) && this._lastSpell && performance.now() - this._lastSpell.at < 6000) radius *= 1 + (this._lastSpell.pw - 1) * 0.5;
         const keep = this.wards?.keepFor(pos, radius) || [];
+        this.forestFloor?.blast(pos, radius); // (the undergrowth breaks / blows away: ForestFloor.blast)
         this.riverRocks?.blast(pos, radius); // (a boulder of the rivers breaks in a blast: RiverRocks.blast)
         this.applyExplosion(pos, radius, true, power, casterId, keep);
         this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius, ...(keep.length ? { k: keep } : {}) }); // (k: the houses' spheres it could not eat into)
@@ -4169,6 +4174,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         addAll(this.items?.sampleModels?.() || []);
+        addAll(this.forestFloor?.sampleModels?.() || []); // (the undergrowth: one Lambert material for every shape)
         addAll(this.riverRocks?.sampleModels?.() || []); // (the boulders: one Lambert material for every shape)
         addAll(this.oceanStorm?.samples?.() || []);
         addAll(this.landTornado?.samples?.() || []); // (the land tornado's dusty funnel)
@@ -4687,6 +4693,9 @@ export class Game {
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
         if (earth && !duelOnly && !lean) this.iceCastle.update(dt); sysMark('iceCastle');
         if (earth && !duelOnly && !lean) this.pharaoh?.update(dt); sysMark('pharaoh');
+        if (earth && !duelOnly && !lean) this.nature?.update(dt, this.character.group.position);
+        if (earth && !duelOnly && !lean) this.forestFloor?.update(dt, this.character.group.position);
+        else if (this.forestFloor?.group.visible) this.forestFloor.group.visible = false;
         if (earth && !duelOnly && !lean) this.riverRocks?.update(dt, this.character.group.position);
         else if (this.riverRocks?.group.visible) this.riverRocks.group.visible = false;
         if (earth && !duelOnly) this.fallFx?.update(dt, this.character.group.position, !lean);

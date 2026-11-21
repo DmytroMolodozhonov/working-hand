@@ -24,6 +24,7 @@ import './SafeAudio.js'; // (a bad number in a ramp never stops the game)
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { MusicDirector } from './MusicDirector.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
+import { synthNature, NATURE_SOUNDS } from './NatureSounds.js';
 import { synthSwan, SWAN_SOUNDS } from './SwanSounds.js';
 import { synthSea, SEA_SOUNDS } from './SeaSounds.js';
 import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
@@ -819,6 +820,8 @@ export class SoundManager {
             ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
             // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
+            // (the forest's and the shore's small voices — NatureSounds.js / NatureAmbience.js)
+            ...NATURE_SOUNDS.map((k) => ['nature_' + k, () => synthNature(this.context, k)]),
             ...SWAN_SOUNDS.map((k) => ['swan_' + k, () => synthSwan(this.context, k)]),
             // (the sea update — SeaSounds.js: the gale, a waterspout, under the water, the sea creatures)
             ...SEA_SOUNDS.map((k) => ['sea_' + k, () => synthSea(this.context, k)]),
@@ -2226,6 +2229,14 @@ export class SoundManager {
         const key = 'owl_' + kind;
         if (!this.sounds[key]) { if (!OWL_SOUNDS.includes(kind)) return; this.sounds[key] = synthOwl(this.context, kind); }
         this._playAt(this.sounds[key], position, kind === 'wings' ? 0.7 : 1, kind === 'wings' ? 6 : 12, 0.95 + Math.random() * 0.1);
+    }
+
+    /** A small voice of the forest or the shore (NatureAmbience.js): one of NatureSounds.NATURE_SOUNDS at a place — made ahead (prewarmStep). */
+    playNature(position, kind, volume = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'nature_' + kind;
+        if (!this.sounds[key]) { if (!NATURE_SOUNDS.includes(kind)) return; this.sounds[key] = synthNature(this.context, kind); }
+        this._playAt(this.sounds[key], position, volume * 0.8, 9, 0.96 + Math.random() * 0.1);
     }
 
     /** The bird of Spencer (SpencerBirds.js): 'chirp' | 'trill' | 'wings' — made ahead (prewarmStep). Only a seer ever asks for it. */
