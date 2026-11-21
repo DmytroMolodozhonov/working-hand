@@ -40,6 +40,7 @@ import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
 import { VampireCastleSite } from './VampireCastle.js';
 import { PyramidSite, PYR, isPyramidBlock } from './Pyramids.js';
+import { BridgeSite } from './RiverBridges.js';
 import { WaterfallSite } from './Waterfalls.js';
 import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE, iceMount } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
@@ -298,12 +299,14 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 35;
+export const WORLD_GEN = 36;
 export const CAVE_MINES_FROM_GEN = 35;
 /** The first generation with waterfalls on the rivers (Waterfalls.js: rock bluffs with water falling into the river). */
 export const WATERFALLS_FROM_GEN = 32;
 /** Generation 33: the Eye-flower (Глазоцвет — a small flower with a living eye that blinks and looks about; its eye is for the circle of night sight) grows in the wild (MagicFlora.js: `fromGen`). */
 export const EYEFLOWER_FROM_GEN = 33;
+/** Generation 36: rivers of two sizes — small brooks and big rivers (wider, deeper) — and the bridges over them: wooden over the small, stone over the big (RiverBridges.js). */
+export const BRIDGES_FROM_GEN = 36;
 /** Generation 34: the shops of the wizards' market lane have wide counters (7 × 3) with a rune plate for the coins and a rim round it (WizardVillages.buildMarket). */
 export const WIZ_COUNTER_FROM_GEN = 34;
 export const EARTH_SETTLEMENTS_FROM_GEN = 30;
@@ -560,7 +563,7 @@ export function treeFitsChunk(c, x, z, h, kind) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false) {
+export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false, riverSizes = false) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -571,6 +574,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     const region = createNoise2D(seed ^ 0x2c1b3c6d);
     const lakes = createNoise2D(seed ^ 0x6a09e667);
     const rivers = createNoise2D(seed ^ 0x3c6ef372);
+    const riverSize = riverSizes ? createNoise2D(seed ^ 0x5bd1e995) : null; // (generation 36: how big the river is, changing slowly along its course)
     // generation 5: the far land is the new landscape (Landscape.js); the spawn's land as it was
     const land = lush ? createLandscape(seed) : null;
     const fn = (ix, iz) => {
@@ -643,10 +647,14 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
         // block so you can always walk in and out.
         // (generation 5: the rivers further apart — the land between them wider)
         const rv = land ? Math.abs(rivers(ix / 380, iz / 380) + 0.16 * rivers(ix / 60 + 50, iz / 60 - 20)) : Math.abs(rivers(ix / 230, iz / 230) + 0.18 * rivers(ix / 45 + 50, iz / 45 - 20));
-        const width = (land ? 0.022 : 0.032) * wet;
+        // (generation 36: a river is small (a brook, ~8 m) or big (up to ~25 m, deeper), and grows and shrinks slowly along its course — `fn.big` says which; older worlds' rivers are as they were)
+        let wf = 1;
+        fn.big = false;
+        if (riverSize) { const sz = riverSize(ix / 1300 + 3.1, iz / 1300 - 1.7) * 0.5 + 0.5; wf = 0.65 + 1.9 * smoothstep(0.34, 0.72, sz); fn.big = wf >= 1.75; }
+        const width = (land ? 0.022 : 0.032) * wet * wf;
         if (rv < width * 3) {
             if (rv < width) {
-                const depth = rv < width * 0.5 ? 2 : 1;
+                const depth = fn.big ? Math.max(1, Math.min(4, 1 + Math.floor((1 - rv / width) * 4.2))) : rv < width * 0.5 ? 2 : 1; // (a big river: its bed deepens one block at a time to 4)
                 fn.water = depth;
                 // which way it flows: along the river's line (across the gradient of its noise) — the water's look only (UltraWater)
                 const sAt = land ? (x, z) => rivers(x / 380, z / 380) + 0.16 * rivers(x / 60 + 50, z / 60 - 20) : (x, z) => rivers(x / 230, z / 230) + 0.18 * rivers(x / 45 + 50, z / 45 - 20);
@@ -685,7 +693,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     const hill = (ix, iz) => {
         let h = fn(ix, iz);
         hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach; hill.kind = fn.kind;
-        hill.river = fn.river; hill.flowX = fn.flowX; hill.flowZ = fn.flowZ; // (the rivers' flags too: the current of the water, the waterfalls — Waterfalls.js)
+        hill.river = fn.river; hill.flowX = fn.flowX; hill.flowZ = fn.flowZ; hill.big = fn.big; // (the rivers' flags too: the current of the water, the waterfalls — Waterfalls.js)
         hill.mesa = fn.mesa; hill.emer = fn.emer; hill.moon = fn.moon; hill.fant = fn.fant;
         const m = fn.water ? -Infinity : testHillHeight(ix, iz); // (the river keeps its bed: its water's top stays level, no raised channel)
         if (m > h) h = m;
@@ -753,7 +761,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false, caveMines = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, bridges = false, wizCounters = false, caveMines = false } = {}) {
         this.waterJobs.length = 0;
         this.floodState.clear();
         this.incomingFlood?.clear();
@@ -783,10 +791,10 @@ export class TerrainData {
         const spot = mountains && seas && test ? testSeaCastleSpot(seed, this.bigHouses) : null;
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
-        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed);
+        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed, !!bridges && this.lush);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = this.pyr = this.school = this.falls = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = this.pyr = this.school = this.falls = this.bridges = null;
         this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
@@ -844,6 +852,8 @@ export class TerrainData {
             if (this.ghost && ghostSeen) this.ghost.on = true;
             // the waterfalls of the rivers (Waterfalls.js; generation 32): rock bluffs on the banks, away from every built place — made when a chunk asks
             this.falls = waterfalls && this.lush ? new WaterfallSite(seed, raw, (x, z, r) => dgNear(x, z, r) || this.hamlets.near(x, z, r).length > 0 || busy(Math.round(x), Math.round(z))) : null;
+            // the bridges over the rivers (RiverBridges.js; generation 36): wooden over the small ones, stone over the big — away from every built place and from the falls
+            this.bridges = bridges && this.lush ? new BridgeSite(seed, raw, (x, z, r) => dgNear(x, z, r) || this.hamlets.near(x, z, r).length > 0 || busy(Math.round(x), Math.round(z)) || !!this.falls?.near(x, z, r)) : null;
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas, this.dungeons);
             this.iceCastle = ice;
             const den = this.den, vamp = this.vamp, pyr = this.pyr, school = this.school;
@@ -1348,7 +1358,7 @@ export class TerrainData {
                 const kind = b.kinds[Math.floor(hashLand(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * b.kinds.length)];
                 if (h > LUSH.TREE_LINE + (kind === 2 ? 8 : 0)) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
-                if (this.iceCastle?.rocky(tx, tz) || this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz) || this.falls?.near(tx, tz, 2)) continue; // (the Ice Castle's peak, the vampire's crag: bare rock)
+                if (this.iceCastle?.rocky(tx, tz) || this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz) || this.falls?.near(tx, tz, 2) || this.bridges?.near(tx, tz, 3)) continue; // (the Ice Castle's peak, the vampire's crag: bare rock)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue;
                 if (this.school?.clear(tx, tz)) continue; // (the school's terrace and road: no trees)
                 if (this.ghost?.on && (this.ghost.insideAt(tx, tz, 6) || this.ghost.insideAt(tx + 1, tz + 1, 6))) continue; // (the Castle of Ghosts has no trees on its terrace)
@@ -1561,6 +1571,7 @@ export class TerrainData {
         }
         if (this.school) { const sc = this.school.partsForChunk(c.cx, c.cz, CHUNK); if (sc.length) lists = lists.length ? lists.concat(sc) : sc; } // (the school Akseldorf: SchoolLand.js)
         if (this.falls) { const f = this.falls.partsForChunk(c.cx, c.cz, CHUNK); if (f.length) lists = lists.length ? lists.concat(f) : f; } // (the rivers' waterfalls: Waterfalls.js)
+        if (this.bridges) { const b = this.bridges.partsForChunk(c.cx, c.cz, CHUNK); if (b.length) lists = lists.length ? lists.concat(b) : b; } // (the bridges over the rivers: RiverBridges.js)
         if (this.pyr) { const p = this.pyr.partsForChunk(c.cx, c.cz, CHUNK); if (p.length) lists = lists.length ? lists.concat(p) : p; } // (the three pyramids: Pyramids.js)
         if (this.vamp) { const v = this.vamp.partsForChunk(c.cx, c.cz, CHUNK); if (v.length) lists = lists.length ? lists.concat(v) : v; } // (Count Sracula's castle: VampireCastle.js)
         if (this.ghost?.on) { const g = this.ghost.partsForChunk(c.cx, c.cz, CHUNK); if (g.length) lists = lists.length ? lists.concat(g) : g; } // (the Castle of Ghosts: only in a seer's land — GhostCastle.js)
@@ -2120,7 +2131,7 @@ export class TerrainData {
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue; // not on a beach (nor its crown)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue; // no trees in villages
                 if (this.ghost?.on && this.ghost.insideAt(tx, tz, 6)) continue;
-                if (this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz) || this.falls?.near(tx, tz, 2)) continue; // (the vampire's crag, the pyramids' desert)
+                if (this.vamp?.rocky(tx, tz) || this.pyr?.sandy(tx, tz) || this.falls?.near(tx, tz, 2) || this.bridges?.near(tx, tz, 3)) continue; // (the vampire's crag, the pyramids' desert)
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
                 // Only on level dry ground (the 2×2 trunk and its surroundings)
