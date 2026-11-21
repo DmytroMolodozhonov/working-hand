@@ -53,8 +53,8 @@ export function forestOfChunk(data, c) {
     const colOf = (x, z) => (z - z0) * CHUNK + (x - x0);
     /** a free forest-grass spot: ground y (top of the block) or null */
     const ground = (x, z, flat) => {
-        const lx = Math.floor(x) - x0, lz = Math.floor(z) - z0;
-        if (lx < 0 || lz < 0 || lx >= CHUNK || lz >= CHUNK) return null;
+        const lx = Math.round(x) - x0, lz = Math.round(z) - z0; // (a block spans ±0.5 round its whole number)
+        if (lx < 0 || lz < 0 || lx >= CHUNK || lz >= CHUNK || x < x0 || z < z0 || x >= x0 + CHUNK || z >= z0 + CHUNK) return null;
         const col = lz * CHUNK + lx;
         if (c.bio[col] !== forest) return null;
         const L = c.top[col], i = (L - MIN_LAYER) * COLS + col;

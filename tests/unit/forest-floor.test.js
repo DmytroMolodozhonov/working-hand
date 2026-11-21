@@ -33,7 +33,7 @@ test('the forest has its undergrowth: every kind, deterministic, on forest grass
             seen[it.k] = (seen[it.k] || 0) + 1;
             assert.ok(it.v >= 0 && it.v < KINDS[it.k], 'a real shape');
             assert.ok(it.x >= c.cx * CHUNK && it.x < (c.cx + 1) * CHUNK && it.z >= c.cz * CHUNK && it.z < (c.cz + 1) * CHUNK, 'inside its chunk');
-            const col = (Math.floor(it.z) - c.cz * CHUNK) * CHUNK + (Math.floor(it.x) - c.cx * CHUNK);
+            const col = (Math.round(it.z) - c.cz * CHUNK) * CHUNK + (Math.round(it.x) - c.cx * CHUNK);
             assert.equal(c.bio[col], BIOME.forest, 'on forest land');
             const L = c.top[col], i = (L - MIN_LAYER) * COLS + col;
             assert.equal(c.blocks[i], BLOCK.GRASS, 'on a grass block');
