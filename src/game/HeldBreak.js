@@ -163,6 +163,7 @@ export function breakCreatureHeld(g, c, { max = false, wandFirst = false } = {})
         m?.dropShield?.();
     } else if (slot.kind === 'wand') {
         c.noWand = true; c.lostWand = null; c.practice = null; // (no wand in the hand any more — and none to fetch)
+        c.wandDestroyed = true; // («Liquidation Maxima» crumbled his wand: the fight is won — WizardLife.beatenCheck)
         m?.setHeldTool?.('none');
     } else {
         if (slot.kind === 'weapon') c.disarmed = true; // (fists now: CastleLife / Sailors halve the blows; Death drops nothing)

@@ -1,4 +1,4 @@
-// Победа над волшебником без столкновения лучей и без убийства (автор 19.11, уточнено 21.11): победа — это когда его палочка перешла ко мне (выбита и взята: «Акцио» / подобрал) или уничтожена, он убежал (даже с палочкой) или умер. Оглушение, лёд, «Левиоса» — не победа.
+// Победа над волшебником без столкновения лучей и без убийства (автор 19.11, уточнено 21.11): победа — это когда его палочка перешла ко мне (выбита и взята: «Акцио» / подобрал) или рассыпана «Liquidation Maxima», он убежал (даже с палочкой) или умер. Оглушение, лёд, «Левиоса» — не победа.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WizardLife } from '../../src/game/WizardLife.js';
@@ -37,8 +37,11 @@ test('the wand knocked out is NOT yet a win (he may pick it up); in MY hand (А�
     const b = fake(); const bare = mage({ id: 'w2', noWand: true });
     b.w.beatenCheck(bare, 0.25); b.w.beatenCheck(bare, 0.25);
     assert.equal(b.calls.length, 0, 'no wand from the start: no win');
-    const c = fake(); const v3 = mage({ id: 'w3' }); c.w.beatenCheck(v3, 0.25); v3.noWand = true; v3.lostWand = null; c.w.beatenCheck(v3, 0.25);
-    assert.match(c.calls[0][5], /уничтожена/);
+    // «Liquidation Maxima» crumbled the wand in his hand (HeldBreak sets wandDestroyed): won; a wand lost any other way (no flag) — not
+    const c = fake(); const v3 = mage({ id: 'w3' }); c.w.beatenCheck(v3, 0.25); v3.noWand = true; v3.lostWand = null; v3.wandDestroyed = true; c.w.beatenCheck(v3, 0.25);
+    assert.match(c.calls[0][5], /Liquidation Maxima/);
+    const d = fake(); const v5 = mage({ id: 'w5' }); d.w.beatenCheck(v5, 0.25); v5.noWand = true; v5.lostWand = null; d.w.beatenCheck(v5, 0.25);
+    assert.equal(d.calls.length, 0, 'no wand and no destruction: nothing');
 });
 test('ran away: fleeing 40 m and more for 6 s on end — won; fleeing close by is not', () => {
     const { w, calls } = fake();
