@@ -498,8 +498,10 @@ export class WizardLife {
      * A fight won WITHOUT a beam clash and without a kill. The author's rule (21.11: «победа — это когда обезоруживаю, или уничтожаю палочку, или он не
      * может воевать [= остался без палочки], или умер, или убежал»; and again: «поднят Левиосой — не победа, оглушён — тоже не победа»: a wizard knocked
      * down, stunned, frozen, lifted or carried gets up and goes on — none of it is a defeat): a wizard who has cast at ME has lost when
-     *   — his WAND is out of his hand («Экспеллиармус») or destroyed (he HAD one when the fight began: a wizard with no wand at all is no win);
-     *   — he ran: fleeing, 40 m and more away from me, for 6 s on end.
+     *   — his WAND is mine (the author 21.11: «не просто выбита — должна перейти ко мне, с помощью «Акцио»: он может подбежать и подобрать»): knocked out
+     *     and then in my hand — or destroyed (he HAD one when the fight began: a wizard with no wand at all is no win);
+     *   — or he ran (afraid: even with his wand — a strong foe frightens him off);
+     *     fleeing, 40 m and more away from me, for 6 s on end.
      * (Dead — his own reward, killWon.) Once per wizard: Mana.duelWonAlive (the prize by the beauty of the fight — FightLedger); once per opponent in life.
      */
     beatenCheck(v, dt = 0) {
@@ -508,7 +510,13 @@ export class WizardLife {
         const armed = !v.noWand && !v.lostWand;
         if (armed) v._armedAtFight = true; // (he had a wand in his hand while he fought me)
         let why = null;
-        if (v._armedAtFight && !armed) why = v.lostWand ? 'обезоружен: палочка выбита' : 'палочка уничтожена';
+        if (v._armedAtFight && !armed) {
+            if (v.lostWand) {
+                // knocked out: not yet a win — he may run and pick it up. It is MINE (pulled with «Акцио» or picked up: it is in my hand) — then it is
+                const uid = v.lostWand.uid, held = g.items?.held;
+                if (uid && held && (held.right?.item?.uid === uid || held.left?.item?.uid === uid)) why = 'палочка у вас (выбита и перешла к вам)';
+            } else why = 'палочка уничтожена';
+        }
         // ran away: fleeing, far from me, for a while
         const p = g.character?.group?.position;
         const far = p ? Math.hypot(v.x - p.x, v.z - p.z) >= 40 : false;

@@ -1,5 +1,4 @@
-// Победа над волшебником без столкновения лучей и без убийства (автор 19.11, уточнено 21.11): победа — это когда его обезоружили (палочка выбита или
-// уничтожена), он убежал или умер. Оглушение, лёд, «Левиоса» — не победа.
+// Победа над волшебником без столкновения лучей и без убийства (автор 19.11, уточнено 21.11): победа — это когда его палочка перешла ко мне (выбита и взята: «Акцио» / подобрал) или уничтожена, он убежал (даже с палочкой) или умер. Оглушение, лёд, «Левиоса» — не победа.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WizardLife } from '../../src/game/WizardLife.js';
@@ -20,12 +19,21 @@ test('stunned, frozen, lifted, carried — however long — is NOT a defeat (he 
     }
     assert.equal(calls.length, 0);
 });
-test('the wand knocked out («Экспеллиармус») or destroyed: won — once; but only a wizard who HAD a wand while he fought', () => {
+test('the wand knocked out is NOT yet a win (he may pick it up); in MY hand (Акцио / picked up) — won, once; destroyed — won; no wand from the start — never', () => {
     const { w, calls } = fake();
-    const v = mage(); w.beatenCheck(v, 0.25); v.noWand = true; v.lostWand = { uid: 'x' };
+    const v = mage(); w.beatenCheck(v, 0.25); v.noWand = true; v.lostWand = { uid: 'wand1' };
     w.beatenCheck(v, 0.25); w.beatenCheck(v, 0.25);
-    assert.equal(calls.length, 1);
-    assert.match(calls[0][5], /обезоружен/);
+    assert.equal(calls.length, 0, 'lying on the ground: nothing yet');
+    w.game.items = { held: { right: null, left: { item: { uid: 'other' } } } };
+    w.beatenCheck(v, 0.25);
+    assert.equal(calls.length, 0, 'another thing in my hand');
+    w.game.items.held.right = { item: { uid: 'wand1' } };
+    w.beatenCheck(v, 0.25); w.beatenCheck(v, 0.25);
+    assert.equal(calls.length, 1, 'his wand came to me: won, once');
+    assert.match(calls[0][5], /палочка у вас/);
+    const r = fake(); const v2 = mage({ id: 'w4' }); r.w.beatenCheck(v2, 0.25); v2.noWand = true; v2.lostWand = { uid: 'wand2' };
+    r.w.beatenCheck(v2, 0.25); v2.noWand = false; v2.lostWand = null; r.w.beatenCheck(v2, 0.25); // (he ran up and took it back)
+    assert.equal(r.calls.length, 0);
     const b = fake(); const bare = mage({ id: 'w2', noWand: true });
     b.w.beatenCheck(bare, 0.25); b.w.beatenCheck(bare, 0.25);
     assert.equal(b.calls.length, 0, 'no wand from the start: no win');
