@@ -196,6 +196,12 @@ ${BOOM_PARS}
 uniform float uSkyComp;
 uniform sampler2D uSoil;
 uniform sampler2D uRock;
+// Explicit gradients keep tile filtering stable where neighbouring pixels choose different materials.
+#ifdef texture2DGradEXT
+    #define geologySample(map, uv, dx, dy) texture2DGradEXT(map, uv, dx, dy)
+#else
+    #define geologySample(map, uv, dx, dy) texture2D(map, uv)
+#endif
 uniform sampler2D uCaveBones;
 uniform sampler2D uBuildingWood;
 uniform float uHellT;
@@ -327,29 +333,38 @@ float snowflakeAt(vec2 uv) {
     if (pat < 0.5 && vVoxPos.y < uSeaY - 0.1 && vVoxWet > 0.5) detail *= 0.15; // (the sea's bottom: no blocks' pixels)
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides
     diffuseColor.rgb *= 1.0 + detail * kFine;
+    // Project all axes onto the same coordinates so the contact continues around corners.
+    vec2 geologyUV = vec2(q.x * 0.84 + q.z * 0.58, q.y + q.z * 0.66 - q.x * 0.32);
+    vec2 dx = dFdx(geologyUV), dy = dFdy(geologyUV);
+    vec2 soilDX = dFdx(uv), soilDY = dFdy(uv);
+    float field = vVoxGeology < 0.0 ? (rock ? 1.0 : 0.0) : vVoxGeology;
+    float feather = clamp(fwidth(field) * 0.7, 0.062, 0.16);
     if (soil || rock) {
-        // A common projection puts the same mineral grain on both sides of every wall, floor and corner.
-        vec2 geologyUV = vec2(q.x * 0.84 + q.z * 0.58, q.y + q.z * 0.66 - q.x * 0.32);
+        const float soilScale = 1.0 / ${SOIL_METRES.toFixed(1)};
+        const float rockScale = 1.0 / ${ROCK_METRES.toFixed(1)};
         vec2 soilUV = uv + layerId * vec2(0.18, 0.12);
-        float field = vVoxGeology < 0.0 ? (rock ? 1.0 : 0.0) : vVoxGeology;
-        if (field < 0.001) {
-            diffuseColor.rgb = pow(texture2D(uSoil, soilUV / ${SOIL_METRES.toFixed(1)}).rgb, vec3(2.2));
-        } else {
-            vec4 stone = texture2D(uRock, geologyUV / ${ROCK_METRES.toFixed(1)});
-            float tint = rock ? smoothstep(0.57, 1.0, field) : 0.0;
-            vec3 stoneColor = pow(stone.rgb, vec3(2.2)) * mix(vec3(1.0), voxBase / 0.541, tint);
-            diffuseColor.rgb = stoneColor;
-            if (field < 0.999) {
-                float mixed = 1.0 - abs(field * 2.0 - 1.0);
-                float rockShare = smoothstep(0.11, 0.89, field + (stone.a - 0.5) * 1.38 * mixed);
-                vec3 dirt = texture2D(uSoil, geologyUV / ${SOIL_METRES.toFixed(1)}).rgb;
-                // Crossfade the samples so the grain stays crisp instead of stretching along the contact.
-                if (field < 0.30) {
-                    vec3 original = texture2D(uSoil, soilUV / ${SOIL_METRES.toFixed(1)}).rgb;
-                    dirt = mix(original, dirt, smoothstep(0.0, 0.30, field));
-                }
-                diffuseColor.rgb = mix(pow(dirt, vec3(2.2)), stoneColor, rockShare);
+
+        float rockShare = 0.0;
+        vec3 stoneColor = vec3(0.0);
+        if (field > 0.25) {
+            vec4 stone = geologySample(uRock, geologyUV * rockScale, dx * rockScale, dy * rockScale);
+            float contact = field - 0.5 + (stone.a - 0.5) * 0.19;
+            rockShare = smoothstep(-feather, feather, contact);
+            float tint = rock ? smoothstep(0.64, 1.0, field) : 0.0;
+            stoneColor = pow(stone.rgb, vec3(2.2)) * mix(vec3(1.0), voxBase / 0.541, tint);
+        }
+
+        diffuseColor.rgb = stoneColor;
+        if (rockShare < 1.0) {
+            vec3 dirt = vec3(0.0);
+            if (field < 0.30) {
+                dirt = geologySample(uSoil, soilUV * soilScale, soilDX * soilScale, soilDY * soilScale).rgb;
             }
+            if (field > 0.07) {
+                vec3 contactSoil = geologySample(uSoil, geologyUV * soilScale, dx * soilScale, dy * soilScale).rgb;
+                dirt = mix(dirt, contactSoil, smoothstep(0.07, 0.30, field));
+            }
+            diffuseColor.rgb = mix(pow(dirt, vec3(2.2)), stoneColor, rockShare);
         }
         if (soil && pat >= 32.0) {
             vec2 boneUV = f;
@@ -668,7 +683,7 @@ float snowflakeAt(vec2 uv) {
             .replace('#include <fog_fragment>', WET_FRAG);
     };
     material.extensions = { ...(material.extensions || {}), derivatives: true }; // (fwidth on WebGL1)
-    material.customProgramCacheKey = () => 'voxel-detail-geology';
+    material.customProgramCacheKey = () => 'voxel-detail-limestone';
     return material;
 }
 
