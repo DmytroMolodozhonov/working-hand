@@ -23,6 +23,7 @@
  * hit hard in the air (knocked down) — it falls; into a wall / a roof — the body stops (never through), a ceiling — no climb.
  */
 import { FlapReader, armsOf } from './ImperiusFlight.js';
+import { allLog } from '../core/AllLog.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 /*
@@ -186,7 +187,7 @@ export class WingFlight {
         const hv = ch.handRelVelocity;
         const stroke = why ? 0 : this.reader.update(dt, hv?.left, hv?.right);
         if (why) {
-            if (this.st.air) this._letGo(); // (in the air and the wings cannot: the body falls as any)
+            if (this.st.air) this._letGo(why); // (in the air and the wings cannot: the body falls as any)
             return;
         }
         const W = g.wings;
@@ -217,6 +218,7 @@ export class WingFlight {
         }
         if (stroke > 0) g.sound?.playSwan?.(p, 'wings');
         if (!st.air) { if (wasAir) this._touch(0, 0); this._pose(false, arms, dt); return; }
+        if (!wasAir) allLog('Полёт', `взлёт на крыльях: скорость вперёд ${st.vf.toFixed(1)} м/с, вверх ${st.vy.toFixed(1)} м/с, взмахов ${this._strokes?.length || 0}, высота над землёй ${alt.toFixed(1)} м`);
         if (!wasAir) g.hud?.setVoice?.('🪽 Взлёт! Машите руками, иначе упадёте. Наклон вперёд — вниз, назад — вверх, вбок — поворот', true);
         if (st.hold < 0.35 && !this._toldFall) { this._toldFall = true; g.hud?.setVoice?.('🪽 Крылья устали держать — машите!', true); }
         if (st.hold > 0.8) this._toldFall = false;
@@ -244,6 +246,13 @@ export class WingFlight {
             st.air = false; st.vy = 0; st.vf = 0;
             this._pose(false, arms, dt);
             return;
+        }
+        // (автор 21.11: «добавь логи — анализ падения, как игрок летит»: раз в секунду полёта — высота, скорость вниз и вперёд, угол спуска, руки, наклон тела,
+        //  поддержка крыльев; на посадке и срыве — отдельные строки)
+        this._logT = (this._logT || 0) + dt;
+        if (this._logT >= 1) {
+            this._logT = 0;
+            allLog('Полёт', `на крыльях: высота ${alt.toFixed(1)} м; вниз ${(-st.vy).toFixed(1)} м/с, вперёд ${st.vf.toFixed(1)} м/с, угол спуска ${(Math.atan2(Math.max(0, -st.vy), Math.max(0.01, st.vf)) * 57.3).toFixed(0)}°; руки «${arms}», наклон тела ${steer.dive.toFixed(2)}, поворот ${steer.turn.toFixed(2)}; поддержка крыльев ${(st.hold ?? 0).toFixed(2)}, ${(st.since ?? 0).toFixed(1)} с после взмаха`);
         }
         ch.verticalVelocity = 0;
         // (the wings carry the body: the Character's own «fall» counter must not run — else a long glide lands as ONE fall of its whole height and kills —
@@ -282,8 +291,9 @@ export class WingFlight {
     }
 
     /** The wings let go in the air (busy, knocked, dead): the body falls by itself (Character's own gravity). */
-    _letGo() {
+    _letGo(why = '') {
         const ch = this.game.character;
+        allLog('Полёт', `крылья отпустили тело в воздухе (${why || 'занято / сбит / мёртв'}): вниз ${(-this.st.vy).toFixed(1)} м/с, вперёд ${this.st.vf.toFixed(1)} м/с; дальше падает само`);
         ch.verticalVelocity = Math.min(0, this.st.vy);
         this.st.air = false; this.st.vf = 0; this.st.vy = 0;
         ch.setFlightTilt?.(0); ch.flying = false;
@@ -294,6 +304,7 @@ export class WingFlight {
     _touch(vy, vf) {
         const g = this.game;
         const h = landingHurt(vy, vf);
+        allLog('Полёт', `посадка на крыльях: вниз ${(-vy).toFixed(1)} м/с, вперёд ${(vf || 0).toFixed(1)} м/с, угол ${(Math.atan2(Math.max(0, -vy), Math.max(0.01, vf || 0)) * 57.3).toFixed(0)}°; урон ${h.dmg}${h.knock ? ', с ног' : ''} (мягко ≤ ${LAND.SAFE_VY} м/с вниз или угол < ~27°)`);
         g.steady?.fell?.();
         this.game.character.setFlightTilt?.(0);
         this.game.character.flying = false;

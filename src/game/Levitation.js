@@ -23,6 +23,7 @@ import { rayToSegment, segmentToSegment, BODY } from './Duel.js';
 import { refusal } from './Hints.js';
 import { AIM, aimOffset, steadyDir, applyAimOffset } from './AimHold.js';
 import { playerFallDamage, PLAYER_FALL } from './PlayerFallRules.js';
+import { allLog } from '../core/AllLog.js';
 import { P } from './Ragdoll.js';
 import { reactLevel } from './WizardMind.js';
 import { disarmVillager } from './Expelliarmus.js';
@@ -1220,6 +1221,7 @@ export class Levitation {
         this._playerLandingSeen = L;
         if (!ch.onGround || ch.swimY != null || g.isDeadLocal || g.combat?.dead || performance.now() < (g.impact?.gentleUntil || 0)) return;
         const d = playerFallDamage(L.drop, L);
+        if (L.drop > 1 || d) allLog('Полёт', `посадка (обычное падение): с высоты ${L.drop.toFixed(1)} м, скорость ${(L.speed ?? 0).toFixed(1)} м/с, ${L.soft ? 'мягко (перо)' : L.careful ? 'осторожный шаг' : 'обычно'}; урон ${d}`);
         if (!d) return;
         if (g.combat?.enabled) g.combat.damage(d, null, 'fall');
         else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d, 'fall');
