@@ -2,15 +2,16 @@
  * Brawl.js — «Битва существ»: `g.brawl` (rules and numbers: BrawlRules.js).
  *
  * The player puts creatures of two teams on a bounded field (TutorialLand — a meadow with cliffs, nothing else) and starts the fight; then
- * watches as a camera (SpectatorCam.js: keyboard and mouse, no web camera). Zombies, animals and people are «servants» of their team
+ * watches or takes control of a fighter (SpectatorCam.js and BrawlControl.js). Zombies, animals and people are «servants» of their team
  * (Servants.js: the pseudo-master `brawl:A` / `brawl:B`), so the walking and the blows of every system are its own; the mages (ordinary and
- * elemental) fight by their OWN real brains, their foe a pseudo player id (foePos / _feedFoes). Nobody in this mode goes for the player: the hero is only the eye.
+ * elemental) fight by their OWN real brains, their foe a pseudo player id (foePos / _feedFoes). The hidden world hero only keeps the field loaded.
  *
  * Host only in a network game is not a thing here (a map for one); `authority` is always true.
  */
 import * as THREE from 'three';
 import { allLog } from '../core/AllLog.js';
-import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, fighterDef, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage, teamAt } from './BrawlRules.js';
+import { TEAMS, TEAM_IDS, masterOfTeam, teamOfMaster, customFighter, BRAWL, pickEnemy, winnerOf, placePoints, foeId, isMage, teamAt } from './BrawlRules.js';
+import { BrawlControl } from './BrawlControl.js';
 import { TUTORIAL } from '../world/TutorialLand.js';
 import { SHARDS } from './ElementalRules.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -28,7 +29,9 @@ export class Brawl {
     constructor(game) {
         this.game = game;
         this.roster = new Map(); // 'k:id' → {k, id, team, type, def}
-        this.state = 'setup'; // 'setup' | 'fight' | 'over'
+        this.state = 'setup'; // 'setup' | 'countdown' | 'fight' | 'over'
+        this.countdown = 0;
+        this.control = new BrawlControl(this);
         this.winner = null;
         this.overAt = 0;
         this._aims = new Map(); // 'k:id' → {target: 'k:id', t}: whom each fighter went for lately (the others read «it is after me» from it — ThreatRank)
@@ -132,10 +135,11 @@ export class Brawl {
     }
 
     /** Put a fighter of kind `typeId` of `team` at (x, z). → the entry, or null (why: this.why). */
-    spawn(typeId, team, x, zc) {
-        const g = this.game, def = fighterDef(typeId);
+    spawn(typeId, team, x, zc, options = null) {
+        const g = this.game, def = customFighter(typeId, options);
         this.why = '';
         if (!def || !TEAMS[team]) { this.why = 'нет такого бойца'; return null; }
+        if (this.state === 'countdown') { this.why = 'дождитесь начала боя'; return null; }
         if (this.state === 'over') this.clear(); // (a new round: the old field goes)
         if (this.count() >= BRAWL.MAX) { this.why = 'на поле уже много бойцов'; return null; }
         if (g.terrain?.data?.landMade && !g.terrain.data.landMade(x, zc)) { this.why = 'поле ещё строится — подождите секунду'; return null; }
@@ -178,12 +182,13 @@ export class Brawl {
             if (!life || !site) { this.why = 'жители недоступны'; return null; }
             const idx = ++this._elemN, m = idx;
             const el = def.elemental;
-            site.people.push({ idx, seed: 20261117 + m * 131, role: 'mage', element: el, name: def.label + ' ' + m, female: el === 'water' || m % 4 === 0, mana: def.mana, robe: false, look: el === 'earth' ? earthLook() : elementalLook(el, { tank: el === 'water' }) });
+            site.people.push({ idx, seed: 20261117 + m * 131, role: 'mage', element: el, name: def.custom ? def.label : def.label + ' ' + m, female: el === 'water' || m % 4 === 0, mana: def.mana, robe: false, look: el === 'earth' ? earthLook() : elementalLook(el, { tank: el === 'water' }) });
             const cs = life._runtime(site);
             if (!cs.awake) cs.awake = true;
             const yaw = team === 'A' ? Math.PI * 1.5 : Math.PI * 0.5;
             const v = life._activate(cs, idx, { x, y, z, yaw }, 'elemental');
             if (!v) { this.why = 'не получилось'; return null; }
+            if (def.custom) v.mana = v.maxMana = def.mana;
             v.brawl = { team, def, elemental: true };
             v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; // (ready at once: not the seconds of a first surprise the ordinary roll gives — _feedFoes keeps it)
             v.yaw = yaw;
@@ -193,7 +198,7 @@ export class Brawl {
             if (!life || !site) { this.why = 'жители недоступны'; return null; }
             const idx = ++this._person;
             const m = this._person;
-            site.people.push({ idx, role: def.role, female: m % 3 === 0, name: def.label + ' ' + m, home: -1, stall: -1, seed: 20261116 + m * 97, rank: def.rank, brave: 1, mana: def.mana, ...(def.outfit ? { outfit: def.outfit } : {}) });
+            site.people.push({ idx, role: def.role, female: m % 3 === 0, name: def.custom ? def.label : def.label + ' ' + m, home: -1, stall: -1, seed: 20261116 + m * 97, rank: def.rank, brave: 1, mana: def.mana, ...(def.outfit ? { outfit: def.outfit } : {}) });
             const cs = life._runtime(site);
             if (!cs.awake) cs.awake = true;
             const yaw = team === 'A' ? Math.PI * 1.5 : Math.PI * 0.5;
@@ -220,6 +225,7 @@ export class Brawl {
     /** Take one fighter off the field (a test, a sweep of one): the creature and its place in the roster. */
     removeFighter(k, id) {
         const g = this.game, life = g.castleLife;
+        if (this.control.entry?.k === k && this.control.entry.id === id) this.control.release(false);
         if (k === 'z') { const z = g.zombieById?.get(id); if (z) g.removeZombie(z); }
         else if (k === 'a') { const a = g.animals?.byId.get(id); if (a) g.animals._remove(a); }
         else if (k === 'v') { const v = life?.byId.get(id); if (v) { v.dead = true; life._deactivate(v); } }
@@ -229,6 +235,8 @@ export class Brawl {
 
     /** Take everybody off the field. */
     clear() {
+        this.control.release(false);
+        this._endCountdown();
         const g = this.game, life = g.castleLife;
         for (const e of [...this.roster.values()]) {
             if (e.k === 'z') { const z = g.zombieById?.get(e.id); if (z) g.removeZombie(z); }
@@ -300,16 +308,55 @@ export class Brawl {
     }
 
     start() {
-        if (this.state === 'fight') return false;
+        if (this.state !== 'setup') return false;
         const a = this.aliveCount();
         if (!(a.A > 0 && a.B > 0)) { this.why = 'нужны бойцы с обеих сторон'; return false; }
+        if (this.control.entry) {
+            this.state = 'countdown';
+            this.countdown = BRAWL.COUNTDOWN;
+            this._showGlass();
+            this._changed();
+        } else this._beginFight(a);
+        return true;
+    }
+
+    _showGlass() {
+        if (!this.glass) {
+            const half = BRAWL.EDGE + 4;
+            const geometry = new THREE.BoxGeometry(.08, 16, half * 2);
+            const pane = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+                color: 0x89d8f7, transparent: true, opacity: .24, depthWrite: false,
+            }));
+            const lines = [0, -6, -half, 0, -6, half, 0, 8, -half, 0, 8, half];
+            for (let z = -half; z <= half; z += 7) lines.push(0, -8, z, 0, 8, z);
+            const grid = new THREE.BufferGeometry();
+            grid.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
+            const edges = new THREE.LineSegments(grid, new THREE.LineBasicMaterial({
+                color: 0xc9f2ff, transparent: true, opacity: .66, depthWrite: false,
+            }));
+            pane.add(edges);
+            pane.renderOrder = 6;
+            this.game.scene.add(pane);
+            this.glass = pane;
+        }
+        this.glass.position.y = this.groundAt(0, 0) + 6;
+        this.glass.visible = true;
+    }
+
+    _endCountdown() {
+        this.countdown = 0;
+        if (this.glass) this.glass.visible = false;
+    }
+
+    _beginFight(a = this.aliveCount()) {
+        this._endCountdown();
         this.state = 'fight';
         this.winner = null;
         this._logT = 0; this._hook();
         allLog('Битва', `бой начался: красных ${a.A}, синих ${a.B}; бойцы: ` + [...this.roster.values()].map((e) => `${e.team}:${e.type}#${e.id}`).join(' '));
         this.game.hud?.setVoice?.('⚔️ Бой начался', true);
+        this._feedFoes();
         this._changed();
-        return true;
     }
 
     // ------------------------------------------------------------ the search
@@ -401,7 +448,7 @@ export class Brawl {
         const L = this.game.castleLife;
         const list = this.state === 'fight' ? this._enemies() : null;
         for (const e of this.roster.values()) {
-            if (!isMage(e.def)) continue;
+            if (!isMage(e.def) || e === this.control.entry) continue;
             const v = L?.byId.get(e.id);
             if (!v || v.dead) continue;
             v.reactLag = BRAWL.REACT; v.readyUntil = Date.now() + 60000; // (in the middle of a battle a mage is on his guard: not the seconds of a first surprise before he lifts the wand — knights cross the field in two)
@@ -639,8 +686,17 @@ export class Brawl {
         allLog('Битва', `раненых рыцарей (<50%): ${hurt}; живых: красные ${al.A}, синие ${al.B}`);
     }
 
-    update(dt) {
+    update(dt, elapsed = dt) {
         this._frame++;
+        if (this.control.entry && !this._alive(this.control.entry)) {
+            this.control.release();
+        }
+        if (this.state === 'countdown') {
+            const seconds = Math.ceil(this.countdown);
+            this.countdown -= elapsed;
+            if (this.countdown <= 0 || !this.control.entry) this._beginFight();
+            else if (seconds !== Math.ceil(this.countdown)) this._changed();
+        }
         if (!this._stripBuilt && this._frame > 20 && this.game.terrain?.data?.landMade?.(0, 0) !== false) this._buildStrip();
         if (this.state === 'fight') {
             this._logT = (this._logT || 0) + dt; if (this._logT >= 2) { this._logT = 0; this._snapshot(); }
@@ -648,6 +704,7 @@ export class Brawl {
             if (w) {
                 this.state = 'over';
                 this.winner = w;
+                this.control.release(false);
                 allLog('Битва', `бой окончен: ${w === 'draw' ? 'ничья' : 'победа ' + w}`);
                 this.overAt = performance.now();
                 this.game.hud?.setVoice?.(w === 'draw' ? '🤝 Все пали — ничья' : `🏆 Победа: ${TEAMS[w].label}`, true);
@@ -655,6 +712,7 @@ export class Brawl {
             }
         }
         if (this._frame % 2 === 0) this._updateMarkers();
+        if (this.control.entry && this._frame % 6 === 0) this.game.brawlPanel?.updateStatus();
         if (this._frame % 12 === 3) { this._feedFoes(); this._watchCarry(); }
         if (this._frame % 30 === 0) { // (no stranger on the field: a zombie nobody put there goes)
             for (const z of [...this.game.zombies]) if (!this.roster.has('z:' + z.id) && !z.isDying) this.game.removeZombie(z);
@@ -664,7 +722,7 @@ export class Brawl {
     }
 
     _changed(soft = false) {
-        this.onChange?.({ state: this.state, winner: this.winner, total: { A: this.count('A'), B: this.count('B') }, alive: this.aliveCount(), soft });
+        this.onChange?.({ state: this.state, winner: this.winner, countdown: Math.ceil(this.countdown), total: { A: this.count('A'), B: this.count('B') }, alive: this.aliveCount(), soft });
     }
 
     dispose() {
@@ -672,5 +730,9 @@ export class Brawl {
         this.game.scene.remove(this.markers);
         this.markers.geometry.dispose();
         this.markers.material.dispose();
+        if (this.glass) {
+            this.game.scene.remove(this.glass);
+            this.glass.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+        }
     }
 }

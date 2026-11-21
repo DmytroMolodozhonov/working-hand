@@ -158,7 +158,7 @@ export class Savior {
         if (!v) return;
         if (!this.auth) return;
         if (v.dead || !this.life.byId.has(v.id)) { this._over(v); return; }
-        if (v.soulTask) return;
+        if (v.soulTask || v.brawlManual) return;
         if (this.sealing) { this.sealing = false; this._leave(v, 'win'); return; }
         const bf = !!v.brawl; // (on the brawl field he never leaves: no foe for a while — he waits)
         if (bf) this.foe = v.foe || null;

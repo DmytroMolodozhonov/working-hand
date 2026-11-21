@@ -596,7 +596,7 @@ export class Duel {
             out.push(e);
             return e;
         };
-        if (skip !== this.me && g.character && !g.combat?.dead && !g.isDeadLocal) this._heroBody(g.character.group, put('p', this.me));
+        if (skip !== this.me && g.character && !g.combat?.dead && !g.isDeadLocal && !g.spectator?.active) this._heroBody(g.character.group, put('p', this.me));
         for (const [id, r] of g.remotes || []) if (!r.dead && id !== skip) this._heroBody(r.character.group, put('p', id));
         for (const z of g.zombies || []) if (!z.isDead) this._tipped(z, this._zombieBody(z, put('z', z.id)));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)

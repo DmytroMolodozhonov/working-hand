@@ -1079,7 +1079,7 @@ export class Game {
             this.cine = new Cine(this); // (cut-scenes: the school's opening — Cine.js)
             this.school = new School(this); // («Школа Акселдорф»: the year at the school — School.js)
         } else if (config.brawl) {
-            this.brawl = new Brawl(this); // («Битва существ»: two teams on a bounded field; the player is only a camera — Brawl.js, SpectatorCam.js)
+            this.brawl = new Brawl(this);
             this.spectator = new SpectatorCam(this);
             this.brawlPanel = new BrawlPanel(this);
         } else if (config.tutorial) {
@@ -4097,6 +4097,40 @@ export class Game {
         progress(1);
     }
 
+    /**
+     * Hands the video card every sample group's shaders without waiting (KHR_parallel_shader_compile: the driver links them on its
+     * own threads), then one wait for all of them. Null when the card has no such extension (then the old way, group by group).
+     */
+    _pwBatch(parts, per, skip, zoo) {
+        const r = this.renderer, gl = r.getContext?.(), ext = gl?.getExtension?.('KHR_parallel_shader_compile');
+        if (!ext) return null;
+        const before = r.info.programs?.length || 0;
+        const out = { programs: 0 };
+        out.issue = function* () {
+            const old = r.debug.deferShaderCompletion;
+            for (let i = 0; i < parts.length; i += per) {
+                if (skip.groups.has(i)) continue;
+                const part = parts.slice(i, i + per);
+                zoo.add(...part);
+                r.debug.deferShaderCompletion = true;
+                try { r.compile(this.scene, this.camera); } finally { r.debug.deferShaderCompletion = old; zoo.remove(...part); }
+                yield i;
+            }
+            out.programs = (r.info.programs?.length || 0) - before;
+        }.bind(this);
+        out.wait = async () => {
+            const pending = (r.info.programs || []).filter((p) => p.program);
+            const t0 = performance.now();
+            while (pending.length) {
+                if (gl.isContextLost?.()) throw new Error('WebGL context lost during shader warm-up');
+                for (let k = pending.length - 1; k >= 0; k--) if (gl.getProgramParameter(pending[k].program, ext.COMPLETION_STATUS_KHR)) pending.splice(k, 1);
+                if (!pending.length || performance.now() - t0 > 180000) break; // (a driver that never says «ready»: the drawing below finishes them)
+                await new Promise((res) => setTimeout(res, 8));
+            }
+        };
+        return out;
+    }
+
     /** The shader warm-up's crumb: where it was when the video card dropped the context (a driver reset leaves the page dead — the next start reads this, says in the journal which sample it was, and skips it). */
     _pwMark(stage) { try { if (stage) localStorage.setItem('zns-pw-at', stage); else localStorage.removeItem('zns-pw-at'); } catch (e) { /* no storage */ } }
 
@@ -4297,13 +4331,26 @@ export class Game {
             this.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isSprite || o.isLine) && o.visible) { o.visible = false; hideRest.push(o); } }); // (not the groups: a light inside one must stay on, or the shaders differ)
             this.scene.add(zoo);
             zoo.remove(...parts);
+            // all at once (the author 21.11: «ускорь загрузку выживания в 2 раза» — the shaders were 55–95 s of a 70–120 s load): the
+            // driver is handed EVERY sample's program first and links them on its own threads side by side; only then is each group
+            // drawn. Before, each group of 4 was waited for alone — the driver's threads stood idle. A start that died here falls
+            // back to the old one-group-at-a-time way, whose crumbs name the sample.
+            const batch = asyncCompile && this.renderer.compileAsync && !skip.stages.has('пачка') && this._pwBatch(parts, PER, skip, zoo);
+            if (batch) {
+                this._pwMark('пачка');
+                const t0 = performance.now();
+                for (const step of batch.issue()) yield { of };
+                yield { of, wait: batch.wait() };
+                bootTimer.note(`прогрев: ${batch.programs} шейдеров параллельно за ${Math.round(performance.now() - t0)} мс`);
+            }
             for (let i = 0; i < parts.length; i += PER) {
                 const part = parts.slice(i, i + PER);
                 if (skip.groups.has(i)) { yield { of }; continue; }
                 this._pwMark('g:' + i);
                 zoo.add(...part);
                 const t0 = performance.now();
-                if (asyncCompile && this.renderer.compileAsync) yield {of, wait:this.renderer.compileAsync(this.scene,this.camera)};
+                if (batch) this.renderer.compile(this.scene, this.camera); // (linked already: only the uniforms are looked up)
+                else if (asyncCompile && this.renderer.compileAsync) yield {of, wait:this.renderer.compileAsync(this.scene,this.camera)};
                 yield* sides();
                 const ms = performance.now() - t0;
                 if (ms > 300) (this._pwSlow || (this._pwSlow = [])).push({ ms, i, what: this._pwDescribe(part) }); // (the journal: which samples made the loading stall — a friend's complaint 06.11)
@@ -4657,7 +4704,7 @@ export class Game {
         if (earth && !duelOnly && !lean) this.vampire?.update(dt); sysMark('vampire');
         if (!duelOnly && !lean) this.titans?.update(dt); sysMark('titans');
         this.godhood?.update(dt); sysMark('godhood');
-        this.brawl?.update(dt); sysMark('brawl');
+        this.brawl?.update(dt, deltaTime); sysMark('brawl');
         this.tutorial?.update(dt); sysMark('tutorial'); // (on the planets — it knows itself where the hero is)
         this.tutorialNudge?.update(dt); sysMark('tutorialNudge'); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
         this.school?.update(dt); sysMark('school'); // («Школа Акселдорф»: School.js)
@@ -5452,6 +5499,7 @@ export class Game {
         for (let i = this.zombies.length - 1; i >= 0; i--) {
             const z = this.zombies[i];
             // («Империус»: a mind in it — mine drives it, a guest's is drawn where it is — ImperiusControl.step)
+            if (z.brawlManual && this.brawl?.control.step('z', z, dt)) continue;
             if (z.imp && (this.authority || z.imp.mine) && this.imperius?.step('z', z, dt)) { if (z.removable) this.removeZombie(z); continue; }
             if (!this.authority) {
                 // Multiplayer guest: the host moves zombies; we only animate them

@@ -109,10 +109,7 @@ export async function startFromMenu(page, mode = 'creative', { zombies = 0, smoo
     await page.waitForFunction(() => document.getElementById('saved-worlds')?.children.length > 0 && document.querySelector('.mode-row .mode-card'));
     if (await page.isHidden('#create-world')) await page.click('#create-world-btn');
     if (['creative', 'freeworld', 'tutorial', 'school'].includes(mode)) await page.click(`.mode-card[data-mode="${mode}"]`); // («Обучение» too)
-    else if (mode === 'brawl') { // («Карты» → «Битва существ», Brawl.js)
-        await page.click('.mode-card[data-mode="maps"]');
-        await page.click('.map-card[data-brawl="1"]');
-    } else {
+    else if (mode === 'brawl') await page.click('.mode-card[data-mode="brawl"]'); else {
         await page.click('.mode-card[data-mode="maps"]');
         await page.click(`.map-card[data-name="${mode}"]`);
     }

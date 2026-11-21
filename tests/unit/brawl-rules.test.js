@@ -1,7 +1,7 @@
 // «Битва существ» (BrawlRules.js): the teams, the field, the foe search, the mage's distance, the winner.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TEAMS, teamOfMaster, masterOfTeam, otherTeam, FIGHTERS, fighterDef, FIGHTER_GROUPS, pickEnemy, winnerOf, placePoints, BRAWL, foeId, foeRef, isMage, teamAt, onSide } from '../../src/game/BrawlRules.js';
+import { TEAMS, teamOfMaster, masterOfTeam, otherTeam, FIGHTERS, fighterDef, FIGHTER_GROUPS, pickEnemy, winnerOf, placePoints, BRAWL, foeId, foeRef, isMage, teamAt, onSide, customFighter, MAX_CUSTOM_MANA } from '../../src/game/BrawlRules.js';
 import { WIZ_RANKS } from '../../src/game/WizardAI.js';
 
 test('a team is a pseudo-master and back; a real player is no team', () => {
@@ -92,4 +92,14 @@ test('a group put near the strip never crosses it', () => {
 test('teams are two and distinct', () => {
     assert.notEqual(TEAMS.A.color, TEAMS.B.color);
     assert.notEqual(TEAMS.A.label, TEAMS.B.label);
+});
+
+test('a custom fighter keeps his own mana and element without editing the roster presets', () => {
+    const fire = customFighter('fire', { name: 'Искра', mana: 137 });
+    assert.deepEqual([fire.label, fire.elemental, fire.mana], ['Искра', 'fire', 137]);
+    assert.equal(fighterDef('fire').mana, 400);
+    assert.equal(customFighter('water', { mana: 0 }).mana, 0);
+    assert.equal(customFighter('wizard', { mana: -53 }).mana, 0);
+    assert.equal(customFighter('wizard', { mana: 2001 }).mana, MAX_CUSTOM_MANA);
+    assert.equal(customFighter('knight', { mana: 40 }).mana, undefined);
 });

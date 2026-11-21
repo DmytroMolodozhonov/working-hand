@@ -30,12 +30,20 @@ export class SpectatorCam {
         this.keys = new Set();
         this._look = false;
         this._onKey = (e) => {
-            if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'SELECT' || e.target?.tagName === 'TEXTAREA') return;
             const c = e.code;
+            if (e.type === 'keyup') { this.keys.delete(c); return; }
+            if (e.target?.matches?.('input,select,textarea,[contenteditable]')) return;
+            const control = this.game.brawl?.control;
+            if (control?.entry) {
+                if (c === 'KeyV') { control.release(); return; }
+                if (/^Digit[1-4]$/.test(c)) { control.select(Number(c.slice(-1)) - 1); return; }
+            }
             if (e.type === 'keydown') { if (/^(KeyW|KeyA|KeyS|KeyD|KeyQ|KeyE|KeyC|Space|ShiftLeft|ShiftRight)$/.test(c)) this.keys.add(c); if (c === 'Space') e.preventDefault(); }
-            else this.keys.delete(c);
         };
-        this._onBlur = () => { this.keys.clear(); this._look = false; };
+        this._onBlur = () => { this.keys.clear(); this._look = false; if (game.brawl?.control) {
+                game.brawl.control.attackHeld = false;
+                game.brawl.control.attackQueued = false;
+            } };
         this._onDown = (e) => { if (e.button === 2) { this._look = true; e.preventDefault(); } };
         this._onUp = (e) => { if (e.button === 2) this._look = false; };
         this._onMove = (e) => {
@@ -76,10 +84,12 @@ export class SpectatorCam {
 
     /** Put the camera there, and the (hidden) hero on the ground below it. */
     apply(camera, dt) {
-        this.step(dt);
         this._cleanse();
-        camera.position.copy(this.pos);
-        camera.quaternion.setFromEuler(_e.set(this.pitch, this.yaw, 0));
+        if (!this.game.brawl?.control?.camera(camera)) {
+            this.step(dt);
+            camera.position.copy(this.pos);
+            camera.quaternion.setFromEuler(_e.set(this.pitch, this.yaw, 0));
+        }
         const ch = this.game.character;
         if (ch?.group) {
             // (the hero's body stays in the MIDDLE of the field, not under the camera: the world's collision is made round the hero, and a fighter put far from him stood on no ground, fell to 0 and was pushed out sideways — «зомби не спавнится», 17.11)

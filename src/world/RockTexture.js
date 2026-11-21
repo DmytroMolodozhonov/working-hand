@@ -8,34 +8,39 @@ const smooth = (a, b, v) => {
     return t * t * (3 - 2 * t);
 };
 
-/** A wraparound stone swatch. Alpha carries the fine grain of the soil–rock contact. */
+/** Fractured, granular bedrock. Alpha shapes the narrow contact with the soil. */
 export function rockPixels() {
     const pixels = new Uint8Array(ROCK_SIZE * ROCK_SIZE * 4);
     for (let y = 0; y < ROCK_SIZE; y++) for (let x = 0; x < ROCK_SIZE; x++) {
         const u = x / ROCK_SIZE, v = y / ROCK_SIZE;
-        const weather = noise(u * 5, v * 5, 5, 171);
+        const bed = noise(u * 5, v * 5, 5, 171);
         const warp = noise(u * 9, v * 9, 9, 172);
-        const flecks = noise(u * 62, v * 62, 62, 173);
-        const grit = grain(x, y, 174);
-        const wx = u + (weather - .5) * .16;
+        const wx = u + (bed - .5) * .16;
         const wy = v + (warp - .5) * .12;
-        const slabs = noise(wx * 12, wy * 12, 12, 175);
-        const split = noise((wx + wy) * 6, wy * 6, 6, 176);
-        const fractureWidth = .012 + .017 * weather;
-        const fracture = 1 - smooth(.003, fractureWidth, Math.abs(split - .49));
-        const vein = (1 - smooth(.006, .035, Math.abs(split - .535))) * smooth(.27, .57, slabs);
-        const bands = Math.sin(2 * Math.PI * (v * 8 + u + (weather - .5) * 1.25 + (slabs - .5) * .22));
-        const strata = bands * (4 + 8 * smooth(.4, .68, warp));
-        const grains = (flecks - .5) * 23 + (grit - .5) * 13;
-        const minerals = vein * (8 + 14 * weather) - fracture * (12 + 25 * slabs)
-            + (grit > .975 && flecks > .54 ? 24 : 0) - (grit < .04 && flecks < .5 ? 18 : 0);
-        const tone = (weather - .5) * 35 + (slabs - .5) * 40 + strata + grains + minerals;
-        const warmth = (warp - .5) * 10 + vein * 5;
+        const facets = noise(wx * 18, wy * 18, 18, 175);
+        const aggregate = noise(wx * 38, wy * 38, 38, 179);
+        const grains = noise(u * 76, v * 76, 76, 173);
+        const grit = grain(x, y, 174);
+
+        const cleft = noise((wx + wy) * 6, wy * 6, 6, 176);
+        const fractured = smooth(.30, .58, facets);
+        const fissure = (1 - smooth(.003, .023, Math.abs(cleft - .49))) * fractured;
+        const lip = (1 - smooth(.004, .025, Math.abs(cleft - .518))) * fractured;
+        const ridge = Math.sin(2 * Math.PI * (v * 8 + u + (bed - .5) * 1.35 + (facets - .5) * .34));
+        const strata = ridge * (2 + 7 * smooth(.46, .74, warp));
+        const crags = (bed - .5) * 16 + (facets - .5) * 22 + (aggregate - .5) * 22 + strata;
+        const mineral = (grains - .5) * 25 + (grit - .5) * 11
+            + (grit > .96 && grains > .60 ? 16 : 0) - (grit < .07 && grains < .48 ? 13 : 0);
+        const tone = crags + mineral + lip * 15 - fissure * 29;
+        const cool = (warp - .5) * 5;
+
+        const seam = noise(u * 19, v * 19, 19, 186);
+        const seamGrain = noise(u * 53, v * 53, 53, 187);
         const i = (y * ROCK_SIZE + x) * 4;
-        pixels[i] = 132 + tone + warmth;
-        pixels[i + 1] = 131 + tone * .97;
-        pixels[i + 2] = 128 + tone * .93 - warmth;
-        pixels[i + 3] = 35 + slabs * 100 + warp * 85 + flecks * 35;
+        pixels[i] = 130 + tone - cool;
+        pixels[i + 1] = 131 + tone;
+        pixels[i + 2] = 132 + tone * .97 + cool;
+        pixels[i + 3] = 128 + (seam - .5) * 152 + (seamGrain - .5) * 78;
     }
     return pixels;
 }
