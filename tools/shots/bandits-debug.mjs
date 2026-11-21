@@ -10,6 +10,8 @@ export default async function (h) {
     B.riders.mount = (v, P, ax, az, yaw) => { const r = origMount(v, P, ax, az, yaw); h.log('mount', v.id, !!r, 'spawnFn', typeof g.animals?._spawn); return r; };
     const origAct = L._activate.bind(L);
     L._activate = (cs, i, at, job, ex) => { const v = origAct(cs, i, at, job, ex); h.log('activate', i, !!v, v && v.role, job); return v; };
+    const pl = L._players()[0];
+    h.log('pre', !!idx?.towers?.wanderDef, typeof g.animals?._spawn, L._players().length, !!pl, pl && JSON.stringify(pl.p), 'land', idx.landAt?.(Math.round(x), Math.round(z)), 'free', g.travelers?._placeFree?.(x, z, 0, false, { into: null }));
     try {
         const P = B.spawnNear({ at: { x, z }, n: 3, strategy: 'charge' });
         h.log('spawn', !!P, P && { n: P.n, ph: P.phase, members: P.members.map((v) => [v.title, v.name, v.seated, v.mode, !!v.horse]) });
