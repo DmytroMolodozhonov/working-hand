@@ -1,26 +1,55 @@
-// Победа в бою без столкновения лучей и без убийства (автор 19.11): волшебник, бивший по мне, повержен (оглушён / тяжело ранен) → +1…+3 ячеек, один раз
+// Победа над волшебником без столкновения лучей и без убийства (автор 19.11, уточнено 21.11): победа — это когда его обезоружили (палочка выбита или
+// уничтожена), он не может воевать (долго выведен из строя), он убежал или умер. Короткое оглушение — не победа.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WizardLife } from '../../src/game/WizardLife.js';
 
 function fake(me = 'me') {
     const calls = [];
-    const game = { localId: me, mana: { duelWonAlive: (...a) => { calls.push(a); return 1; } } };
+    const game = { localId: me, character: { group: { position: { x: 0, z: 0 } } }, mana: { duelWonAlive: (...a) => { calls.push(a); return 1; } } };
     const w = Object.create(WizardLife.prototype); w.game = game;
     return { w, calls };
 }
+const mage = (o = {}) => ({ id: 'w1', hp: 100, maxHp: 100, maxMana: 60, x: 10, z: 0, castAtPlayers: new Set(['me']), ...o });
 
-test('a wizard who cast at me and lies stunned: the fight is won — once', () => {
+test('a short stun is NOT a defeat (he gets up and fights on); held down 8 s on end — is', () => {
     const { w, calls } = fake();
-    const v = { id: 'w1', hp: 100, maxHp: 100, maxMana: 60, stunT: 2, castAtPlayers: new Set(['me']) };
-    w.beatenCheck(v); w.beatenCheck(v);
-    assert.equal(calls.length, 1); assert.equal(calls[0][0], 'w1');
+    const v = mage({ stunT: 3 });
+    for (let i = 0; i < 20; i++) w.beatenCheck(v, 0.25); // 5 s
+    assert.equal(calls.length, 0, 'a stun of a few seconds pays nothing');
+    v.stunT = 0; w.beatenCheck(v, 0.25);
+    assert.equal(v._downT, 0, 'he got up: the count starts again');
+    v.stunT = 10;
+    for (let i = 0; i < 40; i++) w.beatenCheck(v, 0.25); // 10 s held down (ice)
+    assert.equal(calls.length, 1, 'once');
 });
-test('hurt to a third: won; healthy and standing: not; never cast at me: not; dead: not (the kill has its own reward)', () => {
+test('the wand knocked out («Экспеллиармус») or destroyed: won — once; but only a wizard who HAD a wand while he fought', () => {
     const { w, calls } = fake();
-    w.beatenCheck({ id: 'a', hp: 30, maxHp: 100, castAtPlayers: new Set(['me']) });
-    w.beatenCheck({ id: 'b', hp: 100, maxHp: 100, castAtPlayers: new Set(['me']) });
-    w.beatenCheck({ id: 'c', hp: 10, maxHp: 100, stunT: 3, castAtPlayers: new Set(['other']) });
-    w.beatenCheck({ id: 'd', hp: 10, maxHp: 100, dead: true, castAtPlayers: new Set(['me']) });
-    assert.deepEqual(calls.map((c) => c[0]), ['a']);
+    const v = mage(); w.beatenCheck(v, 0.25); v.noWand = true; v.lostWand = { uid: 'x' };
+    w.beatenCheck(v, 0.25); w.beatenCheck(v, 0.25);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0][5], /обезоружен/);
+    const b = fake(); const bare = mage({ id: 'w2', noWand: true });
+    b.w.beatenCheck(bare, 0.25); b.w.beatenCheck(bare, 0.25);
+    assert.equal(b.calls.length, 0, 'no wand from the start: no win');
+    const c = fake(); const v3 = mage({ id: 'w3' }); c.w.beatenCheck(v3, 0.25); v3.noWand = true; v3.lostWand = null; c.w.beatenCheck(v3, 0.25);
+    assert.match(c.calls[0][5], /уничтожена/);
+});
+test('ran away: fleeing 40 m and more for 6 s on end — won; fleeing close by is not', () => {
+    const { w, calls } = fake();
+    const near = mage({ id: 'n', fleeT: 5, x: 20 });
+    for (let i = 0; i < 40; i++) w.beatenCheck(near, 0.25);
+    assert.equal(calls.length, 0, 'close by: he may come back');
+    const far = mage({ id: 'f', fleeT: 5, x: 80 });
+    for (let i = 0; i < 20; i++) w.beatenCheck(far, 0.25); // 5 s
+    assert.equal(calls.length, 0);
+    for (let i = 0; i < 8; i++) w.beatenCheck(far, 0.25);
+    assert.deepEqual(calls.map((c) => c[0]), ['f']);
+});
+test('never cast at me: not; dead: not (the kill has its own reward); hurt to a third but standing: not', () => {
+    const { w, calls } = fake();
+    w.beatenCheck(mage({ id: 'c', stunT: 30, castAtPlayers: new Set(['other']) }), 10);
+    w.beatenCheck(mage({ id: 'd', dead: true, stunT: 30 }), 10);
+    w.beatenCheck(mage({ id: 'e', hp: 10 }), 10);
+    assert.equal(calls.length, 0);
 });

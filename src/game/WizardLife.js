@@ -495,24 +495,41 @@ export class WizardLife {
     }
 
     /**
-     * A fight won WITHOUT a beam clash and without a kill (the author 19.11: the wizard cast first, I answered with «Protection», then beat him — no part of
-     * his power came to me): a wizard who has cast at ME and is now knocked down (stunned, frozen, lifted, in claws) or hurt to a third of his health has lost the
-     * fight. Once per wizard: Mana.duelWonAlive (the prize by the beauty of the fight — FightLedger) — it is also once per opponent in the player's life.
+     * A fight won WITHOUT a beam clash and without a kill. The author's rule (21.11: «победа — это когда обезоруживаю, или уничтожаю палочку, или он не
+     * может воевать, или умер, или убежал»; a knocked-down wizard who gets up and goes on fighting is NOT beaten — the stun used to count, and the prize
+     * came before the disarm): a wizard who has cast at ME has lost when
+     *   — his WAND is out of his hand («Экспеллиармус») or destroyed (he HAD one when the fight began: a wizard with no wand at all is no win);
+     *   — he cannot fight: held down (stunned, frozen, lifted, in claws) for 8 s on end — a short stun is not;
+     *   — he ran: fleeing, 40 m and more away from me, for 6 s on end.
+     * (Dead — his own reward, killWon.) Once per wizard: Mana.duelWonAlive (the prize by the beauty of the fight — FightLedger); once per opponent in life.
      */
-    beatenCheck(v) {
+    beatenCheck(v, dt = 0) {
         const g = this.game, me = g.localId;
         if (v._beatenPaid || v.dead || me == null || !v.castAtPlayers?.has(me)) return;
+        const armed = !v.noWand && !v.lostWand;
+        if (armed) v._armedAtFight = true; // (he had a wand in his hand while he fought me)
+        let why = null;
+        if (v._armedAtFight && !armed) why = v.lostWand ? 'обезоружен: палочка выбита' : 'палочка уничтожена';
+        // can't fight: held down long (a stun of a moment is not a defeat)
         const down = v.stunT > 0.5 || v.lev || v.carriedBy;
-        if (!down && !(v.hp <= 0.35 * (v.maxHp || 1))) return;
+        v._downT = down ? (v._downT || 0) + dt : 0;
+        if (!why && v._downT >= 8) why = 'не может воевать: выведен из строя на 8 с';
+        // ran away: fleeing, far from me, for a while
+        const p = g.character?.group?.position;
+        const far = p ? Math.hypot(v.x - p.x, v.z - p.z) >= 40 : false;
+        const fleeing = (v.fleeT > 0 || v.mode === 'flee') && far;
+        v._fledT = fleeing ? (v._fledT || 0) + dt : Math.max(0, (v._fledT || 0) - dt);
+        if (!why && v._fledT >= 6) why = 'убежал';
+        if (!why) return;
         v._beatenPaid = true;
-        g.mana?.duelWonAlive?.(v.id, Math.random, Math.round(v.maxMana || 0) || undefined, null, false, 'повержен: оглушён/поднят/ранен');
+        g.mana?.duelWonAlive?.(v.id, Math.random, Math.round(v.maxMana || 0) || undefined, null, false, 'повержен: ' + why);
     }
 
     // ------------------------------------------------------------ thinking
     /** (host) Before the usual thinking: true = handled here. (The fight comes here — see defence.) */
     think(v, dt) {
         const W = v.W;
-        if (v.wizard) this.beatenCheck(v);
+        if (v.wizard) this.beatenCheck(v, dt);
         if (W) {
             if (v.savior == null && !v.element) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
             v.castCd -= dt; v.domeCd -= dt; v.windCd -= dt; v.blinkCd -= dt;
