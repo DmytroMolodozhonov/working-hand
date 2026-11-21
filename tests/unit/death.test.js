@@ -123,3 +123,19 @@ test('death: the body of a killed wizard is made from his own look (robe, hat), 
     assert.ok(body.pivot, 'a body is made');
     assert.equal(look.role, 'wanderer');
 });
+
+test('the corpse\'s skin does not carry the things that dropped: no coin pouch, no belt wand on the copy of the dead body (the author 21.11)', async () => {
+    const { WORN_ON_BODY } = await import('../../src/game/Death.js');
+    assert.ok(WORN_ON_BODY.has('coin-belt') && WORN_ON_BODY.has('wand-belt'));
+    const ds = Object.create(DeathSystem.prototype);
+    const hero = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+    const pouch = new THREE.Group(); pouch.name = 'coin-belt'; pouch.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshBasicMaterial()));
+    const beltWand = new THREE.Group(); beltWand.name = 'wand-belt'; beltWand.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1), new THREE.MeshBasicMaterial()));
+    hero.add(torso, pouch, beltWand);
+    const copy = ds._copy(hero);
+    const names = []; copy.traverse((o) => names.push(o.name));
+    assert.ok(!names.includes('coin-belt') && !names.includes('wand-belt'), `the copy: ${names}`);
+    let meshes = 0; copy.traverse((o) => { if (o.isMesh) meshes++; });
+    assert.equal(meshes, 1, 'only the body is left');
+});
