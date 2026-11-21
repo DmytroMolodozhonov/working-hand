@@ -134,11 +134,21 @@ export function thermalAt(alt) {
     return k * k * (3 - 2 * k);
 }
 
-/** The touch of the ground at vy (m/s up, < 0 down) and vf (forward): {dmg, knock}. Soft (≤ SAFE_VY down, slow forward) — nothing. */
+/**
+ * The touch of the ground at vy (m/s up, < 0 down) and vf (forward): {dmg, knock}.
+ * The author 21.11 («если игрок плавно, нормально приземлился — урона быть не должно; урон только если он падает почти под 90°, и важны расстояние и
+ * скорость падения»): a landing hurts only by how STEEP it is and how fast it comes down — never by the forward speed alone. The impact's slope
+ * (the share of the speed that is down): below ~27° (a glide, a flare) nothing, however fast it runs forward; full from ~49°. The vertical speed
+ * carries the distance fallen (a long dive builds it), and ≤ SAFE_VY down is soft at any angle.
+ */
 export function landingHurt(vy, vf) {
-    const down = Math.max(0, -(vy || 0) - LAND.SAFE_VY), fwd = Math.max(0, (vf || 0) - LAND.FWD_SAFE);
-    const dmg = Math.round(down * LAND.PER + fwd * LAND.FWD_PER) * 0.5; // player fall damage, including a hard wing landing, is halved
-    return { dmg, knock: -(vy || 0) >= LAND.KNOCK_VY || fwd > 6 };
+    const vd = Math.max(0, -(vy || 0)), vh = Math.max(0, vf || 0);
+    const steep = vd / Math.max(1e-6, Math.hypot(vd, vh)); // sin of the angle to the ground: 0 flat … 1 straight down
+    const gate = Math.max(0, Math.min(1, (steep - 0.45) / 0.3)); // (smoothed below)
+    const k = gate * gate * (3 - 2 * gate);
+    const down = Math.max(0, vd - LAND.SAFE_VY), fwd = Math.max(0, vh - LAND.FWD_SAFE);
+    const dmg = Math.round((down * LAND.PER + fwd * LAND.FWD_PER * k) * k) * 0.5; // player fall damage, including a hard wing landing, is halved
+    return { dmg, knock: k > 0.5 && (vd >= LAND.KNOCK_VY || fwd > 6) };
 }
 
 export class WingFlight {
@@ -230,11 +240,15 @@ export class WingFlight {
         if (p.y - PLAYER_GROUND_OFFSET <= g2 + 0.02 && st.vy <= 0.3) {
             p.y = g2 + PLAYER_GROUND_OFFSET;
             this._touch(st.vy, st.vf);
+            ch.airTop = null; ch._fallEntry = null; ch.landing = null; // (no second count of the same landing)
             st.air = false; st.vy = 0; st.vf = 0;
             this._pose(false, arms, dt);
             return;
         }
         ch.verticalVelocity = 0;
+        // (the wings carry the body: the Character's own «fall» counter must not run — else a long glide lands as ONE fall of its whole height and kills —
+        //  the author 21.11; the wings' own touch (_touch, by the slope and the speed) is the only judge of the landing)
+        ch.airTop = null; ch._fallEntry = null; ch.landing = null;
         this._pose(true, arms, dt, stroke);
     }
 
