@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
+import * as THREE from 'three';
+import { FallingBlocks } from '../../src/fx/FallingBlocks.js';
+import { TerrainData, BLOCK, chunkKey, patternOf } from '../../src/world/Terrain.js';
 import { findHanging, collapseAfter } from '../../src/world/Collapse.js';
 
 function flat() { const d = new TerrainData(); d.generate({ seed: 1 }); return d; }
@@ -117,4 +119,26 @@ test('turned(): a block of the footing lies next to the footing, the ones above 
     assert.deepEqual(turned([0, 7, 0], 2, M), [-5, 1, 0]);
     const Z = { axis: 'z', sg: 1, edge: 2, Lb: 1 };
     assert.deepEqual(turned([5, 4, 2], 1, Z), [5, 1, 5]);
+});
+
+test('falling blocks keep their terrain patterns and only remesh the visible landing chunk', () => {
+    const data = flat(), chunk = data.chunk(0, 0), key = chunkKey(0, 0);
+    const part = { cells: [[0, 7, 0, BLOCK.PLANKS], [1, 8, 0, BLOCK.ROOF_RED]],
+        landed: [[0, 4, 0, BLOCK.PLANKS], [1, 5, 0, BLOCK.ROOF_RED]], broken: [], d: 3 };
+    for (const cell of part.landed) data.set(...cell);
+    data.dirtyChunks.clear();
+    data.mapDirty.clear();
+    const ver = chunk.ver;
+    const falls = new FallingBlocks(new THREE.Scene(), { data });
+    falls.add(part);
+    const mesh = falls.pieces[0].mesh;
+    assert.deepEqual([...mesh.geometry.attributes.voxPat.array], [patternOf(BLOCK.PLANKS), patternOf(BLOCK.ROOF_RED)]);
+    assert.deepEqual([...mesh.geometry.attributes.fragmentOrigin.array], [0, 6, 0, 1, 7, 0]);
+    assert.deepEqual([...data.dirtyChunks], [key]);
+    assert.equal(chunk.ver, ver);
+    assert.equal(data.mapDirty.size, 0);
+    assert.equal(data._hidden.get(key).size, 2);
+    falls.clear();
+    assert.equal(data._hidden.has(key), false);
+    assert.equal(chunk.ver, ver);
 });

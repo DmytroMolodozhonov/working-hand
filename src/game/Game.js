@@ -221,7 +221,7 @@ import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { terrainProbe } from '../world/TerrainProbe.js';
-import { WIZ_COUNTER_FROM_GEN, CAVE_MINES_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { WIZ_COUNTER_FROM_GEN, CAVE_MINES_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, patternOf, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -339,7 +339,6 @@ const DUEL_FAST = new Set(['Cardilon', 'Jolt', 'Sapira', 'Stupefy', 'AvadaKedavr
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
 const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
-const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
 const _airLook = new THREE.Vector3();
 const MANA_LATER = new Set(['FireVortex', 'Cardilon', 'Breakthrough', 'BreakthroughMaxima', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
@@ -1457,9 +1456,9 @@ export class Game {
         const all = f.landed.length ? f.landed : f.broken.map(([x, L, z, t]) => [x, L - f.d, z, t]);
         for (const [x, L, z] of all) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); y0 = Math.min(y0, L - 1.5); sx += x; sy += L - 1; sz += z; }
         const c = new THREE.Vector3(sx / all.length, sy / all.length, sz / all.length);
-        const debris = f.broken.map(([x, L, z, t]) => ({ x, y: L - f.d - 1, z, color: BASE_COLORS[t] ?? 0x888888 }));
+        const debris = f.broken.map(([x, L, z, t]) => ({ x, y: L - f.d - 1, z, textureY: L - 1, pattern: patternOf(t, !!this.world.terrain?.data.lush), color: BASE_COLORS[t] ?? 0x888888 }));
         for (let i = 0; i < Math.min(40, all.length); i++) { const [x, , z] = all[Math.floor(Math.random() * all.length)]; debris.push({ x, y: y0 + 0.2, z, color: 0x9a8f80, size: 0.6 }); }
-        this.fx.debrisFrom(debris, new THREE.Vector3(c.x, y0 + 0.5, c.z), 160);
+        this.fx.debrisFrom(debris, new THREE.Vector3(c.x, y0 + 0.5, c.z), 160, true);
         // the dust: a low ring rolling out from under it, a cloud rising over it, fine grit falling back
         const size = f.cells.length, R = Math.max(x1 - x0, z1 - z0) / 2 + 1;
         const puffs = Math.min(70, 10 + size);
@@ -1526,7 +1525,7 @@ export class Game {
             this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true, { r: radius });
         }
         const debris = [];
-        for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? BASE_COLORS[b.type] ?? 0x7a5230 });
+        for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, pattern: patternOf(b.type, !!this.world.terrain?.data.lush), color: BLOCK_COLORS[b.type] ?? BASE_COLORS[b.type] ?? 0x7a5230 });
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
@@ -1545,7 +1544,7 @@ export class Game {
         this.houses?.boulders.blast(pos,radius);
         this.elementalMages?.objects.blast(pos,radius);
         this.earthMages?.blast(pos,radius); // real floating walls break after shielding this blast's actors
-        this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
+        this.fx.debrisFrom(debris, pos, 192, true);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
 
         // Weapons nearby wake up and get thrown
@@ -2478,10 +2477,7 @@ export class Game {
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
         // the player may be saying «Бомбардо Максима».
         if (name === 'Bombardo' && !isFinal) {
-            if (!this._pendingBombardo && now - this.lastSpellCastTime >= SPELL_COOLDOWN) {
-                this._pendingBombardo = { at: now };
-                setTimeout(() => this._updatePendingSpell(), BOMBARDO_WAIT + 5);
-            }
+            this.lastCastWhy = 'ждём окончание «Бомбардо» или «Максима»';
             return null;
         }
         // The microphone's final version of a phrase that was already cast
@@ -2490,7 +2486,6 @@ export class Game {
         if (isFinal && early && now - early.at < 3000) {
             if (early.name === name) { this.lastCastWhy = 'эта фраза уже сработала (промежуточная версия)'; this._interimCast = null; return null; }
         }
-        if (name === 'Bombardo' || name === 'BombardoMaxima') this._pendingBombardo = null;
         if (now - this.lastSpellCastTime < SPELL_COOLDOWN) { this.lastCastWhy = `пауза между заклинаниями: прошло ${now - this.lastSpellCastTime} мс из ${SPELL_COOLDOWN}`; if (isFinal && !early) this._why('cooldown'); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
@@ -2655,7 +2650,7 @@ export class Game {
      * that charge becomes the Maxima (the rest of its mana is paid; none left — it stays a «Джолт») — never a
      * second charge. false: no such early «Джолт» (an ordinary cast).
      */
-    /** A spell cast at once in a fight (NativeVoice.FIGHT_UPGRADE: «Бомбардо», «Фрозен», «Айс», «Джолт»): its «… Максима» may still come. */
+    /** A spell cast at once in a fight (NativeVoice.FIGHT_UPGRADE: «Фрозен», «Айс», «Джолт»): its «… Максима» may still come. */
     noteFightBase(spell, manaBefore) {
         if (!FIGHT_UPGRADE.has(spell)) return;
         const paid = Number.isFinite(manaBefore) && Number.isFinite(this.combat?.fatigue) ? Math.max(0, manaBefore - this.combat.fatigue) : 0;
@@ -2676,8 +2671,7 @@ export class Game {
         // (the pause between two spells is for two words, not one word and its «Максима»)
         const last = this.lastSpellCastTime, lastDuel = this._lastDuelCast, early = this._interimCast;
         this.lastSpellCastTime = 0; this._lastDuelCast = 0; this._interimCast = null;
-        // (the plain spell's mana goes back BEFORE the Maxima is paid for: «paid once, at the Maxima's price» — with the plain one's 20 still taken,
-        // «Бомбардо Максима» (35) needed 55 mana and a hero with 40 only got the plain one: the author 19.11, «в основном бомбарда используется только»)
+        // Refund the base spell before checking whether there is enough mana for Maxima.
         const refund = b.paid > 0 && this.combat?.manaOn ? Math.min(b.paid, Math.max(0, (this.combat.maxFatigue || Infinity) - this.combat.fatigue)) : 0;
         this.combat.fatigue += refund;
         const name = this.castLocalSpell(text, true);
@@ -3969,19 +3963,6 @@ export class Game {
         for (const b of shapes) this.iceCells.push(b);
     }
 
-    /** A «Бомбардо» that was not followed by «Максима» goes off now. */
-    _updatePendingSpell() {
-        const p = this._pendingBombardo;
-        if (!p || !this.active || Date.now() - p.at < BOMBARDO_WAIT) return;
-        this._pendingBombardo = null;
-        this.lastMagicTime = Date.now(); // the hand was raised when the word started
-        if (this.castLocalSpell('бомбардо', true)) {
-            // The microphone will still send the finished «бомбардо»: ignore it then
-            this._interimCast = { name: 'Bombardo', at: Date.now() };
-            this.hud.setVoice('✨ <span style="color:#55efc4">BOMBARDO</span>');
-        }
-    }
-
     /** Debug keys: cast in the camera direction. */
     castDebug(name) {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
@@ -4816,7 +4797,6 @@ export class Game {
         this.cardilon.update(dt); sysMark('cardilon');
         this.spells.update(dt); sysMark('spells');
         this._updateMagicGesture();
-        this._updatePendingSpell();
         if (!isTest && earth && !duelOnly) this._spawnWaves(dt);
 
         for (const r of this.remotes.values()) r.update(dt, this.ships, this.space);
@@ -6011,7 +5991,7 @@ export class Game {
             explosions: this.explosions.length,
             flight: { state: this.flight.state, speed: this.flight.speed, tilt: this.flight.tilt, pitch: this.flight.pitch },
             space: this.space ? { state: this.space.state, realm: this.space.realm, P: { ...this.space.P }, speed: this.space.speed, knows: this.space.knows() } : null,
-            stats: { ...this.stats, fx: { sparks: this.fx.sparks.active, debris: this.fx.debris.active } },
+            stats: { ...this.stats, fx: { sparks: this.fx.sparks.active, debris: this.fx.debris.active + this.fx.blockDebris.active } },
         };
     }
 }

@@ -43,18 +43,18 @@ const V = (x, y, z) => ({ x, y, z });
 const SH = V(0.7, 1.25, 0);
 
 /** wind-up above the shoulder at t=0, then a swing forward/down for `n` frames, then the hand opens */
-function overhand(det, { start = V(0.8, 1.75, -0.2), vRel = V(0, -3, -9), curlSwing = 0.9, openAt = 150, curlOpen = 0.2, weight = 1, swingAt = 33, n = 3, track = () => true, curlWind = 0.9, strict = false, behind = false } = {}) {
+function overhand(det, { start = V(0.8, 1.75, -0.2), vRel = V(0, -3, -9), curlSwing = 0.9, openAt = 150, curlOpen = 0.2, weight = 1, swingAt = 33, n = 3, track = () => true, curlWind = 0.9, strict = false, behind = false, book = false } = {}) {
     const r = [];
-    for (let t = 0; t < swingAt; t += 33) r.push(det.update({ now: t, hand: t < 99 ? start : V(start.x, SH.y + 0.1, start.z), shoulder: SH, vRel: V(0, 0, 0), vWorld: [0, 0, 0], curl: curlWind, tracked: true, weight, strict, behind: behind && t < 99 }));
+    for (let t = 0; t < swingAt; t += 33) r.push(det.update({ now: t, hand: t < 99 ? start : V(start.x, SH.y + 0.1, start.z), shoulder: SH, vRel: V(0, 0, 0), vWorld: [0, 0, 0], curl: curlWind, tracked: true, weight, strict, book, behind: behind && t < 99 }));
     let h = { ...start };
     for (let i = 0; i < n; i++) {
         const t = swingAt + i * 33;
         h = V(h.x + vRel.x * 0.033, h.y + vRel.y * 0.033 - 0.12, h.z + vRel.z * 0.033);
-        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel, vWorld: [vRel.x + 1, vRel.y, vRel.z], curl: curlSwing, tracked: track(t), weight, strict }));
+        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel, vWorld: [vRel.x + 1, vRel.y, vRel.z], curl: curlSwing, tracked: track(t), weight, strict, book }));
     }
     for (let t = swingAt + n * 33; t <= swingAt + n * 33 + 800; t += 33) {
         const curl = t >= swingAt + openAt ? curlOpen : curlSwing;
-        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel: V(0, 0, -0.5), vWorld: [0, 0, -0.5], curl, tracked: track(t), weight, strict }));
+        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel: V(0, 0, -0.5), vWorld: [0, 0, -0.5], curl, tracked: track(t), weight, strict, book }));
     }
     return r.find(Boolean) || null;
 }
@@ -71,6 +71,16 @@ test('ThrowDetector: no wind-up (from the hip), a fist kept closed, a late openi
     assert.equal(overhand(new ThrowDetector(), { openAt: 900 }), null, 'opened long after the swing');
     assert.equal(overhand(new ThrowDetector(), { swingAt: 1600 }), null, 'the swing long after the wind-up');
     assert.equal(overhand(new ThrowDetector(), { curlWind: 0.2, curlSwing: 0.2 }), null, 'an open hand all along held nothing: no throw');
+});
+
+test('a book leaves the hand only after a full fist, a swing, and a tracked opening', () => {
+    const release = (o = {}) => overhand(new ThrowDetector(), { book: true, ...o });
+    assert.ok(release()?.speed > 9);
+    assert.equal(release({ vRel: V(0, 0, -2) }), null, 'opening a steady hand');
+    assert.equal(release({ curlWind: 0.7, curlSwing: 0.7 }), null, 'no full fist');
+    assert.equal(release({ curlOpen: 0.35 }), null, 'partly loosened fingers');
+    assert.equal(release({ track: (t) => t < 140 || t > 240 }), null, 'tracking lost at the release');
+    assert.equal(release({ openAt: 550 }), null, 'opened after the gesture was over');
 });
 
 test('ThrowDetector: the hand lost in the blur of the swing — opening seen 200 ms later still throws', () => {

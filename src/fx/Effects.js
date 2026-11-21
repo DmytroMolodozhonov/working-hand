@@ -5,11 +5,13 @@
 
 import * as THREE from 'three';
 import { ParticlePool, GlowPool, SegmentPool, CurvedBeam } from './Particles.js';
+import { fragmentGeometry, fragmentMaterial } from './VoxelFragments.js';
 
 const _v = new THREE.Vector3();
 const _bd = new THREE.Vector3();
 const _bs = new THREE.Vector3();
 const _bu = new THREE.Vector3();
+const BLOCK_DEBRIS_LIMIT = 192;
 
 export class Effects {
     /**
@@ -26,6 +28,7 @@ export class Effects {
         this.sand = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 2000, ground, friction: 0.8 });
         this.shards = new ParticlePool(scene, { geometry: new THREE.ConeGeometry(0.4, 1, 4), capacity: 500, transparent: true, gravity: -9.8, ground, friction: 0.5 });
         this.debris = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 1600, lit: true, gravity: -22, ground, bounce: 0.25, friction: 0.6 });
+        this.blockDebris = new ParticlePool(scene, { geometry: fragmentGeometry(BLOCK_DEBRIS_LIMIT, true), capacity: BLOCK_DEBRIS_LIMIT, material: fragmentMaterial(), gravity: -22, ground, bounce: 0.25, friction: 0.6 });
         // the fireworks' sparks (Fireworks.js): soft glowing points, additive, no fog (seen from far away)
         this.fireworks = new GlowPool(scene, { capacity: 3500 });
         this.smoke = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 700, transparent: true, depthWrite: false });
@@ -205,7 +208,8 @@ export class Effects {
     }
 
     /** Destroyed terrain blocks / props fly apart. */
-    debrisFrom(items, center, maxCount = 260) {
+    debrisFrom(items, center, maxCount = 260, terrain = false) {
+        if (terrain) maxCount = Math.min(maxCount, 192);
         const step = Math.max(1, Math.ceil(items.length / maxCount));
         for (let i = 0; i < items.length; i += step) {
             const b = items[i];
@@ -213,13 +217,14 @@ export class Effects {
             const dx = b.x - center.x, dy = b.y - center.y, dz = b.z - center.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
             const power = 9 + Math.random() * 7;
-            const pieces = b.size && b.size > 1 ? 3 : 2;
+            const pieces = terrain && items.length > 96 ? 1 : b.size && b.size > 1 ? 3 : 2;
+            const pool = b.pattern ? this.blockDebris : this.debris;
             for (let k = 0; k < pieces; k++) {
-                this.debris.spawn(
+                pool.spawn(
                     b.x + (Math.random() - 0.5) * 0.6, b.y + (Math.random() - 0.5) * 0.6, b.z + (Math.random() - 0.5) * 0.6,
                     (dx / d) * power + (Math.random() - 0.5) * 5, (dy / d) * power * 0.6 + 6 + Math.random() * 7, (dz / d) * power + (Math.random() - 0.5) * 5,
-                    color, (b.size || 1) * (0.35 + Math.random() * 0.3), 2.5 + Math.random() * 2.0,
-                    { shrink: 0.12, fade: false, spin: 10 },
+                    color, (b.size || 1) * (0.35 + Math.random() * 0.3), (terrain ? 1.7 : 2.5) + Math.random() * (terrain ? 0.8 : 2),
+                    { shrink: 0.12, fade: false, spin: 10, pattern: b.pattern, ox: b.x, oy: b.textureY ?? b.y, oz: b.z },
                 );
             }
         }
@@ -365,6 +370,7 @@ export class Effects {
         this.sand.update(dt);
         this.shards.update(dt);
         this.debris.update(dt);
+        this.blockDebris.update(dt);
         this.planks.update(dt);
         this.smoke.update(dt);
         this.bolts.update(dt);
@@ -386,7 +392,7 @@ export class Effects {
     }
 
     clear() {
-        for (const p of [this.sparks, this.glow, this.sand, this.shards, this.debris, this.planks, this.smoke]) p.clear();
+        for (const p of [this.sparks, this.glow, this.sand, this.shards, this.debris, this.blockDebris, this.planks, this.smoke]) p.clear();
         this.bolts.clear();
         for (const b of this.iceBeams) this.releaseIceBeam(b);
         for (const s of this.straight) { s.life = 0; s.mesh.visible = false; }

@@ -2254,16 +2254,25 @@ export class TerrainData {
     /** Blocks of a falling piece (src/fx/FallingBlocks.js): in the data already, drawn when it lands. */
     hideCells(keys, show = false) {
         this._hidden = this._hidden || new Map();
-        for (const k of keys) {
-            const [x, L, z] = k.split(',').map(Number);
+        const touched = new Set();
+        for (const cell of keys) {
+            const [x, L, z] = typeof cell === 'string' ? cell.split(',').map(Number) : cell;
             if (L < MIN_LAYER || L > MAX_LAYER) continue;
             const ck = chunkKey(x >> SHIFT, z >> SHIFT);
             let s = this._hidden.get(ck);
             const i = ((L - MIN_LAYER) * CHUNK + (z & MASK)) * CHUNK + (x & MASK);
-            if (show) { if (s) { s.delete(i); if (!s.size) this._hidden.delete(ck); } }
-            else { if (!s) this._hidden.set(ck, s = new Set()); s.add(i); }
-            this._markDirty(x, z);
+            if (show) {
+                if (!s?.delete(i)) continue;
+                if (!s.size) this._hidden.delete(ck);
+            } else {
+                if (!s) this._hidden.set(ck, s = new Set());
+                if (s.has(i)) continue;
+                s.add(i);
+            }
+            touched.add(ck);
         }
+        // The worker gets visibility separately from the blocks. No new chunk copy or minimap rebuild.
+        for (const key of touched) this.dirtyChunks.add(key);
     }
 
     showCells(keys) { this.hideCells(keys, true); }

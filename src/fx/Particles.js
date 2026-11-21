@@ -52,9 +52,9 @@ export class ParticlePool {
         this.groundFn = o.ground || null; // (x,z) => y
         this.bounce = o.bounce ?? 0;
         this.friction = o.friction ?? 0.8;
-        const mat = o.lit
+        const mat = o.material ?? (o.lit
             ? new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: !!o.transparent })
-            : new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: !!o.transparent, blending: o.blending ?? THREE.NormalBlending, depthWrite: o.depthWrite ?? true });
+            : new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: !!o.transparent, blending: o.blending ?? THREE.NormalBlending, depthWrite: o.depthWrite ?? true }));
         if (o.transparent) withInstanceAlpha(mat);
         this.mesh = new THREE.InstancedMesh(o.geometry, mat, this.capacity);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -72,6 +72,8 @@ export class ParticlePool {
             o.geometry.setAttribute('instanceAlpha', this.alpha);
         }
         scene.add(this.mesh);
+        this.fragmentOrigin = o.geometry.getAttribute('fragmentOrigin');
+        this.fragmentPattern = o.geometry.getAttribute('voxPat');
 
         const n = this.capacity;
         this.pos = new Float32Array(n * 3);
@@ -117,6 +119,11 @@ export class ParticlePool {
         this.maxLife[i] = life;
         this.fade[i] = (o?.fade ?? true) ? 1 : 0;
         this.grav[i] = o?.gravity ?? this.gravity;
+        if (this.fragmentOrigin) {
+            this.fragmentOrigin.setXYZ(i, o?.ox ?? x, o?.oy ?? y, o?.oz ?? z);
+            this.fragmentPattern.setX(i, o?.pattern ?? 0);
+            this.fragmentOrigin.needsUpdate = this.fragmentPattern.needsUpdate = true;
+        }
         _c.setHex(color);
         this.col[i3] = _c.r; this.col[i3 + 1] = _c.g; this.col[i3 + 2] = _c.b;
     }
@@ -160,6 +167,11 @@ export class ParticlePool {
             this.rot[i3 + k] = this.rot[l3 + k];
             this.rotVel[i3 + k] = this.rotVel[l3 + k];
             this.col[i3 + k] = this.col[l3 + k];
+        }
+        if (this.fragmentOrigin) {
+            this.fragmentOrigin.copyAt(i, this.fragmentOrigin, last);
+            this.fragmentPattern.copyAt(i, this.fragmentPattern, last);
+            this.fragmentOrigin.needsUpdate = this.fragmentPattern.needsUpdate = true;
         }
         this.size[i] = this.size[last];
         this.shrink[i] = this.shrink[last];
