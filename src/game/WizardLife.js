@@ -496,10 +496,9 @@ export class WizardLife {
 
     /**
      * A fight won WITHOUT a beam clash and without a kill. The author's rule (21.11: «победа — это когда обезоруживаю, или уничтожаю палочку, или он не
-     * может воевать, или умер, или убежал»; a knocked-down wizard who gets up and goes on fighting is NOT beaten — the stun used to count, and the prize
-     * came before the disarm): a wizard who has cast at ME has lost when
+     * может воевать [= остался без палочки], или умер, или убежал»; and again: «поднят Левиосой — не победа, оглушён — тоже не победа»: a wizard knocked
+     * down, stunned, frozen, lifted or carried gets up and goes on — none of it is a defeat): a wizard who has cast at ME has lost when
      *   — his WAND is out of his hand («Экспеллиармус») or destroyed (he HAD one when the fight began: a wizard with no wand at all is no win);
-     *   — he cannot fight: held down (stunned, frozen, lifted, in claws) for 8 s on end — a short stun is not;
      *   — he ran: fleeing, 40 m and more away from me, for 6 s on end.
      * (Dead — his own reward, killWon.) Once per wizard: Mana.duelWonAlive (the prize by the beauty of the fight — FightLedger); once per opponent in life.
      */
@@ -510,10 +509,6 @@ export class WizardLife {
         if (armed) v._armedAtFight = true; // (he had a wand in his hand while he fought me)
         let why = null;
         if (v._armedAtFight && !armed) why = v.lostWand ? 'обезоружен: палочка выбита' : 'палочка уничтожена';
-        // can't fight: held down long (a stun of a moment is not a defeat)
-        const down = v.stunT > 0.5 || v.lev || v.carriedBy;
-        v._downT = down ? (v._downT || 0) + dt : 0;
-        if (!why && v._downT >= 8) why = 'не может воевать: выведен из строя на 8 с';
         // ran away: fleeing, far from me, for a while
         const p = g.character?.group?.position;
         const far = p ? Math.hypot(v.x - p.x, v.z - p.z) >= 40 : false;

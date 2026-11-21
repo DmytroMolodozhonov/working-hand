@@ -1,5 +1,5 @@
 // Победа над волшебником без столкновения лучей и без убийства (автор 19.11, уточнено 21.11): победа — это когда его обезоружили (палочка выбита или
-// уничтожена), он не может воевать (долго выведен из строя), он убежал или умер. Короткое оглушение — не победа.
+// уничтожена), он убежал или умер. Оглушение, лёд, «Левиоса» — не победа.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WizardLife } from '../../src/game/WizardLife.js';
@@ -12,16 +12,13 @@ function fake(me = 'me') {
 }
 const mage = (o = {}) => ({ id: 'w1', hp: 100, maxHp: 100, maxMana: 60, x: 10, z: 0, castAtPlayers: new Set(['me']), ...o });
 
-test('a short stun is NOT a defeat (he gets up and fights on); held down 8 s on end — is', () => {
+test('stunned, frozen, lifted, carried — however long — is NOT a defeat (he gets up and fights on)', () => {
     const { w, calls } = fake();
-    const v = mage({ stunT: 3 });
-    for (let i = 0; i < 20; i++) w.beatenCheck(v, 0.25); // 5 s
-    assert.equal(calls.length, 0, 'a stun of a few seconds pays nothing');
-    v.stunT = 0; w.beatenCheck(v, 0.25);
-    assert.equal(v._downT, 0, 'he got up: the count starts again');
-    v.stunT = 10;
-    for (let i = 0; i < 40; i++) w.beatenCheck(v, 0.25); // 10 s held down (ice)
-    assert.equal(calls.length, 1, 'once');
+    for (const f of [{ stunT: 30 }, { lev: true }, { carriedBy: 'x' }]) {
+        const v = mage({ id: 'k' + Object.keys(f)[0], ...f });
+        for (let i = 0; i < 80; i++) w.beatenCheck(v, 0.25); // 20 s
+    }
+    assert.equal(calls.length, 0);
 });
 test('the wand knocked out («Экспеллиармус») or destroyed: won — once; but only a wizard who HAD a wand while he fought', () => {
     const { w, calls } = fake();
