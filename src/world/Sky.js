@@ -88,6 +88,28 @@ uniform float uWinR;    // … and how wide the wide is (radians)
 varying vec3 vDir;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+vec3 hash33(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }
+float noise3(vec3 p) {
+    vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    float a = hash33(i).x, b = hash33(i + vec3(1.0, 0.0, 0.0)).x, c = hash33(i + vec3(0.0, 1.0, 0.0)).x, e = hash33(i + vec3(1.0, 1.0, 0.0)).x;
+    float a2 = hash33(i + vec3(0.0, 0.0, 1.0)).x, b2 = hash33(i + vec3(1.0, 0.0, 1.0)).x, c2 = hash33(i + vec3(0.0, 1.0, 1.0)).x, e2 = hash33(i + vec3(1.0, 1.0, 1.0)).x;
+    return mix(mix(mix(a, b, f.x), mix(c, e, f.x), f.y), mix(mix(a2, b2, f.x), mix(c2, e2, f.x), f.y), f.z);
+}
+// One layer of stars: the direction d scaled into cells of space (S per unit); a cell holds a star with chance dens, at a random place inside it (never on a grid),
+// its glow radius rad (in cells, ≤ 0.15 so it never reaches the cell's edge) times its own size; colour from blue-white to amber; twinkles at its own pace.
+vec3 starLayer(vec3 d, float S, float dens, float rad, float t) {
+    vec3 p = d * S, c = floor(p);
+    vec3 h = hash33(c), g = hash33(c + 19.7), k = hash33(c + 41.3);
+    if (h.x > dens) return vec3(0.0);
+    vec3 pos = c + 0.15 + 0.7 * g;
+    float dist = length(p - pos);
+    float size = rad * (0.45 + 0.75 * k.x * k.x);
+    float glow = smoothstep(size, 0.0, dist);
+    float bright = 0.25 + 2.0 * pow(k.y, 3.0);
+    float tw = 0.72 + 0.28 * sin(t * (1.5 + 3.5 * k.z) + 80.0 * h.y);
+    vec3 tint = mix(vec3(0.72, 0.84, 1.0), vec3(1.0, 0.84, 0.62), k.z);
+    return tint * glow * glow * bright * tw;
+}
 float noise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
     vec2 u = f * f * (3.0 - 2.0 * f);
@@ -290,26 +312,20 @@ void main() {
         col = mix(col, moonCol * (1.35 - 0.45 * smoothstep(0.45, 0.7, seas)), disc);
     }
     // Stars at night (not through the clouds)
+    // (the author 21.11: «звёзды выстроены слишком ровно, не похоже на настоящее небо» — they sat in the middle of the cells of a flat grid, all one size. Now:
+    //  the direction is cut into CELLS OF SPACE, each with at most one star at a random place, of its own size, brightness (many dim, a few bright), warmth and twinkle;
+    //  they gather in clumps and thicken along the Milky Way — no rows, no columns, nothing that repeats.)
     float starK = smoothstep(0.45, 1.0, uNight) * clear;
     if (starK > 0.01 && h > 0.0) {
-        vec2 sp = d.xz / (h + 0.3) * 120.0;
-        float s = step(0.9975, hash(floor(sp)));
-        float tw2 = 0.6 + 0.4 * sin(uTime * 3.0 + hash(floor(sp)) * 40.0);
-        col += vec3(s * tw2) * starK * smoothstep(0.0, 0.3, h);
-        {
-            // many more stars, of different brightness and colour, and the Milky Way across the sky
-            vec2 sp2 = d.xz / (h + 0.3) * 260.0;
-            float hs = hash(floor(sp2));
-            float s2 = step(0.991, hs) * (0.25 + 0.75 * pow(hash(floor(sp2) + 7.0), 2.0));
-            vec2 fs = fract(sp2) - 0.5;
-            s2 *= smoothstep(0.35, 0.0, length(fs));
-            vec3 sc = mix(vec3(0.75, 0.85, 1.0), vec3(1.0, 0.85, 0.65), hash(floor(sp2) + 3.0));
-            float tw3 = 0.7 + 0.3 * sin(uTime * (2.0 + hs * 3.0) + hs * 60.0);
-            float band = exp(-pow(dot(d, normalize(vec3(0.35, 0.25, 0.9))) / 0.2, 2.0));
-            float mw = band * fbm(d.xz / (h + 0.4) * 6.0) * smoothstep(0.0, 0.25, h);
-            col += sc * s2 * tw3 * 2.2 * starK * smoothstep(0.0, 0.3, h) * (1.0 + band * 2.0);
-            col += mix(vec3(0.25, 0.28, 0.45), vec3(0.45, 0.38, 0.35), mw) * mw * 0.16 * starK;
-        }
+        float horizonFade = smoothstep(0.0, 0.3, h);
+        float band = exp(-pow(dot(d, normalize(vec3(0.35, 0.25, 0.9))) / 0.2, 2.0));
+        float clump = 0.35 + 1.3 * smoothstep(0.3, 0.75, noise3(d * 3.1 + 5.0)) + 1.6 * band * (0.4 + noise3(d * 9.0));
+        // a few big bright ones, a crowd of faint ones, and a dust of the faintest
+        col += starLayer(d, 58.0, 0.34 * clump, 0.15, uTime) * 4.4 * starK * horizonFade;
+        col += starLayer(d + 0.31, 112.0, 0.42 * clump, 0.14, uTime) * 3.7 * starK * horizonFade;
+        col += starLayer(d + 0.77, 205.0, 0.6 * clump, 0.15, uTime) * 3.0 * starK * horizonFade;
+        float mw = band * fbm(d.xz / (h + 0.4) * 6.0) * smoothstep(0.0, 0.25, h);
+        col += mix(vec3(0.25, 0.28, 0.45), vec3(0.45, 0.38, 0.35), mw) * mw * 0.16 * starK;
     }
     gl_FragColor = vec4(col, 1.0);
 }
