@@ -27,12 +27,13 @@ import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
 import { retireScrollsIn } from './ItemTypes.js';
+import { allLog } from '../core/AllLog.js';
 import { OLD_STAND_IDS } from './HeroItems.js';
 import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, EYEFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, BUILDINGS_FROM_GEN, GHOST_CASTLE_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
-const SAVE_EVERY = 8; // seconds
+const SAVE_EVERY = 20; // seconds (was 8: each save cost the game 75–110 ms in one frame — the author 21.11; death, leaving and closing save at once anyway)
 
 /** The version of the game running now (from /api/version): written into every save. */
 export const GAME_VERSION = { date: '', sha: '' };
@@ -193,6 +194,42 @@ export async function putWorld(w) {
     const state = { browser: browser.status === 'fulfilled', disk: diskEnabled ? disk.status === 'fulfilled' : null };
     if (!state.browser && !state.disk) throw new AggregateError([browser.reason, disk.reason].filter(Boolean), 'Мир не удалось сохранить ни в браузере, ни на диске');
     return state;
+}
+
+/**
+ * The autosave's way: the game thread makes the world's text ONCE, a worker puts it to the disk backup and the browser's database
+ * (no second copy and no structured clone in the frame). No Worker (a test, an old browser) or it fails → the old way: putWorld.
+ * → {browser, disk}.
+ */
+let _saver = null, _saverN = 0, _saverFailed = false;
+const _saverWait = new Map();
+function saver() {
+    if (_saverFailed || typeof Worker === 'undefined' || typeof window === 'undefined') return null;
+    if (_saver) return _saver;
+    try {
+        const w = new Worker(new URL('./WorldSaveWorker.js', import.meta.url), { type: 'module' });
+        w.onmessage = (e) => { const f = _saverWait.get(e.data?.n); if (f) { _saverWait.delete(e.data.n); f(e.data); } };
+        w.onerror = () => { _saverFailed = true; for (const f of _saverWait.values()) f(null); _saverWait.clear(); try { w.terminate(); } catch (err) { /* */ } _saver = null; };
+        _saver = w;
+    } catch (e) { _saverFailed = true; _saver = null; }
+    return _saver;
+}
+export async function putWorldFast(w, onTiming = null) {
+    const wk = saver();
+    if (!wk) return putWorld(w);
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+    const json = JSON.stringify(w);
+    onTiming?.(performance.now() - t0, json.length);
+    const diskEnabled = typeof fetch !== 'undefined' && !globalThis.__ZNS_NO_DISK_WORLDS__;
+    const n = ++_saverN;
+    const r = await new Promise((resolve) => {
+        const timer = setTimeout(() => { _saverWait.delete(n); resolve(null); }, 30000);
+        _saverWait.set(n, (d) => { clearTimeout(timer); resolve(d); });
+        try { wk.postMessage({ n, json, disk: diskEnabled }); } catch (e) { clearTimeout(timer); _saverWait.delete(n); resolve(null); }
+    });
+    if (!r) return putWorld(w); // (the worker is gone or did not answer: the old way, the world is not lost)
+    if (!r.browser && !r.disk) throw new Error(r.error || 'Мир не удалось сохранить ни в браузере, ни на диске');
+    return { browser: r.browser, disk: r.disk };
 }
 
 export const NAME_MAX = 40;
@@ -517,7 +554,12 @@ export class WorldKeeper {
             do {
                 this._saveAgain = false;
                 try {
-                    const saved = await putWorld(this.snapshot());
+                    const t0 = performance.now();
+                    const snap = this.snapshot();
+                    const tSnap = performance.now() - t0;
+                    let tText = 0, bytes = 0;
+                    const saved = await putWorldFast(snap, (ms, n) => { tText = ms; bytes = n; });
+                    if (tSnap + tText > 25) allLog('Производительность', `сохранение мира: сбор ${tSnap.toFixed(0)} мс + текст ${tText.toFixed(0)} мс (${(bytes / 1048576).toFixed(1)} МБ) в кадре; запись — в отдельной программе`);
                     this.lastSaved = Date.now();
                     const warning = saved.disk === false ? '⚠ Мир сохранён в браузере, но резервная копия на диске не записалась. Проверьте свободное место.' : !saved.browser ? '⚠ Мир сохранён на диске, но хранилище браузера недоступно.' : '';
                     if (warning && warning !== this._saveWarning) { console.warn('[WorldSave]', warning); this.game.hud?.toast?.(warning, 7000); }

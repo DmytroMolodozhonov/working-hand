@@ -21,7 +21,7 @@ import time
 BRANCH = "logs"
 FOLDER = "games"
 KEEP_S = 3 * 24 * 3600  # (the author 20.11: a few days — 3; older ones go from the branch and from the folder)
-SAVE_QUIET_S = 25  # (the world was saved and no more saves came: the game is closed — the journals go up at once)
+SAVE_QUIET_S = 40  # (the world was saved and no more saves came: the game is closed — the journals go up at once)
 IDLE_S = 5 * 60  # (a quiet journal: the game is over or paused — what there is goes up)
 NAME_RE = re.compile(r"^game-(\d{8})-(\d{6})\.log$")
 
