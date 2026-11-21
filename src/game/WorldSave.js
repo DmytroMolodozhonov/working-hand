@@ -361,6 +361,8 @@ export function applyPlayerSnapshot(game, s) {
     if (s.gear) game.items?.restore(s.gear);
     if (s.pfx) game.potionFx?.restore(s.pfx);
     if (s.wng) game.wings?.restore(s.wng);
+    // TEMP 21.11 (the author's own request — DELETE these two lines once he has his wings back): the wings «Give Me My Power» did not return, in his world
+    if (!game.wings?.has && game.keeper?.name?.includes('19.11, 15:30')) game.wings?.grant();
     if (s.el) game.heroElement?.restore(s.el);
     if (inv?.purse) { // (every hero has the pouch: a save without it gets a new one; the coins owed go into it)
         inv.purse.ensure();
