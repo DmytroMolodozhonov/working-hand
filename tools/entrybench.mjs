@@ -31,6 +31,12 @@ const browser = await launch(PROFILE_DIR ? { userDataDir: PROFILE_DIR, viewport:
 let out = 0;
 try {
     const { page, errors } = await openPage(browser, srv.url + (NOCACHE ? '?nocache' : ''), { noCamera: true, viewport: { width: 640, height: 360 } });
+    if (args.includes('--fake-khr')) { // (the container's GL has no KHR_parallel_shader_compile: pretend it has, to walk the game's «all shaders at once» path)
+        await page.addInitScript(() => { for (const C of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) { if (!C) continue; const ge = C.prototype.getExtension, gp = C.prototype.getProgramParameter;
+            C.prototype.getExtension = function (n) { return n === 'KHR_parallel_shader_compile' ? { COMPLETION_STATUS_KHR: 0x91b1 } : ge.call(this, n); };
+            C.prototype.getProgramParameter = function (p, q) { return q === 0x91b1 ? true : gp.call(this, p, q); }; } });
+        await page.reload(); await page.waitForFunction(() => !!window.__zns);
+    }
     const cdp = await page.context().newCDPSession(page);
     if (CPU > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
     await page.evaluate(() => {
