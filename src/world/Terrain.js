@@ -103,7 +103,7 @@ export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30, SOIL: 31, BONES: 32, SKELETON: 33, TIMBER: 34 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30, SOIL: 31, BONES: 32, SKELETON: 33, TIMBER: 34, ROCK: 35, DEEP_ROCK: 36 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -249,6 +249,7 @@ export const BASE_COLORS = {
     [BLOCK.PYR_BLACK]: 0x1b1822, [BLOCK.PYR_TORCH_OFF]: 0x4a3a2a, [BLOCK.PYR_TORCH_ON]: 0xffb14a, [BLOCK.PYR_PLATE]: 0xa8743a,
 };
 Object.assign(PATTERN_OF, {
+    [BLOCK.STONE]: PATTERN.ROCK, [BLOCK.DEEPSTONE]: PATTERN.DEEP_ROCK,
     [BLOCK.DIRT]: PATTERN.SOIL, [BLOCK.BURIED_BONES]: PATTERN.BONES, [BLOCK.BURIED_SKELETON]: PATTERN.SKELETON,
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
     [BLOCK.CS_MOSSY]: PATTERN.COBBLE, [BLOCK.COBBLE]: PATTERN.COBBLE, [BLOCK.PATH]: PATTERN.COBBLE, [BLOCK.BRICK]: PATTERN.BRICK,
@@ -2287,6 +2288,10 @@ export class TerrainData {
         if (lx === MASK) this.dirtyChunks.add(chunkKey(cx + 1, cz));
         if (lz === 0) this.dirtyChunks.add(chunkKey(cx, cz - 1));
         if (lz === MASK) this.dirtyChunks.add(chunkKey(cx, cz + 1));
+        // Geological blend weights are shared by all faces meeting at a vertex.
+        if ((lx === 0 || lx === MASK) && (lz === 0 || lz === MASK)) {
+            this.dirtyChunks.add(chunkKey(cx + (lx === 0 ? -1 : 1), cz + (lz === 0 ? -1 : 1)));
+        }
         if (this.mapDirty.size < 64) this.mapDirty.add(chunkKey(cx, cz));
         this.version++;
     }
@@ -2795,6 +2800,7 @@ export class TerrainData {
         if (this.liteLook) return type === BLOCK.GRASS && !isTop ? GRASS_SIDE : (BASE_COLORS[type] ?? 0xff00ff); // (the light mode: plain colours — big merged quads, fewer triangles)
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }
         let base = BASE_COLORS[type] ?? 0xff00ff;
+        if (pattern === PATTERN.ROCK || pattern === PATTERN.DEEP_ROCK) return base;
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;
         if (L <= 0 && type === BLOCK.GRASS) return base; // flat ground: exact original colour
         if (type === BLOCK.WATER || type === BLOCK.ICE) return base;
@@ -2962,23 +2968,22 @@ export class TerrainData {
         const pdef = c.planet ? this.planets?.get(c.planet) : null;
         const WATER_COL = pdef?.terraformed && pdef.ground?.sea != null ? pdef.ground.sea : BASE_COLORS[BLOCK.WATER];
         const SEA_WATER_COL = pdef ? WATER_COL : SEA_WATER; // (the sea's water seen from the side: the sea surface's colour)
-        const below = lowest > MIN_LAYER ? BLOCK.STONE : BLOCK.AIR; // (all rock under `lowest`)
         const hid = this._hidden?.get(chunkKey(cx, cz)) || null; // (a falling piece not landed yet: not drawn there)
         // (a cave's dark: a face is as lit as the air in front of it — _skyLight; null: all lit)
         const sky = this._skyLight(cx, cz);
         this._meshChunk = c;
         const PAT = this.lush ? PATTERN_OF_LUSH : PATTERN_OF; // (generation 5: the grass gets its own look in the shader)
         // The blocks round the chunk in one padded box (gx, gz −1…CHUNK, gy −1…layers): the chunk's
-        // own, its four neighbours' border columns for occlusion (not the corners: never looked at),
-        // all rock under `lowest`, air above the world — read straight, no lookups in the sweeps.
+        // own and its neighbours' border columns for occlusion and material blending,
+        // air above the world — read straight, no lookups in the sweeps.
         const PX = CHUNK + 2, PY = layers + 2, PXZ = PX * PX;
         const pad = _mesh.pad && _mesh.pad.length >= PXZ * PY ? _mesh.pad : (_mesh.pad = new Uint8Array(PXZ * PY));
         pad.fill(BLOCK.AIR, 0, PXZ * PY);
-        pad.fill(below, 0, PXZ); // (gy = −1)
+        const yBottom = G0 > 0 ? -1 : 0;
         const yTop = Math.min(layers, HEIGHT - G0 - 1); // (the highest gy inside the world)
         for (let gz = 0; gz < CHUNK; gz++) for (let gx = 0; gx < CHUNK; gx++) {
-            let i = (G0 * CHUNK + gz) * CHUNK + gx, o = PXZ + (gz + 1) * PX + gx + 1;
-            for (let gy = 0; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) pad[o] = blocks[i];
+            let i = ((G0 + yBottom) * CHUNK + gz) * CHUNK + gx, o = (yBottom + 1) * PXZ + (gz + 1) * PX + gx + 1;
+            for (let gy = yBottom; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) pad[o] = blocks[i];
         }
         if (hid) for (const i of hid) {
             const gx = i % CHUNK, gz = ((i - gx) / CHUNK) % CHUNK, gy = Math.floor(i / (CHUNK * CHUNK)) - G0;
@@ -3019,9 +3024,20 @@ export class TerrainData {
             const n = sides[q], nb = n.blocks, ns = spad ? n.shape : null;
             for (let k = 0; k < CHUNK; k++) {
                 const gx = nx === 0 ? k : nx, gz = nz === 0 ? k : nz;
-                let i = (G0 * CHUNK + (gz & MASK)) * CHUNK + (gx & MASK), o = PXZ + (gz + 1) * PX + gx + 1;
-                for (let gy = 0; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) { pad[o] = nb[i]; if (ns) spad[o] = ns[i]; }
+                let i = ((G0 + yBottom) * CHUNK + (gz & MASK)) * CHUNK + (gx & MASK);
+                let o = (yBottom + 1) * PXZ + (gz + 1) * PX + gx + 1;
+                for (let gy = yBottom; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) {
+                    pad[o] = nb[i];
+                    if (ns && gy >= 0) spad[o] = ns[i];
+                }
             }
+        }
+        for (let dz = -1; dz <= 1; dz += 2) for (let dx = -1; dx <= 1; dx += 2) {
+            const gx = dx < 0 ? -1 : CHUNK, gz = dz < 0 ? -1 : CHUNK;
+            const nb = this.chunk(cx + dx, cz + dz).blocks;
+            const i = (G0 * CHUNK + (gz & MASK)) * CHUNK + (gx & MASK);
+            const o = PXZ + (gz + 1) * PX + gx + 1;
+            for (let gy = yBottom; gy <= yTop; gy++) pad[o + gy * PXZ] = nb[i + gy * CHUNK * CHUNK];
         }
         if (hid && spad) for (const i of hid) {
             const gx = i % CHUNK, gz = ((i - gx) / CHUNK) % CHUNK, gy = Math.floor(i / (CHUNK * CHUNK)) - G0;
@@ -3040,6 +3056,7 @@ export class TerrainData {
             const su = sizes[u], sv = sizes[v];
             const mask = new Int32Array(su * sv);
             const maskKind = new Int8Array(su * sv); // 0 ground, 1 raised, 2 water
+            const maskGeology = new Uint8Array(su * sv);
             const maskWet = new Uint8Array(su * sv); // actual water touching the visible face, independent of daylight
             const maskWater = waterPad ? new Int32Array(su * sv) : null;
             const maskDark = new Int8Array(su * sv); // 0 open sky … 15 deep in a cave
@@ -3114,6 +3131,9 @@ export class TerrainData {
                             if (d !== 1 && waterPad?.[ia + step]) waterLip = waterPad[ia + step] * 257;
                         }
                         mask[n] = key;
+                        const block = key > 0 ? a : b;
+                        const material = kind !== 2 && key ? GEOLOGY[block] : 0;
+                        maskGeology[n] = material ? geologyCorners(pad, ia, step, ustep, vstep, material) : 0;
                         maskKind[n] = kind;
                         if (maskWater) maskWater[n] = waterLip;
                         maskWet[n] = kind !== 2 && (key > 0 ? bRaw : aRaw) === WATER ? 255 : 0;
@@ -3129,13 +3149,17 @@ export class TerrainData {
                         const col = mask[n];
                         if (col === 0) { i++; n++; continue; }
                         const kindC = maskKind[n], darkC = maskDark[n], wetC = maskWet[n], lip = maskWater?.[n] || 0;
+                        const geology = maskGeology[n];
+                        // A repeated gradient can merge only along edges where the corner weights agree.
+                        const alongU = (geology & 5) === ((geology >> 1) & 5);
+                        const alongV = (geology & 3) === ((geology >> 3) | ((geology & 4) >> 1));
                         let w = 1;
-                        while (i + w < su && !(lip && u === 1) && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC && maskWet[n + w] === wetC && (!maskWater || maskWater[n + w] === lip)) w++;
+                        while (alongU && i + w < su && maskGeology[n + w] === geology && !(lip && u === 1) && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC && maskWet[n + w] === wetC && (!maskWater || maskWater[n + w] === lip)) w++;
                         let h = 1, done = false;
-                        for (; j + h < sv && !(lip && v === 1); h++) {
+                        for (; alongV && j + h < sv && !(lip && v === 1); h++) {
                             for (let k = 0; k < w; k++) {
                                 const m = n + k + h * su;
-                                if (mask[m] !== col || maskKind[m] !== kindC || maskDark[m] !== darkC || maskWet[m] !== wetC || maskWater && maskWater[m] !== lip) { done = true; break; }
+                                if (mask[m] !== col || maskGeology[m] !== geology || maskKind[m] !== kindC || maskDark[m] !== darkC || maskWet[m] !== wetC || maskWater && maskWater[m] !== lip) { done = true; break; }
                             }
                             if (done) break;
                         }
@@ -3153,7 +3177,7 @@ export class TerrainData {
                             else dv[1] = height * .88 - bottom;
                         }
                         const code = Math.abs(col) - 1;
-                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC), wetC);
+                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC), wetC, geology);
                         for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * su] = 0;
                         i += w; n += w;
                     }
@@ -3197,6 +3221,7 @@ export class TerrainData {
         if (!sh) return;
         const AIR = BLOCK.AIR, WATER = BLOCK.WATER, ICE_SHAPE = BLOCK.ICE_SHAPE;
         const V = _mesh.v, h = _mesh.h;
+        const blend = { pad, o: 0, PX, PXZ, material: 0, x0: 0, y0: 0, z0: 0 };
         for (let gy = 0; gy <= yTop; gy++) for (let gz = 0; gz < CHUNK; gz++) for (let gx = 0; gx < CHUNK; gx++) {
             const o = (gy + 1) * PXZ + (gz + 1) * PX + gx + 1;
             const s = spad[o];
@@ -3204,10 +3229,12 @@ export class TerrainData {
             const t = pad[o], L = gy + lowest, wx = x0 + gx, wz = z0 + gz;
             const target = L >= 1 ? out.raised : out.ground;
             const pat = PAT[t] || 0;
+            blend.material = GEOLOGY[t];
+            blend.o = o;
             const ceil = isCeilShape(s);
             const hh = cornerHeights(s);
             // (world corners of the cell)
-            const X0 = wx - 0.5, Z0 = wz - 0.5, Y0 = L - 1.5;
+            const X0 = blend.x0 = wx - 0.5, Z0 = blend.z0 = wz - 0.5, Y0 = blend.y0 = L - 1.5;
             for (let k = 0; k < 4; k++) h[k] = ceil ? 1 - hh[k] : hh[k];
             // -- the slope (or the slab's middle face): the top of a floor shape, the underside of a ceiling one
             {
@@ -3217,10 +3244,10 @@ export class TerrainData {
                 // one quad when both triangles lie in one plane (a slab, a ramp); corners 0 −x−z, 1 +x−z, 2 −x+z, 3 +x+z
                 if (h[0] + h[3] === h[1] + h[2]) {
                     corner(V, 0, X0, Y0, Z0, h, 0); corner(V, 1, X0, Y0, Z0, h, 1); corner(V, 2, X0, Y0, Z0, h, 3); corner(V, 3, X0, Y0, Z0, h, 2);
-                    pushPoly(target, V, 4, ceil ? -1 : 1, colTop, pat, k, pad[ceil ? o - PXZ : o + PXZ] === WATER ? 255 : 0);
+                    pushPoly(target, V, 4, ceil ? -1 : 1, colTop, pat, k, pad[ceil ? o - PXZ : o + PXZ] === WATER ? 255 : 0, blend);
                 } else for (let q = 0; q < 2; q++) {
                     for (let j = 0; j < 3; j++) corner(V, j, X0, Y0, Z0, h, tri[q * 3 + j]);
-                    pushPoly(target, V, 3, ceil ? -1 : 1, colTop, pat, k, pad[ceil ? o - PXZ : o + PXZ] === WATER ? 255 : 0);
+                    pushPoly(target, V, 3, ceil ? -1 : 1, colTop, pat, k, pad[ceil ? o - PXZ : o + PXZ] === WATER ? 255 : 0, blend);
                 }
             }
             // -- the flat face: the bottom of a floor shape, the top of a ceiling one (hidden by a whole face over it)
@@ -3231,7 +3258,7 @@ export class TerrainData {
                 if (!covered && !(dir === 3 && L === MIN_LAYER)) {
                     const yy = ceil ? Y0 + 1 : Y0;
                     V[0] = X0; V[1] = yy; V[2] = Z0; V[3] = X0 + 1; V[4] = yy; V[5] = Z0; V[6] = X0 + 1; V[7] = yy; V[8] = Z0 + 1; V[9] = X0; V[10] = yy; V[11] = Z0 + 1;
-                    pushPoly(target, V, 4, ceil ? 2 : -2, this.faceColor(t, wx, L, wz, ceil), pat, litOf(sky, wx, ceil ? L + 1 : L - 1, wz), nb === WATER ? 255 : 0);
+                    pushPoly(target, V, 4, ceil ? 2 : -2, this.faceColor(t, wx, L, wz, ceil), pat, litOf(sky, wx, ceil ? L + 1 : L - 1, wz), nb === WATER ? 255 : 0, blend);
                 }
             }
             // -- the four sides: under the slope (over it, upside down), down to the bottom (up to the top)
@@ -3258,7 +3285,7 @@ export class TerrainData {
                 }
                 // (a grass ramp's triangle side is the hill's own turf going on, green — not the earth of a cut bank)
                 const turf = t === BLOCK.GRASS && (ha === 0 || hb === 0);
-                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, turf), turf && pat === PATTERN.GRASS ? 0 : pat, litOf(sky, wx + dx, L, wz + dz), nb === WATER ? 255 : 0);
+                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, turf), turf && pat === PATTERN.GRASS ? 0 : pat, litOf(sky, wx + dx, L, wz + dz), nb === WATER ? 255 : 0, blend);
             }
         }
     }
@@ -3271,6 +3298,35 @@ const _TRI0 = [0, 1, 3, 0, 3, 2], _TRI1 = [0, 1, 2, 1, 3, 2]; // (a shape's surf
 const _SDIR = [0, 1, 4, 5], _SDX = [1, -1, 0, 0], _SDZ = [0, 0, 1, -1];
 const _SCA = [1, 0, 2, 0], _SCB = [3, 2, 3, 1];
 _mesh.sides = [null, null, null, null];
+// At the shared corner of eight cells, soil and rock contribute equally when both are present.
+const GEOLOGY = new Uint8Array(256);
+for (const t of [BLOCK.DIRT, BLOCK.BURIED_BONES, BLOCK.BURIED_SKELETON]) GEOLOGY[t] = 1;
+for (const t of [BLOCK.STONE, BLOCK.DEEPSTONE]) GEOLOGY[t] = 2;
+
+function touchesGeology(pad, i, d, u, v, material) {
+    return GEOLOGY[pad[i]] === material || GEOLOGY[pad[i + d]] === material ||
+        GEOLOGY[pad[i + u]] === material || GEOLOGY[pad[i + d + u]] === material ||
+        GEOLOGY[pad[i + v]] === material || GEOLOGY[pad[i + d + v]] === material ||
+        GEOLOGY[pad[i + u + v]] === material || GEOLOGY[pad[i + d + u + v]] === material;
+}
+
+function geologyCorners(pad, i, d, u, v, material) {
+    const other = 3 - material;
+    return (+touchesGeology(pad, i, d, -u, -v, other)) |
+        (+touchesGeology(pad, i, d, u, -v, other) << 1) |
+        (+touchesGeology(pad, i, d, u, v, other) << 2) |
+        (+touchesGeology(pad, i, d, -u, v, other) << 3);
+}
+
+// A shaped face can also have a vertex partway up an edge of the cell.
+function slopeGeology({ pad, o, PX, PXZ, material, x0, y0, z0 }, x, y, z) {
+    const dx = x - x0 > 0.5 ? 1 : -1, dz = z - z0 > 0.5 ? PX : -PX;
+    const pure = material === 2 ? 255 : 0, other = 3 - material;
+    const bottom = touchesGeology(pad, o, -PXZ, dx, dz, other) ? 128 : pure;
+    const top = touchesGeology(pad, o, PXZ, dx, dz, other) ? 128 : pure;
+    return Math.round(bottom + (top - bottom) * (y - y0));
+}
+
 /** The daylight a shape's face gets from the cell (x, L, z) in front of it (`sky`: Terrain._skyLight's, null: all lit). */
 const litOf = (sky, x, L, z) => (sky ? skyFactor(sky(x, L, z)) : 1);
 /** Corner i of a shape's surface (heights h, the cell's world corner X0, Y0, Z0) as point j of V. */
@@ -3285,7 +3341,7 @@ _mesh.h = new Float32Array(4);
  * growing JS arrays); finishBuffers copies out exactly what was written.
  */
 function newBuffers(slot) {
-    const b = _quadBufs[slot] || (_quadBufs[slot] = { pos: new Float32Array(4096 * 12), nor: new Float32Array(4096 * 12), col: new Float32Array(4096 * 12), pat: new Float32Array(4096 * 4), sky: new Float32Array(4096 * 4), wet: new Uint8Array(4096 * 4), idx: new Uint32Array(4096 * 6), cap: 4096 });
+    const b = _quadBufs[slot] || (_quadBufs[slot] = { pos: new Float32Array(4096 * 12), nor: new Float32Array(4096 * 12), col: new Float32Array(4096 * 12), pat: new Float32Array(4096 * 4), sky: new Float32Array(4096 * 4), wet: new Uint8Array(4096 * 4), geology: new Uint8Array(4096 * 4), idx: new Uint32Array(4096 * 6), cap: 4096 });
     b.nv = 0; b.ni = 0; b.patterned = false;
     return b;
 }
@@ -3294,17 +3350,17 @@ const _quadBufs = [];
 function growBuffers(b) {
     const cap = b.cap * 2;
     const re = (a, n) => { const t = new a.constructor(cap * n); t.set(a); return t; };
-    b.pos = re(b.pos, 12); b.nor = re(b.nor, 12); b.col = re(b.col, 12); b.pat = re(b.pat, 4); b.sky = re(b.sky, 4); b.wet = re(b.wet, 4); b.idx = re(b.idx, 6);
+    b.pos = re(b.pos, 12); b.nor = re(b.nor, 12); b.col = re(b.col, 12); b.pat = re(b.pat, 4); b.sky = re(b.sky, 4); b.wet = re(b.wet, 4); b.geology = re(b.geology, 4); b.idx = re(b.idx, 6);
     b.cap = cap;
 }
 
-/** The finished arrays of a mesh (positions, normals, colours, indices, patterns, skies). */
+/** The finished arrays of a mesh (positions, normals, colours, indices, and surface attributes). */
 function finishBuffers(b) {
     const nv = b.nv;
     return {
         positions: b.pos.slice(0, nv * 3), normals: b.nor.slice(0, nv * 3), colors: b.col.slice(0, nv * 3),
         indices: nv <= 65535 ? Uint16Array.from(b.idx.subarray(0, b.ni)) : b.idx.slice(0, b.ni),
-        patterns: b.pat.slice(0, nv), skies: b.sky.slice(0, nv), wet: b.wet.slice(0, nv), patterned: b.patterned,
+        patterns: b.pat.slice(0, nv), skies: b.sky.slice(0, nv), wet: b.wet.slice(0, nv), geology: b.geology.slice(0, nv), patterned: b.patterned,
     };
 }
 
@@ -3323,6 +3379,7 @@ export function mergeBuffers(a, b) {
     for (let i = 0; i < b.indices.length; i++) idx[a.indices.length + i] = b.indices[i] + nv;
     return {
         positions: cat(a.positions, b.positions), normals: cat(a.normals, b.normals), colors: cat(a.colors, b.colors),
+        geology: cat(a.geology || new Uint8Array(nv), b.geology || new Uint8Array(n - nv)),
         indices: idx, patterns: cat(a.patterns, b.patterns), skies: cat(a.skies, b.skies), wet: cat(a.wet || new Uint8Array(nv), b.wet || new Uint8Array(b.positions.length / 3)), patterned: a.patterned || b.patterned,
     };
 }
@@ -3334,7 +3391,7 @@ const _FACE_N = { 2: [0, 1, 0], [-2]: [0, -1, 0], 3: [1, 0, 0], 4: [-1, 0, 0], 5
  * Append a polygon (3 or 4 points in world space, `V` flat) of a slab or a ramp, turned to face its normal.
  * face: 1 / −1 a sloping face (its normal from its points, up / down), ±2 flat, 3…6 a side.
  */
-function pushPoly(buf, V, n, face, color, pattern, sky, wet = 0) {
+function pushPoly(buf, V, n, face, color, pattern, sky, wet, blend) {
     if (buf.nv + 4 > buf.cap * 4) growBuffers(buf);
     let nx, ny, nz;
     // the polygon's own normal (its first three points)
@@ -3358,6 +3415,7 @@ function pushPoly(buf, V, n, face, color, pattern, sky, wet = 0) {
         buf.pat[base + k] = pattern;
         buf.sky[base + k] = sky;
         buf.wet[base + k] = wet;
+        buf.geology[base + k] = blend.material ? slopeGeology(blend, P[o], P[o + 1], P[o + 2]) : 0;
     }
     buf.nv += n;
     if (pattern) buf.patterned = true;
@@ -3370,7 +3428,7 @@ function pushPoly(buf, V, n, face, color, pattern, sky, wet = 0) {
 }
 
 /** Convert grid-space quad to world space and append it. */
-function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1, wet = 0) {
+function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1, wet = 0, geology = 0) {
     if (buf.nv + 4 > buf.cap * 4) growBuffers(buf);
     // grid -> world: x_w = gx - 0.5, y_w = gy - 1.5, z_w = gz - 0.5 (gx = origin + local)
     const base = buf.nv, P = buf.pos, N = buf.nor, C = buf.col;
@@ -3382,12 +3440,14 @@ function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, patter
     P[o + 3] = px + du[0]; P[o + 4] = py + du[1]; P[o + 5] = pz + du[2];
     P[o + 6] = px + du[0] + dv[0]; P[o + 7] = py + du[1] + dv[1]; P[o + 8] = pz + du[2] + dv[2];
     P[o + 9] = px + dv[0]; P[o + 10] = py + dv[1]; P[o + 11] = pz + dv[2];
+    const pure = pattern === PATTERN.ROCK || pattern === PATTERN.DEEP_ROCK ? 255 : 0;
     for (let k = 0; k < 4; k++, o += 3) {
         N[o] = nx; N[o + 1] = ny; N[o + 2] = nz;
         C[o] = r; C[o + 1] = g; C[o + 2] = b;
         buf.pat[base + k] = pattern;
         buf.sky[base + k] = sky;
         buf.wet[base + k] = wet;
+        buf.geology[base + k] = geology & (1 << k) ? 128 : pure;
     }
     buf.nv += 4;
     if (pattern) buf.patterned = true;
