@@ -87,6 +87,7 @@ export const FIRST_SPELL = {
     Kidarius: 100, // (the fourteenth: «Кидариус» — the gods' bolt, StrongSpells.js; the library's 100)
     SunRay: 100, // (the thirteenth: «Sun Ray» — the Sun's beam, SunRay.js; the library's 100)
     Helios: 100, // (the twelfth: «Helios» — the gods' Sun, Helios.js; the library's 100)
+    Revivify: 100, // (the sixteenth: «Revivify» — the gods' return of an NPC's life, Revivify.js; the library's 100)
     DivineCreation: 100, // (the eleventh: «Да пусть создастся» — DivineCreation.js; the library's 100)
     ImperiusMaxima: IMPERIUS_MAXIMA.FIRST, // (the tenth: «Империус Максима» — Imperius.js; the library's 100, the author's rule)
     Imperius: IMPERIUS.FIRST, // («Империус»: a strong scroll of the Earth — +15)
@@ -210,11 +211,22 @@ export class Mana {
         this.partPaid = new Map(); // opponent id → cells already paid for an unfinished fight (a later win pays the rest)
         this.log = []; // (tests) the last few gains
         // the reward for a fight with a wizard — by the beauty of the magic (FightLedger.js): an account for each wizard
-        this.fight = new FightLedger(() => performance.now() / 1000, (name) => ({ key: SAME_SPELL[name] || name, w: NOT_SPELLS.has(name) || name === 'Maxima' ? 0 : spellWeight(firstSpellGain(name)) }), () => this.max + this.mastery);
+        this.fight = new FightLedger(() => performance.now() / 1000, (name) => ({ key: SAME_SPELL[name] || name, w: NOT_SPELLS.has(name) || name === 'Maxima' ? 0 : spellWeight(firstSpellGain(name)) }), () => this.max + this.mastery, (id) => this._foeNear(id));
+        this.fight.onLog = (id, text) => allLog('Мана', `бой с ${id}: ${text}`);
         FoeSet.onCast = (v, id) => { if (v && id != null && id === this.game.localId) this.fight.foeCast(v.id, v.maxMana || 0); }; // (a wizard cast at ME)
     }
 
     get combat() { return this.game.combat; }
+
+    /** Is the foe `id` within FIGHT.NEAR_M of me? (false: he is far — a fled / flown away fight is not the fight's time; undefined: unknown → counted as near) */
+    _foeNear(id) {
+        const g = this.game, me = g.character?.group?.position;
+        const v = g.castleLife?.byId?.get?.(id) || g.animals?.byId?.get?.(id);
+        if (!me || !v) return undefined;
+        const p = v.group?.position && !Number.isFinite(v.x) ? v.group.position : v;
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.z)) return undefined;
+        return Math.hypot(p.x - me.x, p.z - me.z) <= FIGHT.NEAR_M;
+    }
 
     /** The bar's maximum now. */
     get max() { return this.combat?.maxFatigue || MANA.BASE; }
@@ -270,8 +282,10 @@ export class Mana {
      * `killed`: he died; `fought`: the caller knows it was honest (a player, the arena); `arena`: the arena's round decides it.
      * @returns {number} the cells that grew
      */
-    fightWon(id = null, { killed = false, oppMax = MANA.BASE, oppMastery = 0, pos = null, fought = false, arena = false } = {}) {
+    fightWon(id = null, { killed = false, oppMax = MANA.BASE, oppMastery = 0, pos = null, fought = false, arena = false, via = '' } = {}) {
         const key = id != null ? String(id) : null;
+        const nowS = performance.now() / 1000;
+        if (key != null && this._paidAt?.get(key) > nowS - 3) { allLog('Мана', `бой с ${id}: повтор события победы (${via || '?'}) — игнорирую, уже оплачено секунду назад`); return 0; } // (the same win told twice in a moment — a stunned wizard, a clash and the arena at once)
         const L = this.fight;
         const sum = L.summary(key ?? '?', fought || arena, arena, (Number(oppMax) || 0) + (Number(oppMastery) || 0));
         if (!sum.honest) { allLog('Мана', `бой с ${id}: ячейки НЕ начислены — бой нечестный (он не нападал на вас), такие не считаются`); return 0; }
@@ -281,7 +295,8 @@ export class Mana {
         const n = Math.max(part ? 0 : 1, fightCells(sum.pct, oppMax, MANA.BASE) - part);
         const m = this.masteryWon(id, killed, oppMax, oppMastery, true, sum.pct);
         L.close(key ?? '?');
-        allLog('Мана', `бой с ${id} выигран${killed ? ' (убит)' : ''}: ${Math.round(sum.pct)}% от (${Math.round(oppMax)} − ${MANA.BASE}) = +${n} ячеек; бой ${Math.round(sum.seconds)} с, заклинаний ${sum.spells}, столкновений ${sum.clashes}${sum.elemental ? ', магия стихий' : ''}${sum.underdog > 0 ? `, слабее соперника в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : ''}${sum.crowd > 0 ? `, противников сразу ${sum.peak}: +${Math.round(sum.crowd)}%` : ''}${sum.ally > 0 ? `, помощники: +${sum.ally}%` : ''}; мастерство +${m}`);
+        (this._paidAt || (this._paidAt = new Map())).set(key ?? '?', nowS);
+        allLog('Мана', `бой с ${id} выигран${killed ? ' (убит)' : ''} [${via || '?'}]: ${Math.round(sum.pct)}% от (${Math.round(oppMax)} − ${MANA.BASE}) = +${n} ячеек; бой ${Math.round(sum.seconds)} с, заклинания (${sum.spells}): ${sum.names.join(', ') || '—'}, столкновений ${sum.clashes} (выиграно ${sum.clashWon}, лучи стояли ${Math.round(sum.clashSec)} с)${sum.elemental ? ', магия стихий' : ''}${sum.underdog > 0 ? `, слабее соперника в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : ''}${sum.crowd > 0 ? `, противников сразу ${sum.peak}: +${Math.round(sum.crowd)}%` : ''}${sum.ally > 0 ? `, помощники: +${sum.ally}%` : ''}; мастерство +${m}`);
         if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
         this.grow(n, killed ? 'duel' : 'duelAlive');
         const why = [`бой ${Math.round(sum.seconds)} с`, `заклинаний: ${sum.spells}`, sum.clashes ? `столкновений: ${sum.clashes}` : null, sum.elemental ? 'магия стихий' : null, sum.underdog > 0 ? `соперник сильнее вас в ${sum.ratio.toFixed(1)} раза: +${Math.round(sum.underdog)}%` : null, sum.crowd > 0 ? `противников сразу: ${sum.peak}, +${Math.round(sum.crowd)}%` : null, sum.ally > 0 ? `помощники: +${sum.ally}%` : null].filter(Boolean).join(', ');
@@ -312,10 +327,10 @@ export class Mana {
     }
 
     /** (old name) A real duel won: the opponent killed in the clash. */
-    duelWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought: true }); }
+    duelWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought: true, via: 'убит после выигранного столкновения' }); }
 
     /** (old name) The opponent killed by me without a clash: only after he fought (`fought`). */
-    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0, fought = true) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought }); }
+    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0, fought = true) { return this.fightWon(id, { killed: true, oppMax, oppMastery, pos, fought, via: 'убит' }); }
 
     /** The beaten one's power flies to my chest: a stream of sparks (the shared pool), a flash and a chime at the end. */
     powerFlow(pos, n, how) {
@@ -338,6 +353,7 @@ export class Mana {
         const ad = this.game.arenaDuels, on = !!(ad?.meFighting?.() && !ad.mode);
         if (on !== !!this._arenaOn) { this._arenaOn = on; this.fight.arena(on); }
         if (on) this.fight.arenaTick(dt);
+        this.fight.tick(dt); // (the seconds of real fighting: the foe near and something going on)
         if ((this._abT = (this._abT || 0) - dt) <= 0) { this._abT = 2; for (const a of this.fight.abandoned()) this.fightAbandoned(a); } // (every 2 s: the fights left unfinished)
         const list = this._flow;
         if (!list || !list.length) return;
@@ -357,7 +373,7 @@ export class Mana {
     }
 
     /** (old name) The fight won and the opponent `id` lives (lifted, stunned, fled, the arena's verdict): the same prize as for a kill. */
-    duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE, pos = null, arena = false) { return this.fightWon(id, { killed: false, oppMax, pos, arena, fought: arena }); }
+    duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE, pos = null, arena = false, via = '') { return this.fightWon(id, { killed: false, oppMax, pos, arena, fought: arena, via: via || (arena ? 'арена' : 'победил живым') }); }
 
     /**
      * A duel won against `id` (`kill`: to the death): «дуэльное мастерство» grows — every duel won,
@@ -425,6 +441,7 @@ export class Mana {
         this.duelsWon.clear();
         this.fight.clear();
         this.partPaid.clear();
+        this._paidAt?.clear();
         if (this._flow) this._flow.length = 0;
         this.found.clear();
         this.mastery = 0;
@@ -465,7 +482,7 @@ const TITLES = {
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', WardDispel: 'Dispel Ward', ProtectionHouse: 'Protection House', StrengthenHouse: 'Strengthen House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', EarthDust: 'Earth Dust', IceShards: 'Shards', FireVortex: 'Fire Vortex', AirVortex: 'Air Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
-    Axis: 'Axis', Kidarius: 'Кидариус', SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Reperio: 'Reperio', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
+    Axis: 'Axis', Revivify: 'Revivify', Kidarius: 'Кидариус', SunRay: 'Sun Ray', Helios: 'Helios', WaterPart: 'Aquadivide', WaterWalk: 'Aquambula', Spiralis: 'Spiralis', Caligo: 'Caligo', Reperio: 'Reperio', Sectura: 'Sectura', IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', FireSerpent: 'Serpent', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
     Fireball:'Fireball', Featherfall:'Featherfall', WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Flourish: 'Flourish', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Cardilon: 'Кардилон', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',

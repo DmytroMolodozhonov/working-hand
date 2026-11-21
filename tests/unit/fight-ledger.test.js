@@ -1,7 +1,7 @@
 // Награда за бой с волшебником — по красоте магии (FightLedger.js; автор 19.11–20.11)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FightLedger, FIGHT, ARENA, spellWeight, fightCells, fightMastery, isElemental, FoeSet, foeSet } from '../../src/game/FightLedger.js';
+import { winBonus, FightLedger, FIGHT, ARENA, spellWeight, fightCells, fightMastery, isElemental, FoeSet, foeSet } from '../../src/game/FightLedger.js';
 import { firstSpellGain, SAME_SPELL, NOT_SPELLS } from '../../src/game/Mana.js';
 
 function ledger(me = 0) {
@@ -32,22 +32,42 @@ test('одно и то же заклинание много раз — ниче�
     assert.ok(many <= FIGHT.VARIETY_MAX);
 });
 
-test('время: идёт, пока заклинания летят; пауза дольше 10 с не считается; минута — полная', () => {
+test('время: идёт, пока заклинания летят и соперник рядом; пауза дольше 15 с не считается; 45 с — полные', () => {
     const { L, at } = ledger();
-    at(0); L.foeCast('w');
-    for (let s = 5; s <= 30; s += 5) { at(s); L.foeCast('w'); }
-    assert.equal(Math.round(L.summary('w').seconds), 30);
-    at(100); L.foeCast('w'); // (a pause of 70 s: nothing added)
-    assert.equal(Math.round(L.summary('w').seconds), 30, 'пауза не считается');
-    for (let s = 105; s <= 160; s += 5) { at(s); L.foeCast('w'); }
+    const run = (from, to, every = 5) => { for (let s = from; s <= to; s++) { at(s); if ((s - from) % every === 0) L.foeCast('w'); L.tick(1); } };
+    run(0, 30);
+    assert.ok(Math.abs(L.summary('w').seconds - 30) <= 1.01, 'ровно столько, сколько шла драка: ' + L.summary('w').seconds);
+    for (let s = 31; s <= 100; s++) { at(s); L.tick(1); } // (70 s of nothing: no time)
+    assert.ok(L.summary('w').seconds < 47, 'пауза не считается: ' + L.summary('w').seconds);
+    run(101, 200);
     assert.ok(L.summary('w').parts.time <= FIGHT.TIME_PCT + 1e-9);
+});
+
+test('убежал далеко (соперник дальше NEAR_M): секунды не идут, хотя мы ещё видим друг друга и что-то происходит; вернулся — снова идут', () => {
+    let near = true, t = 0;
+    const L = new FightLedger(() => t, () => ({ key: 'x', w: 1 }), () => 0, () => near);
+    L.foeCast('w', 100);
+    for (let s = 1; s <= 10; s++) { t = s; L.foeCast('w', 100); L.tick(1); }
+    const close = L.summary('w').seconds;
+    near = false;
+    for (let s = 11; s <= 25; s++) { t = s; L.foeCast('w', 100); L.tick(1); } // (he still hits me from afar — but it is not the fight's time)
+    assert.equal(L.summary('w').seconds, close, 'вдали не считается');
+    near = true;
+    for (let s = 26; s <= 30; s++) { t = s; L.foeCast('w', 100); L.tick(1); }
+    assert.ok(L.summary('w').seconds > close + 4, 'вернулись — идёт');
+    const u = new FightLedger(() => t, () => ({ key: 'x', w: 1 }), () => 0, () => undefined); // (unknown distance: counted as near)
+    t = 0; u.foeCast('w'); for (let s = 1; s <= 5; s++) { t = s; u.foeCast('w'); u.tick(1); }
+    assert.ok(u.summary('w').seconds >= 4.9);
 });
 
 test('столкновение лучей прибавляет, но не больше предела; магия стихий умножает; потолок 45 %', () => {
     const { L, at } = ledger();
     L.foeCast('w');
     for (let i = 0; i < 10; i++) L.clash('w');
-    assert.equal(L.summary('w').parts.clash, FIGHT.CLASH_MAX);
+    assert.equal(L.summary('w').parts.clash, FIGHT.CLASH_FIRST, 'десять проигранных подряд: само столкновение платит один раз');
+    const c = ledger(); c.L.foeCast('x'); c.L.clash('x'); c.L.clash('x', true); c.L.clash('x', true);
+    assert.equal(c.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 8 + 4, 'одно «за участие» + победы по убыванию: 8, потом 4');
+    assert.equal(FIGHT.CLASH_WON, 8); assert.equal(FIGHT.CLASH_FIRST, 5);
     const e = ledger();
     e.L.foeCast('z');
     for (let i = 0; i < 3; i++) { e.at(i * 3); e.L.myCast('IceShards'); e.L.myCast('Waterball'); e.L.myCast('WaterVortex'); }
@@ -58,7 +78,7 @@ test('столкновение лучей прибавляет, но не бол
     const f = ledger();
     f.L.foeCast('big');
     for (let i = 0; i < 12; i++) f.L.clash('big');
-    for (let i = 0; i < 60; i++) { f.at(i); for (const n of ['Hellfire', 'Inferno', 'FireMaxima', 'Tornado', 'LightningStrike', 'Earthquake', 'IceMaxima']) f.L.myCast(n); }
+    for (let i = 0; i < 60; i++) { f.at(i); for (const n of ['Hellfire', 'Inferno', 'FireMaxima', 'Tornado', 'LightningStrike', 'Earthquake', 'IceMaxima']) f.L.myCast(n); f.L.foeCast('big'); f.L.tick(1); }
     const big = f.L.summary('big').pct;
     assert.ok(big > 40 && big <= FIGHT.MAX_PCT, 'почти всё сразу — около потолка, но не выше: ' + big);
 });
@@ -170,7 +190,7 @@ test('общий потолок: 75 %; красота + время + разно�
     for (let i = 0; i < 6; i++) f.L.foeCast('x' + i);
     f.L.myCast('Alive');
     for (let i = 0; i < 12; i++) f.L.clash('big');
-    for (let i = 0; i < 80; i++) { f.at(i); for (const n of ['Hellfire', 'Inferno', 'FireMaxima', 'Tornado', 'LightningStrike', 'Earthquake', 'IceMaxima']) f.L.myCast(n); f.L.foeCast('big'); for (let k = 0; k < 6; k++) f.L.foeCast('x' + k); }
+    for (let i = 0; i < 80; i++) { f.at(i); for (const n of ['Hellfire', 'Inferno', 'FireMaxima', 'Tornado', 'LightningStrike', 'Earthquake', 'IceMaxima']) f.L.myCast(n); f.L.foeCast('big'); for (let k = 0; k < 6; k++) f.L.foeCast('x' + k); f.L.tick(1); }
     const s = f.L.summary('big', false, false, 1e9);
     assert.ok(s.pct <= FIGHT.TOTAL_MAX + 1e-9 && s.pct > 60, 'около общего потолка: ' + s.pct);
 });
@@ -178,7 +198,8 @@ test('общий потолок: 75 %; красота + время + разно�
 test('незаконченный бой: честный счёт волшебника, затихший на 45 с, отдаётся на выплату; зверь/дерево и бой без настоящей драки — тихо выбрасываются', () => {
     const { L, at } = ledger();
     at(0); L.foeCast('w', 100);
-    at(5); L.myCast('Bombardo'); L.foeCast('w', 100);
+    for (let s = 1; s <= 5; s++) { at(s); L.foeCast('w', 100); L.tick(1); }
+    at(5); L.myCast('Bombardo');
     L.foeCast('beast'); // (no mana: nothing to pay)
     at(30); assert.deepEqual(L.abandoned(), [], 'ещё рано');
     at(60);
@@ -186,6 +207,24 @@ test('незаконченный бой: честный счёт волшебн�
     assert.equal(a.length, 1); assert.equal(a[0].id, 'w'); assert.equal(a[0].foeMax, 100);
     assert.equal(L.peek('w'), null); assert.equal(L.peek('beast'), null, 'без маны — выброшен');
     assert.deepEqual(L.abandoned(), [], 'второй раз — нет');
-    const b = ledger(); b.at(0); b.L.foeCast('x', 100); b.at(1); b.L.foeCast('x', 100); b.at(100);
+    const b = ledger(); b.at(0); b.L.foeCast('x', 100); b.at(1); b.L.foeCast('x', 100); b.L.tick(1); b.at(100);
     assert.deepEqual(b.L.abandoned(), [], 'дрались меньше 3 секунд — не бой');
+});
+
+test('время самого столкновения лучей: +4 % за каждые 5 с, до +20 %; сумма с самими столкновениями ограничена общим потолком', () => {
+    const a = ledger(); a.L.foeCast('x'); a.L.clash('x', false, 4.9);
+    assert.equal(a.L.summary('x').parts.clash, FIGHT.CLASH_FIRST, '4,9 с — без прибавки за время');
+    const b = ledger(); b.L.foeCast('x'); b.L.clash('x', false, 12);
+    assert.equal(b.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 2 * FIGHT.CLASH_SEC_PCT, '12 с = две пятёрки');
+    const c = ledger(); c.L.foeCast('x'); c.L.clash('x', true, 600);
+    assert.equal(c.L.summary('x').clashTime, FIGHT.CLASH_SEC_MAX, 'потолок прибавки за время');
+});
+
+test('победы лучами над ТЕМ ЖЕ противником: 8, 4, 2, 1, 1… — вдвое меньше каждый раз, но не меньше 1 (автор 20.11)', () => {
+    assert.deepEqual([1, 2, 3, 4, 5, 8].map(winBonus), [8, 12, 14, 15, 16, 19]);
+    const a = ledger(); a.L.foeCast('x');
+    for (let i = 0; i < 5; i++) a.L.clash('x', true);
+    assert.equal(a.L.summary('x').parts.clash, FIGHT.CLASH_FIRST + 16);
+    const b = ledger(); b.L.foeCast('x'); b.L.foeCast('y'); b.L.clash('x', true); b.L.clash('y', true);
+    assert.equal(b.L.summary('y').parts.clash, FIGHT.CLASH_FIRST + 8, 'у другого противника счёт свой: снова 8');
 });

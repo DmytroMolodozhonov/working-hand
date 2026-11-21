@@ -14,7 +14,7 @@
  * crown is a few spheres that stop flying spells (World.leavesAt), not the player.
  */
 import * as THREE from 'three';
-import { TREE_GEN } from './TreeBuild.js';
+import { LARGE_TREE, TREE_GEN } from './TreeBuild.js';
 import { sharedTreeMaterials, treeGeometry } from './TreeMaterials.js';
 import { CHUNK, chunkKey, treeFitsChunk } from './Terrain.js';
 
@@ -23,6 +23,7 @@ export const TREES = {
     FAR2: 115, // m: beyond this the very light shape (the same tree: its trunk, limbs and a few big sprigs)
     FAR_SHAPES: TREE_GEN.VARIANTS, // far shapes per kind: each tree its own (the far shape is the same tree, lighter — no other tree swapped in as it comes near)
     FAR2_SHAPES: 4, // very far (beyond FAR2, in the haze): 4 shapes a kind are enough — fewer draws
+    LOD_MARGIN: 5, // m: a few steps near a threshold should not switch the shape back and forth
     REGISTER_MS: 1.2, // ms a frame for taking new chunks' trees in
     MOVE: 4, // m the player moves before the lists are remade
     TURN: 0.06, // rad the view turns before the lists are remade
@@ -32,6 +33,13 @@ export const TREES = {
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _y = new THREE.Vector3(0, 1, 0);
 const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere(), _c = new THREE.Color(), _dir = new THREE.Vector3();
+
+export function treeLOD(distance2, previous) {
+    const margin = previous === undefined ? 0 : TREES.LOD_MARGIN;
+    const near = TREES.NEAR + (previous > 0 ? -margin : margin);
+    const far = TREES.FAR2 + (previous > 1 ? -margin : margin);
+    return distance2 <= near * near ? 0 : distance2 <= far * far ? 1 : 2;
+}
 
 export class WorldTrees {
     /** @param {import('./World.js').World} world */
@@ -63,12 +71,14 @@ export class WorldTrees {
     // ------------------------------------------------------------------ the trees in the world
     /** A tree record (the World.trees format) from a chunk's entry or a start-area tree. */
     _make(e) {
-        const g = treeGeometry(e.kind, e.v, false).info;
+        const shape = e.species ?? e.kind;
+        const g = treeGeometry(shape, e.v, false, !!e.deadfall).info;
         const s = e.s || 1;
         const t = {
             mesh: true, index: e.id, id: e.id, x: e.x, y: e.y, z: e.z, kind: e.kind, v: e.v, scale: s, turn: e.turn || 0, tint: e.tint || 1,
-            alive: true, boxId: null, crown: null, h: g.H * s, c0: Math.max(3.5, g.crown.lowest * s), r: Math.max(0.28, g.trunk.r * s),
-            spheres: g.spheres, fallen: null, matrix: new THREE.Matrix4(), fixed: !!e.fixed,
+            shape, deadfall: !!e.deadfall,
+            alive: true, boxId: null, crown: null, h: g.H * s, c0: e.deadfall ? g.trunk.pts.at(-1)[1] * s : Math.max(3.5, g.crown.lowest * s), r: Math.max(0.28, g.trunk.r * s),
+            spheres: e.deadfall ? [] : g.spheres, fallen: e.deadfall || null, matrix: new THREE.Matrix4(), fixed: !!e.fixed,
         };
         return t;
     }
@@ -102,14 +112,14 @@ export class WorldTrees {
         if (t.boxId != null) { this.collision.removeBox(t.boxId); t.boxId = null; }
         if (dir) {
             const dx = dir === 'x' ? 1 : dir === '-x' ? -1 : 0, dz = dir === 'z' ? 1 : dir === '-z' ? -1 : 0;
-            const R = _m.makeRotationAxis(_dir.set(dz, 0, -dx), Math.PI / 2);
+            const R = _m.makeRotationAxis(_dir.set(dz, 0, -dx), Math.PI / 2 + (t.deadfall ? .055 : 0));
             const fell = new THREE.Matrix4().makeTranslation(t.x, t.y + t.r, t.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-t.x, -t.y, -t.z));
             t.matrix.premultiply(fell);
             const along = (a0, a1, w) => (dx ? { minX: t.x + Math.min(a0 * dx, a1 * dx), maxX: t.x + Math.max(a0 * dx, a1 * dx), minZ: t.z - w, maxZ: t.z + w }
                 : { minX: t.x - w, maxX: t.x + w, minZ: t.z + Math.min(a0 * dz, a1 * dz), maxZ: t.z + Math.max(a0 * dz, a1 * dz) });
             if (t.alive) t.boxId = this.collision.addBox({ ...along(-0.5, t.c0, t.r), minY: t.y, maxY: t.y + t.r * 2, kind: 'tree', noSupport: true });
             const cw = (t.h - t.c0) * 0.5;
-            t.crown = t.burnt ? null : { ...along(t.c0, t.h, cw), minY: t.y, maxY: t.y + cw * 2 };
+            t.crown = t.burnt || t.deadfall ? null : { ...along(t.c0, t.h, cw), minY: t.y, maxY: t.y + cw * 2 };
             return;
         }
         // the trunk: solid up to where the branches begin (walk under the crown); a box round its foot
@@ -209,10 +219,10 @@ export class WorldTrees {
      * for a copy of it (carried by «Левиоса Максима», come alive — LivingTrees).
      */
     parts(t, matrix = t.matrix) {
-        const g = treeGeometry(t.kind, t.v, false);
+        const g = treeGeometry(t.shape ?? t.kind, t.v, false, t.deadfall);
         const tint = _c.setScalar(t.tint).clone();
-        const out = [{ geometry: g.wood, material: this.bark, matrix: matrix.clone(), color: t.burnt ? new THREE.Color(TREES.CHAR) : new THREE.Color(1, 1, 1), depth: this.depth }];
-        if (!t.burnt) out.push({ geometry: g.leaf, material: this.leaves, matrix: matrix.clone(), color: tint, depth: this.depth });
+        const out = [{ geometry: g.wood, material: this.bark, matrix: matrix.clone(), color: t.burnt ? new THREE.Color(TREES.CHAR) : t.deadfall ? new THREE.Color(.78, .85, .92) : new THREE.Color(1, 1, 1), depth: this.depth }];
+        if (!t.burnt && !t.deadfall) out.push({ geometry: g.leaf, material: this.leaves, matrix: matrix.clone(), color: tint, depth: this.depth });
         return out;
     }
 
@@ -295,15 +305,15 @@ export class WorldTrees {
      * One shape's instanced mesh (made when first needed; grown ×2 when full): its bark and leaves in one shape and one
      * material — one draw (and one for the shadow, near). `bare`: the bark alone — the burnt trees of that shape.
      */
-    _shape(kind, v, lod, bare, need) {
+    _shape(kind, v, lod, state, need) {
         const far = lod > 0;
-        const key = this._key(kind, v, lod, bare);
+        const key = this._key(kind, v, lod, state);
         let e = this.meshes.get(key);
         if (e && e.cap >= need) return e;
         const cap = Math.max(8, e ? e.cap * 2 : 8, need);
         if (e) { this.group.remove(e.mesh); e.mesh.dispose(); }
-        const g = treeGeometry(kind, v, lod);
-        const mesh = new THREE.InstancedMesh(bare ? g.wood : g.full, this.leaves, cap);
+        const g = treeGeometry(kind, v, lod, state === 2);
+        const mesh = new THREE.InstancedMesh(state ? g.wood : g.full, this.leaves, cap);
         mesh.frustumCulled = false; // (culled here, tree by tree)
         mesh.castShadow = !far;
         mesh.receiveShadow = !far; // (the sun's shadows on it near: other trees', its own branches' — light through the crown in patches)
@@ -320,12 +330,14 @@ export class WorldTrees {
         return e;
     }
 
-    _key(kind, v, lod, bare) { return ((kind * 16 + v) * 3 + lod) * 2 + (bare ? 1 : 0); }
+    _key(kind, v, lod, state) { return ((kind * 16 + v) * 3 + lod) * 3 + state; }
 
     _draw(camera) {
         _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
         _fr.setFromProjectionMatrix(_pm);
-        const far = (this.scene.fog?.far || 300) + 20, cx = camera.position.x, cz = camera.position.z;
+        const fog = this.scene.fog;
+        const far = (fog?.far || 300) + 20, cx = camera.position.x, cz = camera.position.z;
+        const haze = fog?.isFog ? fog.near + (fog.far - fog.near) * .82 : far;
         // which trees, in which shape
         const lists = this._lists || (this._lists = new Map());
         for (const l of lists.values()) l.length = 0;
@@ -334,11 +346,13 @@ export class WorldTrees {
             if (!t.mesh || !t.alive) continue;
             const dx = t.x - cx, dz = t.z - cz, d2 = dx * dx + dz * dz;
             if (d2 > far * far) continue;
-            _sph.center.set(t.x, t.y + t.h * 0.5, t.z);
-            _sph.radius = t.h * 0.75 + 4;
+            if (t.fallen) _sph.center.copy(_p.set(0, t.h * .5 / t.scale, 0).applyMatrix4(t.matrix));
+            else _sph.center.set(t.x, t.y + t.h * .5, t.z);
+            _sph.radius = t.h * .75 + 4;
             if (!_fr.intersectsSphere(_sph)) continue;
-            const lod = d2 <= TREES.NEAR * TREES.NEAR ? 0 : d2 <= TREES.FAR2 * TREES.FAR2 ? 1 : 2;
-            const key = this._key(t.kind, lod === 2 ? t.v % TREES.FAR2_SHAPES : t.v, lod, !!t.burnt);
+            const lod = t.lod = treeLOD(d2, t.lod);
+            const variant = lod === 2 && d2 > haze * haze ? t.v % TREES.FAR2_SHAPES : t.v;
+            const key = this._key(t.shape ?? t.kind, variant, lod, t.deadfall ? 2 : t.burnt ? 1 : 0);
             let l = lists.get(key);
             if (!l) lists.set(key, (l = []));
             l.push(t);
@@ -350,13 +364,13 @@ export class WorldTrees {
         for (const [key, e] of this.meshes) if (!(lists.get(key)?.length)) e.mesh.count = 0;
         for (const [key, l] of lists) {
             if (!l.length) continue;
-            const kv = Math.floor(key / 6), lod = (key >> 1) % 3; // (the key: kind, shape, how far, bare — _key)
-            const e = this._shape(Math.floor(kv / 16), kv % 16, lod, (key & 1) === 1, l.length);
+            const kv = Math.floor(key / 9), lod = Math.floor(key / 3) % 3;
+            const e = this._shape(Math.floor(kv / 16), kv % 16, lod, key % 3, l.length);
             const m = e.mesh;
             for (let i = 0; i < l.length; i++) {
                 const t = l[i];
                 m.setMatrixAt(i, t.matrix);
-                m.setColorAt(i, t.burnt ? _c.setHex(TREES.CHAR) : _c.setScalar(t.tint));
+                m.setColorAt(i, t.burnt ? _c.setHex(TREES.CHAR) : t.deadfall ? _c.setRGB(.78, .85, .92) : _c.setScalar(t.tint));
             }
             m.count = l.length;
             m.instanceMatrix.needsUpdate = true;
@@ -403,6 +417,7 @@ export class WorldTrees {
     warmSteps() {
         const out = [];
         for (let k = 0; k < TREE_GEN.KINDS; k++) for (let v = 0; v < TREE_GEN.VARIANTS; v++) out.push(() => { treeGeometry(k, v, 0); treeGeometry(k, v, 1); if (v < TREES.FAR2_SHAPES) treeGeometry(k, v, 2); });
+        for (const k of [LARGE_TREE.OAK, LARGE_TREE.REDWOOD, LARGE_TREE.PLANE]) for (let v = 0; v < LARGE_TREE.VARIANTS; v++) out.push(() => { treeGeometry(k, v, 0); treeGeometry(k, v, 1); treeGeometry(k, v, 2); });
         return out;
     }
 

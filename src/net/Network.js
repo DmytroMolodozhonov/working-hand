@@ -43,7 +43,7 @@ export const PIECE_BYTES = 15000;
 const PIECE_CHARS = 4800;
 export const PIECES_MAX = 4000; // (pieces of one message at most: ~60 MB — anything more is no message of the game)
 /** Messages only the host's network itself sends: a guest's copy is never passed on or believed. */
-const HOST_ONLY = new Set(['players', 'host-left', 'full', 'version', 'info', 'welcome']);
+const HOST_ONLY = new Set(['rvdone', 'players', 'host-left', 'full', 'version', 'info', 'welcome', 'flood', 'floodin']);
 
 /** UTF-8 bytes of a string (without making the bytes). */
 export function utf8Bytes(s) {

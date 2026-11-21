@@ -82,6 +82,9 @@ uniform float uNight;
 uniform float uClouds;
 uniform float uOvercast;
 uniform float uUltra;
+uniform vec3 uWinDir;   // «To the Sun»: the window in the clouds — its centre (where the beam meets the sky) …
+uniform float uWin;     // … how far it is open (0: none … 1: wide) …
+uniform float uWinR;    // … and how wide the wide is (radians)
 varying vec3 vDir;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -142,7 +145,31 @@ void main() {
     float h = d.y;
     vec3 sd = normalize(uSunDir);
     float se = sd.y; // the sun's height (< 0: under the horizon)
-    float clear = 1.0 - uOvercast;
+    // ——— «To the Sun»: the heavens open. A ragged window tears open in the clouds where the beam met them: the cloud bank rolls back
+    // round it in a spiral, a golden rim burns along its edge, and through it the clear sky and a sun of its own shine down in rays.
+    float ov = uOvercast, win = 0.0, winRim = 0.0, winAng = 1.0, winPhi = 0.0, winSpin = 0.0;
+    vec3 dCl = d; // (the direction the clouds are read from: turned about the window's axis — the spiral)
+    if (uWin > 0.001) {
+        vec3 wa = normalize(uWinDir);
+        vec3 wt = normalize(cross(abs(wa.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0), wa));
+        vec3 wb = cross(wa, wt);
+        float cw = dot(d, wa);
+        winAng = acos(clamp(cw, -1.0, 1.0));
+        float R = max(uWinR * uWin, 1e-3);
+        float phi = atan(dot(d, wb), dot(d, wt));
+        winSpin = (1.0 - smoothstep(0.0, R * 1.6, winAng)) * uWin * 1.3 - uTime * 0.05 * uWin; // (the nearer the centre, the more it is turned)
+        winPhi = phi + winSpin;
+        vec2 pc = vec2(cos(winPhi), sin(winPhi)); // (the edge's noise is read round a circle: no seam where the angle wraps)
+        float rag = (noise(pc * 1.7 + 3.0 + uTime * 0.12) - 0.5) * 0.55 + (noise(pc * 3.6 + vec2(winAng * 5.0 - uTime * 0.4, 1.0)) - 0.5) * 0.22;
+        float aR = winAng + rag * R * 0.35;
+        win = (1.0 - smoothstep(R * 0.78, R, aR)) * smoothstep(0.0, 0.06, uWin);
+        winRim = smoothstep(R * 0.8, R * 0.96, aR) * (1.0 - smoothstep(R * 0.96, R * 1.06, aR)) * smoothstep(0.0, 0.1, uWin);
+        // the clouds are read from a direction turned about the axis by the same spin: they stream round the opening
+        float ca = cos(winSpin * 0.55), sa = sin(winSpin * 0.55);
+        dCl = d * ca + cross(wa, d) * sa + wa * dot(wa, d) * (1.0 - ca);
+        ov = uOvercast * (1.0 - win);
+    }
+    float clear = 1.0 - ov;
     // the painted gradient (it carries the night, the rain's grey, the world's own colours) …
     vec3 col = mix(uHorizon, uZenith, pow(max(h, 0.0), 0.55));
     // … under the real air by day: the scattered sunlight (tone-mapped; at the horizon and below it the air of the horizon)
@@ -152,7 +179,7 @@ void main() {
         air = pow(1.0 - exp(-air * 1.3), vec3(1.0 / 2.2));
         float airL = dot(air, vec3(0.3333));
         air = clamp(airL + (air - airL) * 1.5, 0.0, 1.0) * vec3(0.97, 0.99, 1.07); // (the eye sees the sky's blue deeper than the plain numbers)
-        float dayW = smoothstep(-0.2, 0.04, se) * (1.0 - uOvercast * 0.88);
+        float dayW = smoothstep(-0.2, 0.04, se) * (1.0 - ov * 0.88);
         col = mix(col, air, dayW);
     }
     col = mix(col, uGround, down(-0.25, 0.0, h));
@@ -189,23 +216,23 @@ void main() {
     vec3 sunCol = mix(vec3(1.0, 0.93, 0.78), mix(vec3(1.0, 0.64, 0.3), vec3(1.0, 0.36, 0.16), low), down(0.0, 0.35, se));
     col += sunCol * pow(sunAmt, 8.0) * mix(0.35, 0.8, down(0.0, 0.4, se)) * smoothstep(-0.2, 0.0, se) * clear;
     col += sunCol * pow(sunAmt, 64.0) * 0.6 * sunUp * clear;
-    col = mix(col, sunCol * mix(1.6, 1.25, low), smoothstep(0.9982, 0.999, sunAmt) * sunUp * mix(1.0, 0.25, uOvercast));
+    col = mix(col, sunCol * mix(1.6, 1.25, low), smoothstep(0.9982, 0.999, sunAmt) * sunUp * mix(1.0, 0.25, ov));
     // Moon at night
     vec3 md = normalize(uMoonDir);
     float moonAmt = max(dot(d, md), 0.0);
     vec3 moonCol = vec3(0.75, 0.82, 1.0);
     col += moonCol * (pow(moonAmt, 8.0) * 0.08 + pow(moonAmt, 64.0) * 0.15) * uNight * clear;
-    col = mix(col, moonCol * 0.9, smoothstep(0.9985, 0.9992, moonAmt) * uNight * smoothstep(-0.01, 0.01, h) * mix(1.0, 0.3, uOvercast));
+    col = mix(col, moonCol * 0.9, smoothstep(0.9985, 0.9992, moonAmt) * uNight * smoothstep(-0.01, 0.01, h) * mix(1.0, 0.3, ov));
     // Clouds: projected on a high flat layer, drifting (more and greyer under rain clouds)
     if (uClouds > 0.5 && h > 0.01) {
         // «Ультра»: soft, thick clouds lit from the sun's side (a look a little towards the sun: where the
         // cloud thins that way its edge glows — a silver lining), darker and fuller under rain
-        vec2 uv = d.xz / (h + 0.1) * 1.3 + vec2(uTime * 0.01, uTime * 0.0035);
+        vec2 uv = dCl.xz / (max(dCl.y, 0.02) + 0.1) * 1.3 + vec2(uTime * 0.01, uTime * 0.0035);
         vec2 warp = vec2(fbm(uv * 0.6 + 4.0), fbm(uv * 0.6 - 2.0)) - 0.5;
         vec2 cuv = uv + warp * 0.9;
         float c0 = fbm6(cuv);
-        float cov = mix(0.5, 0.3, uOvercast);
-        float c = smoothstep(cov, cov + mix(0.32, 0.26, uOvercast), c0) * smoothstep(0.01, 0.2, h);
+        float cov = mix(0.5, 0.3, ov);
+        float c = smoothstep(cov, cov + mix(0.32, 0.26, ov), c0) * smoothstep(0.01, 0.2, h);
         if (c > 0.002) {
             float cs = fbm6(cuv + sd.xz * 0.09);
             float lit = clamp(0.72 + (c0 - cs) * 3.2, 0.38, 1.25);
@@ -215,25 +242,40 @@ void main() {
             vec3 shadowCol = mix(vec3(0.62, 0.68, 0.8), vec3(0.42, 0.36, 0.5), glow);
             vec3 cloudCol = mix(shadowCol, cloudLit, smoothstep(0.38, 1.1, lit)) * (0.85 + 0.25 * lit);
             cloudCol = mix(cloudCol, vec3(0.16, 0.19, 0.27) + vec3(0.06, 0.07, 0.1) * lit, uNight * 0.9 * (1.0 - glow * 0.6));
-            cloudCol = mix(cloudCol, vec3(0.5, 0.53, 0.58) * (0.8 + 0.25 * lit) * (1.0 - 0.7 * uNight), uOvercast * 0.85);
+            cloudCol = mix(cloudCol, vec3(0.5, 0.53, 0.58) * (0.8 + 0.25 * lit) * (1.0 - 0.7 * uNight), ov * 0.85);
             float edge = c * (1.0 - c) * 4.0;
             cloudCol += sunCol * edge * pow(sunAmt, 6.0) * 1.4 * clear * smoothstep(-0.1, 0.05, se);
-            col = mix(col, cloudCol, c * mix(mix(0.92, 0.55, uNight), 0.97, uOvercast));
+            col = mix(col, cloudCol, c * mix(mix(0.92, 0.55, uNight), 0.97, ov));
         }
     } else if (false) {
         vec2 uv = d.xz / (h + 0.08) * 1.6 + vec2(uTime * 0.012, uTime * 0.004);
         float c = fbm(uv);
-        c = smoothstep(mix(0.48, 0.3, uOvercast), mix(0.78, 0.62, uOvercast), c) * smoothstep(0.01, 0.22, h);
+        c = smoothstep(mix(0.48, 0.3, ov), mix(0.78, 0.62, ov), c) * smoothstep(0.01, 0.22, h);
         vec3 cloudLit = mix(vec3(1.0), vec3(1.0, 0.95, 0.88), pow(sunAmt, 4.0));
         // at sunset the clouds are lit from below: orange-red towards the sun, pink away from it
         vec3 cloudSun = mix(pink * 0.95, mix(orange * 1.05, red * 1.1, low), sideSun) * mix(1.0, 0.55, low);
         cloudLit = mix(cloudLit, cloudSun, glow * 0.9);
         vec3 cloudCol = mix(cloudLit, vec3(0.25, 0.28, 0.35), uNight * 0.85 * (1.0 - glow * 0.6));
-        cloudCol = mix(cloudCol, vec3(0.55, 0.58, 0.63) * (1.0 - 0.65 * uNight), uOvercast * 0.8);
+        cloudCol = mix(cloudCol, vec3(0.55, 0.58, 0.63) * (1.0 - 0.65 * uNight), ov * 0.8);
         if (c > 0.002) {
             float shade = 0.82 + 0.18 * fbm(uv * 1.7 + 3.0);
-            col = mix(col, cloudCol * shade, c * mix(mix(0.85, 0.35, uNight), 0.95, uOvercast));
+            col = mix(col, cloudCol * shade, c * mix(mix(0.85, 0.35, uNight), 0.95, ov));
         }
+    }
+    // ——— the window's light (over the clouds): the rim of gold, the sun of the heavens, rays pouring out of it
+    if (uWin > 0.001) {
+        float R = max(uWinR * uWin, 1e-3);
+        vec3 holy = vec3(1.0, 0.8, 0.42), holyW = vec3(1.0, 0.96, 0.82);
+        float rayA = pow(0.5 + 0.5 * sin(winPhi * 17.0 + uTime * 0.45 + noise(vec2(cos(winPhi), sin(winPhi)) * 1.5 + uTime * 0.1) * 4.0), 3.0);
+        float rayB = pow(0.5 + 0.5 * sin(winPhi * 31.0 - uTime * 0.6 + 1.7), 5.0);
+        float inR = exp(-winAng / (R * 0.5));
+        col += holy * win * (0.04 + 0.16 * inR) * uWin;                          // the warm light filling the opening
+        col += holy * (rayA * 0.5 + rayB * 0.3) * inR * win * 0.4 * uWin;       // rays of heaven: from the centre to the rim
+        col += mix(holy, holyW, 0.3) * winRim * (0.5 + 0.2 * sin(uTime * 2.3 + winPhi * 5.0)); // the burning rim of the clouds
+        float sunR = 0.05 + 0.02 * uWin;
+        float sunA = 1.0 - smoothstep(sunR * 0.55, sunR, winAng);
+        col += holyW * sunA * 1.6 * uWin;                                        // the sun of the heavens
+        col += holy * exp(-winAng * winAng / (sunR * sunR * 14.0)) * 0.5 * uWin; // its corona
     }
     if (uUltra > 0.5) {
         // the sun burns brighter than white (its glow blooms on the picture); the night's deep blue, not black
@@ -242,7 +284,7 @@ void main() {
         col += vec3(0.008, 0.016, 0.045) * uNight * (1.0 - 0.6 * h);
         // the moon: a halo, a brighter disc with its grey seas
         col += moonCol * pow(moonAmt, 48.0) * 0.18 * uNight * clear;
-        float disc = smoothstep(0.9983, 0.9991, moonAmt) * uNight * smoothstep(-0.01, 0.01, h) * mix(1.0, 0.3, uOvercast);
+        float disc = smoothstep(0.9983, 0.9991, moonAmt) * uNight * smoothstep(-0.01, 0.01, h) * mix(1.0, 0.3, ov);
         vec3 mt = d - md * dot(d, md);
         float seas = noise(mt.xy * 900.0 + 3.0) * 0.6 + noise(mt.yz * 1700.0) * 0.4;
         col = mix(col, moonCol * (1.35 - 0.45 * smoothstep(0.45, 0.7, seas)), disc);
@@ -284,6 +326,9 @@ export class Sky {
             uOvercast: { value: 0 }, // (rain clouds: the sunset and the stars covered)
             uTime: { value: 0 },
             uNight: { value: 0 },
+            uWinDir: { value: new THREE.Vector3(0, 1, 0) }, // «To the Sun»: the window in the clouds (SunBeam.js)
+            uWin: { value: 0 },
+            uWinR: { value: 1.15 },
             uUltra: ULTRA.on, // («Ультра качество»: the richer clouds, sun, moon and stars)
             uClouds: { value: 1 }, // off at the lowest graphics levels (the clouds cost the most per pixel)
         };
@@ -312,6 +357,14 @@ export class Sky {
     /** Rain / storm clouds (0..1). */
     setOvercast(k) {
         this.uniforms.uOvercast.value = Math.max(0, Math.min(1, k));
+    }
+
+    /** «To the Sun»: the window in the clouds — `dir`: where it is (a direction from the eye), `open` 0…1, `radius` of the wide open, radians. open 0 = none. */
+    setWindow(dir, open, radius = 1.15) {
+        const u = this.uniforms;
+        if (dir) u.uWinDir.value.copy(dir).normalize();
+        u.uWin.value = Math.max(0, Math.min(1, open));
+        u.uWinR.value = radius;
     }
 
     setNight(night) {

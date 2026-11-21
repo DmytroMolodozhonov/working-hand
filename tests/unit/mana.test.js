@@ -179,17 +179,17 @@ test('mana: a duel charge that hits counts (the first time); a clash won + the o
     assert.equal(g.mana.max, 43, 'a kill without a clash with him: 5% of nothing, still +1');
     assert.equal(duel.opponentDied('enemy', 40), true);
     assert.equal(g.mana.log.at(-1).why, 'duel');
-    assert.equal(g.mana.max, 44, 'a real duel won against a maximum of 40: 5% + the clash 2% = 7% of 10 → +1');
+    assert.equal(g.mana.max, 45, 'a real duel won against a maximum of 40: 5% + a clash won 12% = 17% of 10 → +2');
     assert.equal(duel.opponentDied('enemy'), false, 'only once');
-    assert.equal(g.mana.max, 44, 'and nothing on top');
+    assert.equal(g.mana.max, 45, 'and nothing on top');
     duel._won = { id: 'wiz7', at: performance.now() - 9000 }; // (a clash won 9 s ago, he still lives — but there is no account of a fight with him: not an honest one)
     duel._wonAlive();
-    assert.equal(g.mana.max, 44);
+    assert.equal(g.mana.max, 45);
     assert.equal(duel._won, null);
     g.mana.fight.clash('wiz8'); duel._won = { id: 'wiz8', at: performance.now() - 9000, max: 90 }; // (a clash with him: an honest fight)
     duel._wonAlive();
     assert.equal(g.mana.log.at(-1).why, 'duelAlive');
-    assert.ok(g.mana.max > 44 + 4, 'a clash (7%) + the underdog bonus (90 against my ~50) of (90 − 30): more than 4 cells: ' + g.mana.max);
+    assert.ok(g.mana.max > 45 + 4, 'a clash (7%) + the underdog bonus (90 against my ~50) of (90 − 30): more than 4 cells: ' + g.mana.max);
 });
 
 test('mana: the giant spider gives +20 to whoever killed it — the first one only', () => {
@@ -284,7 +284,7 @@ test('незаконченный бой (убежал, NPC потерял): по
     const { g } = fakeGame();
     let t = 0; g.mana.fight.now = () => t;
     t = 0; g.mana.fight.foeCast('w1', 130);
-    t = 6; g.mana.fight.foeCast('w1', 130);
+    for (let s = 1; s <= 6; s++) { t = s; g.mana.fight.foeCast('w1', 130); g.mana.fight.tick(1); }
     t = 30; for (const a of g.mana.fight.abandoned()) g.mana.fightAbandoned(a);
     assert.equal(g.mana.max, 30, 'ещё рано');
     t = 80;

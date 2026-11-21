@@ -147,8 +147,6 @@ export class Builder {
         amount = Math.min(amount, room);
         const edits = [];
         for (const c of cells) { data.set(c.x, c.L, c.z, BLOCK.AIR); edits.push([c.x, c.L, c.z, BLOCK.AIR]); }
-        // (a hole taken beside a river or a lake fills with its water — sent too: the same everywhere)
-        for (const [x, L, z] of data._flood?.(cells.map((c) => ({ x: c.x, y: c.L - 1, z: c.z }))) || []) edits.push([x, L, z, BLOCK.WATER]);
         this._sendEdits(edits, true); // (what the taken blocks held may come down)
         // pulling a castle / a house apart: whoever sees it calls the guard
         if (isCastleBlock(cell.type)) g.castleLife?.damaged({ x: cell.x, y: cell.L - 1, z: cell.z }, g.localId, cells.length, false);
@@ -400,6 +398,7 @@ export class Builder {
         for (const e of list) this.game.blockEdits.push(e);
         if (this.game.blockEdits.length > 30000) this.game.blockEdits.splice(0, this.game.blockEdits.length - 30000);
         if (this.game.sync) this.game.sync.blocks?.(list);
+        if (this.game.authority !== false) d?._flood?.(list.filter(e => e[3] === BLOCK.AIR));
     }
 
     /**
@@ -463,6 +462,7 @@ export class Builder {
             if ((e[3] | 0) === BLOCK.ICE) this.ice.push({ x: e[0] | 0, L: e[1] | 0, z: e[2] | 0, until: performance.now() + ICE_LIFE * 1000 });
         }
         data.enchantFree = prev;
+        if (this.game.authority !== false) data._flood?.(list.filter(e => Array.isArray(e) && e[3] === BLOCK.AIR));
         // (pushed, not concat: a copy of the whole list at every message of 400 edits — a guest watching «Total Destruction» copied
         // it hundreds of times; and kept as long as the host's own list, not for ever)
         const all = this.game.blockEdits || (this.game.blockEdits = []);

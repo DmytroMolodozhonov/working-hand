@@ -92,10 +92,12 @@ if (fwFall > 0.5) {
     float mirror = fwRiver > 0.5 ? 0.6 : 0.92; // (a still lake mirrors the most)
     // (a lake: deep dark green-teal, a little lighter where the swell lifts and a little colour of the block it lies over; the sky still reflects at grazing angles)
     vec3 lakeBody = vec3(0.028, 0.085, 0.095) + gl_FragColor.rgb * 0.07 + vec3(0.012, 0.03, 0.024) * (lkA.b * 0.8 + lkB.b * 0.5);
-    vec3 body = fwRiver > 0.5 ? gl_FragColor.rgb : lakeBody;
-    gl_FragColor.rgb = mix(body * mix(1.0, 0.85, ufr), ultraSky(uR), clamp(ufr * (fwRiver > 0.5 ? 0.9 : 1.15), 0.0, mirror));
+    float daylight = clamp(vFreshSky, 0.0, 1.0);
+    vec3 body = fwRiver > 0.5 ? gl_FragColor.rgb : lakeBody * mix(vec3(.51, .75, .71), vec3(1.0), daylight);
+    vec3 reflection = mix(gl_FragColor.rgb * .7 + vec3(.012, .033, .043), ultraSky(uR), daylight);
+    gl_FragColor.rgb = mix(body * mix(1.0, 0.85, ufr), reflection, clamp(ufr * (fwRiver > 0.5 ? 0.9 : 1.15), 0.0, mirror));
     float usg = max(dot(uR, normalize(uUltraSunDir)), 0.0);
-    gl_FragColor.rgb += uUltraSunCol * (pow(usg, fwRiver > 0.5 ? 300.0 : 1400.0) * (fwRiver > 0.5 ? 3.0 : 8.0) + pow(usg, 80.0) * 0.25) * uUltraSunVis;
+    gl_FragColor.rgb += uUltraSunCol * (pow(usg, fwRiver > 0.5 ? 300.0 : 1400.0) * (fwRiver > 0.5 ? 3.0 : 8.0) + pow(usg, 80.0) * 0.25) * uUltraSunVis * daylight;
     vec3 foamC = vec3(0.86, 0.92, 0.9) * (0.45 + 0.55 * max(0.0, uUltraSunCol.r * uUltraSunVis + 0.35));
     gl_FragColor.rgb = mix(gl_FragColor.rgb, foamC, clamp(foam, 0.0, 0.8));
     gl_FragColor.a = clamp(mix(gl_FragColor.a, 1.0, ufr * 0.6 + foam * 0.6), 0.0, 1.0);
@@ -111,14 +113,14 @@ export function applyUltraWater(material) {
         addUltraUniforms(shader);
         shader.uniforms.uFreshRipple = { value: ripples() };
         shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nvarying vec3 vUltraWorld;')
-            .replace('#include <project_vertex>', '#include <project_vertex>\nvUltraWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+            .replace('#include <common>', '#include <common>\nvarying vec3 vUltraWorld;\nattribute float voxSky;\nvarying float vFreshSky;')
+            .replace('#include <project_vertex>', '#include <project_vertex>\nvUltraWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvFreshSky = voxSky;');
         shader.fragmentShader = shader.fragmentShader
-            .replace('#include <common>', '#include <common>\nuniform sampler2D uFreshRipple;\nvarying vec3 vUltraWorld;\nfloat fwRiver = 0.0;\nfloat fwFall = 0.0;\nfloat fwPhase = 0.0;\nvec2 fwFlow = vec2(0.0, 1.0);\n' + ULTRA_PARS)
+            .replace('#include <common>', '#include <common>\nuniform sampler2D uFreshRipple;\nvarying vec3 vUltraWorld;\nvarying float vFreshSky;\nfloat fwRiver = 0.0;\nfloat fwFall = 0.0;\nfloat fwPhase = 0.0;\nvec2 fwFlow = vec2(0.0, 1.0);\n' + ULTRA_PARS)
             .replace('#include <color_fragment>', COLOR_FRAG)
             .replace('#include <fog_fragment>', WATER_FRAG);
     };
     const key = material.customProgramCacheKey?.bind(material);
-    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw5';
+    material.customProgramCacheKey = () => (key ? key() : material.type) + '-freshw6';
     return material;
 }

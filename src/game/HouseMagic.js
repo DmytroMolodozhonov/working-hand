@@ -150,6 +150,27 @@ export class HouseMagic {
     }
 
     /** Its ground plan's rectangle (kept: asked for every column of a chunk made again — the plan's own key was too slow). */
+    /** Diffuse light in a player-built room, with a stronger contribution from nearby unobstructed windows. */
+    roomDaylight(p) {
+        for (const rec of this.list.values()) {
+            if (p.y < rec.G || p.y > rec.G + 25) continue;
+            const rc = this._rectOf(rec);
+            if (p.x <= rc.x0 + .45 || p.x >= rc.x1 - .45 || p.z <= rc.z0 + .45 || p.z >= rc.z1 - .45) continue;
+            const plan = this.plan(rec);
+            if (p.y > plan.top - .4) continue;
+            let fill = .28;
+            for (const w of plan.windows) {
+                const distance = Math.hypot(p.x - w.x, (p.y - w.y) * 1.5, p.z - w.z);
+                if (distance > 12 || Math.abs(p.y - w.y) > 3.0) continue;
+                const x = w.x + Math.sign(rec.x - w.x) * .72, z = w.z + Math.sign(rec.z - w.z) * .72;
+                if (!this.game.collision.lineOfSight(p.x, p.y, p.z, x, w.y, z, .45)) continue;
+                fill = Math.max(fill, 1 - distance / 16);
+            }
+            return fill;
+        }
+        return 0;
+    }
+
     _rectOf(rec) {
         const m = this._rects || (this._rects = new WeakMap());
         let e = m.get(rec);

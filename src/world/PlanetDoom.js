@@ -31,7 +31,9 @@ export const DOOM = {
  */
 export function planetMass(def) {
     if (!def) return 0;
-    const r = (def.radius || 200) / SPACE.EARTH_R;
+    // (the price was made for the squeezed sizes the planets had before 20.11 (radius ∝ real^0.6): the base bodies keep that scale here, so
+    //  Jupiter still costs ~6000 and not 15000; the planets made by players have always been measured in the real metres)
+    const r0 = (def.radius || 200) / SPACE.EARTH_R, r = def.created ? r0 : Math.pow(r0, 0.6);
     return Math.max(0, def.gravity ?? 0.2) * r * r;
 }
 

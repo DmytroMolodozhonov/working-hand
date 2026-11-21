@@ -190,7 +190,6 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null, ri
             rubble.push([x + dx, z + dz, t]);
         }
     }
-    data._flood?.(dips); // (a dip next to a lake or the sea fills with its water)
     // the wave's crest: the ground is thrown up one block (never on water, never under a sphere)
     const heaved = [];
     for (const [x, z] of ridge) {
@@ -214,6 +213,7 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null, ri
     // a wave's bands — only once its last band came down, round the whole circle)
     const last = !ring || !(ring.full > 0) || radius >= ring.full - 1e-6;
     const falls = collapseAfter(data, cx, cy, cz, radius * (1 + RUIN.EDGE), ring?.inner > 0 ? ring.inner * (1 - RUIN.EDGE) : 0, last ? removed : false, hold); // (a band: only the new band)
+    data._flood?.([...dips, ...removed], hold);
     return { removed, rubble: out, falls, sunk: dips.length, heaved };
 }
 

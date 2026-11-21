@@ -3,17 +3,18 @@
  * быстро использовал и всё, не вступил ни в дуэль, ничего — мало получит»). Pure numbers; Mana.fightWon pays by them.
  *
  *  • A separate account for EACH wizard (you may fight several at once): it opens when the fight begins — he casts at me, a beam clash, my spell hits him, the arena round.
- *  • My spells cast while an account is alive (the last 20 s of its fighting) are written in it: each NEW spell counts once (a repeat is nothing — no spam), its worth is
+ *  • My spells cast while an account is alive (the last 45 s of its fighting) are written in it: each NEW spell counts once (a repeat is nothing — no spam), its worth is
  *    how great it is (the first-success cells of Mana.FIRST_SPELL: a light — little, «Максима» and the great ones — much).
  *  • The prize, % of (the wizard's mana maximum − 30): 5 % for any honest fight, then
- *        + time        up to 16 %   (the seconds of real fighting; a pause over 10 s counts nothing; 45 s is full)
+ *        + time        up to 16 %   (the seconds of real fighting; counted only while we are really fighting: near each other (NEAR_M) and something happened in the last GAP_S seconds — running away far to recover is not the fight's time (the author 20.11); 45 s is full)
  *        + variety     up to 20 %   (3,6 % for each point of worth of the different spells — what is not aimed at the foe (a stand-up, a light, an Accio) counts half: still the whole strength is spent on winning, the author 20.11 — ; the ones cast in the 6 s BEFORE the fight opened count too — the first spell flies before he answers)
- *        + beam clashes up to 8 %   (2 % each)
+ *        + clash time  4 % for every 5 s the beams really stood against each other, up to 20 %
+ *        + beam clashes 5 % once per fight for standing in one (a second, a third — nothing for the clash itself), +8 % for the first clash I WON against him, then 4, 2, 1 and 1 for every next one (halved each time, never less than 1 — the author 20.11)
  *        × 1,25 on all of that, if half of my spells (at least 2) were elemental magic (earth, water, fire, air — SpellElements.js)
  *        + underdog    up to 15 %   (the author 20.11: a bonus for being WEAKER — 8 % for each doubling of his strength over mine at the start of the fight: mana maximum + duel mastery)
  *        + crowd       5 % for EACH other opponent fought at the same time (the author 20.11: a wizard, an enchanted tree, anything that fights me — one has to be distracted), up to 20 %
  *        + allies      5 % once, if I called creatures to help in the fight (Alive, a snowman, the fire serpent, Imperius…: ALLY_SPELLS)
- *    the base + time + variety + clashes never give more than 50 %; with everything on top at most 75 %. The same for a kill and for a win with him alive. The «duel mastery» grows by the same share.
+ *    the base + time + variety + clashes never give more than 60 %; with everything on top at most 85 %. The same for a kill and for a win with him alive. The «duel mastery» grows by the same share.
  *  • An UNFINISHED fight (the author 20.11: «убежал… NPC меня потерял — всё равно засчитывается, но вдвое меньше, без анимации»): an honest account of a wizard that has been quiet for ABANDON_S
  *    seconds (after at least ABANDON_MIN_ACTIVE_S of real fighting) is paid at ABANDON_K of the prize, quietly (Mana.fightAbandoned); a later win over him pays only the rest.
  *  • DISHONEST fights are not counted — always (the author): an NPC that never cast at me (a bomb in his sleep) gives nothing; the arena is the exception (the round is the fight).
@@ -21,15 +22,16 @@
 import { ELEMENT_SPELLS } from '../ui/SpellElements.js';
 
 export const FIGHT = {
-    MIN_PCT: 5, MAX_PCT: 50, TOTAL_MAX: 75,
-    TIME_PCT: 16, TIME_FULL_S: 45, GAP_S: 10, WINDOW_S: 20,
+    MIN_PCT: 5, MAX_PCT: 60, TOTAL_MAX: 85,
+    TIME_PCT: 16, TIME_FULL_S: 45, GAP_S: 15, WINDOW_S: 45, NEAR_M: 50,
     VARIETY_PER_W: 3.6, VARIETY_MAX: 20, PRE_S: 6, SUPPORT_K: 0.5,
     ALLY_PCT: 5,
-    CLASH_EACH: 2, CLASH_MAX: 8,
+    CLASH_SEC_EACH: 5, CLASH_SEC_PCT: 4, CLASH_SEC_MAX: 20, // every 5 s of a beam clash itself: +4 %, up to +20 % (the author 20.11)
+    CLASH_FIRST: 5, CLASH_WON: 8, CLASH_WON_MIN: 1, CLASH_MAX: 60, // the clash itself pays ONCE per fight (5 %); a repeat — nothing; what is paid is the WIN (+8 % each) and the TIME of the clash (the author 20.11: «не само столкновение награждать, а время и победу»)
     ELEMENT_MULT: 1.25, ELEMENT_SHARE: 0.5, ELEMENT_MIN_CASTS: 2,
     CROWD_EACH: 5, CROWD_MAX: 20,
     UNDERDOG_FROM: 1.25, UNDERDOG_K: 8, UNDERDOG_MAX: 15,
-    MASTERY_BASE: 2, MASTERY_PER_PCT: 0.4, MASTERY_FOE_SHARE: 0.2,
+    MASTERY_BASE: 2, MASTERY_PER_PCT: 0.25, MASTERY_FOE_SHARE: 0.2,
     ABANDON_S: 45, ABANDON_MIN_ACTIVE_S: 3, ABANDON_K: 0.5, // an unfinished fight (I fled, he lost me): paid half after this long quiet
     DROP_S: 900, MAX_ENTRIES: 40,
 };
@@ -55,9 +57,10 @@ export const foeSet = (v) => v.castAtPlayers || (v.castAtPlayers = new FoeSet(v)
 
 export class FightLedger {
     /** @param {() => number} now seconds  @param {(name: string) => {key: string, w: number}} spellOf the spell's family and worth */
-    constructor(now, spellOf, strength = () => 0) {
-        this.now = now; this.spellOf = spellOf; this.strength = strength; // (my strength now: mana maximum + duel mastery — noted when an account opens)
+    constructor(now, spellOf, strength = () => 0, near = null) {
+        this.now = now; this.spellOf = spellOf; this.strength = strength; this.near = near; // (near(id): is the foe within NEAR_M of me? false → this second is not the fight's) // (my strength now: mana maximum + duel mastery — noted when an account opens)
         this.map = new Map();
+        this.onLog = null; // (id, text) — the journal: how a fight began, who joined it
         this.recent = []; // my latest spells {t, name, key, w, el}: the opening one is cast before the account opens
     }
 
@@ -66,7 +69,7 @@ export class FightLedger {
         let e = this.map.get(k);
         if (!e && create) {
             if (this.map.size >= FIGHT.MAX_ENTRIES) this.map.delete(this.map.keys().next().value);
-            e = { ally: false, peak: 1, t0: this.now(), me: Number(this.strength()) || 0, last: this.now(), active: 0, honest: false, spells: new Map(), casts: 0, elem: 0, clashes: 0, arena: false };
+            e = { id: k, ally: false, peak: 1, t0: this.now(), me: Number(this.strength()) || 0, last: this.now(), active: 0, honest: false, spells: new Map(), casts: 0, elem: 0, clashes: 0, arena: false };
             this.map.set(k, e);
             const t = this.now();
             for (const r of this.recent) { // (the spells cast just before: they began this fight)
@@ -81,8 +84,7 @@ export class FightLedger {
     }
 
     _touch(e) {
-        const t = this.now(), dt = t - e.last;
-        if (dt > 0 && dt <= FIGHT.GAP_S) e.active += dt;
+        const t = this.now();
         e.last = t;
         if (e.honest) { // (how many fight me at this moment: this one's crowd)
             let n = 0;
@@ -94,9 +96,10 @@ export class FightLedger {
     _alive(e) { return e.arena || this.now() - e.last <= FIGHT.WINDOW_S; }
 
     /** He cast at me (an NPC wizard / a player): the fight is honest and goes on. */
-    foeCast(id, foeMax = 0) { const e = this._entry(id); e.honest = true; if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
+    foeCast(id, foeMax = 0) { const e = this._entry(id); this._honest(e, id, foeMax > 0 ? 'он колдует/бьёт в вас' : 'он бьёт вас'); if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
+    _honest(e, id, why) { if (!e.honest) { e.honest = true; this.onLog?.(id, `бой начался (${why}); мана соперника ${e.foeMax || '?'}; противников сейчас ${[...this.map.values()].filter((x) => x.honest && this._alive(x)).length}`); } }
     /** A beam clash with him (won or lost). */
-    clash(id) { const e = this._entry(id); e.honest = true; e.clashes++; this._touch(e); }
+    clash(id, won = false, seconds = 0) { const e = this._entry(id); this._honest(e, id, 'столкновение лучей'); e.clashes++; if (won) e.clashWon = (e.clashWon || 0) + 1; e.clashSec = (e.clashSec || 0) + Math.max(0, +seconds || 0); this._touch(e); }
     /** My spell hurt him: the fight goes on (honest only if he has fought back). */
     hit(id, foeMax = 0) { const e = this._entry(id); if (foeMax > 0) e.foeMax = foeMax; this._touch(e); }
     /** The arena's round: the opponent is fought honestly by the rules of the place. */
@@ -105,6 +108,16 @@ export class FightLedger {
         if (!e) return;
         if (on) { e.honest = true; e.arena = true; this._touch(e); } else e.arena = false;
     }
+    /** (every frame) The seconds of REAL fighting: an honest account with something happening in the last GAP_S s and the foe near; far away (fled, recovering) — none. */
+    tick(dt) {
+        const t = this.now();
+        for (const e of this.map.values()) {
+            if (e.arena || !e.honest || t - e.last > FIGHT.GAP_S) continue;
+            if (this.near && this.near(e.id) === false) continue;
+            e.active += dt;
+        }
+    }
+
     /** (every frame while the arena round runs) the fighting seconds. */
     arenaTick(dt) { const e = this._entry(ARENA, false); if (e?.arena) { e.active += dt; e.last = this.now(); } }
 
@@ -142,7 +155,8 @@ export class FightLedger {
         const time = Math.min(1, e.active / FIGHT.TIME_FULL_S) * FIGHT.TIME_PCT;
         let w = 0; for (const x of e.spells.values()) w += x;
         const variety = Math.min(FIGHT.VARIETY_MAX, w * FIGHT.VARIETY_PER_W);
-        const clash = Math.min(FIGHT.CLASH_MAX, e.clashes * FIGHT.CLASH_EACH);
+        const clashTime = Math.min(FIGHT.CLASH_SEC_MAX, Math.floor((e.clashSec || 0) / FIGHT.CLASH_SEC_EACH) * FIGHT.CLASH_SEC_PCT);
+        const clash = Math.min(FIGHT.CLASH_MAX, (e.clashes > 0 ? FIGHT.CLASH_FIRST : 0) + winBonus(e.clashWon || 0)) + clashTime;
         const elemental = e.elem >= FIGHT.ELEMENT_MIN_CASTS && e.elem >= e.casts * FIGHT.ELEMENT_SHARE;
         const extra = (time + variety + clash) * (elemental ? FIGHT.ELEMENT_MULT : 1);
         const beauty = Math.min(FIGHT.MAX_PCT, FIGHT.MIN_PCT + extra);
@@ -151,7 +165,7 @@ export class FightLedger {
         const crowd = Math.min(FIGHT.CROWD_MAX, Math.max(0, (e.peak || 1) - 1) * FIGHT.CROWD_EACH);
         const ally = e.ally ? FIGHT.ALLY_PCT : 0;
         const pct = Math.min(FIGHT.TOTAL_MAX, beauty + underdog + crowd + ally);
-        return { honest: true, pct, underdog, ratio: r, crowd, ally, peak: e.peak || 1, parts: { base: FIGHT.MIN_PCT, time, variety, clash }, elemental, seconds: e.active, spells: e.spells.size, clashes: e.clashes };
+        return { honest: true, pct, underdog, ratio: r, crowd, ally, names: [...e.spells.keys()], peak: e.peak || 1, parts: { base: FIGHT.MIN_PCT, time, variety, clash }, elemental, seconds: e.active, spells: e.spells.size, clashes: e.clashes, clashWon: e.clashWon || 0, clashSec: e.clashSec || 0, clashTime };
     }
 
     close(id) { this.map.delete(String(id)); this.map.delete(ARENA); }
@@ -173,7 +187,14 @@ export class FightLedger {
 }
 
 function merge(a, b) {
-    return { ...a, honest: a.honest || b.honest, active: Math.max(a.active, b.active), spells: new Map([...a.spells, ...b.spells]), casts: Math.max(a.casts, b.casts), elem: Math.max(a.elem, b.elem), clashes: Math.max(a.clashes, b.clashes), arena: a.arena || b.arena, me: a.me || b.me, peak: Math.max(a.peak || 1, b.peak || 1), ally: a.ally || b.ally };
+    return { ...a, honest: a.honest || b.honest, active: Math.max(a.active, b.active), spells: new Map([...a.spells, ...b.spells]), casts: Math.max(a.casts, b.casts), elem: Math.max(a.elem, b.elem), clashes: Math.max(a.clashes, b.clashes), clashWon: Math.max(a.clashWon || 0, b.clashWon || 0), clashSec: Math.max(a.clashSec || 0, b.clashSec || 0), arena: a.arena || b.arena, me: a.me || b.me, peak: Math.max(a.peak || 1, b.peak || 1), ally: a.ally || b.ally };
+}
+
+/** The wins of beam clashes against the SAME foe pay by halves: 8, 4, 2, 1, 1, 1… % (the author 20.11). */
+export function winBonus(wins) {
+    let sum = 0, v = FIGHT.CLASH_WON;
+    for (let i = 0; i < wins; i++) { sum += Math.max(FIGHT.CLASH_WON_MIN, v); v /= 2; }
+    return sum;
 }
 
 /** Cells of the prize: `pct` % of (the wizard's maximum − base 30), at least 1. */

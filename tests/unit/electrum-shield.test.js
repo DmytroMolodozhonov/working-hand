@@ -33,7 +33,7 @@ test('«Protection Maxima»: held for as long as mana lasts, then gives way and 
     const from = new THREE.Vector3(0, 1, 10);
     let t = 0;
     while (c.pressBeam(from, 'Electrum', 0.25) && t < 60) t += 0.25;
-    assert.ok(t > 8 && t < 12, `30 mana at 3/s ≈ 10 s: ${t}`);
+    assert.ok(t > 22 && t < 26, `30 mana at 1.25/s ≈ 24 s: ${t}`);
     assert.equal(c.shatterCalls, 1);
     assert.equal(c.fatigue, 0);
 });
@@ -45,7 +45,7 @@ test('plain «Protection» gives way twice as fast; a shield pressed for a short
     const from = new THREE.Vector3(0, 1, 10);
     let t = 0;
     while (c.pressBeam(from, 'Electrum', 0.25) && t < 60) t += 0.25;
-    assert.ok(t > 4 && t < 6, `30 mana at 6/s ≈ 5 s: ${t}`);
+    assert.ok(t > 11 && t < 13, `30 mana at 2.5/s ≈ 12 s: ${t}`);
 });
 
 test('electrumOnMe: no damage while the shield holds, damage once it gave way', () => {
@@ -66,4 +66,9 @@ test('no mana rules — it holds on; no shield — no pressing', () => {
     assert.equal(c.pressBeam(new THREE.Vector3(0, 1, 10), 'Electrum', 0.25) === true, true);
     c.shield = null;
     assert.equal(c.pressBeam(new THREE.Vector3(0, 1, 10), 'Electrum', 0.25), false);
+});
+
+test('осада щита невыгодна атакующему: щит берёт вдвое меньше, чем тратит «Электром»', async () => {
+    const { STRONG } = await import('../../src/game/StrongSpells.js');
+    assert.equal(SHIELD_PRESS.Electrum * 2, STRONG.Electrum.drain);
 });

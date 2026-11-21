@@ -22,6 +22,7 @@ import { CREATION, SPREAD, recipeKey, sanitizeRecipe } from './CreationRules.js'
 import { plantShape, plantMaterials } from '../fx/CustomPlantModel.js';
 import { BLOCK, isLeaves } from '../world/Terrain.js';
 import { realmAt } from '../world/Planets.js';
+import { hasPlantSupport } from '../world/PlantSupport.js';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
@@ -245,8 +246,7 @@ export class CustomPlants {
             const gone = [], players=worldPlayers(g);
             for (const p of this.list) {
                 if (!nearWorldPlayer(players,p.x,p.z,150)) continue;
-                const y = this._ground(p.x, p.z);
-                if (y != null && y < p.y - 0.8) gone.push(p);
+                if (!hasPlantSupport(this.data, p.x, p.y, p.z)) gone.push(p);
             }
             this._kill(gone, false);
         }

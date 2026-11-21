@@ -22,6 +22,8 @@
 
 import '../core/FastMath.js'; // (Math.hypot without the garbage: the main thread and the workers alike)
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
+import { LARGE_TREE } from './TreeBuild.js';
+import { applyWaterBreach, WATER_FULL, waterBreach } from './WaterBreach.js';
 import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { VillageIndex } from './WizardVillages.js';
@@ -29,6 +31,8 @@ import { SiteIndex } from './Sites.js';
 import { HamletIndex } from './Hamlets.js';
 import { ArenaIndex, ARENA_BIG } from './DuelArenas.js';
 import { DungeonIndex } from './Dungeons.js';
+import { CaveMines } from './CaveMines.js';
+import { buryCaveBones } from './CaveBones.js';
 import { GhostCastleIndex } from './GhostCastle.js';
 import { SeaIndex, SEA, seaDepth, seabedDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
@@ -86,19 +90,20 @@ export const BLOCK = {
     // THE PYRAMIDS of Pharaoh Sandy (Pyramids.js, generation 27): dressed sandstone, pale fine stone, four paints (lapis, ochre, turquoise, black), a torch put out and one
     // burning, a pressure plate. 86–94; their numbers are PB in Pyramids.js (a test keeps them equal). The next free number is 95.
     PYR_STONE: 86, PYR_BRICK: 87, PYR_BLUE: 88, PYR_RED: 89, PYR_TURQ: 90, PYR_BLACK: 91, PYR_TORCH_OFF: 92, PYR_TORCH_ON: 93, PYR_PLATE: 94,
+    BURIED_BONES: 95, BURIED_SKELETON: 96,
 };
 /** A block of hell's land (HellLand.js). */
 export const isHellBlock = (t) => t >= BLOCK.HELL_BASALT && t <= BLOCK.HELL_IRON;
 /** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
 export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_LEAF;
 /** The land itself, not built (carveColumn's `gone` leaves it out). */
-const NATURAL = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.ICE, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.WATER, BLOCK.REGOLITH, BLOCK.PLANET_ROCK, BLOCK.PLANET_ICE, BLOCK.PLANET_DARK, BLOCK.PLANET_GRASS]);
+const NATURAL = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.ICE, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.BURIED_BONES, BLOCK.BURIED_SKELETON, BLOCK.WATER, BLOCK.REGOLITH, BLOCK.PLANET_ROCK, BLOCK.PLANET_ICE, BLOCK.PLANET_DARK, BLOCK.PLANET_GRASS]);
 /** The palace's / the Ice Rod's ice (melts in fire: IceQueen.melt). */
 export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30, SOIL: 31, BONES: 32, SKELETON: 33, TIMBER: 34 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -157,7 +162,7 @@ export const WATER_LEVEL_Y = -0.62;
 
 export const BASE_COLORS = {
     [BLOCK.GRASS]: 0x4CAF50, // identical to the old ground plane
-    [BLOCK.DIRT]: 0x7a5230,
+    [BLOCK.DIRT]: 0x7a5230, [BLOCK.BURIED_BONES]: 0x7a5230, [BLOCK.BURIED_SKELETON]: 0x7a5230,
     [BLOCK.STONE]: 0x8a8a8a,
     [BLOCK.SNOW]: 0xf2f6f8,
     [BLOCK.BEDROCK]: 0x3b3b3b,
@@ -244,9 +249,11 @@ export const BASE_COLORS = {
     [BLOCK.PYR_BLACK]: 0x1b1822, [BLOCK.PYR_TORCH_OFF]: 0x4a3a2a, [BLOCK.PYR_TORCH_ON]: 0xffb14a, [BLOCK.PYR_PLATE]: 0xa8743a,
 };
 Object.assign(PATTERN_OF, {
+    [BLOCK.DIRT]: PATTERN.SOIL, [BLOCK.BURIED_BONES]: PATTERN.BONES, [BLOCK.BURIED_SKELETON]: PATTERN.SKELETON,
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
     [BLOCK.CS_MOSSY]: PATTERN.COBBLE, [BLOCK.COBBLE]: PATTERN.COBBLE, [BLOCK.PATH]: PATTERN.COBBLE, [BLOCK.BRICK]: PATTERN.BRICK,
     [BLOCK.PLANKS]: PATTERN.PLANKS, [BLOCK.PLANKS_DARK]: PATTERN.PLANKS, [BLOCK.FENCE]: PATTERN.PLANKS,
+    [BLOCK.WOOD]: PATTERN.TIMBER, [BLOCK.BIRCH]: PATTERN.TIMBER, [BLOCK.SPRUCE]: PATTERN.TIMBER, [BLOCK.CHERRY]: PATTERN.TIMBER, [BLOCK.DARK]: PATTERN.TIMBER,
     [BLOCK.ROOF_RED]: PATTERN.TILES, [BLOCK.ROOF_BLUE]: PATTERN.TILES, [BLOCK.ROOF_SLATE]: PATTERN.TILES,
     [BLOCK.THATCH]: PATTERN.STRAW, [BLOCK.HAY]: PATTERN.STRAW, [BLOCK.WHEAT]: PATTERN.STRAW,
     [BLOCK.CARPET_RED]: PATTERN.CLOTH, [BLOCK.CARPET_BLUE]: PATTERN.CLOTH, [BLOCK.CARPET_GREEN]: PATTERN.CLOTH, [BLOCK.CLOTH_WHITE]: PATTERN.CLOTH, [BLOCK.CLOTH_YELLOW]: PATTERN.CLOTH,
@@ -290,7 +297,8 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 34;
+export const WORLD_GEN = 35;
+export const CAVE_MINES_FROM_GEN = 35;
 /** The first generation with waterfalls on the rivers (Waterfalls.js: rock bluffs with water falling into the river). */
 export const WATERFALLS_FROM_GEN = 32;
 /** Generation 33: the Eye-flower (Глазоцвет — a small flower with a living eye that blinks and looks about; its eye is for the circle of night sight) grows in the wild (MagicFlora.js: `fromGen`). */
@@ -739,10 +747,16 @@ export class TerrainData {
         this.mountains = false;
         this.heightAt = () => 0;
         this._last = null; // last chunk looked up (most queries hit the same one)
+        this.waterJobs = [];
+        this.floodState = new Map();
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false, caveMines = false } = {}) {
+        this.waterJobs.length = 0;
+        this.floodState.clear();
+        this.incomingFlood?.clear();
+        this.caveMines = caveMines && deepCaves && dungeons ? new CaveMines(this, CAVE_CELL) : null;
         this.seed = seed;
         this.tutorial = !!tutorial; // («Обучение»: a small bounded map — TutorialLand.js; nothing else in it)
         this.schoolMode = !!school; // («Школа Акселдорф»: the world's own land, the school castle on a terrace near the start — SchoolLand.js)
@@ -823,7 +837,7 @@ export class TerrainData {
             this.hamlets = new HamletIndex(seed, raw, hnear, this.wizHuts, this.buildings, !!earthSettlements,!!elementalSettlements&&this.lush);
             // the dungeons of the wild (Dungeons.js; generation 15): ruins on the ground, halls under it — never on another site's land
             const dgNear = (x, z, r) => hnear(x, z, r) || this.hamlets.near(x, z, r).length > 0;
-            this.dungeons = dungeons && this.lush ? new DungeonIndex(seed, raw, dgNear) : null;
+            this.dungeons = dungeons && this.lush ? new DungeonIndex(seed, raw, dgNear, !!this.caveMines) : null;
             // the Castle of Ghosts (GhostCastle.js; generation 18): in the land only while the hero sees the invisible (`ghost.on`); never on another site's land
             this.ghost = ghostCastle && this.lush ? new GhostCastleIndex(seed, raw, (x, z, r) => dgNear(x, z, r) || (this.dungeons?.near(x, z, r).length > 0) || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL)) : null;
             if (this.ghost && ghostSeen) this.ghost.on = true;
@@ -959,14 +973,16 @@ export class TerrainData {
      * «Flourish» (Flourish.js): flowers asked to grow on this column's grass (FloraBuild draws one there). Kept per chunk, as `_hidden`;
      * the chunk's rev goes up so its grass is made again (here or in a worker — the list goes along: TerrainView.askFlora).
      */
-    setBloom(ix, iz) {
+    setBloom(ix, iz, layer = null) {
         const cx = ix >> SHIFT, cz = iz >> SHIFT, k = chunkKey(cx, cz);
         this._bloom = this._bloom || new Map();
         let s = this._bloom.get(k);
         if (!s) this._bloom.set(k, s = new Set());
         const col = (iz & MASK) * CHUNK + (ix & MASK);
-        if (s.has(col)) return false;
-        s.add(col);
+        // The original column keys still refer to the surface; layered keys share the same worker payload.
+        const key = layer == null ? col : (layer - MIN_LAYER + 1) * CHUNK * CHUNK + col;
+        if (s.has(key)) return false;
+        s.add(key);
         const c = this.chunks.get(k);
         if (c) { c.rev = (c.rev || 0) + 1; c.modified = true; }
         return true;
@@ -1366,9 +1382,33 @@ export class TerrainData {
         const S = this.sites;
         if (S) for (const [dx, dz] of TREE_CROWN_REACH) if (S.landAt(tx + dx, tz + dz)) return;
         const r = (k) => hashLand(tx * 7 + k, tz * 13 - k, this.seed + 71 + k);
+        const wide = kind === 0 || kind === 4;
+        const variation = r(5);
+        let species, deadfall;
+        if (id < 5e9 && variation < .20 && (tx & MASK) >= 2 && (tx & MASK) < CHUNK - 2 && (tz & MASK) >= 2 && (tz & MASK) < CHUNK - 2) {
+            const biome = BIOMES[this.biomeAt(tx, tz)].id;
+            const fit = (dx, dz) => treeFitsChunk(c, tx + dx, tz + dz, h, 1);
+            const clear = !S || !TREE_CROWN_REACH.some(([dx, dz]) => S.landAt(tx + 3 * dx, tz + 3 * dz));
+            if (clear && fit(-2, 0) && fit(2, 0) && fit(0, -2) && fit(0, 2)) {
+                if (wide && (biome === 'forest' || biome === 'meadow' || biome === 'jungle')) species = LARGE_TREE.OAK;
+                if (kind === 2 && (biome === 'taiga' || biome === 'emerald')) species = LARGE_TREE.REDWOOD;
+                if (kind === 1 && (biome === 'autumn' || biome === 'sakura' || biome === 'forest')) species = LARGE_TREE.PLANE;
+            }
+        }
+        if (!species && id < 5e9 && wide && variation > .977) {
+            const i = Math.floor(r(6) * 4), axis = i < 2 ? 'x' : 'z', dir = i % 2 ? -1 : 1;
+            const H = this.heightAt;
+            let grounded = true;
+            for (let d = 2; d <= 10; d += 2) {
+                const x = tx + (axis === 'x' ? d * dir : 0), z = tz + (axis === 'z' ? d * dir : 0);
+                if (Math.abs(H(x, z) - h) > 1 || H.water || S?.landAt(x, z)) { grounded = false; break; }
+            }
+            if (grounded) deadfall = dir < 0 ? '-' + axis : axis;
+        }
         (c.trees || (c.trees = [])).push({
-            id, x: tx + 0.5 * (kind === 0 || kind === 4 ? 1 : 0), z: tz + 0.5 * (kind === 0 || kind === 4 ? 1 : 0), y: h - 0.5, kind,
-            v: Math.floor(r(1) * TREE_VARIANTS), s: Math.round((0.86 + 0.28 * r(2)) * 100) / 100, turn: Math.round(r(3) * 628) / 100, tint: Math.round((0.9 + 0.2 * r(4)) * 100) / 100,
+            id, x: tx + (wide ? .5 : 0), z: tz + (wide ? .5 : 0), y: h - 0.5, kind,
+            ...(species ? { species } : deadfall ? { deadfall } : {}),
+            v: Math.floor(r(1) * (species ? LARGE_TREE.VARIANTS : TREE_VARIANTS)), s: Math.round((0.86 + 0.28 * r(2)) * 100) / 100, turn: Math.round(r(3) * 628) / 100, tint: Math.round((0.9 + 0.2 * r(4)) * 100) / 100,
         });
     }
 
@@ -1510,6 +1550,14 @@ export class TerrainData {
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
         let lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
+        if (this.caveMines && !offEarth(c.cx * CHUNK)) {
+            const x = c.cx * CHUNK, z = c.cz * CHUNK;
+            const mines = this.caveMines.inBox(x, z, x + CHUNK - 1, z + CHUNK - 1);
+            if (mines.length) {
+                c.caved = true;
+                lists = lists.concat(mines.map(mine => mine.parts));
+            }
+        }
         if (this.school) { const sc = this.school.partsForChunk(c.cx, c.cz, CHUNK); if (sc.length) lists = lists.length ? lists.concat(sc) : sc; } // (the school Akseldorf: SchoolLand.js)
         if (this.falls) { const f = this.falls.partsForChunk(c.cx, c.cz, CHUNK); if (f.length) lists = lists.length ? lists.concat(f) : f; } // (the rivers' waterfalls: Waterfalls.js)
         if (this.pyr) { const p = this.pyr.partsForChunk(c.cx, c.cz, CHUNK); if (p.length) lists = lists.length ? lists.concat(p) : p; } // (the three pyramids: Pyramids.js)
@@ -1754,6 +1802,7 @@ export class TerrainData {
             if (lazy && !d.isBuilt && this._cellLater(false)) continue; // (building one — 1–5 ms — at most every 30 ms with the workers on)
             out.push(d);
         }
+        if (this.caveMines) out.push(...this.caveMines.inBox(x - r, z - r, x + r, z + r, lazy));
         return out;
     }
 
@@ -1948,6 +1997,7 @@ export class TerrainData {
                 }
             }
         }
+        if (c.caved && this.caveMines) for (const cave of sys) buryCaveBones(c, cave, this.seed);
     }
 
     /**
@@ -2175,6 +2225,10 @@ export class TerrainData {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         if (c.empty) return; // (nothing is built in the empty zone between the planets)
         const bi = ((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK);
+        if (c.blocks[bi] === BLOCK.WATER && type !== BLOCK.WATER) {
+            c.partialWater?.delete(bi);
+            this.floodState.delete(`${ix},${L},${iz}`);
+        } else if (type === BLOCK.WATER && c.blocks[bi] !== BLOCK.WATER) this.floodState.delete(`${ix},${L},${iz}`);
         c.blocks[bi] = type;
         if (sh || c.shape) (c.shape || (c.shape = new Uint8Array(c.blocks.length)))[bi] = sh;
         c.modified = true;
@@ -2368,7 +2422,8 @@ export class TerrainData {
 
     /** Is the world-space point under water? */
     isWaterAt(x, y, z) {
-        return this.get(Math.round(x), Math.floor(y + 1.5), Math.round(z)) === BLOCK.WATER;
+        const ix = Math.round(x), L = Math.floor(y + 1.5), iz = Math.round(z);
+        return this.get(ix, L, iz) === BLOCK.WATER && y < this.waterFaceY(ix, L, iz);
     }
 
     /**
@@ -2391,7 +2446,7 @@ export class TerrainData {
                     for (let L = L0; L >= L1; L--) {
                         const b = this.get(ix, L, iz);
                         if (b === BLOCK.WATER) {
-                            if (this.get(ix, L + 1, iz) === BLOCK.AIR) { best = { x: ix, y: L - 0.5 - 0.12, z: iz }; bestD = d2; }
+                            if (this.get(ix, L + 1, iz) === BLOCK.AIR) { best = { x: ix, y: L - 1.5 + this.waterAmount(ix, L, iz) / WATER_FULL * .88, z: iz }; bestD = d2; }
                             break;
                         }
                         if (b !== BLOCK.AIR) break;
@@ -2457,14 +2512,14 @@ export class TerrainData {
                 }
             }
         }
-        if (removed.length) this._flood(removed);
+        if (removed.length) this._flood(removed, keep);
         return removed;
     }
 
     /**
      * «Бум» (BoomCarve.js): one column of its crater — every block above `floorY` (a block's centre y) goes,
-     * from the column's top down; bedrock, water and the gods' ground stay. `wet` gets [x, L, z] of the cells
-     * opened at or under the sea's level (L ≤ 0) — the water may come in there. @returns how many went.
+     * from the column's top down. Bedrock, water and the gods' ground stay. `wet` gets the openings
+     * at water level or below that can start a flood. @returns how many went.
      */
     carveColumn(ix, iz, floorY, wet = null, gone = null) {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
@@ -2475,14 +2530,14 @@ export class TerrainData {
         for (let L = Math.min(MAX_LAYER, c.top[col]); L >= L0; L--) {
             const idx = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
             const t = c.blocks[idx];
-            if (t === BLOCK.AIR || t === BLOCK.BEDROCK || (t === BLOCK.WATER && L <= 0)) continue; // (the sea's water stays: it pours in)
+            if (t === BLOCK.AIR || t === BLOCK.BEDROCK || t === BLOCK.WATER) continue;
             if (this.godGiftAt && this.godGiftAt(ix, L - 1, iz)) continue; // (a gift of the gods: the temple's ground)
             if (isEnchanted(t) && !enchantMayBreak(this, ix, iz)) break; // (the enchanted stone: only near the middle of «Бум»; it holds the ground under it — nothing left hanging)
             if (gone && !NATURAL.has(t)) gone.push([ix, L, iz, t]); // (a built block: the check of the building round it — Structure.js)
-            c.blocks[idx] = BLOCK.AIR; // (a river's or a lake's water over the sea's level goes with the ground under it — none left hanging)
+            c.blocks[idx] = BLOCK.AIR;
             if (c.shape) c.shape[idx] = 0;
             if (L < c.minOpen) c.minOpen = L;
-            if (wet && L <= 0) wet.push(ix, L, iz);
+            if (wet && (L <= 0 || c.blocks[idx + CHUNK * CHUNK] === BLOCK.WATER)) wet.push([ix, L, iz]);
             n++;
         }
         if (n) {
@@ -2508,32 +2563,125 @@ export class TerrainData {
         this._markDirty(ix, iz);
     }
 
-    /**
-     * Holes dug next to / under water fill with water (up to the water level), all the way
-     * through the hole (not only its cells beside the water). Returns the cells filled.
-     */
-    _flood(cells) {
-        const W = BLOCK.WATER, filled = [];
-        for (let pass = 0; pass < 64; pass++) {
-            let changed = false;
-            for (const b of cells) {
-                const L = Math.round(b.y + 1);
-                if (L > 0) continue;
-                const ix = b.x, iz = b.z;
-                if (this.get(ix, L, iz) !== BLOCK.AIR) continue;
-                if (this.get(ix, L + 1, iz) === W || this.get(ix + 1, L, iz) === W || this.get(ix - 1, L, iz) === W ||
-                    this.get(ix, L, iz + 1) === W || this.get(ix, L, iz - 1) === W) {
-                    const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
-                    c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = W;
-                    if (c.shape) c.shape[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = 0;
-                    this._markDirty(ix, iz);
-                    filled.push([ix, L, iz]);
-                    changed = true;
-                }
+    waterFeed(x, L, z) {
+        if (this.isSeaColumn(x, z)) return 2;
+        const h = this.rawHeight;
+        if (!h || L < -2) return 0;
+        return L > h(x, z) && h.river ? 1 : 0;
+    }
+
+    /** -1 for a solid cell, zero for air. Full water is implicit for old worlds. */
+    waterAmount(x, L, z) {
+        const t = this.get(x, L, z);
+        if (t !== BLOCK.WATER) return t === BLOCK.AIR ? 0 : -1;
+        const c = this.chunk(x >> SHIFT, z >> SHIFT);
+        const i = ((L - MIN_LAYER) * CHUNK + (z & MASK)) * CHUNK + (x & MASK);
+        return c.partialWater?.get(i) ?? WATER_FULL;
+    }
+
+    waterFaceY(x, L, z) { return L - 1.5 + this.waterAmount(x, L, z) / WATER_FULL; }
+
+    setFloodAmount(x, L, z, n, sea = 0) {
+        if (L <= MIN_LAYER || L > MAX_LAYER || n < 0 || n > WATER_FULL) return;
+        const c = this.chunk(x >> SHIFT, z >> SHIFT), col = (z & MASK) * CHUNK + (x & MASK);
+        if (c.empty) return;
+        const i = (L - MIN_LAYER) * CHUNK * CHUNK + col, t = c.blocks[i];
+        if (t !== BLOCK.AIR && t !== BLOCK.WATER) return;
+        if (n > 0 && n < WATER_FULL) (c.partialWater ||= new Map()).set(i, n);
+        else c.partialWater?.delete(i);
+        c.blocks[i] = n ? BLOCK.WATER : BLOCK.AIR;
+        if (sea && n === WATER_FULL && L === 0) (c.sea ||= new Uint8Array(CHUNK * CHUNK))[col] = 1;
+        if (L > c.maxTop) c.maxTop = L;
+        if (L < c.minOpen) c.minOpen = L;
+        c.modified = true;
+        this._markDirty(x, z);
+        const key = `${x},${L},${z}`, row = [x, L, z, n, sea];
+        this.floodState.set(key, row);
+        this._floodPatch?.set(key, row);
+    }
+
+    _flood(cells, keep = null) {
+        if (!cells.length || this.floodAuthority?.() === false || this.loadingFloodState) return;
+        this.waterJobs.push({ cells, keep, scan: null, apply: null });
+        if (!this.deferFloods) this.stepFloods(Infinity, Infinity);
+    }
+
+    stepFloods(ms = 2, operations = 160) {
+        let budget = operations;
+        const start = performance.now(), until = start + ms, paced = Number.isFinite(ms);
+        // A remote «Бум» may still be carving while the host's water arrives.
+        let waiting = this.incomingFlood?.size || 0;
+        if (waiting) for (const [key, p] of this.incomingFlood) {
+            const [x, L, z, amount, sea] = p.row;
+            if (start >= p.until) this.incomingFlood.delete(key);
+            else if (this.waterAmount(x, L, z) >= 0) {
+                this.setFloodAmount(x, L, z, amount, sea);
+                this.incomingFlood.delete(key);
+            } else {
+                this.incomingFlood.delete(key);
+                this.incomingFlood.set(key, p);
             }
-            if (!changed) break;
+            waiting--; budget--;
+            if (!waiting || budget <= 0 || performance.now() >= until) break;
         }
-        return filled;
+        while (this.waterJobs.length && budget > 0 && performance.now() < until) {
+            const job = this.waterJobs[0];
+            if (job.cells && job.version != null && job.version !== this.version) {
+                job.scan = job.apply = job.moves = null; // (a wall was added, or another hole opened)
+                job.nextFlow = 0;
+            }
+            job.version = this.version;
+            if (paced && job.nextFlow > start) break;
+            if (!job.apply) {
+                job.scan ||= waterBreach(this, job.cells, { AIR: BLOCK.AIR, WATER: BLOCK.WATER, bottom: MIN_LAYER, top: MAX_LAYER }, job.keep);
+                const plan = job.scan.next();
+                budget--;
+                if (plan.value === 'ground') break;
+                if (!plan.done) continue;
+                job.moves = plan.value.changes;
+                job.apply = applyWaterBreach(this, job.moves);
+                job.inlet = plan.value.inlet;
+                if (job.inlet && this.deferFloods) this.onFloodInlet?.({ ...job.inlet, duration: 2.6 + job.moves.length / 220 });
+            }
+            this._floodPatch ||= new Map();
+            if (job.apply.next().done) this.waterJobs.shift();
+            job.version = this.version;
+            budget--;
+        }
+        if (paced && this._floodPatch?.size && this.waterJobs[0]?.apply) this.waterJobs[0].nextFlow = start + 65;
+        if (this._floodPatch?.size) this.onFloodPatch?.([...this._floodPatch.values()]);
+        this._floodPatch = null;
+    }
+
+    floodSnapshot() {
+        if (!this.floodState.size && !this.waterJobs.length) return undefined;
+        return { levels: [...this.floodState.values()], pending: this.waterJobs.map(({ cells, moves }) => ({ cells, moves: moves || undefined })) };
+    }
+
+    applyFloodPatch(rows, waitForOpening = false) {
+        if (!Array.isArray(rows)) return;
+        for (const row of rows) if (Array.isArray(row) && row.length === 5 && row.every(Number.isSafeInteger)) {
+            const [x, L, z, amount, sea] = row;
+            if ((x | 0) !== x || (z | 0) !== z || L <= MIN_LAYER || L > MAX_LAYER || amount < 0 || amount > WATER_FULL) continue;
+            const key = `${x},${L},${z}`;
+            if (waitForOpening && amount > 0 && this.waterAmount(x, L, z) < 0) {
+                (this.incomingFlood ||= new Map()).set(key, { row, until: performance.now() + 30000 });
+                continue;
+            }
+            this.incomingFlood?.delete(key);
+            this.setFloodAmount(x, L, z, amount, sea);
+        }
+    }
+
+    restoreFlood(state) {
+        if (!state) return;
+        this.applyFloodPatch(state.levels);
+        if (this.floodAuthority?.() === false || !Array.isArray(state.pending)) return;
+        for (const job of state.pending) {
+            if (Array.isArray(job.moves)) this.waterJobs.push({ cells: job.cells, moves: job.moves, apply: applyWaterBreach(this, job.moves) });
+            else if (Array.isArray(job.cells)) this._flood(job.cells);
+        }
+        if (!this.deferFloods) this.stepFloods(Infinity, Infinity);
     }
 
     /**
@@ -2641,6 +2789,8 @@ export class TerrainData {
 
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
+        const pattern = PATTERN_OF[type];
+        if (type === BLOCK.DIRT || pattern === PATTERN.PLANKS || pattern === PATTERN.TIMBER) return BASE_COLORS[type];
         if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_LEAF) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
         if (this.liteLook) return type === BLOCK.GRASS && !isTop ? GRASS_SIDE : (BASE_COLORS[type] ?? 0xff00ff); // (the light mode: plain colours — big merged quads, fewer triangles)
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }
@@ -2838,6 +2988,21 @@ export class TerrainData {
         // neighbour has any; a world without them meshes exactly as it always did)
         const sides = _mesh.sides;
         for (let q = 0; q < 4; q++) sides[q] = this.chunk(cx + _SIDE[q * 2], cz + _SIDE[q * 2 + 1]);
+        let waterPad = null;
+        if (c.partialWater?.size || sides.some(n => n.partialWater?.size)) {
+            waterPad = _mesh.waterPad && _mesh.waterPad.length >= PXZ * PY ? _mesh.waterPad : (_mesh.waterPad = new Uint8Array(PXZ * PY));
+            waterPad.fill(0, 0, PXZ * PY);
+            const addPartial = (chunk, ox, oz) => {
+                for (const [i, amount] of chunk.partialWater || []) {
+                    const gx = i % CHUNK + ox, gz = ((i >> SHIFT) & MASK) + oz, gy = Math.floor(i / (CHUNK * CHUNK)) - G0;
+                    if (gx >= -1 && gx <= CHUNK && gz >= -1 && gz <= CHUNK && gy >= 0 && gy <= yTop) {
+                        waterPad[(gy + 1) * PXZ + (gz + 1) * PX + gx + 1] = amount;
+                    }
+                }
+            };
+            addPartial(c, 0, 0);
+            for (const e of sides) addPartial(e, (e.cx - cx) * CHUNK, (e.cz - cz) * CHUNK);
+        }
         const shaped = !!(c.shape || sides[0].shape || sides[1].shape || sides[2].shape || sides[3].shape);
         let spad = null;
         if (shaped) {
@@ -2876,6 +3041,7 @@ export class TerrainData {
             const mask = new Int32Array(su * sv);
             const maskKind = new Int8Array(su * sv); // 0 ground, 1 raised, 2 water
             const maskWet = new Uint8Array(su * sv); // actual water touching the visible face, independent of daylight
+            const maskWater = waterPad ? new Int32Array(su * sv) : null;
             const maskDark = new Int8Array(su * sv); // 0 open sky … 15 deep in a cave
             const qx = d === 0 ? 1 : 0, qy = d === 1 ? 1 : 0, qz = d === 2 ? 1 : 0;
             const step = stride[d], ustep = stride[u], vstep = stride[v];
@@ -2911,7 +3077,7 @@ export class TerrainData {
                         const b = bIn ? bRaw : AIR;
                         // Solid faces show wherever the neighbour is air or (see-through) water;
                         // water shows its surface only towards air.
-                        let key = 0, kind = 0;
+                        let key = 0, kind = 0, waterLip = 0;
                         if (aIn && !aOpen && bOpen) {
                             const L = ay + lowest;
                             key = this.faceColor(a, x0 + ax, L, z0 + az, d === 1) + 1 + (PAT[a] || 0) * 0x1000000;
@@ -2923,6 +3089,13 @@ export class TerrainData {
                                 key = -(this.faceColor(b, x0 + ax + qx, L, z0 + az + qz, false) + 1 + (PAT[b] || 0) * 0x1000000);
                                 kind = L >= 1 ? 1 : 0;
                             }
+                        } else if (d !== 1 && waterPad && aRaw === WATER && bRaw === WATER) {
+                            const aFill = waterPad[ia] || WATER_FULL, bFill = waterPad[ia + step] || WATER_FULL;
+                            if (aFill > bFill + 1 && aIn || bFill > aFill + 1 && bIn) {
+                                key = (aFill > bFill ? 1 : -1) * (WATER_COL + 1);
+                                kind = 2;
+                                waterLip = Math.max(aFill, bFill) * 257 + Math.min(aFill, bFill);
+                            }
                         } else if (a === WATER && (bRaw === AIR || bRaw === ICE_SHAPE)) {
                             // (the sea's top is drawn by the moving wave surface instead)
                             if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) {
@@ -2932,17 +3105,20 @@ export class TerrainData {
                                 // (water standing over water, raised above the rivers' level and looking sideways into the air: a WATERFALL's sheet — blue byte 2, the red byte its phase; UltraWater draws it falling)
                                 if (d !== 1 && !pdef && ay + lowest >= 1 && pad[ia - PXZ] === WATER) key = (((((x0 + ax) * 73 + (z0 + az) * 151) & 255) << 16) | (128 << 8) | 2) + 1;
                                 kind = 2;
+                                if (waterPad?.[ia]) waterLip = waterPad[ia] * 257;
                             }
                         } else if (b === WATER && (aRaw === AIR || aRaw === ICE_SHAPE)) {
                             const sx = ax + qx, sz = az + qz; // (the sea's water — a crater of «Бум» it poured into — in the sea's colour, not a lake's)
                             key = -((c.sea && sx >= 0 && sz >= 0 && sx < CHUNK && sz < CHUNK && c.sea[sz * CHUNK + sx] ? SEA_WATER_COL : WATER_COL) + 1); kind = 2;
                             if (d !== 1 && !pdef && ay + lowest >= 1 && pad[ia + step - PXZ] === WATER) key = -((((((x0 + sx) * 73 + (z0 + sz) * 151) & 255) << 16) | (128 << 8) | 2) + 1); // (a waterfall's sheet, seen from the other side)
+                            if (d !== 1 && waterPad?.[ia + step]) waterLip = waterPad[ia + step] * 257;
                         }
                         mask[n] = key;
                         maskKind[n] = kind;
+                        if (maskWater) maskWater[n] = waterLip;
                         maskWet[n] = kind !== 2 && (key > 0 ? bRaw : aRaw) === WATER ? 255 : 0;
                         // the air the face looks into (a's face looks at b, b's at a)
-                        maskDark[n] = sky && key && kind !== 2 ? (key > 0 ? sky(x0 + ax + qx, lowest + ay + qy, z0 + az + qz) : sky(x0 + ax, lowest + ay, z0 + az)) : 0;
+                        maskDark[n] = sky && key ? (key > 0 ? sky(x0 + ax + qx, lowest + ay + qy, z0 + az + qz) : sky(x0 + ax, lowest + ay, z0 + az)) : 0;
                     }
                 }
                 x[d]++;
@@ -2952,14 +3128,14 @@ export class TerrainData {
                     for (let i = 0; i < su;) {
                         const col = mask[n];
                         if (col === 0) { i++; n++; continue; }
-                        const kindC = maskKind[n], darkC = maskDark[n], wetC = maskWet[n];
+                        const kindC = maskKind[n], darkC = maskDark[n], wetC = maskWet[n], lip = maskWater?.[n] || 0;
                         let w = 1;
-                        while (i + w < su && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC && maskWet[n + w] === wetC) w++;
+                        while (i + w < su && !(lip && u === 1) && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC && maskWet[n + w] === wetC && (!maskWater || maskWater[n + w] === lip)) w++;
                         let h = 1, done = false;
-                        for (; j + h < sv; h++) {
+                        for (; j + h < sv && !(lip && v === 1); h++) {
                             for (let k = 0; k < w; k++) {
                                 const m = n + k + h * su;
-                                if (mask[m] !== col || maskKind[m] !== kindC || maskDark[m] !== darkC || maskWet[m] !== wetC) { done = true; break; }
+                                if (mask[m] !== col || maskKind[m] !== kindC || maskDark[m] !== darkC || maskWet[m] !== wetC || maskWater && maskWater[m] !== lip) { done = true; break; }
                             }
                             if (done) break;
                         }
@@ -2968,7 +3144,14 @@ export class TerrainData {
                         const dv = [0, 0, 0]; dv[v] = h;
                         const target = kindC === 2 ? out.water : kindC === 1 ? out.raised : out.ground;
                         // The water surface sits a little below the ground around it
-                        const drop = kindC === 2 && d === 1 && col > 0 ? 0.12 : 0;
+                        const height = lip ? Math.floor(lip / 257) / WATER_FULL : 1;
+                        const drop = kindC === 2 && d === 1 && col > 0 ? 1 - height * .88 : 0;
+                        if (lip && d !== 1) {
+                            const bottom = (lip % 257) / WATER_FULL * .88;
+                            pos[1] += bottom;
+                            if (u === 1) du[1] = height * .88 - bottom;
+                            else dv[1] = height * .88 - bottom;
+                        }
                         const code = Math.abs(col) - 1;
                         pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC), wetC);
                         for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * su] = 0;

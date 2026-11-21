@@ -483,8 +483,10 @@ export class WorldKeeper {
             dayPhase: g.dayPhase ? g.dayPhase() : 0,
             dayMs: DAY,
             explosions: g.explosions.slice(-4000),
+            flood: g.world.terrain?.data?.floodSnapshot?.(),
             edits: (g.blockEdits || []).slice(-30000),
             treesGone: g.world.treesGoneList?.() || [],
+            wildPlantsGone: g.flora?.goneList?.() || [],
             treesMoved: g.world.movedTrees?.() || [], // (carried by «Левиоса Максима»: World.placeTree)
             ice: g.iceCells || [],
             chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
@@ -588,12 +590,15 @@ export function restoreWorld(game, save, THREE) {
     retireScrollsIn(save); // (the loose things, the bodies, the chests… of an old save: the retired scrolls become apples)
     const g = game;
     if (!save) return;
+    const floodLand = g.world.terrain?.data;
+    if (floodLand && save.flood) floodLand.loadingFloodState = true;
     if (Array.isArray(save.edits) && save.edits.length) {
         // (an old world's other wizards' towers are no more — the world keeps one: their edits would be holes in bare land)
         const towers = g.world?.terrain?.data?.towers;
         g.builder?.applyEdits(towers?.dropLostEdits ? towers.dropLostEdits(save.edits) : save.edits);
     }
     for (const i of save.treesGone || []) g.world.treeGoneById(i); // (one whose land is not here yet stays gone when it comes)
+    g.flora?.restoreGone?.(save.wildPlantsGone);
     g.world.restoreMovedTrees?.(save.treesMoved);
     // (the checks of the buildings after each blast: at once, in the blasts' order, unseen — Structure.js, Collapse.Settling)
     const replay = (fn) => (g.world.terrain?.data?.settling ? g.world.terrain.data.settling.replay(fn) : fn());
@@ -608,6 +613,10 @@ export function restoreWorld(game, save, THREE) {
             g.explosions.push(e);
         }
     });
+    if (floodLand) {
+        floodLand.loadingFloodState = false;
+        floodLand.restoreFlood?.(save.flood);
+    }
     if (save.rebuild) g.castleLife?.rebuild.restore(save.rebuild); // (after the blasts: what the builders put back since)
     if (save.ice && save.ice.length) g.applyIce(save.ice);
     if (save.liquidated) g.liquidation?.restore(save.liquidated); // (before the things themselves: what crumbled is not made again)

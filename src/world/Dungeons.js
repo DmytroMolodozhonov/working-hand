@@ -25,6 +25,14 @@ const key = (gx, gz) => gx * 65536 + gz;
 const wx = (X, rot, u, v) => X + (rot === 0 ? u : rot === 1 ? -v : rot === 2 ? -u : v);
 const wz = (Z, rot, u, v) => Z + (rot === 0 ? v : rot === 1 ? u : rot === 2 ? -v : -u);
 
+/** Keep the same seeded roll for old dungeons and for the caves that replace their entrances. */
+export function dungeonRoll(seed, gx, gz) {
+    const rng = createRng((Math.imul(seed, 2654435761) ^ Math.imul(gx, 40503) ^ Math.imul(gz, 92821) ^ 0x6d19e) >>> 0);
+    rng(); // (the first draw of a fresh generator is the least mixed)
+    const chance = rng(), under = rng() < DUNGEON.UNDER_SHARE;
+    return { rng, under, allowed: chance <= DUNGEON.CHANCE * (under ? 1 : DUNGEON.GROUND_BOOST) };
+}
+
 /** One dungeon: the cheap record at once, the blocks and the chests on demand. */
 export class DungeonSite {
     constructor(f) {
@@ -56,8 +64,8 @@ export class DungeonIndex {
      * @param {Function} raw  the world's height field (without the sites' levelled land); `raw.water`/`raw.sea` after a call
      * @param {(x:number, z:number, r:number) => boolean} busy  another site's land lies within `r` of a point
      */
-    constructor(seed, raw, busy) {
-        this.seed = seed; this.raw = raw; this.busy = busy;
+    constructor(seed, raw, busy, useCaveMines = false) {
+        this.seed = seed; this.raw = raw; this.busy = busy; this.useCaveMines = useCaveMines;
         this.cells = new Map(); // cell key → site or null
         this._last = null;
     }
@@ -108,13 +116,11 @@ export class DungeonIndex {
     /** Optional bench counter (`index.stats = {}`): why the spots of the ground ruins fail. Off in the game. */
     _count(why) { if (this.stats) this.stats[why] = (this.stats[why] || 0) + 1; }
 
-    _decide(gx, gz) {
+    _decide(gx, gz, legacy = false) {
         const C = DUNGEON.CELL;
         if (offEarth((gx + 1) * C)) return null;
-        const rng = createRng((Math.imul(this.seed, 2654435761) ^ Math.imul(gx, 40503) ^ Math.imul(gz, 92821) ^ 0x6d19e) >>> 0);
-        rng(); // (the first draw of a fresh generator is the least mixed)
-        const chance = rng(), under = rng() < DUNGEON.UNDER_SHARE;
-        if (chance > DUNGEON.CHANCE * (under ? 1 : DUNGEON.GROUND_BOOST)) return null; // (same draws in the same order: the old dungeons stay where they were, the ruins only get more)
+        const { rng, under, allowed } = dungeonRoll(this.seed, gx, gz);
+        if (!allowed || (under && this.useCaveMines && !legacy)) return null;
         const kindId = pickKind(under, rng(), rng());
         const K = KINDS[kindId];
         const seed = Math.floor(rng() * 1e9);
@@ -164,6 +170,12 @@ export class DungeonIndex {
             });
         }
         return null;
+    }
+
+    /** An old underground placement counts toward the new mine frequency only if it could actually spawn. */
+    legacyUnderground(gx, gz) {
+        const s = this._decide(gx, gz, true);
+        return s?.under ? s : null;
     }
 
     /** Dungeons whose land or walls reach within `r` of a point. */

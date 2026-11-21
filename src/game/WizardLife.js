@@ -505,7 +505,7 @@ export class WizardLife {
         const down = v.stunT > 0.5 || v.lev || v.carriedBy;
         if (!down && !(v.hp <= 0.35 * (v.maxHp || 1))) return;
         v._beatenPaid = true;
-        g.mana?.duelWonAlive?.(v.id, Math.random, Math.round(v.maxMana || 0) || undefined);
+        g.mana?.duelWonAlive?.(v.id, Math.random, Math.round(v.maxMana || 0) || undefined, null, false, 'повержен: оглушён/поднят/ранен');
     }
 
     // ------------------------------------------------------------ thinking

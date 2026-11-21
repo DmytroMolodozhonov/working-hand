@@ -196,6 +196,7 @@ export class NetSync {
             t: 'welcome',
             config: sanitizeConfig(g.config),
             explosions: g.explosions,
+            flood: g.world.terrain?.data?.floodSnapshot?.(),
             chests: [...new Set([...g.chests.filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
             airObjects: g.elementalMages?.objects.snapshot() || [],
             items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r3(L.model.position.x), r3(L.model.position.y), r3(L.model.position.z)], h: L.hover ? 1 : 0, r: L.rest ? 1 : 0 })) : [],
@@ -233,6 +234,7 @@ export class NetSync {
             rain: g.storm?.rainLeft?.() || 0, // («Let it rain» still falling)
             edits: g.blockEdits || [],
             treesGone: g.world.treesGoneList?.() || [],
+            wildPlantsGone: g.flora?.goneList?.() || [],
             treesMoved: g.world.movedTrees?.() || [],
             crystals: g.crystals?.snapshot() || [],
             ships: g.ships ? g.ships.snapshot(true) : [],
@@ -245,6 +247,7 @@ export class NetSync {
         const g = this.game;
         if (Array.isArray(msg.edits) && msg.edits.length) g.builder?.applyEdits(msg.edits.slice(-30000));
         for (const i of msg.treesGone || []) g.world.treeGoneById(i); // (one whose land is not here yet stays gone when it comes)
+        g.flora?.restoreGone?.(msg.wildPlantsGone);
         g.world.restoreMovedTrees?.(msg.treesMoved);
         if(Array.isArray(msg.airObjects))for(const s of msg.airObjects)g.elementalMages?.objects.onNet(s);
         if (msg.crystals) g.crystals?.restore(msg.crystals);
@@ -286,6 +289,7 @@ export class NetSync {
                 g.explosions.push(e);
             }
         });
+        g.world.terrain?.data?.restoreFlood?.(msg.flood);
         if (msg.rebuild) g.castleLife?.rebuild.restore(msg.rebuild); // (after the blasts: what was put back since)
         if (msg.ice && msg.ice.length) g.applyIce(msg.ice);
         for (const id of msg.chests || []) {
@@ -452,6 +456,14 @@ export class NetSync {
     /** Blocks I placed / removed (building, gathering, melting ice). */
     blocks(list) {
         for (let i = 0; i < list.length; i += 400) this.net.send({ t: 'blk', l: list.slice(i, i + 400) }, true);
+    }
+
+    floodPatch(list) {
+        if (this.net.isHost) for (let i = 0; i < list.length; i += 300) this.net.send({ t: 'flood', l: list.slice(i, i + 300) }, true);
+    }
+
+    floodInlet(inlet) {
+        if (this.net.isHost) this.net.send({ t: 'floodin', inlet }, true);
     }
 
     /**
@@ -1102,6 +1114,8 @@ export class NetSync {
                 break;
             }
             case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
+            case 'flood': if (!this.net.isHost && m.from === 'H' && Array.isArray(m.l)) g.terrain?.data?.applyFloodPatch?.(m.l.slice(0, 300), true); break;
+            case 'floodin': if (!this.net.isHost && m.from === 'H') g.fallFx?.breach(m.inlet); break;
             case 'fal': if (m.by !== this.me && Array.isArray(m.f)) { // (a building's pieces seen falling: its blocks are where they landed already — 'blk')
                 const list = m.f.slice(0, 200).filter((f) => Array.isArray(f?.c) && Array.isArray(f.l) && Array.isArray(f.b))
                     .map((f) => ({ cells: f.c.slice(0, 4000), d: +f.d || 0, landed: f.l.slice(0, 4000), broken: f.b.slice(0, 4000), stage: Math.min(10, f.s | 0), ...(f.x ? { crushed: true } : {}), ...(f.tl && (f.tl.axis === 'x' || f.tl.axis === 'z') ? { tilt: { axis: f.tl.axis, sg: f.tl.sg > 0 ? 1 : -1, edge: +f.tl.edge || 0, Lb: +f.tl.Lb || 0, d2: Math.min(300, +f.tl.d2 || 0) } } : {}) }));
@@ -1319,7 +1333,7 @@ export class NetSync {
             case 'agone': if (!this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr && tr.apples[m.i]) tr.apples[m.i].until = Date.now() + Math.max(0, (m.until || 0) - Date.now()); } break;
             case 'flpick': if (this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) g.flora.pick(pl, m.i, m.from, m.side); } break;
             case 'flgone': if (!this.net.isHost) g.flora?.netGone(m.id, m.i, m.until); break;
-            case 'flkill': if (!this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) { if (m.how === 'burn') g.flora.ignite(pl, true); else g.flora.kill(pl, m.how, true); } } break;
+            case 'flkill': if (!this.net.isHost) g.flora?.netKill(m.id, m.how); break;
             case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(10 / 3, a.apples + Math.min(10 / 3, Math.max(0, +m.w || 1))); } break;
             case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on && !a.pegasus) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
             case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; a.flyCode = m.p[4] || 0; } } break; // (a Pegasus in flight: its wings)
@@ -1452,6 +1466,7 @@ export class NetSync {
                 if (m.from === 'H' && !this.net.isHost && typeof m.id === 'string' && m.seal) { const b = g.death?.bodies.get(m.id); if (b) g.death.sealBody(b, m.seal); }
                 break;
             }
+            case 'rvask': case 'rvdone': g.revivify?.onNet(m); break;
             case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
             case 'dlreq': if (this.net.isHost) g.death?.claims.host(m); break;
             case 'dlack': if (!this.net.isHost) g.death?.claims.reply(m); break;

@@ -70,7 +70,7 @@ export const SPELL_COST = {
     Axis: 2000, // «Axis»: the gods' turn of the planet — day to night, night to day over ~10 s (a scroll of the gods — TimeTurn.js)
     Kidarius: 1000, // «Кидариус»: the gods' bolt — blows up on the target, −500 (a scroll of the gods — StrongSpells.js)
     Pilbidrio: 100, // «Пилбидрио»: −80, the body burst at ≤ 80
-    Electrum: 50, // «Электром»: then 3 a second while the lightning is held
+    Electrum: 80, // «Электром»: then 5 a second while the lightning is held
     Die: 1000, // «Дай»: the gods' — +10 a second while its beam fights in a clash
     WaveAttack: 8,
     WaveAttackMaxima: 18,
@@ -87,6 +87,7 @@ export const SPELL_COST = {
     CreateBed: 6,
     CreateHouse: 20, // a house by magic: then 0.5 a second for its 10 s (HouseMagic.js; each level of «Improve a House» twice as much)
     CreateCastle: 500,
+    Revivify: 1000,
     DivineCreation: 1000, // «Да пусть создастся»: the gods make what is described (DivineCreation.js pays it itself; Creative: free) // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)
     ImproveHouse: 40, // (level 2; 80, 160, 320 for the next — HouseMagic pays it itself)
     ChangeColor: 2,

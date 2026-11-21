@@ -30,9 +30,9 @@
 import { skyVisible, skyMessage, mayTell } from './SkyRules.js';
 import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
-import { enchantMul, shieldMul, shieldPlain, enchantAdd } from './Enchant.js';
+import { enchantMul, shieldMul, enchantAdd } from './Enchant.js';
+import { shieldWear } from './KnightShield.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
-import { SPELL_COST } from './Combat.js';
 import { allLog } from '../core/AllLog.js';
 import { WEATHER } from '../fx/Storm.js';
 import { spiderDist } from './Spider.js';
@@ -56,7 +56,7 @@ const _ba = new THREE.Vector3();
 const _bu = new THREE.Vector3();
 const _fw = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
-const STRONG = 15; // spells costing this much break a plain shield
+
 const HINT_NOCKED = '🏹 Стрела на тетиве — сожмите пальцы на тетиве и отведите руку к подбородку, разожмите — выстрел';
 
 /** The arrow rests on top of the bow fist: this far above the grip's middle (bow-local units). */
@@ -150,14 +150,9 @@ export class Gear {
         const s = this._heldShield();
         if (!s) return;
         const g = this.game;
-        const cost = SPELL_COST[kind] ?? (kind === 'melee' ? 2 : 8);
         const it = s.item;
-        let broken = false;
-        if (it.magic) {
-            const left = this.shieldPower.get(it.uid) ?? it.max * shieldMul(it);
-            if (left < 5 && cost >= STRONG) broken = true;
-            this.shieldPower.set(it.uid, Math.max(0, left - cost));
-        } else if (cost >= STRONG + shieldPlain(it)) broken = true;
+        const { reserve, broken } = shieldWear(it, kind, this.shieldPower.get(it.uid));
+        if (it.magic) this.shieldPower.set(it.uid, reserve);
         const p = s.model.position;
         for (let i = 0; i < 18; i++) g.fx.spark(p, it.magic ? 0x9fd8ff : 0xffe0a0, 0.1, _v.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.5);
         if (broken) {

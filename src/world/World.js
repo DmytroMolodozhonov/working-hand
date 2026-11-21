@@ -11,6 +11,7 @@ import { createRng } from '../core/math.js';
 import { BLOCK } from './Terrain.js';
 import { Terrain } from './TerrainView.js';
 import { collapseAfter } from './Collapse.js';
+import { hasTreeSupport } from './PlantSupport.js';
 import { ruinArea } from './Ruin.js';
 
 const _sun = new THREE.Vector3();
@@ -131,7 +132,7 @@ export class VoxelWorld {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
             this.meshTrees = !!opts.meshTrees; // (a world of real trees, not blocks — `realTrees`, Trees.js)
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls, !!opts.wizCounters);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls, !!opts.wizCounters, !!opts.caveMines);
             this.createSkybox();
         }
     }
@@ -244,6 +245,12 @@ export class VoxelWorld {
         this.setStorm(this.storm || 0);
     }
 
+    setHouseFill(k) {
+        if (Math.abs(k - (this.houseFill || 0)) < .01) return;
+        this.houseFill = k;
+        this.setStorm(this.storm || 0);
+    }
+
     /** «Lightning Strike»: a storm darkens the world (0 = clear, 1 = full storm). */
     setStorm(k) {
         this.storm = k;
@@ -258,7 +265,9 @@ export class VoxelWorld {
         // indoors: the sun is outside; by day the light of the windows and the door fills the rooms (the walls away from
         // the sun as lit as the others), by night only a faint glow: the rooms are as dark as the night, what lights them
         // is a real light (lantern, torch, fire, «Люмос» — FireLights). Smooth with the night (`b.night` 0…1).
-        const lamp = 1 + ind * (0.8 - 0.65 * b.night), fill = 1 + ind * (0.5 - 0.4 * b.night);
+        const daylightFill = (this.houseFill || 0) * (1 - b.night) * (1 - k * .62);
+        const lamp = 1 + ind * (0.8 - 0.65 * b.night) + .42 * daylightFill;
+        const fill = 1 + ind * (0.5 - 0.4 * b.night) + .55 * daylightFill;
         const boost = lightBoost(nv, darkness(b.night, cv)); // (the night gift: ×1…1.5 as dark as it is — the same lights, no new ones)
         const gh = this.ghostHaze || 0, ghd = 1 - 0.3 * gh; // (the Castle of Ghosts' haze: a dimmer day)
         this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp * boost * ghd;
@@ -405,9 +414,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, wizCounters = false, caveMines = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, wizCounters, meshTrees: !!this.meshTrees });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, wizCounters, caveMines, meshTrees: !!this.meshTrees });
         if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
         if (this.terrain.data.meshTrees) this.forest = new WorldTrees(this); // (real trees — drawn, hit, burnt like the start area's always were)
         this.collision.setTerrain(this.terrain);
@@ -571,6 +580,21 @@ export class VoxelWorld {
         const t = this.trees?.find((x) => x.index === i);
         if (t && t.alive) this.removeTree(t);
         else if (!t && this.forest) this.forest.goneById(i);
+    }
+
+    /** Check already registered trunks after edits, including older start-area trees. */
+    pruneUnsupportedTrees(dt, gone) {
+        const terrain = this.terrain?.data;
+        if (!terrain || !this.destructible) return;
+        this._treeFloorT = (this._treeFloorT || 0) - dt;
+        if (this._treeFloorT > 0 || this._treeFloorVersion === terrain.version) return;
+        this._treeFloorT = .5;
+        this._treeFloorVersion = terrain.version;
+        for (const t of this.trees) {
+            if (!t.alive || this.forest?.godGift?.(t) || hasTreeSupport(terrain, t)) continue;
+            this.removeTree(t);
+            gone?.(t.index);
+        }
     }
 
     /**
@@ -1007,8 +1031,10 @@ export class VoxelWorld {
                 const dx = t.x - center.x, dz = t.z - center.z;
                 const dy = Math.max(0, Math.max(t.y - 0.5 - center.y, center.y - (t.y + t.h))); // trunk+crown span
                 const reach = radius + t.r + (center.y > t.y + t.c0 ? Math.min(3, (t.h - t.c0) * 0.25) : 0.6);
-                if (dx * dx + dz * dz + dy * dy > reach * reach) continue;
+                if (dx * dx + dz * dz + dy * dy > reach * reach
+                    && (dx * dx + dz * dz > (reach + (t.fallen ? t.c0 : 0)) ** 2 || hasTreeSupport(this.terrain?.data, t))) continue;
                 if (this.forest.godGift?.(t)) continue;
+                const crown = t.crown;
                 this.forest.removeTree(t);
                 out.trees = out.trees || [];
                 out.trees.push(t);
@@ -1016,8 +1042,8 @@ export class VoxelWorld {
                 const leaf = [0x3f8a30, 0x6a9f3a, 0x2f6238, 0xf2a6c8, 0x335c26][t.kind] ?? 0x3f8a30;
                 const n = Math.min(8, Math.max(4, Math.round(t.c0)));
                 for (let k = 0; k < n; k++) out.props.push({ x: t.x + (Math.random() - 0.5) * t.r * 2, y: t.y + 0.5 + (k / n) * t.c0, z: t.z + (Math.random() - 0.5) * t.r * 2, color: bark, size: Math.max(0.6, t.r * 1.4) });
-                if (!t.burnt) for (let k = 0; k < 14; k++) {
-                    const a = (k / 14) * Math.PI * 2, rr = (t.crown ? (t.crown.maxX - t.crown.minX) / 2 : 4) * (0.3 + 0.6 * ((k * 37) % 10) / 10);
+                if (crown) for (let k = 0; k < 14; k++) {
+                    const a = (k / 14) * Math.PI * 2, rr = (crown.maxX - crown.minX) * .5 * (0.3 + 0.6 * ((k * 37) % 10) / 10);
                     out.props.push({ x: t.x + Math.cos(a) * rr, y: t.y + t.c0 + ((k * 53) % 10) / 10 * (t.h - t.c0), z: t.z + Math.sin(a) * rr, color: leaf, size: 1.3 });
                 }
             }
@@ -1031,7 +1057,8 @@ export class VoxelWorld {
                 if (!t.alive || t.mesh) continue;
                 const dx = t.x - center.x, dz = t.z - center.z;
                 const dy = Math.max(0, Math.max(-0.5 - center.y, center.y - 11)); // trunk+crown span
-                if (dx * dx + dz * dz + dy * dy > (radius + 1.2) ** 2) continue;
+                const reach2 = (radius + 1.2) ** 2;
+                if (dx * dx + dz * dz + dy * dy > reach2 && (dx * dx + dz * dz > reach2 || hasTreeSupport(this.terrain?.data, t))) continue;
                 t.alive = false;
                 dummy.position.set(t.x, -1000, t.z);
                 dummy.scale.setScalar(0.0001);
@@ -1039,6 +1066,7 @@ export class VoxelWorld {
                 this.trunkMesh.setMatrixAt(t.index, dummy.matrix);
                 this.leafMesh.setMatrixAt(t.index, dummy.matrix);
                 this.collision.removeBox(t.boxId);
+                (out.trees ||= []).push(t);
                 for (let k = 0; k < 6; k++) out.props.push({ x: t.x, y: 0.5 + k, z: t.z, color: 0x8B4513, size: 1 });
                 for (let k = 0; k < 10; k++) out.props.push({ x: t.x + (k % 3 - 1) * 2, y: 6 + Math.floor(k / 3) * 2, z: t.z + ((k >> 1) % 3 - 1) * 2, color: 0x228B22, size: 1.6 });
                 changed = true;

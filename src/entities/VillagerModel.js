@@ -1826,7 +1826,8 @@ export class VillagerModel {
             case 'block':
                 T.aRX = 1.25; T.aRZ = -0.45; T.wrist = -1.25;
                 if (this.shield) { T.block = 1; T.aLX = 0.9; T.aLZ = 0.5; } else { T.aLX = 1.0; T.aLZ = 0.3; }
-                T.hx = -0.08;
+                if (this.shield) { T.lL = .32; T.lR = -.28; T.kL = -.5; T.kR = -.25; }
+                T.hx = -0.18;
                 rate = 16;
                 break;
             case 'brace':

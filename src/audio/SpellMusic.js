@@ -208,6 +208,19 @@ const TUNES = {
         noise(o, sr, 0, 4, 0.04, (u) => 0.2 + 0.6 * u, swell(0.5, 0.4), r);
         return finish(o, sr, { rms: 0.08 });
     },
+    /** «Revivify»'s tune: a life coming back — a low warm drone, a slow rising line of bells in F major like a heartbeat finding its pulse, a golden choir-like pad opening and a long soft glow. */
+    thRevivify(sr) {
+        const o = buf(sr, 9), r = rng(211);
+        pad(o, sr, ['F2', 'C3', 'F3'], 0, 3.2, 0.4, { att: 1.6, vib: 0.004, harm: 3 });
+        pad(o, sr, ['F3', 'A3', 'C4', 'F4'], 2.2, 3.4, 0.5, { att: 1, vib: 0.004, harm: 3 });
+        pad(o, sr, ['Bb3', 'D4', 'F4', 'Bb4'], 4.8, 2.4, 0.54, { att: 0.5, vib: 0.004, harm: 3 });
+        pad(o, sr, ['F3', 'A3', 'C4', 'F4', 'A4', 'C5'], 6.4, 2.6, 0.64, { att: 0.4, rel: 1.8, vib: 0.004, harm: 3 });
+        melody([[0, 'F4'], [1, 'A4'], [2, 'C5', 2], [4, 'D5'], [5, 'F5', 2], [7, 'A5'], [8, 'C6', 3]], 0.66, 1.0, (f, t) => bell(o, sr, f, t, 0.18, 2.4));
+        for (let k = 0; k < 6; k++) drum(o, sr, 1.4 + k * 0.9, 0.18 + k * 0.03, 70, 0.4, r); // (a heartbeat finding its pulse)
+        for (let k = 0; k < 14; k++) bell(o, sr, hz('F7') * (1 + 0.5 * (k % 3)), 6.2 + k * 0.12, 0.045, 1.2); // (sparks of returning life)
+        noise(o, sr, 0, 4, 0.03, (u) => 0.15 + 0.6 * u, swell(0.5, 0.4), r);
+        return finish(o, sr, { rms: 0.075 });
+    },
     /** «Sun Ray»'s tune: the Sun's energy drawn down — a rising drone, a bright brass-like fanfare in open fifths (E major), bells like sparks falling, a long white end. */
     thSunRay(sr) {
         const o = buf(sr, 9), r = rng(163);
@@ -1049,6 +1062,15 @@ const LOOPS = {
         drum(o, sr, 0.02, 0.9, 42, 0.5, r);
         return finish(o, sr, { peak: 0.62 });
     },
+    /** «Revivify» at the word: a golden bell rising into a warm swell, a soft heartbeat and a shimmer. */
+    fxRevivify(sr) {
+        const o = buf(sr, 1.6), r = rng(213);
+        glide(o, sr, 0, 0.9, 0.15, (u) => 260 + 700 * u, swell(0.1, 0.6), 2);
+        ['F5', 'A5', 'C6', 'F6'].forEach((n, k) => bell(o, sr, hz(n), 0.3 + k * 0.14, 0.15, 1.1, 0.3));
+        drum(o, sr, 0.15, 0.2, 70, 0.4, r); drum(o, sr, 0.5, 0.18, 70, 0.4, r);
+        noise(o, sr, 0.2, 1, 0.03, (u) => 0.3 + 0.7 * u, swell(0.1, 0.6), r);
+        return finish(o, sr, { peak: 0.58 });
+    },
     /** «Кидариус» at the word: a crackle gathering into a bright electric ring, a high bell. */
     fxKidarius(sr) {
         const o = buf(sr, 1.2), r = rng(181);
@@ -1277,6 +1299,7 @@ export const SPELL_SOUND = {
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
+    Revivify: { cast: 'fxRevivify', theme: 'thRevivify' },
     Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, WaterWalk: { cast: 'fxWaterWalk' }, WaterPart: { cast: 'fxWaterPart', theme: 'thWaterPart' }, Helios: { cast: 'fxHelios', theme: 'thHelios' }, SunRay: { cast: 'fxSunRayCharge', theme: 'thSunRay' }, Kidarius: { cast: 'fxKidarius', theme: 'thKidarius' }, Axis: { cast: 'fxAxis', theme: 'thAxis' }, SunRayFire: { cast: 'fxSunRayFire' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
     Breakthrough: { own: ['fxStone'] }, BreakthroughMaxima: { own: ['fxStone'] },

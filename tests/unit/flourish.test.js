@@ -5,8 +5,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchSpell } from '../../src/fx/SpellManager.js';
-import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
-import { buildFlora } from '../../src/world/FloraBuild.js';
+import * as THREE from 'three';
+import { TerrainData, BLOCK, chunkKey } from '../../src/world/Terrain.js';
+import { Flora, buildFlora } from '../../src/world/Flora.js';
 import { Flourish, GREENS } from '../../src/game/Flourish.js';
 
 test('the words: «Flourish» / «флориш» — and not everyday speech', () => {
@@ -36,4 +37,65 @@ test('a bloom column grows a flower on its grass; the chunk is made again; the l
     const G = new Flourish({ terrain: { data: t2 }, fx: null });
     G.restore(JSON.parse(JSON.stringify(F.snapshot())));
     assert.ok(t2._bloom?.size, 'the flowers back after a load');
+});
+
+test('Flourish greens the aimed cave floor, places flowers there, and leaves stone and the surface alone', () => {
+    const t = new TerrainData();
+    t.generate({ seed: 7, mountains: true });
+    const x = 80, z = 80, layer = -7;
+    const c = t.chunk(x >> 5, z >> 5);
+    for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) {
+        t.set(x + dx, layer, z + dz, dx === 0 && dz === 0 ? BLOCK.DIRT : BLOCK.STONE);
+        t.set(x + dx, layer + 1, z + dz, BLOCK.AIR);
+    }
+    const top = t.topLayer(x, z), surface = t.get(x, top, z);
+    assert.ok(top > layer + 1);
+    const game = {
+        localId: 'me', terrain: {data: t},
+        dom: 'right', wandSide: () => 'right',
+        character: {getHandDirection: (_, out) => out.set(0, -1, 0), getHandWorldPosition: (_, out) => out.set(x, -5, z)},
+        combat: {pay: () => {}},
+        builder: {
+            _hitCell: () => ({x, z, L: layer, type: t.get(x, layer, z), point: {}}),
+            _sendEdits: edits => { for (const cell of edits) t.set(...cell); },
+        },
+    };
+    const F = new Flourish(game);
+    assert.equal(F.cast(true), 'Flourish');
+    F.update(2.3);
+    assert.equal(t.get(x, layer, z), BLOCK.GRASS);
+    assert.equal(t.get(x + 1, layer, z), BLOCK.STONE);
+    assert.equal(t.get(x, top, z), surface);
+    const flowers = new Flourish(game);
+    flowers.restore([[x, z, layer]]);
+    assert.deepEqual(flowers.snapshot(), [[x, z, layer]]);
+    assert.ok(buildFlora(t, c).box[1] < -6, 'flower vertices belong to the cave, not the grass above');
+});
+
+
+test('an edited floor hides stale meadow geometry while the worker rebuilds it', () => {
+    const data = new TerrainData();
+    data.generate({ seed: 7 });
+    const cx = 0, cz = 0, key = chunkKey(cx, cz);
+    const c = data.chunk(cx, cz);
+    const terrain = {
+        data, group: new THREE.Group(), meshes: new Map([[key, {}]]),
+        floraAsync: false, askFlora() {}, takeFlora: () => [],
+    };
+    const meadow = new Flora(terrain);
+    const focus = { x: 4, z: 4 };
+    meadow.update(focus, true);
+    const old = meadow.meshes.get(key).mesh;
+    assert.equal(old.visible, true);
+    data.set(4, data.topLayer(4, 4) + 1, 4, BLOCK.PLANKS);
+    c.rev = (c.rev || 0) + 1; // the built terrain mesh was swapped in
+    terrain.floraAsync = true;
+    meadow.update(focus);
+    assert.equal(old.visible, false);
+    terrain.takeFlora = () => [{ key, rev: c.rev, out: buildFlora(data, c) }];
+    meadow.update(focus);
+    const current = meadow.meshes.get(key).mesh;
+    assert.notEqual(current, old);
+    assert.equal(current.visible, true);
+    meadow.dispose();
 });

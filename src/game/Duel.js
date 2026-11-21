@@ -2219,7 +2219,7 @@ export class Duel {
         this.bolts.delete(a.id);
         this.bolts.delete(b.id);
         const winnerBolt = loser === a.by ? b : loser === b.by ? a : null;
-        { const foe = a.by === this.me ? b.by : b.by === this.me ? a.by : null; if (foe != null && foe !== this.me) this.game.mana?.fight?.clash(foe); } // (a beam clash of mine: it counts in the fight with him — FightLedger)
+        { const foe = a.by === this.me ? b.by : b.by === this.me ? a.by : null; if (foe != null && foe !== this.me) this.game.mana?.fight?.clash(foe, !!winnerBolt && winnerBolt.by === this.me, c.t); } // (a beam clash of mine: it counts in the fight with him — FightLedger)
         this._burst(a.front, winnerBolt && c.marks ? c.marks[winnerBolt === a ? 0 : 1] : 0xffffff, 40);
         if (!winnerBolt) {
             if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ Дуэль прервана — никто не пострадал', true);
@@ -2262,7 +2262,7 @@ export class Duel {
         const w = this._won;
         if (!w || performance.now() - w.at <= 8000) return;
         this._won = null;
-        this.game.mana?.duelWonAlive(w.id, Math.random, w.max);
+        this.game.mana?.duelWonAlive(w.id, Math.random, w.max, null, false, 'выиграл столкновение, соперник жив 8 с');
     }
 
     remoteClashEnd(m) {

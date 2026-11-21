@@ -258,3 +258,18 @@ test('the hand over my own chest: only a magic house of mine (or a granted ward)
     chest.store = { castle: 'c1', k: 0 };
     assert.equal(g.houseMagic.chestUnderHand(over(top - chest.mesh.position.y + 0.5)), null);
 });
+
+test('window light fills a created house and follows open sight lines', () => {
+    const { g } = world();
+    const hm = g.houseMagic;
+    const rec = { id: 'house', x: 0, z: 0, G: 10, level: 1, face: 0, seed: 7 };
+    hm.list.set(rec.id, rec);
+    const plan = hm.plan(rec), w = plan.windows[0];
+    const p = new THREE.Vector3(w.x + Math.sign(rec.x - w.x) * 2, w.y, w.z + Math.sign(rec.z - w.z) * 2);
+    g.collision.lineOfSight = () => true;
+    assert.ok(hm.roomDaylight(p) > .6);
+    g.collision.lineOfSight = () => false;
+    assert.ok(hm.roomDaylight(p) > 0 && hm.roomDaylight(p) < .4);
+    p.y = plan.top + 3;
+    assert.equal(hm.roomDaylight(p), 0);
+});

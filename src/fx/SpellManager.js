@@ -139,6 +139,7 @@ export function matchSpell(text) {
     // «Да пусть создастся …» (the gods' making, DivineCreation.js): FIRST — the description after it may hold any other
     // spell's word («…замок с огнём на башнях»); only the opener at the very start of the phrase (CreationWords.js)
     if (creationWords(s)) return 'DivineCreation';
+    if (/^(revivify|ревивифай|рививифай|ревивифаи)[.!?]*$/.test(s)) return 'Revivify';
     // «Империус» («…Максима»): the whole word only — «империя», «император», «империал» are talk (imperiusWords)
     const imp = imperiusWords(s);
     if (imp) return imp;
@@ -1621,7 +1622,7 @@ export class SpellManager {
             capture: incendiary?null:() => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
             // (14.11: a thrown orb — «Bombardo», «Bombardo Maxima», «Fireball» — seen by the fire and the air mage, who beat it back: ElementalParry.js; `parry` takes it out
             // of the flight without a blast, as `capture` does, for the fireball too)
-            orb: { p: orb.position, v: vel, by: casterId, fire: !!incendiary, maxima: !!maxima },
+            orb: { id: bomb.id, p: orb.position, v: vel, by: casterId, fire: !!incendiary, maxima: !!maxima },
             parry: () => { if (exploded || task.life <= 0) return false; exploded = true; task.life = 0; return true; },
             life: maxima ? 3.2 : 2.6,
             onUpdate: (spell, dt) => {

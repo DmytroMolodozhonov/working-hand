@@ -44,7 +44,7 @@ export const TEMPLE = {
 /** The eight scrolls of the library's pedestals (the spells' names — taught by burning a scroll): the four of the
  * planets, «Бум» (Boom.js) on the fifth, before the god of Wisdom, and «Planet Liquidation» (PlanetDestroy.js) on
  * the sixth, further down the aisle. */
-export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die', 'ImperiusMaxima', 'DivineCreation', 'Helios', 'SunRay', 'Kidarius', 'Axis'];
+export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die', 'ImperiusMaxima', 'DivineCreation', 'Helios', 'SunRay', 'Kidarius', 'Axis', 'Revivify'];
 // (the fifteenth: «Axis» — the turn of the planet's day, TimeTurn.js; left of the carpet, before the desks, beyond the gods' shield)
 // (the fourteenth: «Кидариус» — the gods' golden lightning that blows up on its target, StrongSpells.js; left of the carpet, beyond «Империус Максима»)
 // (the thirteenth: «Sun Ray» — the Sun's energy into the wand, then a burning beam at «Атак» against the titans, SunRay.js; right of the carpet, beyond «Да пусть создастся»)
@@ -746,6 +746,7 @@ export function templePlan(seed = 1) {
     pedestals.push({ x: 4.6, z: WZ + 12.5, spell: TEMPLE_SCROLLS[12] }); // («Sun Ray»)
     pedestals.push({ x: -4.6, z: WZ + 12.5, spell: TEMPLE_SCROLLS[13] }); // («Кидариус»)
     pedestals.push({ x: -8, z: WZ + 11.5, spell: TEMPLE_SCROLLS[14] }); // («Axis»)
+    pedestals.push({ x: 8, z: WZ + 11.5, spell: TEMPLE_SCROLLS[15] }); // («Revivify»)
     // the colonnade along both sides holding the gallery of the upper storey
     const BY = 7; // the gallery's floor
     for (const sx of [-1, 1]) {

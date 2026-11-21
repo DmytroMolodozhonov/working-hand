@@ -217,12 +217,11 @@ export class RainSummon {
         if (f.by === g.localId || f.by === 'local') { const h = castingHand(g); if (h) { o = h.origin; d = h.dir; } }
         else { const h = g.handPose?.(f.by, f.side); if (h) { o = h.origin; d = h.dir; } }
         if (!o || !d) return;
-        _p.copy(o); _d.copy(d).normalize();
-        if (_d.y < 0.3) _d.y = 0.3; // (the beam goes up into the clouds, never across)
-        _d.normalize();
+        // (автор 20.11: основание луча идёт за кончиком палочки, как у боевых заклинаний, а сам свет — строго вверх, в небо:
+        //  он не качается вслед за наклоном палочки)
+        _p.copy(o);
         this.group.position.lerp(_p, 0.85);
-        _q.setFromUnitVectors(UP, _d);
-        this.group.quaternion.slerp(_q, 0.5);
+        this.group.quaternion.slerp(_q.identity(), 0.5);
     }
 
     update(dt) {

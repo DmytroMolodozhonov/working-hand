@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { BLOCK, BAKSADI_FROM_GEN } from '../world/Terrain.js';
 import { BIOMES } from '../world/Landscape.js';
 import { FLORA, FLORA_KINDS, FLORA_ORDER, FLORA_OF_ITEM, BURN_TIME, SCATTER_MAX, floraGroupIn, floraHarm, plantFoot, EYE, eyeState } from './MagicFlora.js';
+import { hasPlantSupport } from '../world/PlantSupport.js';
 import { floraBody, floraPick, floraMaterials, FLORA_MATERIAL, FLORA_VARIANTS, FLORA_CLOCK } from '../fx/FloraModels.js';
 import { newUid, ITEM_INFO } from './ItemTypes.js';
 
@@ -21,7 +22,7 @@ const _e = new THREE.Euler(), _m = new THREE.Matrix4(), _q = new THREE.Quaternio
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const PICK_COUNT = { glowcap: 8, giantfern: 5, azureberry: 9, sunherb: 7, frostcrystal: 5, armourleaf: 4, eyeflower: 1 }; // (a plant has at most this many picked parts)
 const BUDGET_MS = 1.2; // placing groups: at most this long a frame
-const REACH = { glowcap: 2.2, giantfern: 4.5, azureberry: 2.4, sunherb: 1.8, frostcrystal: 3, armourleaf: 2.2, eyeflower: 1.2 }; // m round the plant: what a spell / ray touches
+const REACH = { glowcap: 2.2, giantfern: 4.5, azureberry: 2.4, sunherb: 1.8, frostcrystal: 3, armourleaf: 2.2, eyeflower: 1.2, cactus: 1.6 }; // m round the plant: what a spell / ray touches
 
 export class MagicFloraLife {
     constructor(game) {
@@ -52,7 +53,7 @@ export class MagicFloraLife {
             const fm = FLORA_MATERIAL[kind];
             out.body[kind] = [];
             for (let v = 0; v < FLORA_VARIANTS; v++) out.body[kind].push(this._inst(floraBody(kind, v), M[fm.body], FLORA.MAX_PER_KIND));
-            out.pick[kind] = this._inst(floraPick(kind), M[fm.pick], FLORA.MAX_PER_KIND * PICK_COUNT[kind]);
+            if (PICK_COUNT[kind]) out.pick[kind] = this._inst(floraPick(kind), M[fm.pick], FLORA.MAX_PER_KIND * PICK_COUNT[kind]);
         }
         return (this.meshes = out);
     }
@@ -69,12 +70,23 @@ export class MagicFloraLife {
     sample() {
         const M = this._ensureMeshes();
         const out = [];
-        for (const kind of FLORA_ORDER) { const g = new THREE.Group(); g.add(new THREE.Mesh(M.body[kind][0].geometry, M.body[kind][0].material), new THREE.Mesh(M.pick[kind].geometry, M.pick[kind].material)); out.push(g); }
+        for (const kind of FLORA_ORDER) {
+            const g = new THREE.Group(), body = M.body[kind][0], pick = M.pick[kind];
+            g.add(new THREE.Mesh(body.geometry, body.material));
+            if (pick) g.add(new THREE.Mesh(pick.geometry, pick.material));
+            out.push(g);
+        }
         return out;
     }
 
     // ----------------------------------------------------------- placing
-    _biomeOf(t) { return (x, z) => BIOMES[t.biomeAt(Math.floor(x), Math.floor(z))]?.id || ''; }
+    _biomeOf(t, kind) {
+        return (x, z) => {
+            const ix = Math.floor(x), iz = Math.floor(z);
+            if (kind === 'cactus') return t.pyr?.sandy(ix, iz) ? 'desert' : '';
+            return BIOMES[t.biomeAt(ix, iz)]?.id || '';
+        };
+    }
 
     /** The cells round `p` that still need to be looked at, nearest first. */
     _plan(p) {
@@ -102,7 +114,7 @@ export class MagicFloraLife {
     }
 
     _place(t, e, seed) {
-        const grp = floraGroupIn(e.kind, e.gx, e.gz, seed, this._biomeOf(t));
+        const grp = floraGroupIn(e.kind, e.gx, e.gz, seed, this._biomeOf(t, e.kind));
         if (!grp) { this.groups.set(e.key, null); return; }
         // the land of every member must be made already (never made in the frame — TerrainData.landMade)
         if (grp.members.some((m) => t.landMade && !t.landMade(m.x, m.z))) return; // (try again later)
@@ -112,13 +124,13 @@ export class MagicFloraLife {
             const x = m.x, z = m.z;
             if (Math.hypot(x, z) < 40) continue; // (the start place stays clear)
             const top = t.topLayer(x, z), b = t.get(x, top, z);
-            if (b !== BLOCK.GRASS && !(e.kind === 'frostcrystal' && b === BLOCK.SNOW)) continue;
+            if (e.kind === 'cactus' ? b !== BLOCK.SAND || !t.pyr?.sandy(x, z) : b !== BLOCK.GRASS && !(e.kind === 'frostcrystal' && b === BLOCK.SNOW)) continue;
             if (t.get(x, top + 1, z) === BLOCK.WATER || t.get(x, top + 1, z) === BLOCK.SNOW && e.kind !== 'frostcrystal') continue;
             if ((t.sites || t.castles)?.landAt?.(x, z) || t.isIsland?.(x, z)) continue; // (not in castles, villages, towers; not on islands)
             if (Math.abs(t.topLayer(x + 2, z) - top) > 2 || Math.abs(t.topLayer(x, z + 2) - top) > 2 || Math.abs(t.topLayer(x - 2, z) - top) > 2 || Math.abs(t.topLayer(x, z - 2) - top) > 2) continue; // (a steep slope: nothing grows)
             const foot = plantFoot(t, e.kind, x, z, m.scale, (ix, tl, iz) => t.get(ix, tl, iz) === BLOCK.WATER || t.get(ix, tl + 1, iz) === BLOCK.WATER);
             if (!foot) continue; // (no solid ground under the whole foot: a hollow, water, a cliff — it does not grow here)
-            const pl = { ...m, kind: e.kind, y: foot.y, topL: top, picks: [], boxId: null, burn: 0, group: out }; // (topL: the block it grows on — gone, it falls: _grounded)
+            const pl = { ...m, kind: e.kind, y: foot.y, supportY: t.surfaceY(x, z), picks: [], boxId: null, burn: 0, group: out };
             const spots = floraBody(e.kind, m.variant).userData.picks;
             const was = this.picked.get(m.id);
             for (let i = 0; i < spots.length; i++) {
@@ -172,6 +184,7 @@ export class MagicFloraLife {
 
     _writePicks(kind) {
         const M = this._ensureMeshes(), mesh = M.pick[kind], now = Date.now();
+        if (!mesh) return;
         let n = 0;
         for (const pl of this.list[kind]) {
             if (pl.burn < 0) continue;
@@ -282,6 +295,7 @@ export class MagicFloraLife {
         const g = this.game;
         let best = null, bd = 12;
         for (const kind of FLORA_ORDER) for (const pl of this.list[kind]) {
+            if (!pl.picks.length) continue;
             const to = _v.set(pl.x - o.x, pl.y + 1.4 - o.y, pl.z - o.z), dist = to.length();
             if (dist > bd || d.angleTo(to.normalize()) > 0.35) continue;
             best = pl; bd = dist;
@@ -359,6 +373,20 @@ export class MagicFloraLife {
         this._dirty.add(pl.kind); this._pickDirty.add(pl.kind);
     }
 
+    netKill(id, how) {
+        if (typeof id !== 'string') return;
+        const pl = this.byId.get(id);
+        if (how === 'burn') { if (pl) this.ignite(pl, true); return; }
+        if (pl) this.kill(pl, how, true);
+        else this.gone.add(id);
+    }
+
+    goneList() { return Array.from(this.gone); }
+
+    restoreGone(ids) {
+        if (Array.isArray(ids)) for (const id of ids) this.netKill(id, 'destroy');
+    }
+
     // ----------------------------------------------------------- frame
     update(dt) {
         if (!this.active) { this.group.visible = false; return; }
@@ -387,12 +415,6 @@ export class MagicFloraLife {
             this._eyeT = 0.05;
             for (const pl of this.list.eyeflower || []) if (Math.abs(pl.x - me.x) + Math.abs(pl.z - me.z) < 70) { this._pickDirty.add('eyeflower'); break; }
         }
-        // instances: only the kinds that changed
-        if (this._dirty.size || this._pickDirty.size) {
-            for (const k of this._dirty) this._writeBody(k);
-            for (const k of this._pickDirty) this._writePicks(k);
-            this._dirty.clear(); this._pickDirty.clear();
-        }
         // parts grow again
         this._growT = (this._growT || 0) - dt;
         if (this._growT <= 0) {
@@ -408,9 +430,8 @@ export class MagicFloraLife {
             this._groundT = 0.5;
             const players=worldPlayers(g);
             for (const kind of FLORA_ORDER) for (const pl of [...this.list[kind]]) {
-                if (pl.topL == null || !nearWorldPlayer(players,pl.x,pl.z,120)) continue;
-                const b = t.get(Math.round(pl.x), pl.topL, Math.round(pl.z));
-                if (b === BLOCK.AIR || b === BLOCK.WATER) this.kill(pl, 'destroy');
+                if (!nearWorldPlayer(players,pl.x,pl.z,120)) continue;
+                if (!hasPlantSupport(t, pl.x, pl.supportY ?? pl.y, pl.z)) this.kill(pl, 'destroy');
             }
         }
         // burning plants: embers, then ash
@@ -421,6 +442,11 @@ export class MagicFloraLife {
             if (pl.burn <= 0) { pl.burn = -1; this.kill(pl, 'ash'); }
             else this._dirty.add(pl.kind);
         }
+
+        // Commit the instances after removing unsupported or burnt plants, before this frame is drawn.
+        for (const k of this._dirty) this._writeBody(k);
+        for (const k of this._pickDirty) this._writePicks(k);
+        this._dirty.clear(); this._pickDirty.clear();
 
         // the hand: pick
         this._handT -= dt;
@@ -448,7 +474,7 @@ export class MagicFloraLife {
         for (const pl of [...this.byId.values()]) this._drop(pl, false);
         this.groups.clear();
         this.group.parent?.remove(this.group);
-        if (this.meshes) { for (const kind of FLORA_ORDER) { for (const m of this.meshes.body[kind]) m.dispose?.(); this.meshes.pick[kind].dispose?.(); } }
+        if (this.meshes) { for (const kind of FLORA_ORDER) { for (const m of this.meshes.body[kind]) m.dispose?.(); this.meshes.pick[kind]?.dispose?.(); } }
     }
 }
 

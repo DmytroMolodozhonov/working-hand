@@ -1,4 +1,5 @@
 import {SPELL_COST} from './SpellCosts.js';
+import { allLog } from '../core/AllLog.js';
 import { deathImpulse, magicalImpactKind } from './DeathImpulse.js';
 /**
  * Combat.js — the «Свободный мир» rules: players fight each other with spells.
@@ -128,7 +129,7 @@ export function shieldHitCost(kind) {
  * shield gives way): mana a second the shield's holder pays while it is pressed. The dome («Protection Maxima») pays half
  * («держит дольше»), as against the Ice Queen. Not in the table — a one-off charge, paid once (shieldHitCost).
  */
-export const SHIELD_PRESS = { Electrum: 6 };
+export const SHIELD_PRESS = { Electrum: 2.5 }; // (автор 20.11: щит берёт вдвое меньше, чем тратит атакующий — 5/с; осада щита разорительна для того, кто давит)
 export const pressCost = (kind, dt, dome = false) => (SHIELD_PRESS[kind] || 0) * dt * (dome ? 0.5 : 1);
 
 const SHIELD_LEVEL = 0.15; // m: one hand this much higher than the other — the shield goes up at it (Combat._shieldSide)
@@ -597,6 +598,7 @@ export class Combat {
     /** Pay the fatigue of a spell that was cast. */
     /** Fatigue a spell costs (a wand in the hand saves 15%). */
     costOf(name, extra = 0) {
+        if (name === 'Revivify') return SPELL_COST.Revivify;
         const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1) * (this.game.heroElement?.k(name) ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
         return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardDispel|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * wandCostMul(w) * 10) / 10 : base; // (the plain wooden wand saves nothing)
@@ -905,7 +907,8 @@ export class Combat {
             m[kind] = now;
         }
         if (cost <= 0) return true;
-        if (this.fatigue >= cost) { this.fatigue -= cost; return true; }
+        if (this.fatigue >= cost) { this.fatigue -= cost; allLog('Бой', `щит принял «${kind}»: −${cost.toFixed(1)} маны, осталось ${Math.round(this.fatigue)}`); return true; }
+        allLog('Бой', `щит не удержал «${kind}»: нужно ${cost.toFixed(1)} маны, а было ${Math.round(this.fatigue)} — щит разбит`);
         this.fatigue = 0;
         this._shatter('💥 Щит разбит — не хватило маны, чтобы удержать заклинание!');
         return false;
@@ -1000,6 +1003,7 @@ export class Combat {
         if (this.manaOn) {
             const cost = pressCost(kind, dt, s.type === 2);
             if (this.fatigue < cost) {
+                allLog('Бой', `щит разбит «${kind}» (молния давила): нужно ${cost.toFixed(1)} маны, а было ${Math.round(this.fatigue)}`);
                 this.fatigue = 0;
                 this._shatter('💥 Щит разбит — молния продавила его, не хватило маны!');
                 return false;
@@ -1173,7 +1177,10 @@ export class Combat {
         // worn armour takes its share; a robe / a named armour's perks soften it (Armor.js)
         if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
         this.game.imperius?.interruptByDamage?.(amount, kind); // («Империус»: ANY harm to the body left standing brings the mind back at once — the author)
+        const hp0 = this.hp;
         this.hp = Math.max(0, this.hp - amount);
+        // (автор 21.11: «не понимаю, что произошло» — каждый удар по герою виден в журнале: кто, чем, сколько, что осталось, какая мана и щит)
+        allLog('Бой', `по вам: «${kind || '?'}» от ${byId != null ? this.game.playerName?.(byId) || byId : 'неизвестного'}: −${(hp0 - this.hp).toFixed(1)} HP (${hp0.toFixed(1)} → ${this.hp.toFixed(1)} из ${this.maxHp || PVP.MAX_HP}); мана ${Math.round(this.fatigue)}; щит ${this.shield && this.shield.left > 0 ? (this.shield.gods ? 'божественный' : this.shield.type === 2 ? 'купол' : 'обычный') : 'нет'}`);
         this.game.fireSerpent?.masterHurt?.(byId); // (my fire serpent answers whoever really hurt me — FireSerpent.js)
         this.game.fleet?.kingHurt(byId); // (the crew of my ship answers whoever struck me — FleetOrders.kingHurt)
         this.hurtAt = performance.now(); // (in a fight: the microphone listens for spells — main.js)

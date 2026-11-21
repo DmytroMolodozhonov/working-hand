@@ -221,7 +221,7 @@ import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN, inHell } from '../world/HellMap.js';
 import { allLog } from '../core/AllLog.js';
 import { terrainProbe } from '../world/TerrainProbe.js';
-import { WIZ_COUNTER_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { WIZ_COUNTER_FROM_GEN, CAVE_MINES_FROM_GEN, BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, ARENA_FLAT_FROM_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, SEABED_FROM_GEN, WIZ_SHOPS_FROM_GEN, VAMPIRE_FROM_GEN, PYRAMIDS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { windAt, stormOf, windLevelSmooth } from '../world/SeaWind.js';
 import { OceanStorm } from './OceanStorm.js';
@@ -330,6 +330,7 @@ import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 import { restartsCreative } from './CreativeRestart.js';
 import { PotionEffects } from './PotionEffects.js';
 import { Flourish } from './Flourish.js';
+import { Revivify } from './Revivify.js';
 import { randomLook as _rollLook, cleanLook as _cleanLook } from '../entities/Appearance.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -570,6 +571,7 @@ export class Game {
             buildings: this.gen >= BUILDINGS_FROM_GEN, // (different buildings in the settlements — Buildings.js)
             apart: this.gen >= SPAWN_MAPS_FROM_GEN, // (the Creative bosses' places apart: the dragon's lair, the far ice castle, the spider's den — Terrain.SPAWN_MAPS_FROM_GEN)
             bigHouses: this.gen >= HOUSE_SIZE_FROM_GEN, // (the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig)
+            caveMines: this.gen >= CAVE_MINES_FROM_GEN,
             dungeons: this.gen >= DUNGEON_FROM_GEN, // (the ruins and the underground dungeons — Dungeons.js)
             ghostCastle: this.gen >= GHOST_CASTLE_FROM_GEN, // (the Castle of Ghosts — only a hero who sees the invisible has it in his land: GhostCastleLife.js)
             iceArena: this.gen >= ICE_ARENA_FROM_GEN, // (the Ice Queen's palace on the great ice arena — IceCastle.ICE_CASTLE.ARENA)
@@ -601,6 +603,13 @@ export class Game {
         if (this.dayCycle) this.world.setDayPhase(this.dayPhase());
         this.collision = this.world.collision;
         this.terrain = this.world.terrain;
+        if (this.terrain) {
+            const land = this.terrain.data;
+            land.deferFloods = true;
+            land.floodAuthority = () => this.authority;
+            land.onFloodPatch = patch => this.sync?.floodPatch?.(patch);
+            land.onFloodInlet = inlet => { this.fallFx?.breach(inlet); this.sync?.floodInlet?.(inlet); };
+        }
         // the sea (generation-2 worlds): its waves, the same on every computer (src/world/Sea.js)
         const seas = this.terrain?.data?.seas;
         // (what the terrain made of a column: land, sea, or a castle's harbour — calm behind its breakwater)
@@ -960,6 +969,7 @@ export class Game {
         this.crossedShield = new CrossedShield(this); // «Protection» by crossing the arms before the chest (CrossedArms.js)
         this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
+        this.revivify = new Revivify(this);
         this.flourish = new Flourish(this); // «Flourish»: the earth turns green, then flowers (Flourish.js)
         this.wingFlight = new WingFlight(this); // (the flight on them by the arms' strokes — WingFlight.js)
         this.walkRec = new WalkRecorder(this); // F8: «Ходьба» — a recording to tune walking back (WalkRecorder.js)
@@ -1510,6 +1520,7 @@ export class Game {
         this.wreck?.afterBlast(pos, radius, power);
         // a blast in a castle or a village: the guards hear it (and want to know who)
         if (authoritative) {
+            for (const t of out.trees || []) this.sync?.treeGone?.(t.index);
             let wrecked = 0;
             for (const b of out.blocks) if (isCastleBlock(b.type)) wrecked++;
             this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true, { r: radius });
@@ -1826,7 +1837,7 @@ export class Game {
         }
         if (this._caveChests?.size && (this._caveUnloadT = (this._caveUnloadT || 0) - dt) <= 0) { this._caveUnloadT = 5; this._unloadCaves(p); }
         // darkness: rock above the head
-        const head = Math.floor(p.y + 2.4 + 1.5);
+        const head = Math.floor(p.y + 1.25 + 1.5);
         // rock above the head here and around (so the light doesn't flicker at the edges)
         let n = 0;
         for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) if (t.solidIn(Math.round(p.x) + dx, Math.round(p.z) + dz, head, head + 14)) n++;
@@ -1842,7 +1853,11 @@ export class Game {
         // in a cave: as dark as the daylight reaching the head (the mouth lit, deeper in dark — the
         // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
         const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;
-        let dark = sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
+        if ((this._houseLightT = (this._houseLightT || 0) - dt) <= 0) {
+            this._houseLightT = .25;
+            this._roomLight = this.houseMagic?.roomDaylight(p) || 0;
+        }
+        let dark = this._roomLight > 0 && built ? 0 : sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
         if (this.godhood?.inHall) dark = 0; // (the Hall of the Sun: no darkness at all)
         this._sunHallK = (this._sunHallK || 0) + ((this.godhood?.inHall ? 1 : 0) - (this._sunHallK || 0)) * Math.min(1, dt * 1.2);
         this.world.setSunHall?.(this._sunHallK);
@@ -1851,6 +1866,9 @@ export class Game {
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
         this.world.setIndoor?.(this._indoorK);
+        const roomFill = built ? this._roomLight : 0;
+        this._roomFill = (this._roomFill || 0) + (roomFill - (this._roomFill || 0)) * Math.min(1, dt * 3.5);
+        this.world.setHouseFill?.(this._roomFill);
         this._updateCaveMap(dt, p, !built && !!this._caveSys && (covered || sky < 0.9 || belowCaveSurface(t, p.x, p.z, p.y - PLAYER_GROUND_OFFSET)));
     }
 
@@ -2409,6 +2427,7 @@ export class Game {
         if (name === 'Caligo') return this.darkFog.cast(isFinal); // (a jet of black smoke for 10 s — DarkFog.js)
         if (name === 'Sectura') return this.slash.cast(isFinal); // (the word arms the wand; the swing lets the blade go — Slash.js)
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
+        if (name === 'Revivify') return this.revivify.cast(isFinal);
         if (name === 'Flourish') return this.flourish.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         if (name === 'Axis') return this.timeTurn.cast(isFinal); // (the turn of the planet: 2000 mana — TimeTurn.js)
@@ -3788,7 +3807,7 @@ export class Game {
         if (!data) return null;
         const ix = Math.round(x), iz = Math.round(z), L = Math.floor(y + 1.5);
         const b = data.get(ix, L, iz);
-        if (b === BLOCK.WATER) return 'water';
+        if (b === BLOCK.WATER) return data.isWaterAt?.(x, y, z) === false ? null : 'water';
         // the moving sea surface (waves above the still water blocks)
         if (this.sea && L >= 1 && data.isSeaColumn?.(ix, iz) && y < WATER_LEVEL_Y + this.sea.height(x, z)) return 'water';
         if (b && b !== BLOCK.AIR && b !== BLOCK.WHEAT && b !== BLOCK.FLOWERS && b !== BLOCK.VEG) return 'solid'; // (the flame goes over plants)
@@ -4632,7 +4651,9 @@ export class Game {
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
         if (earth && !duelOnly && !lean) this.iceCastle.update(dt); sysMark('iceCastle');
         if (earth && !duelOnly && !lean) this.pharaoh?.update(dt); sysMark('pharaoh');
-        if (earth && !duelOnly && !lean) { this.riverRocks?.update(dt, this.character.group.position); this.fallFx?.update(dt, this.character.group.position); } else if (this.riverRocks?.group.visible) this.riverRocks.group.visible = false;
+        if (earth && !duelOnly && !lean) this.riverRocks?.update(dt, this.character.group.position);
+        else if (this.riverRocks?.group.visible) this.riverRocks.group.visible = false;
+        if (earth && !duelOnly) this.fallFx?.update(dt, this.character.group.position, !lean);
         if (earth && !duelOnly && !lean) this.vampire?.update(dt); sysMark('vampire');
         if (!duelOnly && !lean) this.titans?.update(dt); sysMark('titans');
         this.godhood?.update(dt); sysMark('godhood');
@@ -4658,6 +4679,7 @@ export class Game {
         this._brainrotUpkeep(dt);
         this.potionFx?.update(dt); sysMark('potionFx');
         this.wings?.update(dt); sysMark('wings'); // (they grow, they hurt, they fold or spread)
+        this.revivify?.update(dt);
         this.flourish?.update(dt); sysMark('flourish');
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
@@ -4777,6 +4799,7 @@ export class Game {
             dc.enabled = on;
             dc.update(deltaTime, this.scene, focus.x, focus.y, focus.z, on ? fog.far : 0, !!this.lite);
         }
+        if (this.authority && !this.space?.inSpace) this.world.pruneUnsupportedTrees(dt, i => this.sync?.treeGone?.(i));
         this.world.forest?.update(dt, this.character.group.position, this.camera, worldPlayers(this)); // (the real trees — Trees.js)
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase()); // (before the water's haze: it sets the fog's colour)
         // («Helios» on the Earth: the gods' Sun turns the night to day round it — World.setHelios; on the planets Space._planetSky does it)
@@ -5823,6 +5846,7 @@ export class Game {
         this.fishPier?.dispose();
         this.rainFx?.dispose();
         this.seaSurface?.dispose();
+        this.fallFx?.dispose();
         this.steam?.dispose();
         this.airFx?.dispose();
         this.featherfall?.dispose();

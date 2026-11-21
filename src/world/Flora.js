@@ -121,6 +121,8 @@ vGlow = glow;
             if (!this.data.hasChunk(cx, cz) || !this.terrain.meshes.has(key)) continue; // (its ground first)
             const e = this.meshes.get(key), c = this.data.chunk(cx, cz);
             if (e && e.rev === c.rev && e.chunk === c) continue;
+            // Keep edited floors clear while the replacement meadow is in flight.
+            if (e && (c.modified || e.chunk !== c)) e.mesh.visible = false;
             want.push({ key, cx, cz, d, c });
         }
         // made by a terrain worker (a chunk as it was generated — the same blades as here): in now

@@ -591,8 +591,36 @@ function eyePick() {
 }
 
 // ================================================================== the table
-const BODY_BUILD = { glowcap: glowcapBody, giantfern: fernBody, azureberry: azureBody, sunherb: sunBody, frostcrystal: frostBody, armourleaf: armourBody, eyeflower: eyeBody };
-const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick, armourleaf: armourPick, eyeflower: eyePick };
+function cactusBody(variant) {
+    const B = new Builder(), rand = rng(9343 + variant * 73), h = 2.9 + variant * .85, r = .27 + variant * .035;
+    const skin = hexRGB(0x668348), furrow = hexRGB(0x344e2a), spine = hexRGB(0xd9caa1);
+    const stem = (pts, radius) => B.tube(pts, t => radius * (t > .8 ? 1 - (t - .8) * 4.4 : .89 + t * .27),
+        (t, u) => shade(lerpC(furrow, skin, .4 + .58 * Math.cos(u * Math.PI * 14) ** 2), .84 + t * .2),
+        16, { ridge: (t, u) => 1 + .125 * Math.cos(u * Math.PI * 16) });
+    const lean = (rand() - .5) * .4;
+    stem([[0, -.16, 0], [lean * .3, h * .32, 0], [lean * .65, h * .68, 0], [lean, h * .93, .03], [lean, h, .05]], r);
+    for (let arm = 0; arm < (variant === 0 ? 1 : 2); arm++) {
+        const side = arm ? -1 : 1, y = h * (.33 + arm * .22 + rand() * .14), reach = side * (.68 + rand() * .35);
+        stem([[0, y, 0], [reach * .7, y + .11, .17], [reach, y + .47, .25], [reach * 1.04, y + .78 + rand() * .38, .3]], r * .66);
+    }
+    for (let i = 0; i < 52; i++) {
+        const a = (i % 8) * Math.PI / 4, t = .1 + rand() * .78;
+        const dx = Math.cos(a), dz = Math.sin(a);
+        B.cone([dx * r + t * lean, h * t, dz * r], unit([dx, .35, dz]), .085 + rand() * .047, .02, furrow, spine, 3);
+    }
+    const g = B.geometry(h * 12);
+    g.userData.picks = [];
+    return g;
+}
+
+function cactusSpine() {
+    const B = new Builder();
+    B.cone([0, 0, 0], unit([.2, 1, .07]), .44, .045, hexRGB(0x6d5a3e), hexRGB(0xe2d3aa), 7);
+    return B.geometry();
+}
+
+const BODY_BUILD = { glowcap: glowcapBody, giantfern: fernBody, azureberry: azureBody, sunherb: sunBody, frostcrystal: frostBody, armourleaf: armourBody, eyeflower: eyeBody, cactus: cactusBody };
+const PICK_BUILD = { glowcap: glowcapShape, giantfern: fernPick, azureberry: azurePick, sunherb: sunPick, frostcrystal: frostPick, armourleaf: armourPick, eyeflower: eyePick, cactus: cactusSpine };
 /** Which shared material draws the body / the picked part of each kind. */
 export const FLORA_MATERIAL = {
     glowcap: { body: 'body', pick: 'glowcap' },
@@ -602,6 +630,7 @@ export const FLORA_MATERIAL = {
     frostcrystal: { body: 'crystal', pick: 'shard' },
     armourleaf: { body: 'plate', pick: 'plate' },
     eyeflower: { body: 'eyestalk', pick: 'eye' },
+    cactus: { body: 'body', pick: 'plate' },
 };
 /** The picked part's size factor in the hand (the item model). */
 const _body = new Map(), _pick = new Map();
@@ -633,7 +662,9 @@ export function floraSamples() {
     const M = floraMaterials();
     for (const kind of Object.keys(BODY_BUILD)) {
         const grp = new THREE.Group();
-        grp.add(new THREE.Mesh(floraBody(kind, 0), M[FLORA_MATERIAL[kind].body]), new THREE.Mesh(floraPick(kind), M[FLORA_MATERIAL[kind].pick]));
+        const mat = FLORA_MATERIAL[kind];
+        grp.add(new THREE.Mesh(floraBody(kind, 0), M[mat.body]));
+        if (mat.pick) grp.add(new THREE.Mesh(floraPick(kind), M[mat.pick]));
         out.push(grp);
     }
     return out;

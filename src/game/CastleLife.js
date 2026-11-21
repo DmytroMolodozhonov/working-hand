@@ -80,6 +80,7 @@ import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
+import { knightShield, shieldReaction, shieldReserve, shieldWear } from './KnightShield.js';
 import { teaches, placeOf, darkOfEntry, isDark } from './DarkMagic.js';
 import { setDarkVillager } from '../entities/DarkSkin.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
@@ -487,6 +488,12 @@ export class CastleLife {
             walk: WALK * (0.72 + ((e.seed >>> 4) % 100) / 220), lane: (((e.seed >>> 11) % 100) / 100 - 0.5) * 2.6,
             bubble: null, bar: null, net: null,
         };
+        if (model.shield && (v.role === 'knight' || v.role === 'king')) {
+            const saved = this.state(def.id).shields?.[idx];
+            v.shieldItem = knightShield(v);
+            v.shieldReserve = saved >= 0 ? Math.min(saved, shieldReserve(v.shieldItem)) : shieldReserve(v.shieldItem);
+            if (saved === -1) { v.shieldGone = true; model.dropShield(); }
+        }
         if (e.robe) v.robe = true;
         v.dark = darkOfEntry(def, e, v.id); // (чёрный маг мира: метки на теле — DarkSkin.js; волшебники своих не презирают)
         if (v.dark > 0) setDarkVillager(model, v.dark);
@@ -1569,6 +1576,7 @@ export class CastleLife {
         // a road fighter's own reaction time passed (WandererMind): now he acts; a commoner's decision runs out (the fear is gone)
         if (v.wLag && (v.wLag.t -= dt) <= 0) { const f = v.wLag.fn; v.wLag = null; if (!v.dead) f(); }
         if (v.wm && v.wm.until && Date.now() > v.wm.until) this._wanderCalm(v);
+        if (this._knightGuard(v, dt)) return;
         // startled (a spell flew past, a blast near — Startle.js): a flinch and a turn to where it came from
         if (v.flinchT > 0) {
             v.flinchT -= dt;
@@ -2963,8 +2971,13 @@ export class CastleLife {
         if (v.wizard && (v.fx & FX.DOME) && !opts.pierce && this.wizards.fight.shieldPays(v, opts.spell ? opts.kind || 'spell' : 'melee', true)) { this._flash(v); return; }
         // a shield held up (the shield wall, the ones holding a place, a wizard's hand shield) takes a blow
         // or a spell from the front: little gets through. «Авада Кедавра» passes any shield.
-        if (dir && !opts.pierce && opts.kind !== 'Thunderwave' && v.foe && this._shieldUp(v)) { // (Thunderwave comes from above: a hand shield does not stop it)
+        if (dir && !opts.pierce && opts.kind !== 'Thunderwave' && (v.foe || v.shieldGuard) && this._shieldUp(v)) { // (Thunderwave comes from above: a hand shield does not stop it)
             if (dir.x * -Math.sin(v.yaw) + dir.z * -Math.cos(v.yaw) < -0.35) {
+                if (v.shieldItem && !v.wizard && opts.spell) {
+                    this._wearKnightShield(v, opts.kind || 'spell');
+                    this._flash(v);
+                    return;
+                }
                 dmg *= opts.fire ? 0.5 : 0.25; // (fire goes round a shield: it only halves it)
                 if (opts.fire) v.shieldHeat = (v.shieldHeat || 0) + 0.25; // (and the shield gets hot)
                 for (let i = 0; i < 5; i++) this.game.fx.spark(_v.set(v.x - Math.sin(v.yaw) * 0.8, v.y + 2.6, v.z - Math.cos(v.yaw) * 0.8), 0xffe9a0, 0.08, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
@@ -3340,6 +3353,37 @@ export class CastleLife {
         return true;
     }
 
+    /** Raise the very same resident or wanderer, clearing the persisted death only after the replacement exists. */
+    reviveVillager(body) {
+        if (!this.auth || body.k !== 'v' || typeof body.who !== 'string') return null;
+        const match = /^(.+):(\d+)$/.exec(body.who);
+        if (!match) return null;
+        const [, cid, n] = match, idx = Number(n);
+        const old = this.byId.get(body.who);
+        if (old && !old.dead) return null;
+        const cs = old?.cs || this.castles.get(cid) || this._runtimeById(cid);
+        if (!cs || !this._rosterRaw(cs.def, idx)) return null;
+        const st = this.state(cid);
+        if (!st.killed.has(idx) || this.justice?.isJailed(cs, idx)) return null;
+        if (old) this._deactivate(old);
+        st.killed.delete(idx);
+        const v = this._activate(cs, idx, { x: body.x, y: body.y, z: body.z, yaw: body.yaw }, old?.job || 'wander', { post: old?.post });
+        if (!v) { st.killed.add(idx); return null; }
+        v.model.setHeldTool('none');
+        v.noWand = !!v.wizard;
+        if (v.wizard && body.wandUid) v.lostWand = { uid: body.wandUid, t: 0 };
+        if (v.shieldItem) {
+            v.shieldGone = true;
+            (st.shields ||= {})[idx] = -1;
+            v.model.dropShield();
+        }
+        if (v.role === 'knight' || v.role === 'king') v.disarmed = true;
+        v.stunT = .55;
+        if (v.role === 'king') st.kingDead = false;
+        this._sendState(cs);
+        return v;
+    }
+
     _flash(v) {
         v.model.flashHit(0.15);
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.set(v.x, v.y + 2.6, v.z), v.armor > 0 ? 0xdddddd : 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.5);
@@ -3523,12 +3567,68 @@ export class CastleLife {
         }
     }
 
-    _shieldUp(v) { return (!!v.model.shield && (v.mode === 'block' || v.tac?.role === 'shield')) || (!!v.wizard && !!(v.fx & FX.SHIELD)); }
+    _shieldUp(v) {
+        return (!!v.model.shield && !v.shieldGone && !v.vy && !(v.stunT > 0) && !v.lev
+            && (v.mode === 'block' || v.tac?.role === 'shield')) || (!!v.wizard && !!(v.fx & FX.SHIELD));
+    }
+
+    _knightGuard(v, dt) {
+        if (!v.shieldItem || !v.model.shield || v.shieldGone || v.seated) return false;
+        if (v.shieldItem.magic && v.shieldReserve < shieldReserve(v.shieldItem)) {
+            v.shieldReserve = Math.min(shieldReserve(v.shieldItem), v.shieldReserve + dt);
+            if (v.cs && this.state(v.cs.def.id).shields) this.state(v.cs.def.id).shields[v.idx] = v.shieldReserve;
+        }
+        const now = performance.now() / 1000;
+        let guard = v.shieldGuard;
+        if (guard && now >= guard.until) guard = v.shieldGuard = null;
+        if (!guard && now >= (v.shieldScan || 0)) {
+            v.shieldScan = now + .08;
+            const duel = this.game.duel;
+            let reaction;
+            for (const bolt of duel?.bolts?.values() || []) {
+                if (bolt.state !== 'flying' || bolt.by === v.id) continue;
+                reaction = shieldReaction(v, bolt, duel.boltSpeed(bolt));
+                if (reaction && this._sees(v, bolt.front)) break;
+                reaction = null;
+            }
+            if (!reaction) for (const task of this.game.spells?.spells || []) {
+                const orb = task.orb;
+                if (!orb?.id || orb.by === v.id || task.life <= 0) continue;
+                const speed = orb.v.length();
+                if (speed < .1) continue;
+                const bolt = { id: orb.id, by: orb.by, front: orb.p, dir: _v2.copy(orb.v).multiplyScalar(1 / speed) };
+                reaction = shieldReaction(v, bolt, speed);
+                if (reaction && this._sees(v, orb.p)) break;
+                reaction = null;
+            }
+            if (reaction) guard = v.shieldGuard = { ...reaction, ready: now + reaction.delay, until: now + reaction.eta + .35 };
+        }
+        if (!guard || now < guard.ready) return false;
+        v.yaw = turn(v.yaw, Math.atan2(v.x - guard.x, v.z - guard.z), dt * 8);
+        v.speed = 0;
+        v.mode = 'block';
+        this._ground(v);
+        return true;
+    }
+
+    _wearKnightShield(v, spell) {
+        const { reserve, broken } = shieldWear(v.shieldItem, spell, v.shieldReserve);
+        v.shieldReserve = reserve;
+        if (v.cs && (broken || v.shieldItem.magic)) {
+            const state = this.state(v.cs.def.id);
+            (state.shields ||= {})[v.idx] = broken ? -1 : reserve;
+        }
+        if (broken) { v.shieldGone = true; v.shieldGuard = null; v.model.dropShield(); }
+        for (let i = 0; i < (broken ? 16 : 5); i++) this.game.fx?.spark?.(
+            _v2.set(v.x - Math.sin(v.yaw) * .8, v.y + 2.6, v.z - Math.cos(v.yaw) * .8),
+            v.shieldItem.magic ? 0x91c9f1 : 0xe6bd84, broken ? .15 : .08,
+            _v.set((Math.random() - .5) * 5, Math.random() * 3, (Math.random() - .5) * 5), .5);
+    }
 
     /**
      * (host) A duel charge reached a castle person (Duel.applyToCreature): taken by a shield? The
      * Master's dome takes any; a wizard's hand shield or a knight's raised shield — one from the
-     * front (Sapira's blow on a knight's shield: hit() weakens it; Avada passes a knight's shield).
+     * front. A knight's shield absorbs the blow and takes the same wear as a player's.
      * A wizard's shield pays half of the charge's mana for it — out of mana it shatters.
      */
     wardOff(v, from, spell, dt = 0, earthChecked = false) {
@@ -3537,10 +3637,12 @@ export class CastleLife {
         // a wizard's «Protection» / the Master's dome: any charge — «Авада Кедавра» too — for half its mana (WizardFight.shieldPays)
         if (v.wizard && (v.fx & FX.DOME)) return this.wizards.fight.shieldPays(v, spell, true, dt);
         const front = !!from && (from.x - v.x) * -Math.sin(v.yaw) + (from.z - v.z) * -Math.cos(v.yaw) > 0;
-        if (!front || !(v.foe || v.arenaFight) || !this._shieldUp(v)) return false; // (arenaFight: an arena duellist's shield — ArenaDuels.js)
+        if (!front || !(v.foe || v.arenaFight || v.shieldGuard) || !this._shieldUp(v)) return false; // (arenaFight: an arena duellist's shield — ArenaDuels.js)
         if (v.wizard) return this.wizards.fight.shieldPays(v, spell, false, dt);
-        if (dt > 0 && spell === 'Electrum') return this.wizards.fight.shieldHeats(v, dt); // (wood and iron: lightning heats it, it gives way in time)
-        return spell !== 'AvadaKedavra' && spell !== 'SapiraDuel'; // (a knight's shield of wood and iron)
+        if (dt > 0 && spell === 'Electrum' && this.wizards.fight.shieldHeats(v, dt)) return true;
+        if (!v.shieldItem) return false;
+        this._wearKnightShield(v, spell);
+        return true;
     }
 
     /** Who saw it? If anyone did (or the victim lives to tell), the castle turns on `by`. */
@@ -4369,6 +4471,7 @@ export class CastleLife {
         const wasDead = st.kingDead;
         st.owner = s.owner || null; st.ownerName = s.ownerName || null; st.kingDead = !!s.kingDead;
         st.killed = new Set(s.killed || []);
+        if (s.shields && typeof s.shields === 'object') st.shields = s.shields;
         if (s.sealLoot && typeof s.sealLoot === 'object') st.sealLoot = s.sealLoot;
         // (the king's friends: told to everybody; if mine changed, I am told too)
         const myBefore = levelOf(st.ranks, this.game.localId);
@@ -4385,9 +4488,9 @@ export class CastleLife {
 
     snapshot() {
         const out = {};
-        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || Object.keys(s.sealLoot || {}).length || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length || (s.reb && s.reb.v > 0)) {
+        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.shields || Object.keys(s.sealLoot || {}).length || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length || (s.reb && s.reb.v > 0)) {
                 const cs = this.castles.get(id);
-                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(Object.keys(s.sealLoot || {}).length ? { sealLoot: s.sealLoot } : {}), ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.reb && s.reb.v > 0 ? { reb: s.reb } : {}), ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
+                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(s.shields ? { shields: s.shields } : {}), ...(Object.keys(s.sealLoot || {}).length ? { sealLoot: s.sealLoot } : {}), ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.reb && s.reb.v > 0 ? { reb: s.reb } : {}), ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
             }
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;

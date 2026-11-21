@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="rvf-bg" cx="50%" cy="48%" r="52%"><stop offset="0" stop-color="#fffbe6" stop-opacity=".9"/><stop offset=".5" stop-color="#f2c75a" stop-opacity=".32"/><stop offset="1" stop-color="#2a1d06" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rvf-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".55" stop-color="#ffeaa0" stop-opacity=".8"/><stop offset="1" stop-color="#ffc247" stop-opacity=".25"/></linearGradient>
+    <linearGradient id="rvf-bone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f0e0"/><stop offset="1" stop-color="#b9ad90"/></linearGradient>
+    <radialGradient id="rvf-core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#fff0b8"/><stop offset="1" stop-color="#ffbf3a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="60" r="60" fill="url(#rvf-bg)"/>
+  <!-- rays of the returning light -->
+  <g stroke="#ffe39a" stroke-linecap="round" opacity=".75">
+    <path d="M64 3 v13" stroke-width="3"/>
+    <path d="M36 10 l6 10 M92 10 l-6 10 M14 30 l11 6 M114 30 l-11 6" stroke-width="2.4"/>
+    <path d="M50 5 l3 9 M78 5 l-3 9 M22 18 l8 7 M106 18 l-8 7" stroke-width="1.5" opacity=".7"/>
+  </g>
+  <!-- the ring of runes round the remains -->
+  <ellipse cx="64" cy="108" rx="52" ry="11" fill="none" stroke="#ffd25e" stroke-width="2.4" stroke-dasharray="7 4 2 4" opacity=".95"/>
+  <ellipse cx="64" cy="108" rx="38" ry="7.5" fill="none" stroke="#b9d7ff" stroke-width="1.5" stroke-dasharray="3 3" opacity=".9"/>
+  <!-- the figure of light standing up out of the bones: head, shoulders, arms a little raised, a robe fading down -->
+  <g>
+    <circle cx="64" cy="36" r="9" fill="url(#rvf-body)" stroke="#fff3c4" stroke-width="1.6"/>
+    <path d="M45 98 C47 70 50 56 64 52 C78 56 81 70 83 98 Z" fill="url(#rvf-body)" stroke="#fff3c4" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M52 62 C44 66 40 74 38 82 M76 62 C84 66 88 74 90 82" fill="none" stroke="#fff3c4" stroke-width="3.2" stroke-linecap="round" opacity=".9"/>
+    <circle cx="64" cy="70" r="9" fill="url(#rvf-core)"/>
+  </g>
+  <!-- the bones lying at its feet: two crossed long bones with knobs, a small ribcage, a skull-less fragment -->
+  <g stroke="#6e6347" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="url(#rvf-bone)">
+    <path d="M30 104 L98 112 M30 112 L98 104" stroke="#6e6347" fill="none" stroke-width="5.2"/>
+    <path d="M30 104 L98 112 M30 112 L98 104" stroke="url(#rvf-bone)" fill="none" stroke-width="3.2"/>
+    <circle cx="29" cy="102" r="3.4"/><circle cx="27" cy="106" r="3.4"/><circle cx="29" cy="110.5" r="3.4"/><circle cx="27" cy="114" r="3.4"/>
+    <circle cx="99" cy="102.6" r="3.4"/><circle cx="101" cy="106.6" r="3.4"/><circle cx="99" cy="111" r="3.4"/><circle cx="101" cy="114.4" r="3.4"/>
+    <path d="M52 108 q12 -9 24 0 M54 112 q10 -7 20 0" fill="none" stroke-width="2.2"/>
+  </g>
+  <!-- a spiral of sparks rising round the figure -->
+  <g fill="#fff3c4">
+    <circle cx="40" cy="92" r="2.2"/><circle cx="33" cy="76" r="1.8"/><circle cx="38" cy="58" r="2"/><circle cx="46" cy="42" r="1.6"/>
+    <circle cx="88" cy="92" r="2.2"/><circle cx="95" cy="76" r="1.8"/><circle cx="90" cy="58" r="2"/><circle cx="82" cy="42" r="1.6"/>
+    <circle cx="64" cy="16" r="2.4"/><circle cx="56" cy="24" r="1.4"/><circle cx="72" cy="24" r="1.4"/>
+  </g>
+</svg>
