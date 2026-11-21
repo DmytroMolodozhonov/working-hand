@@ -129,7 +129,7 @@ async function handleMessage(e){
     if (m.type !== 'build' || !data) return;
     const t0 = performance.now();
     const ownData=data;
-    const templateKey=templateCache&&Math.abs(m.cx)<=8&&Math.abs(m.cz)<=8?cacheKey('terrain',{...templateRecipe,mesh:2,cx:m.cx,cz:m.cz,planets:templatePlanets,ghost:!!data.ghost?.on}):null;
+    const templateKey=templateCache&&Math.abs(m.cx)<=8&&Math.abs(m.cz)<=8?cacheKey('terrain',{...templateRecipe,mesh:3,cx:m.cx,cz:m.cz,planets:templatePlanets,ghost:!!data.ghost?.on}):null;
     const kept=templateKey?await templateCache.getTree('terrain',templateKey):null;
     if(data!==ownData)return;
     if(kept?.chunk&&kept?.arrays?.land&&kept?.arrays?.water){
