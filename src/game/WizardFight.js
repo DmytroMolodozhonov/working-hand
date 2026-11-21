@@ -86,6 +86,7 @@ export class WizardFight {
         this._t = 0.25;
         const L = this.life, now = this.clock;
         for (const cs of L.castles.values()) {
+            if (cs.def.type === 'magehut') continue; // A lone defender fights on his own, without a squad's guard role.
             if (!(cs.awake || cs.def.kind === 'wander') || !(cs.def.kind === 'tower' || cs.def.kind === 'wander' || cs.def.kind === 'wizvillage' || (cs.def.kind === 'hamlet' && cs.def.mage))) continue; // (the wandering wizards' site is never «awake»: Travelers leads them)
             const groups = new Map();
             for (const v of cs.active.values()) {
@@ -314,7 +315,7 @@ export class WizardFight {
         const wt = v.wt, sq = wt?.sq;
         const W = v.W;
         // (a held shield: the guards and the screen keep it up — it costs a little mana)
-        if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2) { if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; }
+        if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2 && this.wl?.home?.allowsPersonalShield(v) !== false) { if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; }
         // the Master: he comes too close → blink away
         if ((v.role === 'master' || v.savior != null || v.keepAway) && W.blink && d < (v.keepAway ? 5 : 3.5) && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
         let spot = this._spot(v, fp, d, sq);
@@ -892,6 +893,7 @@ export class WizardFight {
 
     /** A charge flies at this wizard: a shield, the dome, or a step aside (WizardAI.react). */
     _react(v, dt) {
+        if (this.wl?.home?.allowsPersonalShield(v, true) === false) return;
         const duel = this.game.duel;
         v.reactT = (v.reactT || 0) - dt;
         if (!duel?.bolts || v.reactT > 0) return;
@@ -901,8 +903,15 @@ export class WizardFight {
             const dx = v.x - b.front.x, dz = v.z - b.front.z;
             const dist = Math.hypot(dx, dz);
             if (dist > 22) continue;
-            const at = (b.tk === 'v' && b.tid === v.id) || (b.dir.x * dx + b.dir.z * dz > dist * 0.94); // (aimed at me, or coming straight at me)
-            if (!at) continue;
+            const directlyAimed = b.tk === 'v' && b.tid === v.id;
+            if (!directlyAimed) {
+                if (b.dir.x * dx + b.dir.z * dz <= dist * 0.94) continue;
+                if (v.cs?.def?.type === 'magehut') {
+                    const dy = v.y + 2 - b.front.y;
+                    const along = b.dir.x * dx + b.dir.y * dy + b.dir.z * dz;
+                    if (along <= 0 || dx * dx + dy * dy + dz * dz - along * along > 2.2 ** 2) continue;
+                }
+            }
             const seen = b.seenBy || (b.seenBy = new Set());
             if (seen.has(v.id)) continue;
             // does he see it, is he ready, is there time? (from behind — never; taken by surprise — late)
@@ -923,7 +932,7 @@ export class WizardFight {
             }
             if (r && !v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; v.seated = false; } // (he cast at me: now it is a fight)
             if (r === 'counter' && (!n.counter || eta < CAST_PREP.T + 0.3)) r = 'shield'; // (no time to raise the wand and say it: only the hand shield)
-            if (r === 'dome') this._dome(v);
+            if (r === 'dome') this._dome(v, true);
             else if (r === 'counter' && this._counter(v, b)) { /* (a spell back: the beams meet — a duel) */ }
             else if (r === 'shield' || r === 'counter') {
                 if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; // (raised in the free hand: the wand goes on casting)
@@ -1040,7 +1049,8 @@ export class WizardFight {
         return this._begin(v, spell, b.by, fp, { vs: b.id, cost, cd: v.W.cast * 0.6 });
     }
 
-    _dome(v) {
+    _dome(v, threatened = false) {
+        if (this.wl?.home?.allowsPersonalShield(v, threatened) === false) return;
         const D = v.W.dome;
         if (!D || (v.fx & FX.DOME) || v.mana < NPC_COST.ProtectionMaxima) return;
         v.mana -= NPC_COST.ProtectionMaxima;

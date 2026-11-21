@@ -242,7 +242,10 @@ export class WizardLife {
                 if (v.dead || v.lev || v.servantOf != null) continue;
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
                 if (d > D.hear) continue;
-                if (MAGIC_OF[kind] === 'blast' && d < (r ?? D.r) + 10) this.blasts.protect(v);
+                if (MAGIC_OF[kind] === 'blast' && d < (r ?? D.r) + 10) {
+                    const threatened = !!bp && Math.hypot(d, v.y + 2 - (pos.y ?? v.y)) <= (r ?? D.r);
+                    this.blasts.protect(v, threatened);
+                }
                 if (cs.def.type === 'magehut') {
                     this.home.alarm(v, pos, bp && L._knows(v, by, pos, via) ? by : null);
                     continue;
@@ -313,6 +316,7 @@ export class WizardLife {
      * slower, and the gust takes him unprepared (the log says so).
      */
     windWatch(v, name, dist, from) {
+        if (this.home?.allowsPersonalShield(v, true) === false) return;
         if (v.dead || v.noWand || v.sleep || (v.fx & (FX.DOME | FX.SHIELD)) === (FX.DOME | FX.SHIELD)) return;
         const pick = windShield({ spell: name, dist, mana: v.mana, maxMana: v.maxMana, rank: v.rank, domeReady: !!v.W?.dome && (v.domeCd ?? 0) <= 0 && !(v.fx & FX.DOME) });
         if (!pick) return;
@@ -321,7 +325,7 @@ export class WizardLife {
         if ((ready ? lag.t * 0.4 : lag.t) > WIND_SHIELD.IN_TIME) { this.life.alog?.decision(v, `ветер ${name} с ${Math.round(dist)} м: ${reactLagText(lag)} — не успел поставить щит`); return; }
         if (from) v.yaw = turnToward(v.yaw, yawTo(v.x, v.z, from.x, from.z), 3.2); // (turns to the caster: the hand shield covers the front only)
         if (pick === 'dome') {
-            this.fight._dome(v);
+            this.fight._dome(v, true);
             if (v.fx & FX.DOME) { this.life.alog?.decision(v, `поставил Protection Maxima: на него идёт ${name} (${Math.round(dist)} м)`); return; }
         }
         if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection;
@@ -371,7 +375,9 @@ export class WizardLife {
         const lvl = L.wantedLevel(by) || 0;
         const role = huntRole({ role: v.role, rank: v.rank, level: lvl, saw: true, tied: v.role === 'master' || v.job === 'stall', timid: !WizardFight.fights(v), hasWand: true });
         // the shield first, facing the place it came from (the hand one; a strong wizard with a volley coming — the dome: WizardFight._react)
-        const sh = chooseShield({ mana: v.mana, maxMana: v.maxMana, rank: v.rank, spell: 'Bombardo', incoming: 1, foes: 1, hpK: v.hp / (v.maxHp || 1), domeReady: false });
+        if (this.home?.ward(v)) return this.home.alarm(v, from);
+        const sh = this.home?.allowsPersonalShield(v) === false ? null :
+            chooseShield({ mana: v.mana, maxMana: v.maxMana, rank: v.rank, spell: 'Bombardo', incoming: 1, foes: 1, hpK: v.hp / (v.maxHp || 1), domeReady: false });
         if (sh === 'hand' && !(v.fx & (FX.SHIELD | FX.DOME))) {
             v.mana -= SHIELD.COST_HAND; v.shieldT = Math.max(v.shieldT || 0, 2.5); v.fx |= FX.SHIELD;
             v.yaw = Math.atan2(-(from.x - v.x), -(from.z - v.z));
@@ -390,7 +396,7 @@ export class WizardLife {
      * already going there). There: the shield towards the fire; then he answers whoever did it, if known (the usual fight takes him again).
      */
     fireRun(v, x, z, R, heat) {
-        if (heat < 0.05 || v.noWand && heat < 0.3 || v.arena || v.dead) return; // (an arena duellist is led by the arena; the dead run from nothing)
+        if (heat < 0.05 || v.noWand && heat < 0.3 || v.arena || v.dead || this.home?.ward(v)) return; // (an arena duellist is led by the arena; the dead run from nothing)
         const L = this.life, f = v.fleeAt;
         if (v.sleep) L.night?.wake?.(v, 'alarm'); // (asleep in a house that burns: up)
         if (!v.shelter || !f || Math.hypot(f.x - x, f.z - z) > 4) {
@@ -414,7 +420,7 @@ export class WizardLife {
         const safe = d > 25;
         if (safe) {
             // the shield towards the fire while it is near (5 mana; the dome for the strong when it is really worth it — a big fire is)
-            if (!(v.fx & (FX.SHIELD | FX.DOME)) && v.mana >= SHIELD.COST_HAND && d < 45 && !v.noWand) {
+            if (!(v.fx & (FX.SHIELD | FX.DOME)) && v.mana >= SHIELD.COST_HAND && d < 45 && !v.noWand && this.home?.allowsPersonalShield(v) !== false) {
                 v.mana -= SHIELD.COST_HAND; v.shieldT = 3; v.fx |= FX.SHIELD;
             }
             if (v.fx & FX.SHIELD) { v.shieldT = (v.shieldT || 0) - dt; if (v.shieldT <= 0) v.fx &= ~FX.SHIELD; }
@@ -531,7 +537,10 @@ export class WizardLife {
     /** (host) Before the usual thinking: true = handled here. (The fight comes here — see defence.) */
     think(v, dt) {
         const W = v.W;
-        if (v.wizard) this.beatenCheck(v, dt);
+        if (v.wizard) {
+            this.beatenCheck(v, dt);
+            this.home?.lowerPersonalShield(v);
+        }
         if (W) {
             if (v.savior == null && !v.element) v.mana = Math.min(v.maxMana, v.mana + W.regen * dt);
             v.castCd -= dt; v.domeCd -= dt; v.windCd -= dt; v.blinkCd -= dt;
