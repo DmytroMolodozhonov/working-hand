@@ -16,7 +16,7 @@ export default async function (h, args) {
     h.log('going');
     await h.go(spot.x, data.heightAt(spot.x, spot.z) + 8, spot.z, true);
     h.log('arrived');
-    await h.frames(400);
+    { const t0 = performance.now(); await h.frames(30); h.log('30 frames ms', Math.round(performance.now() - t0), 'chunks', g.forestFloor.chunks.size); await h.until(() => g.forestFloor.chunks.size > 10, 120000); }
     const ff = g.forestFloor; h.log('chunks', ff.chunks.size, 'drawn', ff.stats.drawn);
     const items = []; for (const c of ff.chunks.values()) for (const it of c.items) items.push(it);
     const kinds = {}; for (const it of items) kinds[it.k] = (kinds[it.k] || 0) + 1; h.log('items', JSON.stringify(kinds));
