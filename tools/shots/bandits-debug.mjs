@@ -18,7 +18,7 @@ export default async function (h) {
         let P = false; for (let k = 0; k < 24 && !P; k++) { const a = k * 0.55, d = 60 + (k % 3) * 12; P = B.spawnNear({ at: { x: me.x + Math.cos(a) * d, z: me.z + Math.sin(a) * d }, n: 3, strategy: 'charge' }); h.log('try', k, !!P); }
         h.log('spawn', !!P, P && { n: P.n, ph: P.phase, members: P.members.map((v) => [v.title, v.name, v.seated, v.mode, !!v.horse]) });
         if (P) {
-            for (let t = 0; t < 12; t++) { await h.frames(30); h.log(`t${t}`, P.phase, P.members.map((v) => `${v.bandit?.role}:${Math.round(Math.hypot(v.x - me.x, v.z - me.z))}:${v.mode}`).join(' ')); }
+            for (let t = 0; t < 40; t++) { const t0 = Date.now(); await h.frames(5); h.log(`t${t}`, Date.now() - t0, "ms", P.phase, P.members.map((v) => `${v.bandit?.role}:${Math.round(Math.hypot(v.x - me.x, v.z - me.z))}:${v.mode}`).join(' ')); }
         }
     } catch (e) { h.log('ERR', e.message, e.stack.split('\n').slice(0, 5).join(' | ')); }
 }

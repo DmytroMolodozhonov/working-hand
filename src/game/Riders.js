@@ -36,7 +36,7 @@ export const RIDE = {
     AIM_T: 0.8, // s between looks for the way
 };
 
-const turn = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * Math.min(1, k); };
+const turn = (a, b, k) => { let d = b - a; if (!Number.isFinite(d)) return Number.isFinite(a) ? a : 0; d -= Math.PI * 2 * Math.round(d / (Math.PI * 2)); return a + d * Math.min(1, k); };
 
 export class Riders {
     constructor(trav) {

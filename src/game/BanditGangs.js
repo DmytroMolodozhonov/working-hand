@@ -86,7 +86,7 @@ const SHOUT = {
     flee: ['Уходим! Он опасен!', 'Назад! Врассыпную!', 'Нас порубят — ходу!'],
 };
 const pick = (a, rnd = Math.random) => a[Math.floor(rnd() * a.length) % a.length];
-const wrap = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+const wrap = (a) => (Number.isFinite(a) ? a - Math.PI * 2 * Math.round(a / (Math.PI * 2)) : 0);
 /** The yaw that looks from (0,0) towards (dx, dz) (a body faces −sin, −cos). */
 export const headTo = (dx, dz) => Math.atan2(-dx, -dz);
 
