@@ -48,6 +48,7 @@ import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
+import { HurtFx } from './HurtFx.js';
 import { Combat, PVP, bombardoDamage, sampleShieldModels, setShieldGlow } from './Combat.js';
 import { isDivine } from './ProtectionGods.js';
 import { chestCoins } from './CastleTreasure.js';
@@ -773,6 +774,7 @@ export class Game {
         this.water = new WaterMagic(this);
         this.vortex = new WaterVortex(this); // «Water Vortex» (+ «Bubble», «Frozen») and «Fire Maxima»
         this.waterStorm = new WaterStorm(this); // «Water Vortex Super Maxima»: a great storm of water held and steered by the wand
+        this.hurtFx = new HurtFx(this); // heartbeat, red edges, blood on the glass, the blow's direction (HurtFx.js)
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
         this.darkExile = new DarkExile(this); // башня гонит чёрного мага 81+ (DarkExile.js)
@@ -3903,6 +3905,7 @@ export class Game {
 
     /** Back into the game: full health, a new place near the start. */
     respawn() {
+        this.hurtFx?.reset();
         if (restartsCreative(this) && this.ui.restartCreative) return this.ui.restartCreative(this);
         forgetDeath(this);
         const ch = this.character;
@@ -4747,6 +4750,7 @@ export class Game {
         this.shieldAlert.update(dt); sysMark('shieldAlert');
         this.crossedShield.update(dt); sysMark('crossedShield');
         this.combat.update(dt); sysMark('combat');
+        this.hurtFx?.update(dt); sysMark('hurtFx');
         this.ghosts?.afterCombat(); // (a ghost's chill slows the legs: after Combat set their speed for this frame)
         this.vortex.update(dt); sysMark('vortex');
         this.hellfire?.update(dt); sysMark('hellfire');
@@ -5828,6 +5832,7 @@ export class Game {
     // ================================================================ cleanup
     dispose() {
         this.stop();
+        this.hurtFx?.dispose();
         this.voiceChat?.dispose(); // (the calls end, the microphone is let go)
         this.voiceChat = null;
         this.monster?.dispose(); // (leaving: the form taken off first — the man's place and health are saved)
