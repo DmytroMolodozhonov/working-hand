@@ -298,7 +298,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 35;
+export const WORLD_GEN = 36;
 export const CAVE_MINES_FROM_GEN = 35;
 /** The first generation with waterfalls on the rivers (Waterfalls.js: rock bluffs with water falling into the river). */
 export const WATERFALLS_FROM_GEN = 32;
