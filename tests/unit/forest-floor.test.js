@@ -95,3 +95,12 @@ test('the shapes are real: many triangles, finite, with a size of their own, col
     const sig = [0, 1, 2, 3].map((v) => { const a = forestArrays('mush', v); return a.count + ':' + a.col.slice(0, 9).join(','); });
     assert.equal(new Set(sig).size, 4);
 });
+
+test('generation 36: forests cover about 40 % more land; an old world is the same as before', async () => {
+    const share = (seed, moreForest) => { const d = new TerrainData(); d.generate({ seed, ...OPTS, moreForest }); let f = 0, t = 0; for (let z = -2400; z < 2400; z += 48) for (let x = -2400; x < 2400; x += 48) { t++; if (d.biomeAt(x, z) === BIOME.forest) f++; } return f / t; };
+    let a = 0, b = 0;
+    for (const seed of [1, 7, 42, 20261121]) { a += share(seed, false); b += share(seed, true); }
+    assert.ok(b / a > 1.25 && b / a < 1.6, 'forests ×' + (b / a).toFixed(2));
+    // the same seed without the flag gives the same land as ever (an old world's forests are where they were)
+    assert.equal(share(42, false), share(42, false));
+});

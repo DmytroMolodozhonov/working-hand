@@ -563,7 +563,7 @@ export function treeFitsChunk(c, x, z, h, kind) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false, riverSizes = false) {
+export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false, riverSizes = false, moreForest = false) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -576,7 +576,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     const rivers = createNoise2D(seed ^ 0x3c6ef372);
     const riverSize = riverSizes ? createNoise2D(seed ^ 0x5bd1e995) : null; // (generation 36: how big the river is, changing slowly along its course)
     // generation 5: the far land is the new landscape (Landscape.js); the spawn's land as it was
-    const land = lush ? createLandscape(seed) : null;
+    const land = lush ? createLandscape(seed, { moreForest }) : null; // (generation 36: forests 40 % more often — Landscape.FOREST_BOOST)
     const fn = (ix, iz) => {
         fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND; fn.river = false;
         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
@@ -761,7 +761,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, bridges = false, wizCounters = false, caveMines = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, bridges = false, wizCounters = false, caveMines = false, moreForest = false } = {}) {
         this.waterJobs.length = 0;
         this.floodState.clear();
         this.incomingFlood?.clear();
@@ -791,7 +791,7 @@ export class TerrainData {
         const spot = mountains && seas && test ? testSeaCastleSpot(seed, this.bigHouses) : null;
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
-        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed, !!bridges && this.lush);
+        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed, !!bridges && this.lush, !!moreForest && this.lush);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
         this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = this.pyr = this.school = this.falls = this.bridges = null;
