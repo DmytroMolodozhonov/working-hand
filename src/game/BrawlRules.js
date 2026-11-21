@@ -52,7 +52,22 @@ export const FIGHTERS = [
 export const fighterDef = (id) => FIGHTERS.find((f) => f.id === id) || null;
 export const FIGHTER_GROUPS = [...new Set(FIGHTERS.map((f) => f.group))];
 
+export const CUSTOM_FIGHTERS = ['knight', 'novice', 'wizard', 'archmage', 'supermage', 'earth', 'water', 'fire', 'air'];
+export const MAX_CUSTOM_MANA = 2000;
+
+/** Stats for a custom entry are copied so later edits cannot change fighters already on the field. */
+export function customFighter(id, options) {
+    const base = fighterDef(id);
+    if (!options) return base;
+    if (!CUSTOM_FIGHTERS.includes(id)) return null;
+    const value = Number(options.mana);
+    const mana = isMage(base) ? Math.min(MAX_CUSTOM_MANA, Math.max(0, Number.isFinite(value) ? Math.round(value) : base.mana)) : undefined;
+    const name = typeof options.name === 'string' ? options.name.replace(/[<>&]/g, '').trim().slice(0, 32) : '';
+    return { ...base, mana, label: name || base.label, custom: true };
+}
+
 export const BRAWL = {
+    COUNTDOWN: 10,
     MAX: 40, // fighters on the field at most (the arena is 84 m across: more is a heap, and the frame pays for each; the author's friend's game died at 55 knights on a weak card — 17.11)
     REACT: { t: 0.35, level: 3, lost: false }, // a mage's reaction at a new foe (WizardFight._engage): the field is a battle, he is ready
     STRIP: 8, // m: the strip between the teams (nobody is put on it): the left half of the field (x < 0, seen from the start camera) is the red team's, the right half the blue's

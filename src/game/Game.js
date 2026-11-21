@@ -1079,7 +1079,7 @@ export class Game {
             this.cine = new Cine(this); // (cut-scenes: the school's opening — Cine.js)
             this.school = new School(this); // («Школа Акселдорф»: the year at the school — School.js)
         } else if (config.brawl) {
-            this.brawl = new Brawl(this); // («Битва существ»: two teams on a bounded field; the player is only a camera — Brawl.js, SpectatorCam.js)
+            this.brawl = new Brawl(this);
             this.spectator = new SpectatorCam(this);
             this.brawlPanel = new BrawlPanel(this);
         } else if (config.tutorial) {
@@ -4657,7 +4657,7 @@ export class Game {
         if (earth && !duelOnly && !lean) this.vampire?.update(dt); sysMark('vampire');
         if (!duelOnly && !lean) this.titans?.update(dt); sysMark('titans');
         this.godhood?.update(dt); sysMark('godhood');
-        this.brawl?.update(dt); sysMark('brawl');
+        this.brawl?.update(dt, deltaTime); sysMark('brawl');
         this.tutorial?.update(dt); sysMark('tutorial'); // (on the planets — it knows itself where the hero is)
         this.tutorialNudge?.update(dt); sysMark('tutorialNudge'); // (skipped the tutorial and struggles: «обучение всегда можно пройти» — TutorialNudge.js)
         this.school?.update(dt); sysMark('school'); // («Школа Акселдорф»: School.js)
@@ -5452,6 +5452,7 @@ export class Game {
         for (let i = this.zombies.length - 1; i >= 0; i--) {
             const z = this.zombies[i];
             // («Империус»: a mind in it — mine drives it, a guest's is drawn where it is — ImperiusControl.step)
+            if (z.brawlManual && this.brawl?.control.step('z', z, dt)) continue;
             if (z.imp && (this.authority || z.imp.mine) && this.imperius?.step('z', z, dt)) { if (z.removable) this.removeZombie(z); continue; }
             if (!this.authority) {
                 // Multiplayer guest: the host moves zombies; we only animate them

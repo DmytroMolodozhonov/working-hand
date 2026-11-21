@@ -25,7 +25,7 @@ export const MODES = {
 export const MAPS_ENTRY = { label: 'Карты', icon: '🗺️', hint: 'Пройдите карту до финиша' };
 
 /** «Битва существ» (Brawl.js): its own card in the first choice (beside «Карты»; the author 19.11) — the player puts creatures of two teams on a field and only watches them fight. */
-export const BRAWL_ENTRY = { label: 'Битва существ', icon: '⚔️', hint: 'Расставьте на поле бойцов двух сторон — зомби, животных, магов — и наблюдайте, как они сражаются. Вы летаете как камера: мышь и клавиатура, веб-камера не нужна' };
+export const BRAWL_ENTRY = { label: 'Битва существ', icon: '⚔️', hint: 'Расставьте бойцов двух команд, настройте своего персонажа и сыграйте за любого участника или наблюдайте. Управление мышью и клавиатурой' };
 
 /** «Обучение» (Tutorial.js): a small bounded map where the hero learns the game step by step (internally a 'freeworld' game with `tutorial`). */
 export const SCHOOL_ENTRY = { label: 'Школа Акселдорф', icon: '🏰', hint: 'Год в школе волшебства: уроки защиты, зельеварения, пентаграмм и истории мира вместе с другими учениками. Выпускник уходит в мир Выживания со всем, чему научился' };
