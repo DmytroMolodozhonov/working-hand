@@ -85,8 +85,11 @@ export function hashLand(a, b, s) {
  * The landscape of a seed: the far land's height and the kind of land of every column.
  * @param {number} seed
  */
-export function createLandscape(seed) {
+/** Generation 36: the forest's weight among the kinds of land is this much more — forests cover ~40 % more of the map (the author 21.11). */
+export const FOREST_BOOST = 1.4;
+export function createLandscape(seed, { moreForest = false } = {}) {
     const s = seed | 0;
+    const forestK = moreForest ? FOREST_BOOST : 1;
     const nT = createNoise2D(s ^ 0x51ed270b), nW = createNoise2D(s ^ 0x2d358dcc), nF = createNoise2D(s ^ 0x7a1c3b5f);
     const nK = createNoise2D(s ^ 0x1f83d9ab), nR = createNoise2D(s ^ 0x5be0cd19), nWarp = createNoise2D(s ^ 0x6c8e9cf5);
     const nM = [0x3ad4f1e1, 0x4b2a6c3d, 0x18e6f0a7, 0x77c1d30b, 0x2c49e8b5].map((k) => createNoise2D(s ^ k));
@@ -228,6 +231,7 @@ export function createLandscape(seed) {
             k = k > 0 ? k * k : 0;
             w[i] = k * plain + 1e-4;
         }
+        w[BIOME.forest] *= forestK;
         w[BIOME.meadow] += 0.6 * spawn;
         w[BIOME.moon] = fx.moon * 1.4; w[BIOME.mesa] = fx.mesa * 1.4; w[BIOME.emerald] = fx.emer * 1.4;
         let best = 0;

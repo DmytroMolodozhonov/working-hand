@@ -15,14 +15,14 @@
  */
 import * as THREE from 'three';
 
-function rng(seed) { let s = (seed ^ 0x9e3779b9) >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+export function rng(seed) { let s = (seed ^ 0x9e3779b9) >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
 
 // ---------------------------------------------------------------- the picture: cells of the atlas
 export const CELL = { BARK: 0, RINGS: 1, FERN: 2, LEAVES: 3, SPRIG: 4, RED: 5, BROWN: 6, STEM: 7, ORANGE: 8, MOSS: 9, BELL: 10, TWIG: 11, WHITE: 12, ANEMONE: 13 };
-const cellUV = (cell, u, v) => [((cell % 4) + 0.03 + 0.94 * u) / 4, 1 - (Math.floor(cell / 4) + 0.03 + 0.94 * (1 - v)) / 4];
+export const cellUV = (cell, u, v) => [((cell % 4) + 0.03 + 0.94 * u) / 4, 1 - (Math.floor(cell / 4) + 0.03 + 0.94 * (1 - v)) / 4];
 
 // ---------------------------------------------------------------- a little mesh builder
-class Mesh {
+export class Mesh {
     constructor() { this.p = []; this.n = []; this.c = []; this.u = []; }
     /** one triangle: three vertices [x,y,z, nx,ny,nz, u,v] and a colour [r,g,b] (or one colour per vertex) */
     tri(a, b, c, col) {
@@ -35,17 +35,17 @@ class Mesh {
     get count() { return this.p.length / 3; }
     arrays() { return { pos: new Float32Array(this.p), nor: new Float32Array(this.n), col: new Float32Array(this.c), uv: new Float32Array(this.u), count: this.count }; }
 }
-const norm = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+export const norm = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
+export const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+export const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+export const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 
 /**
  * A tube along `path` ([[x,y,z]…]) with the radii `rad`, `seg` sides (even). `colorAt(point, normal, t)` → [r,g,b]. The picture of `cell` is laid
  * round the tube `uRep` times and runs once along every ring-to-ring step (the cell is a tile: no seams to see in bark).
  * `capStart` / `capEnd`: { cell, col } for a flat end (null: open).
  */
-function tube(M, path, rad, seg, cell, colorAt, uRep = 2, vRep = 1, capStart = null, capEnd = null) {
+export function tube(M, path, rad, seg, cell, colorAt, uRep = 2, vRep = 1, capStart = null, capEnd = null) {
     void vRep;
     const rings = [];
     let prevA = null;
@@ -87,7 +87,7 @@ function tube(M, path, rad, seg, cell, colorAt, uRep = 2, vRep = 1, capStart = n
     if (capEnd) cap(rings[rings.length - 1], capEnd.cell, capEnd.col, false);
 }
 
-const hash3 = (x, y, z) => { let h = (Math.imul(Math.floor(x * 9.1), 374761393) + Math.imul(Math.floor(y * 9.1), 668265263) + Math.imul(Math.floor(z * 9.1), 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+export const hash3 = (x, y, z) => { let h = (Math.imul(Math.floor(x * 9.1), 374761393) + Math.imul(Math.floor(y * 9.1), 668265263) + Math.imul(Math.floor(z * 9.1), 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const BARK = [0.62, 0.55, 0.5], MOSSC = [0.3, 0.46, 0.2], WOOD = [0.86, 0.74, 0.55], CREAM = [0.93, 0.9, 0.8];
 /** bark colour with moss on the upper faces and a dark damp underside */
 const barkColor = (mossAmt, tone = BARK) => (p, n) => {
@@ -167,7 +167,7 @@ function mushroom(M, x, y, z, v, scale, lean, R) {
 
 // ---------------------------------------------------------------- frond cards (ferns, sprigs, bluebells)
 /** An arched strip: from `base` along `dir` (unit, horizontal part) with `elev0` rising and drooping by `droop`; `w` wide; `len` long; the cell's picture along it. */
-function frond(M, base, yaw, elev0, droop, len, w, cell, colA, colB, segs = 4, taper = 0.25) {
+export function frond(M, base, yaw, elev0, droop, len, w, cell, colA, colB, segs = 4, taper = 0.25) {
     const dx = Math.cos(yaw), dz = Math.sin(yaw), px = -dz, pz = dx;
     let x = base[0], y = base[1], z = base[2], el = elev0;
     const step = len / segs, rows = [];

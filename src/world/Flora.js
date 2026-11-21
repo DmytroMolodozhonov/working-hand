@@ -17,8 +17,9 @@
 import * as THREE from 'three';
 import { CHUNK, chunkKey } from './Terrain.js';
 import { buildFlora } from './FloraBuild.js';
-import { applySkyComp } from './VoxelShading.js';
+import { applySkyComp, SKY_LIGHT } from './VoxelShading.js';
 import { ULTRA } from '../fx/UltraUniforms.js';
+import { CLOUD_SHADE_GLSL, addCloudUniforms } from './CloudShade.js';
 
 export { buildFlora }; // (the blades themselves: FloraBuild.js — no THREE there, so a worker can make them too)
 
@@ -52,17 +53,22 @@ export class Flora {
         const radius = (this._radiusU = { value: this.radius });
         m.onBeforeCompile = (shader) => {
             shader.uniforms.uWind = WIND.time;
+            shader.uniforms.uCornerShade = SKY_LIGHT.shade;
+            shader.uniforms.uGreenSat = SKY_LIGHT.greenSat;
+            addCloudUniforms(shader);
             shader.uniforms.uFloraCenter = center;
             shader.uniforms.uFloraR = radius;
             shader.uniforms.uUltraOn = ULTRA.on;
             shader.uniforms.uUltraTime = ULTRA.time;
             shader.vertexShader = shader.vertexShader
-                .replace('#include <common>', '#include <common>\nattribute float sway;\nattribute float glow;\nvarying float vGlow;\nuniform float uWind;\nuniform float uUltraOn;\nuniform float uUltraTime;\nuniform vec3 uFloraCenter;\nuniform float uFloraR;')
+                .replace('#include <common>', '#include <common>\nattribute float sway;\nattribute float glow;\nvarying float vGlow;\nvarying float vBlade;\nvarying vec2 vFloraXZ;\nuniform float uWind;\nuniform float uUltraOn;\nuniform float uUltraTime;\nuniform vec3 uFloraCenter;\nuniform float uFloraR;')
                 .replace('#include <begin_vertex>', `#include <begin_vertex>
 vGlow = glow;
+vBlade = smoothstep(0.0, 0.55, sway); // (0 at the root … 1 up the blade: the root sits in the tuft's own shade)
 {
     // shrink away towards the edge of the drawn circle; sway in the wind (the tips most)
     vec3 wp = (modelMatrix * vec4(transformed, 1.0)).xyz;
+    vFloraXZ = wp.xz;
     float far = 1.0 - smoothstep(uFloraR * 0.72, uFloraR, distance(wp.xz, uFloraCenter.xz));
     transformed.y -= sway * (1.0 - far) * 1.2;
     float s = sway * sway;
@@ -76,7 +82,9 @@ vGlow = glow;
                 // (a blade is lit like the ground it grows from, from either side — not dark from behind)
                 .replace('( gl_FrontFacing ) ? vIndirectFront : vIndirectBack', 'vIndirectFront')
                 .replace('( gl_FrontFacing ) ? vLightFront : vLightBack', 'vLightFront')
-                .replace('#include <common>', '#include <common>\nvarying float vGlow;')
+                .replace('#include <common>', '#include <common>\nvarying float vGlow;\nvarying float vBlade;\nvarying vec2 vFloraXZ;\nuniform float uCornerShade;\nuniform float uGreenSat;\n' + CLOUD_SHADE_GLSL)
+                // (the author 21.11: «слишком игрушечно»: a tuft is dark down in its middle, where its own blades shade it, and bright at the tips)
+                .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(mix(1.0, 0.58, uCornerShade), 1.0, vBlade * (2.0 - vBlade));\nif (diffuseColor.g > diffuseColor.r && diffuseColor.g > diffuseColor.b) { float gl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(vec3(gl), diffuseColor.rgb, uGreenSat) * mix(vec3(1.0), vec3(0.97, 0.95, 0.87), uCornerShade); }\ndiffuseColor.rgb *= mix(1.0, cloudShade(vFloraXZ), 0.75); // (a cloud\'s shadow passes over the grass with the ground under it)')
                 .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vGlow * 0.55; // (the moonlit groves\' flowers glow)');
         };
         m.customProgramCacheKey = () => 'flora';

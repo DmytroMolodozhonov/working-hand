@@ -13,17 +13,19 @@ function room() {
     for(let z=2;z<=12;z++)for(let x=2;x<=12;x++)for(let L=-9;L<=-3;L++)t.set(x,L,z,BLOCK.AIR);
     return t;
 }
-const faces = b => Array.from({length:b.positions.length/3},(_,i)=>({x:b.positions[i*3],y:b.positions[i*3+1],z:b.positions[i*3+2],wet:b.wet[i],ny:b.normals[i*3+1],sky:b.skies[i]}));
+const faces = b => Array.from({length:b.positions.length/3},(_,i)=>({x:b.positions[i*3],y:b.positions[i*3+1],z:b.positions[i*3+2],wet:b.wet[i]&128?255:0,shade:b.wet[i]&127,ny:b.normals[i*3+1],sky:b.skies[i]}));
 
 test('dry cave stays dry before and after a skylight; actual submerged floor carries its own flag through merge and GPU geometry',()=>{
     const t=room();
     let arrays=t.buildChunkArrays(0,0), merged=mergeBuffers(arrays.ground,arrays.raised);
     assert.ok(merged.wet instanceof Uint8Array);
     assert.equal(merged.wet.length,merged.positions.length/3);
-    assert.ok(merged.wet.every(x=>x===0),'dry room is not seabed');
+    // (21.11: the byte's low 7 bits are the corners' soft shade — Terrain.faceShade; bit 7 alone says «under water»)
+    assert.ok(merged.wet.every(x=>x<128),'dry room is not seabed');
+    assert.ok(merged.wet.some(x=>x>0),'the room\'s corners are shaded');
     for(let z=4;z<=6;z++)for(let x=4;x<=6;x++)for(let L=-2;L<=0;L++)t.set(x,L,z,BLOCK.AIR);
     arrays=t.buildChunkArrays(0,0);merged=mergeBuffers(arrays.ground,arrays.raised);
-    assert.ok(merged.wet.every(x=>x===0));
+    assert.ok(merged.wet.every(x=>x<128));
     assert.ok(faces(merged).some(v=>v.y < -3 && v.sky>.12),'daylight really reaches the dry cavity');
     // Water over part of the very same floor must split an otherwise mergeable dry/wet boundary.
     for(let z=3;z<=5;z++)for(let x=9;x<=11;x++)for(let L=-9;L<=-6;L++)t.set(x,L,z,BLOCK.WATER);

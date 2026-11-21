@@ -297,6 +297,7 @@ export class Space {
         const g = this.game, p = g.character.group.position;
         const was = this.realm;
         this.realm = this.enabled ? realmAt(p.x, p.y, p.z, this.planets) : 'earth';
+        if (g.world) g.world.offEarth = this.realm !== 'earth'; // (the clouds' shadows — CloudShade.js — only under the Earth's sky)
         const def = this.planets.get(this.realm);
         g.character.gravityK = def && this.realm !== 'earth' && this.realm !== 'space' ? def.gravity : 1;
         if (was !== this.realm) this._realmChanged(was);

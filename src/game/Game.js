@@ -174,6 +174,8 @@ import { PharaohLife } from './PharaohLife.js';
 import { RiverRocks } from '../world/RiverRocks.js';
 import { ForestFloor } from '../world/ForestFloor.js';
 import { NatureAmbience } from './NatureAmbience.js';
+import { ShoreFloor } from '../world/ShoreFloor.js';
+import { Critters } from './Critters.js';
 import { Threats } from './Threats.js';
 import { WaterfallFx } from '../fx/WaterfallFx.js';
 import { Temple } from './Temple.js';
@@ -591,6 +593,7 @@ export class Game {
             earthSettlements: this.gen >= EARTH_SETTLEMENTS_FROM_GEN,
             elementalSettlements:this.gen >= ELEMENTAL_SETTLEMENTS_FROM_GEN,
             waterfalls: this.gen >= WATERFALLS_FROM_GEN,
+            moreForest: this.gen >= 36, // (forests 40 % more often and the undergrowth — generation 36)
             bridges: this.gen >= BRIDGES_FROM_GEN, // (rivers of two sizes and the bridges over them — RiverBridges.js)
             wizCounters: this.gen >= WIZ_COUNTER_FROM_GEN, // (the wizards' market lane: wide counters with a coin plate — WizardVillages.js) // (the rivers' waterfalls: Waterfalls.js)
             arenaFlat: this.gen >= ARENA_FLAT_FROM_GEN, // (an arena only where the land round it does not drop away — DuelArenas.arenaGround)
@@ -953,6 +956,8 @@ export class Game {
         this.titans = new Titans(this); // the seven titans on their planets (Titans.js, TitanRules.js)
         this.fallFx = new WaterfallFx(this); // the spray, the roar and the rainbow of the waterfalls (WaterfallFx.js)
         this.nature = new NatureAmbience(this); // the small voices of the forest and the shore (NatureAmbience.js)
+        this.critters = new Critters(this); // butterflies, dragonflies, fireflies (Critters.js; generation 36)
+        this.shoreFloor = new ShoreFloor(this); // the small things of the rivers' and lakes' edges: reeds, lilies, pebbles, irises, driftwood (ShoreFloor.js; generation 36)
         this.forestFloor = new ForestFloor(this); // the undergrowth of the forest: logs, stumps, ferns, mushrooms, bushes (ForestFloor.js; generation 36)
         this.riverRocks = new RiverRocks(this); // the boulders by the rivers and at the waterfalls' feet (RiverRocks.js; generation 32)
         this.pharaoh = new PharaohLife(this); // Pharaoh Sandy's pyramids: the mummies, the guards, the traps, the torches (PharaohLife.js)
@@ -1418,6 +1423,7 @@ export class Game {
         // a wand makes my Bombardo destroy more
         if ((casterId === 'local' || casterId === this.localId) && this._lastSpell && performance.now() - this._lastSpell.at < 6000) radius *= 1 + (this._lastSpell.pw - 1) * 0.5;
         const keep = this.wards?.keepFor(pos, radius) || [];
+        this.shoreFloor?.blast(pos, radius);
         this.forestFloor?.blast(pos, radius); // (the undergrowth breaks / blows away: ForestFloor.blast)
         this.riverRocks?.blast(pos, radius); // (a boulder of the rivers breaks in a blast: RiverRocks.blast)
         this.applyExplosion(pos, radius, true, power, casterId, keep);
@@ -4174,6 +4180,8 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         addAll(this.items?.sampleModels?.() || []);
+        addAll(this.critters?.sampleModels?.() || []);
+        addAll(this.shoreFloor?.sampleModels?.() || []); // (the shore's small things: one Lambert material for every shape)
         addAll(this.forestFloor?.sampleModels?.() || []); // (the undergrowth: one Lambert material for every shape)
         addAll(this.riverRocks?.sampleModels?.() || []); // (the boulders: one Lambert material for every shape)
         addAll(this.oceanStorm?.samples?.() || []);
@@ -4694,6 +4702,10 @@ export class Game {
         if (earth && !duelOnly && !lean) this.iceCastle.update(dt); sysMark('iceCastle');
         if (earth && !duelOnly && !lean) this.pharaoh?.update(dt); sysMark('pharaoh');
         if (earth && !duelOnly && !lean) this.nature?.update(dt, this.character.group.position);
+        if (earth && !duelOnly && !lean) this.critters?.update(dt, this.character.group.position);
+        else if (this.critters?.group.visible) this.critters.group.visible = false;
+        if (earth && !duelOnly && !lean) this.shoreFloor?.update(dt, this.character.group.position);
+        else if (this.shoreFloor?.group.visible) this.shoreFloor.group.visible = false;
         if (earth && !duelOnly && !lean) this.forestFloor?.update(dt, this.character.group.position);
         else if (this.forestFloor?.group.visible) this.forestFloor.group.visible = false;
         if (earth && !duelOnly && !lean) this.riverRocks?.update(dt, this.character.group.position);

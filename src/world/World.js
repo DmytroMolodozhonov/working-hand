@@ -13,6 +13,7 @@ import { Terrain } from './TerrainView.js';
 import { collapseAfter } from './Collapse.js';
 import { hasTreeSupport } from './PlantSupport.js';
 import { ruinArea } from './Ruin.js';
+import { stepClouds } from './CloudShade.js';
 
 const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
@@ -91,6 +92,13 @@ const SPAWN_TREE_TINTS = [
     { leaf: [0.75, 0.62, 0.55], trunk: [0.48, 0.45, 0.42] },
 ];
 const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
+/**
+ * The day's light (the author 21.11: «слишком игрушечно, теней не хватает»): the sky's even light was 0.65 against the sun's 0.85 —
+ * everything lit almost alike from all sides, the shade barely darker than the sun, the bright colours washed past white. Now the
+ * sun leads (its side bright, a shadow clearly darker and cool-blue from the sky), the even light is lower, the ground's bounce
+ * an earthy olive instead of bright green.
+ */
+export const DAY_LIGHT = { amb: 0.14, hemi: 0.27, sun: 0.92, ground: 0x55603f };
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows (on the ground)
 const _defaultSun = new THREE.Vector3(50, 100, 50).normalize();
 const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _c = new THREE.Vector3();
@@ -132,18 +140,18 @@ export class VoxelWorld {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
             this.meshTrees = !!opts.meshTrees; // (a world of real trees, not blocks — `realTrees`, Trees.js)
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls, !!opts.bridges, !!opts.wizCounters, !!opts.caveMines);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena, !!opts.knightCap, !!opts.queenMap, !!opts.caveLake, !!opts.hell, !!opts.seabed, !!opts.wizShops, !!opts.vampire, !!opts.pyramids, !!opts.tutorial, !!opts.school, !!opts.arenaFlat, !!opts.earthSettlements,!!opts.elementalSettlements, !!opts.waterfalls, !!opts.bridges, !!opts.wizCounters, !!opts.caveMines, !!opts.moreForest);
             this.createSkybox();
         }
     }
 
     // ------------------------------------------------------------------ lights
     createLights() {
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, DAY_LIGHT.amb);
         this.scene.add(this.ambientLight);
 
         // Warm sunlight + cool sky light: simple, but reads as daylight
-        this.dirLight = new THREE.DirectionalLight(0xfff0d8, 0.85);
+        this.dirLight = new THREE.DirectionalLight(0xfff0d8, DAY_LIGHT.sun);
         this.dirLight.position.set(50, 100, 50);
         this.dirLight.castShadow = true;
         this.dirLight.shadow.mapSize.width = 2048;
@@ -162,7 +170,7 @@ export class VoxelWorld {
         this.scene.add(this.dirLight);
         this.scene.add(this.dirLight.target);
 
-        this.hemiLight = new THREE.HemisphereLight(0xbfe3ff, 0x6a8f4e, 0.35);
+        this.hemiLight = new THREE.HemisphereLight(0xbfe3ff, DAY_LIGHT.ground, DAY_LIGHT.hemi);
         this.scene.add(this.hemiLight);
     }
 
@@ -183,9 +191,9 @@ export class VoxelWorld {
             this.fogFar = this.sky ? 90 : 80;
             this.fogNear = this.sky ? 25 : 20;
             this.sky?.setNight(false);
-            this.ambientLight.intensity = 0.3;
-            this.dirLight.intensity = 0.85;
-            this.hemiLight.intensity = 0.35;
+            this.ambientLight.intensity = DAY_LIGHT.amb;
+            this.dirLight.intensity = DAY_LIGHT.sun;
+            this.hemiLight.intensity = DAY_LIGHT.hemi;
         }
         this._rememberBase(isNight ? 1 : 0);
     }
@@ -377,18 +385,18 @@ export class VoxelWorld {
         this.scene.fog.near = this.fogNear;
         // (the low sun lights the land less: evening comes before the night)
         const eve = 1 - 0.25 * glow * ss(0.3, 1, 1 - ss(0, 0.4, elev));
-        this.ambientLight.intensity = (0.3 + (0.15 - 0.3) * k) * eve;
+        this.ambientLight.intensity = (DAY_LIGHT.amb + (0.15 - DAY_LIGHT.amb) * k) * eve;
         // sunlight: white by day, golden in the golden hour, orange-red as the sun touches the horizon
         const low = 1 - ss(0.0, 0.4, elev);
         const sunCol = _c1.set(0xfff0d8).lerp(_c2.set(0xffb768), ss(0, 0.7, low)).lerp(_c2.set(0xff6a3c), ss(0.6, 1, low));
-        const sunI = 0.85 * sunW * (0.55 + 0.45 * Math.min(1, Math.max(0, elev) / 0.5));
+        const sunI = DAY_LIGHT.sun * sunW * (0.55 + 0.45 * Math.min(1, Math.max(0, elev) / 0.5));
         const moonI = 0.18 * ss(0.45, 0.85, k);
         this.dirLight.intensity = sunI + moonI;
         this.dirLight.color.copy(sunW > 0.001 ? sunCol : _moon.set(0x9fb6ff));
         // the sky's light on everything: warm at sunset, cool blue-violet in the twilight
         this.ambientLight.color.setRGB(1, 1, 1).lerp(_c2.setRGB(1, 0.72, 0.62), 0.55 * glow * (1 - k)).lerp(_c2.setRGB(0.72, 0.74, 1), 0.35 * k);
         this.hemiLight.color.set(0xbfe3ff).lerp(_c2.setRGB(1, 0.7, 0.55), 0.55 * glow * (1 - k));
-        this.hemiLight.intensity = (0.35 + (0.08 - 0.35) * k) * eve;
+        this.hemiLight.intensity = (DAY_LIGHT.hemi + (0.08 - DAY_LIGHT.hemi) * k) * eve;
         this._shadowX = null; // re-aim the shadow
         this._rememberBase(k);
     }
@@ -414,9 +422,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, bridges = false, wizCounters = false, caveMines = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, seabed = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, bridges = false, wizCounters = false, caveMines = false, moreForest = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, bridges, wizCounters, caveMines, meshTrees: !!this.meshTrees });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap, caveLake, hell, seabed, wizShops, vampire, pyramids, tutorial, school, arenaFlat, earthSettlements, elementalSettlements, waterfalls, bridges, wizCounters, caveMines, moreForest, meshTrees: !!this.meshTrees });
         if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
         if (this.terrain.data.meshTrees) this.forest = new WorldTrees(this); // (real trees — drawn, hit, burnt like the start area's always were)
         this.collision.setTerrain(this.terrain);
@@ -1098,6 +1106,8 @@ export class VoxelWorld {
      */
     update(focus, viewBoost = 0) {
         const now = performance.now();
+        // the clouds' shadows over the land (CloudShade.js): by day, on the Earth's open land — not in hell, a storm, space
+        stepClouds(Math.min(0.1, (now - (this._lastUpdate || now)) / 1000), (1 - (this._night ?? 0)) * (1 - (this.hell || 0)) * (1 - (this.storm || 0)), !!this.sky && !this.offEarth && (this._cloudsWanted ?? true));
         if (this.pedestals) this._animatePedestals(Math.min(0.1, (now - (this._lastUpdate || now)) / 1000));
         this._lastUpdate = now;
         if (this.scene.fog && this.fogFar) {

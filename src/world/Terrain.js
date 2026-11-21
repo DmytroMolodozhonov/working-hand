@@ -563,7 +563,7 @@ export function treeFitsChunk(c, x, z, h, kind) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false, riverSizes = false) {
+export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false, riverSizes = false, moreForest = false) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -576,7 +576,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     const rivers = createNoise2D(seed ^ 0x3c6ef372);
     const riverSize = riverSizes ? createNoise2D(seed ^ 0x5bd1e995) : null; // (generation 36: how big the river is, changing slowly along its course)
     // generation 5: the far land is the new landscape (Landscape.js); the spawn's land as it was
-    const land = lush ? createLandscape(seed) : null;
+    const land = lush ? createLandscape(seed, { moreForest }) : null; // (generation 36: forests 40 % more often — Landscape.FOREST_BOOST)
     const fn = (ix, iz) => {
         fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND; fn.river = false;
         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
@@ -761,7 +761,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, bridges = false, wizCounters = false, caveMines = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, seabed = false, hell = false, wizShops = false, vampire = false, pyramids = false, tutorial = false, school = false, arenaFlat = false, earthSettlements = false, elementalSettlements = false, waterfalls = false, bridges = false, wizCounters = false, caveMines = false, moreForest = false } = {}) {
         this.waterJobs.length = 0;
         this.floodState.clear();
         this.incomingFlood?.clear();
@@ -791,7 +791,7 @@ export class TerrainData {
         const spot = mountains && seas && test ? testSeaCastleSpot(seed, this.bigHouses) : null;
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
-        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed, !!bridges && this.lush);
+        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush, this.seabed, !!bridges && this.lush, !!moreForest && this.lush);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
         this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = this.vamp = this.pyr = this.school = this.falls = this.bridges = null;
@@ -3080,6 +3080,7 @@ export class TerrainData {
             const maskWet = new Uint8Array(su * sv); // actual water touching the visible face, independent of daylight
             const maskWater = waterPad ? new Int32Array(su * sv) : null;
             const maskDark = new Int8Array(su * sv); // 0 open sky … 15 deep in a cave
+            const maskShade = new Uint8Array(su * sv); // the corners' shade (faceShade): 2 bits a corner
             const qx = d === 0 ? 1 : 0, qy = d === 1 ? 1 : 0, qz = d === 2 ? 1 : 0;
             const step = stride[d], ustep = stride[u], vstep = stride[v];
             const dPos = d === 0 ? 0 : d === 1 ? 2 : 4; // (the side +d of BlockShapes: 0 +x, 2 +y, 4 +z; +1 the − side)
@@ -3157,6 +3158,7 @@ export class TerrainData {
                         maskKind[n] = kind;
                         if (maskWater) maskWater[n] = waterLip;
                         maskWet[n] = kind !== 2 && (key > 0 ? bRaw : aRaw) === WATER ? 255 : 0;
+                        maskShade[n] = key && kind !== 2 ? faceShade(pad, key > 0 ? ia + step : ia, ustep, vstep) : 0;
                         // the air the face looks into (a's face looks at b, b's at a)
                         maskDark[n] = sky && key ? (key > 0 ? sky(x0 + ax + qx, lowest + ay + qy, z0 + az + qz) : sky(x0 + ax, lowest + ay, z0 + az)) : 0;
                     }
@@ -3168,18 +3170,19 @@ export class TerrainData {
                     for (let i = 0; i < su;) {
                         const col = mask[n];
                         if (col === 0) { i++; n++; continue; }
-                        const kindC = maskKind[n], darkC = maskDark[n], wetC = maskWet[n], lip = maskWater?.[n] || 0;
+                        const kindC = maskKind[n], darkC = maskDark[n], wetC = maskWet[n], lip = maskWater?.[n] || 0, shadeC = maskShade[n];
                         const geology = maskGeology[n];
                         // A repeated gradient can merge only along edges where the corner weights agree.
-                        const alongU = (geology & 5) === ((geology >> 1) & 5);
-                        const alongV = (geology & 3) === ((geology >> 3) | ((geology & 4) >> 1));
+                        // (and the corners' shade: a run merges only along a side whose two ends are equally shaded)
+                        const alongU = (geology & 5) === ((geology >> 1) & 5) && (shadeC & 3) === ((shadeC >> 2) & 3) && ((shadeC >> 6) & 3) === ((shadeC >> 4) & 3);
+                        const alongV = (geology & 3) === ((geology >> 3) | ((geology & 4) >> 1)) && (shadeC & 3) === ((shadeC >> 6) & 3) && ((shadeC >> 2) & 3) === ((shadeC >> 4) & 3);
                         let w = 1;
-                        while (alongU && i + w < su && maskGeology[n + w] === geology && !(lip && u === 1) && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC && maskWet[n + w] === wetC && (!maskWater || maskWater[n + w] === lip)) w++;
+                        while (alongU && i + w < su && maskGeology[n + w] === geology && !(lip && u === 1) && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC && maskShade[n + w] === shadeC && maskWet[n + w] === wetC && (!maskWater || maskWater[n + w] === lip)) w++;
                         let h = 1, done = false;
                         for (; alongV && j + h < sv && !(lip && v === 1); h++) {
                             for (let k = 0; k < w; k++) {
                                 const m = n + k + h * su;
-                                if (mask[m] !== col || maskGeology[m] !== geology || maskKind[m] !== kindC || maskDark[m] !== darkC || maskWet[m] !== wetC || maskWater && maskWater[m] !== lip) { done = true; break; }
+                                if (mask[m] !== col || maskGeology[m] !== geology || maskKind[m] !== kindC || maskDark[m] !== darkC || maskShade[m] !== shadeC || maskWet[m] !== wetC || maskWater && maskWater[m] !== lip) { done = true; break; }
                             }
                             if (done) break;
                         }
@@ -3197,7 +3200,7 @@ export class TerrainData {
                             else dv[1] = height * .88 - bottom;
                         }
                         const code = Math.abs(col) - 1;
-                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC), wetC, geology);
+                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC), wetC, geology, shadeC);
                         for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * su] = 0;
                         i += w; n += w;
                     }
@@ -3330,6 +3333,26 @@ function touchesGeology(pad, i, d, u, v, material) {
         GEOLOGY[pad[i + u + v]] === material || GEOLOGY[pad[i + d + u + v]] === material;
 }
 
+/**
+ * The soft shade in the corners of the land (the author 21.11: «слишком игрушечно, теней не хватает»): where a face meets a
+ * wall, a step, a trunk, an overhang, its corners get darker — the light of the sky reaches them less (ambient occlusion, as
+ * in Minecraft's «smooth lighting»). `air` is the cell the face looks into; for each corner (0 −u−v, 1 +u−v, 2 +u+v, 3 −u+v,
+ * the vertex order of pushQuad) the two side cells and the diagonal one: 0 open … 3 a closed inner corner. 2 bits a corner.
+ * The byte goes with the water flag in `wet` (bit 7 water, the rest the shade: SHADE_BYTE) — VoxelShading reads both.
+ */
+export const OCCLUDES = new Uint8Array(256).fill(1);
+for (const t of [BLOCK.AIR, BLOCK.WATER, BLOCK.ICE_SHAPE, BLOCK.LANTERN, BLOCK.ARCANE_LAMP, BLOCK.ARCANE_LAMP_VIOLET, BLOCK.GHOST_LAMP, BLOCK.WHEAT, BLOCK.FLOWERS, BLOCK.VEG, BLOCK.FENCE, BLOCK.PYR_TORCH_ON]) OCCLUDES[t] = 0;
+export const SHADE_BYTE = [0, 42, 84, 126];
+function faceShade(pad, air, u, v) {
+    // (| 0: past the padded box's edge — open)
+    const O = OCCLUDES, mu = O[pad[air - u]] | 0, pu = O[pad[air + u]] | 0, mv = O[pad[air - v]] | 0, pv = O[pad[air + v]] | 0;
+    const s0 = mu && mv ? 3 : mu + mv + (O[pad[air - u - v]] | 0);
+    const s1 = pu && mv ? 3 : pu + mv + (O[pad[air + u - v]] | 0);
+    const s2 = pu && pv ? 3 : pu + pv + (O[pad[air + u + v]] | 0);
+    const s3 = mu && pv ? 3 : mu + pv + (O[pad[air - u + v]] | 0);
+    return s0 | (s1 << 2) | (s2 << 4) | (s3 << 6);
+}
+
 function geologyCorners(pad, i, d, u, v, material) {
     const other = 3 - material;
     return (+touchesGeology(pad, i, d, -u, -v, other)) |
@@ -3448,7 +3471,7 @@ function pushPoly(buf, V, n, face, color, pattern, sky, wet, blend) {
 }
 
 /** Convert grid-space quad to world space and append it. */
-function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1, wet = 0, geology = 0) {
+function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1, wet = 0, geology = 0, shade = 0) {
     if (buf.nv + 4 > buf.cap * 4) growBuffers(buf);
     // grid -> world: x_w = gx - 0.5, y_w = gy - 1.5, z_w = gz - 0.5 (gx = origin + local)
     const base = buf.nv, P = buf.pos, N = buf.nor, C = buf.col;
@@ -3466,13 +3489,21 @@ function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, patter
         C[o] = r; C[o + 1] = g; C[o + 2] = b;
         buf.pat[base + k] = pattern;
         buf.sky[base + k] = sky;
-        buf.wet[base + k] = wet;
+        buf.wet[base + k] = (wet ? 128 : 0) + SHADE_BYTE[(shade >> (k * 2)) & 3];
         buf.geology[base + k] = geology & (1 << k) ? 128 : pure;
     }
     buf.nv += 4;
     if (pattern) buf.patterned = true;
     // Winding: (u, v, d) is a right-handed cyclic triple, so u×v = +d.
     const I = buf.idx, i = buf.ni;
+    // (a quad with one shaded corner is cut along the other diagonal: the shade stays in its corner, not smeared along a stripe)
+    const s0 = shade & 3, s1 = (shade >> 2) & 3, s2 = (shade >> 4) & 3, s3 = (shade >> 6) & 3;
+    if (s0 + s2 > s1 + s3) {
+        if (positive) { I[i] = base + 1; I[i + 1] = base + 2; I[i + 2] = base + 3; I[i + 3] = base + 1; I[i + 4] = base + 3; I[i + 5] = base; }
+        else { I[i] = base + 1; I[i + 1] = base + 3; I[i + 2] = base + 2; I[i + 3] = base + 1; I[i + 4] = base; I[i + 5] = base + 3; }
+        buf.ni += 6;
+        return;
+    }
     if (positive) { I[i] = base; I[i + 1] = base + 1; I[i + 2] = base + 2; I[i + 3] = base; I[i + 4] = base + 2; I[i + 5] = base + 3; }
     else { I[i] = base; I[i + 1] = base + 2; I[i + 2] = base + 1; I[i + 3] = base; I[i + 4] = base + 3; I[i + 5] = base + 2; }
     buf.ni += 6;
