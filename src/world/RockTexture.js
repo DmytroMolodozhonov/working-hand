@@ -8,32 +8,38 @@ const smooth = (a, b, v) => {
     return t * t * (3 - 2 * t);
 };
 
-/** Seamless fine-grained limestone. The alpha channel shapes the edge where soil meets rock. */
+/** Fractured, granular bedrock. Alpha shapes the narrow contact with the soil. */
 export function rockPixels() {
     const pixels = new Uint8Array(ROCK_SIZE * ROCK_SIZE * 4);
     for (let y = 0; y < ROCK_SIZE; y++) for (let x = 0; x < ROCK_SIZE; x++) {
         const u = x / ROCK_SIZE, v = y / ROCK_SIZE;
-        const lift = noise(u * 4, v * 4, 4, 181);
-        const patches = noise(u * 9, v * 9, 9, 182);
-        const sand = noise(u * 74, v * 74, 74, 183);
-        const grit = grain(x, y, 184);
+        const bed = noise(u * 5, v * 5, 5, 171);
+        const warp = noise(u * 9, v * 9, 9, 172);
+        const wx = u + (bed - .5) * .16;
+        const wy = v + (warp - .5) * .12;
+        const facets = noise(wx * 18, wy * 18, 18, 175);
+        const aggregate = noise(wx * 38, wy * 38, 38, 179);
+        const grains = noise(u * 76, v * 76, 76, 173);
+        const grit = grain(x, y, 174);
 
-        // Low-contrast bedding planes, broken into shorter runs by a slow change in layer height.
-        const bed = v * 9 + u + (lift - .5) * .55;
-        const edge = bed - Math.floor(bed);
-        const line = (1 - smooth(.012, .08, edge)) * smooth(.30, .67, patches);
-        const step = smooth(.06, .18, edge) * (1 - smooth(.67, .99, edge));
-        const cleft = Math.abs(noise(u * 12 + v * 6, v * 6, 6, 185) - .51);
-        const fracture = (1 - smooth(.003, .035, cleft)) * smooth(.52, .73, lift);
-        const tone = (lift - .5) * 15 + (patches - .5) * 13 + step * 7 - line * 14 - fracture * 18
-            + (sand - .5) * 8 + (grit - .5) * 4;
+        const cleft = noise((wx + wy) * 6, wy * 6, 6, 176);
+        const fractured = smooth(.30, .58, facets);
+        const fissure = (1 - smooth(.003, .023, Math.abs(cleft - .49))) * fractured;
+        const lip = (1 - smooth(.004, .025, Math.abs(cleft - .518))) * fractured;
+        const ridge = Math.sin(2 * Math.PI * (v * 8 + u + (bed - .5) * 1.35 + (facets - .5) * .34));
+        const strata = ridge * (2 + 7 * smooth(.46, .74, warp));
+        const crags = (bed - .5) * 16 + (facets - .5) * 22 + (aggregate - .5) * 22 + strata;
+        const mineral = (grains - .5) * 25 + (grit - .5) * 11
+            + (grit > .96 && grains > .60 ? 16 : 0) - (grit < .07 && grains < .48 ? 13 : 0);
+        const tone = crags + mineral + lip * 15 - fissure * 29;
+        const cool = (warp - .5) * 5;
 
         const seam = noise(u * 19, v * 19, 19, 186);
         const seamGrain = noise(u * 53, v * 53, 53, 187);
         const i = (y * ROCK_SIZE + x) * 4;
-        pixels[i] = 141 + tone;
-        pixels[i + 1] = 147 + tone;
-        pixels[i + 2] = 151 + tone;
+        pixels[i] = 130 + tone - cool;
+        pixels[i + 1] = 131 + tone;
+        pixels[i + 2] = 132 + tone * .97 + cool;
         pixels[i + 3] = 128 + (seam - .5) * 152 + (seamGrain - .5) * 78;
     }
     return pixels;
