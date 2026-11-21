@@ -121,7 +121,7 @@ async function handleMessage(e){
         for (const k of ['land', 'water']) {
             const b = arrays[k];
             bounds(b);
-            for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies, b.wet]) transfer.push(a.buffer);
+            for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies, b.wet, b.geology]) transfer.push(a.buffer);
         }
         self.postMessage({ type: 'rebuilt', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, sky, chunk }, transfer);
         return;
@@ -129,7 +129,7 @@ async function handleMessage(e){
     if (m.type !== 'build' || !data) return;
     const t0 = performance.now();
     const ownData=data;
-    const templateKey=templateCache&&Math.abs(m.cx)<=8&&Math.abs(m.cz)<=8?cacheKey('terrain',{...templateRecipe,cx:m.cx,cz:m.cz,planets:templatePlanets,ghost:!!data.ghost?.on}):null;
+    const templateKey=templateCache&&Math.abs(m.cx)<=8&&Math.abs(m.cz)<=8?cacheKey('terrain',{...templateRecipe,mesh:2,cx:m.cx,cz:m.cz,planets:templatePlanets,ghost:!!data.ghost?.on}):null;
     const kept=templateKey?await templateCache.getTree('terrain',templateKey):null;
     if(data!==ownData)return;
     if(kept?.chunk&&kept?.arrays?.land&&kept?.arrays?.water){
@@ -137,7 +137,7 @@ async function handleMessage(e){
         const copyViews=o=>{const c={...o};for(const k of Object.keys(c))if(ArrayBuffer.isView(c[k]))c[k]=c[k].slice();return c;};
         const chunk=copyViews(kept.chunk),arrays={land:copyViews(kept.arrays.land),water:copyViews(kept.arrays.water)};
         data.chunks.set(chunkKey(m.cx,m.cz),chunk);data._last=null;
-        const transfer=[];for(const k of ['land','water'])for(const a of [arrays[k].positions,arrays[k].normals,arrays[k].colors,arrays[k].indices,arrays[k].patterns,arrays[k].skies,arrays[k].wet])transfer.push(a.buffer);
+        const transfer=[];for(const k of ['land','water'])for(const a of [arrays[k].positions,arrays[k].normals,arrays[k].colors,arrays[k].indices,arrays[k].patterns,arrays[k].skies,arrays[k].wet,arrays[k].geology])transfer.push(a.buffer);
         self.postMessage({type:'built',id:m.id,key:m.key,cx:m.cx,cz:m.cz,arrays,chunk,ms:performance.now()-t0,template:true},transfer);
         pruneChunks(m);return;
     }
@@ -151,7 +151,7 @@ async function handleMessage(e){
     for (const k of ['land', 'water']) {
         const b = arrays[k];
         bounds(b);
-        for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies, b.wet]) transfer.push(a.buffer);
+        for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies, b.wet, b.geology]) transfer.push(a.buffer);
     }
     if(templateKey)void templateCache.putTree('terrain',templateKey,{arrays,chunk});
     self.postMessage({ type: 'built', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, chunk, ms: performance.now() - t0 }, transfer);

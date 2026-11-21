@@ -2,7 +2,7 @@
 export const SOIL_SIZE = 512;
 export const SOIL_METRES = 10;
 
-function grain(x, y, salt) {
+export function grain(x, y, salt) {
     let h = Math.imul(x + 137, 374761393) ^ Math.imul(y - 159, 668265263) ^ Math.imul(salt, 2246822519);
     h = Math.imul(h ^ (h >>> 15), 3266489917);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
@@ -10,7 +10,7 @@ function grain(x, y, salt) {
 
 const wrap = (n, period) => ((n % period) + period) % period;
 
-function noise(x, y, period, salt) {
+export function noise(x, y, period, salt) {
     const ix = Math.floor(x), iy = Math.floor(y);
     const fx = x - ix, fy = y - iy;
     const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
