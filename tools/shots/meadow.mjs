@@ -7,7 +7,7 @@ export default async function (h, args = {}) {
     const { SKY_LIGHT } = await import('/src/world/VoxelShading.js');
     const { CLOUD_SHADE: CLOUD, CLOUD_RULES } = await import('/src/world/CloudShade.js');
     const NEW = { ...DAY_LIGHT }, OLD = { amb: 0.3, hemi: 0.35, sun: 0.85, ground: 0x6a8f4e };
-    const look = (L, shade) => { Object.assign(DAY_LIGHT, L); g.world.hemiLight.groundColor.set(L.ground); SKY_LIGHT.shade.value = shade; SKY_LIGHT.greenSat.value = shade ? 0.84 : 1; CLOUD.k.value = shade ? 0.5 : 0; CLOUD_RULES.K = shade ? 0.5 : 0; g.world._night = -1; };
+    const look = (L, shade) => { Object.assign(DAY_LIGHT, L); g.world.hemiLight.groundColor.set(L.ground); SKY_LIGHT.shade.value = shade; SKY_LIGHT.greenSat.value = shade ? 0.72 : 1; CLOUD.k.value = shade ? 0.5 : 0; CLOUD_RULES.K = shade ? 0.5 : 0; g.world._night = -1; };
     // an open, green, fairly flat place near the start (a meadow): sample around the hero
     const p0 = g.character.group.position.clone();
     let best = args.at ? { x: args.at[0], y: args.at[1], z: args.at[2] } : null;
@@ -25,7 +25,7 @@ export default async function (h, args = {}) {
     await h.frames(20);
     h.bare();
     g.ultra?.set?.(!!args.ultra);
-    for (const [tod, tn] of (args.evening ? [[0.3, 'day'], [0.6, 'evening']] : [[0.3, 'day']])) {
+    for (const [tod, tn] of (args.evening ? [[0.3, 'day'], [0.66, 'evening']] : [[0.3, 'day']])) {
         h.time(tod);
         for (let k = 0; k < (args.n || 2); k++) {
             const a = k * 2.1, eye = new T.Vector3(best.x, best.y + 3.4, best.z);

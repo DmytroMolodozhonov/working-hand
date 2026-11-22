@@ -14,6 +14,7 @@
  * popping). Night, caves, storms: lit like the rest of the open world (applySkyComp).
  */
 
+import { BladeField } from './GrassBlades.js';
 import { COVERAGE } from '../core/AlphaCoverage.js';
 import * as THREE from 'three';
 import { CHUNK, chunkKey } from './Terrain.js';
@@ -28,6 +29,7 @@ export { buildFlora }; // (the blades themselves: FloraBuild.js — no THREE the
 
 export const FLORA = {
     RADIUS: 56, // m round the player (21.11: 70 → 56 — the tall kinds past ~50 m are a few pixels; the triangles cost — creativebench)
+    GROW_MS: 700, // ms: a newly arrived chunk's grass grows up out of the ground
     COVER_R: 32, // m: the dense cover (the sward, turf, clover, moss) — drawn this far, melting away towards it (creativebench: triangles)
     BUILD_PER_FRAME: 2, // chunks
     BUDGET_MS: 2.5,
@@ -45,10 +47,12 @@ export class Flora {
         this.material = this._material();
         this.bushDepth = this._bushDepth();
         this.puddleMat = this._puddleMaterial();
+        this._windU = WIND.time;
         this.feet = null; // (Game: a function that hands every walker near the player to press(x, z, r, vx, vz) — TrampleField.js)
         this.group = new THREE.Group();
         this.group.name = 'flora';
         terrain.group.add(this.group);
+        this.blades = new BladeField(this); // (the real 3D tufts near the player: one instanced draw — GrassBlades.js)
         this.meshes = new Map(); // chunk key → { mesh, cx, cz, rev, chunk }
         this._center = { x: 1e9, z: 1e9 };
         this._t = 0;
@@ -60,6 +64,7 @@ export class Flora {
         const m = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, map: grassAtlas(), alphaTest: 0.5 });
         const center = (this._centerU = { value: new THREE.Vector3() });
         const radius = (this._radiusU = { value: this.radius });
+        const growIn = (this._growU = { value: 1 });
         const tr = this.trample.uniforms;
         m.onBeforeCompile = (shader) => {
             shader.uniforms.uWind = WIND.time;
@@ -69,6 +74,7 @@ export class Flora {
             addCloudUniforms(shader);
             shader.uniforms.uFloraCenter = center;
             shader.uniforms.uFloraR = radius;
+            shader.uniforms.uGrowIn = growIn;
             shader.uniforms.uUltraOn = ULTRA.on;
             shader.uniforms.uUltraTime = ULTRA.time;
             shader.uniforms.uSunDir = ULTRA.sunDir;
@@ -77,7 +83,7 @@ export class Flora {
             shader.uniforms.uTrample = tr.tex;
             shader.uniforms.uTrampleO = tr.origin;
             shader.vertexShader = shader.vertexShader
-                .replace('#include <common>', '#include <common>\nattribute float sway;\nattribute float glow;\nattribute vec2 grow;\nvarying float vGlow;\nvarying float vBlade;\nvarying vec2 vFloraXZ;\nvarying vec3 vFloraView;\nuniform float uWind;\nuniform float uUltraOn;\nuniform float uUltraTime;\nuniform vec3 uFloraCenter;\nuniform float uFloraR;\n' + TRAMPLE_GLSL)
+                .replace('#include <common>', '#include <common>\nattribute float sway;\nattribute float glow;\nattribute vec2 grow;\nvarying float vGlow;\nvarying float vBlade;\nvarying vec2 vFloraXZ;\nvarying vec3 vFloraView;\nuniform float uWind;\nuniform float uUltraOn;\nuniform float uUltraTime;\nuniform vec3 uFloraCenter;\nuniform float uFloraR;\nuniform float uGrowIn;\n' + TRAMPLE_GLSL)
                 .replace('#include <begin_vertex>', `#include <begin_vertex>
 vGlow = glow;
 vBlade = clamp(sway / max(0.25, sway + 0.25), 0.0, 1.0) * step(0.001, sway); // (0 at the root … towards 1 up the plant)
@@ -88,8 +94,9 @@ vBlade = clamp(sway / max(0.25, sway + 0.25), 0.0, 1.0) * step(0.001, sway); // 
     // far away the plants thin out by their rank (the cover last), then all shrink into the ground at the edge: no popping
     float far = 1.0 - smoothstep(uFloraR * 0.72, uFloraR, d);
     float keep = 1.0 - smoothstep(uFloraR * 0.3, uFloraR * 0.9, d) * 0.8, rank = grow.y;
-    if (rank >= 2.0) { rank -= 2.0; keep = 1.0 - smoothstep(${(FLORA.COVER_R * 0.45).toFixed(1)}, ${(FLORA.COVER_R * 0.95).toFixed(1)}, d); } // (the cover: thinner and thinner, gone by COVER_R)
+    if (rank >= 2.0) { rank -= 2.0; keep = smoothstep(9.0, 15.0, d) * (1.0 - smoothstep(${(FLORA.COVER_R * 0.45).toFixed(1)}, ${(FLORA.COVER_R * 0.95).toFixed(1)}, d)); } // (the cover: near the player the 3D blades — GrassBlades.js — take its place; thinner and thinner, gone by COVER_R)
     if (rank > keep) far = 0.0;
+    far *= uGrowIn * uGrowIn * (3.0 - 2.0 * uGrowIn);
     transformed.y -= sway * (1.0 - far) * 1.05;
     float flex = grow.x, s = sway * sway;
     // the wind: a steady sway and gusts rolling over the meadow in waves (stronger with «Ультра»); limp kinds most, reeds little
@@ -123,7 +130,7 @@ diffuseColor.a = vUv.x < 0.0 ? 1.0 : clamp((diffuseColor.a - 0.5) / max(fwidth(d
                 .replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= mix(0.8, 1.0, vBlade); // (deep in the tuft its own blades shade it — the picture has its own foot shade too)
 diffuseColor.rgb *= mix(1.0, cloudShade(vFloraXZ), 0.75); // (a cloud's shadow passes over the grass with the ground under it)
-{ float aer = smoothstep(30.0, 230.0, length(vFloraView)) * 0.42 * uAerial; float al = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(al) * vec3(0.84, 0.93, 1.1), aer); } // (the same air as over the land)`)
+{ float aer = smoothstep(18.0, 220.0, length(vFloraView)) * 0.55 * uAerial; float al = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(al) * vec3(0.84, 0.93, 1.1), aer); } // (the same air as over the land)`)
                 .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += diffuseColor.rgb * vGlow * 0.55; // (the moonlit groves' flowers glow)
 // the sun shining through the blades from behind (looking towards a low sun the meadow lights up gold-green at its tips)
@@ -207,6 +214,7 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
         T0.follow(focus.x, focus.z);
         this.feet?.(T0);
         T0.rise(Math.min(0.1, (now - (this._lastRise || now)) / 1000));
+        this.blades?.update(focus, Math.min(0.1, (now - (this._lastRise || now)) / 1000));
         this._lastRise = now;
         this._centerU.value.set(focus.x, 0, focus.z);
         const R = this.radius, rc = Math.ceil(R / CHUNK) + 1;
@@ -271,6 +279,7 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
 
     _drop(key, e) {
         this.meshes.delete(key);
+        if (this.blades && e.tufts) this.blades.dirty = true;
         for (const m of [e.mesh, e.bush, e.puddles, e.cover]) if (m) { this.group.remove(m); m.geometry.dispose(); }
     }
 
@@ -279,11 +288,18 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
         const old = this.meshes.get(key);
         if (old) this._drop(key, old);
         out = out || buildFlora(this.data, c, { under: this.under });
+        // (the author 22.11: «когда лечу, видно, что трава подгружается»): a chunk's meadow arriving for the first time grows up out of the
+        // ground over GROW_MS instead of appearing at once; a rebuild of one already there (an edit) is shown at once
+        const born = old ? -1e9 : performance.now();
         const mk = (geo, mat) => {
             const mesh = new THREE.Mesh(geo, mat);
             mesh.frustumCulled = true; mesh.castShadow = false; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false;
             mesh.userData.isFlora = true;
             mesh.raycast = () => {}; // (not a thing to hit: spells and hands pass through grass)
+            if (mat === this.material) mesh.onBeforeRender = (r, sc, cam, geo, m) => {
+                const k = Math.min(1, (performance.now() - born) / FLORA.GROW_MS);
+                if (this._growU.value !== k) { this._growU.value = k; m.uniformsNeedUpdate = true; }
+            };
             this.group.add(mesh);
             return mesh;
         };
@@ -292,7 +308,8 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
         if (out.cover?.verts) { cover = mk(this.chunkGeometry(c, out.cover), this.material); cover.visible = this._chunkDist(cx, cz, this._centerU.value) < FLORA.COVER_R; }
         if (out.bush?.verts) { bush = mk(this.chunkGeometry(c, out.bush), this.material); bush.castShadow = true; bush.customDepthMaterial = this.bushDepth; }
         if (out.puddles?.length) puddles = mk(this._puddleGeometry(out.puddles), this.puddleMat);
-        this.meshes.set(key, { mesh, bush, puddles, cover, cx, cz, rev: c.rev, chunk: c });
+        this.meshes.set(key, { mesh, bush, puddles, cover, tufts: out.tufts || null, cx, cz, rev: c.rev, chunk: c });
+        if (this.blades) this.blades.dirty = true;
         this.stats.built++;
     }
 
@@ -340,7 +357,7 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
 
     dispose() {
         for (const [key, e] of this.meshes) this._drop(key, e);
-        this.material.dispose(); this.bushDepth.dispose(); this.puddleMat.dispose(); this.trample.dispose();
+        this.blades?.dispose(); this.material.dispose(); this.bushDepth.dispose(); this.puddleMat.dispose(); this.trample.dispose();
         this.terrain.group.remove(this.group);
     }
 }

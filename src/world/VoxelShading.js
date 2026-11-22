@@ -28,7 +28,7 @@ import { CLOUD_SHADE_GLSL, addCloudUniforms } from './CloudShade.js';
  * in a cave (World: their hands, the things by them are dark) for the land itself — the land is as
  * lit as the sky reaches it (each block face's own daylight, `voxSky`), wherever the player is.
  */
-export const SKY_LIGHT = { comp: { value: 1 }, nv: { value: 0 }, shade: { value: 1 }, greenSat: { value: 0.84 }, aerial: { value: 1 } }; // (aerial: the air's haze over far land — World sets it: 1 under the Earth's sky by day, 0 in hell, space, caves) // (nv: the night gift «Noctis» 0…1 — the cave's dark is that much milder in the terrain's own light: voxSky below)
+export const SKY_LIGHT = { comp: { value: 1 }, nv: { value: 0 }, shade: { value: 1 }, greenSat: { value: 0.66 }, aerial: { value: 1 } }; // (aerial: the air's haze over far land — World sets it: 1 under the Earth's sky by day, 0 in hell, space, caves) // (nv: the night gift «Noctis» 0…1 — the cave's dark is that much milder in the terrain's own light: voxSky below)
 
 /**
  * Invisible houses («Protection Invisible», HouseWards.js): inside each sphere [x, y, z, r] the blocks
@@ -645,10 +645,10 @@ float snowflakeAt(vec2 uv) {
     }
     // living green, not plastic (the author 21.11: «слишком игрушечно»): the grass's colour a little less saturated and towards
     // olive — a real meadow is never the pure green of a paint box; the golden steppe, the autumn and the snow keep their own
-    if (green && !snowy) { float gl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(vec3(gl), diffuseColor.rgb, uGreenSat) * mix(vec3(1.0), vec3(0.97, 0.95, 0.87), uCornerShade); }
+    if (green && !snowy) { float gl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(vec3(gl), diffuseColor.rgb, uGreenSat) * mix(vec3(1.0), vec3(0.8, 0.84, 0.7), uCornerShade); } // (22.11: a real meadow reflects about a fifth of the light — darker, olive, not a lime paint)
     // the air between (21.11, the author: the far hills «игрушечные» — bright lime steps to the horizon): the farther land loses its
     // colour and takes the sky's cool blue, as through real air, long before the fog swallows it
-    { float aer = smoothstep(30.0, 230.0, length(vVoxPos - cameraPosition)) * 0.42 * uAerial;
+    { float aer = smoothstep(18.0, 220.0, length(vVoxPos - cameraPosition)) * 0.55 * uAerial;
       float al = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(al) * vec3(0.84, 0.93, 1.1), aer); }
     // soft edge darkening (fake ambient occlusion along block borders)

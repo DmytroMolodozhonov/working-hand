@@ -69,6 +69,15 @@ class Verts {
     }
 }
 const _main = new Verts(), _bush = new Verts(), _cover = new Verts();
+/** The 3D tufts near the player (GrassBlades.js): 12 floats each — x, y, z, yaw, h, w, flex, rank, r, g, b, kind. */
+const _tufts = { a: new Float32Array(12 * 4096), n: 0, box: null };
+function tuft(x, y, z, yaw, h, w, flex, rank, r, g, b) {
+    if ((_tufts.n + 1) * 12 > _tufts.a.length) { const t = new Float32Array(_tufts.a.length * 2); t.set(_tufts.a); _tufts.a = t; }
+    const o = _tufts.n++ * 12, A = _tufts.a, B = _tufts.box;
+    A[o] = x; A[o + 1] = y; A[o + 2] = z; A[o + 3] = yaw; A[o + 4] = h; A[o + 5] = w; A[o + 6] = flex; A[o + 7] = rank; A[o + 8] = r; A[o + 9] = g; A[o + 10] = b; A[o + 11] = 0;
+    if (x < B[0]) B[0] = x; if (y < B[1]) B[1] = y; if (z < B[2]) B[2] = z; if (x > B[3]) B[3] = x; if (y + h > B[4]) B[4] = y + h; if (z > B[5]) B[5] = z;
+}
+const BLADE_GREEN = [0.33, 0.56, 0.21]; // (a living meadow's green — the land's tint shifts it)
 
 /** A smooth noise 0…1 over `size` m (hashed lattice; each kind its own `salt`). */
 function vnoise(x, z, size, seed) {
@@ -140,6 +149,7 @@ export function buildFlora(data, c, opts = null) {
     const hidden = data._hidden?.get(chunkKey(c.cx, c.cz)) || null;
     const V = _main, VB = _bush, VC = _cover;
     V.reset(); VB.reset(); VC.reset();
+    _tufts.n = 0; _tufts.box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     const puddles = [];
     let count = 0;
     // the water near each column (within the chunk: 0 at the water's edge … 4 far) — the wet kinds grow only by it
@@ -208,6 +218,11 @@ export function buildFlora(data, c, opts = null) {
                 const y = rootY(ox, oz), rank = 2 + hashLand(x + 91 * t, z - 37, seed + 615) * 0.95;
                 if (K.flat) { lie(VC, ox, y, oz, a * 2, w * 1.6, q, cr, cg, cb, rank); continue; } // (moss lies on the ground)
                 card(VC, ox, y, oz, a, w, h, 0, 0, q, cr, cg, cb, K.flex, rank);
+                // the same grass as real 3D blades near the player (GrassBlades.js): the cards take over farther away
+                if (K.id === 'sward' || (K.id === 'turf' && t === 0)) {
+                    const bt = 0.88 + 0.24 * hashLand(x - t * 5, z + t * 9, seed + 616);
+                    tuft(ox, y - 0.03, oz, a * 2, h * (K.id === 'sward' ? 1.05 : 1.6), w * 0.75, K.flex, hashLand(x + t, z + 77 * t, seed + 617), BLADE_GREEN[0] * tr * bt, BLADE_GREEN[1] * tg * bt, BLADE_GREEN[2] * tb * bt);
+                }
                 if (K.id !== 'sward' || t === 0) card(VC, ox, y, oz, a + Math.PI / 2, w, h, 0, 0, q, cr, cg, cb, K.flex, rank);
             }
         }
@@ -260,6 +275,7 @@ export function buildFlora(data, c, opts = null) {
             const lean = (hashLand(x + 3, z + t, seed + 517) - 0.5) * 0.25 * H * K.flex, la = hashLand(x, z + t * 5, seed + 518) * Math.PI * 2;
             const w = K.w * (0.85 + 0.3 * k1) * (0.7 + 0.3 * Math.min(2, H));
             for (let s = 0; s < K.n; s++) card(V, ox, y, oz, a0 + s * Math.PI / K.n, w, H, Math.cos(la) * lean, Math.sin(la) * lean, q, cr, cg, cb, K.flex, rank, K.glow ? 1 : 0);
+            if (!K.glow) tuft(ox, y - 0.03, oz, a0, H * 0.6, w * 0.5, K.flex, rank, BLADE_GREEN[0] * tr * tone * 0.92, BLADE_GREEN[1] * tg * tone * 0.92, BLADE_GREEN[2] * tb * tone * 0.92); // (a 3D base under the tall kind)
             count++;
         }
 
@@ -323,6 +339,8 @@ export function buildFlora(data, c, opts = null) {
     const out = V.finish(count);
     out.bush = VB.n ? VB.finish(0) : null;
     out.cover = VC.n ? VC.finish(0) : null;
+    out.tufts = _tufts.n ? _tufts.a.slice(0, _tufts.n * 12) : null;
+    out.tuftBox = _tufts.n ? _tufts.box.slice() : null;
     out.puddles = new Float32Array(puddles);
     return out;
 }
@@ -334,5 +352,6 @@ export function floraBuffers(out) {
     const list = [];
     for (const o of [out, out.bush, out.cover]) if (o) for (const k of ['index', 'pos', 'nor', 'col', 'uv', 'sway', 'glow', 'grow']) list.push(o[k].buffer);
     if (out.puddles) list.push(out.puddles.buffer);
+    if (out.tufts) list.push(out.tufts.buffer);
     return list;
 }
