@@ -26,7 +26,8 @@ import { TrampleField, TRAMPLE_GLSL } from './TrampleField.js';
 export { buildFlora }; // (the blades themselves: FloraBuild.js — no THREE there, so a worker can make them too)
 
 export const FLORA = {
-    RADIUS: 70, // m round the player
+    RADIUS: 56, // m round the player (21.11: 70 → 56 — the tall kinds past ~50 m are a few pixels; the triangles cost — creativebench)
+    COVER_R: 32, // m: the dense cover (the sward, turf, clover, moss) — drawn this far, melting away towards it (creativebench: triangles)
     BUILD_PER_FRAME: 2, // chunks
     BUDGET_MS: 2.5,
 };
@@ -85,8 +86,9 @@ vBlade = clamp(sway / max(0.25, sway + 0.25), 0.0, 1.0) * step(0.001, sway); // 
     float d = distance(wp.xz, uFloraCenter.xz);
     // far away the plants thin out by their rank (the cover last), then all shrink into the ground at the edge: no popping
     float far = 1.0 - smoothstep(uFloraR * 0.72, uFloraR, d);
-    float keep = 1.0 - smoothstep(uFloraR * 0.3, uFloraR * 0.9, d) * 0.8;
-    if (grow.y > keep) far = 0.0;
+    float keep = 1.0 - smoothstep(uFloraR * 0.3, uFloraR * 0.9, d) * 0.8, rank = grow.y;
+    if (rank >= 2.0) { rank -= 2.0; keep = 1.0 - smoothstep(${(FLORA.COVER_R * 0.45).toFixed(1)}, ${(FLORA.COVER_R * 0.95).toFixed(1)}, d); } // (the cover: thinner and thinner, gone by COVER_R)
+    if (rank > keep) far = 0.0;
     transformed.y -= sway * (1.0 - far) * 1.05;
     float flex = grow.x, s = sway * sway;
     // the wind: a steady sway and gusts rolling over the meadow in waves (stronger with «Ультра»); limp kinds most, reeds little
@@ -206,9 +208,11 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
         this._centerU.value.set(focus.x, 0, focus.z);
         const R = this.radius, rc = Math.ceil(R / CHUNK) + 1;
         const ccx = Math.floor(focus.x / CHUNK), ccz = Math.floor(focus.z / CHUNK);
-        // forget the chunks left behind
+        // forget the chunks left behind; the cover only in the chunks near the player
         for (const [key, e] of this.meshes) {
-            if (this._chunkDist(e.cx, e.cz, focus) > R + CHUNK) { this._drop(key, e); }
+            const d = this._chunkDist(e.cx, e.cz, focus);
+            if (d > R + CHUNK) { this._drop(key, e); continue; }
+            if (e.cover) e.cover.visible = d < FLORA.COVER_R;
         }
         // make the missing ones (nearest first) and the ones whose ground changed
         const want = [];
@@ -264,7 +268,7 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
 
     _drop(key, e) {
         this.meshes.delete(key);
-        for (const m of [e.mesh, e.bush, e.puddles]) if (m) { this.group.remove(m); m.geometry.dispose(); }
+        for (const m of [e.mesh, e.bush, e.puddles, e.cover]) if (m) { this.group.remove(m); m.geometry.dispose(); }
     }
 
     /** The living ground of one chunk: the cover, grasses, flowers and litter in one mesh; the bushes in a second (it casts a shadow); the puddles in a third. */
@@ -281,10 +285,11 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
             return mesh;
         };
         const mesh = mk(this.chunkGeometry(c, out), this.material);
-        let bush = null, puddles = null;
+        let bush = null, puddles = null, cover = null;
+        if (out.cover?.verts) { cover = mk(this.chunkGeometry(c, out.cover), this.material); cover.visible = this._chunkDist(cx, cz, this._centerU.value) < FLORA.COVER_R; }
         if (out.bush?.verts) { bush = mk(this.chunkGeometry(c, out.bush), this.material); bush.castShadow = true; bush.customDepthMaterial = this.bushDepth; }
         if (out.puddles?.length) puddles = mk(this._puddleGeometry(out.puddles), this.puddleMat);
-        this.meshes.set(key, { mesh, bush, puddles, cx, cz, rev: c.rev, chunk: c });
+        this.meshes.set(key, { mesh, bush, puddles, cover, cx, cz, rev: c.rev, chunk: c });
         this.stats.built++;
     }
 

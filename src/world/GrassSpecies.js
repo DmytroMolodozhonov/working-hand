@@ -55,7 +55,7 @@ export const GRASSES = [
 export const CARPETS = [
     // (the author 21.11: «нет прямой травы, все плюс-минус одинаковые; должна быть прямая, очень сплошная»): a dense upright sward —
     // straight blades standing edge to edge, the meadows' main cover; the cards of neighbouring blocks overlap into one wall of grass
-    { id: 'sward', ru: 'Сплошная прямая трава', cell: 32, h: [0.5, 0.95], w: 0.85, per: 3, flex: 0.55, tint: 1, colony: 11, where: { meadow: 1, emerald: 1, sakura: 0.9, forest: 0.5, autumn: 0.8, jungle: 0.7, steppe: 0.6, taiga: 0.4, moon: 0.6 } },
+    { id: 'sward', ru: 'Сплошная прямая трава', cell: 32, h: [0.5, 0.95], w: 0.95, per: 2, flex: 0.55, tint: 1, colony: 11, where: { meadow: 1, emerald: 1, sakura: 0.9, forest: 0.5, autumn: 0.8, jungle: 0.7, steppe: 0.6, taiga: 0.4, moon: 0.6 } },
     { id: 'turf', ru: 'Дернина', cell: 20, h: [0.12, 0.24], w: 0.5, per: 3, flex: 0.6, tint: 1, colony: 0, where: { meadow: 1, emerald: 1, sakura: 1, forest: 0.8, autumn: 0.8, jungle: 0.9, taiga: 0.6, tundra: 0.6, steppe: 0.5, moon: 0.8, mesa: 0.3 } },
     { id: 'clover', ru: 'Клевер', cell: 21, h: [0.1, 0.2], w: 0.42, per: 3, flex: 0.4, tint: 0.5, colony: 5, where: { meadow: 0.8, emerald: 0.6, sakura: 0.6, forest: 0.3 } },
     { id: 'moss', ru: 'Мох', cell: 22, h: [0.06, 0.12], w: 0.6, per: 2, flex: 0.1, tint: 0.4, colony: 6, flat: true, where: { taiga: 1, forest: 0.8, tundra: 0.6, jungle: 0.5, moon: 0.5 } },

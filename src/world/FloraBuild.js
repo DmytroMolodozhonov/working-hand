@@ -68,7 +68,7 @@ class Verts {
         return { index, pos: this.pos.slice(0, n * 3), nor: this.nor.slice(0, n * 3), col: this.col.slice(0, n * 3), uv: this.uv.slice(0, n * 2), sway: this.sway.slice(0, n), glow: this.glow.slice(0, n), grow: this.grow.slice(0, n * 2), count, verts: n, box: n ? this.box.slice() : null };
     }
 }
-const _main = new Verts(), _bush = new Verts();
+const _main = new Verts(), _bush = new Verts(), _cover = new Verts();
 
 /** A smooth noise 0…1 over `size` m (hashed lattice; each kind its own `salt`). */
 function vnoise(x, z, size, seed) {
@@ -138,8 +138,8 @@ export function buildFlora(data, c, opts = null) {
     const bloom = data._bloom?.get(chunkKey(c.cx, c.cz)) || null;
     const COLS = CHUNK * CHUNK;
     const hidden = data._hidden?.get(chunkKey(c.cx, c.cz)) || null;
-    const V = _main, VB = _bush;
-    V.reset(); VB.reset();
+    const V = _main, VB = _bush, VC = _cover;
+    V.reset(); VB.reset(); VC.reset();
     const puddles = [];
     let count = 0;
     // the water near each column (within the chunk: 0 at the water's edge … 4 far) — the wet kinds grow only by it
@@ -204,10 +204,11 @@ export function buildFlora(data, c, opts = null) {
                 const tone = 0.82 + 0.22 * hashLand(x + t, z - t, seed + 613);
                 const [cr, cg, cb] = tintOf(K, tone);
                 const a = hashLand(x - t * 7, z + t * 3, seed + 614) * Math.PI;
-                const y = rootY(ox, oz), rank = hashLand(x + 91 * t, z - 37, seed + 615) * 0.7; // (the cover thins out last)
-                if (K.flat) { lie(V, ox, y, oz, a * 2, w * 1.6, q, cr, cg, cb, rank); continue; } // (moss lies on the ground)
-                card(V, ox, y, oz, a, w, h, 0, 0, q, cr, cg, cb, K.flex, rank);
-                if (K.id !== 'sward' || t === 0) card(V, ox, y, oz, a + Math.PI / 2, w, h, 0, 0, q, cr, cg, cb, K.flex, rank);
+                // (the cover is its own mesh, drawn only near the player — Flora.COVER_R; rank + 2 tells the shader it is the cover)
+                const y = rootY(ox, oz), rank = 2 + hashLand(x + 91 * t, z - 37, seed + 615) * 0.95;
+                if (K.flat) { lie(VC, ox, y, oz, a * 2, w * 1.6, q, cr, cg, cb, rank); continue; } // (moss lies on the ground)
+                card(VC, ox, y, oz, a, w, h, 0, 0, q, cr, cg, cb, K.flex, rank);
+                if (K.id !== 'sward' || t === 0) card(VC, ox, y, oz, a + Math.PI / 2, w, h, 0, 0, q, cr, cg, cb, K.flex, rank);
             }
         }
 
@@ -321,6 +322,7 @@ export function buildFlora(data, c, opts = null) {
     }
     const out = V.finish(count);
     out.bush = VB.n ? VB.finish(0) : null;
+    out.cover = VC.n ? VC.finish(0) : null;
     out.puddles = new Float32Array(puddles);
     return out;
 }
@@ -330,7 +332,7 @@ const SKIP_SHORE = new Set(['cattail', 'reed', 'sedge']), SKIP_FOREST = new Set(
 /** Every ArrayBuffer of a buildFlora result (for a worker's transfer list). */
 export function floraBuffers(out) {
     const list = [];
-    for (const o of [out, out.bush]) if (o) for (const k of ['index', 'pos', 'nor', 'col', 'uv', 'sway', 'glow', 'grow']) list.push(o[k].buffer);
+    for (const o of [out, out.bush, out.cover]) if (o) for (const k of ['index', 'pos', 'nor', 'col', 'uv', 'sway', 'glow', 'grow']) list.push(o[k].buffer);
     if (out.puddles) list.push(out.puddles.buffer);
     return list;
 }
