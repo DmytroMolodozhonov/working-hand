@@ -273,7 +273,9 @@ export class UltraPost {
         r.info.autoReset = false;
         r.setRenderTarget(this.scene);
         r.autoClear = true;
-        r.render(scene, camera);
+        const ex = r.toneMappingExposure;
+        r.toneMappingExposure = -1; // (the scene raw: this picture makes its own curve — ToneShoulder.js reads −1 as «as it is»)
+        try { r.render(scene, camera); } finally { r.toneMappingExposure = ex; }
         r.autoClear = false;
         // bloom: the bright parts, smaller and smaller, then back up adding each onto the next
         const pf = this.prefilter.uniforms;

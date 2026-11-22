@@ -1,3 +1,5 @@
+import { COVERAGE } from './core/AlphaCoverage.js';
+import { installToneShoulder } from './core/ToneShoulder.js';
 import {rememberStartupFailure,readStartupFailure,clearStartupFailure,showStartupFailure} from './ui/StartupFailure.js';
 /**
  * main.js — entry point: menu, settings, loading screen, game start,
@@ -91,6 +93,8 @@ const antialias = (() => {
 })();
 const renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
+COVERAGE.on = !!renderer.getContext().getContextAttributes?.()?.antialias; // (cut-out leaves and grass: alpha-to-coverage with MSAA — AlphaCoverage.js)
+installToneShoulder(renderer); // (one photographic curve for the land and the sky: bright things roll off softly, keeping their colour — ToneShoulder.js)
 // (the video card dropped the drawing context — a driver reset under a heavy scene: three.js then dies on «null.trim()» in the shader log;
 //  the journal says why, and the loading screen says it in words instead of «Cannot read properties of null»)
 // (the last shader the card was asked to build: written to the browser's storage BEFORE each compile — a driver reset leaves the page dead,

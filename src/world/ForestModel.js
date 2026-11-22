@@ -13,6 +13,7 @@
  * (alpha-tested: the leaves' edges are the picture's), one geometry per shape (17 in all), instanced by ForestFloor — no draw call per item.
  * The arrays come from `forestArrays(kind, v)` (no canvas, no three: a test can build them).
  */
+import { steadyCutout } from '../core/AlphaCoverage.js';
 import * as THREE from 'three';
 
 export function rng(seed) { let s = (seed ^ 0x9e3779b9) >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -501,5 +502,6 @@ export function forestMaterial() {
     if (_mat) return _mat;
     const m = new THREE.MeshLambertMaterial({ map: forestAtlas() || null, vertexColors: true, alphaTest: 0.45, side: THREE.DoubleSide });
     m.userData.shared = true; m.userData.keep = true;
+    steadyCutout(m); // (no shimmer far away: AlphaCoverage.js)
     return (_mat = m);
 }

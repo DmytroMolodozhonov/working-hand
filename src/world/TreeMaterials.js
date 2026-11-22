@@ -7,6 +7,7 @@
  * through real leaves too), sway in the wind in the vertex shader (the crown's top most, the trunk not at
  * all; it fades out far away), and are cut out by the picture's alpha (also in the shadow).
  */
+import { steadyCutout } from '../core/AlphaCoverage.js';
 import * as THREE from 'three';
 import { buildTree, ATLAS_CELLS, BARK_CELL } from './TreeBuild.js';
 import { drawLeafAtlas, bleedLeafPixels, LEAF_ATLAS } from './TreeLeaves.js';
@@ -224,6 +225,7 @@ if (vTreeBark > 0.5) {
         }
     };
     m.customProgramCacheKey = () => (glow === 'violet' ? 'tree-leaf-violet' : glow ? 'tree-leaf-gold' : 'tree-leaf');
+    steadyCutout(m); // (no shimmer far away: AlphaCoverage.js)
     return m;
 }
 

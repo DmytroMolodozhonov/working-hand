@@ -14,6 +14,7 @@
  * popping). Night, caves, storms: lit like the rest of the open world (applySkyComp).
  */
 
+import { COVERAGE } from '../core/AlphaCoverage.js';
 import * as THREE from 'three';
 import { CHUNK, chunkKey } from './Terrain.js';
 import { buildFlora } from './FloraBuild.js';
@@ -131,7 +132,9 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
         };
         m.extensions = { ...(m.extensions || {}), derivatives: true };
         m.customProgramCacheKey = () => 'flora-atlas';
-        return applySkyComp(m);
+        applySkyComp(m);
+        if (COVERAGE.on) { m.alphaToCoverage = true; m.alphaTest = 0.06; } // (the alpha is already sharpened above: with MSAA the edges turn into coverage — no shimmer far away)
+        return m;
     }
 
     /** The bushes' shadow: the same cut-out picture (a bush's shadow is leafy, not a box). */

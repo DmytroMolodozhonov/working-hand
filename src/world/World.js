@@ -98,6 +98,8 @@ const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
  * sun leads (its side bright, a shadow clearly darker and cool-blue from the sky), the even light is lower, the ground's bounce
  * an earthy olive instead of bright green.
  */
+/** How much the land's sky-light takes the sky's own colour (0 — the old fixed light blue, 1 — wholly the painted sky's). */
+export const SKY_TIE = 0.75;
 export const DAY_LIGHT = { amb: 0.14, hemi: 0.27, sun: 0.92, ground: 0x55603f };
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows (on the ground)
 const _defaultSun = new THREE.Vector3(50, 100, 50).normalize();
@@ -373,7 +375,7 @@ export class VoxelWorld {
             const sl = Math.hypot(sun.x, sun.z) || 1, sx = sun.x / sl, sz = sun.z / sl, se = Math.max(elev, -0.2);
             const sd = [sun.x, Math.max(sun.y, -0.25), sun.z], n = Math.hypot(sd[0], sd[1], sd[2]) || 1; sd[0] /= n; sd[1] /= n; sd[2] /= n;
             const a = airColor([-sz, 0.04, sx], sd, this._air1 || (this._air1 = [0, 0, 0])), b = airColor([sx * 0.7 - sz * 0.7, 0.04, sz * 0.7 + sx * 0.7], sd, this._air2 || (this._air2 = [0, 0, 0]));
-            const w = ss(-0.2, 0.04, se) * 0.75;
+            const w = ss(-0.2, 0.04, se) * 0.92; // (22.11: 0.75 → 0.92 — the haze IS the horizon's air: no band between the land and the sky)
             fogCol.lerp(_c1.setRGB((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), w);
         }
         if (!this.scene.fog) this.scene.fog = new THREE.Fog(fogCol, 25, 90);
@@ -397,6 +399,19 @@ export class VoxelWorld {
         this.ambientLight.color.setRGB(1, 1, 1).lerp(_c2.setRGB(1, 0.72, 0.62), 0.55 * glow * (1 - k)).lerp(_c2.setRGB(0.72, 0.74, 1), 0.35 * k);
         this.hemiLight.color.set(0xbfe3ff).lerp(_c2.setRGB(1, 0.7, 0.55), 0.55 * glow * (1 - k));
         this.hemiLight.intensity = (DAY_LIGHT.hemi + (0.08 - DAY_LIGHT.hemi) * k) * eve;
+        // the land lit by the very sky it lies under (the author 22.11: «небо и земля как будто из двух разных игр»): the sky's light
+        // (hemisphere) takes the colour of the sky's own dome as the sky shader paints it (Sky.airColor — the same air), the even light
+        // the horizon's; so the shade under a deep blue noon is cool blue, under a golden evening warm, exactly as the sky above
+        if (elev > -0.2) {
+            const sd = [sun.x, Math.max(sun.y, -0.25), sun.z], n = Math.hypot(sd[0], sd[1], sd[2]) || 1; sd[0] /= n; sd[1] /= n; sd[2] /= n;
+            const zen = airColor([0, 1, 0], sd, this._air3 || (this._air3 = [0, 0, 0]));
+            const mid = airColor([0.5, 0.6, 0.62], sd, this._air4 || (this._air4 = [0, 0, 0])), mid2 = airColor([-0.62, 0.6, -0.5], sd, this._air5 || (this._air5 = [0, 0, 0]));
+            const hz = airColor([0.7, 0.05, 0.7], sd, this._air6 || (this._air6 = [0, 0, 0])), hz2 = airColor([-0.7, 0.05, -0.7], sd, this._air7 || (this._air7 = [0, 0, 0]));
+            const w = ss(-0.2, 0.06, elev) * (1 - k) * SKY_TIE;
+            const norm = (r, g, b) => { const l = 0.3 * r + 0.59 * g + 0.11 * b || 1; return _c2.setRGB(r / l, g / l, b / l); };
+            this.hemiLight.color.lerp(norm((zen[0] + mid[0] + mid2[0]) / 3, (zen[1] + mid[1] + mid2[1]) / 3, (zen[2] + mid[2] + mid2[2]) / 3), w);
+            this.ambientLight.color.lerp(norm((hz[0] + hz2[0]) / 2, (hz[1] + hz2[1]) / 2, (hz[2] + hz2[2]) / 2), w * 0.8);
+        }
         this._shadowX = null; // re-aim the shadow
         this._rememberBase(k);
     }
