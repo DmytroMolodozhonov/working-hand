@@ -4159,7 +4159,7 @@ export class Game {
             };
             const FP = this.footprints, ch = this.character;
             const onFoot = !this.isDeadLocal && !ch.flying && !this.swim?.swimming && !this.animals?.riding && !this.dragonRide?.busy && !this.boards?.mounted && !this.boats?.riding;
-            if (onFoot) { step('me', p.x, p.y, p.z, 0.55 * (ch.size || 1)); if (ch.onGround !== false) FP?.step('me', p.x, p.y - 2.0 * (ch.size || 1), p.z, 'boot', ch.size || 1); }
+            if (onFoot) { step('me', p.x, p.y, p.z, 0.55 * (ch.size || 1)); FP?.step('me', p.x, p.y - 2.0 * (ch.size || 1), p.z, 'boot', ch.size || 1); }
             for (const [id, r] of this.remotes || []) if (r.position && !r.dead) { step('p' + id, r.position.x, r.position.y, r.position.z, 0.55); FP?.step('p' + id, r.position.x, r.position.y - 2.0, r.position.z, 'boot'); }
             for (const v of this.castleLife?.byId?.values?.() || []) {
                 if (v.dead || v.seated || v.climb || ((v.x - p.x) ** 2 + (v.z - p.z) ** 2) > near) continue;
