@@ -216,6 +216,7 @@ async function ablate({ names, FRAMES }) {
         else if (name === 'wood' && F) { for (const e of F.meshes.values()) hide(e.wood); }
         else if ((name === 'nearTrees' || name === 'farTrees') && F) { for (const e of F.meshes.values()) if (((e.key & 1) === 1) === (name === 'farTrees')) { hide(e.wood); hide(e.leaf); } }
         else if (name === 'treeShadows' && F) { for (const e of F.meshes.values()) for (const m of [e.wood, e.leaf]) if (m.castShadow) { m.castShadow = false; undo.push(() => { m.castShadow = true; }); } }
+        else if (name === 'flora') { const fl = g.world?.terrain?.flora?.group; if (fl) hide(fl); } // (the grass, flowers, bushes, litter — Flora.js: a child of the terrain group)
         else if (name === 'shadows') { const sm = g.renderer.shadowMap; if (sm.autoUpdate) { sm.autoUpdate = false; undo.push(() => { sm.autoUpdate = true; }); } }
         else for (const c of g.scene.children) if (c.name === name) hide(c);
         return { n: undo.length, undo: () => { for (const u of undo) u(); } };
