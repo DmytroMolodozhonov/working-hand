@@ -76,6 +76,28 @@ export const BUSHES = [
  * dung — only where herds graze (meadows, steppes; Terrain's pastures are not known to a worker: a herd's land is its biome);
  * leaves and twigs — under woods; stones — anywhere, more on dry land; mushrooms — in damp woods.
  */
+/**
+ * Wildflowers (21.11: the flowers were flat coloured squares — «бумажки»): each painted with its stem, leaves and real blossoms.
+ * `rgb` — the colour a land's flower list asks for is matched to the nearest kind (Landscape.BIOMES flowers stay as they are).
+ */
+export const FLOWERS = [
+    { id: 'poppy', ru: 'Мак', cell: 33, rgb: [0.9, 0.2, 0.15], h: [0.5, 0.8] },
+    { id: 'cornflower', ru: 'Василёк', cell: 34, rgb: [0.3, 0.45, 0.9], h: [0.45, 0.75] },
+    { id: 'buttercup', ru: 'Лютик', cell: 35, rgb: [0.97, 0.83, 0.22], h: [0.35, 0.6] },
+    { id: 'daisy', ru: 'Ромашка', cell: 36, rgb: [0.96, 0.95, 0.92], h: [0.4, 0.7] },
+    { id: 'clover', ru: 'Луговой клевер', cell: 37, rgb: [0.88, 0.45, 0.68], h: [0.3, 0.5] },
+    { id: 'bellflower', ru: 'Колокольчик', cell: 38, rgb: [0.6, 0.42, 0.88], h: [0.45, 0.75] },
+    { id: 'hawkweed', ru: 'Ястребинка', cell: 39, rgb: [1.0, 0.58, 0.2], h: [0.4, 0.7] },
+    { id: 'moonbloom', ru: 'Лунный цветок', cell: 40, rgb: [0.5, 0.95, 1.0], h: [0.45, 0.75], glow: true },
+];
+/** The painted flower nearest to a colour (0xRRGGBB). */
+export function flowerFor(c) {
+    const r = ((c >> 16) & 255) / 255, g = ((c >> 8) & 255) / 255, b = (c & 255) / 255;
+    let best = 0, bd = 1e9;
+    for (let k = 0; k < FLOWERS.length; k++) { const q = FLOWERS[k].rgb, d = (q[0] - r) ** 2 + (q[1] - g) ** 2 + (q[2] - b) ** 2; if (d < bd) { bd = d; best = k; } }
+    return best;
+}
+
 export const LITTER = [
     { id: 'pebbles', ru: 'Камешки', cell: 29, size: [0.25, 0.6], kind: 'lie', share: 0.05, where: { '*': 0.6, mesa: 1.5, steppe: 1.2, tundra: 1.5 } },
     { id: 'leaves', ru: 'Опавшие листья', cell: 30, size: [0.5, 1.0], kind: 'lie', share: 0.12, where: { forest: 1, autumn: 2, sakura: 1.2, jungle: 0.6, moon: 0.6 } },

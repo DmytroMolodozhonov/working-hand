@@ -21,13 +21,14 @@
 import { BLOCK, CHUNK, MIN_LAYER, chunkKey } from './Terrain.js';
 import { BIOMES, hashLand } from './Landscape.js';
 import { shapeTop } from './BlockShapes.js';
-import { GRASSES, CARPETS, BUSHES, LITTER, PUDDLES, cellUV, weightsByBiome } from './GrassSpecies.js';
+import { GRASSES, CARPETS, BUSHES, LITTER, PUDDLES, FLOWERS, flowerFor, cellUV, weightsByBiome } from './GrassSpecies.js';
 
 /** («Flourish» on a meadow with no flowers of its own) the chance and the colours: poppy, cornflower, buttercup, daisy, clover, bellflower */
 const BLOOM_FLOWERS = [1, 0xe8392c, 0x4f7fe0, 0xf5d23a, 0xf4f0e6, 0xd86aa8, 0x8a6ad8];
 
 const W_GRASS = weightsByBiome(BIOMES, GRASSES), W_CARPET = weightsByBiome(BIOMES, CARPETS), W_BUSH = weightsByBiome(BIOMES, BUSHES), W_LITTER = weightsByBiome(BIOMES, LITTER);
 const UV_GRASS = GRASSES.map((k) => cellUV(k.cell)), UV_CARPET = CARPETS.map((k) => cellUV(k.cell, k.id !== 'sward')) /* (the low ones are painted in the cell's lower square) */, UV_BUSH = BUSHES.map((k) => cellUV(k.cell, true));
+const UV_FLOWER = FLOWERS.map((k) => cellUV(k.cell));
 const REF = [0x55 / 255, 0xa8 / 255, 0x43 / 255]; // (the meadow's grass: tint 1 — other lands tint relative to it)
 
 /** A growable set of vertex arrays (reused between chunks: no garbage; finish() copies out exactly what was written). */
@@ -213,27 +214,15 @@ export function buildFlora(data, c, opts = null) {
         // —— a flower (as before) ——
         if (blooms || r < fl[0] * (0.3 + 1.5 * patch(x - 77, z + 41, seed))) {
             const k = 1 + Math.floor(hashLand(x, z, seed + 502) * (fl.length - 1));
-            const fc = fl[k], fr = ((fc >> 16) & 255) / 255, fg = ((fc >> 8) & 255) / 255, fb = (fc & 255) / 255;
+            // a real wildflower, painted (GrassSpecies.FLOWERS): the land's flower colour picks the nearest kind
+            const F = FLOWERS[flowerFor(fl[k])], q = UV_FLOWER[FLOWERS.indexOf(F)];
             const ox = x + (hashLand(z, x, seed + 503) - 0.5) * 0.6, oz = z + (hashLand(x + 3, z - 5, seed + 504) - 0.5) * 0.6;
             const y = rootY(ox, oz);
-            const h = 0.32 + 0.35 * hashLand(x - 7, z + 2, seed + 505);
-            const a = hashLand(x + 11, z, seed + 506) * Math.PI;
-            const ca = Math.cos(a) * 0.035, sa = Math.sin(a) * 0.035, rank = hashLand(x, z, seed + 508);
-            V.seq();
-            V.v(ox - ca, y, oz - sa, gr * 0.6, gg * 0.6, gb * 0.6, -1, -1, 0, 0, 0.6, rank);
-            V.v(ox + ca, y, oz + sa, gr * 0.6, gg * 0.6, gb * 0.6, -1, -1, 0, 0, 0.6, rank);
-            V.v(ox, y + h, oz, gr * 0.9, gg * 0.9, gb * 0.9, -1, -1, h, 0, 0.6, rank);
-            const gl = bio.glow ? 1 : 0, s = 0.09 + 0.05 * hashLand(x, z - 9, seed + 507), yh = y + h;
-            for (let q = 0; q < 4; q++) {
-                const b = a + q * Math.PI / 2, cb = Math.cos(b), sb = Math.sin(b);
-                const px = ox + cb * s * 1.6, pz = oz + sb * s * 1.6;
-                V.v(ox, yh, oz, fr * 0.75, fg * 0.75, fb * 0.75, -1, -1, h, gl, 0.6, rank);
-                V.v(ox - sb * s * 0.8 + cb * s * 0.5, yh + 0.03, oz + cb * s * 0.8 + sb * s * 0.5, fr, fg, fb, -1, -1, h + 0.05, gl, 0.6, rank);
-                V.v(px, yh + 0.06, pz, fr, fg, fb, -1, -1, h + 0.08, gl, 0.6, rank);
-                V.v(ox, yh, oz, fr * 0.75, fg * 0.75, fb * 0.75, -1, -1, h, gl, 0.6, rank);
-                V.v(px, yh + 0.06, pz, fr, fg, fb, -1, -1, h + 0.08, gl, 0.6, rank);
-                V.v(ox + sb * s * 0.8 + cb * s * 0.5, yh + 0.03, oz - cb * s * 0.8 + sb * s * 0.5, fr, fg, fb, -1, -1, h + 0.05, gl, 0.6, rank);
-            }
+            const h = F.h[0] + (F.h[1] - F.h[0]) * hashLand(x - 7, z + 2, seed + 505);
+            const a = hashLand(x + 11, z, seed + 506) * Math.PI, rank = hashLand(x, z, seed + 508);
+            const tone = 0.92 + 0.16 * hashLand(x + 5, z, seed + 509), gl = bio.glow || F.glow ? 1 : 0;
+            card(V, ox, y, oz, a, h * 0.62, h, 0, 0, q, tone, tone, tone, 0.6, rank, gl);
+            card(V, ox, y, oz, a + Math.PI / 2, h * 0.62, h, 0, 0, q, tone, tone, tone, 0.6, rank, gl);
             V.seq();
             count++;
         }

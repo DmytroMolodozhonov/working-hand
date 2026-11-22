@@ -1107,6 +1107,7 @@ export class VoxelWorld {
     update(focus, viewBoost = 0) {
         const now = performance.now();
         // the clouds' shadows over the land (CloudShade.js): by day, on the Earth's open land — not in hell, a storm, space
+        SKY_LIGHT.aerial.value = this.sky && !this.offEarth ? (1 - (this.hell || 0)) * (1 - 0.7 * (this.cave || 0)) * (1 - 0.6 * (this.indoor || 0)) : 0; // (the air's haze: VoxelShading, Flora)
         stepClouds(Math.min(0.1, (now - (this._lastUpdate || now)) / 1000), (1 - (this._night ?? 0)) * (1 - (this.hell || 0)) * (1 - (this.storm || 0)), !!this.sky && !this.offEarth && (this._cloudsWanted ?? true));
         if (this.pedestals) this._animatePedestals(Math.min(0.1, (now - (this._lastUpdate || now)) / 1000));
         this._lastUpdate = now;

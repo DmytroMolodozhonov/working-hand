@@ -63,6 +63,7 @@ export class Flora {
             shader.uniforms.uWind = WIND.time;
             shader.uniforms.uCornerShade = SKY_LIGHT.shade;
             shader.uniforms.uGreenSat = SKY_LIGHT.greenSat;
+            shader.uniforms.uAerial = SKY_LIGHT.aerial;
             addCloudUniforms(shader);
             shader.uniforms.uFloraCenter = center;
             shader.uniforms.uFloraR = radius;
@@ -106,7 +107,7 @@ vBlade = clamp(sway / max(0.25, sway + 0.25), 0.0, 1.0) * step(0.001, sway); // 
                 // (a plant is lit like the ground it grows from, from either side — not dark from behind)
                 .replace('( gl_FrontFacing ) ? vIndirectFront : vIndirectBack', 'vIndirectFront')
                 .replace('( gl_FrontFacing ) ? vLightFront : vLightBack', 'vLightFront')
-                .replace('#include <common>', '#include <common>\nvarying float vGlow;\nvarying float vBlade;\nvarying vec2 vFloraXZ;\nvarying vec3 vFloraView;\nuniform float uCornerShade;\nuniform float uGreenSat;\nuniform vec3 uSunDir;\nuniform vec3 uSunCol;\nuniform float uSunVis;\n' + CLOUD_SHADE_GLSL)
+                .replace('#include <common>', '#include <common>\nvarying float vGlow;\nvarying float vBlade;\nvarying vec2 vFloraXZ;\nvarying vec3 vFloraView;\nuniform float uCornerShade;\nuniform float uGreenSat;\nuniform float uAerial;\nuniform vec3 uSunDir;\nuniform vec3 uSunCol;\nuniform float uSunVis;\n' + CLOUD_SHADE_GLSL)
                 // the flowers (uv −1) have no picture: their colour is their vertices'
                 .replace('#include <map_fragment>', `#ifdef USE_MAP
 vec4 texelColor = vUv.x < 0.0 ? vec4(1.0) : texture2D(map, vUv);
@@ -118,7 +119,8 @@ diffuseColor.a = vUv.x < 0.0 ? 1.0 : clamp((diffuseColor.a - 0.5) / max(fwidth(d
 #endif`)
                 .replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= mix(0.8, 1.0, vBlade); // (deep in the tuft its own blades shade it — the picture has its own foot shade too)
-diffuseColor.rgb *= mix(1.0, cloudShade(vFloraXZ), 0.75); // (a cloud's shadow passes over the grass with the ground under it)`)
+diffuseColor.rgb *= mix(1.0, cloudShade(vFloraXZ), 0.75); // (a cloud's shadow passes over the grass with the ground under it)
+{ float aer = smoothstep(30.0, 230.0, length(vFloraView)) * 0.42 * uAerial; float al = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(al) * vec3(0.84, 0.93, 1.1), aer); } // (the same air as over the land)`)
                 .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += diffuseColor.rgb * vGlow * 0.55; // (the moonlit groves' flowers glow)
 // the sun shining through the blades from behind (looking towards a low sun the meadow lights up gold-green at its tips)

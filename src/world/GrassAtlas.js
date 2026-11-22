@@ -9,7 +9,7 @@
  * Seeded randomness: the same picture on every computer and every start.
  */
 import * as THREE from 'three';
-import { ATLAS, GRASSES, CARPETS, BUSHES } from './GrassSpecies.js';
+import { ATLAS, GRASSES, CARPETS, BUSHES, FLOWERS } from './GrassSpecies.js';
 
 let _tex = null;
 
@@ -347,6 +347,43 @@ const LITTER_PAINT = {
     ],
 };
 
+
+/** A blossom seen a little from the side: petals round a centre, each petal shaded from its base, a darker centre with a highlight. */
+function blossom(ctx, R, x, y, n, len, wid, col, dark, centre, tilt = 0.55, cup = 0) {
+    for (let k = 0; k < n; k++) {
+        const a = k / n * Math.PI * 2 + R() * 0.3;
+        ctx.save(); ctx.translate(x, y); ctx.scale(1, tilt); ctx.rotate(a);
+        const g = ctx.createLinearGradient(0, 0, 0, -len); g.addColorStop(0, dark); g.addColorStop(0.4, col); g.addColorStop(1, col);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(wid, -len * 0.3, wid * (1 - cup), -len * 0.95, 0, -len); ctx.bezierCurveTo(-wid * (1 - cup), -len * 0.95, -wid, -len * 0.3, 0, 0); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(0, -len * 0.15); ctx.lineTo(0, -len * 0.8); ctx.stroke();
+        ctx.restore();
+    }
+    if (centre) { const g = ctx.createRadialGradient(x - 1, y - 1, 0.5, x, y, len * 0.35); g.addColorStop(0, centre[0]); g.addColorStop(1, centre[1]); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, len * 0.32, len * 0.32 * tilt, 0, 0, Math.PI * 2); ctx.fill(); }
+}
+/** A flower's stem with a couple of leaves; returns its top. */
+function flowerStem(ctx, R, x, L, lean, leafCol) {
+    const [tx, ty, a] = stem(ctx, x, 256, L, lean, (R() - 0.5) * 0.3, 'hsl(100,32%,30%)', 1.6);
+    for (let k = 0; k < 2; k++) leaf(ctx, R, x + Math.sin(lean) * L * (0.2 + 0.25 * k), 256 - L * (0.2 + 0.25 * k), 18 + R() * 10, 4, (k ? 1 : -1) * (0.9 + R() * 0.4), leafCol, 'hsl(105,30%,22%)');
+    return [tx, ty, a];
+}
+const FLOWER_PAINT = {
+    poppy(ctx, R) { tuft(ctx, R, 6, 40, 90, 2.6, 100, 0.4, 0.42, 60, 0.5, 0.4); for (let i = 0; i < 3; i++) { const [x, y] = flowerStem(ctx, R, 40 + i * 24, 150 + R() * 70, (R() - 0.5) * 0.4, 'hsl(100,35%,38%)'); blossom(ctx, R, x, y, 4, 15, 13, '#d8281c', '#7a120c', ['#2a1810', '#100806'], 0.6, 0.1); } },
+    cornflower(ctx, R) { tuft(ctx, R, 6, 40, 90, 2.4, 100, 0.35, 0.42, 60, 0.5, 0.4); for (let i = 0; i < 3; i++) { const [x, y] = flowerStem(ctx, R, 40 + i * 24, 140 + R() * 70, (R() - 0.5) * 0.4, 'hsl(140,18%,45%)'); blossom(ctx, R, x, y, 9, 11, 3.6, '#4a72e0', '#26388a', ['#3a2a6a', '#201640'], 0.6, -0.3); } },
+    buttercup(ctx, R) { tuft(ctx, R, 6, 30, 80, 2.4, 100, 0.4, 0.42, 60, 0.5, 0.4); for (let i = 0; i < 4; i++) { const [x, y] = flowerStem(ctx, R, 32 + i * 20, 110 + R() * 70, (R() - 0.5) * 0.5, 'hsl(100,35%,38%)'); blossom(ctx, R, x, y, 5, 8, 6, '#f6d22a', '#b88a10', ['#e8b820', '#a07010'], 0.6, 0.2); ctx.fillStyle = 'rgba(255,255,230,0.6)'; ctx.fillRect(x - 3, y - 4, 2, 1.4); } },
+    daisy(ctx, R) { tuft(ctx, R, 6, 30, 80, 2.4, 100, 0.4, 0.42, 60, 0.5, 0.4); for (let i = 0; i < 3; i++) { const [x, y] = flowerStem(ctx, R, 40 + i * 24, 130 + R() * 80, (R() - 0.5) * 0.4, 'hsl(100,35%,38%)'); blossom(ctx, R, x, y, 16, 13, 2.4, '#f8f6ee', '#c8c4b8', ['#f6d040', '#c08a10'], 0.55); } },
+    clover(ctx, R) { tuft(ctx, R, 8, 30, 70, 2.4, 100, 0.4, 0.42, 70, 0.5, 0.4); for (let i = 0; i < 4; i++) { const [x, y] = flowerStem(ctx, R, 30 + i * 22, 90 + R() * 60, (R() - 0.5) * 0.5, 'hsl(110,30%,36%)'); for (let k = 0; k < 30; k++) { const a = R() * 6.28, rr = R() * 9; ctx.fillStyle = `hsl(${325 + R() * 15},${55 + R() * 15}%,${55 + R() * 20}%)`; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.9, 1.6, 3.4, a, 0, Math.PI * 2); ctx.fill(); } } },
+    bellflower(ctx, R) {
+        tuft(ctx, R, 6, 40, 90, 2.4, 100, 0.35, 0.42, 60, 0.5, 0.4);
+        for (let i = 0; i < 2; i++) { const [x, y, a] = flowerStem(ctx, R, 50 + i * 28, 170 + R() * 50, (R() - 0.5) * 0.3, 'hsl(100,30%,36%)');
+            for (let k = 0; k < 4; k++) { const bx = x + (k % 2 ? 9 : -7), by = y + k * 16; ctx.strokeStyle = 'hsl(100,30%,30%)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - Math.sin(a) * k * 16, y + k * 16); ctx.quadraticCurveTo(bx, by - 6, bx, by); ctx.stroke();
+                const g = ctx.createLinearGradient(bx - 6, 0, bx + 6, 0); g.addColorStop(0, '#5a3a9a'); g.addColorStop(0.5, '#9a7ae0'); g.addColorStop(1, '#4a2c86'); ctx.fillStyle = g;
+                ctx.beginPath(); ctx.moveTo(bx - 3, by); ctx.quadraticCurveTo(bx - 7, by + 10, bx - 8, by + 14); ctx.lineTo(bx - 4, by + 12); ctx.lineTo(bx, by + 15); ctx.lineTo(bx + 4, by + 12); ctx.lineTo(bx + 8, by + 14); ctx.quadraticCurveTo(bx + 7, by + 10, bx + 3, by); ctx.closePath(); ctx.fill(); } }
+    },
+    hawkweed(ctx, R) { tuft(ctx, R, 6, 30, 70, 2.4, 100, 0.4, 0.42, 60, 0.5, 0.4); for (let i = 0; i < 3; i++) { const [x, y] = flowerStem(ctx, R, 40 + i * 24, 140 + R() * 70, (R() - 0.5) * 0.4, 'hsl(100,30%,38%)'); blossom(ctx, R, x, y, 14, 10, 2.8, '#f08a22', '#a0400c', ['#d06010', '#803008'], 0.6); } },
+    moonbloom(ctx, R) { for (let i = 0; i < 3; i++) { const [x, y] = flowerStem(ctx, R, 40 + i * 24, 140 + R() * 70, (R() - 0.5) * 0.4, 'hsl(190,40%,34%)'); blossom(ctx, R, x, y, 6, 13, 7, '#9ff6ff', '#2a80a0', ['#ffffff', '#80e8ff'], 0.6, 0.1); } },
+};
+
 /** The atlas texture (made on the first call: ~0.1 s at the loading screen; the same thereafter). */
 export function grassAtlas() {
     if (_tex) return _tex;
@@ -361,6 +398,15 @@ export function grassAtlas() {
         const R = rng(1000 + k.cell * 7919);
         PAINT[k.id]?.(ctx, R);
         if (k.id !== 'moonsedge') grain(ctx, R, k.r ? 0.3 : k.per ? 0.6 : 0.45);
+        ctx.restore();
+    }
+    for (const k of FLOWERS) {
+        const c = k.cell % ATLAS.COLS, r = Math.floor(k.cell / ATLAS.COLS);
+        ctx.save(); ctx.translate(c * ATLAS.CW, r * ATLAS.CH);
+        ctx.beginPath(); ctx.rect(0, 0, ATLAS.CW, ATLAS.CH); ctx.clip();
+        const R = rng(3000 + k.cell * 131);
+        FLOWER_PAINT[k.id]?.(ctx, R);
+        if (!k.glow) grain(ctx, R, 0.4);
         ctx.restore();
     }
     for (const cell of [29, 30, 31]) for (const top of [true, false]) {
