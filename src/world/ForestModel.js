@@ -446,9 +446,9 @@ export function forestAtlas() {
     });
     // fallen leaves on the ground: a dark soft disc and scatter of autumn leaves with veins
     cell(CELL.LEAVES, () => {
-        const g = x.createRadialGradient(C / 2, C / 2, 4, C / 2, C / 2, C / 2); g.addColorStop(0, 'rgba(58,40,24,0.92)'); g.addColorStop(0.75, 'rgba(58,40,24,0.78)'); g.addColorStop(1, 'rgba(58,40,24,0)'); x.fillStyle = g; x.beginPath(); x.arc(C / 2, C / 2, C / 2, 0, 7); x.fill();
+        const g = x.createRadialGradient(C / 2, C / 2, 4, C / 2, C / 2, C / 2); g.addColorStop(0, 'rgba(78,56,34,0.7)'); g.addColorStop(0.6, 'rgba(78,56,34,0.4)'); g.addColorStop(1, 'rgba(78,56,34,0)'); x.fillStyle = g; x.beginPath(); x.arc(C / 2, C / 2, C / 2, 0, 7); x.fill();
         const cols = [[196, 140, 52], [168, 86, 40], [134, 96, 48], [118, 120, 50], [210, 168, 70], [150, 60, 34], [96, 74, 44]];
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < 70; i++) {
             const a = R() * 6.28, d = Math.sqrt(R()) * C * 0.46, c = cols[Math.floor(R() * cols.length)], k = 0.82 + R() * 0.3;
             ell(C / 2 + Math.cos(a) * d, C / 2 + Math.sin(a) * d, 2.2 + R() * 2.4, 1.2 + R() * 1.1, R() * 6.28, rgb(c[0] * k, c[1] * k, c[2] * k, 1), rgb(60, 40, 20, 0.7));
         }
