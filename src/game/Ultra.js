@@ -101,10 +101,11 @@ export class Ultra {
                 ULTRA.sunVis.value = 0.6 * night * (1 - overcast);
             }
         }
-        if (!this.on) return;
-        // the land soaks in the rain fast and dries slowly after it
+        // the land soaks in the rain fast and dries slowly after it (every quality: the puddles and the footprints read it too —
+        // Flora.js, Footprints.js; the ultra-only wet shine is gated by uUltraOn in the shaders)
         const wet = ULTRA.wet.value, want = raining && !off ? 1 : 0;
         ULTRA.wet.value = want > wet ? Math.min(1, wet + dt / 8) : Math.max(0, wet - dt / 45);
+        if (!this.on) return;
         const p = g.character?.group?.position;
         if (p) ULTRA.player.value.set(p.x, p.y - 0.3, p.z);
         // the picture

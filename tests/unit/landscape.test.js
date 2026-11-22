@@ -79,13 +79,15 @@ test('generation 5: tall grass and flowers only on open grass, the same every ti
         assert.equal(a.verts, b.verts);
         assert.deepEqual([...a.pos.slice(0, 30)], [...b.pos.slice(0, 30)]);
         total += a.count;
-        // every blade stands on the top face of a grass block with air over it
-        for (let v = 0; v < a.verts; v += 3) {
+        // every plant stands on the top face of a grass block with air over it (21.11: the plants are cards up to ~1 m wide —
+        // a root corner may reach over the next column, so the root's own grass block is looked for among its neighbours)
+        for (let v = 0; v < a.verts; v++) {
             if (a.sway[v] !== 0) continue;
             const x = Math.round(a.pos[v * 3]), y = a.pos[v * 3 + 1], z = Math.round(a.pos[v * 3 + 2]);
             const L = Math.round(y + 0.5);
-            assert.equal(d.get(x, L, z), BLOCK.GRASS, `${x},${L},${z}`);
-            assert.equal(d.get(x, L + 1, z), BLOCK.AIR);
+            let ok = false;
+            for (let dz = -1; dz <= 1 && !ok; dz++) for (let dx = -1; dx <= 1 && !ok; dx++) ok = d.get(x + dx, L, z + dz) === BLOCK.GRASS && d.get(x + dx, L + 1, z + dz) === BLOCK.AIR;
+            assert.ok(ok, `${x},${L},${z}`);
         }
     }
     assert.ok(total > 200, `${total} tufts and flowers`);

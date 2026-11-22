@@ -265,7 +265,7 @@ export class Terrain {
     get floraAsync() { return !!this._workers; }
 
     /** Ask a worker for the grass and flowers of a chunk — as generated, or as changed here (`changed`: the chunk) — once until it comes. */
-    askFlora(key, cx, cz, changed = null) {
+    askFlora(key, cx, cz, changed = null, under = false) {
         if (!this._workers || this._floraAsked.has(key)) return;
         let w = this._workers[0];
         for (const o of this._workers) if (o.load < w.load) w = o;
@@ -276,7 +276,7 @@ export class Terrain {
         let chunk = null, hidden = null, bloom = null, rev;
         let share = null;
         if (changed) { share = this._share(w, [changed]); rev = changed.rev || 0; const h = this.data._hidden?.get(key); hidden = h ? [...h] : null; const b = this.data._bloom?.get(key); bloom = b ? [...b] : null; }
-        w.postMessage({ type: 'flora', id, key, cx, cz, chunk, hidden, bloom, rev, ...share });
+        w.postMessage({ type: 'flora', id, key, cx, cz, chunk, hidden, bloom, rev, under, ...share });
     }
 
     /** Grass made but not put in this frame: first next time. */
