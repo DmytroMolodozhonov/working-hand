@@ -335,7 +335,7 @@ float snowflakeAt(vec2 uv) {
         float g1 = vnoise(gp / 9.0), g2 = vnoise(gp / 3.3 + 17.0), g3 = vnoise(gp / 26.0 - 31.0);
         diffuseColor.rgb *= 1.0 + (g1 - 0.5) * 0.24 + (g2 - 0.5) * 0.1 * (0.4 + 0.6 * kCoarse);
         diffuseColor.rgb *= mix(vec3(0.9, 1.0, 1.1), vec3(1.1, 1.03, 0.82), smoothstep(0.2, 0.8, g3)); // (cool … warm)
-        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.6, 0.62, 0.55), uCornerShade); // (21.11: the ground under the dense grass lies in its shade — the blades stand out lit, the gaps read as depth, not as a bright floor)
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.7, 0.78, 0.66), uCornerShade); // (a green dusk, not grey-brown dirt) // (21.11: the ground under the dense grass lies in its shade — the blades stand out lit, the gaps read as depth, not as a bright floor)
     }
     float detail = pat > 0.5 ? 0.0 : (r - 0.5) * (snowy ? 0.02 : 0.08);
     if (pat < 0.5 && green && n.y > 0.5) detail += (r > 0.9 ? 0.07 : 0.0) - (r < 0.08 ? 0.06 : 0.0); // grass speckles

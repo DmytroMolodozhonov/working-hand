@@ -65,12 +65,12 @@ function tuft(ctx, R, n, Lmin, Lmax, w, hue, sat, light, spread = 34, fan = 0.55
         const back = i < n * 0.45; // (the first drawn are behind: darker, in the tuft's own shade)
         const t = R(), x = 64 + (t - 0.5) * spread * (0.6 + 0.4 * R()), lean = (t - 0.5) * 2 * fan + (R() - 0.5) * 0.35;
         let L = Lmin + (Lmax - Lmin) * R() ** 0.8, c = curl;
-        const dry = R() < 0.09, broken = R() < 0.08;
+        const dry = R() < 0.04, broken = R() < 0.06; // (a few dry blades only: a living meadow, not a trampled one)
         if (broken) { L *= 0.55; c *= 2.2; }
-        const h = dry ? 42 + R() * 10 : hue + (R() - 0.5) * 14, sa = dry ? 0.28 : sat * (0.8 + 0.4 * R());
+        const h = dry ? 52 + R() * 10 : hue + 4 + (R() - 0.5) * 12, sa = dry ? 0.32 : sat * (0.95 + 0.35 * R());
         const l = (dry ? 0.5 : light + (R() - 0.5) * 0.12) * (back ? 0.72 : 1);
         // root dark and cool, the middle its colour, the tip a little paler and yellowed (sun-bleached), as real blades
-        blade(ctx, R, x, 256, L, lean, Math.sign(lean || 1) * c * (0.4 + R()), w * (0.6 + 0.7 * R()), hsl(h - 6, sa * 0.8, l * 0.32), hsl(dry ? h : h + 2 + R() * 5, sa * (dry ? 1 : 0.95), l * (0.95 + R() * 0.12)), !back);
+        blade(ctx, R, x, 256, L, lean, Math.sign(lean || 1) * c * (0.4 + R()), w * (0.6 + 0.7 * R()), hsl(h - 4, sa * 0.9, l * 0.45), hsl(dry ? h : h + 2 + R() * 5, sa * (dry ? 1 : 0.95), l * (0.95 + R() * 0.12)), !back);
     }
 }
 
@@ -78,13 +78,14 @@ function tuft(ctx, R, n, Lmin, Lmax, w, hue, sat, light, spread = 34, fan = 0.55
 function grain(ctx, R, foot = 0.45) {
     ctx.save();
     ctx.globalCompositeOperation = 'source-atop';
-    for (let i = 0; i < 2600; i++) {
-        const d = R() < 0.55;
-        ctx.fillStyle = d ? `rgba(20,30,10,${0.08 + R() * 0.14})` : `rgba(235,235,190,${0.04 + R() * 0.08})`;
-        ctx.fillRect(R() * 128, R() * 256, 1 + R() * 1.6, 1 + R() * 2.4);
+    // (the author 21.11: «трава кажется грязной» — the grain is now a faint living sheen, not dark specks; the foot's shade a soft green dusk)
+    for (let i = 0; i < 900; i++) {
+        const d = R() < 0.4;
+        ctx.fillStyle = d ? `rgba(20,50,15,${0.04 + R() * 0.06})` : `rgba(230,250,200,${0.05 + R() * 0.08})`;
+        ctx.fillRect(R() * 128, R() * 256, 1, 1 + R() * 3);
     }
     const g = ctx.createLinearGradient(0, 256, 0, 256 * (1 - foot));
-    g.addColorStop(0, 'rgba(10,14,6,0.5)'); g.addColorStop(0.5, 'rgba(10,14,6,0.14)'); g.addColorStop(1, 'rgba(10,14,6,0)');
+    g.addColorStop(0, 'rgba(14,40,12,0.32)'); g.addColorStop(0.5, 'rgba(14,40,12,0.08)'); g.addColorStop(1, 'rgba(14,40,12,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 256);
     ctx.restore();
 }
@@ -372,7 +373,7 @@ export function grassAtlas() {
     tex.anisotropy = 4;
     tex.generateMipmaps = true;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.premultiplyAlpha = false;
+    tex.premultiplyAlpha = true; // (mipmaps average the colour with its alpha: no dark rim round the blades far away — the shader divides it back)
     tex.userData = { ...(tex.userData || {}), keep: true };
     return (_tex = tex);
 }

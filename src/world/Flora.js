@@ -110,6 +110,7 @@ vBlade = clamp(sway / max(0.25, sway + 0.25), 0.0, 1.0) * step(0.001, sway); // 
                 // the flowers (uv −1) have no picture: their colour is their vertices'
                 .replace('#include <map_fragment>', `#ifdef USE_MAP
 vec4 texelColor = vUv.x < 0.0 ? vec4(1.0) : texture2D(map, vUv);
+texelColor.rgb /= max(texelColor.a, 0.004); // (the atlas is premultiplied: the true colour back, no black fringe)
 texelColor = mapTexelToLinear(texelColor);
 diffuseColor *= texelColor;
 // (crisp edges at every distance: the alpha sharpened by its own screen-space change — the blades do not melt away with the mipmaps)
@@ -117,7 +118,6 @@ diffuseColor.a = vUv.x < 0.0 ? 1.0 : clamp((diffuseColor.a - 0.5) / max(fwidth(d
 #endif`)
                 .replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= mix(0.8, 1.0, vBlade); // (deep in the tuft its own blades shade it — the picture has its own foot shade too)
-if (diffuseColor.g > diffuseColor.r && diffuseColor.g > diffuseColor.b) { float gl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(vec3(gl), diffuseColor.rgb, uGreenSat) * mix(vec3(1.0), vec3(0.97, 0.95, 0.87), uCornerShade); }
 diffuseColor.rgb *= mix(1.0, cloudShade(vFloraXZ), 0.75); // (a cloud's shadow passes over the grass with the ground under it)`)
                 .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += diffuseColor.rgb * vGlow * 0.55; // (the moonlit groves' flowers glow)
