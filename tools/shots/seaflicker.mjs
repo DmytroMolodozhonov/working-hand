@@ -4,13 +4,11 @@
 export default async function (h) {
     const g = h.g, seas = g.world?.seas || g.world?.terrain?.data?.seas;
     const p0 = g.character.group.position.clone();
-    // the nearest sea: walk out in rings until a column is sea
-    const data = g.world.terrain.data;
-    let at = null;
-    for (let r = 40; r <= 1600 && !at; r += 40) for (let a = 0; a < 24 && !at; a++) {
-        const x = p0.x + Math.cos(a / 24 * 6.283) * r, z = p0.z + Math.sin(a / 24 * 6.283) * r;
-        if (data.isSeaColumn?.(Math.round(x), Math.round(z))) at = { x, z };
-    }
+    // the nearest sea (Terrain's SeaIndex): stand on its shore, 25 m inland, looking out over it
+    const data = g.world.terrain.data, S = data.seas;
+    const near = S?.nearest(p0.x, p0.z, 12);
+    let at = null, look = null;
+    if (near) { const a = Math.atan2(p0.z - near.z, p0.x - near.x); at = S.pointAt(near, a, -25); look = { x: near.x, z: near.z }; }
     if (!at) { h.log('no sea near'); return; }
     h.log('sea at', at);
     const sea = g.sea?.level ?? 0;
@@ -20,8 +18,9 @@ export default async function (h) {
     h.time(0.3);
     const freeze = g.seaTime; g.seaTime = () => 100; // (the waves stand still between the two pictures)
     const eye = [at.x, 14, at.z];
-    for (const [k, dir] of [[0, [1, 0]], [1, [0, 1]]]) {
-        const tgt = [at.x + dir[0] * 300, 0, at.z + dir[1] * 300];
+    for (const k of [0, 1]) {
+        const lx = look.x - at.x, lz = look.z - at.z, ll = Math.hypot(lx, lz) || 1, side = k ? 0.6 : 0;
+        const tgt = [at.x + (lx / ll + side * (-lz / ll)) * 300, 0, at.z + (lz / ll + side * (lx / ll)) * 300];
         h.cam(eye, tgt);
         await h.shot(`s${k}-a`, { settle: 30 });
         h.cam([eye[0] + 0.02, eye[1] + 0.01, eye[2]], tgt);
