@@ -178,6 +178,7 @@ import { ForestFloor } from '../world/ForestFloor.js';
 import { NatureAmbience } from './NatureAmbience.js';
 import { ShoreFloor } from '../world/ShoreFloor.js';
 import { Critters } from './Critters.js';
+import { ForestAir } from './ForestAir.js';
 import { Threats } from './Threats.js';
 import { WaterfallFx } from '../fx/WaterfallFx.js';
 import { Temple } from './Temple.js';
@@ -958,6 +959,7 @@ export class Game {
         this.titans = new Titans(this); // the seven titans on their planets (Titans.js, TitanRules.js)
         this.fallFx = new WaterfallFx(this); // the spray, the roar and the rainbow of the waterfalls (WaterfallFx.js)
         this.nature = new NatureAmbience(this); // the small voices of the forest and the shore (NatureAmbience.js)
+        this.forestAir = new ForestAir(this); // the forest's light and air: shafts of sun, haze, motes, falling leaves (ForestAir.js; generation 36)
         this.critters = new Critters(this); // butterflies, dragonflies, fireflies (Critters.js; generation 36)
         this.shoreFloor = new ShoreFloor(this); // the small things of the rivers' and lakes' edges: reeds, lilies, pebbles, irises, driftwood (ShoreFloor.js; generation 36)
         this.forestFloor = new ForestFloor(this); // the undergrowth of the forest: logs, stumps, ferns, mushrooms, bushes (ForestFloor.js; generation 36)
@@ -4237,6 +4239,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         addAll(this.items?.sampleModels?.() || []);
+        addAll(this.forestAir?.sampleModels?.() || []);
         addAll(this.critters?.sampleModels?.() || []);
         addAll(this.shoreFloor?.sampleModels?.() || []); // (the shore's small things: one Lambert material for every shape)
         addAll(this.forestFloor?.sampleModels?.() || []); // (the undergrowth: one Lambert material for every shape)
@@ -4759,6 +4762,8 @@ export class Game {
         if (earth && !duelOnly && !lean) this.iceCastle.update(dt); sysMark('iceCastle');
         if (earth && !duelOnly && !lean) this.pharaoh?.update(dt); sysMark('pharaoh');
         if (earth && !duelOnly && !lean) this.nature?.update(dt, this.character.group.position);
+        if (earth && !duelOnly && !lean) this.forestAir?.update(dt, this.character.group.position);
+        else if (this.forestAir?.group.visible) this.forestAir.update(dt, null);
         if (earth && !duelOnly && !lean) this.critters?.update(dt, this.character.group.position);
         else if (this.critters?.group.visible) this.critters.group.visible = false;
         if (earth && !duelOnly && !lean) this.shoreFloor?.update(dt, this.character.group.position);

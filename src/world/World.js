@@ -1115,10 +1115,10 @@ export class VoxelWorld {
             // view opens up by the same metres at every distance, so the land below is visible
             const q = this.viewScale ?? 1, d = this.lite ? Math.min(this.viewDistance ?? 1, 1) : (this.viewDistance ?? 1); // (the light mode: the player's «Прорисовка мира» does not widen it — a short view is what makes it light)
             const hk = this.hell || 0, ff = this.fogFar + (95 - this.fogFar) * hk; // (hell: the same haze by «day» and «night» — its eternal dusk)
-            let far = ff * q * (d + (this.lite ? 0 : viewBoost) * 1.2) * (1 + 0.25 * hk) * (1 - 0.4 * (this.storm || 0)) * (1 - 0.45 * (this.ghostHaze || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
+            let far = ff * q * (d + (this.lite ? 0 : viewBoost) * 1.2) * (1 + 0.25 * hk) * (1 - 0.4 * (this.storm || 0)) * (1 - 0.45 * (this.ghostHaze || 0)) * (1 - 0.28 * (this.forestHaze || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
             if (this.duelFar) far = Math.min(far, this.duelFar); // (the duel-only start: the arena and a little round it, nothing else is made)
             this.scene.fog.far = far;
-            this.scene.fog.near = Math.min(this.fogNear * d * (1 - 0.7 * (this.hell || 0)) + viewBoost * 40, far * 0.5); // (hell: the red haze begins close)
+            this.scene.fog.near = Math.min(this.fogNear * d * (1 - 0.7 * (this.hell || 0)) * (1 - 0.5 * (this.forestHaze || 0)) + viewBoost * 40, far * 0.5); // (hell: the red haze begins close)
             if (this.terrain) this.terrain.viewDistance = far + (this.lite ? 12 : CHUNK_MARGIN);
             if (this.terrain) this.terrain.cullR = far + 2; // (the author 19.11: what cannot be seen is not drawn — chunks wholly behind the haze are all fog colour; the background IS the fog colour — TerrainView) // (the light mode: the land is made only a little beyond the haze — fewer chunks to make and draw)
         }
