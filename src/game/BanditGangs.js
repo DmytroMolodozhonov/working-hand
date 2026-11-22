@@ -23,6 +23,7 @@
  * the riders and the horses as every castle person and every animal (the torso's turn of an archer is only on the host's screen — a picture).
  */
 
+import { rearUp } from './HorseMotion.js';
 import * as THREE from 'three';
 import { Riders } from './Riders.js';
 import { aimArrow } from './KnightTactics.js';
@@ -364,7 +365,7 @@ export class BanditGangs {
             this._approach(P, v, B, fp, toward, mounted, dt);
             // (the moment they are on him — everybody)
             const d = Math.hypot(fp.x - v.x, fp.z - v.z);
-            if (!P.seen && d < BANDIT.NOTICE) { P.seen = true; if (Math.random() < 0.7) this._say(P, pick(SHOUT[P.strategy] || SHOUT.sight), v); }
+            if (!P.seen && d < BANDIT.NOTICE) { P.seen = true; if (Math.random() < 0.7) this._say(P, pick(SHOUT[P.strategy] || SHOUT.sight), v); if (a.hm?.s > 3 || Math.random() < 0.6) rearUp(a, 1.1); } // (the leader's horse rears at the sight: the war cry)
         }
         if (P.phase === 'attack' && fp) {
             P.seenFight = true;

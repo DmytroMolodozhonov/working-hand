@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import { wayFree } from './Carriages.js';
 import { crowdStep } from './CrowdSources.js';
 import { HillNav, RoutePlanner } from './HillWay.js';
+import * as HorseMotion from './HorseMotion.js';
 
 export const RIDE = {
     WALK: 3.6, // m/s: a steady walk on the road
@@ -146,22 +147,25 @@ export class Riders {
     /** The horse a step: turned to `aim`, round the others, on the ground, never through walls. */
     _move(a, aim, speed, dt) {
         const g = this.game, A = g.animals, p = a.group.position;
-        a.group.rotation.y = turn(a.group.rotation.y, aim, dt * 3);
-        let ux = -Math.sin(a.group.rotation.y), uz = -Math.cos(a.group.rotation.y);
+        // (the horse's own motion: speed with weight, the drift, the sliding stop, the rear — HorseMotion.js)
+        const d = HorseMotion.drive(a, aim, speed, dt);
+        let ux = d.ux, uz = d.uz;
+        speed = d.speed;
         if (speed > 0) {
             const s = crowdStep(g, a, p, ux, uz, speed * dt + 2, { r: 1.1, speed, dt, look: 3 + speed * 0.4 });
-            if (!s) speed = 0; else { ux = s.x; uz = s.z; }
+            if (!s) { speed = 0; HorseMotion.blocked(a); } else { ux = s.x; uz = s.z; }
             // Turning and crowd avoidance change the actual heading: check that step too.
             const look = Math.max(1, speed * dt + 0.9);
-            if (wayFree(g, p.x, p.z, ux, uz, look, { half: 0.9, rise: 1.5, clear: 8, wade: true }) < look) speed = 0;
+            if (speed > 0 && wayFree(g, p.x, p.z, ux, uz, look, { half: 0.9, rise: 1.5, clear: 8, wade: true }) < look) { speed = 0; HorseMotion.blocked(a); }
         }
         const step = speed * dt;
         p.x += ux * step; p.z += uz * step;
         const gy = g.collision?.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision?.groundY?.(p.x, p.z) ?? p.y - 0.5;
         p.y += (gy + 0.5 - p.y) * Math.min(1, dt * 8);
         g.collision?.resolveCylinder?.(p, 0.7, p.y - 0.5, 2.5, 1.2);
-        a.spd = speed; a.walkT += step * 1.6; a.pose = 0;
+        a.spd = speed; a.walkT += step * (1.9 - 0.9 * (a.gallop || 0)); a.pose = 0;
         A?._animate?.(a, Math.min(1, speed / 9), dt);
+        HorseMotion.pose(a, dt, g.fx);
     }
 
     /** Off the horse: `thrown` — he falls beside it and lies a moment, the horse runs off a little. */
@@ -169,7 +173,7 @@ export class Riders {
         const a = v.horse, g = this.game;
         v.seated = false; v.job = 'road';
         if (a?.mount) a.mount.on = false;
-        if (a) { a.roadNav = null; a.spd = 0; }
+        if (a) { a.roadNav = null; a.spd = 0; HorseMotion.settle(a); }
         if (a && !a.dead) {
             const p = a.group.position, ry = a.group.rotation.y, side = v.idx % 2 ? 1 : -1;
             const x = p.x + Math.cos(ry) * RIDE.SIDE * side, z = p.z - Math.sin(ry) * RIDE.SIDE * side;
@@ -222,7 +226,7 @@ export class Riders {
 
     /** No rider of the roads any more: a free horse (Animals leads it, and takes it away far off and unseen). */
     _free(a) {
-        a.mount = null;
+        a.mount = null; HorseMotion.settle(a);
         if (!a.rider && a.model.userData.saddle) a.model.userData.saddle.visible = false;
         if (!a.dead && !a.rider) { a.state = 'graze'; a.target?.copy?.(a.group.position); }
     }
