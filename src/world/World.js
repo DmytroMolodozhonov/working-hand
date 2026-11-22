@@ -1137,9 +1137,9 @@ export class VoxelWorld {
      */
     followShadow(pos, flying = 0, look = null) {
         const shadow = this.dirLight.shadow;
-        const fly = this.shadowFlyExtent || SHADOW_EXTENT;
+        const fly = this.shadowFlyExtent || SHADOW_EXTENT, ground = this.shadowGroundExtent || SHADOW_EXTENT;
         // (one jump on take-off / landing, not a slow growth: a changing size would shimmer every frame)
-        const ext = flying > 0.5 && fly > SHADOW_EXTENT ? fly : SHADOW_EXTENT;
+        const ext = flying > 0.5 && fly > ground ? fly : ground;
         const cam = shadow.camera;
         if (cam.right !== ext) {
             cam.left = -ext; cam.right = ext; cam.top = ext; cam.bottom = -ext;
@@ -1147,9 +1147,16 @@ export class VoxelWorld {
             this._shadowX = null;
         }
         let cx = pos.x, cz = pos.z;
-        if (ext > SHADOW_EXTENT && look) {
+        // the box leans the way the camera looks (21.11, the author: «теней не хватает»): on foot a third of it ahead — the shadows
+        // reach twice as far in front as behind, where nobody sees them; in flight further ahead still. (Moved in whole cells of 8 m
+        // of the look's direction: a slow turn of the head does not slide the shadows' edge every frame.)
+        if (look) {
             const l = Math.hypot(look.x, look.z);
-            if (l > 1e-3) { cx += (look.x / l) * ext * 0.45; cz += (look.z / l) * ext * 0.45; }
+            if (l > 1e-3) {
+                const k = (flying > 0.5 && ext > ground ? 0.45 : 0.3) * ext;
+                const a = Math.round(Math.atan2(look.z, look.x) / (Math.PI / 8)) * (Math.PI / 8);
+                cx += Math.cos(a) * k; cz += Math.sin(a) * k;
+            }
         }
         // Move in whole shadow-map texels — counted along the shadow map's own
         // axes (it looks along the sun, not straight down) — so edges don't shimmer.

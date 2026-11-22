@@ -166,7 +166,7 @@ totalEmissiveRadiance += diffuseColor.rgb * uSunCol * back * 0.4;`);
     float ring = uWet * smoothstep(0.08, 0.0, abs(length(fract(vPW.xz * 2.0) - 0.5) - fract(uT * 0.8 + ph) * 0.5)) * (1.0 - fract(uT * 0.8 + ph));
     vec3 R = reflect(V, vec3(0.0, 1.0, 0.0));
     float glint = pow(max(dot(R, normalize(uSunDir)), 0.0), 220.0) * uSunVis * 3.0;
-    totalEmissiveRadiance += sky * fres * 0.8 + uSunCol * glint + vec3(0.6) * ring * 0.25;
+    totalEmissiveRadiance += sky * fres * 0.42 + uSunCol * glint + vec3(0.6) * ring * 0.25; // (a dark mirror: the sky in it is dimmer than the sky)
     diffuseColor.a = rim * (0.55 + 0.35 * fres);
 }`);
         };
