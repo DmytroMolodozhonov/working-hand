@@ -462,6 +462,7 @@ export class CastleLife {
     // ---------------------------------------------------------- villagers
     _activate(cs, idx, at, job, extra = {}) {
         const def = cs.def;
+        if (!at || !Number.isFinite(at.x)) return null; // (a place without that spot — its plan has no throne, no post: nobody stands there; the frame went on throwing every frame — creativebench 22.11)
         if (cs.active.has(idx) || this.state(def.id).killed.has(idx) || this.justice?.isJailed(cs, idx)) return null; // (and the ones in the king's jail are not out and about)
         const e = this._roster(def, idx);
         let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
