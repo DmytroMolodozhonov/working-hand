@@ -52,6 +52,10 @@ export function airColor(d, s, out = [0, 0, 0]) {
     for (let c = 0; c < 3; c++) out[c] = Math.pow(1 - Math.exp(-22 * (sumR[c] * bR[c] * pR + sumM[c] * bM * pM) * 1.3), 1 / 2.2);
     const l = (out[0] + out[1] + out[2]) / 3, tint = [0.97, 0.99, 1.07];
     for (let c = 0; c < 3; c++) out[c] = Math.max(0, Math.min(1, (l + (out[c] - l) * 1.5) * tint[c]));
+    // (the same pale blue-white noon horizon as the sky shader paints — the haze over the land is this colour: no band between them)
+    const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const k = (1 - sm(0, 0.28, Math.max(d[1], 0.04))) * sm(0.08, 0.35, s[1]) * 0.62;
+    if (k > 0) { const aL = (out[0] + out[1] + out[2]) / 3; out[0] += (aL * 0.86 - out[0]) * k; out[1] += (aL * 0.93 - out[1]) * k; out[2] += (aL * 1.07 - out[2]) * k; }
     return out;
 }
 
@@ -201,6 +205,11 @@ void main() {
         air = pow(1.0 - exp(-air * 1.3), vec3(1.0 / 2.2));
         float airL = dot(air, vec3(0.3333));
         air = clamp(airL + (air - airL) * 1.5, 0.0, 1.0) * vec3(0.97, 0.99, 1.07); // (the eye sees the sky's blue deeper than the plain numbers)
+        // (22.11, the author: «небо и земля как будто из разных игр» — a wide cream-yellow band lay along the noon horizon, and the far land
+        //  melted into it: a clear day's horizon is a pale blue-white haze; the warm band only when the sun itself is low)
+        { float lowA = 1.0 - smoothstep(0.0, 0.28, ad.y), sunHi = smoothstep(0.08, 0.35, sd.y);
+          float aL = dot(air, vec3(0.3333));
+          air = mix(air, vec3(aL) * vec3(0.86, 0.93, 1.07), lowA * sunHi * 0.62); }
         float dayW = smoothstep(-0.2, 0.04, se) * (1.0 - ov * 0.88);
         col = mix(col, air, dayW);
     }
