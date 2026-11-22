@@ -172,6 +172,8 @@ import { TutorialNudge } from './TutorialNudge.js';
 import { School } from './School.js';
 import { PharaohLife } from './PharaohLife.js';
 import { RiverRocks } from '../world/RiverRocks.js';
+import { FOREST_FROM_GEN } from '../world/ForestRules.js';
+import { Footprints, animalPrint } from './Footprints.js';
 import { ForestFloor } from '../world/ForestFloor.js';
 import { NatureAmbience } from './NatureAmbience.js';
 import { ShoreFloor } from '../world/ShoreFloor.js';
@@ -959,6 +961,7 @@ export class Game {
         this.critters = new Critters(this); // butterflies, dragonflies, fireflies (Critters.js; generation 36)
         this.shoreFloor = new ShoreFloor(this); // the small things of the rivers' and lakes' edges: reeds, lilies, pebbles, irises, driftwood (ShoreFloor.js; generation 36)
         this.forestFloor = new ForestFloor(this); // the undergrowth of the forest: logs, stumps, ferns, mushrooms, bushes (ForestFloor.js; generation 36)
+        this._wireGrass(); // the living grass: who walks presses it (TrampleField.js); generation 36's undergrowth and banks are not drawn twice
         this.riverRocks = new RiverRocks(this); // the boulders by the rivers and at the waterfalls' feet (RiverRocks.js; generation 32)
         this.pharaoh = new PharaohLife(this); // Pharaoh Sandy's pyramids: the mummies, the guards, the traps, the torches (PharaohLife.js)
         this.vampire = new VampireLife(this); // Count Sracula's castle: the count, his fifty bats, ten skeleton guards, the clouds over his land (VampireLife.js)
@@ -4131,6 +4134,60 @@ export class Game {
         return out;
     }
 
+    /**
+     * The grass (Flora.js) and the world: in generation 36+ worlds the forest's and banks' own models stand there (ForestFloor,
+     * ShoreFloor) — the grass leaves those kinds out; every walker near the player presses the grass under its feet: the hero, the
+     * other players, the villagers, the animals (their speed gives the trail its way). No new objects a frame: positions are read.
+     */
+    _wireGrass() {
+        this.footprints = new Footprints(this); // boot prints, hooves, cloven feet by the ground and the weather (Footprints.js)
+        this.footprints._make();
+        const F = this.world?.terrain?.flora;
+        if (!F) { this._feetOnly(); return; }
+        F.under = (this.gen || 0) >= FOREST_FROM_GEN;
+        const near = 26 * 26, me = this.character?.group?.position;
+        const prev = this._grassPrev || (this._grassPrev = new Map());
+        F.feet = (T) => {
+            const p = this.character?.group?.position;
+            if (!p) return;
+            const now = performance.now();
+            const step = (id, x, y, z, r) => {
+                const o = prev.get(id), dt = o ? Math.max(0.016, (now - o.t) / 1000) : 1;
+                const vx = o ? (x - o.x) / dt : 0, vz = o ? (z - o.z) / dt : 0;
+                if (o) { o.x = x; o.z = z; o.t = now; } else prev.set(id, { x, z, t: now });
+                if (Math.abs(y - p.y) < 6) T.press(x, z, r, vx, vz);
+            };
+            const FP = this.footprints, ch = this.character;
+            const onFoot = !this.isDeadLocal && !ch.flying && !this.swim?.swimming && !this.animals?.riding && !this.dragonRide?.busy && !this.boards?.mounted && !this.boats?.riding;
+            if (onFoot) { step('me', p.x, p.y, p.z, 0.55 * (ch.size || 1)); FP?.step('me', p.x, p.y - 2.0 * (ch.size || 1), p.z, 'boot', ch.size || 1); }
+            for (const [id, r] of this.remotes || []) if (r.position && !r.dead) { step('p' + id, r.position.x, r.position.y, r.position.z, 0.55); FP?.step('p' + id, r.position.x, r.position.y - 2.0, r.position.z, 'boot'); }
+            for (const v of this.castleLife?.byId?.values?.() || []) {
+                if (v.dead || v.seated || v.climb || ((v.x - p.x) ** 2 + (v.z - p.z) ** 2) > near) continue;
+                step(v.id, v.x, v.y + 2, v.z, 0.5);
+                FP?.step(v.id, v.x, v.y, v.z, 'boot');
+            }
+            for (const a of this.animals?.list || []) {
+                if (a.dead || !a.group) continue;
+                const q = a.group.position;
+                if ((q.x - p.x) ** 2 + (q.z - p.z) ** 2 > near) continue;
+                step(a.id ?? a, q.x, q.y + 2, q.z, a.kind === 'horse' || a.kind === 'cow' ? 0.9 : a.kind === 'swan' ? 0.3 : 0.55);
+                if (!a.flying && !a.swimming) FP?.step(a.id ?? a, q.x, q.y, q.z, animalPrint(a.kind), a.kind === 'horse' || a.kind === 'cow' ? 1.3 : 1);
+            }
+            if (prev.size > 400) prev.clear(); // (the record of who was where: never grows without end)
+        };
+        void me;
+    }
+
+    /** No grass in this world (old worlds, other maps): the footprints still come from the walkers. */
+    _feetOnly() {
+        this._feetTick = () => {
+            const FP = this.footprints, p = this.character?.group?.position, ch = this.character;
+            if (!FP || !p) return;
+            if (!this.isDeadLocal && !ch.flying && !this.swim?.swimming && !this.animals?.riding && !this.dragonRide?.busy && !this.boards?.mounted && !this.boats?.riding) FP.step('me', p.x, p.y - 2.0 * (ch.size || 1), p.z, 'boot', ch.size || 1);
+            for (const [id, r] of this.remotes || []) if (r.position && !r.dead) FP.step('p' + id, r.position.x, r.position.y - 2.0, r.position.z, 'boot');
+        };
+    }
+
     /** The shader warm-up's crumb: where it was when the video card dropped the context (a driver reset leaves the page dead — the next start reads this, says in the journal which sample it was, and skips it). */
     _pwMark(stage) { try { if (stage) localStorage.setItem('zns-pw-at', stage); else localStorage.removeItem('zns-pw-at'); } catch (e) { /* no storage */ } }
 
@@ -4728,6 +4785,7 @@ export class Game {
         if (!duelOnly && !lean) { this.customCreatures?.update(dt); this.customPlants?.update(dt); } // (creatures of one's own: on the Earth and the planets with air)
         if (earth && !duelOnly && !lean) this.plants.update(dt); sysMark('plants');
         if (earth && !duelOnly && !lean) this.flora?.update(dt); sysMark('flora');
+        this._feetTick?.(); this.footprints?.update(dt); sysMark('footprints');
         if (earth && !duelOnly && !lean) { // (one system's fault must not end the game: the full stack goes to the console, the game goes on)
             try { this.gargoyles.update(dt); } catch (e) { if ((this._gargErr = (this._gargErr || 0) + 1) <= 5) console.error('[Gargoyles] update error', e); }
         }

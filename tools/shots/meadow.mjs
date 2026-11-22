@@ -31,7 +31,7 @@ export default async function (h, args = {}) {
             const a = k * 2.1, eye = new T.Vector3(best.x, best.y + 3.4, best.z);
             const at = eye.clone().add(new T.Vector3(Math.sin(a) * 40, -6, Math.cos(a) * 40));
             h.cam(eye.toArray(), at.toArray());
-            look(OLD, 0); await h.shot(`${tn}-${k}-before`, { settle: 8 });
+            if (!args.only) { look(OLD, 0); await h.shot(`${tn}-${k}-before`, { settle: 8 }); }
             look(NEW, 1); await h.shot(`${tn}-${k}-after`, { settle: 8 });
         }
     }

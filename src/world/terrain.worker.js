@@ -9,7 +9,7 @@ import {BootCache,CacheStore,cacheKey} from '../core/BootCache.js';
  * chunks it made lately (the next chunk over needs most of them again), not more.
  */
 import { TerrainData, chunkKey, mergeBuffers } from './Terrain.js';
-import { buildFlora } from './FloraBuild.js';
+import { buildFlora, floraBuffers } from './FloraBuild.js';
 
 /** A mesh's box, made here (TerrainView._fill: no pass over its points in the frame). */
 function bounds(b) {
@@ -88,8 +88,9 @@ async function handleMessage(e){
     if (m.type === 'flora' && data) {
         // the tall grass and flowers of a chunk (Flora.js) — the chunk as generated
         if (m.use) m.chunk = takeShared(m)[0] || null;
-        const out = m.chunk ? buildFlora({ seed: data.seed, _hidden: m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null, _bloom: m.bloom ? new Map([[m.key, new Set(m.bloom)]]) : null }, m.chunk) : buildFlora(data, data.chunk(m.cx, m.cz));
-        self.postMessage({ type: 'flora', id: m.id, key: m.key, out, rev: m.rev }, [out.pos.buffer, out.nor.buffer, out.col.buffer, out.sway.buffer, out.glow.buffer]);
+        const opts = { under: !!m.under };
+        const out = m.chunk ? buildFlora({ seed: data.seed, _hidden: m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null, _bloom: m.bloom ? new Map([[m.key, new Set(m.bloom)]]) : null }, m.chunk, opts) : buildFlora(data, data.chunk(m.cx, m.cz), opts);
+        self.postMessage({ type: 'flora', id: m.id, key: m.key, out, rev: m.rev }, floraBuffers(out));
         return;
     }
     if (m.type === 'rebuild' && data) {
