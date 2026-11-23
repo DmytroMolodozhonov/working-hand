@@ -943,6 +943,21 @@ export class WizardFight {
         }
     }
 
+    /** Let an idle elemental mage react to an aimed Leviosa with their own magic. */
+    noticeLevitation(v) {
+        if (v.foe) return;
+        const duel = this.game.duel;
+        for (const b of duel?.bolts?.values() || []) {
+            if (b.spell !== 'LevitateDuel' || b.state !== 'flying' || b.tk !== 'v' || b.tid !== v.id || b.npc) continue;
+            if (!this.life._isPlayer(b.by)) continue;
+            const dist = Math.hypot(v.x - b.front.x, v.z - b.front.z);
+            if (dist <= 22 && this._notice(v, b, dist, dist / duel.boltSpeed(b)).shield) {
+                v.foe = b.by;
+                return;
+            }
+        }
+    }
+
     /** What this wizard can do about the charge `b` (WizardAI.noticeCharge): seen? time for a shield, a spell back? */
     _notice(v, b, dist, eta) {
         const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);

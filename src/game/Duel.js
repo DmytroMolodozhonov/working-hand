@@ -97,7 +97,7 @@ export const DUEL_SPELLS = {
     // («Левиоса» on a wizard is aimed as loosely as at a thing — Levitation.aimWizard: the charge
     //  turns after the body pointed at much more than a fighting spell, so a friend who moves
     //  on, or stands a little beside the hand's line, is still reached)
-    LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса', bend: 0.8, turn: 6 },
+    LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса', speed: 11, bend: 0.8, turn: 6 },
     // Slower and thicker: a dark-violet ball of force rolling through the air
     // one wind blade of the air mage's «Slash» (ElementalMages): a pale-green crescent of cutting air, a fan of three; a hard shove and a few HP
     GustDuel: { color: 0xd4f5c8, name: 'Лезвие ветра', speed: 21, core: 0.05, glow: 0.2, coreColor: 0xffffff, jag: 0.6 },
@@ -1353,7 +1353,7 @@ export class Duel {
         // Captain Black Moustache: his rapier up before him — he may beat the charge aside (Sailors.parryBolt)
         if (c?.isSailor && c.role === 'blackbeard' && b.spell !== 'Die' && this.game.ships?.crew.parryBolt(c, _v3.copy(b.front).addScaledVector(b.dir, -6))) { this._deflect(b, c); return; } // (where it comes from: along its own way)
         this._end(b, 'hit');
-        if (c) this.applyToCreature(b.spell, c, b.by, b.o, this._partOf(b, c), { earthChecked:!!b.earthChecked });
+        if (c) this.applyToCreature(b.spell, c, b.by, b.o, this._partOf(b, c), { earthChecked:!!b.earthChecked, side: b.side, dir: b.dir });
     }
 
     /** Where on the body a charge hit: {ak (0…1 from the head end), low (below the body's middle), point}. */
@@ -1462,7 +1462,11 @@ export class Duel {
                 // falls stiff on its back and lies while the spell holds it (then gets up by itself)
                 g.creatureImpact?.spellHit(c, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
             } else if (spell === 'LevitateDuel') {
-                if (c.isAnimal) g.animals.push(c, _v2.set(0, 13, 0), 2.5);
+                if (c.isVillager && c.wizard && (byId === this.me || g.remotes?.has(byId))) {
+                    // Use the arriving beam's line to choose the grip even if the wand moved in flight.
+                    const ray = part?.point && opts?.dir ? { origin: part.point.clone().addScaledVector(opts.dir, -3), dir: opts.dir } : null;
+                    g.levitation?.hitWizard(c, byId, opts?.side || 'right', ray);
+                } else if (c.isAnimal) g.animals.push(c, _v2.set(0, 13, 0), 2.5);
                 else { c.stunT = 3; c.vy = 11; }
             } else if (spell === 'SapiraDuel') {
                 g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
@@ -2227,7 +2231,7 @@ export class Duel {
         }
         // a wizard of a tower lost: the player's spell reaches him (the host decides the castle people)
         const lw = this._referee() ? this._npcWizard(loser) : null;
-        if (lw && !lw.dead) { this.applyToCreature(winnerBolt.spell, lw, winnerBolt.by, null, null, { clash: true }); if (winnerBolt.extra) this.applyToCreature(winnerBolt.extra, lw, winnerBolt.by, null, null, { clash: true }); }
+        if (lw && !lw.dead) { this.applyToCreature(winnerBolt.spell, lw, winnerBolt.by, null, null, { clash: true, side: winnerBolt.side }); if (winnerBolt.extra) this.applyToCreature(winnerBolt.extra, lw, winnerBolt.by, null, null, { clash: true, side: winnerBolt.side }); }
         if (loser === this.me) { this.applyToMe(winnerBolt.spell, winnerBolt.by, winnerBolt.side, { clash: true }); if (winnerBolt.extra) this.applyToMe(winnerBolt.extra, winnerBolt.by, winnerBolt.side, { clash: true }); } // (a double charge won: both spells reach the loser)
         else if (winnerBolt.by === this.me) {
             this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);

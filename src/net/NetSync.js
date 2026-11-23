@@ -620,6 +620,11 @@ export class NetSync {
         this.net.send({ t: 'lev', by: casterId, k, id, side, h: r3(hold), on: on ? 1 : 0, g: gentle ? 1 : 0, ...(thr ? { thr: [r3(thr.x), r3(thr.y), r3(thr.z)] } : {}) }, true);
     }
 
+    /** The host confirmed a duel charge's grip on an NPC, or ended it. */
+    levWizard(to, id, side, hold, on) {
+        if (this.net.isHost) this.net.sendTo(to, { t: 'levheld', from: 'H', to, id, side, h: r3(hold), on: on ? 1 : 0 });
+    }
+
     /** My body is held up by `by` (or let go / I broke free). */
     lift(by, side, hold, on, free = false, why = null, mx = false) {
         this.net.send({ t: 'lift', by, to: this.me, side, h: r3(hold), on: on ? 1 : 0, f: free ? 1 : 0, ...(why ? { r: why } : {}), ...(mx ? { mx: 1 } : {}) }, true);
@@ -1178,6 +1183,7 @@ export class NetSync {
             case 'svord': if (this.net.isHost && m.o && typeof m.o.kind === 'string') g.servants?.order(m.from, { kind: m.o.kind, who: m.o.who, x: +m.o.x, z: +m.o.z }); break;
             case 'svhit': if (m.to === this.me && Array.isArray(m.d)) g.servants?.hitMe(Math.min(10, +m.dmg || 1), new THREE.Vector3(+m.d[0] || 0, 0, +m.d[1] || 1), m.by, m.k === 'tree' ? 'tree' : 'servant'); break;
             case 'lev': if (m.by !== this.me) g.levitation?.onNetLev(m); break;
+            case 'levheld': if (!this.net.isHost && m.from === 'H' && m.to === this.me) g.levitation?.onWizardHold(m); break;
             case 'lift': if (m.to !== this.me) g.levitation?.onNetLift(m); break;
             case 'levno': if (m.to === this.me) g.levitation?.onNetRefused(m); break;
             case 'lmx': if (m.from !== this.me) g.levMax?.onNet(m, this.net.isHost); break;

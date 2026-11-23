@@ -2463,28 +2463,7 @@ export class Game {
         if (name === 'Fireworks') return this.fireworks.cast(isFinal);
         if (name === 'Cardilon') return this.cardilon.cast(isFinal);
         if (name === 'Nihilis') return this.nihilis.cast(isFinal); // (a cone of light against black magic — Nihilis.js; instant, white magic)
-        // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
-        if (name === 'Levitation') {
-            // The same phrase heard again — the microphone repeats an unfinished phrase many times
-            // while it is still being said, and gives the final one later — is not a new
-            // «Левиоса»: it must not let go of what that phrase has just lifted (a wizard lifted
-            // by the charge was set down again at once: he only "jumped"), nor send a second
-            // charge after the first. Letting go takes a new phrase.
-            const L = this.levitation;
-            if (performance.now() - (this._levDuelAt || -1e9) < LEV_SAME_PHRASE * 1000) return null;
-            if (L.active && L.state.age < LEV_SAME_PHRASE) return null;
-            // (a wizard: a charge flies — the duel decides; an animal / zombie / villager is lifted like a thing)
-            // (a wizard pointed at right on the line — or as loosely as at a thing, when no thing
-            //  is pointed at more truly: Levitation.aimWizard; a fighting spell's narrow aim alone
-            //  missed a friend a little beside the hand's line, and «Левиоса» then lifted nothing)
-            const aim = L.active ? null : this.duel.pickSide(true) || L.aimWizard();
-            if (aim && aim.t.kind === 'p') {
-                const r = this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
-                if (r) this._levDuelAt = performance.now();
-                return r;
-            }
-            return this._castLevitation(isFinal);
-        }
+        if (name === 'Levitation') return this._castLevitation(isFinal);
         // Water bending: the hand is at the water / holding the ball, not raised to the face
         const waterName = this._waterSpell(name);
         if (waterName) return this._castWater(waterName, text, isFinal);
@@ -3637,12 +3616,22 @@ export class Game {
         const early = this._interimCast;
         if (isFinal && early && early.name === 'Levitation' && now - early.at < 3000) { this._interimCast = null; return null; }
         if (now - (this._lastLevitate || 0) < 900) return null;
+        const L = this.levitation;
+        if (performance.now() - (this._levDuelAt ?? -1e9) < LEV_SAME_PHRASE * 1000) return null;
+        if (L.active && L.state.age < LEV_SAME_PHRASE) return null;
+        const best = L.active || this.doors?.carried ? null : L._pick();
+        const aim = L.aimWizard(best);
+        if (aim) {
+            const r = this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
+            if (r) this._levDuelAt = performance.now();
+            return r;
+        }
         const tired = this.levitation.active ? null : this.combat.check('Levitation');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         const wasActive = this.levitation.active;
         // a door being carried: put it down; a door pointed at: lift it
         if (this.doors.carried) { this.doors._putDown(); this._lastLevitate = now; return 'Levitation'; }
-        const hint = this.levitation.cast();
+        const hint = L.cast(best);
         if (hint) {
             const side = (this.wandSide() || [this.dom, this.off].find((sd) => this.character.isArmRaised(sd))) || this.dom;
             if (this.doors.tryLift(side)) { this.combat.pay('Levitation'); this._lastLevitate = now; return 'Levitation'; }

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Levitation, STRUGGLE, struggleKind } from '../../src/game/Levitation.js';
-import { pickBody, bendToward, firstTouched, AIM, BODY, DUEL, DUEL_SPELLS } from '../../src/game/Duel.js';
+import { Duel, pickBody, bendToward, firstTouched, AIM, BODY, DUEL, DUEL_SPELLS } from '../../src/game/Duel.js';
+import { Game } from '../../src/game/Game.js';
 import { DeathSystem } from '../../src/game/Death.js';
 
 /**
@@ -132,7 +133,7 @@ test('the living struggle: each in its way; a castle wizard breaks free and come
     assert.ok(STRUGGLE.knight.jerk > STRUGGLE.villager.jerk, 'a knight pulls harder');
     const { g, lev } = world();
     const said = [];
-    const wiz = { id: 'c:1', x: 0.6, y: 0, z: -6, role: 'teacher', wizard: true, mode: 'idle' };
+    const wiz = { id: 'c:1', x: 0.6, y: 0, z: -6, role: 'teacher', wizard: true, mode: 'idle', mana: 20 };
     const farmer = { id: 'c:2', x: 4, y: 0, z: -6, role: 'farmer', mode: 'idle' };
     g.castleLife = { byId: new Map([[wiz.id, wiz], [farmer.id, farmer]]), targets: () => [wiz, farmer], _say: (v, t) => said.push([v.id, t]) };
     assert.ok(lev.grab('v', farmer, 'me', 'right', 6));
@@ -187,4 +188,99 @@ test('the dead are lifted too: a dead zombie, and a body that lies (a wizard\'s)
     for (let i = 0; i < 240; i++) g.death.update(1 / 60);
     assert.equal(b.y, 0);
     assert.equal(moves.at(-1).air, false, 'and where it landed');
+});
+
+
+function wizardWorld({ element, shield = false, wall = false } = {}) {
+    const w = world(), { g, aim, hand, lev } = w;
+    const mage = { id: 'mage', name: 'Маг', wizard: true, isVillager: true, element, x: 0.6, y: -0.9, z: -13 };
+    g.remotes.clear();
+    g.castleLife = { byId: new Map([[mage.id, mage]]), targets: () => [mage], wardOff: () => shield };
+    if (wall) g.terrain = { data: { isSolidAt: (x, y, z) => z < -6 && z > -7 } };
+    g.scene = new THREE.Scene();
+    g.castOrigin = (side, out) => out.copy(hand);
+    g.fx.lightFlash = () => {};
+    Object.assign(g.sync, { duelCast() {}, duelEnd() {}, duelClash() {} });
+    const d = g.duel = new Duel(g);
+    d._drawBolt = () => {};
+    d._handOf = (by, side, out, dir) => {
+        if (by === g.localId) { out.copy(hand); dir.copy(aim); return true; }
+        if (by === mage.id) { out.set(mage.x, hand.y, mage.z + 1.3); dir.set(0, 0, 1); return true; }
+        return false;
+    };
+    return { ...w, mage, d };
+}
+
+test('the Leviosa charge reaches a wizard first, and only then starts the ordinary hold', () => {
+    for (const element of [undefined, 'earth', 'water', 'air', 'fire']) {
+        const { g, lev, d, mage } = wizardWorld({ element });
+        const target = lev.aimWizard();
+        assert.deepEqual([target.t.kind, target.t.id], ['v', mage.id]);
+        assert.match(lev.cast(), /луч/, 'the instant lift cannot pick a mage');
+        g._castDuel = Game.prototype._castDuel;
+        g._duelReach = () => 30;
+        g.combat.check = () => null;
+        const payments = [];
+        g.combat.pay = (name) => payments.push(name);
+        g.doors = { segmentHit: () => null };
+        assert.equal(Game.prototype._castLevitation.call(g, true), 'Levitation');
+        d.update(0.1);
+        assert.ok(d.bolts.size && !mage.lev && !lev.active);
+        for (let i = 0; i < 60 && d.bolts.size; i++) d.update(1 / 30);
+        assert.equal(mage.lev?.by, 'me');
+        assert.equal(lev.state?.id, mage.id);
+        assert.deepEqual(payments, ['Levitation']);
+    }
+});
+
+test('Leviosa stopped by a wall or by the wizard’s shield never establishes a hold', () => {
+    for (const opts of [{ wall: true }, { shield: true }]) {
+        const { lev, d, mage } = wizardWorld(opts);
+        d.cast('LevitateDuel', lev.aimWizard(), null, 30);
+        for (let i = 0; i < 60 && d.bolts.size; i++) d.update(1 / 30);
+        assert.equal(lev.active, false);
+        assert.equal(mage.lev, undefined);
+    }
+});
+
+test('a guest gets a wizard hold from the host after the beam hit, and loses it when the wizard breaks free', () => {
+    const { g, lev, mage, friendGroup, sent } = wizardWorld();
+    g.remotes.set('guest', { character: { group: friendGroup }, lastUpdate: performance.now(), handPose: () => ({ origin: new THREE.Vector3(0, 2, 0), dir: new THREE.Vector3(0, 0, -1) }) });
+    g.sync.levNo = (...args) => sent.push(['no', ...args]);
+    g.sync.levWizard = (to, id, side, h, on) => sent.push({ to, id, side, h, on });
+    lev.onNetLev({ by: 'guest', k: 'v', id: mage.id, on: 1 });
+    assert.deepEqual(sent.shift(), ['no', 'guest', 'v', mage.id]);
+    assert.equal(mage.lev, undefined);
+    assert.equal(lev.hitWizard(mage, 'guest', 'left'), true);
+    const guest = new Levitation({ ...g, authority: false, localId: 'guest' });
+    guest.onWizardHold(sent.at(-1));
+    assert.equal(guest.state?.side, 'left');
+    assert.equal(guest.state?.id, mage.id);
+    lev.letGo('v', mage, false);
+    guest.onWizardHold(sent.at(-1));
+    assert.equal(guest.active, false);
+});
+
+test('an ordinary villager remains liftable immediately', () => {
+    const { lev, mage } = wizardWorld();
+    mage.wizard = false;
+    assert.equal(lev.aimWizard(), null);
+    assert.equal(lev.cast(), null);
+    assert.equal(lev.state?.id, mage.id);
+    assert.ok(mage.lev);
+});
+
+test('a wizard can meet the Leviosa charge with a counterspell before either cast hits', () => {
+    const { lev, d, mage, hand } = wizardWorld();
+    d._updateClash = () => {};
+    const beam = d.cast('LevitateDuel', lev.aimWizard(), null, 30);
+    d._addBolt({ id: 'counter', by: mage.id, spell: 'Stupefy', side: 'right', tk: 'p', tid: 'me',
+        o: new THREE.Vector3(mage.x, hand.y, mage.z + 1.3), d: new THREE.Vector3(0, 0, 1), npc: true, vs: beam.id });
+    for (let i = 0; i < 30 && !d.clashes.length; i++) d.update(1 / 30);
+    const [clash] = d.clashes;
+    assert.ok(clash);
+    assert.equal(lev.active, false);
+    assert.equal(mage.lev, undefined);
+    d._finishClash(clash, mage.id);
+    assert.equal(lev.state?.id, mage.id, 'winning the beam clash establishes the grip');
 });
