@@ -861,7 +861,7 @@ function updateCaveMeshes(p){
 }
 
 function buildWater(){
-  const water=patch(new THREE.MeshPhysicalMaterial({roughness:0.17,metalness:0.02,ior:1.333,envMapIntensity:1.15,side:THREE.FrontSide,transparent:true,depthWrite:false}),{key:'opushka-water',
+  const water=patch(new THREE.MeshPhysicalMaterial({roughness:0.29,metalness:0.0,ior:1.333,envMapIntensity:0.67,side:THREE.FrontSide,transparent:true,depthWrite:false}),{key:'opushka-water',
     vpars:`attribute vec3 hydro;varying vec3 vHydro;varying vec3 vWater;`,
     v:[['#include <begin_vertex>',`#include <begin_vertex>
       vHydro=hydro; vWater=position;
@@ -870,7 +870,9 @@ function buildWater(){
     fpars:`varying vec3 vHydro;varying vec3 vWater;`,
     f:[['#include <color_fragment>',`#include <color_fragment>
       vec2 p=vWater.xz;
-      float depth=max(0.,-sampleHM(p).r);
+      float bed=sampleHM(p).r;
+      if(bed>.042)discard;
+      float depth=max(0.,-bed);
       float sea=step(2.5,vHydro.x),river=1.-step(1.5,vHydro.x);
       vec3 deep=mix(vec3(0.021,0.061,0.059),vec3(0.014,0.049,0.066),sea);
       vec3 shoal=vec3(0.14,0.168,0.107);
@@ -878,17 +880,21 @@ function buildWater(){
       diffuseColor.rgb=mix(shoal,deep,murk);
       vec3 viewDir=normalize(cameraPosition-vWater);
       float fresnel=.02+.98*pow(1.-clamp(viewDir.y,0.,1.),5.);
-      diffuseColor.a=max(.12,smoothstep(0.,4.4,depth)*.93+fresnel*.46);
+      diffuseColor.a=clamp((.13+smoothstep(0.,3.8,depth)*.72+fresnel*.26)*(1.-smoothstep(-.055,.042,bed)),0.,.99);
       float thread=vnoise((p-vHydro.yz*uTime*.85)*1.3);
       diffuseColor.rgb+=vec3(.025,.037,.034)*smoothstep(.69,.92,thread)*(0.25+river*.75);
       float tide=smoothstep(.02,.17,depth)*(1.-smoothstep(.22,.50,depth));
       diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.27,.33,.32),tide*sea*smoothstep(.56,.81,thread)*.48);`],
       ['#include <normal_fragment_maps>',`#include <normal_fragment_maps>
       vec2 drift=vHydro.yz*uTime*.9;
-      vec2 q=(vWater.xz-drift);
+      vec2 q=vWater.xz-drift;
+      q+=0.58*vec2(vnoise(q*.58),vnoise(q*.61+11.6));
       vec3 wn=normalize(vec3(.048*cos(q.x*1.6+q.y*.81-uTime*1.7)+.028*cos(q.x*3.8-uTime),1.,
         .051*cos(q.y*1.12-q.x*.72+uTime*1.3)+.024*sin(q.y*4.8+uTime)));
-      normal=normalize((viewMatrix*vec4(wn*faceDirection,0.)).xyz);`]]});
+      normal=normalize((viewMatrix*vec4(wn*faceDirection,0.)).xyz);`],
+      ['#include <opaque_fragment>',`float luminance=dot(outgoingLight,vec3(.2126,.7152,.0722));
+      outgoingLight*=mix(1.,0.53/max(0.53,luminance),smoothstep(.50,.80,luminance));
+      #include <opaque_fragment>`]]});
   const mesh=new THREE.Mesh(waterGeometry(-640,640,2,waterKind,flowAt),water);mesh.receiveShadow=true;mesh.renderOrder=1;scene.add(mesh);
   const outer=new THREE.Mesh(waterGeometry(-1800,1800,20,(x,z)=>waterKind(x,z)===WATER_KIND.SEA?WATER_KIND.SEA:0,flowAt,
     (x,z)=>Math.abs(x)<640&&Math.abs(z)<640),water);
@@ -2116,7 +2122,7 @@ function animateMannequin(c,dt,speed,P){
   bendFingers(c,dt);
   (c.holder||charRoot).updateMatrixWorld(true);
   if(c.cape)updateCape(c,dt,P);
-  if(!c.holder||P.pos.distanceToSquared(player.pos)<70**2)moveHair(c.hair,dt,t,U.uWind.value,c.acc,P.fall||0);
+  if(!c.holder||P.pos.distanceToSquared(player.pos)<70**2)moveHair(c.hair,dt,t,U.uWind.value,c.acc,P===player?spells.me.fall:P.fall||0);
 }
 /** The fingers: each joint's bend (rad) from the camera's hand points (ZnsArms.curl), else the right hand round the wand, the left at rest.
  *  Fingers bend round the hand's own Z (across the knuckles, as they were sculpted); the thumb a little less. Smoothed a touch. */
@@ -2413,12 +2419,14 @@ function buildExplorerWings(){
   if(!hasWings)return;
   heroWings=[1,-1].map((side)=>{
     const root=new THREE.Group();
-    root.position.set(side*.16,1.32,-.16);root.scale.set(side*2.7,2.7,2.7);
+    root.position.set(side*.123,.058,-.13);root.scale.set(side*2.17,2.17,2.17);
     const inner=new THREE.Mesh(pigShared.wingIn,pigShared.wingMat),hinge=new THREE.Group();
     hinge.position.x=.30;
     const tip=new THREE.Mesh(pigShared.wingOut,pigShared.wingMat);
     inner.castShadow=tip.castShadow=true;
-    hinge.add(tip);root.add(inner,hinge);charRoot.add(root);
+    const shoulder=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshStandardMaterial({color:0xd7cfc0,roughness:.83}));
+    shoulder.scale.set(.11,.041,.09);shoulder.position.set(.039,0,-.026);shoulder.castShadow=true;
+    hinge.add(tip);root.add(shoulder,inner,hinge);charRig.B.chest.add(root);
     return {side,root,hinge};
   });
 }
@@ -2427,8 +2435,14 @@ function animateExplorerWings(dt){
   const open=player.flying?1:0,beat=wingFlight.flap;
   for(const {side,root,hinge} of heroWings){
     const a=1-Math.exp(-dt*9);
+    const anchor=charCustom?charRoot:charRig.B.chest;
+    if(root.parent!==anchor){
+      anchor.add(root);
+      root.position.set(side*.123,charCustom?1.31:.058,-.13);
+    }
+    root.rotation.x=lerp(root.rotation.x,open*.24,a);
     root.rotation.y=lerp(root.rotation.y,side*(1-open)*.92,a);
-    root.rotation.z=lerp(root.rotation.z,side*(-.85+open*(.85+Math.sin(beat*Math.PI*2)*.57)),a);
+    root.rotation.z=lerp(root.rotation.z,side*(-.85+open*(1.02+Math.sin(beat*Math.PI*2)*.55)),a);
     hinge.rotation.y=lerp(hinge.rotation.y,(1-open)*.8+beat*.17,a);
   }
 }
