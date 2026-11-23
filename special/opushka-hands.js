@@ -38,8 +38,8 @@ const LIVE_MS = 600; // a pose older than this: the camera stopped — the walki
 const SIDE = { L: 'left', R: 'right' };
 
 export class ZnsArms {
-    _wandAim(D, p, dt) {
-        const lm = p.rightHandLandmarks, has = !!(lm && lm.length >= 18);
+    _wandAim(D, p, dt, side) {
+        const lm = p[side + 'HandLandmarks'], has = !!(lm && lm.length >= 18);
         const k = has ? V5_WAND.PALM : 0, T = this._aimT;
         // (D.hand is solved just below; the previous frame's hand direction serves — one frame late is nothing next to the steadying)
         const H = D.hs || D.h;
@@ -104,6 +104,7 @@ export class ZnsArms {
             svc.onPoseUpdate = (p) => { this.smoother.push(p); this.raw = p; this.at = performance.now(); this.heardAt = this.at; };
             svc.onStatus = (t) => { this.status = t; };
             svc.onCaptureState = (detail) => this.captureNotice(detail);
+            svc.hintSource = () => this.inventory?.pocketHintInfo() || null;
             await svc.initialize('zns-webcam', 'zns-preview', this.set.config);
             try { setHandSmoothness(this.set.handSmooth, svc); } catch (e) { /* */ }
             // (the camera busy or not given yet: tried again every few seconds — as the game's camera panel does)
@@ -145,11 +146,11 @@ export class ZnsArms {
             D.ok = true;
             // (the author 23.11: «палочка смотрит вверх и не такая стабильная, как V3»): the wand hand's aim as in the game's V3 — where the real
             // hand points mixed with the forearm (V5_WAND.PALM), then the game's own steadying (AimSteady; calmer while running)
-            if (K === 'R') this._wandAim(D, p, adt);
+            if (K === (this.set.config.leftHanded ? 'L' : 'R')) this._wandAim(D, p, adt, side);
             // the hand: fingers from the wrist to the middle knuckle, the palm's normal across the knuckles (the picture mirrored, as the arms)
             const lm = p[side + 'HandLandmarks'];
             D.hand = false;
-            if (lm && lm.length >= 18) {
+            if (lm && lm.length >= 21) {
                 const w = lm[0], m = lm[9], i5 = lm[5], p17 = lm[17];
                 const b = (q) => ({ x: -(q.x - w.x) * aspect, y: -(q.y - w.y), z: (q.z - w.z) * aspect }); // body space (x right, y up, z back)
                 const fm = b(m), a = b(i5), c = b(p17);
@@ -169,10 +170,16 @@ export class ZnsArms {
                 for (let f = 0; f < 4; f++) {
                     const [a0, a1, a2, a3] = FING[f];
                     const bends = [angle(V(0, a0), V(a0, a1)), angle(V(a0, a1), V(a1, a2)), angle(V(a1, a2), V(a2, a3))];
-                    for (let j = 0; j < 3; j++) curl[f * 3 + j] = Math.max(0, Math.min(1.7, bends[j] - 0.12));
+                    const base=V(0,a0),tip=V(0,a3);
+                    const fold=1-Math.min(1,Math.hypot(...tip)/(Math.hypot(...base)||1));
+                    const closed=Math.max(0,Math.min(1,(fold-0.10)/0.29));
+                    const fist=[1.02,1.28,0.72],limits=[1.32,1.58,1.04];
+                    const angles=bends.map((bend,j)=>Math.min(limits[j],Math.max(0,bend-0.05,fist[j]*closed)));
+                    const margin=Math.min(1,3.15/Math.max(0.01,angles[0]+angles[1]+angles[2]));
+                    for(let j=0;j<3;j++)curl[f*3+j]=angles[j]*margin;
                 }
                 const t0 = angle(V(1, 2), V(2, 3)), t1 = angle(V(2, 3), V(3, 4));
-                curl[12] = Math.max(0, Math.min(1.2, t0 - 0.1)); curl[13] = Math.max(0, Math.min(1.4, t1 - 0.1)); curl[14] = curl[13] * 0.6;
+                curl[12] = Math.max(0, Math.min(0.86, t0 - 0.1)); curl[13] = Math.max(0, Math.min(1.18, t1 - 0.08)); curl[14] = curl[13] * 0.53;
             }
         }
     }

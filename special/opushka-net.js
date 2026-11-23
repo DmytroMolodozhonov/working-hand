@@ -119,8 +119,26 @@ export class OpushkaNet {
             P.justLanded = 0;
             R.fall = (R.fall || 0) + (((R.st & 1) || (R.st & 8) ? 1 : 0) - (R.fall || 0)) * (1 - Math.exp(-dt * 5));
             R.rig.holder.rotation.order = 'YXZ'; R.rig.holder.rotation.x = -R.fall * Math.PI * 0.47;
-            const wand = R.rig.fingers?.R?.wand; if (wand) wand.visible = !(R.st & 4);
-            if (R.rig.fingers?.R) { if (R.st & 4) { R.rig.fingers.R.gripSaved = R.rig.fingers.R.grip || R.rig.fingers.R.gripSaved; R.rig.fingers.R.grip = null; } else if (R.rig.fingers.R.gripSaved) R.rig.fingers.R.grip = R.rig.fingers.R.gripSaved; }
+            const hand = R.rig.fingers?.[R.rig.activeHand];
+            if (hand?.wand) {
+                hand.wand.visible = !(R.st & 4);
+                hand.gripSaved ||= hand.grip;
+                hand.grip = R.st & 20 ? null : hand.gripSaved;
+                const stowed = !!(R.st & 16);
+                if (stowed !== !!hand.stowed) {
+                    hand.stowed = stowed;
+                    hand.heldAt ||= { position: hand.wand.position.clone(), quaternion: hand.wand.quaternion.clone() };
+                    if (stowed) {
+                        R.rig.B.hips.add(hand.wand);
+                        hand.wand.position.set(hand.s * -0.08, -0.26, 0.15);
+                        hand.wand.rotation.set(-0.20, 0, hand.s * 0.25);
+                    } else {
+                        hand.hb.palm.add(hand.wand);
+                        hand.wand.position.copy(hand.heldAt.position);
+                        hand.wand.quaternion.copy(hand.heldAt.quaternion);
+                    }
+                }
+            }
             this.spells?.friendIce(R, !!(R.st & 2));
             R.tag.position.set(P.pos.x, P.pos.y + 2.12, P.pos.z);
         }
@@ -134,12 +152,15 @@ export class OpushkaNet {
             if (!D.ok) return 0;
             const v = (x) => [r3(x.x), r3(x.y), r3(x.z)];
             // (the wand hand: its steadied aim and palm instead of the raw hand — the friend's wand points where it points here)
-            const wa = K === 'R' && D.aim;
+            const wa = K === rig?.activeHand && D.aim;
             return [...v(D.u), ...v(D.f), ...(D.hand || wa ? [...v(wa ? D.aim : D.h), ...v(wa ? (D.np || D.n) : D.n)] : [])];
         };
-        const curl = rig?.fingers?.L?.cur ? Array.from(rig.fingers.L.cur, r2) : 0;
+        const free = rig?.fingers?.[rig?.activeHand === 'L' ? 'R' : 'L'];
+        const curl = free?.cur ? Array.from(free.cur, r2) : 0;
         const fl = (P.grounded ? 1 : 0) | (P.crouch ? 2 : 0) | (P.airStyle === 'leap' ? 4 : 0) | (P.view === 'third' ? 8 : 0);
-        return { t: 'p', s: [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r3(P.faceYaw), r3(P.yaw), r3(P.pitch), r2(P.vel.x), r2(P.vel.z), r2(P.vy), fl, r2(P.landT || 0), this.spells?.stateBits() || 0], a: [arm('L'), arm('R')], c: curl };
+        const look = this.api.look?.();
+        const appearance = look ? [look.skin, look.hairColor, look.topColor, look.hair, look.face] : undefined;
+        return { t: 'p', appearance, s: [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r3(P.faceYaw), r3(P.yaw), r3(P.pitch), r2(P.vel.x), r2(P.vel.z), r2(P.vy), fl, r2(P.landT || 0), this.spells?.stateBits() || 0], a: [arm('L'), arm('R')], c: curl };
     }
 
     _pigs() {
@@ -162,7 +183,11 @@ export class OpushkaNet {
         if (m.t === 'tod' && net.isClient && m.k) { this.api.setTod(m.k); return; }
         // the spells: a friend's charge flies here too; a pig a guest's charge reached — the host decides; who fell to whom
         if (m.t === 'cast' && m.from !== net.localId) { this.spells?.netCast(m); return; }
-        if (m.t === 'pighit' && net.isHost && Array.isArray(m.d)) { this.spells?.pigHit(m.i | 0, m.n, { x: +m.d[0] || 0, y: +m.d[1] || 0, z: +m.d[2] || 0 }, clamp01(+m.k)); return; }
+        if (net.isClient && m.from === 'H' && m.t === 'opclash') { this.spells?.netClash(m); return; }
+        if (net.isClient && m.from === 'H' && m.t === 'opimpact' && m.who === net.localId && Array.isArray(m.dir) && m.dir.every(Number.isFinite)) {
+            this.spells?.hurtMe(m.spell, new this.api.THREE.Vector3(...m.dir), m.by);
+            return;
+        }
         if (m.t === 'died' && m.from !== net.localId) {
             const who = this.net.players.get(m.from)?.name || 'Игрок', by = m.by === net.localId ? 'вы' : m.by ? this.net.players.get(m.by)?.name : null;
             this._say(by ? `☠️ ${who} пал${by === 'вы' ? ' от вашего заклинания' : ' — ' + by}` : `☠️ ${who} пал`);
@@ -178,7 +203,9 @@ export class OpushkaNet {
                 target: null, last: 0, tag: nameTag(THREE, name), arms: remoteArms() };
             this.api.scene.add(R.tag);
             this.remotes.set(id, R);
-            this._build(id, R);
+            const appearance = Array.isArray(m.appearance) ? m.appearance : [];
+            const [skin, hairColor, topColor, hair, face] = appearance;
+            this._build(id, R, (m.s?.[11] & 32) ? 'L' : 'R', { skin, hairColor, topColor, hair, face });
         }
         const s = m.s;
         if (!Array.isArray(s) || s.length < 11 || !s.slice(0, 9).every(Number.isFinite)) return;
@@ -196,17 +223,17 @@ export class OpushkaNet {
             if (!Array.isArray(v) || v.length < 6 || !v.every(Number.isFinite)) { D.ok = false; return; }
             put(D.u, v, 0); put(D.f, v, 3); D.ok = true;
             D.hand = v.length >= 12; if (D.hand) { put(D.h, v, 6); put(D.n, v, 9); }
-            if (K === 'R') { if (D.hand) { D.aim = D.aim || new this.api.THREE.Vector3(); D.aim.set(D.h.x, D.h.y, D.h.z); D.np = D.n; } else D.aim = null; }
+            if (K === ((R.st & 32) ? 'L' : 'R')) { if (D.hand) { D.aim = D.aim || new this.api.THREE.Vector3(); D.aim.set(D.h.x, D.h.y, D.h.z); D.np = D.n; } else D.aim = null; }
         });
-        const c = m.c;
-        if (Array.isArray(c) && c.length === 15 && c.every(Number.isFinite)) { const D = A.L; D.curl = D.curl || new Float32Array(15); D.curl.set(c); }
-        else if (A.L.curl) A.L.curl = null;
+        const free = A[(R.st & 32) ? 'R' : 'L'], c = m.c;
+        if (Array.isArray(c) && c.length === 15 && c.every(Number.isFinite)) { free.curl ||= new Float32Array(15); free.curl.set(c); }
+        else free.curl = null;
     }
 
     /** His wizard: the same body as mine (made once, copied — a moment), his own bones. */
-    async _build(id, R) {
+    async _build(id, R, hand, look) {
         try {
-            const rig = await this.api.buildAvatar();
+            const rig = await this.api.buildAvatar(hand, look);
             if (this.remotes.get(id) !== R) { rig.holder.removeFromParent(); return; } // (he left while it was being made)
             rig.arms = R.arms;
             R.rig = rig;
@@ -226,7 +253,6 @@ export class OpushkaNet {
     }
 }
 
-function clamp01(v) { return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0; }
 function remoteArms() {
     const mk = () => ({ u: { x: 0, y: -1, z: 0 }, f: { x: 0, y: -1, z: 0 }, h: { x: 0, y: -1, z: 0 }, n: { x: 1, y: 0, z: 0 }, ok: false, hand: false, curl: null });
     return { dirs: { L: mk(), R: mk() }, solve() { /* (his own camera solved them on his computer) */ } };

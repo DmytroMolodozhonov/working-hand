@@ -17,15 +17,18 @@
  *   Jolt         | 3 HP, thrown back off the feet (Maxima ×3)     | thrown far                             | stops it, a puff       | a puff of dust
  *   Stupefy      | 6 HP, falls, 3 s unable to move                | falls asleep: drops, lies 8 s          | stops it, red sparks   | red sparks
  *   Expelliarmus | 2 HP, the wand flies out — lies there, walk to it| not at all (no wand): a shove only   | sparks                 | sparks
- *   Avada        | 25 HP (no shield of the hand holds it)         | dies: falls and lies                   | stops it (no harm)     | green smoke
+ *   Avada        | 25 HP (armour does not stop it)         | dies: falls and lies                   | stops it (no harm)     | green smoke
  *   Ice          | 10 s in ice, −3 HP/s (Maxima 6 s, −10/s)       | frozen in ice, falls; thaws            | frost on the bark      | a patch of rime
- *   Protection   | a shield before the hand 3 s (Maxima — a sphere round the body 6 s): charges stop on it; Avada passes it; a blast is softened
+ *   Protection   | a shield before the hand 3 s (Maxima — a sphere round the body 6 s): charges stop on it; a blast is softened
  * Who decides: each player for himself (a charge that reached me — on my computer), the host for the pigs; everybody sees every charge (the
  * cast goes over the net with its place and direction). Death: falls, 6 s, gets up at the meadow with full health.
  */
 import * as THREE from 'three';
 import { VoiceService } from '../src/input/VoiceService.js';
 import { matchSpell } from '../src/fx/SpellManager.js';
+import { DAMAGE } from '../src/game/Damage.js';
+import { CLASH, DUEL, clashPush } from '../src/game/Duel.js';
+import { segmentToSegment } from '../src/game/SegmentContact.js';
 import { spellPhrase, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR } from '../src/audio/SpellPhrase.js';
 
 const V3 = THREE.Vector3;
@@ -41,7 +44,7 @@ export const SPELLS = {
     JoltMaxima: { ru: 'Джолт Максима', kind: 'bolt', speed: 13, color: 0xc4e4ff, core: 0xffffff, size: 0.05, hp: 9, push: 15, life: 2.2 },
     Stupefy: { ru: 'Остолбеней', kind: 'bolt', speed: 12, color: 0xff3b3b, core: 0xffd8d0, size: 0.045, hp: 3, stun: 3, life: 2.4 },
     Expelliarmus: { ru: 'Экспеллиармус', kind: 'bolt', speed: 13, color: 0xc8102e, core: 0xffffff, size: 0.045, hp: 2, disarm: true, life: 2.4 },
-    AvadaKedavra: { ru: 'Авада Кедавра', kind: 'bolt', speed: 12, color: 0x1f8a2a, core: 0x9dff3a, size: 0.06, hp: 25, pierce: true, life: 2.6 },
+    AvadaKedavra: { ru: 'Авада Кедавра', kind: 'bolt', speed: 12, color: 0x1f8a2a, core: 0x9dff3a, size: 0.06, hp: DAMAGE.AvadaKedavra, pierce: true, life: 2.6 },
     Ice: { ru: 'Айс', kind: 'bolt', speed: 14, color: 0x8fdcff, core: 0xf2fbff, size: 0.04, freeze: 10, burn: 3, life: 2.4 },
     IceMaxima: { ru: 'Айс Максима', kind: 'bolt', speed: 14, color: 0x6fc8ff, core: 0xffffff, size: 0.055, freeze: 6, burn: 10, life: 2.4 },
     Protection: { ru: 'Протекшн', kind: 'shield', hold: 3, sphere: false },
@@ -52,7 +55,7 @@ const ALIAS = { Frozen: 'Ice', FrozenMaxima: 'IceMaxima', SapiraDuel: null };
 const KEYS = { KeyB: ['Bombardo', 'BombardoMaxima'], KeyJ: ['Jolt', 'JoltMaxima'], KeyT: ['Stupefy', 'Stupefy'], KeyE: ['Expelliarmus', 'Expelliarmus'],
     KeyK: ['AvadaKedavra', 'AvadaKedavra'], KeyI: ['Ice', 'IceMaxima'], KeyP: ['Protection', 'ProtectionMaxima'] };
 
-export const HERO = { HP: 100, RESPAWN: 6, BODY_R: 0.32, BODY_H: 1.8 };
+export const HERO = { HP: 20, RESPAWN: 6, BODY_R: 0.32, BODY_H: 1.8 };
 const BLAST = { R: 4.2, PEAK: 8, CRATER: 4.8, DEPTH: 1.3, CRATER_MAX: 8.5, DEPTH_MAX: 2.8 }; // the blast of a Bombardo (Maxima: ×√3 the reach, ×3 the harm, the dent ×2.2) — the author 23.11: «слишком слабые, прямо слишком»
 const MAX_BLASTS = 12;
 const PIG_HP = 20;
@@ -62,6 +65,7 @@ export class OpushkaSpells {
     constructor(api) {
         this.api = api;
         this.bolts = [];
+        this.clashes = new Map();
         this.shields = [];   // {by, pos, dir, sphere, t, life, mesh}
         this.clods = null;
         this.me = { hp: HERO.HP, stun: 0, frozen: 0, burn: 0, dead: 0, fall: 0, wandOut: null, knock: new V3() };
@@ -78,11 +82,18 @@ export class OpushkaSpells {
         U.uBlast.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, -1e4));
         U.uBlastP.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, 0));
         this.glow = new Sparks(scene, 2400, true);
-        this.smoke = new Sparks(scene, 1600, false, this.api.groundH);
+        this.smoke = new Sparks(scene, 1600, false, this.api.groundH, U.uSunDirW);
+        this.beamGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
         this.coreGeo = new THREE.IcosahedronGeometry(1, 2);
         this.halo = haloTexture();
         this.fireMat = fireballMaterial();
         this.fireGeo = new THREE.IcosahedronGeometry(1, 4);
+        this.foam = Array.from({length: 6}, () => {
+            const mesh = new THREE.Mesh(new THREE.RingGeometry(0.84, 1, 56),
+                new THREE.MeshBasicMaterial({ color: 0xb8e8ee, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+            mesh.rotation.x = -Math.PI / 2; mesh.visible = false; mesh.renderOrder = 3;
+            scene.add(mesh); return mesh;
+        });
         this.fires = [];
         for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(this.fireGeo, this.fireMat.clone()); m.visible = false; m.frustumCulled = false; scene.add(m); this.fires.push(m); }
         this.iceMat = iceMaterial(); this.iceGeo = iceGeometry();
@@ -141,7 +152,8 @@ export class OpushkaSpells {
     /** Where the wand's tip is and where it points. */
     aim() {
         const rig = this.api.rig(), cam = this.api.camera, P = this.api.player();
-        const wand = rig?.fingers?.R?.wand;
+        const hand = this.api.wandHand?.() || 'R';
+        const wand = this.api.wandHeld?.() === false ? null : rig?.fingers?.[hand]?.wand;
         const o = new V3(), d = new V3();
         cam.getWorldDirection(d);
         if (wand && !this.me.wandOut) {
@@ -161,8 +173,8 @@ export class OpushkaSpells {
         }
         // no camera: the arm is raised toward where the eyes look and the charge leaves from the end of the raised wand (not from the wand
         // hanging at the knee — it went into the ground beside the wizard: the author's screenshots)
-        if (wand && !this.me.wandOut && !this.api.armsLive() && rig?.B?.uaR) {
-            const sh = new V3(); rig.B.uaR.getWorldPosition(sh);
+        if (wand && !this.me.wandOut && !this.api.armsLive() && rig?.B?.['ua' + hand]) {
+            const sh = new V3(); rig.B['ua' + hand].getWorldPosition(sh);
             const far = this._lookPoint(cam);
             d.copy(far).sub(sh).normalize();
             o.copy(sh).addScaledVector(d, 0.82);
@@ -181,7 +193,8 @@ export class OpushkaSpells {
         const mk = () => ({ u: { x: 0, y: -1, z: 0 }, f: { x: 0, y: -1, z: 0 }, h: { x: 0, y: -1, z: 0 }, n: { x: 1, y: 0, z: 0 }, ok: false, hand: false, curl: null });
         const A = this._raise || (this._raise = { dirs: { L: mk(), R: mk() }, solve() {} });
         const u = dc.clone().add(_v.set(-0.12, -0.3, 0)).normalize();
-        Object.assign(A.dirs.R.u, { x: u.x, y: u.y, z: u.z }); Object.assign(A.dirs.R.f, { x: dc.x, y: dc.y, z: dc.z }); A.dirs.R.ok = true;
+        const arm = A.dirs[this.api.wandHand?.() || 'R'];
+        Object.assign(arm.u, { x: u.x, y: u.y, z: u.z }); Object.assign(arm.f, { x: dc.x, y: dc.y, z: dc.z }); arm.ok = true;
         rig.arms = A; this._raiseT = 0.9;
     }
 
@@ -205,6 +218,7 @@ export class OpushkaSpells {
         const out = [], P = this.api.player();
         if (!this.me.dead) out.push({ kind: 'me', c: new V3(P.pos.x, P.pos.y + 0.95, P.pos.z), base: P.pos, r: HERO.BODY_R, h: HERO.BODY_H });
         for (const [id, R] of this.api.remotes()) if (R.rig && !R.dead) out.push({ kind: 'friend', id, c: new V3(R.P.pos.x, R.P.pos.y + 0.95, R.P.pos.z), base: R.P.pos, r: HERO.BODY_R, h: HERO.BODY_H });
+        this.api.village?.()?.people.forEach((npc) => { if (!npc.dead) out.push({ kind: 'resident', id: npc.id, npc, c: npc.pos.clone().add(new V3(0, 0.95, 0)), base: npc.pos, h: HERO.BODY_H, r: HERO.BODY_R }); });
         this.api.pigs.forEach((pg, i) => { if (!pg.dead) out.push({ kind: 'pig', i, pg, c: pg.pos.clone().add(_v.set(0, 0.45 * (pg.sc || 1), 0)), r: 0.45 * (pg.sc || 1) }); });
         return out;
     }
@@ -216,13 +230,24 @@ export class OpushkaSpells {
             if (S && !this.me.dead) this.api.hud(this.me.frozen > 0 ? '❄️ Во льду не поколдуешь' : '💫 Вы оглушены');
             return;
         }
-        if (this.me.wandOut && S.kind !== 'shield') { this.api.hud('🪄 Палочки нет в руке — подберите её'); return; }
+        if ((this.me.wandOut || this.api.wandHeld?.() === false) && S.kind !== 'shield') { this.api.hud('🪄 Палочки нет в руке — подберите её'); return; }
         const { o, d } = this.aim();
         const id = this.api.net()?.localId || 'me';
         const castId = id + ':' + (++this._seq);
         this.api.hud(`🪄 «${S.ru}»`);
         this._spawn(name, o, d, id, castId, true);
         this.api.net()?.send({ t: 'cast', n: name, o: [o.x, o.y, o.z].map(r3), d: [d.x, d.y, d.z].map(r4), id: castId }, true);
+    }
+
+    castResident(npc, target, name) {
+        const wand = npc.rig.fingers?.[npc.rig.activeHand]?.wand;
+        if (!wand) return false;
+        const origin = wand.localToWorld(new V3(0, wand.userData.tipY || 0.62, 0));
+        const heading = target.clone().add(new V3(0, 1.13, 0)).sub(origin).normalize();
+        const end = origin.clone().addScaledVector(heading, origin.distanceTo(target) - 0.4);
+        if (this._worldHit(origin, end, 0)) return false;
+        this._spawn(name, origin, heading, npc.id, npc.id + ':' + (++this._seq), false);
+        return true;
     }
 
     /** Somebody else's cast came over the net: the same charge here (it hurts whoever it reaches on his own computer). */
@@ -243,6 +268,7 @@ export class OpushkaSpells {
         core.add(halo); halo.scale.divideScalar(S.size);
         this.api.scene.add(core);
         const b = { name, S, by, id: castId, mine, p: o.clone(), v: d.clone().multiplyScalar(S.speed), age: 0, core, halo, hand: o.clone(), dir: d.clone(), done: false, spin: Math.random() * 6 };
+        if (S.kind === 'bolt') b.streak = this._makeBeam(S.color, S.core);
         this.bolts.push(b);
         this._castFx(b);
         this.sound(name === 'BombardoMaxima' ? 'castMax' : S.kind === 'orb' ? 'cast' : name === 'AvadaKedavra' ? 'avada' : name.startsWith('Ice') ? 'ice' : name.startsWith('Jolt') ? 'jolt' : 'bolt', o, S.kind === 'orb' ? 1 : 0.8, S.color);
@@ -285,7 +311,7 @@ export class OpushkaSpells {
     _myId() { return this.api.net()?.localId || 'me'; }
     _bodyOf(id) {
         if (id === this._myId() || id === 'me') return this.api.player().pos;
-        return this.api.remotes().get(id)?.P.pos || null;
+        return this.api.remotes().get(id)?.P.pos || this.api.village?.()?.people.find((person)=>person.id===id&&!person.dead)?.pos || null;
     }
 
     /** Does a charge on its way from a to b meet a shield (not its own caster's)? → the shield */
@@ -312,9 +338,19 @@ export class OpushkaSpells {
             if (sh.t >= sh.life) sh.dead = true;
         }
         this.shields = this.shields.filter((sh) => { if (sh.dead) { sh.mesh.removeFromParent(); sh.mesh.material.dispose(); } return !sh.dead; });
-        for (const b of this.bolts) this._fly(b, dt);
-        this.bolts = this.bolts.filter((b) => { if (b.done) { b.core.removeFromParent(); b.core.material.dispose(); b.halo.material.dispose(); } return !b.done; });
+        for (const b of this.bolts) if (!b.done) this._fly(b, dt);
+        this._stepClashes(dt);
+        this.bolts = this.bolts.filter((b) => { if (b.done) { b.core.removeFromParent(); b.core.material.dispose(); b.halo.material.dispose(); if (b.streak) { b.streak.removeFromParent(); b.streak.material.dispose(); } } return !b.done; });
         this.glow.update(dt); this.smoke.update(dt); this.clods.update(dt);
+        for (const ring of this.foam) {
+            if (!ring.visible) continue;
+            const u = ring.userData;
+            u.age += dt;
+            const progress = u.age / u.life;
+            ring.visible = progress < 1;
+            ring.scale.setScalar(0.3 + (1 - (1 - progress) ** 2) * u.radius);
+            ring.material.opacity = 0.55 * Math.max(0, 1 - progress) ** 1.4;
+        }
         for (const f of this.fires) if (f.visible) this._fireStep(f, dt);
         for (const pg of this.api.pigs) {
             const on = pg.frozen > 0 && !pg.dead;
@@ -341,10 +377,14 @@ export class OpushkaSpells {
     _fly(b, dt) {
         b.age += dt;
         const { S } = b;
-        const a = b.p.clone();
+        const a = b.p.clone(); b.previous = a;
         if (S.grav) b.v.y -= S.grav * dt;
         b.p.addScaledVector(b.v, dt);
         b.core.position.copy(b.p);
+        if (b.streak) {
+            const tail = b.p.clone().addScaledVector(b.dir, -Math.min(2.8, b.age * S.speed));
+            this._setBeam(b.streak, tail, b.p, S.size * 0.42);
+        }
         b.spin += dt * 9; b.core.rotation.set(b.spin, b.spin * 0.7, 0);
         b.halo.material.opacity = 0.75 + 0.25 * Math.sin(b.age * 40 + b.spin);
         // the trail
@@ -362,25 +402,159 @@ export class OpushkaSpells {
         if (b.age < 0.06) return; // (the first moment: out of the hand)
         // what it meets on the way a → b.p: a shield, a body, a tree or a rock, the ground
         const sh = this._shieldHit(a, b.p, b.by);
-        if (sh && b.name !== 'AvadaKedavra') { this._onShield(b, a.lerp(b.p, sh.t), sh.sh); return; }
+        if (sh) { this._onShield(b, a.lerp(b.p, sh.t), sh.sh); return; }
         let hit = null, ht = 2;
         for (const t of this._targets()) {
-            if (b.age < 0.25 && (t.kind === 'me' && b.mine || t.kind === 'friend' && t.id === b.by)) continue; // (not the caster himself as it leaves the hand)
+            if (t.id === b.by || b.age < 0.25 && t.kind === 'me' && b.mine) continue; // (not the caster himself as it leaves the hand)
             const tt = t.h ? segCapsule(a, b.p, t.base, t.r + S.size, t.h) : segSphere(a, b.p, t.c, t.r + S.size);
             if (tt !== null && tt < ht) { ht = tt; hit = t; }
         }
-        const world = this._worldHit(a, b.p, S.size);
+        const world = this._worldHit(a, b.p, S.size, S.kind === 'orb');
+        const endAt = Math.min(world?.t ?? 1, ht);
+        if (S.kind === 'bolt' && this._tryClash(b, a, a.clone().lerp(b.p, endAt))) return;
         if (world && world.t < ht) { this._onWorld(b, world); return; }
-        if (hit) { this._onBody(b, a.lerp(b.p, ht), hit); return; }
+        if (hit) { this._onBody(b, a.clone().lerp(b.p, ht), hit); return; }
         if (b.age > (S.life || 2.5)) { if (S.kind === 'orb') this._explode(b, b.p.clone()); else this._fizzle(b); }
     }
 
+    _makeBeam(color, coreColor) {
+        const material = new THREE.MeshBasicMaterial({ color: new THREE.Color(coreColor || color).multiplyScalar(2.1), toneMapped: false });
+        const mesh = new THREE.Mesh(this.beamGeo, material);
+        mesh.visible = false;
+        this.api.scene.add(mesh);
+        return mesh;
+    }
+
+    _setBeam(mesh, a, b, width) {
+        const direction = b.clone().sub(a), length = direction.length();
+        mesh.visible = length > 0.01;
+        if (!mesh.visible) return;
+        mesh.position.copy(a).lerp(b, 0.5);
+        mesh.quaternion.setFromUnitVectors(new V3(0, 1, 0), direction.divideScalar(length));
+        mesh.scale.set(width, length, width);
+    }
+
+    _tryClash(shot, previous, tip) {
+        const net = this.api.net();
+        if (!net?.isHost) return false;
+        const body = this._bodyOf(shot.by);
+        if (!body) return false;
+        for (const other of this.bolts) {
+            if (other.done || other.S.kind !== 'bolt' || other.by === shot.by || other.age < 0.05
+                || shot.dir.dot(other.dir) > -CLASH.FACING) continue;
+            const rival = this._bodyOf(other.by);
+            if (!rival) continue;
+            const between = rival.clone().sub(body).setY(0);
+            if (between.lengthSq() < 1) continue;
+            between.normalize();
+            if (between.dot(shot.dir) < 0.55 || between.dot(other.dir) > -0.55) continue;
+            const meet = segmentToSegment(previous, tip, other.previous || other.p, other.p);
+            if (meet.dist > CLASH.MEET * 0.58) continue;
+            const point = previous.clone().lerp(tip, meet.s).lerp((other.previous || other.p).clone().lerp(other.p, meet.k), 0.5);
+            const message = { t: 'opclash', mode: 'start', id: shot.id + '/' + other.id,
+                a: { by: shot.by, spell: shot.name, bolt: shot.id, dir: shot.dir.toArray() },
+                b: { by: other.by, spell: other.name, bolt: other.id, dir: other.dir.toArray() }, at: point.toArray() };
+            this.netClash(message);
+            net.send(message);
+            return true;
+        }
+        return false;
+    }
+
+    netClash(message) {
+        let clash = this.clashes.get(message.id);
+        if (message.mode === 'start' && !clash) {
+            const sa = SPELLS[message.a?.spell], sb = SPELLS[message.b?.spell];
+            if (!sa || !sb || !Array.isArray(message.at) || !message.at.every(Number.isFinite)) return;
+            for (const b of this.bolts) if (b.id === message.a.bolt || b.id === message.b.bolt) b.done = true;
+            clash = { a: message.a, b: message.b, point: new V3(...message.at), aim: new V3(...message.at),
+                ma: this._makeBeam(sa.color, sa.core), mb: this._makeBeam(sb.color, sb.core), time: 0, send: 0, p: 0.5, lostA: 0, lostB: 0 };
+            this.clashes.set(message.id, clash);
+            if ([clash.a.by, clash.b.by].includes(this._myId())) this.api.hud('⚡ Лучевая дуэль — держите палочку на сопернике');
+        } else if (message.mode === 'step' && clash && Array.isArray(message.at) && message.at.every(Number.isFinite)) {
+            clash.aim.set(...message.at);
+        } else if (message.mode === 'end' && clash) {
+            if (message.loser === this._myId()) {
+                const winner = clash.a.by === message.loser ? clash.b : clash.a;
+                this.hurtMe(winner.spell, new V3(...winner.dir), winner.by);
+            }
+            for (const m of [clash.ma, clash.mb]) { m.parent?.remove(m); m.material.dispose(); }
+            this.clashes.delete(message.id);
+        }
+    }
+
+    _beamHand(side) {
+        const mine = side.by === this._myId();
+        const remote = mine ? null : this.api.remotes().get(side.by);
+        const body = this._bodyOf(side.by), rig = mine ? this.api.rig() : remote?.rig;
+        if (!body || (mine ? this.me.dead || this.api.wandHeld?.() === false : remote?.dead || (remote?.st & 20))) return null;
+        const wand = rig?.fingers?.[rig?.activeHand]?.wand;
+        const pointed = mine ? this.api.armsLive() : !!remote?.arms?.dirs?.[rig?.activeHand]?.ok;
+        if (wand && pointed) {
+            wand.updateWorldMatrix(true, false);
+            return { point: wand.localToWorld(new V3(0, wand.userData.tipY || 0.62, 0)), dir: new V3(0, 1, 0).transformDirection(wand.matrixWorld) };
+        }
+        const look = mine ? this.api.player() : remote?.P;
+        const dir = look ? new V3(-Math.sin(look.yaw) * Math.cos(look.pitch), Math.sin(look.pitch), -Math.cos(look.yaw) * Math.cos(look.pitch)) : new V3(...side.dir);
+        return { point: body.clone().add(new V3(0, 1.27, 0)).addScaledVector(dir, 0.43), dir };
+    }
+
+    _stepClashes(dt) {
+        const net = this.api.net();
+        for (const [id, c] of this.clashes) {
+            c.time += dt;
+            const a = this._beamHand(c.a), b = this._beamHand(c.b);
+            if (net?.isHost) {
+                let loser = null;
+                if (!a || !b) loser = a ? c.b.by : b ? c.a.by : null;
+                if (a && b) {
+                    const axis = b.point.clone().sub(a.point);
+                    const distance = axis.length();
+                    axis.normalize();
+                    const dotA = a.dir.dot(axis), dotB = -b.dir.dot(axis), minimum = Math.cos(DUEL.CONTACT_ANGLE);
+                    c.lostA = dotA < minimum ? c.lostA + dt : 0;
+                    c.lostB = dotB < minimum ? c.lostB + dt : 0;
+                    if ((c.lostA > 0.45) !== (c.lostB > 0.45)) loser = c.lostA > 0.45 ? c.a.by : c.b.by;
+                    c.p = clamp(c.p + clashPush(2.4 * (dotA - dotB)) * dt, 0, 1);
+                    if (c.p <= 0.035 || c.p >= 0.965) loser = c.p < 0.5 ? c.a.by : c.b.by;
+                    c.aim.copy(a.point).lerp(b.point, c.p);
+                    if (distance > 35 || this._worldHit(a.point, c.aim, 0) || this._worldHit(b.point, c.aim, 0)) c.time = 17;
+                }
+                if (loser || !a || !b || c.time > 16) {
+                    const m = { t: 'opclash', mode: 'end', id, loser };
+                    net.send(m);
+                    this.netClash(m);
+                    continue;
+                }
+                if ((c.send += dt) >= 0.09) {
+                    c.send = 0;
+                    net.send({ t: 'opclash', mode: 'step', id, at: c.aim.toArray().map(r3) });
+                }
+            } else if (!net || c.time > 18) {
+                this.netClash({ mode: 'end', id });
+                continue;
+            }
+            if (!a || !b) continue;
+            c.point.lerp(c.aim, 1 - Math.exp(-dt * 18));
+            this._setBeam(c.ma, a.point, c.point, 0.045);
+            this._setBeam(c.mb, b.point, c.point, 0.045);
+            this.glow.spawn(c.point, new V3(rnd(-1.5, 1.5), rnd(-0.2, 1.2), rnd(-1.5, 1.5)), 0xfff3b8, 0.078, 0.22);
+        }
+    }
+
     /** The trees' trunks, the rocks, the ground between a and b → {t, p, kind, n} */
-    _worldHit(a, b, rad) {
+    _worldHit(a, b, rad, hitWater = false) {
         let best = null;
+        const house = this.api.village?.()?.trace(a, b, rad);
+        if (hitWater && (a.y >= 0) !== (b.y >= 0)) {
+            const t = a.y / (a.y - b.y), point = a.clone().lerp(b, t);
+            if (this.api.waterAt(point.x, point.z)) best = { t, p: point, kind: 'water', n: new V3(0, 1, 0) };
+        }
         const steps = Math.max(1, Math.ceil(a.distanceTo(b) / 0.2));
         for (let i = 1; i <= steps; i++) {
-            const t = i / steps; _v.copy(a).lerp(b, t);
+            const t = i / steps;
+            if (best && t >= best.t) break;
+            _v.copy(a).lerp(b, t);
             const g = this.api.groundH(_v.x, _v.z);
             const solid = this.api.solid;
             if (solid ? solid(_v.x, _v.y, _v.z) >= -rad : _v.y - rad <= g) {
@@ -402,7 +576,7 @@ export class OpushkaSpells {
             const t = segSphere(a, b, rk.c, rk.r + rad);
             if (t !== null && (!best || t < best.t)) best = { t, p: a.clone().lerp(b, t), kind: 'rock', n: a.clone().sub(rk.c).normalize() };
         }
-        return best;
+        return house && (!best || house.t < best.t) ? house : best;
     }
 
     _onShield(b, p, sh) {
@@ -416,7 +590,7 @@ export class OpushkaSpells {
 
     _onWorld(b, w) {
         spellLog(`${b.name} → ${w.kind} на ${b.age.toFixed(2)} с, ${w.p.distanceTo(b.hand).toFixed(1)} м`);
-        if (b.S.kind === 'orb') { this._explode(b, w.p.addScaledVector(w.n, 0.1)); return; }
+        if (b.S.kind === 'orb') { this._explode(b, w.kind === 'water' ? w.p : w.p.addScaledVector(w.n, 0.1), 1, w.kind === 'water'); return; }
         b.done = true;
         const G = this.glow, S = b.S;
         for (let i = 0; i < 22; i++) G.spawn(w.p, _v.copy(w.n).multiplyScalar(rnd(0.5, 2.5)).add(_w.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1))), i % 2 ? S.color : S.core, rnd(0.015, 0.035), rnd(0.15, 0.4), { drag: 2, grav: 2 });
@@ -442,64 +616,100 @@ export class OpushkaSpells {
         for (let i = 0; i < 30; i++) G.spawn(p, _v.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(2), i % 2 ? S.color : S.core, rnd(0.02, 0.04), rnd(0.2, 0.45), { drag: 3 });
         this.flash(p, S.color, 1.4, 0.12);
         this.sound('hit', p, 0.8, S.color);
-        if (t.kind === 'me') this.hurtMe(b.name, b.dir, b.by);
+        const net = this.api.net();
+        if (t.kind === 'me') {
+            if (!net?.isClient) this.hurtMe(b.name, b.dir, b.by);
+        } else if (t.kind === 'friend' && net?.isHost) {
+            net.send({ t: 'opimpact', who: t.id, by: b.by, spell: b.name, dir: b.dir.toArray().map(r3) });
+        }
+        else if (t.kind === 'resident') this.api.village().hit(t.npc, S.hp || 0, b.dir, b.by, S.push || S.stun || S.freeze ? 1.0 : 0.25);
         else if (t.kind === 'pig') this._pigHit(t.i, b.name, b.dir, 1);
-        // (a friend: his own computer decides — the same charge flies there)
     }
 
     // ----------------------------------------------------------------------------------------------- the blast
-    _explode(b, p, soft = 1) {
+    _explode(b, p, soft = 1, water = p.y <= 0 && !!this.api.waterAt(p.x, p.z)) {
         b.done = true;
         spellLog(`${b.name} взрыв: ${b.age.toFixed(2)} с, ${b.p.distanceTo(b.hand).toFixed(1)} м от руки`);
         const maxi = b.name === 'BombardoMaxima', S = b.S, pw = S.power;
         const R = BLAST.R * Math.sqrt(pw);
         const G = this.glow, Sm = this.smoke;
-        // the fireball
-        const f = this.fires.find((x) => !x.visible) || this.fires[0];
-        f.visible = true; f.position.copy(p); f.userData = { t: 0, life: maxi ? 1.9 : 1.3, R: R * 0.62 * soft, y: p.y };
-        f.material.uniforms.uSeed.value = Math.random() * 100;
-        // sparks and embers
-        const n = maxi ? 700 : 320;
-        for (let i = 0; i < n; i++) {
-            _v.set(rnd(-1, 1), rnd(-0.2, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(4, maxi ? 24 : 15) * soft);
-            G.spawn(p, _v, Math.random() < 0.3 ? 0xffe0a0 : Math.random() < 0.5 ? 0xff7a1a : 0xff3a00, rnd(0.02, 0.06), rnd(0.5, maxi ? 2.6 : 1.7), { drag: 1.0, grav: 4 });
+        if (water) this.waterBurst(p, R, soft);
+        else {
+            // the fireball
+            const f = this.fires.find((x) => !x.visible) || this.fires[0];
+            f.visible = true; f.position.copy(p); f.userData = { t: 0, life: maxi ? 1.9 : 1.3, R: R * 0.62 * soft, y: p.y };
+            f.material.uniforms.uSeed.value = Math.random() * 100;
+            // sparks and embers
+            const n = maxi ? 700 : 320;
+            for (let i = 0; i < n; i++) {
+                _v.set(rnd(-1, 1), rnd(-0.2, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(4, maxi ? 24 : 15) * soft);
+                G.spawn(p, _v, Math.random() < 0.3 ? 0xffe0a0 : Math.random() < 0.5 ? 0xff7a1a : 0xff3a00, rnd(0.02, 0.06), rnd(0.5, maxi ? 2.6 : 1.7), { drag: 1.0, grav: 4 });
+            }
+            // smoke: a rising column and a ring of dust running along the ground
+            for (let i = 0; i < (maxi ? 110 : 55); i++) Sm.spawn(_w.copy(p).add(_v.set(rnd(-0.5, 0.5), rnd(0, 0.8), rnd(-0.5, 0.5)).multiplyScalar(R * 0.4)), _v.set(rnd(-0.6, 0.6), rnd(0.8, 2.2), rnd(-0.6, 0.6)), Math.random() < 0.5 ? 0x2a241f : 0x4a4038, rnd(0.7, 1.2) * Math.sqrt(pw), rnd(4, maxi ? 10 : 7), { grow: 1.0, alpha: 0.75, delay: rnd(0.15, 0.5) });
+            for (let i = 0; i < (maxi ? 40 : 20); i++) { const a = i / (maxi ? 40 : 20) * Math.PI * 2; Sm.spawn(_w.copy(p).add(_v.set(Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5)), _v.set(Math.cos(a) * rnd(5, 9), rnd(0.2, 0.6), Math.sin(a) * rnd(5, 9)).multiplyScalar(Math.sqrt(pw) * 0.7), 0x7a6a55, rnd(0.35, 0.6), rnd(1.6, 2.6), { grow: 1.2, alpha: 0.5, drag: 2.2 }); }
+            // the ground: a dent, char that glows and cools, burnt grass, clods
+            const g = this.api.groundH(p.x, p.z), onGround = p.y - g < R * 0.7;
+            if (onGround) {
+                // (the author 23.11: «слабый в плане разрушения… при взаимодействии с землёй»): a real crater — bare earth thrown out, a rim of it
+                const Rc = (maxi ? BLAST.CRATER_MAX : BLAST.CRATER) * soft, depth = (maxi ? BLAST.DEPTH_MAX : BLAST.DEPTH) * soft;
+                const k = clamp(1 - (p.y - g) / (R * 0.7), 0.3, 1); // (an orb going off above the ground digs less)
+                this.api.dent(p.x, p.z, Rc * k, depth * k, p.y);
+                this._scorch(p.x, p.z, R, pw, Rc * k);
+                this.clods.burst(p, maxi ? 160 : 80, Rc);
+                this._earthFountain(p, Rc * k, maxi);
+            }
+            this._needlesAround(p, R * 2);
+            // the trees near it: broken at the ground and thrown down away from the blast (nearer — surely, further — some; never the whole forest)
+            let felled = 0; const reachT = R * 1.35, maxT = maxi ? 9 : 4;
+            const near = this.api.trees().filter((t) => !t.fell).map((t) => ({ t, d: Math.hypot(t.x - p.x, t.z - p.z) })).filter((o) => o.d < reachT).sort((a, b) => a.d - b.d);
+            for (const { t, d } of near) {
+                if (felled >= maxT) break;
+                const k = 1 - d / reachT, h = ((t.i * 2654435761) >>> 0) / 4294967296; // (the same trees fall on every computer)
+                if (d < R * 0.6 || h < k * 1.4) { if (this.api.fell(t.i, p.x, p.z, k * soft)) felled++; }
+            }
+            this.flash(p, 0xff9a40, (maxi ? 16 : 8) * soft, maxi ? 0.45 : 0.3); this._ember = onGround ? (maxi ? 8 : 4) : 0;
+            this.sound(maxi ? 'boomMax' : 'boom', p, 1.6 * soft);
         }
-        // smoke: a rising column and a ring of dust running along the ground
-        for (let i = 0; i < (maxi ? 110 : 55); i++) Sm.spawn(_w.copy(p).add(_v.set(rnd(-0.5, 0.5), rnd(0, 0.8), rnd(-0.5, 0.5)).multiplyScalar(R * 0.4)), _v.set(rnd(-0.6, 0.6), rnd(0.8, 2.2), rnd(-0.6, 0.6)), Math.random() < 0.5 ? 0x2a241f : 0x4a4038, rnd(0.7, 1.2) * Math.sqrt(pw), rnd(4, maxi ? 10 : 7), { grow: 1.0, alpha: 0.75, delay: rnd(0.15, 0.5) });
-        for (let i = 0; i < (maxi ? 40 : 20); i++) { const a = i / (maxi ? 40 : 20) * Math.PI * 2; Sm.spawn(_w.copy(p).add(_v.set(Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5)), _v.set(Math.cos(a) * rnd(5, 9), rnd(0.2, 0.6), Math.sin(a) * rnd(5, 9)).multiplyScalar(Math.sqrt(pw) * 0.7), 0x7a6a55, rnd(0.35, 0.6), rnd(1.6, 2.6), { grow: 1.2, alpha: 0.5, drag: 2.2 }); }
-        // the ground: a dent, char that glows and cools, burnt grass, clods
-        const g = this.api.groundH(p.x, p.z), onGround = p.y - g < R * 0.7;
-        if (onGround) {
-            // (the author 23.11: «слабый в плане разрушения… при взаимодействии с землёй»): a real crater — bare earth thrown out, a rim of it
-            const Rc = (maxi ? BLAST.CRATER_MAX : BLAST.CRATER) * soft, depth = (maxi ? BLAST.DEPTH_MAX : BLAST.DEPTH) * soft;
-            const k = clamp(1 - (p.y - g) / (R * 0.7), 0.3, 1); // (an orb going off above the ground digs less)
-            this.api.dent(p.x, p.z, Rc * k, depth * k, p.y);
-            this._scorch(p.x, p.z, R, pw, Rc * k);
-            this.clods.burst(p, maxi ? 160 : 80, Rc);
-            this._earthFountain(p, Rc * k, maxi);
-        }
-        this._needlesAround(p, R * 2);
-        // the trees near it: broken at the ground and thrown down away from the blast (nearer — surely, further — some; never the whole forest)
-        let felled = 0; const reachT = R * 1.35, maxT = maxi ? 9 : 4;
-        const near = this.api.trees().filter((t) => !t.fell).map((t) => ({ t, d: Math.hypot(t.x - p.x, t.z - p.z) })).filter((o) => o.d < reachT).sort((a, b) => a.d - b.d);
-        for (const { t, d } of near) {
-            if (felled >= maxT) break;
-            const k = 1 - d / reachT, h = ((t.i * 2654435761) >>> 0) / 4294967296; // (the same trees fall on every computer)
-            if (d < R * 0.6 || h < k * 1.4) { if (this.api.fell(t.i, p.x, p.z, k * soft)) felled++; }
-        }
-        this.flash(p, 0xff9a40, (maxi ? 16 : 8) * soft, maxi ? 0.45 : 0.3); this._ember = onGround ? (maxi ? 8 : 4) : 0;
-        this.sound(maxi ? 'boomMax' : 'boom', p, 1.6 * soft);
         // who it reaches (each on his own computer; the pigs on the host's)
         const P = this.api.player();
         const dMe = _v.set(P.pos.x, P.pos.y + 0.9, P.pos.z).distanceTo(p);
         this.shake = Math.max(this.shake, clamp((maxi ? 2.4 : 1.5) * (1 - dMe / (R * 14)), 0, 2.4));
         const reach = R + 1.6;
+        const village = this.api.village?.();
+        if (village) {
+            const alarm = water ? new Set() : village.blast(p, 2.4 * pw * soft, R);
+            for (const npc of village.people) {
+                const d = npc.pos.clone().add(new V3(0, 0.9, 0)).distanceTo(p);
+                if (d < reach || alarm.has(npc.home.id)) {
+                    const force = Math.max(0, 1 - d / reach);
+                    village.hit(npc, BLAST.PEAK * pw * force * soft, npc.pos.clone().sub(p).setY(0).normalize(), b.by, force);
+                }
+            }
+        }
         if (dMe < reach && !this.me.dead) {
             const k = 1 - dMe / reach, shielded = this.shields.some((s) => s.by === this._myId() && (s.sphere || _w.copy(p).sub(s.pos).dot(s.dir) > 0));
             const dir = _w.set(P.pos.x - p.x, 0, P.pos.z - p.z).normalize();
             this.hurtMe(b.name, dir, b.by, { hp: BLAST.PEAK * pw * k * soft * (shielded ? 0.25 : 1), push: (9 + 9 * pw) * k * soft * (shielded ? 0.3 : 1), up: (5 + 2 * pw) * k * soft });
         }
         this.api.pigs.forEach((pg, i) => { const d = pg.pos.distanceTo(p); if (d < reach * 1.3) this._pigHit(i, b.name, _w.copy(pg.pos).sub(p).normalize().clone(), 1 - d / (reach * 1.3)); });
+    }
+
+    waterBurst(p, radius, strength = 1) {
+        const surface = new V3(p.x, 0.045, p.z);
+        const ring = this.foam.find((m) => !m.visible) || this.foam[0];
+        ring.visible = true; ring.position.copy(surface); ring.scale.setScalar(0.3);
+        ring.userData = { age: 0, life: 0.8 + radius * 0.22, radius: radius * 1.25 };
+        const jets = Math.ceil(radius * 20);
+        for (let i = 0; i < jets; i++) {
+            const a = Math.random() * Math.PI * 2, spread = rnd(0.5, radius * 1.3);
+            const base = _w.copy(surface).add(_u.set(Math.cos(a), 0, Math.sin(a)).multiplyScalar(rnd(0, radius * 0.16)));
+            _v.set(Math.cos(a) * spread, rnd(0.7, 2.4) * radius * strength, Math.sin(a) * spread);
+            this.smoke.spawn(base, _v, i % 3 ? 0xa2ced9 : 0xe7f3f2, rnd(0.05, 0.20) * Math.sqrt(radius),
+                rnd(0.36, 0.74) + radius * 0.07, { grav: 12, drag: 0.8, grow: 0.15, alpha: 0.78 });
+        }
+        this._ember = 0;
+        this.sound('splash', surface, Math.min(1.3, radius * 0.27));
     }
 
     _fireStep(f, dt) {
@@ -572,7 +782,7 @@ export class OpushkaSpells {
         let hp = o ? o.hp : S.hp || 0, push = o ? o.push : S.push || 0, up = o ? o.up : 0;
         if (S.stun) { me.stun = Math.max(me.stun, S.stun); this.api.hud('💫 Вас оглушили'); }
         if (S.freeze) { me.frozen = S.freeze; me.burn = S.burn; this.api.hud('❄️ Вы во льду'); this.sound('freeze', P.pos, 0.8); }
-        if (S.disarm && !me.wandOut) this._loseWand(dir);
+        if (S.disarm && !me.wandOut && this.api.wandHeld?.() !== false) this._loseWand(dir);
         if (name.startsWith('Jolt')) { up = 2.5 + push * 0.15; me.stun = Math.max(me.stun, 0.6); }
         if (push > 0) { P.vel.x += dir.x * push; P.vel.z += dir.z * push; P.vy = Math.max(P.vy, up); P.grounded = false; }
         if (hp > 0) this._damage(hp, by);
@@ -592,7 +802,7 @@ export class OpushkaSpells {
     }
 
     _loseWand(dir) {
-        const rig = this.api.rig(), wand = rig?.fingers?.R?.wand; if (!wand) return;
+        const rig = this.api.rig(), hand = this.api.wandHand?.() || 'R', wand = rig?.fingers?.[hand]?.wand; if (!wand) return;
         const P = this.api.player();
         wand.updateWorldMatrix(true, false);
         const w = { obj: wand, parent: wand.parent, p: new V3().setFromMatrixPosition(wand.matrixWorld), q: new THREE.Quaternion().setFromRotationMatrix(wand.matrixWorld),
@@ -600,7 +810,7 @@ export class OpushkaSpells {
         w.ws = new V3(); wand.getWorldScale(w.ws);
         this.api.scene.add(wand); wand.position.copy(w.p); wand.quaternion.copy(w.q); wand.scale.copy(w.ws);
         this.me.wandOut = w;
-        rig.fingers.R.gripSaved = rig.fingers.R.grip; rig.fingers.R.grip = null; // (the empty hand opens)
+        rig.fingers[hand].gripSaved = rig.fingers[hand].grip; rig.fingers[hand].grip = null; // (the empty hand opens)
         this.api.hud('🪄 Палочку выбили из руки — подойдите к ней');
         void P;
     }
@@ -624,7 +834,7 @@ export class OpushkaSpells {
     _takeWand() {
         const w = this.me.wandOut; if (!w) return;
         w.parent.add(w.obj); w.obj.position.copy(w.local.p); w.obj.quaternion.copy(w.local.q); w.obj.scale.copy(w.local.s);
-        const F = this.api.rig().fingers.R; F.grip = F.gripSaved; this.me.wandOut = null;
+        const F = this.api.rig().fingers[this.api.wandHand?.() || 'R']; F.grip = F.gripSaved; this.me.wandOut = null;
         this.api.hud('🪄 Палочка снова в руке');
     }
 
@@ -666,12 +876,12 @@ export class OpushkaSpells {
     }
 
     /** What my state is for the others (in my pose): fallen, frozen, the wand out, dead. */
-    stateBits() { const m = this.me; return (m.fall > 0.5 ? 1 : 0) | (m.frozen > 0 ? 2 : 0) | (m.wandOut ? 4 : 0) | (m.dead ? 8 : 0); }
+    stateBits() { const m = this.me; return (m.fall > 0.5 ? 1 : 0) | (m.frozen > 0 ? 2 : 0) | (m.wandOut ? 4 : 0) | (m.dead ? 8 : 0) | (this.api.wandHeld?.() === false && !m.wandOut ? 16 : 0) | (this.api.wandHand?.() === 'L' ? 32 : 0); }
 
     // ----------------------------------------------------------------------------------------------- the pigs (the host decides)
     _pigHit(i, name, dir, k) {
         const net = this.api.net();
-        if (net?.isClient) { net.send({ t: 'pighit', i, n: name, d: [dir.x, dir.y, dir.z].map(r3), k: r3(k) }); return; }
+        if (net?.isClient) return;
         this.pigHit(i, name, dir, k);
     }
 
@@ -718,6 +928,16 @@ export class OpushkaSpells {
                 ph += 2 * Math.PI * (tone * (1 + 0.6 * k)) / sr; d[i] = (y * 1.4 + (tone ? Math.sin(ph) * 0.35 + Math.sin(ph * 2.01) * 0.12 : 0)) * env; }
         });
         this.snd = {
+            splash: mk(1.65, (samples, n) => {
+                let low = 0;
+                for (let i = 0; i < n; i++) {
+                    const t = i / sr;
+                    low += (noise() - low) * 0.08;
+                    const bubbles = Math.sin(2 * Math.PI * (76 + 180 * Math.exp(-t * 5)) * t);
+                    samples[i] = (low * 2 + noise() * 0.21) * (1 - Math.exp(-t * 70)) * Math.exp(-t * 3.4)
+                        + bubbles * (0.4 + 0.6 * Math.sin(t * 53) ** 2) * Math.exp(-t * 11) * 0.18;
+                }
+            }),
             boom: boom(3.2, 46, 0.6), boomMax: boom(5, 34, 0.75),
             cast: whoosh(0.7, 300, 2400, 0), castMax: whoosh(1.1, 120, 1800, 70),
             bolt: whoosh(0.45, 900, 4200, 880), jolt: mk(0.4, (d, n) => { let y = 0; for (let i = 0; i < n; i++) { const t = i / sr; y += (noise() - y) * 0.08; d[i] = (y * 2 + Math.sin(2 * Math.PI * 90 * t) * Math.exp(-t * 18)) * Math.exp(-t * 9); } }),
@@ -848,7 +1068,7 @@ function shieldMaterial() {
 
 /** A pool of glowing (additive) or smoky (soft) points: one draw each, nothing made while it runs. */
 class Sparks {
-    constructor(scene, n, add, groundH = null) {
+    constructor(scene, n, add, groundH = null, sun = null) {
         this.n = n; this.i = 0; this.add = add; this.groundH = groundH;
         const g = new THREE.BufferGeometry();
         this.pos = new Float32Array(n * 3); this.col = new Float32Array(n * 4); this.sz = new Float32Array(n);
@@ -858,13 +1078,24 @@ class Sparks {
         this.vel = new Float32Array(n * 3); this.life = new Float32Array(n); this.max = new Float32Array(n); this.o = new Float32Array(n * 6); this.base = new Float32Array(n * 4);
         for (let i = 0; i < n; i++) this.pos[i * 3 + 1] = -9999;
         const m = new THREE.ShaderMaterial({
-            uniforms: { uScale: { value: 600 } }, transparent: true, depthWrite: false, toneMapped: !add, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending,
-            vertexShader: `attribute vec4 aCol;attribute float aSize;uniform float uScale;varying vec4 vC;varying float vS;void main(){vC=aCol;vec4 mv=modelViewMatrix*vec4(position,1.);vS=fract(position.x*13.1+position.z*7.7);
+            uniforms: { uScale: { value: 600 }, uSun: sun || { value: new V3(0, 1, 0) } }, transparent: true, depthWrite: false, toneMapped: !add, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending,
+            vertexShader: `attribute vec4 aCol;attribute float aSize;uniform float uScale;varying vec4 vC;varying float vS,vD;varying vec3 vTo;void main(){vC=aCol;vec4 mv=modelViewMatrix*vec4(position,1.);vTo=cameraPosition-position;vD=length(vTo);vS=fract(position.x*13.1+position.z*7.7);
               gl_PointSize=clamp(aSize*uScale/max(0.1,-mv.z),0.,256.);gl_Position=projectionMatrix*mv;}`,
             fragmentShader: add
                 ? `varying vec4 vC;void main(){vec2 p=gl_PointCoord-0.5;float d=length(p)*2.;float a=smoothstep(1.,0.,d);a*=a;gl_FragColor=vec4(vC.rgb*a*vC.a*2.2,a*vC.a);}`
-                : NOISE_GLSL + `varying vec4 vC;varying float vS;void main(){vec2 p=gl_PointCoord-0.5;float d=length(p)*2.;float n=n3(vec3(p*5.,vS*40.));float a=smoothstep(1.,0.25,d+n*0.45-0.2);
-                  float lit=0.75+0.5*(0.5-p.y)*0.6;gl_FragColor=vec4(vC.rgb*lit,a*vC.a);}`,
+                : NOISE_GLSL + `uniform vec3 uSun;varying vec4 vC;varying float vS,vD;varying vec3 vTo;
+                  void main(){
+                    vec2 p=gl_PointCoord-0.5;
+                    float n=n3(vec3(p*4.,vS*40.));
+                    float a=1.-smoothstep(.18,.99,length(p)*2.+n*.42-.18);
+                    if(a*vC.a<.008)discard;
+                    float back=pow(max(dot(normalize(-vTo),normalize(uSun)),0.),4.);
+                    float edge=(1.-a)*back;
+                    vec3 lit=vC.rgb*(.67+.45*(.5-p.y)+.36*edge)+vec3(.15,.14,.12)*edge;
+                    float haze=1.-exp(-vD*.007);
+                    lit=mix(lit,vec3(.27,.32,.37),haze*.55);
+                    gl_FragColor=vec4(lit,a*vC.a*(1.-haze*.45));
+                  }`,
         });
         this.pts = new THREE.Points(g, m); this.pts.frustumCulled = false; this.pts.renderOrder = add ? 6 : 5; scene.add(this.pts);
         this.dirty = false;

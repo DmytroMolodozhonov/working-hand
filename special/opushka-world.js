@@ -1,14 +1,12 @@
 /** The main world's geography, sampled as continuous surfaces for Opushka. */
 import { createHeightField } from '../src/world/Terrain.js';
 import { SeaIndex } from '../src/world/Sea.js';
-import { CAVES, caveMouth, hillMouth, growCaveSystem, noise3, systemIn } from '../src/world/CaveSystems.js';
-import { createRng, smoothstep } from '../src/core/math.js';
-import { hashLand } from '../src/world/Landscape.js';
+import { CAVES, CAVE_CELL, naturalCaveSystem, noise3, systemIn } from '../src/world/CaveSystems.js';
+import { smoothstep } from '../src/core/math.js';
 
 export const WATER_KIND = { NONE: 0, RIVER: 1, LAKE: 2, SEA: 3 };
 export const OPUSHKA_SEED = 1337;
 const TILE = 20;
-const CAVE_CELL = 160;
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const key = (x, z) => x + ',' + z;
 
@@ -41,16 +39,10 @@ export class OpushkaCaves {
         this.systems = [];
         this.tiles = new Map();
         const cells = Math.ceil(limit / CAVE_CELL);
+        const keep = (x, z) => Math.abs(x) > limit - 10 || Math.abs(z) > limit - 10
+            || Math.hypot(x, z) < CAVES.KEEP_SPAWN || blocked(x, z);
         for (let gz = -cells; gz < cells; gz++) for (let gx = -cells; gx < cells; gx++) {
-            const rng = createRng((seed ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709)) >>> 0);
-            const keep = (x, z) => Math.abs(x) > limit - 10 || Math.abs(z) > limit - 10 || blocked(x, z);
-            const chance = hashLand(gx, gz, seed + 101);
-            if (chance > 0.65) continue;
-            const mouth = chance < CAVES.CHANCE
-                ? caveMouth(rng, gx, gz, CAVE_CELL, height, keep)
-                : hillMouth(rng, gx, gz, CAVE_CELL, height, keep) || caveMouth(rng, gx, gz, CAVE_CELL, height, keep);
-            if (!mouth) continue;
-            const cave = growCaveSystem({ id: key(gx, gz), rng, start: mouth, H: height, blocked: keep });
+            const cave = naturalCaveSystem(gx, gz, seed, height, keep);
             if (cave) this.systems.push(cave);
         }
         for (const cave of this.systems) {

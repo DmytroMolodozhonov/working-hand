@@ -35,7 +35,7 @@ import { CaveMines } from './CaveMines.js';
 import { buryCaveBones } from './CaveBones.js';
 import { GhostCastleIndex } from './GhostCastle.js';
 import { SeaIndex, SEA, seaDepth, seabedDepth } from './Sea.js';
-import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
+import { CAVES, CAVE_CELL, growCaveSystem, naturalCaveSystem, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
 import { VampireCastleSite } from './VampireCastle.js';
@@ -686,7 +686,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
                 // shallow at the shore, deep enough to swim in the middle (up to 7 blocks)
                 const depth = Math.min(7, 1 + Math.floor(d * 1.6));
                 fn.water = depth;
-                return smoothLand ? -Math.min(7, d * 1.6) : -depth;
+                return smoothLand ? -Math.min(12, d * 3.2) : -depth;
             }
         }
         return h;
@@ -730,7 +730,6 @@ const TREE_CROWN_REACH = [[0, 0], [1, 1], [5, 0], [-5, 0], [0, 5], [0, -5], [4, 
 const TREE_VARIANTS = 12;
 const TREE_CELL = 12; // one possible tree per 12×12 m cell
 const _PALACE_RING = [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -14], [10, 10], [-10, 10], [10, -10], [-10, -10]];
-const CAVE_CELL = 90; // at most one cave per 90×90 m
 const TREE_MIN_DIST = 128; // trees closer to spawn are the original (instanced) ones
 /** Generation 5's floating islands: at most one (with its small ones) per CELL×CELL m. */
 export const ISLE = { CELL: 112, R_MIN: 6, R_MAX: 15 };
@@ -1714,24 +1713,7 @@ export class TerrainData {
             };
             s = growCaveSystem({ id: 'cvtest', test: true, rng: createRng((this.seed * 31 + 777) >>> 0), start: { x: m.x, ground: top(m.x, m.z), z: m.z, yaw: Math.PI, pitch: -0.04, open: 2 }, H: top, blocked: wet, steer: nearPalace });
         } else {
-            const h = hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101);
-            if (h < CAVES.CHANCE) {
-                const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0xca7e) >>> 0);
-                const m = caveMouth(rng, gx, gz, CAVE_CELL, top, blocked);
-                if (m) s = growCaveSystem({ id: 'cv' + gx + '_' + gz, rng, start: m, H: top, blocked });
-            } else if (h < CAVES.CHANCE + CAVES.HILL_CHANCE) {
-                // (more caves: their mouths in a hillside — the ones before stay as they were)
-                const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0x4177) >>> 0);
-                const m = hillMouth(rng, gx, gz, CAVE_CELL, top, blocked);
-                if (m) s = growCaveSystem({ id: 'cvh' + gx + '_' + gz, rng, start: m, H: top, blocked });
-            }
-            // («caves 30 % more often» — the author): a cell left without one tries again — a hillside
-            // first, else any mouth (the caves before stay as they were)
-            if (!s && hash01(gx * 11 + 5, gz * 3 + 9, this.seed + 505) < CAVES.MORE_CHANCE) {
-                const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0x6a5e) >>> 0);
-                const m = hillMouth(rng, gx, gz, CAVE_CELL, top, blocked) || caveMouth(rng, gx, gz, CAVE_CELL, top, blocked);
-                if (m) s = growCaveSystem({ id: 'cvm' + gx + '_' + gz, rng, start: m, H: top, blocked });
-            }
+            s = naturalCaveSystem(gx, gz, this.seed, top, blocked);
         }
         this._caves.set(key, s);
         return s;

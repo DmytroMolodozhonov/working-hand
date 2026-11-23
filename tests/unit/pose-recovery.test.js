@@ -102,3 +102,24 @@ test('buffered native poses do not mask loss of fresh frames', () => {
     assert.equal(svc._cameraFrameAt, 123);
     assert.equal(svc.stats.nativeRejected, 1);
 });
+
+test('a stalled browser frame callback falls back to polling without stopping capture', async () => {
+    const documentBefore = globalThis.document;
+    globalThis.document = { hidden: false };
+    try {
+        const svc = new PoseService();
+        svc.isRunning = true;
+        svc.stream = camera('live');
+        svc._cameraFrameAt = 1000;
+        svc._lastVideoTime = 1;
+        svc.videoElement = { currentTime: 2, paused: false, readyState: 2 };
+        let read = 0, pumps = 0;
+        svc._onVideoFrame = () => read++;
+        svc._pump = () => pumps++;
+        await svc._checkCapture(9000);
+        assert.equal(svc.stream.getVideoTracks()[0].readyState, 'live');
+        assert.equal(svc._timerVideo, true);
+        assert.equal(read, 1);
+        assert.equal(pumps, 1);
+    } finally { globalThis.document = documentBefore; }
+});

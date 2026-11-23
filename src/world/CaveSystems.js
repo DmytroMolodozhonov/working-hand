@@ -12,6 +12,34 @@
  * API (chests, crystals) — kx, kz, F, r (its main chamber), ex, ez (where the tunnel comes in)}.
  */
 
+import { createRng } from '../core/math.js';
+import { hashLand } from './Landscape.js';
+
+export const CAVE_CELL = 90;
+
+export function naturalCaveSystem(gx, gz, seed, H, blocked) {
+    let s = null;
+    const h = hashLand(gx * 7 + 3, gz * 13 + 5, seed + 101);
+    if (h < CAVES.CHANCE) {
+        const rng = createRng(((seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0xca7e) >>> 0);
+        const m = caveMouth(rng, gx, gz, CAVE_CELL, H, blocked);
+        if (m) s = growCaveSystem({ id: 'cv' + gx + '_' + gz, rng, start: m, H: H, blocked });
+    } else if (h < CAVES.CHANCE + CAVES.HILL_CHANCE) {
+        // (more caves: their mouths in a hillside — the ones before stay as they were)
+        const rng = createRng(((seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0x4177) >>> 0);
+        const m = hillMouth(rng, gx, gz, CAVE_CELL, H, blocked);
+        if (m) s = growCaveSystem({ id: 'cvh' + gx + '_' + gz, rng, start: m, H: H, blocked });
+    }
+    // («caves 30 % more often» — the author): a cell left without one tries again — a hillside
+    // first, else any mouth (the caves before stay as they were)
+    if (!s && hashLand(gx * 11 + 5, gz * 3 + 9, seed + 505) < CAVES.MORE_CHANCE) {
+        const rng = createRng(((seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0x6a5e) >>> 0);
+        const m = hillMouth(rng, gx, gz, CAVE_CELL, H, blocked) || caveMouth(rng, gx, gz, CAVE_CELL, H, blocked);
+        if (m) s = growCaveSystem({ id: 'cvm' + gx + '_' + gz, rng, start: m, H: H, blocked });
+    }
+    return s;
+}
+
 export const CAVES = {
     CHANCE: 0.5, // per cave cell (90 m): a system starts there (was 0.28: «caves are really rare» — the author; the old ones stay, new ones join them)
     // more caves, their mouths in the side of a hill or a mountain («caves in the hills too, half as many
