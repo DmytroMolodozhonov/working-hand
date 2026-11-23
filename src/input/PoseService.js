@@ -586,6 +586,15 @@ export class PoseService {
         const track = this.stream?.getVideoTracks()[0];
         const ended = this.native ? !this._native || this._native.readyState === EventSource.CLOSED : !track || track.readyState === 'ended';
         if (!ended && now - this._cameraFrameAt < CAMERA_SILENCE_MS) return;
+        const video = this.videoElement;
+        if (!this.native && !ended && !track.muted && video && !video.paused && video.readyState >= 2
+            && video.currentTime > (this._lastVideoTime ?? 0) + 0.01) {
+            this._captureLog('Кадры камеры идут, обратный вызов видео задержался. Переход на чтение по таймеру.');
+            this._timerVideo = true;
+            this._onVideoFrame();
+            this._pump();
+            return;
+        }
 
         this._recovering = true;
         const epoch = this._captureEpoch;
@@ -875,8 +884,8 @@ export class PoseService {
         const gen = (this._pumpGen = (this._pumpGen || 0) + 1); // one loop only, even after a camera switch
         const next = () => {
             if (!this.isRunning || gen !== this._pumpGen) return;
-            if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => { if (this.isRunning && gen === this._pumpGen) this._onVideoFrame(); next(); });
-            else requestAnimationFrame(() => { if (this.isRunning && gen === this._pumpGen) this._onVideoFrame(); next(); });
+            if (!this._timerVideo && v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => { if (this.isRunning && gen === this._pumpGen) this._onVideoFrame(); next(); });
+            else setTimeout(() => { if (this.isRunning && gen === this._pumpGen) this._onVideoFrame(); next(); }, 32);
         };
         next();
     }
@@ -884,7 +893,7 @@ export class PoseService {
     async _onVideoFrame() {
         const v = this.videoElement;
         if (!v || v.readyState < 2 || !v.videoWidth) return;
-        if (this._lastVideoTime === v.currentTime && !v.requestVideoFrameCallback) return;
+        if (this._lastVideoTime === v.currentTime) return;
         this._lastVideoTime = v.currentTime;
         this._cameraFrameAt = performance.now();
         if (this.injected || this.inFlight) return;
