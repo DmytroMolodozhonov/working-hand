@@ -63,6 +63,20 @@ test('shore sand follows the water and leaves dry land and some banks untouched'
     assert.deepEqual([...plain].sort(), [...sandy].sort());
 });
 
+test('a lake can stay entirely unsanded even next to another sandy lake', () => {
+    const size = 41, half = 40, step = 2;
+    const heights = new Float32Array(size ** 2).fill(.42), water = new Uint8Array(heights.length);
+    const sand = new Uint8Array(heights.length), banks = new Uint8Array(heights.length);
+    const index = (x, z) => (z + half) / step * size + (x + half) / step;
+    for (const x of [0, 10]) for (const z of [0, 2]) {
+        water[index(x, z)] = WATER_KIND.LAKE;
+        heights[index(x, z)] = -1;
+    }
+    markShoreSand(sand, heights, water, banks, size, half, step, () => false);
+    for (let z = -4; z <= 6; z += 2) for (let x = -4; x <= 4; x += 2) assert.equal(sand[index(x,z)], 0);
+    assert.equal(sand[index(10,-2)], SHORE_SAND);
+});
+
 test('the cave network has dry entries, underground air, solid roofs and an actual mesh', () => {
     const field = geography(() => 0.84);
     const wet = (x, z) => { field(x, z); return !!field.water; };

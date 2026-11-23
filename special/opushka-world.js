@@ -37,6 +37,27 @@ export function heightTriangle(array, size, gx, gz) {
 /** Give eligible shorelines discontinuous sandy stretches. Dry upland and the lake bed
  * are excluded, and the same mask drives both the surface material and Gather. */
 export function markShoreSand(sand, heights, water, banks, size, half, step, keepClear) {
+    const lakeSand = new Uint8Array(water.length);
+    const cells = [];
+    for (let k = 0; k < water.length; k++) {
+        if (water[k] !== WATER_KIND.LAKE || lakeSand[k]) continue;
+        const x = k % size * step - half, z = Math.floor(k / size) * step - half;
+        const key = (Math.imul(x, 73856093) ^ Math.imul(z, 19349663)) >>> 0;
+        const shore = ((key ^ (key >>> 16)) & 3) === 0 ? 2 : 1;
+        cells.length = 0;
+        cells.push(k);
+        lakeSand[k] = shore;
+        for (let i = 0; i < cells.length; i++) {
+            const node = cells[i], col = node % size, row = Math.floor(node / size);
+            for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+                if (col + dx < 0 || col + dx >= size || row + dz < 0 || row + dz >= size) continue;
+                const next = node + dz * size + dx;
+                if (water[next] !== WATER_KIND.LAKE || lakeSand[next]) continue;
+                lakeSand[next] = shore;
+                cells.push(next);
+            }
+        }
+    }
     for (let j = 2; j < size - 2; j++) for (let i = 2; i < size - 2; i++) {
         const k = j * size + i;
         if (water[k] || heights[k] < 0 || heights[k] > 2.4) continue;
@@ -46,7 +67,9 @@ export function markShoreSand(sand, heights, water, banks, size, half, step, kee
         if (patch < -.15) continue;
         let near = 0;
         for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
-            if (dx * dx + dz * dz <= 5) near |= 1 << water[k + dz * size + dx];
+            if (dx * dx + dz * dz > 5) continue;
+            const next = k + dz * size + dx, kind = water[next];
+            if (kind !== WATER_KIND.LAKE || lakeSand[next] === 1) near |= 1 << kind;
         }
         if ((banks[k] && (near & ((1 << WATER_KIND.RIVER) | (1 << WATER_KIND.SEA))))
             || ((near & (1 << WATER_KIND.LAKE)) && heights[k] <= .95 && patch > .35)) sand[k] = SHORE_SAND;
