@@ -84,6 +84,9 @@ body.touch.playing #joy{display:block}
 
 <script src="../vendor/peerjs/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"../vendor/three-r170/three.module.js","three/addons/":"../vendor/three-r170/addons/"}}</script>
+<div id="painV" style="position:fixed;inset:0;z-index:25;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(120,0,0,0) 45%,rgba(150,10,10,.55) 100%)"></div>
+<div id="spellHud" style="position:fixed;left:50%;bottom:72px;transform:translateX(-50%);z-index:30;padding:6px 14px;border-radius:8px;background:rgba(10,12,8,.55);color:#efe6cf;font:15px/1.4 Georgia,serif;pointer-events:none;opacity:0;transition:opacity .4s;max-width:calc(100vw - 32px);text-align:center"></div>
+<div id="hpBar" style="position:fixed;left:16px;bottom:16px;z-index:30;width:min(220px,40vw);height:8px;border-radius:4px;background:rgba(10,12,8,.55);overflow:hidden;pointer-events:none"><div id="hpFill" style="height:100%;width:100%;background:linear-gradient(90deg,#8e1b12,#c8402a);transition:width .25s"></div></div>
 <div id="mpHud" hidden style="position:fixed;left:16px;top:16px;z-index:30;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;border-radius:8px;background:rgba(10,12,8,.62);color:#efe6cf;font:13px/1.4 Georgia,serif;pointer-events:none"></div>
 <video id="zns-webcam" playsinline muted hidden></video><video id="zns-preview" playsinline muted hidden></video>
 <script type="module">
@@ -93,6 +96,7 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 // (the game's hands in this world — the same camera and the same arm solving as the game: special/opushka-hands.js)
 import { OpushkaNet } from './opushka-net.js';
+import { OpushkaSpells } from './opushka-spells.js';
 import { ZnsArms } from './opushka-hands.js';
 import { wandModel } from '../src/game/WandModel.js';
 const zns = new ZnsArms(); window.__znsArms = zns; // (tests and the camera check reach it here)
@@ -101,6 +105,18 @@ const mpNet = new OpushkaNet({ THREE, get scene() { return scene; }, player: () 
   animateAvatar: (r, dt, sp, P) => animateAvatar(r, dt, sp, P), get pigs() { return pigs; }, groundH: (x, z) => groundH(x, z),
   setTod: (k) => setTod(k), tod: () => todKey, hud: (t) => { const el = document.getElementById('mpHud'); if (el) { el.textContent = t; el.hidden = !t; } } });
 window.__mpNet = mpNet;
+// (the battle spells — special/opushka-spells.js: the game's words, the wand in the fist; a blast dents this world's ground)
+const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() { return camera; }, get U() { return U; }, player: () => player, rig: () => charRig, charRoot: () => charRoot,
+  get pigs() { return pigs; }, groundH: (x, z) => groundH(x, z), dent: (x, z, r, d) => dentGround(x, z, r, d), trees: () => treesNear(), rocks: () => rocksAll(),
+  net: () => (mpNet.on ? mpNet.net : null), remotes: () => mpNet.remotes, audio: () => audio.ctx, playing: () => playing, armsLive: () => zns.live(),
+  hud: (t) => spellHud(t), pain: (k) => painFlash(k), setLocked: (b) => { player.locked = b; }, nameOf: (id) => mpNet.net?.players.get(id)?.name || 'другой волшебник',
+  oink: (pg) => audio.oink && audio.oink(pg, 1.4), respawn: () => { player.pos.set(MEADOW[0] - 4 + Math.random() * 3, 0, MEADOW[1] + 14 + Math.random() * 3); player.pos.y = groundH(player.pos.x, player.pos.z); player.vel.set(0, 0, 0); player.vy = 0; } });
+window.__spells = spells; mpNet.spells = spells;
+let _hudT = 0;
+let _hpShown = -1;
+function updateHp() { const h = Math.round(spells.me.hp); if (h === _hpShown) return; _hpShown = h; const el = document.getElementById('hpFill'); if (el) el.style.width = h + '%'; }
+function spellHud(t) { const el = document.getElementById('spellHud'); if (!el) return; el.textContent = t; el.style.opacity = 1; clearTimeout(_hudT); _hudT = setTimeout(() => { el.style.opacity = 0; }, 2600); }
+function painFlash(k) { const el = document.getElementById('painV'); if (!el) return; el.style.transition = 'none'; el.style.opacity = Math.min(1, 0.35 + k); requestAnimationFrame(() => { el.style.transition = 'opacity 1.2s ease-out'; el.style.opacity = 0; }); }
 
 const $ = s => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -262,6 +278,7 @@ const U={
   uTime:{value:0}, uHM:{value:null}, uHMHalf:{value:HM_HALF}, uHMRes:{value:HM_N},
   uWind:{value:new THREE.Vector2(0.8,0.6).normalize()}, uWindStr:{value:0.5},
   uSunDirW:{value:new THREE.Vector3(0,1,0)}, uLodR:{value:Q.treeR}, uPlayer:{value:new THREE.Vector3(0,-999,0)},
+  uBlast:{value:Array.from({length:6},()=>new THREE.Vector4(0,0,0,-1e4))}, uBlastP:{value:Array.from({length:6},()=>new THREE.Vector4())},
 };
 
 const GLSL_COMMON=/* glsl */`
@@ -278,6 +295,36 @@ float vnoise3(vec3 p){vec3 i=floor(p),f=fract(p);vec3 u=f*f*(3.-2.*f);
 float fbmN(vec2 p){float s=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<4;i++){s+=a*vnoise(p);p=m*p;a*=.5;}return s/.9375;}
 float fbm3N(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise3(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s/.9375;}
 vec4 sampleHM(vec2 wxz){vec2 uv=(wxz+uHMHalf)/(2.*uHMHalf);uv=(uv*(uHMRes-1.)+.5)/uHMRes;return texture2D(uHM,uv);}
+uniform vec4 uBlast[6]; uniform vec4 uBlastP[6];
+// (23.11, the spells — opushka-spells.js: each blast or frost patch — x, z, its radius, the time it came; P: power, 1 = frost, how long it stays)
+float blastBurn(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y>0.5)continue;
+  float fade=1.-smoothstep(Q.z*0.7,Q.z,age);float d=length(p-B.xy)/B.z;float n=vnoise(p*3.1+B.xy)*0.35+vnoise(p*11.)*0.15;
+  b=max(b,(1.-smoothstep(0.55,1.05,d+n-0.25))*fade);}return b;}
+float blastDry(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z)continue;
+  float fade=1.-smoothstep(Q.z*0.7,Q.z,age);float d=length(p-B.xy)/B.z;b=max(b,(1.-smoothstep(0.9,1.8,d+vnoise(p*2.3)*0.4))*fade);}return b;}
+float blastFrost(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y<0.5)continue;
+  float fade=1.-smoothstep(Q.z*0.5,Q.z,age);float d=length(p-B.xy)/B.z;b=max(b,(1.-smoothstep(0.4,1.,d+vnoise(p*7.)*0.4))*fade*min(1.,age*4.));}return b;}
+vec2 blastPush(vec2 p){vec2 o=vec2(0.);for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>25.||Q.y>0.5)continue;
+  vec2 dp=p-B.xy;float dl=length(dp);vec2 dir=dp/max(dl,1e-3);float rf=age*38.;
+  float front=exp(-pow((dl-rf)/(1.2+age*4.),2.))*(1.-smoothstep(0.,1.6,age))*2.4*min(Q.x,2.);
+  float lay=(1.-smoothstep(B.z,B.z*3.,dl))*(1.-smoothstep(4.,25.,age))*1.1;o+=dir*(front+lay);}return o;}
+vec3 blastGlow;
+vec3 blastGround(vec2 p,vec3 alb){blastGlow=vec3(0.);for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z)continue;
+  float fade=1.-smoothstep(Q.z*0.6,Q.z,age);vec2 dp=p-B.xy;float dl=length(dp);float d=dl/B.z;
+  if(Q.y>0.5){float fr=(1.-smoothstep(0.35,1.,d+vnoise(p*7.)*0.45))*min(1.,age*4.)*(1.-smoothstep(Q.z*0.5,Q.z,age));
+    float cr=smoothstep(0.75,0.95,vnoise(p*38.));alb=mix(alb,vec3(0.78,0.86,0.92)+cr*0.12,fr*0.85);continue;}
+  float ang=atan(dp.y,dp.x);float n=vnoise(p*2.3+B.xy*1.7)*0.3+vnoise(p*9.)*0.15;
+  float rays=pow(vnoise(vec2(ang*7.+B.x,dl*0.6)),2.)*(1.-smoothstep(0.6,1.6,d));
+  float charA=1.-smoothstep(0.45,1.0,d+n-0.2);
+  float soot=max(charA,rays*0.7*(1.-smoothstep(0.9,1.9,d)));
+  float ring=(1.-smoothstep(0.9,1.7,d+n*0.6))*(1.-charA);
+  vec3 cc=vec3(0.018,0.015,0.013)*(0.7+0.6*vnoise(p*31.));float ash=smoothstep(0.78,0.86,vnoise(p*45.))*charA;cc=mix(cc,vec3(0.16,0.15,0.14),ash);
+  alb=mix(alb,alb*vec3(0.75,0.6,0.38)+vec3(0.02,0.012,0.),ring*0.8*fade);alb=mix(alb,cc,soot*fade);
+  float hot=exp(-age/2.5)*0.8+exp(-age/9.)*0.2;float crack=smoothstep(0.035,0.,abs(vnoise(p*6.+B.xy)-0.5))*charA;
+  float speck=smoothstep(0.82,0.9,vnoise(p*23.+age*0.3))*charA;blastGlow+=vec3(1.,0.32,0.06)*(crack*0.9+speck*0.6)*hot*2.5*fade*min(Q.x,2.);
+  float rf=age*38.;float wave=exp(-pow((dl-rf)/0.8,2.))*(1.-smoothstep(0.,1.,age));alb=mix(alb,vec3(0.25,0.21,0.16),wave*0.5);}
+  return alb;}
+
 float ign(vec2 fc){return fract(52.9829189*fract(dot(fc,vec2(0.06711056,0.00583715))));}
 `;
 
@@ -649,10 +696,10 @@ function buildTerrain(texF,texM){
         gAlb=mix(gAlb,hill,far);gNrm*=1.-far;
         gOcc=(1.-hm.g*0.78*(1.-far))*(1.-far*0.4);
       }`,
-    f:[['#include <map_fragment>','groundSample();diffuseColor.rgb=gAlb;'],
+    f:[['#include <map_fragment>','groundSample();gAlb=blastGround(vWP.xz,gAlb);diffuseColor.rgb=gAlb;'],['#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=blastGlow;'],
        ['#include <normal_fragment_maps>','{vec3 nw=normalize(vWN+vec3(gNrm.x,0.,gNrm.y)*0.9);normal=normalize((viewMatrix*vec4(nw,0.)).xyz);}'],
        OCC_LIGHT('gOcc')]});
-  const m=new THREE.Mesh(g,groundMat);m.receiveShadow=true;m.castShadow=true;scene.add(m);
+  const m=new THREE.Mesh(g,groundMat);m.receiveShadow=true;m.castShadow=true;scene.add(m);terrainMesh=m;
   // outer ring terrain to the mountains
   const S=20,R=4480,NN=R*2/S;const g2=new THREE.PlaneGeometry(R*2,R*2,NN,NN);g2.rotateX(-Math.PI/2);const p2=g2.attributes.position;
   for(let i=0;i<p2.count;i++){const x=p2.getX(i),z=p2.getZ(i);let h=(Math.abs(x)<=HM_HALF&&Math.abs(z)<=HM_HALF)?sampleArr(HGT,x,z):heightAnalytic(x,z);if(Math.abs(x)<639.9&&Math.abs(z)<639.9)h-=6;p2.setY(i,h);}
@@ -687,12 +734,14 @@ function makeGrassMat(){
       float keep=step(hB,dens);
       float fade=smoothstep(uFade.x,uFade.y,dist)*(1.-smoothstep(uFade.z,uFade.w,dist));
       float H=uBlade.x*mix(0.4,1.0,aRnd.x)*mix(0.55,1.55,tall)*mix(1.,0.55,forest)*keep*fade;
+      float bBurn=blastBurn(wxz),bDry=blastDry(wxz),bFrost=blastFrost(wxz);H*=mix(1.,0.1+0.12*aRnd.x,bBurn);
       float W=uBlade.y*mix(0.6,1.35,aRnd.y)*(0.6+0.4*fade)*(1.+dist*0.045);
       float ang=aRnd.z*6.2831853+hA*2.0;vec2 face=vec2(cos(ang),sin(ang));vec2 side=vec2(-face.y,face.x);
       float t=position.y;
       vec2 wp=wxz*0.028-uWind*uTime*0.16;float gust=smoothstep(0.25,0.85,vnoise(wp)*0.7+vnoise(wp*2.9)*0.3);
       float flut=sin(uTime*(1.8+aRnd.w*2.5)+hA*40.+dot(wxz,vec2(0.7,0.5)))*(0.05+0.08*gust);
       vec2 lv=face*(0.18+0.45*aRnd.w)+uWind*uWindStr*(0.15+1.15*gust)+side*flut;
+      lv+=blastPush(wxz);
       {vec2 dp=wxz-uPlayer.xz;float dl=length(dp);lv+=dp/max(dl,1e-3)*(1.-smoothstep(0.12,0.85,dl))*1.6*step(abs(uPlayer.y-hm.r),1.0);}
       float lean=min(length(lv),1.35);vec2 ld=lv/max(length(lv),1e-4);
       float bx=lean*t*t*0.85;float by=t*(1.-0.22*lean*lean*t*t);
@@ -707,7 +756,8 @@ function makeGrassMat(){
       vec3 tip=mix(vec3(0.075,0.15,0.024),vec3(0.21,0.20,0.06),smoothstep(0.5,0.95,hue));
       tip=mix(tip,vec3(0.30,0.24,0.11),step(0.94,aRnd.x)*0.85);
       tip=mix(tip,vec3(0.06,0.11,0.03),forest*0.6);
-      vGC=mix(vec3(0.022,0.04,0.01),tip,smoothstep(0.,0.85,t));vGT=t;
+      tip=mix(tip,vec3(0.21,0.15,0.06),bDry*0.75);tip=mix(tip,vec3(0.02,0.016,0.012),bBurn);tip=mix(tip,vec3(0.8,0.88,0.95),bFrost*0.9);
+      vGC=mix(vec3(0.022,0.04,0.01)*(1.-bBurn*0.6),tip,smoothstep(0.,0.85,t));vGT=t;
       vGOcc=(1.-hm.g*0.72)*mix(0.3,1.,smoothstep(0.,0.75,t));}`],
        ['#include <begin_vertex>','vec3 transformed=gPos;']],
     fpars:`varying vec3 vGC;varying float vGT;varying float vGOcc;`,
@@ -766,7 +816,7 @@ function buildFlowers(atlas){
       vec4 hm=sampleHM(wxz);float meadow=1.-smoothstep(0.1,0.5,hm.b);
       float patchN=smoothstep(0.45,0.75,vnoise(wxz*0.06+aRnd.x*0.0+vec2(floor(aRnd.z*4.)*13.)));
       float dist=distance(wxz,c);float fade=1.-smoothstep(uP*0.38,uP*0.5,dist);
-      float on=step(aRnd.w,meadow*patchN*0.95)*fade;
+      float on=step(aRnd.w,meadow*patchN*0.95)*fade*(1.-step(0.3,blastBurn(wxz)));
       float type=floor(aRnd.z*4.);float hgt=(type==1.?0.45:type==3.?0.28:0.5)*mix(0.7,1.3,aRnd.y)*on;float hs=(type==3.?0.022:0.03)*mix(0.8,1.25,aRnd.x)*on;
       vec2 wp=wxz*0.028-uWind*uTime*0.16;float gust=smoothstep(0.25,0.85,vnoise(wp)*0.7+vnoise(wp*2.9)*0.3);
       vec2 sway=uWind*uWindStr*(0.1+0.6*gust)*0.25+vec2(sin(uTime*2.1+aRnd.x*30.),cos(uTime*1.7+aRnd.y*20.))*0.02;
@@ -1014,6 +1064,7 @@ function resizePost(){
 }
 const _v=new V3();
 function renderFrame(){
+  const shk=spells.shake;let _cq=null;if(shk>0.01){_cq=camera.quaternion.clone();const t=U.uTime.value;camera.rotateX(Math.sin(t*61)*0.012*shk);camera.rotateY(Math.sin(t*47+1)*0.01*shk);camera.rotateZ(Math.sin(t*53+2)*0.008*shk);camera.updateMatrixWorld();}
   if(window.__camHook)window.__camHook(camera); // (close-up pictures for checks)
   renderer.setRenderTarget(post.rt);renderer.render(skyScene,camera);
   renderer.autoClear=false;renderer.clearDepth();renderer.render(scene,camera);renderer.autoClear=true;
@@ -1029,6 +1080,7 @@ function renderFrame(){
   const f=post.fin.uniforms;f.tScene.value=post.rt.texture;f.tDepth.value=post.rt.depthTexture;f.tBloom.value=post.bloom[0].texture;f.tRays.value=post.raysRT.texture;
   f.uProjInv.value.copy(camera.projectionMatrixInverse);f.uCamWorld.value.copy(camera.matrixWorld);f.uCamPos.value.copy(camera.position);f.uRes.value.set(post.w,post.h);
   pass(post.fin,post.ldr);post.smaa.renderToScreen=true;post.smaa.render(renderer,null,post.ldr);
+  if(_cq){camera.quaternion.copy(_cq);camera.updateMatrixWorld();}
 }
 
 /* ============================== LOD / SHADOWS ============================== */
@@ -1090,7 +1142,7 @@ function collide(p){
 const joy={x:0,y:0,id:null,lookId:null,lx:0,ly:0};
 function updatePlayer(dt){
   let fx=0,fz=0;if(keys.KeyW||keys.ArrowUp)fz+=1;if(keys.KeyS||keys.ArrowDown)fz-=1;if(keys.KeyA||keys.ArrowLeft)fx-=1;if(keys.KeyD||keys.ArrowRight)fx+=1;
-  fx+=joy.x;fz+=-joy.y;const run=keys.ShiftLeft||keys.ShiftRight||Math.hypot(joy.x,joy.y)>0.92;
+  fx+=joy.x;fz+=-joy.y;if(player.locked){fx=0;fz=0;}const run=keys.ShiftLeft||keys.ShiftRight||Math.hypot(joy.x,joy.y)>0.92;
   const len=Math.hypot(fx,fz);if(len>1){fx/=len;fz/=len;}
   player.crouch=!!(keys.ControlLeft||keys.ControlRight||keys.KeyX);const sp=player.crouch?(run?1.8:0.95):run?4.6:1.65;const fw=new V3(-Math.sin(player.yaw),0,-Math.cos(player.yaw)),rt=new V3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   const target=fw.multiplyScalar(fz*sp).addScaledVector(rt,fx*sp);
@@ -1098,7 +1150,7 @@ function updatePlayer(dt){
   player.vel.lerp(target,1-Math.exp(-dt*(player.grounded?(len>0?5:7):0.7)));
   player.pos.addScaledVector(player.vel,dt);collide(player.pos);
   const g=groundH(player.pos.x,player.pos.z);
-  if((keys.Space||joy.jump)&&player.grounded&&playing&&player.landT<0.05&&!player.jumpPrep){player.jumpPrep=1e-4;joy.jump=false;}
+  if((keys.Space||joy.jump)&&player.grounded&&playing&&!player.locked&&player.landT<0.05&&!player.jumpPrep){player.jumpPrep=1e-4;joy.jump=false;}
   if(player.jumpPrep>0){player.jumpPrep+=dt;if(player.jumpPrep>=0.14){const hs=Math.hypot(player.vel.x,player.vel.z);player.jumpPrep=0;player.airStyle=hs>2.6?'leap':'tuck';player.vy=4.5+hs*0.12;player.grounded=false;audio.step(2,true);}}
   if(!player.grounded){player.vy-=11.5*dt;player.pos.y+=player.vy*dt;
     if(player.pos.y<=g&&player.vy<0){player.justLanded=player.vy;player.landT=0.22*clamp(-player.vy/5,0.3,1);player.pos.y=g;player.grounded=true;player.vy=0;audio.step(3.5,true);}}
@@ -1134,7 +1186,7 @@ function setView(v){player.view=v;player.camInit=false;$('#viewBtn')&&($('#viewB
 
 /* ============================== CHARACTER ============================== */
 const charRoot=new THREE.Group();charRoot.visible=false;
-let charRig=null,charCustom=null;
+let charRig=null,charCustom=null;let terrainMesh=null,hmSrc=null;
 const ang=(a,b,t)=>{let d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;return a+d*t;};
 const wrapA=a=>((a+Math.PI*3)%(Math.PI*2))-Math.PI;
 
@@ -1866,6 +1918,31 @@ function updateCharacter(dt,speed){
   if(charCustom)animateCustom(charCustom,dt,speed,player);else animateMannequin(charRig,dt,speed,player);
 }
 
+
+/* ---------- the ground dented (the spells: a blast presses a hollow into the earth — opushka-spells.js) ---------- */
+/** A hollow of radius r and depth d at (x, z) with a low rim of thrown earth: the height map (feet, pigs, everything that asks groundH), the ground's
+ *  mesh (its normals too) and the texture the grass and the ground's shading read — only the few rows that changed are sent to the video card. */
+function dentGround(x,z,r,d){
+  if(!terrainMesh||Math.abs(x)>620||Math.abs(z)>620)return;
+  const R=r*1.6,i0=Math.max(1,Math.floor((x-R+HM_HALF)/HM_STEP)),i1=Math.min(HM_N-2,Math.ceil((x+R+HM_HALF)/HM_STEP));
+  const j0=Math.max(1,Math.floor((z-R+HM_HALF)/HM_STEP)),j1=Math.min(HM_N-2,Math.ceil((z+R+HM_HALF)/HM_STEP));
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const px=-HM_HALF+i*HM_STEP,pz=-HM_HALF+j*HM_STEP,q=Math.hypot(px-x,pz-z)/r;
+    let dh=q<1?-d*(1-q*q)**2:0;dh+=d*0.22*Math.exp(-(((q-1.05)/0.35)**2));HGT[j*HM_N+i]+=dh;}
+  // the mesh: its vertices on the 2 m grid of ±640 (row iy — z, column ix — x)
+  const g=terrainMesh.geometry,P=g.attributes.position,Nm=g.attributes.normal,NN=640,W=NN+1;
+  const hAt=(i,j)=>HGT[j*HM_N+i],off=(HM_HALF-640)/HM_STEP;
+  let lo=1e9,hi=-1;
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const ix=i-off,iy=j-off;if(ix<0||iy<0||ix>NN||iy>NN)continue;const v=iy*W+ix;
+    P.setY(v,hAt(i,j));const nx=-(hAt(i+1,j)-hAt(i-1,j))/(2*HM_STEP),nz=-(hAt(i,j+1)-hAt(i,j-1))/(2*HM_STEP),l=Math.hypot(nx,1,nz);Nm.setXYZ(v,nx/l,1/l,nz/l);lo=Math.min(lo,iy);hi=Math.max(hi,iy);}
+  if(hi>=lo){P.addUpdateRange(lo*W*3,(hi-lo+1)*W*3);Nm.addUpdateRange(lo*W*3,(hi-lo+1)*W*3);P.needsUpdate=true;Nm.needsUpdate=true;}
+  // the texture: the height channel of the changed nodes, only that patch
+  const half=hmSrc.image.data;for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)half[(j*HM_N+i)*4]=THREE.DataUtils.toHalfFloat(HGT[j*HM_N+i]);
+  renderer.copyTextureToTexture(hmSrc,U.uHM.value,new THREE.Box2(new THREE.Vector2(i0,j0),new THREE.Vector2(i1+1,j1+1)),new THREE.Vector2(i0,j0));
+}
+let _trF=-1;const _trees=[],_rocks=[];
+function treesNear(){if(_trF===U.uTime.value)return _trees;_trF=U.uTime.value;_trees.length=0;
+  for(const i of nearList){const tv=treeVar[TV[i]];if(!tv)continue;_trees.push({x:TX[i],z:TZ[i],y:TY[i]-0.5,r:tv.g.trunk*TS[i],h:(tv.g.H||12)*TS[i]});}return _trees;}
+function rocksAll(){if(_rocks.length!==RN){_rocks.length=0;for(let i=0;i<RN;i++)_rocks.push({c:new V3(RX[i],RY[i]+RS[i]*0.25,RZ[i]),r:RS[i]*0.85});}return _rocks;}
 /* ============================== WINGED PIGS ============================== */
 const pigs=[];let pigShared=null;
 function makeFeatherTex(){
@@ -1961,11 +2038,20 @@ function makePig(seed){
 function pickFlyTarget(pg){const a=pg.r()*Math.PI*2,d=pg.r()*55;pg.target.set(MEADOW[0]+Math.cos(a)*d,0,MEADOW[1]+Math.sin(a)*d*0.85);pg.target.y=groundH(pg.target.x,pg.target.z)+5+pg.r()*12;}
 async function buildPigs(){await buildPigShared();for(let i=0;i<8;i++){const pg=makePig(300+i);pickFlyTarget(pg);pigs.push(pg);}}
 /** A guest's pig: where the host's pig is (its place, turn and what it does), reached smoothly; → its wings' beat. */
+/** A pig a spell reached (on the host or alone): thrown, falls, lies on its side; wakes and flies off (dead — lies, then a new one comes). */
+function koPig(pg,dt){const g=groundH(pg.pos.x,pg.pos.z);pg.ko-=dt;if(pg.frozen>0)pg.frozen-=dt;
+  pg.vel.y-=9.8*dt;pg.pos.addScaledVector(pg.vel,dt);
+  if(pg.pos.y<=g){pg.pos.y=g;if(pg.vel.y<-2){pg.vel.y*=-0.25;pg.vel.x*=0.6;pg.vel.z*=0.6;}else{pg.vel.set(pg.vel.x*Math.exp(-dt*4),0,pg.vel.z*Math.exp(-dt*4));}}
+  const lying=pg.pos.y<g+0.05;pg.roll.x+=((lying?1.45:pg.roll.x+dt*4)-pg.roll.x)*(1-Math.exp(-dt*6));pg.walk=0;
+  if(pg.dead&&performance.now()-pg.deadAt>40000){pg.dead=false;pg.hp=20;pg.ko=0;pg.roll.x=0;const a=pg.r()*Math.PI*2;pg.pos.set(MEADOW[0]+Math.cos(a)*60,groundH(MEADOW[0]+Math.cos(a)*60,MEADOW[1]+Math.sin(a)*60)+18,MEADOW[1]+Math.sin(a)*60);pg.state='fly';pickFlyTarget(pg);return 1;}
+  if(pg.ko<=0&&!pg.dead){pg.ko=0;pg.frozen=0;pg.state='takeoff';pg.vel.set(Math.sin(pg.yaw)*2,3,Math.cos(pg.yaw)*2);pg.stateT=15+pg.r()*25;pg.roll.x=0;audio.oink&&audio.oink(pg,1.4);}
+  return pg.dead||pg.frozen>0?0:lying?0.15:1;}
 function netPig(pg,dt){const N=pg.net,k=1-Math.exp(-dt*6);const px=pg.pos.x,py=pg.pos.y,pz=pg.pos.z;
   pg.pos.x+=(N.x-pg.pos.x)*k;pg.pos.y+=(N.y-pg.pos.y)*k;pg.pos.z+=(N.z-pg.pos.z)*k;pg.yaw+=wrapA(N.yaw-pg.yaw)*k;
   if(dt>0)pg.vel.set((pg.pos.x-px)/dt,(pg.pos.y-py)/dt,(pg.pos.z-pz)/dt);
-  pg.state=N.st;pg.glide=lerp(pg.glide||0,N.gl||0,k);pg.pitch=lerp(pg.pitch,clamp(-pg.vel.y*0.12,-0.5,0.5),k);spr(pg.roll,0,dt,2,0.8);
-  const ground=N.st==='ground';const hv=Math.hypot(pg.vel.x,pg.vel.z);pg.walk=lerp(pg.walk,ground&&hv>0.2?1:0,1-Math.exp(-dt*5));
+  pg.state=N.st;pg.dead=!!(N.f&1);pg.frozen=N.f&2?1:0;pg.glide=lerp(pg.glide||0,N.gl||0,k);pg.pitch=lerp(pg.pitch,clamp(-pg.vel.y*0.12,-0.5,0.5),k);
+  if(N.st==='ko'){pg.roll.x+=(1.45-pg.roll.x)*k;}else spr(pg.roll,0,dt,2,0.8);
+  const ground=N.st==='ground'||N.st==='ko';const hv=Math.hypot(pg.vel.x,pg.vel.z);pg.walk=lerp(pg.walk,ground&&hv>0.2?1:0,1-Math.exp(-dt*5));
   if(ground)pg.pos.y=Math.max(pg.pos.y,groundH(pg.pos.x,pg.pos.z));
   return ground?0:1-pg.glide*0.9;}
 function updatePigs(dt){
@@ -1973,7 +2059,7 @@ function updatePigs(dt){
   for(const pg of pigs){
     const g=groundH(pg.pos.x,pg.pos.z);let dPlayer=Math.hypot(pg.pos.x-pp.x,pg.pos.z-pp.z);for(const o of mpNet.others())dPlayer=Math.min(dPlayer,Math.hypot(pg.pos.x-o.x,pg.pos.z-o.z)); // (a friend frightens a pig as I do)
     pg.stateT-=dt;let flap=0;
-    if(pg.net){flap=netPig(pg,dt);}else if(pg.state==='fly'||pg.state==='land'||pg.state==='takeoff'){
+    if(pg.ko>0&&!pg.net){flap=koPig(pg,dt);}else if(pg.net){flap=netPig(pg,dt);}else if(pg.state==='fly'||pg.state==='land'||pg.state==='takeoff'){
       if(pg.state==='takeoff'){pg.vel.y+=9*dt;if(pg.pos.y>g+3){pg.state='fly';pickFlyTarget(pg);}}
       const to=pg.target.clone().sub(pg.pos);const dist=to.length();
       if(pg.state==='fly'&&dist<4)pickFlyTarget(pg);
@@ -2060,7 +2146,7 @@ document.querySelectorAll('#qual button').forEach(b=>b.onclick=()=>{qKey=b.datas
 document.querySelectorAll('#tod button').forEach(b=>b.onclick=()=>setTod(b.dataset.v));
 function setTod(k){todKey=k;T=TOD[k];setSeg('tod',k);if(started)applyTOD();mpNet.todChanged(k);}
 function applyQuality(){U.uLodR.value=Q.treeR;dynScale=1;setupShadow();buildGrass();resizePost();post.rays.uniforms.uN.value=Q.rays;lastLod.set(1e9,0,1e9);}
-$('#go').onclick=()=>{audio.start();enterPlay();};
+$('#go').onclick=()=>{audio.start();enterPlay();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);};
 $('#viewBtn').onclick=()=>setView(player.view==='first'?'third':'first');
 $('#charFile').onchange=e=>{if(e.target.files.length)loadCustomCharacter(e.target.files);};
 function enterPlay(){playing=true;$('#overlay').classList.add('gone');document.body.classList.add('playing');if(!isTouch){try{const p=canvasEl.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}}
@@ -2086,7 +2172,7 @@ async function init(){
     prog(0.02,'Генерация мира');await nextFrame();
     await genWorld(prog);
     const half=new Uint16Array(HM_N*HM_N*4);for(let i=0;i<HM_N*HM_N;i++){half[i*4]=THREE.DataUtils.toHalfFloat(HGT[i]);half[i*4+1]=THREE.DataUtils.toHalfFloat(CAN[i]);half[i*4+2]=THREE.DataUtils.toHalfFloat(FOR[i]);half[i*4+3]=THREE.DataUtils.toHalfFloat(LUSH[i]);}
-    const hmTex=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);hmTex.minFilter=hmTex.magFilter=THREE.LinearFilter;hmTex.wrapS=hmTex.wrapT=THREE.ClampToEdgeWrapping;hmTex.needsUpdate=true;U.uHM.value=hmTex;
+    const hmTex=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);hmTex.minFilter=hmTex.magFilter=THREE.LinearFilter;hmTex.wrapS=hmTex.wrapT=THREE.ClampToEdgeWrapping;hmTex.needsUpdate=true;U.uHM.value=hmTex;hmSrc=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);
     prog(0.45,'Кора и почва');await nextFrame();
     const barks={spruce:makeBark('spruce'),pine:makeBark('pine'),birch:makeBark('birch')};await nextFrame();
     const gF=makeGround('forest');await nextFrame();const gM=makeGround('meadow');
@@ -2107,7 +2193,7 @@ async function init(){
     updatePlayer(0.016);refreshLod(camera.position);
     prog(0.95,'Компиляция шейдеров');await nextFrame();
     updateGrass(camera.position);updateTrees();updateShadow();
-    renderer.compile(scene,camera);renderFrame();
+    spells.init();renderer.compile(scene,camera);renderFrame();
     zns.start();
     mpNet.start();
     prog(1,'Готово');$('#status').textContent='Лес готов. Нажми, чтобы войти.';$('#go').disabled=false;started=true;window.__ready=true;
@@ -2122,6 +2208,7 @@ function loop(now){
   if(camera.position.distanceTo(lastLod)>8)refreshLod(camera.position);
   updatePigs(dt);
   mpNet.update(dt);
+  spells.update(dt);updateHp();
   updateGrass(camera.position);updateTrees();updateShadow();
   renderFrame();
   // audio & hud

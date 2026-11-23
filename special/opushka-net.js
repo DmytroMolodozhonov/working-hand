@@ -22,7 +22,7 @@ import { Network } from '../src/net/Network.js';
 
 const SEND_DT = 1 / 15;      // a pose: 15 times a second (each ~0.3 KB)
 const PIGS_DT = 0.2;         // the pigs: 5 times a second
-const PIG_STATES = ['ground', 'fly', 'land', 'takeoff'];
+const PIG_STATES = ['ground', 'fly', 'land', 'takeoff', 'ko'];
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const r2 = (v) => Math.round(v * 100) / 100;
 
@@ -117,6 +117,11 @@ export class OpushkaNet {
             const speed = Math.hypot(P.vel.x, P.vel.z);
             this.api.animateAvatar(R.rig, dt, speed, P);
             P.justLanded = 0;
+            R.fall = (R.fall || 0) + (((R.st & 1) || (R.st & 8) ? 1 : 0) - (R.fall || 0)) * (1 - Math.exp(-dt * 5));
+            R.rig.holder.rotation.order = 'YXZ'; R.rig.holder.rotation.x = -R.fall * Math.PI * 0.47;
+            const wand = R.rig.fingers?.R?.wand; if (wand) wand.visible = !(R.st & 4);
+            if (R.rig.fingers?.R) { if (R.st & 4) { R.rig.fingers.R.gripSaved = R.rig.fingers.R.grip || R.rig.fingers.R.gripSaved; R.rig.fingers.R.grip = null; } else if (R.rig.fingers.R.gripSaved) R.rig.fingers.R.grip = R.rig.fingers.R.gripSaved; }
+            this.spells?.friendIce(R, !!(R.st & 2));
             R.tag.position.set(P.pos.x, P.pos.y + 2.12, P.pos.z);
         }
     }
@@ -132,12 +137,12 @@ export class OpushkaNet {
         };
         const curl = rig?.fingers?.L?.cur ? Array.from(rig.fingers.L.cur, r2) : 0;
         const fl = (P.grounded ? 1 : 0) | (P.crouch ? 2 : 0) | (P.airStyle === 'leap' ? 4 : 0) | (P.view === 'third' ? 8 : 0);
-        return { t: 'p', s: [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r3(P.faceYaw), r3(P.yaw), r3(P.pitch), r2(P.vel.x), r2(P.vel.z), r2(P.vy), fl, r2(P.landT || 0)], a: [arm('L'), arm('R')], c: curl };
+        return { t: 'p', s: [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r3(P.faceYaw), r3(P.yaw), r3(P.pitch), r2(P.vel.x), r2(P.vel.z), r2(P.vy), fl, r2(P.landT || 0), this.spells?.stateBits() || 0], a: [arm('L'), arm('R')], c: curl };
     }
 
     _pigs() {
         const a = [];
-        for (const pg of this.api.pigs) a.push(r2(pg.pos.x), r2(pg.pos.y), r2(pg.pos.z), r3(pg.yaw), Math.max(0, PIG_STATES.indexOf(pg.state)), r2(pg.glide || 0));
+        for (const pg of this.api.pigs) a.push(r2(pg.pos.x), r2(pg.pos.y), r2(pg.pos.z), r3(pg.yaw), Math.max(0, PIG_STATES.indexOf(pg.state)), r2(pg.glide || 0), (pg.dead ? 1 : 0) | (pg.frozen > 0 ? 2 : 0));
         return { t: 'pigs', a };
     }
 
@@ -146,13 +151,20 @@ export class OpushkaNet {
         if (m.t === 'p' && m.from && m.from !== net.localId) { this._pose_in(m.from, m); return; }
         if (m.t === 'pigs' && net.isClient) {
             const pigs = this.api.pigs, a = m.a || [];
-            for (let i = 0; i < pigs.length && i * 6 + 5 < a.length; i++) {
-                const j = i * 6;
-                pigs[i].net = { x: a[j], y: a[j + 1], z: a[j + 2], yaw: a[j + 3], st: PIG_STATES[a[j + 4]] || 'ground', gl: a[j + 5] };
+            for (let i = 0; i < pigs.length && i * 7 + 6 < a.length; i++) {
+                const j = i * 7;
+                pigs[i].net = { x: a[j], y: a[j + 1], z: a[j + 2], yaw: a[j + 3], st: PIG_STATES[a[j + 4]] || 'ground', gl: a[j + 5], f: a[j + 6] | 0 };
             }
             return;
         }
         if (m.t === 'tod' && net.isClient && m.k) { this.api.setTod(m.k); return; }
+        // the spells: a friend's charge flies here too; a pig a guest's charge reached — the host decides; who fell to whom
+        if (m.t === 'cast' && m.from !== net.localId) { this.spells?.netCast(m); return; }
+        if (m.t === 'pighit' && net.isHost && Array.isArray(m.d)) { this.spells?.pigHit(m.i | 0, m.n, { x: +m.d[0] || 0, y: +m.d[1] || 0, z: +m.d[2] || 0 }, clamp01(+m.k)); return; }
+        if (m.t === 'died' && m.from !== net.localId) {
+            const who = this.net.players.get(m.from)?.name || 'Игрок', by = m.by === net.localId ? 'вы' : m.by ? this.net.players.get(m.by)?.name : null;
+            this._say(by ? `☠️ ${who} пал${by === 'вы' ? ' от вашего заклинания' : ' — ' + by}` : `☠️ ${who} пал`);
+        }
     }
 
     _pose_in(id, m) {
@@ -172,6 +184,7 @@ export class OpushkaNet {
         if (!R.last) R.P.pos.set(s[0], s[1], s[2]);
         T.vyWas = T.vy;
         T.x = s[0]; T.y = s[1]; T.z = s[2]; T.fy = s[3]; T.yaw = s[4]; T.pitch = s[5]; T.vx = s[6]; T.vz = s[7]; T.vy = s[8];
+        R.st = s[11] | 0; R.dead = !!(R.st & 8);
         T.g = !!(s[9] & 1); T.c = !!(s[9] & 2); T.leap = !!(s[9] & 4); T.third = !!(s[9] & 8); T.landT = s[10] || 0;
         R.last = performance.now();
         // his arms (the directions his own camera gave) and the fingers of his free hand
@@ -201,7 +214,7 @@ export class OpushkaNet {
         const R = this.remotes.get(id);
         if (!R) return;
         this.remotes.delete(id);
-        R.tag.removeFromParent(); R.tag.material.map?.dispose(); R.tag.material.dispose();
+        R.tag.removeFromParent(); R.tag.material.map?.dispose(); R.tag.material.dispose(); R.ice?.removeFromParent();
         if (R.rig) {
             R.rig.holder.removeFromParent();
             R.rig.holder.traverse((o) => { if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose(); });
@@ -210,6 +223,7 @@ export class OpushkaNet {
     }
 }
 
+function clamp01(v) { return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0; }
 function remoteArms() {
     const mk = () => ({ u: { x: 0, y: -1, z: 0 }, f: { x: 0, y: -1, z: 0 }, h: { x: 0, y: -1, z: 0 }, n: { x: 1, y: 0, z: 0 }, ok: false, hand: false, curl: null });
     return { dirs: { L: mk(), R: mk() }, solve() { /* (his own camera solved them on his computer) */ } };
