@@ -457,6 +457,14 @@ export class OpushkaSpells {
             this._earthFountain(p, Rc * k, maxi);
         }
         this._needlesAround(p, R * 2);
+        // the trees near it: broken at the ground and thrown down away from the blast (nearer — surely, further — some; never the whole forest)
+        let felled = 0; const reachT = R * 1.35, maxT = maxi ? 9 : 4;
+        const near = this.api.trees().filter((t) => !t.fell).map((t) => ({ t, d: Math.hypot(t.x - p.x, t.z - p.z) })).filter((o) => o.d < reachT).sort((a, b) => a.d - b.d);
+        for (const { t, d } of near) {
+            if (felled >= maxT) break;
+            const k = 1 - d / reachT, h = ((t.i * 2654435761) >>> 0) / 4294967296; // (the same trees fall on every computer)
+            if (d < R * 0.6 || h < k * 1.4) { if (this.api.fell(t.i, p.x, p.z, k * soft)) felled++; }
+        }
         this.flash(p, 0xff9a40, (maxi ? 16 : 8) * soft, maxi ? 0.45 : 0.3); this._ember = onGround ? (maxi ? 8 : 4) : 0;
         this.sound(maxi ? 'boomMax' : 'boom', p, 1.6 * soft);
         // who it reaches (each on his own computer; the pigs on the host's)
@@ -505,6 +513,21 @@ export class OpushkaSpells {
         const U = this.api.U, i = this._blastI++ % MAX_BLASTS;
         U.uBlast.value[i].set(p.x, p.z, r, U.uTime.value);
         U.uBlastP.value[i].set(0, 1, 40, 0); // (y = 1: frost, not fire)
+    }
+
+    /** A trunk broke at the ground: splinters of pale wood fly, the wood cracks. */
+    treeBroke(p, r, dir) {
+        for (let i = 0; i < 70; i++) this.smoke.spawn(_w.copy(p).add(_v.set(rnd(-r, r), rnd(-0.2, 0.4), rnd(-r, r))), _v.set(dir.x * rnd(1, 5) + rnd(-2, 2), rnd(1, 5), dir.z * rnd(1, 5) + rnd(-2, 2)), Math.random() < 0.6 ? 0xb99a6e : 0x6b4f33, rnd(0.02, 0.06), rnd(1, 2), { drag: 0.4, grav: 9.8, alpha: 1 });
+        this.sound('crack', p, 1.2);
+    }
+    /** A felled tree struck the ground: a long line of dust and needles along it, the thud through the feet. */
+    treeLanded(base, dir, H, first) {
+        const n = first ? 40 : 12;
+        for (let i = 0; i < n; i++) { const t = rnd(0.2, 1) * H * 0.9;
+            this.smoke.spawn(_w.set(base.x + dir.x * t + rnd(-1, 1), base.y + rnd(0, 0.8), base.z + dir.z * t + rnd(-1, 1)), _v.set(rnd(-1.5, 1.5), rnd(0.3, 1.2), rnd(-1.5, 1.5)), Math.random() < 0.5 ? 0x7a6a55 : 0x5e5040, rnd(0.6, 1.3), rnd(3, 6), { drag: 0.8, grav: -0.05, alpha: 0.45, grow: 0.5 }); }
+        if (first) { this._needles(_w.set(base.x + dir.x * H * 0.7, base.y + 1, base.z + dir.z * H * 0.7), 60);
+            const P = this.api.player(), d = Math.hypot(P.pos.x - base.x - dir.x * H * 0.5, P.pos.z - base.z - dir.z * H * 0.5); this.shake = Math.max(this.shake, clamp(1.2 - d / 25, 0, 1.2)); }
+        this.sound('thud', _w.set(base.x + dir.x * H * 0.5, base.y, base.z + dir.z * H * 0.5), first ? 1.4 : 0.5);
     }
 
     _needles(p, n) {
@@ -683,6 +706,8 @@ export class OpushkaSpells {
             block: mk(0.6, (d, n) => { for (let i = 0; i < n; i++) { const t = i / sr; d[i] = (Math.sin(2 * Math.PI * 660 * t) * 0.6 + Math.sin(2 * Math.PI * 990 * t) * 0.3 + noise() * 0.3 * Math.exp(-t * 30)) * Math.exp(-t * 6); } }),
             shield: whoosh(0.9, 400, 1400, 330),
             freeze: mk(1.2, (d, n) => { for (let i = 0; i < n; i++) { const t = i / sr; d[i] = (Math.random() < 0.02 * Math.exp(-t * 2) ? noise() : 0) * 1 + noise() * 0.08 * Math.exp(-t * 3); } lp(d, 0.6); }),
+            crack: mk(1.1, (d, n) => { for (let i = 0; i < n; i++) { const t = i / sr; d[i] = (Math.random() < 0.06 * Math.exp(-t * 3) ? noise() : 0) * (t < 0.05 ? 1.5 : 0.7) + Math.sin(2 * Math.PI * (180 + 40 * Math.sin(t * 30)) * t) * 0.25 * Math.exp(-t * 4) * (t > 0.08 ? 1 : 0); } }),
+            thud: mk(1.6, (d, n) => { let y = 0; for (let i = 0; i < n; i++) { const t = i / sr; y += (noise() - y) * 0.03; d[i] = (y * 3 + Math.sin(2 * Math.PI * (55 - 20 * t) * t) * 1.2) * Math.exp(-t * 3.5) + (Math.random() < 0.01 * Math.exp(-t * 2) ? noise() * 0.4 : 0); } }),
             shatter: mk(0.9, (d, n) => { for (let i = 0; i < n; i++) { const t = i / sr; d[i] = (Math.random() < 0.05 * Math.exp(-t * 4) ? noise() : 0) + Math.sin(2 * Math.PI * 3520 * t) * 0.1 * Math.exp(-t * 7); } }),
         };
     }
