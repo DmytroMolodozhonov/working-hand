@@ -1549,7 +1549,7 @@ $('start-btn').addEventListener('click', () => {
     if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     // («Особая графика», автор 23.11: Творческий в мире «Опушка» — отдельная страница на своём движке, руки с нашей камеры — special/opushka.html)
-    if (cfg.mode === 'creative' && !cfg.map && $('special-graphics')?.checked) { location.href = 'special/opushka.html'; return; }
+    if (cfg.mode === 'creative' && !cfg.map && $('special-graphics')?.checked) { toOpushka('auto=1'); return; }
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     startGame(cfg);
@@ -1998,7 +1998,19 @@ function goOpushka(kind, code = '') {
     if (kind === 'host') q.set('srv', (($('mp-srv-name')?.value || '').trim().slice(0, 24)) || `Сервер ${playerName()}`);
     if (mpServer.value) q.set('server', mpServer.value);
     try { net.leave(); } catch (e) { /* ignore */ }
-    location.href = 'special/opushka.html?' + q;
+    toOpushka(q.toString());
+}
+
+/**
+ * Into «Опушка» from the menu (the author 23.11: «должно сразу в мир переходить… не на весь экран включилось… управление через камеру»): the
+ * window is made full screen first (the game's app window — by its server, a tab — by the browser), the game's camera settings go along
+ * (the same networks, smoothness and sensitivity as in the game), and the page goes straight into the world — no menu of its own.
+ */
+async function toOpushka(query) {
+    try { sessionStorage.setItem('zns-opushka-cfg', JSON.stringify(readConfig())); } catch (e) { /* */ }
+    if (!window.__ZNS_NO_FULLSCREEN__) { try { await enterGameFullscreen(); } catch (e) { /* */ } }
+    try { poseService.stop?.(); } catch (e) { /* (the menu's camera, if it ran: the world's page takes it) */ }
+    location.href = 'special/opushka.html?' + query;
 }
 
 async function joinRoom(code, byCode = false) {

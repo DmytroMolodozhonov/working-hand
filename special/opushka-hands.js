@@ -13,6 +13,23 @@
  */
 import { PoseService } from '../src/input/PoseService.js';
 import { ArmSolver } from '../src/entities/ArmSolver.js';
+import { headTurnStep } from '../src/game/HeadTurn.js';
+import { lookPitch } from '../src/input/PoseInterpreter.js';
+import { setHandSmoothness } from '../src/input/HandSmooth.js';
+
+/** The game's settings for the camera (the menu's «Камера» tab, kept in this browser): smoothness, sensitivity, the pose networks. */
+export function gameCameraSettings() {
+    let saved = {}, cfg = null;
+    try { saved = JSON.parse(localStorage.getItem('zns-settings') || '{}') || {}; } catch (e) { /* */ }
+    try { cfg = JSON.parse(sessionStorage.getItem('zns-opushka-cfg') || 'null'); } catch (e) { /* */ }
+    const num = (v, d) => (Number.isFinite(+v) ? +v : d);
+    const sm = num(saved['cam-smooth'], 70), se = num(saved['cam-sens'], 100);
+    const config = cfg || {
+        modelComplexity: parseInt(saved['model-quality'] ?? 1, 10), delegate: saved['vision-delegate'] || 'auto', engine: saved['vision-engine'] || 'classic',
+        resolution: saved['camera-res'] || '640', handQuality: String(saved['hand-quality'] || 'high').includes('high') ? 'high' : 'low', leftHanded: saved.handedness === 'left',
+    };
+    return { config, smoothness: Math.max(0.05, 1 - sm / 100), sensitivity: se / 100, handSmooth: sm, drifting: saved['drift-camera'] !== false && saved['drift-camera'] !== 'false' };
+}
 
 const LIVE_MS = 600; // a pose older than this: the camera stopped — the walking swing comes back
 const SIDE = { L: 'left', R: 'right' };
@@ -23,6 +40,29 @@ export class ZnsArms {
         this.solver = new ArmSolver();
         this.dirs = { L: mk(), R: mk() }; // char-space unit directions: u (upper arm), f (forearm), h (fingers), n (palm), ok
         this._frame = -1;
+        this.set = gameCameraSettings();
+        this.head = { yaw: 0, pitch: 0 }; this.turn = {}; this.base = null; this.jumpSeen = null;
+    }
+
+    /** The body from the camera, as in the game: the head looks round (past a small dead zone it turns the body — HeadTurn), stepping on
+     *  the spot walks, faster steps run, a squat crouches, a jump jumps. → {run, k, crouch, jump} or null (no camera: the keys and the mouse). */
+    drive(P, dt) {
+        const p = this.pose;
+        if (!p || !p.hasPose || performance.now() - this.at > LIVE_MS || !p.headRotation) { this.base = null; return null; }
+        const S = this.set, a = 1 - Math.pow(1 - Math.min(1, p.isRunning ? Math.min(S.smoothness, 0.1) : S.smoothness), Math.min(0.1, dt) * 60);
+        const ty = p.headRotation.yaw * S.sensitivity, tp = lookPitch(p.headRotation.pitch * S.sensitivity);
+        if (Number.isFinite(ty)) this.head.yaw += (ty - this.head.yaw) * a;
+        if (Number.isFinite(tp)) this.head.pitch += (tp - this.head.pitch) * a;
+        if (this.base === null) { this.base = P.yaw - (this.head.yaw - (this.turn.neutral || 0)); }
+        const t = headTurnStep(this.turn, this.head.yaw, dt);
+        if (S.drifting) this.base += t.rate * dt;
+        P.walkYaw = this.base;
+        P.yaw = this.base + (this.head.yaw - (this.turn.neutral || 0));
+        P.pitch = Math.max(-1.35, Math.min(1.35, this.head.pitch));
+        const J = p.jump;
+        let jump = false;
+        if (J) { if (this.jumpSeen !== null && J.jumps !== this.jumpSeen) jump = true; this.jumpSeen = J.jumps; }
+        return { run: !!p.isRunning, k: p.runIntensity || 0, crouch: !!p.isCrouching, jump };
     }
 
     /** Start the game's camera (the same as the game uses: the camera program if it runs, else the browser). */
@@ -31,8 +71,12 @@ export class ZnsArms {
             const svc = new PoseService({ baseUrl: new URL('../', location.href).href });
             svc.onPoseUpdate = (p) => { this.pose = p; this.at = performance.now(); };
             svc.onStatus = (t) => { this.status = t; };
-            await svc.initialize('zns-webcam', 'zns-preview', {});
-            await svc.start();
+            await svc.initialize('zns-webcam', 'zns-preview', this.set.config);
+            try { setHandSmoothness(this.set.handSmooth, svc); } catch (e) { /* */ }
+            // (the camera busy or not given yet: tried again every few seconds — as the game's camera panel does)
+            for (let i = 0; ; i++) {
+                try { await svc.start(); break; } catch (e) { this.status = 'камера: ' + (e?.name === 'NotAllowedError' ? 'нет разрешения' : e?.name === 'NotReadableError' ? 'занята другой программой' : 'не найдена') + ' — пробую снова'; if (i > 40) throw e; await new Promise((r) => setTimeout(r, 3000)); }
+            }
             this.svc = svc;
             this.status = svc.native ? 'камера: программа камеры' : 'камера: в браузере';
         } catch (e) {

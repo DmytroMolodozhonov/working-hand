@@ -47,6 +47,7 @@ body.nohud #hud{display:none}
 #joy i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(233,230,220,.25)}
 body.touch.playing #joy{display:block}
 @media (prefers-reduced-motion:reduce){.bar,#overlay{transition:none}}
+.loading #overlay .row,.loading #go,.loading #overlay .keys,.loading #overlay .sub,.loading #overlay a{display:none!important}
 </style>
 
 <canvas id="c"></canvas>
@@ -170,7 +171,9 @@ const PRESETS={
   ultra: {grass:1.0, treeR:155,shadow:4096,shadowR:105,scale:1.0, dpr:2,   msaa:4,rays:72,ferns:1.0},
 };
 const params=new URLSearchParams(location.search);
-let qKey=params.get('q')||(isTouch?'low':'high'); if(!PRESETS[qKey])qKey='high';
+const AUTO=params.get('auto')==='1'||!!params.get('mp'); // (from the game's menu: straight into the world — no menu of this page, ultra, the golden hour)
+if(AUTO)document.body.classList.add('loading');
+let qKey=params.get('q')||(AUTO?'ultra':isTouch?'low':'high'); if(!PRESETS[qKey])qKey='high';
 let Q=PRESETS[qKey];
 let todKey=params.get('tod')||'golden';
 
@@ -1131,7 +1134,7 @@ function updateShadow(){
 }
 
 /* ============================== PLAYER ============================== */
-const player={pos:new V3(MEADOW[0]-4,0,MEADOW[1]+14),yaw:0,pitch:-0.02,vel:new V3(),bob:0,stepT:0,vy:0,grounded:true,landT:0,faceYaw:0,view:params.get('view')||'first',camPos:new V3(),camInit:false};
+const player={walkYaw:0,camDrive:false,pos:new V3(MEADOW[0]-4,0,MEADOW[1]+14),yaw:0,pitch:-0.02,vel:new V3(),bob:0,stepT:0,vy:0,grounded:true,landT:0,faceYaw:0,view:params.get('view')||'first',camPos:new V3(),camInit:false};
 const keys={};let pointerLocked=false,playing=false,started=false;
 function collide(p){
   for(const i of nearList){const dx=p.x-TX[i],dz=p.z-TZ[i];const tv=treeVar[TV[i]];const rr=tv.g.trunk*TS[i]*1.6+0.3;const d2=dx*dx+dz*dz;
@@ -1142,9 +1145,16 @@ function collide(p){
 const joy={x:0,y:0,id:null,lookId:null,lx:0,ly:0};
 function updatePlayer(dt){
   let fx=0,fz=0;if(keys.KeyW||keys.ArrowUp)fz+=1;if(keys.KeyS||keys.ArrowDown)fz-=1;if(keys.KeyA||keys.ArrowLeft)fx-=1;if(keys.KeyD||keys.ArrowRight)fx+=1;
-  fx+=joy.x;fz+=-joy.y;if(player.locked){fx=0;fz=0;}const run=keys.ShiftLeft||keys.ShiftRight||Math.hypot(joy.x,joy.y)>0.92;
+  fx+=joy.x;fz+=-joy.y;
+  // (the author 23.11: «управление должно быть через камеру», as in the game: the head looks and turns the body, stepping on the spot walks,
+  //  faster steps run, a squat crouches, a jump jumps — ZnsArms.drive; the keys and the mouse only while the camera does not see the player)
+  const cam=playing?zns.drive(player,dt):null;player.camDrive=!!cam;
+  if(cam){fx=0;fz=cam.run?1:0;if(cam.jump)joy.jump=true;}
+  if(player.locked){fx=0;fz=0;}const run=cam?cam.k>0.55:keys.ShiftLeft||keys.ShiftRight||Math.hypot(joy.x,joy.y)>0.92;
   const len=Math.hypot(fx,fz);if(len>1){fx/=len;fz/=len;}
-  player.crouch=!!(keys.ControlLeft||keys.ControlRight||keys.KeyX);const sp=player.crouch?(run?1.8:0.95):run?4.6:1.65;const fw=new V3(-Math.sin(player.yaw),0,-Math.cos(player.yaw)),rt=new V3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+  player.crouch=cam?cam.crouch:!!(keys.ControlLeft||keys.ControlRight||keys.KeyX);
+  const sp=player.crouch?(run?1.8:0.95):cam?1.65+(4.6-1.65)*clamp((cam.k-0.25)/0.6,0,1):run?4.6:1.65;const my=cam?player.walkYaw:player.yaw;
+  const fw=new V3(-Math.sin(my),0,-Math.cos(my)),rt=new V3(Math.cos(my),0,-Math.sin(my));
   const target=fw.multiplyScalar(fz*sp).addScaledVector(rt,fx*sp);
   if(player.landT>0.1)target.multiplyScalar(0.4);
   player.vel.lerp(target,1-Math.exp(-dt*(player.grounded?(len>0?5:7):0.7)));
@@ -1157,7 +1167,7 @@ function updatePlayer(dt){
   else{if(player.pos.y-g>0.35){player.grounded=false;player.vy=0;}else player.pos.y=dt>0?lerp(player.pos.y,g,1-Math.exp(-dt*14)):g;}
   player.landT=Math.max(0,player.landT-dt);
   const speed=Math.hypot(player.vel.x,player.vel.z);
-  if(player.view==='first')player.faceYaw=ang(player.faceYaw,player.yaw+Math.PI,1-Math.exp(-dt*12)); // (in the first person the body faces where you look: your arms are before you)
+  if(player.view==='first')player.faceYaw=ang(player.faceYaw,(player.camDrive?player.walkYaw:player.yaw)+Math.PI,1-Math.exp(-dt*12)); // (in the first person the body faces where you look: your arms are before you)
   else if(speed>0.25)player.faceYaw=ang(player.faceYaw,Math.atan2(player.vel.x,player.vel.z),1-Math.exp(-dt*(player.grounded?7:2)));
   U.uPlayer.value.copy(player.pos);
   updateCharacter(dt,speed);
@@ -2150,12 +2160,18 @@ $('#go').onclick=()=>{audio.start();enterPlay();spells.startVoice();setTimeout((
 $('#viewBtn').onclick=()=>setView(player.view==='first'?'third':'first');
 $('#charFile').onchange=e=>{if(e.target.files.length)loadCustomCharacter(e.target.files);};
 function enterPlay(){playing=true;$('#overlay').classList.add('gone');document.body.classList.add('playing');if(!isTouch){try{const p=canvasEl.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}}
+/** Straight into the world (from the game's menu): the sound may wait for the first touch of a key or the mouse (the browser's rule). */
+function autoEnter(){audio.start();enterPlay();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);
+  // (a browser tab: full screen needs a click — the first one does it; the game's own app window is full already: its server made it so)
+  let app=false;try{app=sessionStorage.getItem('zns-app-window')==='1'||document.documentElement.classList.contains('app-full');}catch(e){}
+  const wake=()=>{try{audio.ctx&&audio.ctx.state==='suspended'&&audio.ctx.resume();}catch(e){}
+    if(!app&&!document.fullscreenElement)document.documentElement.requestFullscreen?.({navigationUI:'hide'}).catch(()=>{});};addEventListener('pointerdown',wake,{once:true});addEventListener('keydown',wake,{once:true});}
 function showMenu(){playing=false;$('#overlay').classList.remove('gone');document.body.classList.remove('playing');$('#go').textContent='Вернуться';}
 document.addEventListener('pointerlockchange',()=>{pointerLocked=document.pointerLockElement===canvasEl;if(!pointerLocked&&playing&&!isTouch)showMenu();});
 canvasEl.addEventListener('click',()=>{if(playing&&!pointerLocked&&!isTouch){try{canvasEl.requestPointerLock();}catch(e){}}});
-addEventListener('mousemove',e=>{if(!pointerLocked)return;player.yaw-=e.movementX*0.0021;player.pitch=clamp(player.pitch-e.movementY*0.0021,-1.35,1.35);});
+addEventListener('mousemove',e=>{if(!pointerLocked||player.camDrive)return;player.yaw-=e.movementX*0.0021;player.pitch=clamp(player.pitch-e.movementY*0.0021,-1.35,1.35);});
 addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Digit1')setTod('golden');if(e.code==='Digit2')setTod('noon');if(e.code==='Digit3')setTod('mist');
-  if(e.code==='KeyC')document.body.classList.toggle('lb');if(e.code==='KeyV')setView(player.view==='first'?'third':'first');if(e.code==='Space'&&playing)e.preventDefault();if(e.code==='KeyH')document.body.classList.toggle('nohud');});
+  if(e.code==='KeyC')document.body.classList.toggle('lb');if(e.code==='KeyV')setView(player.view==='first'?'third':'first');if(e.code==='Space'&&playing)e.preventDefault();if(e.code==='KeyH')document.body.classList.toggle('nohud');if(e.code==='Escape'&&AUTO&&started){if(playing)showMenu();else enterPlay();}});
 addEventListener('keyup',e=>{keys[e.code]=false;});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
 // touch
@@ -2197,6 +2213,7 @@ async function init(){
     zns.start();
     mpNet.start();
     prog(1,'Готово');$('#status').textContent='Лес готов. Нажми, чтобы войти.';$('#go').disabled=false;started=true;window.__ready=true;
+    if(AUTO){document.body.classList.remove('loading');autoEnter();}
     requestAnimationFrame(loop);
   }catch(e){console.error(e);$('#status').textContent='Ошибка: '+(e&&e.message||e)+'. Обнови страницу или выбери качество ниже.';window.__err=String(e&&e.stack||e);}
 }
