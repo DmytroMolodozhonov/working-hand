@@ -3,6 +3,10 @@ import { createRng } from '../src/core/math.js';
 import { OUTFITS, fitArmor } from './opushka-appearance.js';
 import { makePiece, makeRobe } from '../src/game/ArmorTypes.js';
 import { RigidProp } from '../src/game/RigidProp.js';
+import { CASTLE_PLAN, CASTLE_HOUSES, MARKET_SITE, TOWN_PATHS, buildOpushkaCastle } from './opushka-castle.js';
+import { stallTrades, SHOPS } from '../src/game/MarketGoods.js';
+import { VillagerBrain } from '../src/game/VillagerBrain.js';
+import { SpeechBubble } from '../src/ui/SpeechBubble.js';
 
 const V3 = THREE.Vector3;
 const houses = [
@@ -10,23 +14,22 @@ const houses = [
     { dx: 3.7, dz: 3.0, width: 6.5, depth: 5.2, style: 'hall' },
     { dx: 9.5, dz: -7.1, width: 5.7, depth: 3.8, style: 'workshop' },
 ];
-const castlePlan = { dx: -1, dz: -33, width: 20, depth: 17 };
-const sites = [...houses, castlePlan];
+const sites = [...houses, CASTLE_PLAN, ...CASTLE_HOUSES, MARKET_SITE];
 export const villageClearing = (x, z) => sites.some(({dx, dz, width, depth}) => Math.abs(x - dx) < width / 2 + 2.15 && Math.abs(z - dz) < depth / 2 + 2.7);
 
-function siding(stone, seed) {
+function siding(stone, seed, castle = false) {
     const rand = createRng(seed);
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = stone ? '#5e594f' : '#493228';
+    ctx.fillStyle = castle ? '#3d3d36' : stone ? '#5e594f' : '#493228';
     ctx.fillRect(0, 0, 256, 256);
     for (let row = 0; row < 8; row++) {
         let x = stone ? -rand() * 75 : 0;
         do {
             const width = stone ? 26 + rand() * 66 : 256;
-            const grey = Math.round((stone ? 124 : 110) + rand() * 35);
-            ctx.fillStyle = stone ? `rgb(${grey},${grey - 7},${grey - 17})` : `rgb(${grey},${grey * 0.72},${grey * 0.46})`;
+            const grey = Math.round((castle ? 86 : stone ? 124 : 110) + rand() * (castle ? 54 : 35));
+            ctx.fillStyle = stone ? `rgb(${grey},${grey - 4},${grey - 12})` : `rgb(${grey},${grey * 0.72},${grey * 0.46})`;
             ctx.fillRect(x, row * 32 + 1, width - (stone ? 3 : 0), 29);
             ctx.fillStyle = '#eee4cc38';
             ctx.fillRect(x + 2, row * 32 + 2, width - 4, 2);
@@ -34,6 +37,13 @@ function siding(stone, seed) {
             ctx.fillRect(x + 1, row * 32 + 27, width - 3, 3);
             x += width;
         } while (x < 256);
+    }
+    if(castle)for(let i=0;i<320;i++){
+        const x=rand()*256,y=rand()*256,r=3+rand()*19;
+        const stain=ctx.createRadialGradient(x,y,0,x,y,r);
+        stain.addColorStop(0,i%4?'#28282037':'#63623b61');
+        stain.addColorStop(1,'#28282000');
+        ctx.fillStyle=stain;ctx.fillRect(x-r,y-r,r*2,r*2);
     }
     for (let i = 0; i < 5200; i++) {
         ctx.fillStyle = rand() > 0.5 ? '#21190d20' : '#f1e1bb20';
@@ -78,22 +88,32 @@ export class OpushkaVillage {
         this.debris = [];
         this.doors = [];
         this.people = [];
+        this.stalls = [];
+        this.bubbles = new Set();
+        this.dirtyBatches = new Set();
         this.rand = createRng(20311);
-        const wood = siding(false, 22), stones = siding(true, 92);
+        const wood = siding(false, 22), stones = siding(true, 92), rubble = siding(true, 701, true);
         const material = (color, map = null) => new THREE.MeshStandardMaterial({ color, map, bumpMap: map, bumpScale: 0.062, roughness: 0.87 });
         this.materials = { wood: material(0xf6ce9b, wood), stone: material(0xe5decb, stones), beam: material(0x4c3325, wood),
             tile: material(0xd0bab0, roofing(false)), slate: material(0xb9bebc, roofing(true)), plaster: material(0xcfc3a3),
             dark: material(0x323b34), brass: material(0xa27a45), joinery: material(0xd0c2a4, wood),
             banner: new THREE.MeshStandardMaterial({ color: 0x783240, roughness: .92, side: THREE.DoubleSide }),
+            castleRock: material(0xb9ad96, rubble), castleDressed: material(0xc8c0a9, rubble),
+            castleShadow: material(0x8d8679, rubble), marketCloth: material(0xc0a883),
             glass: new THREE.MeshPhysicalMaterial({ color: 0xe2ece5, roughness: 0.11, metalness: 0.15,
                 transparent: true, opacity: 0.19, depthWrite: false, envMapIntensity: 0.65, side: THREE.DoubleSide }) };
         this.homes = houses.map((plan, id) => this.house(plan, id));
-        this.homes.push(this.castle(castlePlan, this.homes.length));
+        this.castle=buildOpushkaCastle(this,CASTLE_PLAN,this.homes.length);
+        this.homes.push(this.castle);
+        for(const plan of CASTLE_HOUSES)this.homes.push(this.house(plan,this.homes.length));
+        this.market();
         this.debrisWorld = {
             ground: (x,z,y) => this.floor(x,y-.37,z,api.ground(x,z), .07),
             blocked: (x,y,z) => this.collisionBoxes(x,x,z,z).some(b => y > b.minY && y < b.maxY),
         };
         this.trail();
+        this.makeIndex();
+        this.batchBuildings();
     }
 
     piece(home, material, x, y, z, sx, sy, sz, opts = {}) {
@@ -113,8 +133,11 @@ export class OpushkaVillage {
         if (material === 'glass') mesh.renderOrder = 2;
         this.api.scene.add(mesh);
         const bounds = new THREE.Box3().setFromObject(mesh);
-        const part = { mesh, home, bounds, solid: opts.solid ?? true, roof: !!opts.roof, hp: material === 'stone' ? 2.1 : material === 'glass' ? 0.29 : 1.16,
-            material, broken: false, supports: opts.supports || null };
+        const masonry = material.startsWith('castle');
+        const part = { mesh, home, bounds, solid: opts.solid ?? true, roof: !!opts.roof,
+            hp: masonry ? 3.5 : material === 'stone' ? 2.1 : material === 'glass' ? 0.29 : 1.16,
+            material, broken: false, supports: opts.supports || null, precise:opts.turn||opts.angle||opts.round,
+            footprint:opts.round ? {radius:opts.round} : opts.turn ? {hx:sx/2,hz:sz/2,c:Math.cos(opts.turn),s:Math.sin(opts.turn)} : null };
         this.parts.push(part);
         return part;
     }
@@ -191,9 +214,9 @@ export class OpushkaVillage {
         return home;
     }
 
-    door(home, x, z, half, height, stone) {
+    door(home, x, z, half, height, stone, base = 0) {
         const width=half*2-.065;
-        const part=this.piece(home,'wood',x-half+.037,height*.5,z+.018,width,height-.09,.102,{vertical:true});
+        const part=this.piece(home,'wood',x-half+.037,base+height*.5,z+.018,width,height-.09,.102,{vertical:true});
         part.mesh.geometry.translate(width*.5,0,0);
         const railMat=this.materials[stone?'joinery':'beam'];
         const rails=new THREE.Mesh(new THREE.BoxGeometry(width-.10,.09,.054),railMat);
@@ -206,6 +229,7 @@ export class OpushkaVillage {
         part.mesh.add(latch);
         part.mesh.updateMatrixWorld(true);
         part.bounds.setFromObject(part.mesh);
+        part.precise=true;
         this.doors.push({part,handle:latch,angle:0,goal:0,last:-Infinity});
     }
 
@@ -309,80 +333,83 @@ export class OpushkaVillage {
         return this.piece(home,material,center.x,center.y,center.z,1,1,1,{geometry:g,roof:true,solid:false});
     }
 
-    castle(plan,id) {
-        const { dx,dz,width,depth } = plan;
-        const x=this.origin.x+dx,z=this.origin.z+dz,w=width/2,d=depth/2;
-        const y=this.api.ground(x,z+d+1) + .11;
-        const home={x,y,z,id,style:'castle',width,depth,ruined:false,door:new V3(x,y,z+d+1.15)};
-        const add=(...args)=>this.piece(home,...args);
-        const foundation=(px,pz,sx,sz)=>{
-            const base=this.api.ground(x+px,z+pz)-.24;
-            const tall=Math.max(.24,y-base);
-            return add('stone',px,-tall/2,pz,sx,tall,sz,{solid:false});
-        };
-        const masonry=(px,pz,sx,sz,levels=3)=>{
-            let support=foundation(px,pz,sx,sz);
-            for(let n=0;n<levels;n++)support=add('stone',px,(n+.5)*1.2,pz,sx,1.204,sz,{supports:[support]});
-            return support;
-        };
-        const parapet=(px,pz,sx,sz)=>{
-            const wall=masonry(px,pz,sx,sz);
-            add('joinery',px,3.68,pz,sx+.12,.22,sz+.12,{supports:[wall]});
-            const alongX=sx>sz, count=Math.max(1,Math.floor(Math.max(sx,sz)/1.02));
-            for(let n=0;n<count;n++){
-                const shift=(n+.5-count/2)*.97;
-                add('stone',px+(alongX?shift:0),4.02,pz+(alongX?0:shift),alongX?.52:sx,.62,alongX?sz:.52,{supports:[wall]});
-            }
-            return wall;
-        };
-        for(let n=-2;n<=2;n++)parapet(n*3.7,-d,3.71,.68);
-        for(const s of [-1,1]){
-            for(let n=-1;n<=1;n++)parapet(s*w,n*4.55,.72,4.56);
-            parapet(s*3.32,d,3.35,.78);
-            parapet(s*6.98,d,3.99,.78);
-            for(const back of [-1,1]){
-                const tx=s*w,tz=back*d;
-                const tower=masonry(tx,tz,3.0,3.02,back>0?5:4);
-                const crown=back>0?6:4.8,m=crown+.16;
-                add('joinery',tx,crown-.14,tz,3.31,.28,3.31,{supports:[tower]});
-                const xx=tx,zz=tz,sz=1.85,top=[xx,m+2.1,zz];
-                for(let i=0;i<4;i++){
-                    const angles=[-Math.PI*.75,-Math.PI*.25,Math.PI*.25,Math.PI*.75];
-                    const pt=a=>[xx+Math.cos(a)*sz*1.42,m,zz+Math.sin(a)*sz*1.42];
-                    this.roofFace(home,'slate',[pt(angles[i]),pt(angles[(i+1)%4]),top]).supports=[tower];
-                }
-                if(back>0){
-                    add('banner',tx,crown-1.8,tz+1.56,.78,1.7,.024,{solid:false,supports:[tower]});
-                    add('brass',tx,crown-.97,tz+1.61,1.0,.07,.09,{solid:false,supports:[tower]});
-                }
-            }
-        }
-        const a=add('stone',-1.68,1.8,d,.62,3.6,.84), b=add('stone',1.68,1.8,d,.62,3.6,.84);
-        add('stone',0,3.52,d,2.83,.67,.86,{supports:[a,b]});
-        this.door(home,0,d,1.35,3.18,true);
-        for(let i=0;i<3;i++)add('stone',0,.06-i*.12,d+.45+i*.40,3.02,.24,.44,{solid:false});
-        const hallZ=-3.65;
-        const back=masonry(0,hallZ-2.32,7.4,.44);
-        const east=masonry(3.7,hallZ,.43,4.66),west=masonry(-3.7,hallZ,.43,4.66);
-        const front=[-1,1].map(s=>masonry(s*2.65,hallZ+2.32,2.1,.43));
-        const frontTop=add('stone',0,3.3,hallZ+2.32,3.22,.6,.43,{supports:front});
-        const hallSupports=[back,east,west,frontTop];
-        this.roofFace(home,'slate',[[-4.03,3.59,hallZ-2.6],[-4.03,3.59,hallZ+2.6],[0,5.07,hallZ+2.6],[0,5.07,hallZ-2.6]]).supports=hallSupports;
-        this.roofFace(home,'slate',[[0,5.07,hallZ-2.6],[0,5.07,hallZ+2.6],[4.03,3.59,hallZ+2.6],[4.03,3.59,hallZ-2.6]]).supports=hallSupports;
-        add('stone',0,.15,hallZ,7.22,.3,4.5,{solid:false});
-        add('banner',0,.313,hallZ+.4,1.42,.02,3.7,{solid:false});
-        add('stone',0,.39,hallZ-1.51,2.6,.26,1.2,{solid:false});
-        add('joinery',0,.85,hallZ-1.55,.84,.45,.76);
-        add('beam',0,1.28,hallZ-1.92,.82,1.12,.11);
-        add('brass',0,1.87,hallZ-1.92,.91,.095,.14);
-        return home;
-    }
-
     nearSite(loX,hiX,loZ,hiZ) {
         return sites.some(({dx,dz,width,depth})=>{
             const x=this.origin.x+dx,z=this.origin.z+dz,rx=width/2+3,rz=depth/2+3;
             return hiX>=x-rx&&loX<=x+rx&&hiZ>=z-rz&&loZ<=z+rz;
         });
+    }
+
+    makeIndex() {
+        this.cells=new Map();
+        for(const part of this.parts){
+            if(this.doors.some(d=>d.part===part))continue;
+            const {min,max}=part.bounds;
+            for(let z=Math.floor(min.z/5);z<=Math.floor(max.z/5);z++)for(let x=Math.floor(min.x/5);x<=Math.floor(max.x/5);x++){
+                const key=z*4096+x;let list=this.cells.get(key);
+                if(!list)this.cells.set(key,list=[]);
+                list.push(part);
+            }
+        }
+    }
+
+    batchBuildings() {
+        if(!this.api.mergeGeometries)return;
+        const batches=new Map();
+        for(const part of this.parts){
+            const {mesh}=part;
+            if(mesh.children.length||mesh.material.transparent)continue;
+            const {x,z}=mesh.position,g=mesh.geometry;
+            const key=[part.material,mesh.castShadow,Math.floor(x/15),Math.floor(z/15),!!g.index,Object.keys(g.attributes).join(',')].join(':');
+            const batch=batches.get(key)||{parts:[],combined:null};
+            batch.parts.push(part);
+            batches.set(key,batch);
+        }
+        for(const batch of batches.values()){
+            if(batch.parts.length<2)continue;
+            for(const part of batch.parts){
+                part.batch=batch;
+                part.batchGeometry=part.mesh.geometry.clone().applyMatrix4(part.mesh.matrixWorld);
+                part.mesh.removeFromParent();
+            }
+            this.rebuildBatch(batch);
+        }
+    }
+
+    rebuildBatch(batch) {
+        const live=batch.parts.filter(p=>!p.broken);
+        if(batch.combined){
+            batch.combined.removeFromParent();
+            batch.combined.geometry.dispose();
+            batch.combined=null;
+        }
+        if(!live.length)return;
+        const model=live[0].mesh,geometry=this.api.mergeGeometries(live.map(p=>p.batchGeometry));
+        if(!geometry){
+            for(const part of live){part.batch=null;part.batchGeometry.dispose();part.batchGeometry=null;this.api.scene.add(part.mesh);}
+            return;
+        }
+        const combined=batch.combined=new THREE.Mesh(geometry,model.material);
+        combined.castShadow=model.castShadow;
+        combined.receiveShadow=model.receiveShadow;
+        this.api.scene.add(combined);
+    }
+
+    candidates(loX,hiX,loZ,hiZ) {
+        const found=new Set();
+        for(let z=Math.floor(loZ/5);z<=Math.floor(hiZ/5);z++)for(let x=Math.floor(loX/5);x<=Math.floor(hiX/5);x++){
+            for(const part of this.cells.get(z*4096+x)||[])found.add(part);
+        }
+        for(const {part} of this.doors)if(part.bounds.max.x>=loX&&part.bounds.min.x<=hiX&&part.bounds.max.z>=loZ&&part.bounds.min.z<=hiZ)found.add(part);
+        return found;
+    }
+
+    inFootprint(part,x,z,margin) {
+        const f=part.footprint;
+        if(!f)return true;
+        const dx=x-part.mesh.position.x,dz=z-part.mesh.position.z;
+        if(f.radius)return dx*dx+dz*dz<(f.radius+margin)**2;
+        return Math.abs(dx*f.c-dz*f.s)<f.hx+margin&&Math.abs(dx*f.s+dz*f.c)<f.hz+margin;
     }
 
     gable(home, w, d, h) {
@@ -459,32 +486,134 @@ export class OpushkaVillage {
     }
 
     trail() {
-        const near = this.api.spawn;
-        const end = this.homes[1].door;
-        const geometry = new THREE.PlaneGeometry(1.42, 1, 1, 1);
-        geometry.rotateX(-Math.PI / 2);
-        const positions = [], indices = [], tint = [];
-        for (let i = 0; i <= 49; i++) {
-            const t = i / 49, x = near.x + (end.x - near.x) * t + Math.sin(t * Math.PI) * 2.6;
-            const z = near.z + (end.z - near.z) * t;
-            for (const s of [-1, 1]) {
-                const vx = x + s * (0.55 + this.rand() * 0.14);
-                positions.push(vx, this.api.ground(vx, z) + 0.025, z);
-                const n = 0.30 + this.rand() * 0.075;
-                tint.push(n, n * 0.78, n * 0.54);
+        const start = this.api.spawn, end = this.homes[1].door;
+        this.path([start,start.clone().lerp(end,.5).add(new V3(1.5,0,0)),end],1.35);
+        for(const {wide,points} of TOWN_PATHS){
+            this.path(points.map(([x,z])=>new V3(this.origin.x+x,0,this.origin.z+z)),wide);
+        }
+    }
+
+    path(points, width) {
+        const route=new THREE.CatmullRomCurve3(points),length=route.getLength(),steps=Math.ceil(length/.48);
+        const positions=[],indices=[],colors=[];
+        for(let i=0;i<=steps;i++){
+            const t=i/steps,p=route.getPointAt(t),d=route.getTangentAt(t);
+            const w=width*(.36+.10*Math.sin(t*9.1)+this.rand()*.1);
+            for(const side of [-1,1]){
+                const x=p.x+d.z*w*side,z=p.z-d.x*w*side;
+                positions.push(x,this.api.ground(x,z)+.034,z);
+                const tint=.135+this.rand()*.038+(width>1.8?.015:0);
+                colors.push(tint,tint*.73,tint*.53);
             }
-            if (i) {
-                const a = i * 2 - 2;
-                indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+            if(i){const a=i*2-2;indices.push(a,a+1,a+2,a+2,a+1,a+3);}
+        }
+        const g=new THREE.BufferGeometry();
+        g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+        g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.setIndex(indices);g.computeVertexNormals();
+        this.pathMaterial ||= new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.98});
+        const mesh=new THREE.Mesh(g,this.pathMaterial);mesh.receiveShadow=true;this.api.scene.add(mesh);
+    }
+
+    market() {
+        const {dx,dz,width,depth}=MARKET_SITE,x=this.origin.x+dx,z=this.origin.z+dz;
+        const home={id:this.homes.length,x,z,y:0,width,depth,style:'market',door:new V3(x,this.api.ground(x,z),z+3)};
+        this.homes.push(home);
+        const trades=stallTrades('opushka-castle',3);
+        const add=(...args)=>this.piece(home,...args);
+        for(const [i,trade] of trades.entries()){
+            const px=-6.2+i*6.3,pz=.45+Math.sin(i*2.2)*1.4,base=this.api.ground(x+px,z+pz);
+            const post=(a,b)=>add('beam',px+a,base+1.12,pz+b,.13,2.35,.14);
+            const posts=[post(-1.35,-.95),post(1.35,-.95),post(-1.35,1.03),post(1.35,1.03)];
+            const counter=add(i===1?'stone':'wood',px,base+.76,pz+.45,2.42,.32,.87);
+            add('beam',px,base+.31,pz+.45,2.05,.69,.68,{supports:[counter]});
+            const awning=i%2?'marketCloth':'banner';
+            add(awning,px,base+2.4,pz-.04,3.14,.07,2.50,{pitch:.12-i*.10,solid:false,roof:true,supports:posts});
+            add(awning,px,base+2.29,pz+1.19,3.13,.21,.045,{solid:false,supports:posts});
+            add('wood',px+1.66,base+.34,pz-.61,.51,.69,.57);
+            this.stalls.push({home,trade,counter,top:counter.bounds.max.y,x:x+px,z:z+pz+.45});
+        }
+        const wellX=-11.2,wellZ=2.9,base=this.api.ground(x+wellX,z+wellZ);
+        const ring=new THREE.CylinderGeometry(.98,.98,.68,13,1,true);
+        ring.scale(1,1,.94);
+        add('stone',wellX,base+.33,wellZ,2,.68,2,{geometry:ring,round:.98});
+        add('dark',wellX,base+.09,wellZ,1.64,.07,1.55,{geometry:new THREE.CylinderGeometry(.84,.84,.07,13)});
+        add('beam',wellX-.62,base+1.22,wellZ,.13,2.10,.16);
+        add('beam',wellX+.62,base+1.22,wellZ,.13,2.10,.16);
+        add('beam',wellX,base+1.78,wellZ,1.45,.18,.18);
+        add('brass',wellX+.23,base+1.09,wellZ,.027,1.23,.027,{solid:false});
+        add('wood',wellX+.23,base+.57,wellZ,.32,.36,.32,{geometry:new THREE.CylinderGeometry(.19,.14,.36,10)});
+        for(const [n,kind] of ['smith','tavern'].entries()){
+            const house=this.homes[n===0?5:6];
+            const ax=house.x-x-1.8,az=house.door.z-z+.85,h=this.api.ground(x+ax,z+az);
+            const counter=add('wood',ax,h+.72,az,2.10,.31,.72);
+            add('beam',ax,h+.31,az,1.86,.66,.54,{supports:[counter]});
+            this.stalls.push({home:house,trade:SHOPS[kind],counter,top:counter.bounds.max.y,x:x+ax,z:z+az});
+        }
+        const cottage=this.homes[4];
+        const px=cottage.x-x-3.25,pz=cottage.z-z+3.5,soil=this.api.ground(x+px,z+pz);
+        for(let row=-1;row<=1;row++){
+            add('dark',px+row*.49,soil+.035,pz,.33,.105,2.66,{solid:false,turn:.28});
+            for(let i=0;i<5;i++){
+                const g=new THREE.IcosahedronGeometry(.16,1);g.scale(1,.66,1);
+                add('marketCloth',px+row*.49,soil+.13,pz+(i-2)*.45,.31,.22,.31,{geometry:g,solid:false});
             }
         }
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(tint, 3));
-        geometry.setIndex(indices);
-        geometry.computeVertexNormals();
-        const path = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 1 }));
-        path.receiveShadow = true;
-        this.api.scene.add(path);
+        add('wood',px-.95,soil+.34,pz,.13,.71,3.13,{solid:false,turn:.24});
+    }
+
+    stock(inventory) {
+        this.inventory=inventory;
+        for(let counter=0;counter<this.stalls.length;counter++){
+            const stall=this.stalls[counter];
+            stall.goods=stall.trade.goods.map((good,index)=>{
+                const uid='castle-market:'+counter+':'+index,position=new V3(stall.x+(index-1)*.65,stall.top+.13,stall.z);
+                inventory.placeLoose({...good,uid},position,0,()=>{
+                    if(stall.counter.broken)return false;
+                    this.api.notify?.(good.price+' монет · положите мешочек на прилавок рядом с товаром');
+                    return false;
+                });
+                return {good,uid,position,sold:false};
+            });
+        }
+        inventory.storeItem({kind:'coins',count:80});
+    }
+
+    pay(item,p) {
+        if(item.kind!=='coins')return false;
+        const stall=this.stalls.find(s=>!s.counter.broken&&Math.abs(p.x-s.x)<1.27&&Math.abs(p.z-s.z)<.56&&Math.abs(p.y-s.top)<.46);
+        if(!stall)return false;
+        const offer=stall.goods?.filter(o=>!o.sold).sort((a,b)=>Math.abs(a.position.x-p.x)-Math.abs(b.position.x-p.x))[0];
+        if(!offer){this.api.notify?.('На прилавке всё продано');return false;}
+        const {good,uid,position}=offer;
+        if(item.count<good.price){this.api.notify?.('Нужно '+good.price+' монет');return false;}
+        item.count-=good.price;
+        offer.sold=true;
+        if(stall.seller)stall.seller.brain.memory.trades++;
+        this.inventory.removeLoose(uid);
+        const {price,...paid}=good;
+        this.inventory.placeLoose(paid,position.clone().add(new V3(0,0,.33)),0);
+        if(item.count)this.inventory.placeLoose(item,p.clone().setY(stall.top+.12).add(new V3(0,0,.16)),0);
+        this.api.notify?.('Куплено за '+price+' монет');
+        return true;
+    }
+
+    hear(text) {
+        const eye=this.api.player().pos.clone().add(new V3(0,1.45,0));
+        const last=this.talkTo;
+        const person=this.people.filter(p=>!p.dead&&!p.rig.limp&&p.pos.distanceToSquared(eye)<4.7**2).sort((a,b)=>
+            a.pos.distanceToSquared(eye)-b.pos.distanceToSquared(eye)||(a===last?-1:0))[0];
+        if(!person)return;
+        const answer=person.brain.hear(text,{now:performance.now(),selfId:'me',danger:person.alert>0});
+        if(answer.action==='follow')person.follow=true;
+        else if(answer.action==='stop_follow')person.follow=false;
+        if(!answer.reply)return;
+        this.talkTo=person;
+        if(!person.bubble){
+            person.bubble=new SpeechBubble({offsetY:.14});
+            this.api.scene.add(person.bubble.sprite);
+        }
+        this.bubbles.add(person);
+        person.bubble.show(answer.reply,{name:person.name,seconds:Math.min(9,3.2+answer.reply.length*.035)});
     }
 
     trace(a, b, radius) {
@@ -494,10 +623,10 @@ export class OpushkaVillage {
         if (len < 0.0001) return result;
         const ray = new THREE.Ray(a, delta.divideScalar(len));
         const box = new THREE.Box3(), point = new V3();
-        for (const part of this.parts) {
+        for (const part of this.candidates(Math.min(a.x,b.x)-radius,Math.max(a.x,b.x)+radius,Math.min(a.z,b.z)-radius,Math.max(a.z,b.z)+radius)) {
             if (part.broken) continue;
             const hit = ray.intersectBox(box.copy(part.bounds).expandByScalar(radius), point);
-            if (hit && part.roof) {
+            if (hit && (part.roof || part.precise)) {
                 const caster = new THREE.Raycaster(a, ray.direction, 0, len);
                 const surface = caster.intersectObject(part.mesh, false)[0];
                 if (!surface) continue;
@@ -513,11 +642,11 @@ export class OpushkaVillage {
 
     solidAt(x, y, z, radius = 0.24) {
         if (!this.nearSite(x-radius,x+radius,z-radius,z+radius)) return false;
-        for (const part of this.parts) {
+        for (const part of this.candidates(x-radius,x+radius,z-radius,z+radius)) {
             if (part.broken || !part.solid) continue;
             const { min, max } = part.bounds;
             if (x + radius > min.x && x - radius < max.x && z + radius > min.z && z - radius < max.z
-                && y + 1.6 > min.y && y + 0.11 < max.y) return true;
+                && y + 1.6 > min.y && y + 0.11 < max.y && this.inFootprint(part,x,z,radius)) return true;
         }
         return false;
     }
@@ -525,10 +654,11 @@ export class OpushkaVillage {
     collisionBoxes(loX, hiX, loZ, hiZ) {
         if (!this.nearSite(loX,hiX,loZ,hiZ)) return [];
         const result = [];
-        for (const part of this.parts) {
+        for (const part of this.candidates(loX,hiX,loZ,hiZ)) {
             if (part.broken || !part.solid || part.roof) continue;
             const { min, max } = part.bounds;
             if (hiX < min.x || loX > max.x || hiZ < min.z || loZ > max.z) continue;
+            if(!this.inFootprint(part,(loX+hiX)*.5,(loZ+hiZ)*.5,Math.max(hiX-loX,hiZ-loZ)*.5))continue;
             result.push({ minX: min.x, minY: min.y, minZ: min.z, maxX: max.x, maxY: max.y, maxZ: max.z });
         }
         return result;
@@ -536,17 +666,17 @@ export class OpushkaVillage {
 
     floor(x, y, z, base, reach = .38) {
         if (!this.nearSite(x,x,z,z)) return base;
-        for (const part of this.parts) {
+        for (const part of this.candidates(x,x,z,z)) {
             if (part.broken || part.roof) continue;
             const { min, max } = part.bounds, top = max.y;
-            if (top <= y + reach && top > base && x >= min.x && x <= max.x && z >= min.z && z <= max.z) base = top;
+            if (top <= y + reach && top > base && x >= min.x && x <= max.x && z >= min.z && z <= max.z&&this.inFootprint(part,x,z,0)) base = top;
         }
         return base;
     }
 
     blast(point, force, radius) {
         const alarm = new Set();
-        for (const part of this.parts) {
+        for (const part of this.candidates(point.x-radius,point.x+radius,point.z-radius,point.z+radius)) {
             if (part.broken) continue;
             const distance = part.bounds.distanceToPoint(point);
             if (distance >= radius) continue;
@@ -568,11 +698,21 @@ export class OpushkaVillage {
         for (const house of this.homes) {
             if (alarm.has(house.id)) house.ruined = !this.parts.some(part => part.home === house && part.roof && !part.broken);
         }
+        for(const batch of this.dirtyBatches)this.rebuildBatch(batch);
+        this.dirtyBatches.clear();
         return alarm;
     }
 
     breakPiece(part, point, unsupported = false) {
         part.broken = true;
+        if(part.batch){
+            this.dirtyBatches.add(part.batch);
+            part.batchGeometry.dispose();
+            part.batchGeometry=null;
+            this.api.scene.add(part.mesh);
+        }
+        const stall=this.stalls.find(s=>s.counter===part);
+        for(const offer of stall?.goods||[]) if(!offer.sold)this.inventory?.removeLoose(offer.uid);
         const vel = part.mesh.position.clone().sub(point).normalize().multiplyScalar(unsupported ? .65 : 2.7);
         vel.y = unsupported ? -.34 : vel.y + 2.4 + this.rand() * 2;
         const spin = new V3(.6+this.rand()*2.5,.7-this.rand()*1.4,this.rand()-.5);
@@ -580,21 +720,32 @@ export class OpushkaVillage {
     }
 
     async populate() {
-        const kits = [0,1,2,3,4,6,7,8];
-        for (const i of kits) {
-            const profile = OUTFITS[i], home = this.homes[i>=6?3:i<3?i%2:2];
-            const court = i===6 ? new V3(home.x,home.y+.3,home.z-4.45) : i===7 ? new V3(home.x+1.85,home.y+.3,home.z-3.9) : null;
+        const kits = [0,1,2,3,4,6,7,8].map(i=>({i,profile:OUTFITS[i],home:this.homes[i>=6?3:i<3?i%2:2]}));
+        const names=['Родерик','Агата','Кадвин','Мартин','Айлин','','Эдгар','Ровена','Бран'];
+        const sellerNames=['Элвин','Марта','Томас','Хью','Рут'];
+        this.stalls.forEach((stall,i)=>kits.push({i:9+i,name:sellerNames[i],profile:{...OUTFITS[i%2?4:3],role:'merchant',
+            coat:[0x514637,0x695766,0x657250,0x45362c,0x61534d][i],style:['swept','bun','cropped','bald','braid'][i]},home:stall.home,stall}));
+        this.homes.slice(4,8).forEach((home,i)=>kits.push({i:14+i,name:['Гвин','Беатрис','Эдвин','Сибил'][i],
+            profile:{...OUTFITS[i%2?4:3],coat:[0x77604a,0x48665b,0x5d565a,0x725349][i],style:['curl','shoulder','crest','bun'][i]},home}));
+        for (const {i,profile,home,stall,name=names[i]} of kits) {
+            const seller=stall?new V3(stall.x,0,stall.z-.77):null;
+            if(seller)seller.y=this.api.ground(seller.x,seller.z);
+            const court = i===6 ? home.throne.clone() : i===7 ? home.advisor.clone() : seller;
             const p = court || home.door.clone().add(new V3((i % 2) * 1.7 - 0.7, 0, (i < 3 ? 1.4 : 2.1) + i * 0.23));
             if(!court)p.y = this.api.ground(p.x, p.z);
             const mage = ['wizard','vizier'].includes(profile.role);
             const rig = await this.api.avatar(mage ? 'R' : null, profile, true, i * 8191 + 312);
             const arm = () => ({ ok: false, hand: false, u: new V3(), f: new V3(), h: new V3(), n: new V3(1, 0, 0) });
             rig.arms = { dirs: { L: arm(), R: arm() }, solve() {} };
-            const person = { id: 'resident-' + i, rig, profile, home, hp: profile.role === 'knight' ? 36 : 25,
+            const person = { id: 'resident-' + i, rig, profile, name, home, hp: profile.role === 'knight' ? 36 : 25,
                 maxMana: i === 1 ? 100 : 60, mana: i === 1 ? 100 : 60, waypoint: p.clone(), change: i * 1.2,
                 pos: p, vel: new V3(), faceYaw: 0, yaw: Math.PI, pitch: 0, grounded: true, vy: 0, justLanded: 0,
                 crouch: false, airStyle: 'tuck', view: 'third', landT: 0, jumpPrep: 0, alert: 0, castDelay: i * 0.5, raise: 0, hurt: 0,
-                patrol: court?.clone(), mage };
+                patrol: court?.clone(), mage, stall };
+            const role=profile.role==='vizier'?'advisor':profile.role==='resident'||profile.role==='wizard'?'farmer':profile.role;
+            person.brain=new VillagerBrain({id:person.id,name,role,castleName:'Серый Кряж',kingName:'Эдгар',female:profile===OUTFITS[1]||name==='Ровена'||i%2===1},
+                ()=>({castleName:'Серый Кряж',kingName:'Эдгар',timeOfDay:'day',danger:person.alert>0,trade:stall?.trade?.ru}));
+            if(stall)stall.seller=person;
             if (profile.role === 'knight') {
                 for (const slot of ['helmet', 'chest', 'legs']) fitArmor(rig, slot, makePiece(slot));
             }
@@ -623,6 +774,7 @@ export class OpushkaVillage {
         }
         person.hp -= damage;
         person.alert = 18;
+        person.brain?.feel(caster,-12);
         person.caster = caster;
         person.hurt = Math.max(person.hurt, stun, freeze, push ? .65 : 0);
         if (direction.lengthSq()<.001) direction = new V3(-Math.sin(person.faceYaw),0,-Math.cos(person.faceYaw));
@@ -687,9 +839,13 @@ export class OpushkaVillage {
             const walk = person.waypoint.clone().sub(pos).setY(0);
             if (enemy) {
                 walk.copy(enemy).sub(pos).setY(0).normalize();
-                if (profile.role === 'resident' || distance < 3) walk.negate();
+                if (profile.role === 'resident' || person.stall || distance < 3) walk.negate();
                 else if (person.mage && distance < 10) walk.multiplyScalar(0.04);
-            } else walk.clampLength(0, 1);
+            } else {
+                if(person.follow)walk.copy(player.pos).sub(pos).setY(0).multiplyScalar(walk.lengthSq()>.16?1:.4);
+                if(person.stall)walk.copy(person.patrol).sub(pos).setY(0).multiplyScalar(.85);
+                walk.clampLength(0,1);
+            }
             const speed = enemy ? 3.25 : 1.04;
             const goal = vel.clone().lerp(walk.multiplyScalar(speed), 1 - Math.exp(-dt * 4));
             if (person.hurt <= 0) vel.copy(goal);
@@ -738,6 +894,10 @@ export class OpushkaVillage {
                 if (this.api.cast(person, enemy, 'Jolt')) { person.mana -= 8; person.castDelay = 2 + this.rand() * 1.5; }
                 else person.castDelay = 0.55;
             }
+        }
+        for(const person of this.bubbles){
+            person.bubble.update(dt,person.rig.B.head.getWorldPosition(new V3()),this.api.camera());
+            if(!person.bubble.visible)this.bubbles.delete(person);
         }
         this.debris = this.debris.filter(part => {
             part.time += dt;

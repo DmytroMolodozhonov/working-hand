@@ -420,8 +420,11 @@ export class OpushkaInventory extends Inventory {
             } else if (closedNow && !(hand === this.off && pocket) && !behind && !(hand === this.main && belt?.near)) {
                 if (!this.pickNear(hand, position)) this.api.touch?.(hand,position);
             } else if (openedNow && this.held[hand] && !behind && !(hand === this.off && pocket) && !this.api.reading?.(hand)) {
-                position.y = this.api.floor(position.x, position.z, position.y) + 0.12;
-                this.placeLoose(this.release(hand), position);
+                const item=this.release(hand);
+                if(!this.api.pay?.(item,position)){
+                    position.y = this.api.floor(position.x, position.z, position.y) + 0.12;
+                    this.placeLoose(item, position);
+                }
                 this.selected = -1;
                 this._render();
             }

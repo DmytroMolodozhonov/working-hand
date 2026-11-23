@@ -81,6 +81,21 @@ export class OpushkaMap {
             ctx.strokeStyle = house.ruined ? '#c0ad8b' : '#f0d9ad';
             ctx.lineWidth = 1.7;
             ctx.setLineDash(house.ruined ? [2, 2] : []);
+            if(house.outline){
+                ctx.fillStyle=house.ruined?'#746f5a57':'#a8a18c78';
+                ctx.beginPath();
+                house.outline.forEach(([u,v],i)=>{
+                    const [a,b]=at(u,v);
+                    if(i)ctx.lineTo(a,b);else ctx.moveTo(a,b);
+                });
+                ctx.closePath();ctx.fill();ctx.stroke();
+                const keep=house.keep,[kx,kz]=at(keep.x,keep.z),ks=keep.w*scale,kd=keep.d*scale;
+                ctx.fillStyle='#b7b19b';
+                ctx.fillRect(kx-ks/2,kz-kd/2,ks,kd);
+                ctx.strokeRect(kx-ks/2,kz-kd/2,ks,kd);
+                ctx.setLineDash([]);
+                continue;
+            }
             ctx.fillRect(x-width/2,y-height/2,width,height);
             ctx.strokeRect(x-width/2,y-height/2,width,height);
             ctx.setLineDash([]);

@@ -136,7 +136,7 @@ body.creative #hud{display:none!important}
 <script type="module">
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 // (the game's hands in this world — the same camera and the same arm solving as the game: special/opushka-hands.js)
 import { OpushkaNet } from './opushka-net.js';
@@ -152,6 +152,7 @@ import { OpushkaMap } from './opushka-map.js';
 import { OpushkaInventory, opushkaWand } from './opushka-inventory.js';
 import { OUTFITS, heroProfile, avatarHair, moveHair, fitArmor } from './opushka-appearance.js';
 import { OpushkaVillage, villageClearing } from './opushka-village.js';
+import { castleGrade, TOWN_PATHS } from './opushka-castle.js';
 import { OpushkaCaveLoot } from './opushka-cave-loot.js';
 import { tumble, stepLimp, drawLimp, standLimp, recoverLimp, applyLimpPose } from './opushka-ragdoll.js';
 import { ScrollReading } from '../src/game/ScrollReading.js';
@@ -261,6 +262,16 @@ const HGT=new Float32Array(HM_N*HM_N), FOR=new Float32Array(HM_N*HM_N), CAN=new 
 const MEADOW=[10,-20];
 const VILLAGE_ORIGIN=[MEADOW[0]+25,MEADOW[1]+4];
 const inVillage=(x,z)=>CREATIVE&&villageClearing(x-VILLAGE_ORIGIN[0],z-VILLAGE_ORIGIN[1]);
+function townPath(x,z){
+  const dx=x-VILLAGE_ORIGIN[0],dz=z-VILLAGE_ORIGIN[1];
+  if(dx<8||dx>88||dz>0||dz< -80)return false;
+  for(const {points,wide} of TOWN_PATHS)for(let n=1;n<points.length;n++){
+    const [px,pz]=points[n-1],[qx,qz]=points[n],a=qx-px,b=qz-pz;
+    const t=clamp(((dx-px)*a+(dz-pz)*b)/(a*a+b*b),0,1);
+    if((dx-px-a*t)**2+(dz-pz-b*t)**2<wide**2*.36)return true;
+  }
+  return false;
+}
 function meadowDist(x,z){
   const dx=x-MEADOW[0],dz=(z-MEADOW[1])*1.18;
   let d=Math.hypot(dx,dz)+SN(x*0.008+3,z*0.008-7)*26+SN(x*0.03,z*0.03)*6;
@@ -384,10 +395,14 @@ function flowAt(x,z){
   return [0,0];
 }
 function scenery(x,z){
-  if(inVillage(x,z)||waterAt(x,z)||SAND[sandNode(x,z)])return false;
+  if(inVillage(x,z)||CREATIVE&&townPath(x,z)||waterAt(x,z)||SAND[sandNode(x,z)])return false;
   const h=groundH(x,z);
   if(caves?.density(x,h-0.2,z)<0)return false;
   return Math.hypot(groundH(x+1,z)-groundH(x-1,z),groundH(x,z+1)-groundH(x,z-1))<1.8;
+}
+function townCanopy(x,z){
+  const dx=x-VILLAGE_ORIGIN[0]-58,dz=z-VILLAGE_ORIGIN[1]+25;
+  return CREATIVE&&(dx/34)**2+(dz/14.8)**2<.69+Math.sin(dx*.29+dz*.31)*.15;
 }
 function hmIdx(x,z){return [(x+HM_HALF)/HM_STEP,(z+HM_HALF)/HM_STEP];}
 function sampleArr(arr,x,z){
@@ -409,7 +424,10 @@ async function genWorld(progress){
   const banks=new Uint8Array(HGT.length);
   for(let j=0;j<HM_N;j++){
     const z=-HM_HALF+j*HM_STEP;
-    for(let i=0;i<HM_N;i++){const x=-HM_HALF+i*HM_STEP,k=j*HM_N+i;HGT[k]=heightAnalytic(x,z);HYD[k]=waterCode();
+    for(let i=0;i<HM_N;i++){const x=-HM_HALF+i*HM_STEP,k=j*HM_N+i;
+      const surface=heightAnalytic(x,z);
+      HGT[k]=CREATIVE?castleGrade(x-VILLAGE_ORIGIN[0],z-VILLAGE_ORIGIN[1],surface):surface;
+      HYD[k]=HGT[k]<0?waterCode():0;
       banks[k]=heightAnalytic.bank||heightAnalytic.beach?1:0;
       if(HYD[k]===WATER_KIND.RIVER){FLOW[k*2]=heightAnalytic.flowX*127;FLOW[k*2+1]=heightAnalytic.flowZ*127;}
       FOR[k]=HYD[k]?0:forestAt(x,z);
@@ -417,13 +435,13 @@ async function genWorld(progress){
     if(j%64===0){progress(0.05+0.25*j/HM_N,'Рельеф');await nextFrame();}
   }
   markShoreSand(SAND,HGT,HYD,banks,HM_N,HM_HALF,HM_STEP,inVillage);
-  caves=new OpushkaCaves(groundH,(x,z)=>Math.hypot(x,z)<80||!!waterKind(x,z),PLAY);
+  caves=new OpushkaCaves(groundH,(x,z)=>Math.hypot(x,z)<80||inVillage(x,z)||!!waterKind(x,z),PLAY);
   // trees
   const rng=mulberry32(99), cell=4.4, lim=760;
   for(let gz=-lim;gz<lim;gz+=cell)for(let gx=-lim;gx<lim;gx+=cell){
     const x=gx+rng()*cell,z=gz+rng()*cell; const f=forestAt(x,z);
     const p=Math.pow(f,1.4)*0.9+0.006*(1-f); const r1=rng(),r2=rng(),r3=rng(),r4=rng();
-    if(r1>p||TN>=TMAX||!scenery(x,z))continue;
+    if(r1>p||TN>=TMAX||townCanopy(x,z)||!scenery(x,z))continue;
     if(Math.abs(x)<HM_HALF-4&&Math.abs(z)<HM_HALF-4&&Math.hypot(x-MEADOW[0],z-MEADOW[1]+14)<6)continue;
     const edge=1-smooth(0.45,0.95,f+SN(x*0.02,z*0.02)*0.25);
     let v;
@@ -2349,6 +2367,7 @@ function makePocket(){
     }};
   return new OpushkaInventory({main:wandHand,creative:CREATIVE,scene,renderer,rig:()=>charRig,player:()=>player,notify:gameNotify,
     touch:(hand,pos)=>village?.touchDoor(pos)||caveLoot?.hand(hand,pos),reading:(hand)=>scrollReader?.readingSide===(hand==='L'?'left':'right'),
+    pay:(item,pos)=>village?.pay(item,pos),
     sound:(cue)=>SoundManager.prototype.playPocket.call(uiAudio,cue),disabled:()=>!playing||!!player.locked||!!charCustom,
     disarmed:()=>!!spells.me.wandOut,casting:()=>spells.shields.some(sh=>sh.by===spells._myId()&&!sh.dead),
     floor:(x,z,y)=>{const base=caves?.floor(x,z,y)??groundH(x,z);return village?.floor(x,y,z,base)??base;},fit:(slot,item)=>{
@@ -2395,8 +2414,8 @@ function makeScrollReader(){
 function makeTestVillage(){
   const origin=new V3(VILLAGE_ORIGIN[0],0,VILLAGE_ORIGIN[1]);
   return new OpushkaVillage({scene,ground:groundH,player:()=>player,spawn:player.pos.clone(),avatar:buildAvatar,
-    animate:animateAvatar,camera:()=>camera,sound:(cue,pos)=>spells.sound(cue==='door'?'creak':cue,pos,.55),audio:()=>audio.ctx,body:(id)=>spells._bodyOf(id),cast:(person,target,name)=>spells.castResident(person,target,name),
-    fall:tipAvatar,stepLimp:(rig,dt,state)=>stepLimp(rig,bodyWorld,dt,state),
+    animate:animateAvatar,camera:()=>camera,notify:gameNotify,sound:(cue,pos)=>spells.sound(cue==='door'?'creak':cue,pos,.55),audio:()=>audio.ctx,body:(id)=>spells._bodyOf(id),cast:(person,target,name)=>spells.castResident(person,target,name),
+    mergeGeometries,fall:tipAvatar,stepLimp:(rig,dt,state)=>stepLimp(rig,bodyWorld,dt,state),
     recover:(rig,state)=>recoverLimp(rig,bodyWorld,state)},origin);
 }
 const bodyWorld={
@@ -2841,7 +2860,7 @@ async function init(){
       const k=j*HM_N+i,x=-HM_HALF+i*HM_STEP,z=-HM_HALF+j*HM_STEP;
       geo[k*4]=HYD[k]?255:0;
       geo[k*4+1]=caves.density(x,HGT[k]-0.25,z)<0?255:0;
-      geo[k*4+2]=inVillage(x,z)?255:0;
+      geo[k*4+2]=CREATIVE&&townPath(x,z)?255:inVillage(x,z)?65:0;
       geo[k*4+3]=SAND[k]?255:0;
     }
     const geoTex=new THREE.DataTexture(geo,HM_N,HM_N);geoTex.minFilter=geoTex.magFilter=THREE.LinearFilter;geoTex.needsUpdate=true;U.uGeography.value=geoTex;
@@ -2864,7 +2883,7 @@ async function init(){
     if(params.get('x')){player.pos.x=+params.get('x');player.pos.z=+params.get('z');}
     if(params.get('pitch'))player.pitch=+params.get('pitch');
     updatePlayer(0.016);refreshLod(camera.position);
-    if(CREATIVE){village=makeTestVillage();village.putTestGear(inventory);}
+    if(CREATIVE){village=makeTestVillage();village.putTestGear(inventory);village.stock(inventory);}
     scrollReader=makeScrollReader();
     caveLoot=new OpushkaCaveLoot(caves,{scene,inventory,player:()=>player,net:()=>mpNet.on?mpNet.net:null,
       remote:(id)=>mpNet.remotes.get(id)?.P?.pos,knowsScroll:(item)=>learnedScrolls.has(scrollKey(item)),
