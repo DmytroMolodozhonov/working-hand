@@ -1,12 +1,39 @@
 import * as THREE from 'three';
 import { smoothstep } from '../src/core/math.js';
+import { createRng } from '../src/core/math.js';
 
 export const CASTLE_PLAN = { dx: 55, dz: -68, width: 65, depth: 60 };
-export const CASTLE_HOUSES = [
+const MARKET_HOUSES = [
     { dx: 36, dz: -30, width: 6.7, depth: 5.6, style: 'cottage' },
     { dx: 48, dz: -30, width: 5.8, depth: 5.1, style: 'workshop' },
     { dx: 73, dz: -30, width: 7.8, depth: 7.2, style: 'hall' },
     { dx: 83, dz: -40, width: 6.1, depth: 5.6, style: 'cottage' },
+];
+const houseTypes = {
+    hut: [4.6, 4.1], cottage: [6.1, 5.2], longhouse: [8.9, 4.75], barn: [7.2, 5.1],
+    hall: [7.3, 5.8], manor: [8.1, 6], brick: [5.65, 5.2], towerhouse: [4.7, 4.55],
+};
+// The mixed rows follow separate streets. Front doors turn towards the nearest street.
+const districts = [
+    [
+        [13,-27,'hut',90],[13,-39,'cottage',96],[9,-52,'longhouse',79],[9,-64,'brick',93],[11,-76,'hut',101],
+        [26,-30,'longhouse',-74],[25,-45,'hall',-91],[23,-57,'cottage',-88],[24,-69,'barn',-98],[25,-82,'hut',-82],
+        [3,-40,'barn',88],[0,-70,'longhouse',82],
+    ],[
+        [29,-7,'hut',-164],[41,-5,'cottage',-171],[53,-6,'brick',177],[65,-7,'longhouse',161],[77,-6,'hut',-169],
+        [33,10,'barn',-11],[45,12,'cottage',7],[58,10,'longhouse',-9],[72,11,'hut',12],[84,6,'brick',17],
+    ],[
+        [87,-54,'towerhouse',70],[90,-67,'hall',75],[95,-79,'manor',92],
+        [103,-52,'manor',-71],[105,-65,'brick',-83],[110,-78,'cottage',-96],
+        [101,-38,'cottage',-1],[112,-39,'barn',-11],[110,-26,'longhouse',149],[95,-23,'hut',-148],
+    ],
+];
+export const CASTLE_HOUSES = [
+    ...MARKET_HOUSES,
+    ...districts.flat().map(([dx,dz,style,face],i)=>{
+        const [w,d]=houseTypes[style], scale=.93+(i*17%13)/83;
+        return {dx,dz,width:w*scale,depth:d/scale,style,yaw:face*Math.PI/180,variant:i};
+    }),
 ];
 export const MARKET_SITE = { dx: 58, dz: -25, width: 29, depth: 10 };
 export const TOWN_PATHS = [
@@ -17,7 +44,33 @@ export const TOWN_PATHS = [
     { wide: 1.10, points: [[73,-21],[78,-24],[82,-30],[83.8,-36.1]] },
     { wide: 1.85, points: [[64,-46],[62,-50],[60,-57],[53,-64],[45.6,-74.6]] },
     { wide: 1.10, points: [[61,-54],[69,-53],[76,-57],[79,-61]] },
+    { wide: 1.45, points: [[34,-21],[23,-21],[19,-33],[18,-47],[16,-61],[18,-76],[18,-85]] },
+    { wide: .88, points: [[17,-41],[8,-45],[4,-42]] },
+    { wide: .92, points: [[17,-65],[9,-70],[4,-71]] },
+    { wide: 1.35, points: [[26,-16],[31,-1],[43,3],[59,2],[71,2],[87,-1],[95,-14],[92,-28]] },
+    { wide: 1.62, points: [[78,-24],[89,-30],[97,-42],[96,-53],[98,-67],[103,-80],[102,-85]] },
+    { wide: 1.25, points: [[95,-25],[104,-29],[113,-46],[111,-60],[117,-66]] },
 ];
+
+export function settlementSites(seed, height, startX, startZ, limit=470) {
+    const rng=createRng(seed^0x158aa9);
+    const sites=[{id:0,kind:'castle',x:startX,z:startZ,seed}];
+    const add=(kind,count)=>{
+        const large=kind==='castle',extent=large?122:14,gap=large?221:85;
+        for(let i=0,t=0;i<count&&t<640;t++){
+            const x=Math.round((rng()*2-1)*(limit-extent-19)),z=Math.round((rng()*2-1)*(limit-extent-19));
+            if(z< -256||Math.hypot(x,z)<110||sites.some(v=>Math.hypot(x-v.x,z-v.z)<gap))continue;
+            const offset=large?53:0,side=large?33:12;
+            const hits=[[-side,-side],[side,-side],[-side,side],[side,side],[0,0]].map(([a,b])=>height(x+offset+a,z+b));
+            if(hits.some(y=>y<-.25||y>19)||Math.max(...hits)-Math.min(...hits)>13)continue;
+            sites.push({id:sites.length,kind,x,z,seed:Math.floor(rng()*0x7ffffffe)+1});
+            i++;
+        }
+    };
+    add('castle',1);
+    add('settlement',4);
+    return sites;
+}
 
 export function castleGrade(dx, dz, natural) {
     const x = dx - CASTLE_PLAN.dx, z = dz - CASTLE_PLAN.dz;
@@ -26,7 +79,13 @@ export function castleGrade(dx, dz, natural) {
     const ridge = 1.3 * (1 - smoothstep(-24, 21, x)) * (1 - smoothstep(-18, 19, z));
     const terrace = 1-smoothstep(1,1.55,Math.max(Math.abs(x+9)/9.2,Math.abs(z+13)/7.5));
     const ground=natural+(1.3+rise+ridge-natural)*core;
-    return ground+(8.8-ground)*terrace;
+    const fortified=ground+(8.8-ground)*terrace;
+    if(dx < -12 || dx > 131 || dz < -105 || dz > 28)return fortified;
+    const west=1-smoothstep(.53,1.08,Math.max(Math.abs(dx-15)/27,Math.abs(dz+54)/50));
+    const market=1-smoothstep(.58,1.17,Math.max(Math.abs(dx-58)/47,Math.abs(dz+5)/27));
+    const east=1-smoothstep(.56,1.13,Math.max(Math.abs(dx-102)/25,Math.abs(dz+55)/47));
+    const town=Math.max(west,market,east)*(1-core);
+    return fortified+(1.5+Math.sin(dx*.073+dz*.066)*.66+east*.73-fortified)*town;
 }
 
 export function buildOpushkaCastle(site, plan, id) {

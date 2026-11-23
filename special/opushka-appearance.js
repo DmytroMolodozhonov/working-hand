@@ -136,3 +136,73 @@ export function fitArmor(rig, slot, item) {
     }
     if (slot === 'legs') for (const side of ['L', 'R']) plate(rig.B['sn' + side], [0.069, 0.26, 0.054], [0, -0.16, 0.006], 0x7d8180, true);
 }
+
+const silhouettes = ['linen','apron','pleated','wool','jerkin','doublet','vest','coat'];
+export function residentWardrobe(profile, female, seed) {
+    const rand=createRng(seed^0x49f2c23), build=rand(), mass=Math.round(47+build*66);
+    const armor=['knight','king','wizard','vizier'].includes(profile.role);
+    const form=female?Math.floor(rand()*4):4+Math.floor(rand()*4);
+    return {...profile,female,mass,build:.84+build*.33,garment:armor?null:silhouettes[form]};
+}
+
+/** Town clothes attach to the same skeleton and move with the wearer, even when down. */
+export function fitTownClothes(rig, profile, skeleton, bodyBones) {
+    const dress=['linen','apron','pleated','wool'].indexOf(profile.garment);
+    const cut={linen:[.66,.232,7],apron:[.58,.218,5],pleated:[.73,.259,12],wool:[.79,.219,4]};
+    const layer=(color)=>new THREE.MeshStandardMaterial({color,roughness:.93,side:THREE.DoubleSide});
+    const fabric=layer(profile.coat),accent=layer(profile.trim);
+    const detail=(geo,color,anchor,x,y,z)=>{
+        const mesh=new THREE.Mesh(geo,color);
+        mesh.position.set(x,y,z);
+        mesh.castShadow=true;mesh.receiveShadow=true;
+        anchor.add(mesh);
+        return mesh;
+    };
+    if(dress>=0){
+        const [len,hem,pleats]=cut[profile.garment],g=new THREE.CylinderGeometry(.146,hem,len,24,8,true);
+        g.translate(0,.968-len/2,0);
+        const p=g.attributes.position,indices=[],weights=[];
+        for(let i=0;i<p.count;i++){
+            const x=p.getX(i),y=p.getY(i),z=p.getZ(i),t=(.968-y)/len,angle=Math.atan2(x,z);
+            const fold=1+Math.sin(angle*pleats+.19)*(.064*t)+Math.cos(angle*2)*(.054*t);
+            p.setXYZ(i,x*fold*profile.build,y,z*fold*.77*profile.build);
+            const influence=.28*t;
+            indices.push(bodyBones.hips,x>0?bodyBones.thL:bodyBones.thR,0,0);
+            weights.push(1-influence,influence,0,0);
+        }
+        g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(indices,4));
+        g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));
+        g.computeVertexNormals();
+        const mesh=new THREE.SkinnedMesh(g,fabric);
+        mesh.castShadow=mesh.receiveShadow=true;
+        mesh.frustumCulled=false;
+        rig.root.add(mesh);mesh.bind(skeleton,new THREE.Matrix4());
+        if(profile.garment==='apron'){
+            detail(new THREE.BoxGeometry(.223,.48,.018),accent,rig.B.hips,0,-.235,.153).rotation.x=-.17;
+            detail(new THREE.BoxGeometry(.153,.198,.026),accent,rig.B.chest,0,-.151,.113);
+        }
+        if(profile.garment==='linen'||profile.garment==='wool'){
+            const collar=detail(new THREE.TorusGeometry(.090,.025,8,24),accent,rig.B.neck,0,-.035,-.002);
+            collar.rotation.x=Math.PI/2;
+        }
+        if(profile.garment==='pleated'){
+            detail(new THREE.BoxGeometry(.152,.048,.023),accent,rig.B.hips,0,.032,.13);
+            detail(new THREE.SphereGeometry(.024,10,8),accent,rig.B.chest,0,.076,.139);
+        }
+        return;
+    }
+    if(!profile.garment)return;
+    const heavy=profile.garment==='coat';
+    const apron=profile.role==='merchant'&&profile.garment==='vest';
+    for(const side of [-1,1]){
+        const panel=detail(new THREE.SphereGeometry(1,12,8),fabric,rig.B.chest,side*.093,-.039,.057);
+        panel.scale.set((heavy?.094:.068)*profile.build,heavy?.221:.164,.077);
+        const cuff=detail(new THREE.CylinderGeometry(heavy?.062:.054,.053,heavy?.10:.064,12),accent,rig.B['fa'+(side===1?'L':'R')],side*.045,-.141,.005);
+        cuff.rotation.z=side*.31;
+    }
+    if(apron)detail(new THREE.BoxGeometry(.26,.36,.022),accent,rig.B.hips,0,-.166,.139).rotation.x=-.13;
+    else {
+        const buttons=profile.garment==='doublet'?4:profile.garment==='jerkin'?2:1;
+        for(let i=0;i<buttons;i++)detail(new THREE.SphereGeometry(.016,8,6),accent,rig.B.chest,0,.12-i*.055,.144);
+    }
+}

@@ -347,6 +347,20 @@ export class OpushkaInventory extends Inventory {
         return true;
     }
 
+    callLoose(origin, direction, obstructed) {
+        let target=null,score=Infinity;
+        for(const item of this.loose){
+            if(item.onTake)continue;
+            const diff=item.model.position.clone().sub(origin),t=diff.dot(direction);
+            if(t<.13||t>13)continue;
+            const side=diff.addScaledVector(direction,-t).length();
+            if(side>.34+t*.066||obstructed(origin,item.model.position))continue;
+            const rank=t+side*4;
+            if(rank<score){score=rank;target=item;}
+        }
+        return !!target&&this.pickNear(this.off,target.model.position);
+    }
+
     update(dt, pose, directions) {
         if (!pose?.hasPose || this.api.disabled() || pose.isRunning || this.api.player().flying) {
             this.pocketTime = this.beltTime = 0;

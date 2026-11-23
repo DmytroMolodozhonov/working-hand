@@ -55,6 +55,18 @@ export const SPELLS = {
     WindMaxima: { ru: 'Вайнд Максима', kind: 'gust', power: 3 },
     Inferno: { ru: 'Инферно', kind: 'fire' },
     Gather: { ru: 'Gather', kind: 'gather' },
+    Lumos: { ru: 'Люмос', kind: 'light' },
+    LumosAhead: { ru: 'Люмос вперёд', kind: 'light' },
+    LumosMaxima: { ru: 'Люмос Максима', kind: 'light' },
+    LumosFlashlight: { ru: 'Люмос фонарь', kind: 'light' },
+    Nox: { ru: 'Нокс', kind: 'light' },
+    Accio: { ru: 'Акцио', kind: 'utility' },
+    Alohomora: { ru: 'Алохомора', kind: 'utility' },
+    Lock: { ru: 'Lock', kind: 'utility' },
+    Up: { ru: 'Up', kind: 'utility' },
+    Stand: { ru: 'Stand', kind: 'utility' },
+    Stop: { ru: 'Stop', kind: 'utility' },
+    SwordStrike: { ru:'Удар мечом', kind:'hit' },
     Protection: { ru: 'Протекшн', kind: 'shield', hold: 3, sphere: false },
     ProtectionMaxima: { ru: 'Протекшн Максима', kind: 'shield', hold: 6, sphere: true },
 };
@@ -240,18 +252,28 @@ export class OpushkaSpells {
     /** I cast (voice or key). */
     cast(name) {
         const S = SPELLS[name];
-        if (!S || this.me.dead || this.me.stun > 0 || this.me.frozen > 0) {
+        if (!S || S.kind==='hit' || this.me.dead || this.me.stun > 0 && name!=='Stand' || this.me.frozen > 0) {
             if (S && !this.me.dead) this.api.hud(this.me.frozen > 0 ? '❄️ Во льду не поколдуешь' : '💫 Вы оглушены');
             return;
         }
-        if ((this.me.wandOut || this.api.wandHeld?.() === false) && S.kind !== 'shield') { this.api.hud('🪄 Палочки нет в руке — подберите её'); return; }
+        if ((this.me.wandOut || this.api.wandHeld?.() === false) && S.kind !== 'shield' && !['Nox','Up','Stand','Stop'].includes(name)) { this.api.hud('🪄 Палочки нет в руке — подберите её'); return; }
         if (this.api.knows?.(name) === false) { this.api.hud('Сначала изучите это заклинание со свитка'); return; }
         const canonical = name === 'SapiraDuel' ? 'Sapira' : name === 'LevitateDuel' ? 'Levitation' : name;
         const cost = SPELL_COST[canonical] ?? 0;
         if (!this.noHarm && this.mana < cost) { this.api.hud('Не хватает маны'); return; }
-        const { o, d } = this.aim(S.kind !== 'gather');
+        const { o, d } = this.aim(!['gather','utility','light'].includes(S.kind));
         if (S.kind === 'gather') {
             if (this.api.gather?.(o, d, cost)) this.sound('cast', o, .5);
+            return;
+        }
+        if(S.kind==='light'||S.kind==='utility'){
+            const success=S.kind==='light'?this._lightSpell(name,o,d):this._utility(name,o,d);
+            if(success){
+                if(!this.noHarm)this.mana-=cost;
+                this._succeeded(name);
+                this.sound('cast',o,.45);
+                this.api.hud('«'+S.ru+'»');
+            }
             return;
         }
         if (!this.noHarm) this.mana -= cost;
@@ -276,6 +298,57 @@ export class OpushkaSpells {
         this.maxMana+=gain;this.mana+=gain;
     }
 
+    _lightSpell(name,o,d) {
+        if(name==='Nox'){
+            this.wandLight?.removeFromParent();
+            this.wandBeam?.removeFromParent();
+            this.wandBeam?.target.removeFromParent();
+            this.lightName=null;
+            return true;
+        }
+        if(!this.wandLight){
+            this.wandLight=new THREE.PointLight(0xffedce,3.7,10,2);
+            this.wandBeam=new THREE.SpotLight(0xfff1dd,45,21,.25,.34,1.5);
+        }
+        const {scene}=this.api;
+        scene.add(this.wandLight,this.wandBeam,this.wandBeam.target);
+        this.lightName=name;
+        this.lightPoint=(o||this.api.player().pos).clone().addScaledVector(d,4.2);
+        this._lampStep();
+        return true;
+    }
+
+    _lampStep() {
+        if(!this.lightName)return;
+        const where=this.api.player().pos,forward=this.api.camera.getWorldDirection(new V3());
+        const mode=this.lightName,spot=mode==='LumosFlashlight';
+        this.wandBeam.visible=spot;this.wandLight.visible=!spot;
+        const source=where.clone().add(new V3(0,1.48,0)).addScaledVector(forward,.42);
+        if(spot){this.wandBeam.position.copy(source);this.wandBeam.target.position.copy(source).addScaledVector(forward,11);}
+        else{
+            this.wandLight.position.copy(mode==='LumosAhead'?this.lightPoint:source);
+            if(mode==='LumosMaxima')this.wandLight.position.y+=2.6;
+            this.wandLight.intensity=mode==='LumosMaxima'?23:5.3;
+            this.wandLight.distance=mode==='LumosMaxima'?20:10;
+        }
+    }
+
+    _utility(name,o,d) {
+        if(name==='Alohomora'||name==='Lock')return this.api.village?.()?.doorSpell(o,d,name==='Lock')||false;
+        if(name==='Accio')return this.api.callItem?.(o,d)||false;
+        if(name==='Up')return this.api.up?.()||false;
+        if(name==='Stand'){
+            if(this.api.rig()?.limp){this.me.stun=0;this.api.recover?.(this.api.player());return true;}
+            return this.api.standSpell?.()||false;
+        }
+        if(name==='Stop'){
+            for(const sh of this.shields)if(sh.by===this._myId())sh.dead=true;
+            this._lightSpell('Nox',o,d);
+            return true;
+        }
+        return false;
+    }
+
     castResident(npc, target, name) {
         name=ALIAS[name]||name;
         if(!SPELLS[name])return false;
@@ -291,7 +364,7 @@ export class OpushkaSpells {
 
     /** Somebody else's cast came over the net: the same charge here (it hurts whoever it reaches on his own computer). */
     netCast(m) {
-        if (!SPELLS[m.n] || SPELLS[m.n].kind === 'gather' || !Array.isArray(m.o) || !Array.isArray(m.d)) return;
+        if (!SPELLS[m.n] || ['gather','hit','utility','light'].includes(SPELLS[m.n].kind) || !Array.isArray(m.o) || !Array.isArray(m.d)) return;
         const o = new V3(...m.o), d = new V3(...m.d).normalize();
         if (![o.x, o.y, o.z, d.x, d.y, d.z].every(Number.isFinite)) return;
         this._spawn(m.n, o, d, m.from, m.id, false);
@@ -381,6 +454,7 @@ export class OpushkaSpells {
     update(dt) {
         const { U } = this.api;
         this._me(dt);
+        this._lampStep();
         this.mana=Math.min(this.maxMana,this.mana+dt);
         for (const sh of this.shields) {
             sh.t += dt; this._placeShield(sh); sh.mesh.material.uniforms.uTime.value = this.api.U.uTime.value;

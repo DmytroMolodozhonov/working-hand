@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { createRng } from '../src/core/math.js';
-import { OUTFITS, fitArmor } from './opushka-appearance.js';
+import { OUTFITS, fitArmor, residentWardrobe } from './opushka-appearance.js';
 import { makePiece, makeRobe } from '../src/game/ArmorTypes.js';
 import { RigidProp } from '../src/game/RigidProp.js';
 import { CASTLE_PLAN, CASTLE_HOUSES, MARKET_SITE, TOWN_PATHS, buildOpushkaCastle } from './opushka-castle.js';
 import { stallTrades, SHOPS } from '../src/game/MarketGoods.js';
 import { VillagerBrain } from '../src/game/VillagerBrain.js';
 import { SpeechBubble } from '../src/ui/SpeechBubble.js';
+import { armKnight, prepareSword, swingSword } from './opushka-swords.js';
 
 const V3 = THREE.Vector3;
 const houses = [
@@ -15,26 +16,38 @@ const houses = [
     { dx: 9.5, dz: -7.1, width: 5.7, depth: 3.8, style: 'workshop' },
 ];
 const sites = [...houses, CASTLE_PLAN, ...CASTLE_HOUSES, MARKET_SITE];
-export const villageClearing = (x, z) => sites.some(({dx, dz, width, depth}) => Math.abs(x - dx) < width / 2 + 2.15 && Math.abs(z - dz) < depth / 2 + 2.7);
+export const villageClearing = (x, z, kind='castle') => (kind==='castle'?sites:houses).some(({dx,dz,width,depth,yaw=0,style})=>{
+    const c=Math.cos(yaw),s=Math.sin(yaw),u=x-dx,v=z-dz;
+    const wing=style==='hall'||style==='manor'?width*.42:0;
+    return Math.abs(u*c-v*s)<width/2+wing+2.15&&Math.abs(u*s+v*c)<depth/2+2.7;
+});
 
-function siding(stone, seed, castle = false) {
+function siding(stone, seed, castle = false, cottage = false) {
     const rand = createRng(seed);
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 256;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = castle ? '#3d3d36' : stone ? '#5e594f' : '#493228';
     ctx.fillRect(0, 0, 256, 256);
-    for (let row = 0; row < 8; row++) {
+    const rows=cottage?13:8, rowHeight=256/rows;
+    for (let row = 0; row < rows; row++) {
         let x = stone ? -rand() * 75 : 0;
         do {
-            const width = stone ? 26 + rand() * 66 : 256;
+            const width = stone ? (cottage?15:26) + rand() * (cottage?48:66) : 256;
             const grey = Math.round((castle ? 86 : stone ? 124 : 110) + rand() * (castle ? 54 : 35));
             ctx.fillStyle = stone ? `rgb(${grey},${grey - 4},${grey - 12})` : `rgb(${grey},${grey * 0.72},${grey * 0.46})`;
-            ctx.fillRect(x, row * 32 + 1, width - (stone ? 3 : 0), 29);
+            const y=row*rowHeight,join=stone?(cottage?1.8:3):0;
+            if(cottage){
+                const lip=rand()*3.5;
+                ctx.beginPath();
+                ctx.moveTo(x+1,y+2+lip);ctx.lineTo(x+width*.43,y+1);
+                ctx.lineTo(x+width-join,y+1+rand()*2.5);ctx.lineTo(x+width-join-1,y+rowHeight-2);
+                ctx.lineTo(x+2,y+rowHeight-1-lip);ctx.fill();
+            }else ctx.fillRect(x,y+1,width-join,rowHeight-3);
             ctx.fillStyle = '#eee4cc38';
-            ctx.fillRect(x + 2, row * 32 + 2, width - 4, 2);
+            ctx.fillRect(x+2,y+2,width-4,cottage?1:2);
             ctx.fillStyle = '#25211943';
-            ctx.fillRect(x + 1, row * 32 + 27, width - 3, 3);
+            ctx.fillRect(x+1,y+rowHeight-5,width-3,cottage?1.6:3);
             x += width;
         } while (x < 256);
     }
@@ -81,9 +94,11 @@ function roofing(slate) {
 }
 
 export class OpushkaVillage {
-    constructor(api, origin) {
+    constructor(api, origin, {kind='castle',id=0,seed=20311}={}) {
         this.api = api;
         this.origin = origin;
+        this.kind=kind;
+        this.id=id;
         this.parts = [];
         this.debris = [];
         this.doors = [];
@@ -91,22 +106,29 @@ export class OpushkaVillage {
         this.stalls = [];
         this.bubbles = new Set();
         this.dirtyBatches = new Set();
-        this.rand = createRng(20311);
-        const wood = siding(false, 22), stones = siding(true, 92), rubble = siding(true, 701, true);
+        this.rand = createRng(seed);
+        const wood = siding(false, 22), stones = siding(true, 92), rubble = siding(true, 701, true), cottageStone=siding(true,673,false,true);
         const material = (color, map = null) => new THREE.MeshStandardMaterial({ color, map, bumpMap: map, bumpScale: 0.062, roughness: 0.87 });
         this.materials = { wood: material(0xf6ce9b, wood), stone: material(0xe5decb, stones), beam: material(0x4c3325, wood),
             tile: material(0xd0bab0, roofing(false)), slate: material(0xb9bebc, roofing(true)), plaster: material(0xcfc3a3),
+            lime: material(0xf2dfba, cottageStone), ashlar: material(0xf4e1c3, rubble), fadedWood: material(0xb6aa8d, wood),
+            redWood: material(0xa95b40, wood), brick: material(0xb46550, stones),
             dark: material(0x323b34), brass: material(0xa27a45), joinery: material(0xd0c2a4, wood),
             banner: new THREE.MeshStandardMaterial({ color: 0x783240, roughness: .92, side: THREE.DoubleSide }),
             castleRock: material(0xb9ad96, rubble), castleDressed: material(0xc8c0a9, rubble),
             castleShadow: material(0x8d8679, rubble), marketCloth: material(0xc0a883),
             glass: new THREE.MeshPhysicalMaterial({ color: 0xe2ece5, roughness: 0.11, metalness: 0.15,
                 transparent: true, opacity: 0.19, depthWrite: false, envMapIntensity: 0.65, side: THREE.DoubleSide }) };
-        this.homes = houses.map((plan, id) => this.house(plan, id));
-        this.castle=buildOpushkaCastle(this,CASTLE_PLAN,this.homes.length);
-        this.homes.push(this.castle);
-        for(const plan of CASTLE_HOUSES)this.homes.push(this.house(plan,this.homes.length));
-        this.market();
+        const firstId=id*100;
+        this.homes = houses.map((plan, n) => this.house(plan,firstId+n));
+        this.townHomes=[];
+        if(kind==='castle'){
+            this.castle=buildOpushkaCastle(this,CASTLE_PLAN,firstId+this.homes.length);
+            this.homes.push(this.castle);
+            this.townHomes=CASTLE_HOUSES.map((plan,i)=>this.house(id&&i>=4?{...plan,style:i%5===0?'brick':plan.style,variant:i+seed}:plan,firstId+this.homes.length+i));
+            this.homes.push(...this.townHomes);
+            this.market();
+        }
         this.debrisWorld = {
             ground: (x,z,y) => this.floor(x,y-.37,z,api.ground(x,z), .07),
             blocked: (x,y,z) => this.collisionBoxes(x,x,z,z).some(b => y > b.minY && y < b.maxY),
@@ -126,33 +148,41 @@ export class OpushkaVillage {
             else uv.setXY(i, u * width / 2.9, v * height / 2.9);
         }
         const mesh = new THREE.Mesh(geometry, this.materials[material]);
-        mesh.position.set(home.x + x, home.y + y, home.z + z);
+        const yaw=home.yaw||0,c=Math.cos(yaw),s=Math.sin(yaw);
+        mesh.position.set(home.x+x*c+z*s,home.y+y,home.z+z*c-x*s);
         mesh.rotation.set(opts.pitch || 0, opts.turn || 0, opts.angle || 0);
+        if(yaw)mesh.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new V3(0,1,0),yaw));
         mesh.castShadow = material !== 'glass' && Math.max(sx, sy, sz) > 0.30;
         mesh.receiveShadow = material !== 'glass';
         if (material === 'glass') mesh.renderOrder = 2;
         this.api.scene.add(mesh);
         const bounds = new THREE.Box3().setFromObject(mesh);
-        const masonry = material.startsWith('castle');
+        const masonry = material.startsWith('castle'),turn=yaw+(opts.turn||0);
         const part = { mesh, home, bounds, solid: opts.solid ?? true, roof: !!opts.roof,
-            hp: masonry ? 3.5 : material === 'stone' ? 2.1 : material === 'glass' ? 0.29 : 1.16,
-            material, broken: false, supports: opts.supports || null, precise:opts.turn||opts.angle||opts.round,
-            footprint:opts.round ? {radius:opts.round} : opts.turn ? {hx:sx/2,hz:sz/2,c:Math.cos(opts.turn),s:Math.sin(opts.turn)} : null };
+            hp: masonry ? 3.5 : ['stone','lime','ashlar','brick'].includes(material) ? 2.1 : material === 'glass' ? 0.29 : 1.16,
+            material, broken: false, supports: opts.supports || null, precise:turn||opts.angle||opts.round,
+            footprint:opts.round ? {radius:opts.round} : turn ? {hx:sx/2,hz:sz/2,c:Math.cos(turn),s:Math.sin(turn)} : null };
         this.parts.push(part);
         return part;
     }
 
     house(plan, id) {
-        const { dx, dz, width, depth, style } = plan;
+        if(plan.style==='hall'||plan.style==='manor')return this.stoneHouse(plan,id);
+        const { dx, dz, width, depth, style, yaw=0, variant=0 } = plan;
         const x = this.origin.x + dx, z = this.origin.z + dz, w = width / 2, d = depth / 2;
-        const y = Math.max(...[-1, 1].flatMap(a => [-1, 1].map(b => this.api.ground(x + a * w, z + b * d)))) + 0.13;
-        const stone = style === 'hall', shop = style === 'workshop';
-        const entrance = stone ? 0 : shop ? -1.36 : 0.78;
-        const h = stone ? 3.60 : shop ? 2.28 : 2.65;
-        const home = { x, y, z, id, style, width, depth, ruined:false, door: new V3(x + entrance, y, z + d + 0.9) };
-        const wall = stone ? 'stone' : 'wood', trim = stone ? 'joinery' : 'beam';
+        const c=Math.cos(yaw),s=Math.sin(yaw);
+        const heights=[-1,1].flatMap(a=>[-1,1].map(b=>this.api.ground(x+a*w*c+b*d*s,z+b*d*c-a*w*s)));
+        const y=Math.max(...heights)+.10;
+        const hut=style==='hut',barn=style==='barn',tower=style==='towerhouse',shop=style==='workshop',long=style==='longhouse';
+        const entrance = shop ? -1.36 : long ? -w*.52 : hut||tower ? 0 : (variant%2?-.78:.78);
+        const h = tower?5.22:hut?2.09:shop?2.28:style==='brick'?3.14:barn?2.96:2.65;
+        const home = { x,y,z,id,style,width,depth,yaw,variant,ruined:false,
+            door:new V3(x+entrance*c+(d+.90)*s,y,z+(d+.90)*c-entrance*s) };
+        const wall = tower?'lime':style==='brick'?'brick':barn?'redWood':long||hut?'fadedWood':'wood';
+        const trim = tower||style==='brick'?'ashlar':'beam';
         const add = (mat, a, b, c, u, v, w_, options) => this.piece(home, mat, a, b, c, u, v, w_, options);
-        add('stone', 0, -0.52, 0, width + 0.14, 1.03, depth + 0.15, { solid: false });
+        const foot=Math.max(.55,y-Math.min(...heights)+.4);
+        add('stone',0,-foot/2,0,width+.14,foot,depth+.15,{solid:false});
         add('beam', 0, 0.024, 0, width + 0.05, 0.105, depth + 0.05, { solid: false });
         for (const s of [-1, 1]) {
             for (const half of [-1, 1]) {
@@ -162,11 +192,12 @@ export class OpushkaVillage {
             add(trim,s*w,h/2,d,0.23,h+0.09,0.29);
             add(trim,s*w,h/2,-d,0.23,h+0.09,0.28);
         }
-        const doorHalf = stone ? 0.73 : 0.65, doorTop = stone ? 2.45 : 2.10;
-        const windows = stone
-            ? [{x:-1.90,w:0.86,base:0.96,top:2.74},{x:1.86,w:0.90,base:0.96,top:2.74}]
-            : shop ? [{x:0.71,w:1.26,base:0.83,top:1.88}]
-                : [{x:-1.08,w:1.18,base:0.75,top:1.88}];
+        const doorHalf=barn?.85:hut?.59:.65,doorTop=hut?1.91:barn?2.3:2.10;
+        const windows = tower ? [{x:-1.02,w:.48,base:2.84,top:3.68},{x:1.14,w:.56,base:3.59,top:4.77}]
+            : long ? [{x:0,w:.92,base:.82,top:1.85},{x:w*.59,w:1.03,base:.88,top:1.96}]
+            : barn ? [{x:w*.60,w:.57,base:1.65,top:2.31}]
+            : shop||entrance<0 ? [{x:.78,w:1.24,base:.83,top:1.88}]
+            : [{x:hut?-1.20:-1.08,w:hut?.62:1.18,base:.75,top:hut?1.62:1.88}];
         const holes = [...windows, { x: entrance, w: doorHalf * 2, base: 0, top: doorTop, door: true }]
             .sort((a, b) => a.x - b.x);
         let cursor = -w;
@@ -175,24 +206,28 @@ export class OpushkaVillage {
             if (left > cursor) add(wall,(cursor+left)/2,h/2,d,left-cursor,h,.24,{vertical:shop});
             if (hole.base > 0) add(wall,hole.x,hole.base/2,d,hole.w,hole.base,.25,{vertical:shop});
             add(wall,hole.x,(h+hole.top)/2,d,hole.w,h-hole.top,.25,{vertical:shop});
-            if (!hole.door) this.window(home,hole,d,trim,stone);
+            if (!hole.door) this.window(home,hole,d,trim,tower);
             cursor = hole.x + hole.w / 2;
         }
         if (cursor < w) add(wall,(cursor+w)/2,h/2,d,w-cursor,h,.24,{vertical:shop});
         add(trim,entrance,doorTop+0.045,d+0.014,doorHalf*2+0.25,0.19,0.36);
-        this.door(home,entrance,d,doorHalf,doorTop,stone);
+        this.door(home,entrance,d,doorHalf,doorTop,tower||style==='brick');
         add('stone',entrance,0.10,d+.28,doorHalf*2+.26,.23,.45,{solid:false});
         add('stone',entrance,-.015,d+.63,doorHalf*2+.45,.17,.31,{solid:false});
 
-        if (stone) {
-            this.hipRoof(home,w,d,h);
-            this.tower(home,2.23,-1.73,h);
-            this.stoneWing(home,-w,d);
-            add('joinery',0,h-.30,d+.15,width,.18,.15,{solid:false});
-            add('joinery',0,.36,d+.15,width,.17,.15,{solid:false});
-        } else if (shop) {
+        if(tower){
+            this.crossRoof(home,'slate',0,0,w+.31,d+.31,h,2.18);
+            add('ashlar',0,h-.22,d+.14,width+.17,.20,.20,{solid:false});
+            add('ashlar',0,2.64,d+.13,width+.21,.16,.21,{solid:false});
+        }else if(barn){
+            this.crossRoof(home,'tile',0,0,w+.46,d+.41,h,1.71,true,'redWood');
+            add('beam',0,2.49,d+.14,width+.16,.15,.17,{solid:false});
+        }else if(long){
+            this.crossRoof(home,'slate',0,0,w+.40,d+.49,h,1.19,false,wall,true);
+            this.leanTo(home,w*.60,d,h);
+        }else if (shop||hut) {
             this.shedRoof(home,w,d,h);
-            this.leanTo(home,w-1.34,d,h);
+            if(!hut)this.leanTo(home,w-1.34,d,h);
             // A counter and tools built into the workshop's rear wall.
             add('beam',1.24,.83,-d+.54,1.85,.15,.85);
             add('wood',1.24,.38,-d+.54,1.62,.76,.56);
@@ -201,16 +236,17 @@ export class OpushkaVillage {
             this.porch(home,entrance,d,doorTop);
             add('beam',-w*.63,1.04,d+.24,1.21,.17,.39,{solid:false});
         }
-        if (!stone) {
-            add('stone',w*.58,h+.89,-d*.58,.46,1.92,.54);
-            add('stone',w*.58,h+1.85,-d*.58,.64,.13,.71);
+        if(!barn){
+            const chimney=tower?2.14:hut?1.13:1.65;
+            add('stone',w*.58,h+chimney*.42,-d*.58,.46,chimney,.54);
+            add('ashlar',w*.58,h+chimney*.92,-d*.58,.62,.12,.68);
         }
         if (!shop) {
             add('beam',w-.87,.58,-d+.72,1.04,.14,.91);
             add('wood',w-1.38,.29,-d+.69,.11,.57,.71);
             add('wood',w-.36,.29,-d+.69,.11,.57,.71);
         }
-        this.yard(home,w,d,shop);
+        if(!hut&&!tower)this.yard(home,w,d,shop);
         return home;
     }
 
@@ -230,13 +266,15 @@ export class OpushkaVillage {
         part.mesh.updateMatrixWorld(true);
         part.bounds.setFromObject(part.mesh);
         part.precise=true;
-        this.doors.push({part,handle:latch,angle:0,goal:0,last:-Infinity});
+        part.footprint=null;
+        this.doors.push({part,handle:latch,angle:0,goal:0,yaw:home.yaw||0,last:-Infinity});
     }
 
     toggleDoor(door, point) {
-        if(door.part.broken || performance.now()-door.last<520)return false;
+        if(door.locked || door.part.broken || performance.now()-door.last<520)return false;
         const base=door.part.mesh.position;
-        door.goal=door.goal?0:point.z>=base.z?1.43:-1.43;
+        const outside=(point.z-base.z)*Math.cos(door.yaw)+(point.x-base.x)*Math.sin(door.yaw)>=0;
+        door.goal=door.goal?0:outside?1.43:-1.43;
         door.last=performance.now();
         this.api.sound?.('door',base);
         return true;
@@ -249,8 +287,8 @@ export class OpushkaVillage {
         return false;
     }
 
-    windDoor(origin,direction) {
-        let best=null,dist=3.5;
+    findDoor(origin,direction,range) {
+        let best=null,dist=range;
         for(const door of this.doors){
             if(door.part.broken)continue;
             const target=door.handle.getWorldPosition(new V3()), delta=target.sub(origin);
@@ -260,21 +298,112 @@ export class OpushkaVillage {
             if(wall&&wall.part!==door.part&&wall.p.distanceTo(origin)<d-.24)continue;
             best=door;dist=d;
         }
-        return !!best&&this.toggleDoor(best,origin);
+        return best;
     }
 
-    stoneWing(home,w,d) {
-        const x=w-1.16,z=d-.75,h=2.66,wide=1.98,deep=2.26;
-        const corner=this.piece(home,'stone',x-wide*.50-.09,h*.50,z,.25,h,deep+.18);
-        this.piece(home,'stone',x,h*.50,z+deep*.50,wide,h,.25);
-        this.piece(home,'stone',x,h*.50,z-deep*.50,wide,h,.25);
-        this.piece(home,'stone',x,-.40,z,wide+.22,.82,deep+.12,{solid:false});
-        const a=[x-wide*.66,h,z-deep*.68],b=[x+wide*.66,h+.50,z-deep*.68],
-              c=[x+wide*.66,h+.50,z+deep*.68],d0=[x-wide*.66,h,z+deep*.68];
-        this.roofFace(home,'slate',[a,b,c,d0]);
-        this.piece(home,'joinery',x-wide*.56,h-.11,z,.16,.19,deep*1.2,{roof:true});
-        corner.mesh.name='annex-stone-wall';
-        for(let i=0;i<3;i++)this.piece(home,'stone',x-.1,.14-i*.105,d+.65+i*.36,2.65+i*.2,.23,.38,{solid:false});
+    windDoor(origin,direction) {
+        const door=this.findDoor(origin,direction,3.5);
+        return !!door&&this.toggleDoor(door,origin);
+    }
+
+    doorSpell(origin,direction,lock) {
+        const door=this.findDoor(origin,direction,8.5);
+        if(!door)return false;
+        door.locked=lock;
+        door.last=-Infinity;
+        if(lock){door.goal=0;return true;}
+        return door.goal!==0||this.toggleDoor(door,origin);
+    }
+
+    stoneHouse(plan,id) {
+        const {dx,dz,width,depth,style,yaw=0,variant=0}=plan;
+        const w=width/2,d=depth/2,x=this.origin.x+dx,z=this.origin.z+dz,c=Math.cos(yaw),s=Math.sin(yaw);
+        const rich=style==='manor', side=variant%3===1?-1:1, h=rich?4.58:3.43;
+        const inner=w-.09,outer=w+width*(rich?.39:.33),sf=-d+.76,sb=d+.78;
+        const sideRange=[side*inner,side*outer].sort((a,b)=>a-b);
+        const span=sideRange[1]-sideRange[0],wingX=(sideRange[0]+sideRange[1])/2,wingD=(sb-sf)/2,wingZ=(sf+sb)/2;
+        const levels=[[-w,-d],[-w,d],[w,-d],[w,d],[side*outer,sf],[side*outer,sb]]
+            .map(([a,b])=>this.api.ground(x+a*c+b*s,z+b*c-a*s));
+        const y=Math.max(...levels)+.13,foot=Math.max(.68,y-Math.min(...levels)+.38);
+        const doorX=-side*w*.37,doorW=1.24,doorH=2.23;
+        const home={id,x,y,z,style,width:width+span,depth:depth+.85,yaw,variant,ruined:false,
+            door:new V3(x+doorX*c+(d+1.18)*s,y,z+(d+1.18)*c-doorX*s)};
+        const add=(...args)=>this.piece(home,...args);
+        const mat=rich?'stone':'lime', trim='ashlar';
+        add(mat,0,-foot/2,0,width+.16,foot,depth+.14,{solid:false});
+        add(mat,wingX,-foot/2,wingZ,span+.14,foot,wingD*2+.13,{solid:false});
+        add('beam',0,.024,0,width+.03,.13,depth+.03,{solid:false});
+        add('beam',wingX,.025,wingZ,span+.04,.13,wingD*2+.01,{solid:false});
+        const face=(left,right,z,wallHeight,windows)=>{
+            const cuts=[left,right,...windows.flatMap(({x,w})=>[x-w/2,x+w/2])].sort((a,b)=>a-b);
+            for(let i=1;i<cuts.length;i++){
+                const a=cuts[i-1],b=cuts[i],mid=(a+b)/2;
+                if(b-a<.018)continue;
+                const holes=windows.filter(v=>Math.abs(v.x-mid)<v.w/2).sort((u,v)=>u.base-v.base);
+                let y=0;
+                for(const v of holes){
+                    if(v.base-y>.018)add(mat,mid,(y+v.base)/2,z,b-a,v.base-y,.29);
+                    y=v.top;
+                }
+                if(wallHeight-y>.018)add(mat,mid,(y+wallHeight)/2,z,b-a,wallHeight-y,.29);
+            }
+            for(const window of windows)if(!window.door){
+                this.window(home,window,z,trim,false);
+                add(trim,window.x,window.top+.10,z+.22,window.w+.27,.12,.21,{solid:false});
+                add(trim,window.x,window.base-.045,z+.21,window.w+.27,.10,.29,{solid:false});
+            }
+        };
+        const swing={x:doorX,w:doorW,base:0,top:doorH,door:true};
+        const visible=[swing,{x:side*w*.42,w:1.27,base:.83,top:1.99}];
+        if(rich)for(const o of [-1,1])visible.push({x:o*w*.57,w:1.1,base:2.82,top:3.98});
+        face(-w,w,d,h,visible);
+        add(mat,0,h/2,-d,width+.22,h,.29);
+        add(mat,-side*w,h/2,0,.28,h,depth+.21);
+        add(mat,side*w,h/2,(-d+sf)/2,.28,h,sf+d+.09);
+        add(mat,side*outer,h*.45,wingZ,.28,h*.90,wingD*2+.10);
+        add(mat,wingX,h*.45,sf,span+.11,h*.90,.28);
+        const wingFront=[{x:wingX,w:Math.min(.95,span*.62),base:.77,top:1.96}];
+        if(rich)wingFront.push({x:wingX,w:.85,base:2.68,top:3.65});
+        face(...sideRange,sb,h*.90,wingFront);
+        this.crossRoof(home,'slate',0,0,w+.30,d+.34,h,rich?2.27:1.95,false,mat,true);
+        this.crossRoof(home,'tile',wingX,wingZ,span/2+.34,wingD+.34,h*.9,rich?1.84:1.61,false,mat);
+        this.door(home,doorX,d,doorW/2,doorH,true);
+        const porchW=doorW*.78,porchH=2.37;
+        for(const o of [-1,1])add(trim,doorX+o*porchW,porchH*.44,d+.66,.29,porchH*.88,1.25);
+        this.crossRoof(home,'slate',doorX,d+.71,porchW+.26,.86,porchH*.88,.72,false,mat);
+        for(let i=0;i<3;i++)add(trim,doorX,.13-i*.11,d+1.0+i*.34,1.85+i*.20,.22,.39,{solid:false});
+        for(const [gx,gz,y1] of [[-side*w*.48,-d+.69,h],[wingX,sf+.73,h*.90]]){
+            add(mat,gx,y1+1.18,gz,.63,2.46,.70);
+            add(trim,gx,y1+2.38,gz,.82,.15,.85);
+        }
+        add('stone',-side*w*.71,.68,-d+.4,1.12,1.31,.59);
+        add('beam',side*w*.61,.64,-d+1.09,1.26,.115,.71);
+        add('wood',side*w*.61,.33,-d+1.09,1.09,.60,.57);
+        add('beam',wingX,.66,wingZ,.81,.12,1.24);
+        for(const u of [-1,1])add('wood',wingX+u*.28,.32,wingZ,.11,.56,.86);
+        this.yard(home,w,d,false);
+        return home;
+    }
+
+    crossRoof(home,mat,x,z,w,d,y,rise,barn=false,wall=null,sideways=false) {
+        const p=(a,b,c)=>sideways?[x+c,y+b,z+a]:[x+a,y+b,z+c];
+        const a=sideways?d:w, b=sideways?w:d;
+        if(barn){
+            for(const sign of [-1,1]){
+                this.roofFace(home,mat,[p(sign*a,0,-b),p(sign*a*.56,rise*.73,-b),p(sign*a*.56,rise*.73,b),p(sign*a,0,b)]);
+                this.roofFace(home,mat,[p(sign*a*.56,rise*.73,-b),p(0,rise,-b),p(0,rise,b),p(sign*a*.56,rise*.73,b)]);
+            }
+        }else{
+            for(const sign of [-1,1])this.roofFace(home,mat,[p(sign*a,0,-b),p(0,rise,-b),p(0,rise,b),p(sign*a,0,b)]);
+        }
+        if(wall)for(const sign of [-1,1]){
+            const gable=barn?[p(-a,0,sign*b*.9),p(a,0,sign*b*.9),p(a*.56,rise*.73,sign*b*.9),p(0,rise,sign*b*.9),p(-a*.56,rise*.73,sign*b*.9)]
+                :[p(-a,0,sign*b*.9),p(a,0,sign*b*.9),p(0,rise,sign*b*.9)];
+            for(let i=1;i<gable.length-1;i++){
+                const triangle=[gable[0],gable[i],gable[i+1]];
+                this.roofFace(home,wall,sign>0?triangle:triangle.toReversed());
+            }
+        }
     }
 
     yard(home,w,d,shop) {
@@ -334,15 +463,19 @@ export class OpushkaVillage {
     }
 
     nearSite(loX,hiX,loZ,hiZ) {
-        return sites.some(({dx,dz,width,depth})=>{
-            const x=this.origin.x+dx,z=this.origin.z+dz,rx=width/2+3,rz=depth/2+3;
-            return hiX>=x-rx&&loX<=x+rx&&hiZ>=z-rz&&loZ<=z+rz;
-        });
+        const {min,max}=this.siteBounds;
+        return hiX>=min.x&&loX<=max.x&&hiZ>=min.z&&loZ<=max.z;
     }
 
     makeIndex() {
         this.cells=new Map();
+        this.siteBounds=new THREE.Box3();
+        this.byHome=new Map();
         for(const part of this.parts){
+            this.siteBounds.union(part.bounds);
+            let parts=this.byHome.get(part.home.id);
+            if(!parts)this.byHome.set(part.home.id,parts=[]);
+            parts.push(part);
             if(this.doors.some(d=>d.part===part))continue;
             const {min,max}=part.bounds;
             for(let z=Math.floor(min.z/5);z<=Math.floor(max.z/5);z++)for(let x=Math.floor(min.x/5);x<=Math.floor(max.x/5);x++){
@@ -438,27 +571,6 @@ export class OpushkaVillage {
         this.window(home,{x:ridge,w:.62,base:h+.34,top:h+1.03},d+.071,'beam',false);
     }
 
-    hipRoof(home,w,d,h) {
-        const e=w+.42,l=d+.42,r=1.58,k=.75;
-        const a=[-e,h,-l],b=[e,h,-l],c=[e,h,l],d0=[-e,h,l],u=[-k,h+r,0],v=[k,h+r,0];
-        for (const points of [[a,b,v,u],[d0,u,v,c],[a,u,d0],[b,c,v]]) this.roofFace(home,'slate',points);
-        this.piece(home,'dark',0,h+r,0,1.64,.13,.15,{roof:true});
-        this.piece(home,'dark',0,h-.02,-l,e*2,.16,.12,{roof:true});
-        this.piece(home,'dark',0,h-.02,l,e*2,.16,.12,{roof:true});
-    }
-
-    tower(home,x,z,wallHeight) {
-        const radius=.83,height=wallHeight+1.36, sides=10;
-        for (let i=0;i<sides;i++) {
-            const angle=(i+.5)*Math.PI*2/sides;
-            this.piece(home,'stone',x+Math.sin(angle)*radius,height*.5,z+Math.cos(angle)*radius,
-                2*radius*Math.tan(Math.PI/sides)+.07,height,.215,{turn:angle});
-        }
-        const cone=new THREE.ConeGeometry(1.05,1.47,10,1,false);
-        this.piece(home,'slate',x,height+.67,z,2.1,1.47,2.1,{geometry:cone,roof:true,solid:false});
-        this.piece(home,'brass',x,height+1.50,z,.075,.24,.075,{roof:true,solid:false});
-    }
-
     shedRoof(home,w,d,h) {
         const lean=.20, length=(d+.37)*2, roofY=h+.44;
         for (const side of [-1,1]) {
@@ -488,7 +600,7 @@ export class OpushkaVillage {
     trail() {
         const start = this.api.spawn, end = this.homes[1].door;
         this.path([start,start.clone().lerp(end,.5).add(new V3(1.5,0,0)),end],1.35);
-        for(const {wide,points} of TOWN_PATHS){
+        for(const {wide,points} of this.kind==='castle'?TOWN_PATHS:[]){
             this.path(points.map(([x,z])=>new V3(this.origin.x+x,0,this.origin.z+z)),wide);
         }
     }
@@ -516,7 +628,7 @@ export class OpushkaVillage {
 
     market() {
         const {dx,dz,width,depth}=MARKET_SITE,x=this.origin.x+dx,z=this.origin.z+dz;
-        const home={id:this.homes.length,x,z,y:0,width,depth,style:'market',door:new V3(x,this.api.ground(x,z),z+3)};
+        const home={id:this.id*100+this.homes.length,x,z,y:0,width,depth,style:'market',door:new V3(x,this.api.ground(x,z),z+3)};
         this.homes.push(home);
         const trades=stallTrades('opushka-castle',3);
         const add=(...args)=>this.piece(home,...args);
@@ -530,7 +642,8 @@ export class OpushkaVillage {
             add(awning,px,base+2.4,pz-.04,3.14,.07,2.50,{pitch:.12-i*.10,solid:false,roof:true,supports:posts});
             add(awning,px,base+2.29,pz+1.19,3.13,.21,.045,{solid:false,supports:posts});
             add('wood',px+1.66,base+.34,pz-.61,.51,.69,.57);
-            this.stalls.push({home,trade,counter,top:counter.bounds.max.y,x:x+px,z:z+pz+.45});
+            this.stalls.push({home,trade,counter,top:counter.bounds.max.y,x:x+px,z:z+pz+.45,
+                sellerAt:new V3(x+px,base,z+pz-.54)});
         }
         const wellX=-11.2,wellZ=2.9,base=this.api.ground(x+wellX,z+wellZ);
         const ring=new THREE.CylinderGeometry(.98,.98,.68,13,1,true);
@@ -544,10 +657,11 @@ export class OpushkaVillage {
         add('wood',wellX+.23,base+.57,wellZ,.32,.36,.32,{geometry:new THREE.CylinderGeometry(.19,.14,.36,10)});
         for(const [n,kind] of ['smith','tavern'].entries()){
             const house=this.homes[n===0?5:6];
-            const ax=house.x-x-1.8,az=house.door.z-z+.85,h=this.api.ground(x+ax,z+az);
+            const ax=house.door.x-x+(n===0?-3.9:4.7),az=house.door.z-z+1.3,h=this.api.ground(x+ax,z+az);
             const counter=add('wood',ax,h+.72,az,2.10,.31,.72);
             add('beam',ax,h+.31,az,1.86,.66,.54,{supports:[counter]});
-            this.stalls.push({home:house,trade:SHOPS[kind],counter,top:counter.bounds.max.y,x:x+ax,z:z+az});
+            this.stalls.push({home:house,trade:SHOPS[kind],counter,top:counter.bounds.max.y,x:x+ax,z:z+az,
+                sellerAt:new V3(x+ax,h,z+az-.91)});
         }
         const cottage=this.homes[4];
         const px=cottage.x-x-3.25,pz=cottage.z-z+3.5,soil=this.api.ground(x+px,z+pz);
@@ -561,12 +675,12 @@ export class OpushkaVillage {
         add('wood',px-.95,soil+.34,pz,.13,.71,3.13,{solid:false,turn:.24});
     }
 
-    stock(inventory) {
+    stock(inventory,starter=false) {
         this.inventory=inventory;
         for(let counter=0;counter<this.stalls.length;counter++){
             const stall=this.stalls[counter];
             stall.goods=stall.trade.goods.map((good,index)=>{
-                const uid='castle-market:'+counter+':'+index,position=new V3(stall.x+(index-1)*.65,stall.top+.13,stall.z);
+                const uid='castle-market:'+this.id+':'+counter+':'+index,position=new V3(stall.x+(index-1)*.65,stall.top+.13,stall.z);
                 inventory.placeLoose({...good,uid},position,0,()=>{
                     if(stall.counter.broken)return false;
                     this.api.notify?.(good.price+' монет · положите мешочек на прилавок рядом с товаром');
@@ -575,7 +689,7 @@ export class OpushkaVillage {
                 return {good,uid,position,sold:false};
             });
         }
-        inventory.storeItem({kind:'coins',count:80});
+        if(starter)inventory.storeItem({kind:'coins',count:80});
     }
 
     pay(item,p) {
@@ -614,6 +728,7 @@ export class OpushkaVillage {
         }
         this.bubbles.add(person);
         person.bubble.show(answer.reply,{name:person.name,seconds:Math.min(9,3.2+answer.reply.length*.035)});
+        return true;
     }
 
     trace(a, b, radius) {
@@ -684,19 +799,19 @@ export class OpushkaVillage {
             if (part.hp <= 0) this.breakPiece(part, point);
             alarm.add(part.home.id);
         }
-        for (const part of this.parts) {
-            if (part.broken || !alarm.has(part.home.id)) continue;
+        for(const id of alarm)for (const part of this.byHome.get(id)||[]) {
+            if (part.broken) continue;
             if (part.supports) {
                 const needed=part.supports.length>=3?2:1;
                 if(part.supports.filter(s=>!s.broken).length<needed)this.breakPiece(part,point,true);
                 continue;
             }
             if (!part.roof || part.home.style==='castle') continue;
-            const support = this.parts.filter(other => other.home === part.home && !other.broken && !other.roof && other.bounds.max.y >= part.home.y + 2.05);
+            const support = this.byHome.get(id).filter(other => !other.broken && !other.roof && other.bounds.max.y >= part.home.y + 2.05);
             if (support.length <= 5) this.breakPiece(part, point, true);
         }
         for (const house of this.homes) {
-            if (alarm.has(house.id)) house.ruined = !this.parts.some(part => part.home === house && part.roof && !part.broken);
+            if (alarm.has(house.id)) house.ruined = !this.byHome.get(house.id)?.some(part => part.roof && !part.broken);
         }
         for(const batch of this.dirtyBatches)this.rebuildBatch(batch);
         this.dirtyBatches.clear();
@@ -720,34 +835,39 @@ export class OpushkaVillage {
     }
 
     async populate() {
-        const kits = [0,1,2,3,4,6,7,8].map(i=>({i,profile:OUTFITS[i],home:this.homes[i>=6?3:i<3?i%2:2]}));
+        const kits = (this.castle?[0,1,2,3,4,6,7,8]:[0,1,2,3,4]).map(i=>({i,profile:OUTFITS[i],home:this.homes[i>=6?3:i<3?i%2:2]}));
         const names=['Родерик','Агата','Кадвин','Мартин','Айлин','','Эдгар','Ровена','Бран'];
         const sellerNames=['Элвин','Марта','Томас','Хью','Рут'];
         this.stalls.forEach((stall,i)=>kits.push({i:9+i,name:sellerNames[i],profile:{...OUTFITS[i%2?4:3],role:'merchant',
             coat:[0x514637,0x695766,0x657250,0x45362c,0x61534d][i],style:['swept','bun','cropped','bald','braid'][i]},home:stall.home,stall}));
-        this.homes.slice(4,8).forEach((home,i)=>kits.push({i:14+i,name:['Гвин','Беатрис','Эдвин','Сибил'][i],
-            profile:{...OUTFITS[i%2?4:3],coat:[0x77604a,0x48665b,0x5d565a,0x725349][i],style:['curl','shoulder','crest','bun'][i]},home}));
-        for (const {i,profile,home,stall,name=names[i]} of kits) {
-            const seller=stall?new V3(stall.x,0,stall.z-.77):null;
+        this.townHomes.filter((_,i)=>i<4||i%5===0&&i>4).forEach((home,i)=>kits.push({i:14+i,
+            name:['Гвин','Беатрис','Эдвин','Сибил','Холлис','Мод','Ральф','Джоан','Эдмунд','Элинор','Освин'][i],
+            profile:{...OUTFITS[i%2?4:3],coat:[0x77604a,0x48665b,0x5d565a,0x725349][i%4],style:['curl','shoulder','crest','bun'][i%4]},home}));
+        for (const {i,profile:base,home,stall,name=names[i]} of kits) {
+            const female=[1,4,7,10,13].includes(i)||i>=14&&i%2===1;
+            const profile=residentWardrobe(base,female,i*8191+this.id*229+312);
+            const seller=stall?.sellerAt.clone();
             if(seller)seller.y=this.api.ground(seller.x,seller.z);
             const court = i===6 ? home.throne.clone() : i===7 ? home.advisor.clone() : seller;
-            const p = court || home.door.clone().add(new V3((i % 2) * 1.7 - 0.7, 0, (i < 3 ? 1.4 : 2.1) + i * 0.23));
+            const offset=new V3((i%2)*1.7-.7,0,(i<3?1.4:2.1)+i*.09).applyAxisAngle(new V3(0,1,0),home.yaw||0);
+            const p = court || home.door.clone().add(offset);
             if(!court)p.y = this.api.ground(p.x, p.z);
             const mage = ['wizard','vizier'].includes(profile.role);
             const rig = await this.api.avatar(mage ? 'R' : null, profile, true, i * 8191 + 312);
             const arm = () => ({ ok: false, hand: false, u: new V3(), f: new V3(), h: new V3(), n: new V3(1, 0, 0) });
             rig.arms = { dirs: { L: arm(), R: arm() }, solve() {} };
-            const person = { id: 'resident-' + i, rig, profile, name, home, hp: profile.role === 'knight' ? 36 : 25,
+            const person = { id: 'resident-' + this.id + '-' + i, rig, profile, name, home, hp: profile.role === 'knight' ? 36 : 25,
                 maxMana: i === 1 ? 100 : 60, mana: i === 1 ? 100 : 60, waypoint: p.clone(), change: i * 1.2,
                 pos: p, vel: new V3(), faceYaw: 0, yaw: Math.PI, pitch: 0, grounded: true, vy: 0, justLanded: 0,
                 crouch: false, airStyle: 'tuck', view: 'third', landT: 0, jumpPrep: 0, alert: 0, castDelay: i * 0.5, raise: 0, hurt: 0,
-                patrol: court?.clone(), mage, stall };
+                patrol: court?.clone(), mage, stall, town:this, mass:profile.mass };
             const role=profile.role==='vizier'?'advisor':profile.role==='resident'||profile.role==='wizard'?'farmer':profile.role;
-            person.brain=new VillagerBrain({id:person.id,name,role,castleName:'Серый Кряж',kingName:'Эдгар',female:profile===OUTFITS[1]||name==='Ровена'||i%2===1},
+            person.brain=new VillagerBrain({id:person.id,name,role,castleName:'Серый Кряж',kingName:'Эдгар',female},
                 ()=>({castleName:'Серый Кряж',kingName:'Эдгар',timeOfDay:'day',danger:person.alert>0,trade:stall?.trade?.ru}));
             if(stall)stall.seller=person;
             if (profile.role === 'knight') {
                 for (const slot of ['helmet', 'chest', 'legs']) fitArmor(rig, slot, makePiece(slot));
+                armKnight(person,this.inventory,i+this.id);
             }
             if (mage) {
                 rig.colors.coat.value.setHex(profile.coat);
@@ -768,6 +888,9 @@ export class OpushkaVillage {
     }
 
     hit(person, damage, direction, caster, {push=0,up=0,stun=0,freeze=0} = {}) {
+        const topple=push>=4.5;
+        const response=Math.max(.64,Math.min(1.36,76/(person.mass||76)));
+        push*=response;up*=Math.sqrt(response);
         if (person.dead) {
             if (push>1) this.api.fall?.(person.rig,person,direction,push);
             return;
@@ -776,6 +899,11 @@ export class OpushkaVillage {
         person.alert = 18;
         person.brain?.feel(caster,-12);
         person.caster = caster;
+        if(damage>0&&caster&&this.api.body(caster))for(const guard of this.people){
+            if(guard===person||!guard.sword||guard.dead||guard.pos.distanceToSquared(person.pos)>19**2)continue;
+            if(this.trace(guard.pos.clone().add(new V3(0,1.35,0)),person.pos.clone().add(new V3(0,1.1,0)),0))continue;
+            guard.alert=18;guard.caster=caster;
+        }
         person.hurt = Math.max(person.hurt, stun, freeze, push ? .65 : 0);
         if (direction.lengthSq()<.001) direction = new V3(-Math.sin(person.faceYaw),0,-Math.cos(person.faceYaw));
         if (push) {
@@ -787,8 +915,8 @@ export class OpushkaVillage {
             person.dead = true;
             if (!push) person.vel.addScaledVector(direction, 1.75);
         }
-        if (person.dead || push >= 4.5 || stun > 0) {
-            person.down = Math.max(person.down || 0, stun, push >= 4.5 ? 2.4 : 0);
+        if (person.dead || topple || stun > 0) {
+            person.down = Math.max(person.down || 0, stun, topple ? 2.4 : 0);
             this.api.fall?.(person.rig,person,direction,push || (person.dead ? 2.1 : 1.4));
         }
     }
@@ -800,7 +928,7 @@ export class OpushkaVillage {
             const k=1-Math.exp(-dt*9);
             door.angle+=(door.goal-door.angle)*k;
             if(Math.abs(door.angle-door.goal)<.006)door.angle=door.goal;
-            door.part.mesh.rotation.y=door.angle;
+            door.part.mesh.rotation.y=door.yaw+door.angle;
             door.part.mesh.updateMatrixWorld(true);
             door.part.bounds.setFromObject(door.part.mesh);
         }
@@ -839,15 +967,20 @@ export class OpushkaVillage {
             const walk = person.waypoint.clone().sub(pos).setY(0);
             if (enemy) {
                 walk.copy(enemy).sub(pos).setY(0).normalize();
-                if (profile.role === 'resident' || person.stall || distance < 3) walk.negate();
+                if(person.sword){
+                    if(person.sword.move)walk.multiplyScalar(person.sword.move.time<.8?.22:.07);
+                    else if(distance<.86)walk.multiplyScalar(-.44);
+                    else if(distance<1.48)walk.set(-walk.z,0,walk.x).multiplyScalar(person.mass<75?.44:-.30);
+                }else if (profile.role === 'resident' || person.stall || distance < 3) walk.negate();
                 else if (person.mage && distance < 10) walk.multiplyScalar(0.04);
             } else {
                 if(person.follow)walk.copy(player.pos).sub(pos).setY(0).multiplyScalar(walk.lengthSq()>.16?1:.4);
                 if(person.stall)walk.copy(person.patrol).sub(pos).setY(0).multiplyScalar(.85);
                 walk.clampLength(0,1);
             }
-            const speed = enemy ? 3.25 : 1.04;
-            const goal = vel.clone().lerp(walk.multiplyScalar(speed), 1 - Math.exp(-dt * 4));
+            const stamina=Math.max(.75,Math.min(1.19,Math.sqrt(75/person.mass)));
+            const speed = (enemy ? 3.25 : 1.04)*stamina;
+            const goal = vel.clone().lerp(walk.multiplyScalar(speed), 1 - Math.exp(-dt * 4*stamina));
             if (person.hurt <= 0) vel.copy(goal);
             else vel.multiplyScalar(Math.exp(-dt * 2.6));
             const nx = pos.x + vel.x * dt, nz = pos.z + vel.z * dt;
@@ -889,7 +1022,9 @@ export class OpushkaVillage {
                 arm.f.copy(aim);
                 person.raise = 0.5;
             }
+            prepareSword(person,enemy,distance,dt);
             this.api.animate(rig, dt, vel.length(), person);
+            if(person.sword)swingSword(person,enemy,(...segment)=>this.trace(...segment),this.api.strike);
             if (casting) {
                 if (this.api.cast(person, enemy, 'Jolt')) { person.mana -= 8; person.castDelay = 2 + this.rand() * 1.5; }
                 else person.castDelay = 0.55;
@@ -917,5 +1052,68 @@ export class OpushkaVillage {
         inventory.placeLoose(makePiece('chest'), table.clone().add(new V3(-0.72, 0, 0)));
         inventory.placeLoose(makePiece('legs'), table.clone().add(new V3(-1.4, 0, 0)));
         inventory.placeLoose({ ...makeRobe(false, this.rand), color: 0x68432f }, table.clone().add(new V3(-2.11, 0, 0)));
+    }
+}
+
+export class OpushkaSettlements {
+    constructor(sites, create) {
+        this.sites=sites;
+        this.create=create;
+        this.active=[];
+        this.open(sites[0]);
+        this.check=0;
+    }
+
+    open(site) {
+        if(!site||site.instance)return;
+        site.instance=this.create(site,site.id===0);
+        this.active.push(site.instance);
+    }
+
+    get people() { return this.active.flatMap(t=>t.people); }
+
+    get homes() {
+        return this.sites.flatMap(site=>site.instance?.homes||[{
+            x:site.x+(site.kind==='castle'?CASTLE_PLAN.dx:0),z:site.z+(site.kind==='castle'?CASTLE_PLAN.dz:0),
+            width:site.kind==='castle'?CASTLE_PLAN.width:14,depth:site.kind==='castle'?CASTLE_PLAN.depth:12,style:site.kind==='castle'?'castle':'cottage',
+        }]);
+    }
+
+    trace(a,b,r) {
+        let first=null;
+        for(const town of this.active){
+            const hit=town.trace(a,b,r);
+            if(hit&&(!first||hit.t<first.t))first=hit;
+        }
+        return first;
+    }
+
+    solidAt(x,y,z,r) { return this.active.some(t=>t.solidAt(x,y,z,r)); }
+    floor(x,y,z,base) { return this.active.reduce((floor,t)=>t.floor(x,y,z,floor),base); }
+    collisionBoxes(x0,x1,z0,z1) { return this.active.flatMap(t=>t.collisionBoxes(x0,x1,z0,z1)); }
+    touchDoor(p) { return this.active.some(t=>t.touchDoor(p)); }
+    windDoor(p,d) { return this.active.some(t=>t.windDoor(p,d)); }
+    doorSpell(p,d,lock) { return this.active.some(t=>t.doorSpell(p,d,lock)); }
+    pay(item,p) { return this.active.some(t=>t.pay(item,p)); }
+    hear(text) { return this.active.some(t=>t.hear(text)); }
+    hit(npc,...args) { npc.town.hit(npc,...args); }
+
+    blast(p,power,radius) {
+        const alarms=new Set();
+        for(const town of this.active)for(const id of town.blast(p,power,radius))alarms.add(id);
+        return alarms;
+    }
+
+    update(dt,p) {
+        this.check-=dt;
+        if(this.check<=0){
+            this.check=.48;
+            for(const site of this.sites)if(!site.instance){
+                const radius=site.kind==='castle'?145:66;
+                const cx=site.x+(site.kind==='castle'?CASTLE_PLAN.dx:0),cz=site.z+(site.kind==='castle'?CASTLE_PLAN.dz:0);
+                if(Math.hypot(p.x-cx,p.z-cz)<radius)this.open(site);
+            }
+        }
+        for(const town of this.active)town.update(dt);
     }
 }

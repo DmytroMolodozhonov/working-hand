@@ -147,12 +147,12 @@ import { makeItemModel, describeItem } from '../src/game/ItemTypes.js';
 import { STACK } from '../src/game/Inventory.js';
 import { BLOCK } from '../src/world/Terrain.js';
 import { scrollKey } from '../src/game/SpellBook.js';
-import { geography, heightTriangle, markShoreSand, SHORE_SAND, OpushkaCaves, WATER_KIND, CAVE_TILE } from './opushka-world.js';
+import { geography, heightTriangle, markShoreSand, SHORE_SAND, OPUSHKA_SEED, OpushkaCaves, WATER_KIND, CAVE_TILE } from './opushka-world.js';
 import { OpushkaMap } from './opushka-map.js';
 import { OpushkaInventory, opushkaWand } from './opushka-inventory.js';
-import { OUTFITS, heroProfile, avatarHair, moveHair, fitArmor } from './opushka-appearance.js';
-import { OpushkaVillage, villageClearing } from './opushka-village.js';
-import { castleGrade, TOWN_PATHS } from './opushka-castle.js';
+import { OUTFITS, heroProfile, avatarHair, moveHair, fitArmor, fitTownClothes } from './opushka-appearance.js';
+import { OpushkaVillage, OpushkaSettlements, villageClearing } from './opushka-village.js';
+import { castleGrade, settlementSites, TOWN_PATHS } from './opushka-castle.js';
 import { OpushkaCaveLoot } from './opushka-cave-loot.js';
 import { tumble, stepLimp, drawLimp, standLimp, recoverLimp, applyLimpPose } from './opushka-ragdoll.js';
 import { ScrollReading } from '../src/game/ScrollReading.js';
@@ -178,6 +178,9 @@ const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() {
   fall:(state,direction,force)=>tipAvatar(charRig,state,direction,force),stand:()=>standLimp(charRig),
   recover:(state)=>recoverLimp(charRig,bodyWorld,state),
   knows:(name)=>name!=='WindMaxima'||CREATIVE||learnedScrolls.has('s:WindMaxima'),
+  callItem:(o,d)=>inventory?.callLoose(o,d,(a,b)=>spells._worldHit(a,b,0)),
+  up:()=>{if(player.locked||!player.grounded&&!player.swimming)return false;player.grounded=false;player.vy=Math.max(player.vy,player.swimming?5.2:4.4);return true;},
+  standSpell:standInCave,
   oink: (pg) => audio.oink && audio.oink(pg, 1.4), fell: (i, x, z, k) => fellTree(i, x, z, k), respawn: () => { player.pos.set(MEADOW[0] - 4 + Math.random() * 3, 0, MEADOW[1] + 14 + Math.random() * 3); player.pos.y = groundH(player.pos.x, player.pos.z); player.vel.set(0, 0, 0); player.vy = 0; } });
 window.__spells = spells; mpNet.spells = spells;
 let _hudT = 0;
@@ -261,10 +264,13 @@ const HM_N=769, HM_HALF=768, HM_STEP=2, PLAY=470;
 const HGT=new Float32Array(HM_N*HM_N), FOR=new Float32Array(HM_N*HM_N), CAN=new Float32Array(HM_N*HM_N), LUSH=new Float32Array(HM_N*HM_N);
 const MEADOW=[10,-20];
 const VILLAGE_ORIGIN=[MEADOW[0]+25,MEADOW[1]+4];
-const inVillage=(x,z)=>CREATIVE&&villageClearing(x-VILLAGE_ORIGIN[0],z-VILLAGE_ORIGIN[1]);
+const WORLD_SEED=CREATIVE?Number(params.get('seed'))||OPUSHKA_SEED:OPUSHKA_SEED;
+const inVillage=(x,z)=>worldSites.some(site=>Math.abs(x-site.x)<134&&Math.abs(z-site.z)<111&&villageClearing(x-site.x,z-site.z,site.kind));
 function townPath(x,z){
-  const dx=x-VILLAGE_ORIGIN[0],dz=z-VILLAGE_ORIGIN[1];
-  if(dx<8||dx>88||dz>0||dz< -80)return false;
+  return worldSites.some(site=>site.kind==='castle'&&localTownPath(x-site.x,z-site.z));
+}
+function localTownPath(dx,dz){
+  if(dx< -5||dx>120||dz>16||dz< -89)return false;
   for(const {points,wide} of TOWN_PATHS)for(let n=1;n<points.length;n++){
     const [px,pz]=points[n-1],[qx,qz]=points[n],a=qx-px,b=qz-pz;
     const t=clamp(((dx-px)*a+(dz-pz)*b)/(a*a+b*b),0,1);
@@ -291,7 +297,24 @@ function meadowHeight(x,z){
   h=lerp(h,mh,m);
   return h;
 }
-const heightAnalytic=geography(meadowHeight);
+const heightAnalytic=geography(meadowHeight,WORLD_SEED);
+const worldSites=CREATIVE?settlementSites(WORLD_SEED,heightAnalytic,...VILLAGE_ORIGIN,PLAY):[];
+function townGround(x,z,surface){
+  let h=surface;
+  for(const site of worldSites){
+    const dx=x-site.x,dz=z-site.z;
+    if(site.kind==='castle'){
+      if(dx< -12||dx>131||dz< -126||dz>30)continue;
+      h=castleGrade(dx,dz,h);
+    }else{
+      const d=Math.max(Math.abs(dx),Math.abs(dz));
+      if(d>24)continue;
+      h=lerp(h,site.height,1-smooth(12,24,d));
+    }
+  }
+  return h;
+}
+for(const site of worldSites)if(site.kind==='settlement')site.height=Math.max(.75,heightAnalytic(site.x,site.z));
 let caves, minimap;
 const HYD=new Uint8Array(HM_N*HM_N), FLOW=new Int8Array(HM_N*HM_N*2);
 const SAND=new Uint8Array(HM_N*HM_N), harvestedSand=new Set();
@@ -426,7 +449,7 @@ async function genWorld(progress){
     const z=-HM_HALF+j*HM_STEP;
     for(let i=0;i<HM_N;i++){const x=-HM_HALF+i*HM_STEP,k=j*HM_N+i;
       const surface=heightAnalytic(x,z);
-      HGT[k]=CREATIVE?castleGrade(x-VILLAGE_ORIGIN[0],z-VILLAGE_ORIGIN[1],surface):surface;
+      HGT[k]=townGround(x,z,surface);
       HYD[k]=HGT[k]<0?waterCode():0;
       banks[k]=heightAnalytic.bank||heightAnalytic.beach?1:0;
       if(HYD[k]===WATER_KIND.RIVER){FLOW[k*2]=heightAnalytic.flowX*127;FLOW[k*2+1]=heightAnalytic.flowZ*127;}
@@ -435,7 +458,7 @@ async function genWorld(progress){
     if(j%64===0){progress(0.05+0.25*j/HM_N,'Рельеф');await nextFrame();}
   }
   markShoreSand(SAND,HGT,HYD,banks,HM_N,HM_HALF,HM_STEP,inVillage);
-  caves=new OpushkaCaves(groundH,(x,z)=>Math.hypot(x,z)<80||inVillage(x,z)||!!waterKind(x,z),PLAY);
+  caves=new OpushkaCaves(groundH,(x,z)=>Math.hypot(x,z)<80||inVillage(x,z)||!!waterKind(x,z),PLAY,WORLD_SEED);
   // trees
   const rng=mulberry32(99), cell=4.4, lim=760;
   for(let gz=-lim;gz<lim;gz+=cell)for(let gx=-lim;gx<lim;gx+=cell){
@@ -1878,6 +1901,8 @@ async function buildMannequin(activeHand='R',profile=OUTFITS[5],light=false,seed
   const byBone={};for(const p of bp){if(p.sub)continue;(byBone[p.bone]=byBone[p.bone]||[]).push(p);}
   const bnames=Object.keys(byBone);
   for(let v=0;v<n;v++){const x=P.getX(v),y=P.getY(v),z=P.getZ(v);lp[v*3]=x;lp[v*3+1]=y;lp[v*3+2]=z;
+    const build=1+((profile.build||1)-1)*smooth(.73,.96,y)*(1-smooth(1.42,1.49,y))*(1-smooth(.16,.32,Math.abs(x)));
+    P.setXYZ(v,x*build,y,z*build);
     const ds=[];let best=1e9,bestReg=1;
     for(const b of bnames){let dm=1e9;for(const p of byBone[b]){const d=primD(p,x,y,z);if(d<dm)dm=d;if(d<best){best=d;bestReg=p.reg;}}ds.push([b,dm]);}
     reg[v]=bestReg;
@@ -1891,6 +1916,7 @@ async function buildMannequin(activeHand='R',profile=OUTFITS[5],light=false,seed
   g.setAttribute('aReg',new THREE.BufferAttribute(reg,1));g.setAttribute('aLP',new THREE.BufferAttribute(lp,3));
   const body=new THREE.SkinnedMesh(g,mat);body.castShadow=body.receiveShadow=true;body.frustumCulled=false;root.add(body);
   const skeleton=new THREE.Skeleton(BONES.map(b=>B[b]));body.bind(skeleton);
+  if(profile.garment)fitTownClothes({root,B},profile,skeleton,boneIdx);
   await nextFrame();
   // head (rigid on head bone)
   const hpr=headPrims();const hg=await polygonize(hpr,light?0.0038:0.0024);{const p=hg.attributes.position,l=new Float32Array(p.count*3),r=new Float32Array(p.count),hp=rp('head');
@@ -2411,12 +2437,27 @@ function makeScrollReader(){
     get currentPose(){return zns.live()?zns.raw:null;}};
   return new ScrollReading(adapter,.52);
 }
-function makeTestVillage(){
-  const origin=new V3(VILLAGE_ORIGIN[0],0,VILLAGE_ORIGIN[1]);
-  return new OpushkaVillage({scene,ground:groundH,player:()=>player,spawn:player.pos.clone(),avatar:buildAvatar,
+function makeTown(site,starter){
+  const origin=new V3(site.x,0,site.z);
+  const town=new OpushkaVillage({scene,ground:groundH,player:()=>player,
+    spawn:starter?player.pos.clone():new V3(site.x,groundH(site.x,site.z+14),site.z+14),avatar:buildAvatar,
     animate:animateAvatar,camera:()=>camera,notify:gameNotify,sound:(cue,pos)=>spells.sound(cue==='door'?'creak':cue,pos,.55),audio:()=>audio.ctx,body:(id)=>spells._bodyOf(id),cast:(person,target,name)=>spells.castResident(person,target,name),
+    strike:(knight,target,dir,hp,push)=>{
+      if(target===spells._myId()||target==='me'){
+        const shield=spells.shields.some(s=>s.by===spells._myId()&&(s.sphere||knight.pos.clone().sub(s.pos).dot(s.dir)>0));
+        if(!shield)spells.hurtMe('SwordStrike',dir,knight.id,{hp,push,up:push*.27});
+      }else{
+        const foe=village?.people.find(p=>p.id===target);
+        if(foe)village.hit(foe,hp,dir,knight.id,{push,up:push*.27});
+      }
+      spells.sound('hit',knight.pos,.56,0xcdd6db);
+    },
     mergeGeometries,fall:tipAvatar,stepLimp:(rig,dt,state)=>stepLimp(rig,bodyWorld,dt,state),
-    recover:(rig,state)=>recoverLimp(rig,bodyWorld,state)},origin);
+    recover:(rig,state)=>recoverLimp(rig,bodyWorld,state)},origin,site);
+  if(starter)town.putTestGear(inventory);
+  town.stock(inventory,starter);
+  town.populate().catch(e=>console.warn('[Опушка] поселение',e));
+  return town;
 }
 const bodyWorld={
   floor:(x,z,y)=>{
@@ -2430,6 +2471,17 @@ function tipAvatar(rig,state,direction,force){
   const launch=state.vel.clone().setY(state.vy);
   const liftOff=state.grounded||state.pos.y-(caves?.floor(state.pos.x,state.pos.z,state.pos.y)??groundH(state.pos.x,state.pos.z))<.11;
   tumble(rig,RP,launch,direction,force,liftOff,state===player?!!spells.me.dead:!!state.dead);
+}
+function standInCave(){
+  const {x,y,z}=player.pos;
+  if(y>=groundH(x,z)-.72)return false;
+  const top=groundH(x,z)+.13;
+  for(let at=y+1.55;at<top;at+=.30)if(surfaceDensity(x,at,z)>.02)return false;
+  for(let at=top;at<top+2;at+=.38)if(surfaceDensity(x,at,z)>.02)return false;
+  player.pos.y=top;
+  player.vy=2;
+  player.grounded=false;
+  return true;
 }
 function updateCharacter(dt,speed){
   if(charCustom&&charRig?.cape)charRig.cape.mesh.visible=false;
@@ -2883,7 +2935,7 @@ async function init(){
     if(params.get('x')){player.pos.x=+params.get('x');player.pos.z=+params.get('z');}
     if(params.get('pitch'))player.pitch=+params.get('pitch');
     updatePlayer(0.016);refreshLod(camera.position);
-    if(CREATIVE){village=makeTestVillage();village.putTestGear(inventory);village.stock(inventory);}
+    if(CREATIVE)village=new OpushkaSettlements(worldSites,makeTown);
     scrollReader=makeScrollReader();
     caveLoot=new OpushkaCaveLoot(caves,{scene,inventory,player:()=>player,net:()=>mpNet.on?mpNet.net:null,
       remote:(id)=>mpNet.remotes.get(id)?.P?.pos,knowsScroll:(item)=>learnedScrolls.has(scrollKey(item)),
@@ -2893,7 +2945,6 @@ async function init(){
     buildStumps();spells.init();renderer.compile(scene,camera);renderFrame();
     mpNet.start();
     prog(1,'Готово');$('#status').textContent='Лес готов. Нажми, чтобы войти.';$('#go').disabled=false;started=true;window.__ready=true;
-    if(village)village.populate().catch(e=>console.warn('[Опушка] поселение',e));
     if(AUTO){prog(0.97,'Камера');const t0=performance.now();
       const wait=()=>{const seen=zns.live()||!!zns.raw?.hasPose;
         if(seen||performance.now()-t0>40000){portal.finish();document.body.classList.remove('loading');autoEnter();if(!seen)gameNotify('📷 Камера пока не видит вас — встаньте в кадр; до тех пор — клавиатура и мышь');}
@@ -2909,7 +2960,7 @@ function loop(now){
   if(playing)minimap.draw(player,now);
   if(camera.position.distanceTo(lastLod)>8)refreshLod(camera.position);
   updatePigs(dt);
-  village?.update(dt);
+  village?.update(dt,player.pos);
   mpNet.update(dt);
   inventory?.icons.update(1.5);if(playing){caveLoot.update(dt);scrollReader.update(dt);}updateCaveMeshes(player.pos);spells.update(dt);updateFallen(dt);updateHp();
   updateGrass(camera.position);updateTrees();updateShadow();
@@ -2923,7 +2974,7 @@ function loop(now){
   if(dynTimer>2.5&&playing){dynTimer=0;const old=dynScale;if(fpsShow<42)dynScale=Math.max(0.55,dynScale-0.1);else if(fpsShow>58&&dynScale<1)dynScale=Math.min(1,dynScale+0.05);if(old!==dynScale)resizePost();}
   requestAnimationFrame(loop);
 }
-window.__debug={wingFlight,get caveLoot(){return caveLoot;},get village(){return village;},get inventory(){return inventory;},get minimap(){return minimap;},get caves(){return caves;},groundH,waterAt,get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
+window.__debug={wingFlight,get caveLoot(){return caveLoot;},get village(){return village?.active[0];},get settlements(){return village;},get inventory(){return inventory;},get minimap(){return minimap;},get caves(){return caves;},groundH,waterAt,get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
 init();
 </script>
 
