@@ -1220,9 +1220,11 @@ function bodyPrims(){
     const sh=rp('ua'+K),el=rp('fa'+K),wr=rp('hd'+K);const ad=wr.clone().sub(el).normalize();
     P.push(PE([s*0.165,1.4,-0.01],[0.06,0.06,0.062],{bone:'ua'+K,k:0.045,reg:1}));
     P.push(PC(sh.toArray(),el.toArray(),0.054,0.046,{bone:'ua'+K,k:0.03,reg:1}));
-    // bell sleeve, opened at the wrist
-    P.push(PC(el.toArray(),wr.clone().addScaledVector(ad,0.03).toArray(),0.048,0.07,{bone:'fa'+K,k:0.025,reg:1}));
-    P.push(PC(wr.clone().addScaledVector(ad,-0.07).toArray(),wr.clone().addScaledVector(ad,0.16).toArray(),0.03,0.057,{sub:true,k:0.006}));
+    // bell sleeve, opened above the wrist (the author 23.11: «рукав сократить, чтобы было видно кисть руки»): it ends a hand's width
+    // short of the wrist; the bare forearm and the wrist show under it
+    P.push(PC(el.toArray(),wr.clone().addScaledVector(ad,-0.075).toArray(),0.048,0.062,{bone:'fa'+K,k:0.025,reg:1}));
+    P.push(PC(wr.clone().addScaledVector(ad,-0.15).toArray(),wr.clone().addScaledVector(ad,0.06).toArray(),0.03,0.052,{sub:true,k:0.006}));
+    P.push(PC(wr.clone().addScaledVector(ad,-0.11).toArray(),wr.toArray(),0.031,0.027,{bone:'fa'+K,k:0.008,reg:0})); // the bare forearm
     P.push(PC(wr.clone().lerp(el,0.25).toArray(),wr.clone().lerp(rp('tip'+K),0.12).toArray(),0.03,0.024,{bone:'hd'+K,k:0.004,reg:0}));
     const th=rp('th'+K),sn=rp('sn'+K),ft=rp('ft'+K);
     P.push(PC(th.toArray(),sn.toArray(),0.086,0.058,{bone:'th'+K,k:0.04,reg:2}));
