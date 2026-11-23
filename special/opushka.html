@@ -51,6 +51,7 @@ body.touch.playing #joy{display:block}
 @media (prefers-reduced-motion:reduce){.bar,#overlay{transition:none}}
 .loading #overlay .row,.loading #go,.loading #overlay .keys,.loading #overlay .sub,.loading #overlay a{display:none!important}
 body.auto #overlay{display:none!important}
+body.creative #hud{display:none!important}
 #pause-menu .pause-box button{min-width:12rem}
 </style>
 
@@ -198,6 +199,8 @@ const PRESETS={
 const params=new URLSearchParams(location.search);
 const AUTO=params.get('auto')==='1'||!!params.get('mp'); // (from the game's menu: straight into the world — no menu of this page, ultra, the golden hour)
 if(AUTO){document.body.classList.add('loading','auto');}
+// (the author 23.11: «через Творческий захожу — почему-то ХП появились»): Creative is as the game's — no health, nobody hurt; a server's «Опушка» has it
+const CREATIVE=!params.get('mp');if(CREATIVE){document.body.classList.add('creative');spells.noHarm=true;}
 // (the author 23.11: «загрузка тоже должна быть как у нас в обычной игре»): the game's own passage (PortalLoader) while the forest is made
 const portal=AUTO?new PortalLoader():null;if(portal)portal.start();
 let qKey=params.get('q')||(AUTO?'ultra':isTouch?'low':'high'); if(!PRESETS[qKey])qKey='high';
@@ -1849,7 +1852,7 @@ function animateMannequin(c,dt,speed,P){
       let pole=f.clone().sub(u.clone().multiplyScalar(f.dot(u)));pole=pole.lengthSq()>0.0025?pole.normalize().negate():new V3(0,0,-1);
       const QcUa=aimBone(c,'ua'+K,u,pole,QcChest);const QcFa=aimBone(c,'fa'+K,f,pole,QcUa);
       if(K==='R'&&Z.aim&&c.restB.wandR&&c.fingers?.R?.grip){ // (the wand hand: turned so the WAND points along the steadied aim — the game's V3)
-        const np=Z.np||Z.n,ad=_wandDown.copy(Z.aim);ad.y-=0.2;ad.normalize();const m=c.basis(ad,new V3(np.x,np.y,np.z)).multiply(c.restB.wandR); // (≈11° lower than the aim: the author «чуть вверх смотрит»)const Qc=new THREE.Quaternion().setFromRotationMatrix(m);B.hdR.quaternion.copy(QcFa.clone().invert().multiply(Qc));}
+        const np=Z.np||Z.n,ad=_wandDown.copy(Z.aim);ad.y-=0.2;ad.normalize();const m=c.basis(ad,new V3(np.x,np.y,np.z)).multiply(c.restB.wandR); /* (≈11° lower than the aim: the author «чуть вверх смотрит») */const Qc=new THREE.Quaternion().setFromRotationMatrix(m);B.hdR.quaternion.copy(QcFa.clone().invert().multiply(Qc));}
       else if(Z.hand)aimBone(c,'hd'+K,new V3(Z.h.x,Z.h.y,Z.h.z),new V3(Z.n.x,Z.n.y,Z.n.z),QcFa);else B['hd'+K].quaternion.identity();
       H.init=false;continue;}
     const sh=wp_(B['ua'+K],new V3());const out=right.clone().multiplyScalar(-s);

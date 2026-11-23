@@ -558,6 +558,7 @@ export class OpushkaSpells {
 
     _damage(hp, by) {
         const me = this.me;
+        if (this.noHarm) return; // (Creative: no health, as in the game's Creative — the spells still throw, stun and freeze)
         me.hp = Math.max(0, me.hp - hp);
         this.api.pain(Math.min(1, hp / 20));
         if (me.hp <= 0 && !me.dead) {
