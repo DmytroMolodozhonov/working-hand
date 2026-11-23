@@ -1,4 +1,8 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
+#terrain-map{position:fixed;z-index:8;left:calc(11px + env(safe-area-inset-left,0px));bottom:calc(13px + env(safe-area-inset-bottom,0px));width:clamp(130px,17vw,182px);height:auto;pointer-events:none;display:none;filter:drop-shadow(0 8px 12px rgba(16,20,13,.55));}
+body.playing #terrain-map{display:block;}
+body.touch #terrain-map{bottom:calc(174px + env(safe-area-inset-bottom,0px));}
+</style></head><body>
 <title>Опушка</title>
 <!-- (the author 23.11: «интерфейс Опушки должен быть такой же, как у нас в обычной игре… и загрузка тоже»): the game's own look -->
 <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="../theme.css"><link rel="stylesheet" href="../magic-ui.css"><link rel="stylesheet" href="../arcane-ui.css">
@@ -105,6 +109,7 @@ body.creative #hud{display:none!important}
 
 <script src="../vendor/peerjs/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"../vendor/three-r170/three.module.js","three/addons/":"../vendor/three-r170/addons/"}}</script>
+<canvas id="terrain-map" width="344" height="224" role="img" aria-label="Мини-карта местности"></canvas>
 <div id="mpHud" hidden style="position:fixed;left:16px;top:16px;z-index:30;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;border-radius:8px;background:rgba(10,12,8,.62);color:#efe6cf;font:13px/1.4 Georgia,serif;pointer-events:none"></div>
 <video id="zns-webcam" playsinline muted hidden></video>
 <!-- (the author 23.11: «не вижу справа внизу, как я выгляжу — по аналогии со стандартным»): the game's own camera window — the picture and the skeleton the camera sees -->
@@ -124,6 +129,7 @@ import { PortalLoader } from '../src/ui/PortalLoader.js';
 import { ZnsArms } from './opushka-hands.js';
 import { wandModel } from '../src/game/WandModel.js';
 import { geography, heightTriangle, OpushkaCaves, WATER_KIND, CAVE_TILE } from './opushka-world.js';
+import { OpushkaMap } from './opushka-map.js';
 import { caveGeometry, terrainIndex, waterGeometry } from './opushka-mesh.js';
 const zns = new ZnsArms(); window.__znsArms = zns; // (tests and the camera check reach it here)
 // (multiplayer — special/opushka-net.js: the game's network; friends are whole wizards here, moved by their poses)
@@ -235,7 +241,7 @@ function meadowHeight(x,z){
   return h;
 }
 const heightAnalytic=geography(meadowHeight);
-let caves;
+let caves, minimap;
 const HYD=new Uint8Array(HM_N*HM_N), FLOW=new Int8Array(HM_N*HM_N*2);
 const waterCode=()=>heightAnalytic.sea?WATER_KIND.SEA:heightAnalytic.river?WATER_KIND.RIVER:heightAnalytic.water?WATER_KIND.LAKE:0;
 function waterKind(x,z){
@@ -2412,6 +2418,7 @@ async function init(){
     zns.start(); // (the camera at once, while the forest is made — as the game does: by the end of the loading it already sees the player)
     prog(0.02,'Генерация мира');await nextFrame();
     await genWorld(prog);
+    minimap=new OpushkaMap($('#terrain-map'),{heights:HGT,forest:FOR,water:HYD,size:HM_N,half:HM_HALF,step:HM_STEP,caves});
     const half=new Uint16Array(HM_N*HM_N*4);for(let i=0;i<HM_N*HM_N;i++){half[i*4]=THREE.DataUtils.toHalfFloat(HGT[i]);half[i*4+1]=THREE.DataUtils.toHalfFloat(CAN[i]);half[i*4+2]=THREE.DataUtils.toHalfFloat(FOR[i]);half[i*4+3]=THREE.DataUtils.toHalfFloat(LUSH[i]);}
     const hmTex=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);hmTex.minFilter=hmTex.magFilter=THREE.LinearFilter;hmTex.wrapS=hmTex.wrapT=THREE.ClampToEdgeWrapping;hmTex.needsUpdate=true;U.uHM.value=hmTex;hmSrc=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);
     const geo=new Uint8Array(HM_N*HM_N*4);
@@ -2456,6 +2463,7 @@ function loop(now){
   const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;
   U.uTime.value+=dt;
   const speed=playing?updatePlayer(dt):(updatePlayer(0),0);
+  if(playing)minimap.draw(player,now);
   if(camera.position.distanceTo(lastLod)>8)refreshLod(camera.position);
   updatePigs(dt);
   mpNet.update(dt);
@@ -2471,7 +2479,7 @@ function loop(now){
   if(dynTimer>2.5&&playing){dynTimer=0;const old=dynScale;if(fpsShow<42)dynScale=Math.max(0.55,dynScale-0.1);else if(fpsShow>58&&dynScale<1)dynScale=Math.min(1,dynScale+0.05);if(old!==dynScale)resizePost();}
   requestAnimationFrame(loop);
 }
-window.__debug={get caves(){return caves;},groundH,waterAt,get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
+window.__debug={get minimap(){return minimap;},get caves(){return caves;},groundH,waterAt,get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
 init();
 </script>
 
