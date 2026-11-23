@@ -43,6 +43,7 @@ export class PoseService {
         this.onPoseUpdate = null;
         this.onRawPose = null; // (raw points, its own time: CrossedArms — the crossed arms' shield)
         this.onStatus = null;
+        this.onCaptureState = null;
         this.worker = null;
         this.runner = null; // main-thread fallback
         this.inFlight = false;
@@ -516,6 +517,7 @@ export class PoseService {
                 try { msg = JSON.parse(ev.data).error; } catch (e) { /* ignore */ }
                 this.stats.nativeWhy = msg || 'ошибка программы';
                 this._captureLog('Ошибка программы камеры: ' + this.stats.nativeWhy);
+                if (this.isRunning) this.onCaptureState?.(this.stats.nativeWhy);
                 es.close();
                 cancel();
             });
@@ -591,7 +593,12 @@ export class PoseService {
         this._notice('Камера потеряла связь — подключаю снова…');
         this._captureLost = true;
         const mode = this.native ? 'программа' : 'браузер';
-        this._captureLog(`Потеря камеры (${mode}): ${ended ? 'поток закрыт' : 'нет свежих кадров'}, ${Math.round(now - this._cameraFrameAt)} мс`);
+        const symptom = ended ? 'Поток камеры закрыт' : track?.muted ? 'Камера приостановлена'
+            : this.videoElement?.paused && !this.native ? 'Видеопоток на паузе' : 'Камера перестала присылать кадры';
+        this.onCaptureState?.(symptom);
+        const age = Number.isFinite(this._cameraFrameAt) ? Math.round(now - this._cameraFrameAt) : null;
+        this._captureLog(`Потеря камеры (${mode}): ${symptom}, ${age ?? 'нет данных'} мс`);
+        if (this.native) this._logNativeCapture(epoch);
         try {
             if (this.native) {
                 this._native?.close();
@@ -620,6 +627,10 @@ export class PoseService {
             this._pump();
             this._captureRestored();
         } catch (e) {
+            const known = { NotAllowedError: 'Камера без разрешения', NotReadableError: 'Камера занята или недоступна',
+                NotFoundError: 'Камера не найдена', CaptureTimeoutError: 'Драйвер камеры не отвечает',
+                NoFramesError: 'Камера открылась, но кадров нет' };
+            this.onCaptureState?.(known[e?.name] || 'Камеру пока не удалось подключить');
             this._captureLog('Переподключение: ' + (e?.name || 'Error') + ' ' + (e?.message || e));
         } finally {
             this._captureRetryAt = performance.now() + CAMERA_RETRY_MS;
@@ -627,8 +638,26 @@ export class PoseService {
         }
     }
 
+    async _logNativeCapture(epoch) {
+        const url = new URL('api/pose/status', this.baseUrl);
+        if (!/^https?:$/.test(url.protocol)) return;
+        try {
+            const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(2500) });
+            if (!response.ok || !this.isRunning || epoch !== this._captureEpoch) return;
+            const data = await response.json();
+            const recentFrame = typeof data.frame_ms === 'number' && data.frame_ms < 1500;
+            const recentResult = typeof data.result_ms === 'number' && data.result_ms < 1500;
+            const detail = data.error || (recentFrame
+                ? recentResult ? 'Кадры есть, прервалась доставка распознанных движений' : 'Кадры есть, распознавание перестало отвечать'
+                : data.frame_ms == null ? 'Программа камеры сейчас без активного захвата' : 'Устройство перестало отдавать кадры');
+            this._captureLog(`Захват: ${data.state}, драйвер ${data.camera_api ?? '—'}, кадр ${data.frame_ms ?? '—'} мс, результат ${data.result_ms ?? '—'} мс, перезапусков ${data.reopens ?? '—'}. ${detail}`);
+            if (this._captureLost) this.onCaptureState?.(detail);
+        } catch (e) { this._captureLog('Нет ответа на диагностику программы камеры'); }
+    }
+
     _captureRestored() {
         this._captureLost = false;
+        this.onCaptureState?.(null);
         this._status('Камера снова работает');
         this._notice('Камера снова работает');
         this._captureLog('Камера восстановлена: ' + (this.native ? 'программа' : 'браузер'));
@@ -824,6 +853,7 @@ export class PoseService {
         clearInterval(this._captureWatch);
         this._captureWatch = null;
         this._captureLost = false;
+        this.onCaptureState?.(null);
         this._nativeRecoveryFailures = 0;
         this._cancelNativeOpen?.();
         if (this._native) { this._native.close(); this._native = null; }

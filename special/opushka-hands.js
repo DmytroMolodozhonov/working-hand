@@ -81,6 +81,19 @@ export class ZnsArms {
         return { run: !!p.isRunning, k: p.runIntensity || 0, crouch: !!p.isCrouching, jump };
     }
 
+    captureNotice(detail) {
+        if (!detail && !this.cameraNotice) return;
+        if (!this.cameraNotice) {
+            const notice = document.createElement('aside');
+            notice.setAttribute('role', 'status');
+            notice.style.cssText = 'position:fixed;z-index:7;left:50%;top:max(32px,env(safe-area-inset-top,0px));transform:translateX(-50%);width:max-content;max-width:min(88vw,420px);padding:10px 16px;border:1px solid #b89962;border-radius:12px;background:#1d211eeb;color:#fff2d9;font:14px/1.4 system-ui,sans-serif;text-align:center;pointer-events:none';
+            document.body.append(notice);
+            this.cameraNotice = notice;
+        }
+        this.cameraNotice.hidden = !detail;
+        if (detail) this.cameraNotice.textContent = '📷 ' + detail + '. Переподключаем камеру…';
+    }
+
     /** Start the game's camera (the same as the game uses: the camera program if it runs, else the browser). */
     async start() {
         try {
@@ -90,6 +103,7 @@ export class ZnsArms {
             this.smoother = new PoseSmoother();
             svc.onPoseUpdate = (p) => { this.smoother.push(p); this.raw = p; this.at = performance.now(); this.heardAt = this.at; };
             svc.onStatus = (t) => { this.status = t; };
+            svc.onCaptureState = (detail) => this.captureNotice(detail);
             await svc.initialize('zns-webcam', 'zns-preview', this.set.config);
             try { setHandSmoothness(this.set.handSmooth, svc); } catch (e) { /* */ }
             // (the camera busy or not given yet: tried again every few seconds — as the game's camera panel does)

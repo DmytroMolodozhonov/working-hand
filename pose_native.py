@@ -243,6 +243,8 @@ class NativePose:
         self._cam_hd = False  # (the camera opened at 1280×720)
         self._camera_api = None
         self.reopens = 0
+        self._grab = None
+        self._result_at = 0.0
         self.game_fps = 0.0  # the game's frames a second (pace()), and when it said so
         self.game_fps_at = 0.0
         self._hd_slow = False
@@ -284,6 +286,7 @@ class NativePose:
             return False
 
     def status(self):
+        reader = self._grab
         return {
             "available": self.available(),
             "state": self.state,
@@ -292,6 +295,8 @@ class NativePose:
             "camera": self.camera_index,
             "camera_api": self._camera_api,
             "reopens": self.reopens,
+            "frame_ms": self._elapsed_ms(reader.at if reader else 0),
+            "result_ms": self._elapsed_ms(self._result_at),
             "fps": round(self.fps, 1),
             "cost": round(self.cost, 1),
             "size": [self.width, self.height],
@@ -299,6 +304,10 @@ class NativePose:
             "v5": self.v5.state,
             "v5gpu": self.v5.gpu,
         }
+
+    @staticmethod
+    def _elapsed_ms(stamp):
+        return round(max(0, time.time() - stamp) * 1000) if stamp else None
 
     def snapshot(self, width=480, quality=70):
         """The newest camera picture as a small JPEG (bytes), or None (the hand recording)."""
@@ -332,6 +341,7 @@ class NativePose:
             self._stop.clear()
             self.state = "loading"
             self.error = ""
+            self._result_at = 0.0
             self._thread = threading.Thread(target=self._run, name="pose-native", daemon=True)
             self._thread.start()
         return True
@@ -599,7 +609,7 @@ class NativePose:
             # the NEWEST picture: a camera keeps a queue of pictures, and while the network
             # works on one, the next ones wait there — the hands were shown as they were
             # several pictures ago. (A test video is read picture by picture.)
-            grab = None if os.environ.get("ZNS_CAMERA_FILE") else _LatestFrame(cap, self._stop)
+            grab = self._grab = None if os.environ.get("ZNS_CAMERA_FILE") else _LatestFrame(cap, self._stop)
             t_last = 0.0
             import numpy as np
             from body_zoom import BodyZoom, FarWatch, Light, body_box
@@ -633,7 +643,7 @@ class NativePose:
                             self._hd_slow = True
                     self.last_frame = None
                     grab.close()
-                    grab = None
+                    grab = self._grab = None
                     cap.release()
                     cap = None
                     if self._stop.wait(0.25):
@@ -643,7 +653,7 @@ class NativePose:
                         cap = self._open_camera(alternate=True)
                     if cap is None or recovery_tries > 3:
                         raise RuntimeError("камера не открылась после пропажи кадров")
-                    grab = _LatestFrame(cap, self._stop)
+                    grab = self._grab = _LatestFrame(cap, self._stop)
                     print(f"  [Камера] Захват открыт: {self.width}x{self.height}, драйвер {self._camera_api}")
                     last_picture = time.monotonic()
                     t_last = 0.0
@@ -725,6 +735,7 @@ class NativePose:
                     out["v5"] = self.v5.reason()  # (the game says why the V5 hands aren't there yet)
                 with self.cond:
                     self.seq += 1
+                    self._result_at = time.time()
                     self.latest = json.dumps(out, separators=(",", ":"))
                     self.last_frame = frame  # (a snapshot for the hand recording: snapshot())
                     self.cond.notify_all()
@@ -736,6 +747,7 @@ class NativePose:
             self.error = str(e)
             print(f"  [Камера] захват прерван: {type(e).__name__}: {e}", flush=True)
         finally:
+            self._grab = None
             if grab is not None:
                 grab.close()
             if cap is not None:
