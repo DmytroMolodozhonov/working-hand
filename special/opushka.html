@@ -120,7 +120,7 @@ const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() {
 window.__spells = spells; mpNet.spells = spells;
 let _hudT = 0;
 let _hpShown = -1;
-function updateHp() { const h = Math.round(spells.me.hp); if (h === _hpShown) return; _hpShown = h; const el = document.getElementById('hpFill'); if (el) el.style.width = h + '%'; }
+function updateHp() { const h = Math.round(spells.me.hp * 10) / 10; if (h === _hpShown) return; _hpShown = h; const el = document.getElementById('hpFill'); if (el) el.style.width = h + '%'; }
 function spellHud(t) { const el = document.getElementById('spellHud'); if (!el) return; el.textContent = t; el.style.opacity = 1; clearTimeout(_hudT); _hudT = setTimeout(() => { el.style.opacity = 0; }, 2600); }
 function painFlash(k) { const el = document.getElementById('painV'); if (!el) return; el.style.transition = 'none'; el.style.opacity = Math.min(1, 0.35 + k); requestAnimationFrame(() => { el.style.transition = 'opacity 1.2s ease-out'; el.style.opacity = 0; }); }
 
@@ -287,7 +287,7 @@ const U={
   uWind:{value:new THREE.Vector2(0.8,0.6).normalize()}, uWindStr:{value:0.5},
   uSunDirW:{value:new THREE.Vector3(0,1,0)}, uLodR:{value:Q.treeR}, uPlayer:{value:new THREE.Vector3(0,-999,0)},
   uFlashV:{value:new THREE.Vector3()}, uFlashC:{value:new THREE.Vector4(1,0.6,0.3,0)},
-  uBlast:{value:Array.from({length:6},()=>new THREE.Vector4(0,0,0,-1e4))}, uBlastP:{value:Array.from({length:6},()=>new THREE.Vector4())},
+  uBlast:{value:Array.from({length:12},()=>new THREE.Vector4(0,0,0,-1e4))}, uBlastP:{value:Array.from({length:12},()=>new THREE.Vector4())},
 };
 
 const GLSL_COMMON=/* glsl */`
@@ -304,34 +304,48 @@ float vnoise3(vec3 p){vec3 i=floor(p),f=fract(p);vec3 u=f*f*(3.-2.*f);
 float fbmN(vec2 p){float s=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<4;i++){s+=a*vnoise(p);p=m*p;a*=.5;}return s/.9375;}
 float fbm3N(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise3(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s/.9375;}
 vec4 sampleHM(vec2 wxz){vec2 uv=(wxz+uHMHalf)/(2.*uHMHalf);uv=(uv*(uHMRes-1.)+.5)/uHMRes;return texture2D(uHM,uv);}
-uniform vec4 uBlast[6]; uniform vec4 uBlastP[6]; uniform vec3 uFlashV; uniform vec4 uFlashC;
-// (23.11, the spells — opushka-spells.js: each blast or frost patch — x, z, its radius, the time it came; P: power, 1 = frost, how long it stays)
-float blastBurn(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y>0.5)continue;
+uniform vec4 uBlast[12]; uniform vec4 uBlastP[12]; uniform vec3 uFlashV; uniform vec4 uFlashC;
+// (23.11, the spells — opushka-spells.js: each blast or frost patch — x, z, its radius, the time it came; P: power, 1 = frost, how long it stays,
+//  the crater's radius — the bare earth it threw out)
+float blastBurn(vec2 p){float b=0.;for(int i=0;i<12;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y>0.5)continue;
   float fade=1.-smoothstep(Q.z*0.7,Q.z,age);float d=length(p-B.xy)/B.z;float n=vnoise(p*3.1+B.xy)*0.35+vnoise(p*11.)*0.15;
   b=max(b,(1.-smoothstep(0.55,1.05,d+n-0.25))*fade);}return b;}
-float blastDry(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z)continue;
-  float fade=1.-smoothstep(Q.z*0.7,Q.z,age);float d=length(p-B.xy)/B.z;b=max(b,(1.-smoothstep(0.9,1.8,d+vnoise(p*2.3)*0.4))*fade);}return b;}
-float blastFrost(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y<0.5)continue;
+float blastDry(vec2 p){float b=0.;for(int i=0;i<12;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y>0.5)continue;
+  float fade=1.-smoothstep(Q.z*0.7,Q.z,age);float d=length(p-B.xy)/max(B.z,Q.w);b=max(b,(1.-smoothstep(0.9,1.8,d+vnoise(p*2.3)*0.4))*fade);}return b;}
+float blastFrost(vec2 p){float b=0.;for(int i=0;i<12;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y<0.5)continue;
   float fade=1.-smoothstep(Q.z*0.5,Q.z,age);float d=length(p-B.xy)/B.z;b=max(b,(1.-smoothstep(0.4,1.,d+vnoise(p*7.)*0.4))*fade*min(1.,age*4.));}return b;}
-vec2 blastPush(vec2 p){vec2 o=vec2(0.);for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>25.||Q.y>0.5)continue;
-  vec2 dp=p-B.xy;float dl=length(dp);vec2 dir=dp/max(dl,1e-3);float rf=age*38.;
-  float front=exp(-((dl-rf)/(1.2+age*4.))*((dl-rf)/(1.2+age*4.)))*(1.-smoothstep(0.,1.6,age))*2.4*min(Q.x,2.);
+// the crater: x — the pit of bare earth, y — the rays of earth thrown out over the grass around it
+vec2 blastSoil(vec2 p){vec2 b=vec2(0.);for(int i=0;i<12;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(Q.w<=0.||age<0.)continue;
+  vec2 dp=p-B.xy;float dl=length(dp);float d=dl/Q.w;float n=vnoise(p*1.7+B.xy)*0.25+vnoise(p*6.)*0.12;
+  float pit=1.-smoothstep(0.8,1.04,d+n-0.18);float ang=atan(dp.y,dp.x);
+  float ray=smoothstep(0.42,0.78,vnoise(vec2(ang*9.+B.x,dl*0.12)))*(1.-smoothstep(1.,2.4,d+n))*step(0.85,d);
+  float spray=smoothstep(0.86,0.95,vnoise(p*4.3+B.xy))*(1.-smoothstep(1.,3.,d));
+  b=max(b,vec2(pit,max(ray*0.9,spray)*min(1.,age*3.)));}return b;}
+vec2 blastPush(vec2 p){vec2 o=vec2(0.);for(int i=0;i<12;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>25.||Q.y>0.5)continue;
+  vec2 dp=p-B.xy;float dl=length(dp);vec2 dir=dp/max(dl,1e-3);float rf=age*38.;float x=(dl-rf)/(1.2+age*4.);
+  float front=exp(-x*x)*(1.-smoothstep(0.,1.6,age))*2.4*min(Q.x,2.);
   float lay=(1.-smoothstep(B.z,B.z*3.,dl))*(1.-smoothstep(4.,25.,age))*1.1;o+=dir*(front+lay);}return o;}
 vec3 blastGlow;
-vec3 blastGround(vec2 p,vec3 alb){blastGlow=vec3(0.);for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z)continue;
+vec3 blastGround(vec2 p,vec3 alb){blastGlow=vec3(0.);for(int i=0;i<12;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z)continue;
   float fade=1.-smoothstep(Q.z*0.6,Q.z,age);vec2 dp=p-B.xy;float dl=length(dp);float d=dl/B.z;
   if(Q.y>0.5){float fr=(1.-smoothstep(0.35,1.,d+vnoise(p*7.)*0.45))*min(1.,age*4.)*(1.-smoothstep(Q.z*0.5,Q.z,age));
     float cr=smoothstep(0.75,0.95,vnoise(p*38.));alb=mix(alb,vec3(0.78,0.86,0.92)+cr*0.12,fr*0.85);continue;}
-  float ang=atan(dp.y,dp.x);float n=vnoise(p*2.3+B.xy*1.7)*0.3+vnoise(p*9.)*0.15;
-  float rays=pow(vnoise(vec2(ang*7.+B.x,dl*0.6)),2.)*(1.-smoothstep(0.6,1.6,d));
-  float charA=1.-smoothstep(0.45,1.0,d+n-0.2);
-  float soot=max(charA,rays*0.7*(1.-smoothstep(0.9,1.9,d)));
-  float ring=(1.-smoothstep(0.9,1.7,d+n*0.6))*(1.-charA);
+  float n=vnoise(p*2.3+B.xy*1.7)*0.3+vnoise(p*9.)*0.15;
+  // the earth torn open: dark damp soil at the bottom, lighter fresh earth on the walls and the rim, stones and roots in it
+  if(Q.w>0.){vec2 so=blastSoil(p);float dc=dl/Q.w;
+    vec3 soil=mix(vec3(0.05,0.036,0.024),vec3(0.13,0.095,0.062),smoothstep(0.15,0.95,dc)*0.8+vnoise(p*13.)*0.25);
+    float stone=smoothstep(0.8,0.86,vnoise(p*26.+B.xy));soil=mix(soil,vec3(0.2,0.19,0.17)*(0.7+0.5*vnoise(p*60.)),stone);
+    float root=smoothstep(0.04,0.,abs(vnoise(vec2(atan(dp.y,dp.x)*14.,dl*3.))-0.5))*smoothstep(0.55,0.95,dc)*(1.-smoothstep(0.95,1.05,dc));soil=mix(soil,vec3(0.16,0.11,0.07),root*0.7);
+    soil*=0.85+0.3*vnoise(p*37.);
+    alb=mix(alb,soil,max(so.x,so.y*0.85)*fade);}
+  float ang=atan(dp.y,dp.x);float rays=pow(vnoise(vec2(ang*7.+B.x,dl*0.6)),2.)*(1.-smoothstep(0.6,1.6,d));
+  float charA=1.-smoothstep(0.25,0.6,d+n-0.15);float soot=max(charA,rays*0.5*(1.-smoothstep(0.5,1.2,d)));
   vec3 cc=vec3(0.018,0.015,0.013)*(0.7+0.6*vnoise(p*31.));float ash=smoothstep(0.78,0.86,vnoise(p*45.))*charA;cc=mix(cc,vec3(0.16,0.15,0.14),ash);
-  alb=mix(alb,alb*vec3(0.75,0.6,0.38)+vec3(0.02,0.012,0.),ring*0.8*fade);alb=mix(alb,cc,soot*fade);
+  float ring=(1.-smoothstep(0.9,1.7,d+n*0.6))*(1.-charA);
+  alb=mix(alb,alb*vec3(0.8,0.66,0.45),ring*0.5*fade);alb=mix(alb,cc,soot*fade*0.85);
   float hot=exp(-age/2.5)*0.8+exp(-age/9.)*0.2;float crack=smoothstep(0.035,0.,abs(vnoise(p*6.+B.xy)-0.5))*charA;
-  float speck=smoothstep(0.82,0.9,vnoise(p*23.+age*0.3))*charA;blastGlow+=vec3(1.,0.32,0.06)*(crack*0.9+speck*0.6)*hot*2.5*fade*min(Q.x,2.);
-  float rf=age*38.;float wave=exp(-((dl-rf)/0.8)*((dl-rf)/0.8))*(1.-smoothstep(0.,1.,age));alb=mix(alb,vec3(0.25,0.21,0.16),wave*0.5);}
+  float speck=smoothstep(0.82,0.9,vnoise(p*23.+age*0.3))*charA;blastGlow+=vec3(1.,0.32,0.06)*(crack*0.9+speck*0.6)*hot*2.5*min(Q.x,2.);
+  float rf=age*38.;float wx=(dl-rf)/0.8;float wave=exp(-wx*wx)*(1.-smoothstep(0.,1.,age));alb=mix(alb,vec3(0.25,0.21,0.16),wave*0.5);}
   return alb;}
 
 float ign(vec2 fc){return fract(52.9829189*fract(dot(fc,vec2(0.06711056,0.00583715))));}
@@ -745,7 +759,7 @@ function makeGrassMat(){
       float keep=step(hB,dens);
       float fade=smoothstep(uFade.x,uFade.y,dist)*(1.-smoothstep(uFade.z,uFade.w,dist));
       float H=uBlade.x*mix(0.4,1.0,aRnd.x)*mix(0.55,1.55,tall)*mix(1.,0.55,forest)*keep*fade;
-      float bBurn=blastBurn(wxz),bDry=blastDry(wxz),bFrost=blastFrost(wxz);H*=mix(1.,0.1+0.12*aRnd.x,bBurn);
+      float bBurn=blastBurn(wxz),bDry=blastDry(wxz),bFrost=blastFrost(wxz);vec2 bSoil=blastSoil(wxz);H*=mix(1.,0.1+0.12*aRnd.x,bBurn)*(1.-bSoil.x)*mix(1.,0.25+0.3*aRnd.y,bSoil.y);
       float W=uBlade.y*mix(0.6,1.35,aRnd.y)*(0.6+0.4*fade)*(1.+dist*0.045);
       float ang=aRnd.z*6.2831853+hA*2.0;vec2 face=vec2(cos(ang),sin(ang));vec2 side=vec2(-face.y,face.x);
       float t=position.y;
@@ -767,7 +781,7 @@ function makeGrassMat(){
       vec3 tip=mix(vec3(0.075,0.15,0.024),vec3(0.21,0.20,0.06),smoothstep(0.5,0.95,hue));
       tip=mix(tip,vec3(0.30,0.24,0.11),step(0.94,aRnd.x)*0.85);
       tip=mix(tip,vec3(0.06,0.11,0.03),forest*0.6);
-      tip=mix(tip,vec3(0.21,0.15,0.06),bDry*0.75);tip=mix(tip,vec3(0.02,0.016,0.012),bBurn);tip=mix(tip,vec3(0.8,0.88,0.95),bFrost*0.9);
+      tip=mix(tip,vec3(0.21,0.15,0.06),bDry*0.75);tip=mix(tip,vec3(0.02,0.016,0.012),bBurn);tip=mix(tip,vec3(0.1,0.075,0.05),bSoil.y*0.7);tip=mix(tip,vec3(0.8,0.88,0.95),bFrost*0.9);
       vGC=mix(vec3(0.022,0.04,0.01)*(1.-bBurn*0.6),tip,smoothstep(0.,0.85,t));vGT=t;
       vGOcc=(1.-hm.g*0.72)*mix(0.3,1.,smoothstep(0.,0.75,t));}`],
        ['#include <begin_vertex>','vec3 transformed=gPos;']],
@@ -827,7 +841,7 @@ function buildFlowers(atlas){
       vec4 hm=sampleHM(wxz);float meadow=1.-smoothstep(0.1,0.5,hm.b);
       float patchN=smoothstep(0.45,0.75,vnoise(wxz*0.06+aRnd.x*0.0+vec2(floor(aRnd.z*4.)*13.)));
       float dist=distance(wxz,c);float fade=1.-smoothstep(uP*0.38,uP*0.5,dist);
-      float on=step(aRnd.w,meadow*patchN*0.95)*fade*(1.-step(0.3,blastBurn(wxz)));
+      float on=step(aRnd.w,meadow*patchN*0.95)*fade*(1.-step(0.3,blastBurn(wxz)))*(1.-step(0.3,dot(blastSoil(wxz),vec2(1.))));
       float type=floor(aRnd.z*4.);float hgt=(type==1.?0.45:type==3.?0.28:0.5)*mix(0.7,1.3,aRnd.y)*on;float hs=(type==3.?0.022:0.03)*mix(0.8,1.25,aRnd.x)*on;
       vec2 wp=wxz*0.028-uWind*uTime*0.16;float gust=smoothstep(0.25,0.85,vnoise(wp)*0.7+vnoise(wp*2.9)*0.3);
       vec2 sway=uWind*uWindStr*(0.1+0.6*gust)*0.25+vec2(sin(uTime*2.1+aRnd.x*30.),cos(uTime*1.7+aRnd.y*20.))*0.02;
@@ -1183,7 +1197,10 @@ function updatePlayer(dt){
   if(player.view==='first'){
     charRoot.visible=!!charRig&&!charCustom;headSeen(false); // (the game's first person: you see your own body and arms, not your head)
     const eye=1.68-(player.crouch?0.45:0)+(player.grounded?Math.sin(player.bob*2)*0.028*Math.min(speed,3)/1.65:0)-player.landT*0.6;
-    camera.position.set(player.pos.x+Math.cos(player.bob)*0.012*Math.min(speed,3)-Math.sin(player.yaw)*0.1,player.pos.y+eye,player.pos.z-Math.cos(player.yaw)*0.1);
+    // (the author 23.11: «когда бежал, на секунду увидел своё плечо»: running the body leans and the shoulders swing up to the eyes — the eye goes a
+    //  little further forward the faster one moves, so the shoulder stays behind the near edge of the view)
+    const fwdE=0.1+0.09*Math.min(speed/3,1)+(player.camDrive?0.04:0);
+    camera.position.set(player.pos.x+Math.cos(player.bob)*0.012*Math.min(speed,3)-Math.sin(player.yaw)*fwdE,player.pos.y+eye,player.pos.z-Math.cos(player.yaw)*fwdE);
     camera.rotation.set(player.pitch,player.yaw,Math.cos(player.bob)*0.002*Math.min(speed,3),'YXZ');
   }else{
     charRoot.visible=true;headSeen(true);
@@ -1595,7 +1612,7 @@ async function buildMannequin(){
     const Rw=0.0115/0.9,G=gripWand(F,F.HP,Rw),A=G.A,D=G.D;F.grip=G.curl;
     wand.scale.set(WS[0]/0.9,WS[1]/0.9,WS[2]/0.9);wand.quaternion.setFromUnitVectors(new V3(0,1,0),D);
     wand.position.copy(A).addScaledVector(D,(-0.046-A.z)/D.z); // (the butt ~1.5 cm out past the little finger)
-    wand.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});F.hb.palm.add(wand);F.wand=wand;}
+    wand.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});F.hb.palm.add(wand);F.wand=wand;F.wandD=D.clone();}
   root.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});crys.castShadow=false;
   const restB={};const basis=(d,p)=>{const D=d.clone().normalize(),Pp=p.clone().sub(D.clone().multiplyScalar(p.dot(D))).normalize();return new THREE.Matrix4().makeBasis(D,Pp,new V3().crossVectors(D,Pp));};
   for(const K of ['L','R']){
@@ -1604,6 +1621,8 @@ async function buildMannequin(){
     restB['ft'+K]=basis(rp('toe'+K).sub(rp('ft'+K)),new V3(0,1,0)).transpose();
     restB['ua'+K]=basis(rp('fa'+K).sub(rp('ua'+K)),new V3(0,0,-1)).transpose();
     restB['fa'+K]=basis(rp('hd'+K).sub(rp('fa'+K)),new V3(0,0,-1)).transpose();
+    // (the wand's own rest frame in the hand: its axis and the palm's normal when the hand bone is not turned — to point the hand so the WAND looks where the player aims)
+    if(K==='R'&&fingers.R?.wandD){const s_=-1,rz=new THREE.Matrix4().makeRotationZ(s_*ARM_A);restB.wandR=basis(fingers.R.wandD.clone().applyMatrix4(rz).normalize(),new V3(1,0,0)).transpose();}
     restB['hd'+K]=basis(rp('tip'+K).sub(rp('hd'+K)),new V3(K==='L'?-1:1,0,0)).transpose();} // (the hand: fingers along it, the palm towards the body in the rest pose)
   const sp=v=>({x:v,v:0});const sv=()=>({x:new V3(),v:new V3(),init:false});
   const cape=buildCape();
@@ -1804,7 +1823,9 @@ function animateMannequin(c,dt,speed,P){
     if(Z.ok){const u=new V3(Z.u.x,Z.u.y,Z.u.z),f=new V3(Z.f.x,Z.f.y,Z.f.z);
       let pole=f.clone().sub(u.clone().multiplyScalar(f.dot(u)));pole=pole.lengthSq()>0.0025?pole.normalize().negate():new V3(0,0,-1);
       const QcUa=aimBone(c,'ua'+K,u,pole,QcChest);const QcFa=aimBone(c,'fa'+K,f,pole,QcUa);
-      if(Z.hand)aimBone(c,'hd'+K,new V3(Z.h.x,Z.h.y,Z.h.z),new V3(Z.n.x,Z.n.y,Z.n.z),QcFa);else B['hd'+K].quaternion.identity();
+      if(K==='R'&&Z.aim&&c.restB.wandR&&c.fingers?.R?.grip){ // (the wand hand: turned so the WAND points along the steadied aim — the game's V3)
+        const np=Z.np||Z.n,m=c.basis(Z.aim,new V3(np.x,np.y,np.z)).multiply(c.restB.wandR);const Qc=new THREE.Quaternion().setFromRotationMatrix(m);B.hdR.quaternion.copy(QcFa.clone().invert().multiply(Qc));}
+      else if(Z.hand)aimBone(c,'hd'+K,new V3(Z.h.x,Z.h.y,Z.h.z),new V3(Z.n.x,Z.n.y,Z.n.z),QcFa);else B['hd'+K].quaternion.identity();
       H.init=false;continue;}
     const sh=wp_(B['ua'+K],new V3());const out=right.clone().multiplyScalar(-s);
     const pl=((c.phase+(K==='L'?0:0.5))%1+1)%1;

@@ -133,7 +133,9 @@ export class OpushkaNet {
             const D = Z.dirs[K];
             if (!D.ok) return 0;
             const v = (x) => [r3(x.x), r3(x.y), r3(x.z)];
-            return [...v(D.u), ...v(D.f), ...(D.hand ? [...v(D.h), ...v(D.n)] : [])];
+            // (the wand hand: its steadied aim and palm instead of the raw hand — the friend's wand points where it points here)
+            const wa = K === 'R' && D.aim;
+            return [...v(D.u), ...v(D.f), ...(D.hand || wa ? [...v(wa ? D.aim : D.h), ...v(wa ? (D.np || D.n) : D.n)] : [])];
         };
         const curl = rig?.fingers?.L?.cur ? Array.from(rig.fingers.L.cur, r2) : 0;
         const fl = (P.grounded ? 1 : 0) | (P.crouch ? 2 : 0) | (P.airStyle === 'leap' ? 4 : 0) | (P.view === 'third' ? 8 : 0);
@@ -194,6 +196,7 @@ export class OpushkaNet {
             if (!Array.isArray(v) || v.length < 6 || !v.every(Number.isFinite)) { D.ok = false; return; }
             put(D.u, v, 0); put(D.f, v, 3); D.ok = true;
             D.hand = v.length >= 12; if (D.hand) { put(D.h, v, 6); put(D.n, v, 9); }
+            if (K === 'R') { if (D.hand) { D.aim = D.aim || new this.api.THREE.Vector3(); D.aim.set(D.h.x, D.h.y, D.h.z); D.np = D.n; } else D.aim = null; }
         });
         const c = m.c;
         if (Array.isArray(c) && c.length === 15 && c.every(Number.isFinite)) { const D = A.L; D.curl = D.curl || new Float32Array(15); D.curl.set(c); }

@@ -38,7 +38,7 @@ export const SPELLS = {
     BombardoMaxima: { ru: 'Бомбардо Максима', kind: 'orb', speed: 15, grav: 1.9, life: 3.2, color: 0xff2a00, core: 0xffffff, size: 0.2, power: 3 },
     Jolt: { ru: 'Джолт', kind: 'bolt', speed: 13, color: 0xa9d6ff, core: 0xeaf6ff, size: 0.035, hp: 3, push: 7, life: 2.2 },
     JoltMaxima: { ru: 'Джолт Максима', kind: 'bolt', speed: 13, color: 0xc4e4ff, core: 0xffffff, size: 0.05, hp: 9, push: 15, life: 2.2 },
-    Stupefy: { ru: 'Остолбеней', kind: 'bolt', speed: 12, color: 0xff3b3b, core: 0xffd8d0, size: 0.045, hp: 6, stun: 3, life: 2.4 },
+    Stupefy: { ru: 'Остолбеней', kind: 'bolt', speed: 12, color: 0xff3b3b, core: 0xffd8d0, size: 0.045, hp: 3, stun: 3, life: 2.4 },
     Expelliarmus: { ru: 'Экспеллиармус', kind: 'bolt', speed: 13, color: 0xc8102e, core: 0xffffff, size: 0.045, hp: 2, disarm: true, life: 2.4 },
     AvadaKedavra: { ru: 'Авада Кедавра', kind: 'bolt', speed: 12, color: 0x1f8a2a, core: 0x9dff3a, size: 0.06, hp: 25, pierce: true, life: 2.6 },
     Ice: { ru: 'Айс', kind: 'bolt', speed: 14, color: 0x8fdcff, core: 0xf2fbff, size: 0.04, freeze: 10, burn: 3, life: 2.4 },
@@ -52,8 +52,8 @@ const KEYS = { KeyB: ['Bombardo', 'BombardoMaxima'], KeyJ: ['Jolt', 'JoltMaxima'
     KeyK: ['AvadaKedavra', 'AvadaKedavra'], KeyI: ['Ice', 'IceMaxima'], KeyP: ['Protection', 'ProtectionMaxima'] };
 
 export const HERO = { HP: 100, RESPAWN: 6, BODY_R: 0.32, BODY_H: 1.8 };
-const BLAST = { R: 2.6, PEAK: 8, DENT: 0.35 }; // the blast of a Bombardo (Maxima: ×√3 the reach, ×3 the harm, the dent ×2.2)
-const MAX_BLASTS = 6;
+const BLAST = { R: 4.2, PEAK: 8, CRATER: 4.8, DEPTH: 1.3, CRATER_MAX: 8.5, DEPTH_MAX: 2.8 }; // the blast of a Bombardo (Maxima: ×√3 the reach, ×3 the harm, the dent ×2.2) — the author 23.11: «слишком слабые, прямо слишком»
+const MAX_BLASTS = 12;
 const PIG_HP = 20;
 
 export class OpushkaSpells {
@@ -77,7 +77,7 @@ export class OpushkaSpells {
         U.uBlast.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, -1e4));
         U.uBlastP.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, 0));
         this.glow = new Sparks(scene, 2400, true);
-        this.smoke = new Sparks(scene, 700, false);
+        this.smoke = new Sparks(scene, 1600, false, this.api.groundH);
         this.coreGeo = new THREE.IcosahedronGeometry(1, 2);
         this.halo = haloTexture();
         this.fireMat = fireballMaterial();
@@ -434,36 +434,40 @@ export class OpushkaSpells {
         const G = this.glow, Sm = this.smoke;
         // the fireball
         const f = this.fires.find((x) => !x.visible) || this.fires[0];
-        f.visible = true; f.position.copy(p); f.userData = { t: 0, life: maxi ? 1.5 : 1.0, R: R * 0.55 * soft, y: p.y };
+        f.visible = true; f.position.copy(p); f.userData = { t: 0, life: maxi ? 1.9 : 1.3, R: R * 0.62 * soft, y: p.y };
         f.material.uniforms.uSeed.value = Math.random() * 100;
         // sparks and embers
-        const n = maxi ? 380 : 160;
+        const n = maxi ? 700 : 320;
         for (let i = 0; i < n; i++) {
-            _v.set(rnd(-1, 1), rnd(-0.2, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(3, maxi ? 16 : 10) * soft);
-            G.spawn(p, _v, Math.random() < 0.3 ? 0xffe0a0 : Math.random() < 0.5 ? 0xff7a1a : 0xff3a00, rnd(0.02, 0.06), rnd(0.4, maxi ? 2 : 1.3), { drag: 1.2, grav: 4 });
+            _v.set(rnd(-1, 1), rnd(-0.2, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(4, maxi ? 24 : 15) * soft);
+            G.spawn(p, _v, Math.random() < 0.3 ? 0xffe0a0 : Math.random() < 0.5 ? 0xff7a1a : 0xff3a00, rnd(0.02, 0.06), rnd(0.5, maxi ? 2.6 : 1.7), { drag: 1.0, grav: 4 });
         }
         // smoke: a rising column and a ring of dust running along the ground
-        for (let i = 0; i < (maxi ? 60 : 28); i++) Sm.spawn(_w.copy(p).add(_v.set(rnd(-0.5, 0.5), rnd(0, 0.8), rnd(-0.5, 0.5)).multiplyScalar(R * 0.4)), _v.set(rnd(-0.6, 0.6), rnd(0.8, 2.2), rnd(-0.6, 0.6)), Math.random() < 0.5 ? 0x2a241f : 0x4a4038, rnd(0.5, 0.9) * Math.sqrt(pw), rnd(3, maxi ? 7 : 5), { grow: 0.9, alpha: 0.7, delay: rnd(0.15, 0.5) });
+        for (let i = 0; i < (maxi ? 110 : 55); i++) Sm.spawn(_w.copy(p).add(_v.set(rnd(-0.5, 0.5), rnd(0, 0.8), rnd(-0.5, 0.5)).multiplyScalar(R * 0.4)), _v.set(rnd(-0.6, 0.6), rnd(0.8, 2.2), rnd(-0.6, 0.6)), Math.random() < 0.5 ? 0x2a241f : 0x4a4038, rnd(0.7, 1.2) * Math.sqrt(pw), rnd(4, maxi ? 10 : 7), { grow: 1.0, alpha: 0.75, delay: rnd(0.15, 0.5) });
         for (let i = 0; i < (maxi ? 40 : 20); i++) { const a = i / (maxi ? 40 : 20) * Math.PI * 2; Sm.spawn(_w.copy(p).add(_v.set(Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5)), _v.set(Math.cos(a) * rnd(5, 9), rnd(0.2, 0.6), Math.sin(a) * rnd(5, 9)).multiplyScalar(Math.sqrt(pw) * 0.7), 0x7a6a55, rnd(0.35, 0.6), rnd(1.6, 2.6), { grow: 1.2, alpha: 0.5, drag: 2.2 }); }
         // the ground: a dent, char that glows and cools, burnt grass, clods
         const g = this.api.groundH(p.x, p.z), onGround = p.y - g < R * 0.7;
         if (onGround) {
-            this.api.dent(p.x, p.z, R * 0.85, BLAST.DENT * (maxi ? 2.2 : 1) * soft);
-            this._scorch(p.x, p.z, R, pw);
-            this.clods.burst(p, maxi ? 70 : 30, R);
+            // (the author 23.11: «слабый в плане разрушения… при взаимодействии с землёй»): a real crater — bare earth thrown out, a rim of it
+            const Rc = (maxi ? BLAST.CRATER_MAX : BLAST.CRATER) * soft, depth = (maxi ? BLAST.DEPTH_MAX : BLAST.DEPTH) * soft;
+            const k = clamp(1 - (p.y - g) / (R * 0.7), 0.3, 1); // (an orb going off above the ground digs less)
+            this.api.dent(p.x, p.z, Rc * k, depth * k);
+            this._scorch(p.x, p.z, R, pw, Rc * k);
+            this.clods.burst(p, maxi ? 160 : 80, Rc);
+            this._earthFountain(p, Rc * k, maxi);
         }
         this._needlesAround(p, R * 2);
-        this.flash(p, 0xff9a40, (maxi ? 9 : 4) * soft, maxi ? 0.35 : 0.22); this._ember = onGround ? (maxi ? 8 : 4) : 0;
-        this.sound(maxi ? 'boomMax' : 'boom', p, soft);
+        this.flash(p, 0xff9a40, (maxi ? 16 : 8) * soft, maxi ? 0.45 : 0.3); this._ember = onGround ? (maxi ? 8 : 4) : 0;
+        this.sound(maxi ? 'boomMax' : 'boom', p, 1.6 * soft);
         // who it reaches (each on his own computer; the pigs on the host's)
         const P = this.api.player();
         const dMe = _v.set(P.pos.x, P.pos.y + 0.9, P.pos.z).distanceTo(p);
-        this.shake = Math.max(this.shake, clamp((maxi ? 1.6 : 0.9) * (1 - dMe / (R * 12)), 0, 1.6));
+        this.shake = Math.max(this.shake, clamp((maxi ? 2.4 : 1.5) * (1 - dMe / (R * 14)), 0, 2.4));
         const reach = R + 1.6;
         if (dMe < reach && !this.me.dead) {
             const k = 1 - dMe / reach, shielded = this.shields.some((s) => s.by === this._myId() && (s.sphere || _w.copy(p).sub(s.pos).dot(s.dir) > 0));
             const dir = _w.set(P.pos.x - p.x, 0, P.pos.z - p.z).normalize();
-            this.hurtMe(b.name, dir, b.by, { hp: BLAST.PEAK * pw * k * soft * (shielded ? 0.25 : 1), push: (5 + 6 * pw) * k * soft * (shielded ? 0.3 : 1), up: 3.5 * k * soft });
+            this.hurtMe(b.name, dir, b.by, { hp: BLAST.PEAK * pw * k * soft * (shielded ? 0.25 : 1), push: (9 + 9 * pw) * k * soft * (shielded ? 0.3 : 1), up: (5 + 2 * pw) * k * soft });
         }
         this.api.pigs.forEach((pg, i) => { const d = pg.pos.distanceTo(p); if (d < reach * 1.3) this._pigHit(i, b.name, _w.copy(pg.pos).sub(p).normalize().clone(), 1 - d / (reach * 1.3)); });
     }
@@ -478,10 +482,23 @@ export class OpushkaSpells {
     }
 
     /** The scorch on the ground (drawn by the ground's and the grass's own shaders from uBlast): char, embers, burnt grass, the wave. */
-    _scorch(x, z, R, pw) {
+    _scorch(x, z, R, pw, crater = 0) {
         const U = this.api.U, i = this._blastI++ % MAX_BLASTS;
         U.uBlast.value[i].set(x, z, R, U.uTime.value);
-        U.uBlastP.value[i].set(pw, 0, pw > 1 ? 240 : 150, 0);
+        U.uBlastP.value[i].set(pw, 0, 1e6, crater); // (a crater stays: the earth does not grow back by itself — w: its radius)
+    }
+
+    /** The earth thrown up: a fountain of soil and stones that rains back, turf torn out, a brown cloud rolling out low along the ground. */
+    _earthFountain(p, Rc, maxi) {
+        const Sm = this.smoke, n = maxi ? 520 : 260;
+        for (let i = 0; i < n; i++) {
+            const a = Math.random() * Math.PI * 2, r = Math.random() * Rc * 0.6, up = rnd(5, maxi ? 17 : 12) * (1 - r / Rc * 0.6), out = rnd(1, maxi ? 9 : 6);
+            _w.set(p.x + Math.cos(a) * r, p.y, p.z + Math.sin(a) * r);
+            Sm.spawn(_w, _v.set(Math.cos(a) * out, up, Math.sin(a) * out), Math.random() < 0.2 ? 0x4a3a28 : Math.random() < 0.5 ? 0x2a1d12 : 0x1c140d, rnd(0.04, 0.12), rnd(1.4, maxi ? 3.2 : 2.4), { drag: 0.25, grav: 9.8, alpha: 1, grow: 0 });
+        }
+        // the brown cloud: low, wide, slow — dust of earth, not the black smoke of the fire
+        for (let i = 0; i < (maxi ? 70 : 36); i++) { const a = Math.random() * Math.PI * 2, r = Rc * rnd(0.2, 1.1);
+            Sm.spawn(_w.set(p.x + Math.cos(a) * r, p.y + rnd(0.2, 1.2), p.z + Math.sin(a) * r), _v.set(Math.cos(a) * rnd(1, 4), rnd(0.3, 1.6), Math.sin(a) * rnd(1, 4)), Math.random() < 0.5 ? 0x6e5a44 : 0x857058, rnd(0.8, 1.6) * (maxi ? 1.5 : 1), rnd(5, maxi ? 12 : 8), { drag: 0.7, grav: -0.05, alpha: 0.55, grow: 0.5, delay: rnd(0.05, 0.6) }); }
     }
 
     _rime(p, r) {
@@ -618,7 +635,7 @@ export class OpushkaSpells {
         const S = SPELLS[name]; if (!S) return;
         pg.hp = pg.hp ?? PIG_HP;
         const throwIt = (sp, up) => { pg.ko = Math.max(pg.ko || 0, 0.01); pg.vel.set(dir.x * sp, up, dir.z * sp); pg.state = 'ko'; };
-        if (S.kind === 'orb') { pg.hp -= BLAST.PEAK * S.power * k * 1.5; throwIt(6 * S.power * k + 2, 4 + 4 * k); pg.ko = 2.5; }
+        if (S.kind === 'orb') { pg.hp -= BLAST.PEAK * S.power * k * 1.5; throwIt(10 * S.power * k + 3, 5 + 6 * k); pg.ko = 3; }
         else if (name === 'AvadaKedavra') { pg.hp = 0; }
         else if (S.stun) { throwIt(1, 0); pg.ko = 8; pg.hp -= S.hp; }
         else if (S.push) { throwIt(S.push * 0.9, 3 + S.push * 0.2); pg.ko = 2; pg.hp -= S.hp; }
@@ -783,8 +800,8 @@ function shieldMaterial() {
 
 /** A pool of glowing (additive) or smoky (soft) points: one draw each, nothing made while it runs. */
 class Sparks {
-    constructor(scene, n, add) {
-        this.n = n; this.i = 0; this.add = add;
+    constructor(scene, n, add, groundH = null) {
+        this.n = n; this.i = 0; this.add = add; this.groundH = groundH;
         const g = new THREE.BufferGeometry();
         this.pos = new Float32Array(n * 3); this.col = new Float32Array(n * 4); this.sz = new Float32Array(n);
         g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -812,7 +829,7 @@ class Sparks {
         const a = opt.alpha ?? 1;
         this.base[i * 4] = c.r; this.base[i * 4 + 1] = c.g; this.base[i * 4 + 2] = c.b; this.base[i * 4 + 3] = opt.solid && this.add ? -a : a;
         this.sz[i] = size; this.life[i] = -(opt.delay || 0); this.max[i] = life;
-        this.o[i * 6] = opt.drag || 0; this.o[i * 6 + 1] = opt.grav || 0; this.o[i * 6 + 2] = opt.grow || 0; this.o[i * 6 + 3] = size;
+        this.o[i * 6] = opt.drag || 0; this.o[i * 6 + 1] = opt.grav || 0; this.o[i * 6 + 2] = opt.grow || 0; this.o[i * 6 + 3] = size; this.o[i * 6 + 4] = (opt.grav || 0) > 3 && this.groundH ? 1 : 0; // (heavy bits — earth, stones — stop on the ground)
         this.col[i * 4 + 3] = 0;
         this.dirty = true;
     }
@@ -829,6 +846,7 @@ class Sparks {
             const k = Math.exp(-this.o[i * 6] * dt);
             this.vel[i * 3] *= k; this.vel[i * 3 + 1] = this.vel[i * 3 + 1] * k - this.o[i * 6 + 1] * dt; this.vel[i * 3 + 2] *= k;
             this.pos[i * 3] += this.vel[i * 3] * dt; this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt; this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
+            if (this.o[i * 6 + 4] && this.vel[i * 3 + 1] < 0) { const g = this.groundH(this.pos[i * 3], this.pos[i * 3 + 2]); if (this.pos[i * 3 + 1] < g) { this.pos[i * 3 + 1] = g; this.vel[i * 3] = this.vel[i * 3 + 1] = this.vel[i * 3 + 2] = 0; this.o[i * 6 + 1] = 0; this.o[i * 6 + 4] = 0; this.life[i] = Math.max(L, M - 0.6); } }
             const f = L / M, a0 = this.base[i * 4 + 3];
             this.sz[i] = this.o[i * 6 + 3] * (1 + this.o[i * 6 + 2] * L);
             const fade = this.add ? (1 - f) * (1 - f) : Math.min(1, L * 3) * (1 - f);
@@ -844,7 +862,7 @@ class Sparks {
 /** Clods of earth and turf thrown by a blast: they fly, bounce once or twice and lie where they fell (a minute), then sink into the grass. */
 class Clods {
     constructor(scene, groundH) {
-        this.groundH = groundH; this.n = 160; this.i = 0;
+        this.groundH = groundH; this.n = 400; this.i = 0;
         const geo = new THREE.DodecahedronGeometry(1, 0), p = geo.attributes.position;
         for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 0.8 + 0.35 * Math.abs(Math.sin(x * 5.1 + y * 3.3 + z * 4.7)); p.setXYZ(i, x * k, y * k * 0.7, z * k); }
         geo.computeVertexNormals();
@@ -860,10 +878,10 @@ class Clods {
     _put(i) { const s = this.s[i]; this.mesh.setMatrixAt(i, this._m.compose(s.p, s.q, this._sc.setScalar(s.size))); }
     burst(p, n, R) {
         for (let k = 0; k < n; k++) {
-            const i = this.i = (this.i + 1) % this.n, s = this.s[i], a = Math.random() * Math.PI * 2, sp = rnd(2, 6) * Math.sqrt(R / 2.6);
+            const i = this.i = (this.i + 1) % this.n, s = this.s[i], a = Math.random() * Math.PI * 2, sp = rnd(2, 7) * Math.sqrt(R / 4);
             s.p.set(p.x + Math.cos(a) * rnd(0, R * 0.4), p.y + 0.1, p.z + Math.sin(a) * rnd(0, R * 0.4));
-            s.v.set(Math.cos(a) * sp, rnd(3, 8) * Math.sqrt(R / 2.6), Math.sin(a) * sp); s.w.set(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9));
-            s.size = rnd(0.025, 0.08) * (Math.random() < 0.1 ? 1.8 : 1); s.rest = 0; s.live = 60 + rnd(0, 20);
+            s.v.set(Math.cos(a) * sp, rnd(4, 11) * Math.sqrt(R / 4), Math.sin(a) * sp); s.w.set(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9));
+            s.size = rnd(0.04, 0.14) * (Math.random() < 0.15 ? 2.2 : 1); s.rest = 0; s.live = 150 + rnd(0, 40);
         }
         this.active = this.n;
     }

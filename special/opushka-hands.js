@@ -16,6 +16,8 @@ import { ArmSolver } from '../src/entities/ArmSolver.js';
 import { headTurnStep } from '../src/game/HeadTurn.js';
 import { lookPitch } from '../src/input/PoseInterpreter.js';
 import { setHandSmoothness } from '../src/input/HandSmooth.js';
+import { AimSteady, V5_WAND } from '../src/game/V5WandAim.js';
+import * as THREE from 'three';
 
 /** The game's settings for the camera (the menu's «Камера» tab, kept in this browser): smoothness, sensitivity, the pose networks. */
 export function gameCameraSettings() {
@@ -35,12 +37,24 @@ const LIVE_MS = 600; // a pose older than this: the camera stopped — the walki
 const SIDE = { L: 'left', R: 'right' };
 
 export class ZnsArms {
+    _wandAim(D, p, dt) {
+        const lm = p.rightHandLandmarks, has = !!(lm && lm.length >= 18);
+        const k = has ? V5_WAND.PALM : 0, T = this._aimT;
+        // (D.hand is solved just below; the previous frame's hand direction serves — one frame late is nothing next to the steadying)
+        T.set(D.h.x * k + D.f.x * (1 - k), D.h.y * k + D.f.y * (1 - k), D.h.z * k + D.f.z * (1 - k)).normalize();
+        if (!D.aim) { D.aim = T.clone(); D.np = new THREE.Vector3(D.n.x, D.n.y, D.n.z); }
+        const a = this.steady.alpha(D.aim, T, dt, !!p.isRunning);
+        D.aim.lerp(T, a).normalize();
+        if (has) D.np.lerp(this._aimA.set(D.n.x, D.n.y, D.n.z), 0.12).normalize();
+    }
+
     constructor() {
         this.pose = null; this.at = 0; this.status = 'камера не запущена';
         this.solver = new ArmSolver();
         this.dirs = { L: mk(), R: mk() }; // char-space unit directions: u (upper arm), f (forearm), h (fingers), n (palm), ok
         this._frame = -1;
         this.set = gameCameraSettings();
+        this.steady = new AimSteady(); this._aimT = new THREE.Vector3(); this._aimA = new THREE.Vector3();
         this.head = { yaw: 0, pitch: 0 }; this.turn = {}; this.base = null; this.jumpSeen = null;
     }
 
@@ -108,6 +122,9 @@ export class ZnsArms {
             if (!Number.isFinite(out.u.x + out.f.x)) continue;
             set(D.u, -out.u.x, out.u.y, -out.u.z); set(D.f, -out.f.x, out.f.y, -out.f.z);
             D.ok = true;
+            // (the author 23.11: «палочка смотрит вверх и не такая стабильная, как V3»): the wand hand's aim as in the game's V3 — where the real
+            // hand points mixed with the forearm (V5_WAND.PALM), then the game's own steadying (AimSteady; calmer while running)
+            if (K === 'R') this._wandAim(D, p, adt);
             // the hand: fingers from the wrist to the middle knuckle, the palm's normal across the knuckles (the picture mirrored, as the arms)
             const lm = p[side + 'HandLandmarks'];
             D.hand = false;
