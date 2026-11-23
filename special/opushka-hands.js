@@ -18,6 +18,7 @@ import { lookPitch } from '../src/input/PoseInterpreter.js';
 import { setHandSmoothness } from '../src/input/HandSmooth.js';
 import { AimSteady, V5_WAND } from '../src/game/V5WandAim.js';
 import * as THREE from 'three';
+import { PoseSmoother } from '../src/input/PoseSmoother.js';
 
 /** The game's settings for the camera (the menu's «Камера» tab, kept in this browser): smoothness, sensitivity, the pose networks. */
 export function gameCameraSettings() {
@@ -83,7 +84,10 @@ export class ZnsArms {
     async start() {
         try {
             const svc = new PoseService({ baseUrl: new URL('../', location.href).href });
-            svc.onPoseUpdate = (p) => { this.pose = p; this.at = performance.now(); };
+            // (as the game: every picture goes through the game's PoseSmoother — the blend between pictures and the hands carried forward by the
+            //  picture's age — and the hero is drawn from its sample each frame, not from the raw picture: the author, «стабильность в разы лучше»)
+            this.smoother = new PoseSmoother();
+            svc.onPoseUpdate = (p) => { this.smoother.push(p); this.raw = p; this.at = performance.now(); this.heardAt = this.at; };
             svc.onStatus = (t) => { this.status = t; };
             await svc.initialize('zns-webcam', 'zns-preview', this.set.config);
             try { setHandSmoothness(this.set.handSmooth, svc); } catch (e) { /* */ }
@@ -92,6 +96,16 @@ export class ZnsArms {
                 try { await svc.start(); break; } catch (e) { this.status = 'камера: ' + (e?.name === 'NotAllowedError' ? 'нет разрешения' : e?.name === 'NotReadableError' ? 'занята другой программой' : 'не найдена') + ' — пробую снова'; if (i > 40) throw e; await new Promise((r) => setTimeout(r, 3000)); }
             }
             this.svc = svc;
+            // (the author 23.11: «в какой-то момент просто завис анализ с камеры»): the camera program's stream silent for 4 s while the page is
+            // shown — it is opened again (as the game does when it changes the hands' network); a camera taken away — the start is tried again
+            this.heardAt = performance.now();
+            setInterval(() => {
+                if (document.hidden || !svc.isRunning) return;
+                if (performance.now() - (this.heardAt || 0) < 4000) return;
+                this.heardAt = performance.now();
+                console.warn('[Опушка] camera silent 4 s — reopening');
+                try { if (svc._native) { svc._native.close(); svc._native = null; svc._startNative?.(); } else svc.start?.().catch(() => {}); } catch (e) { /* */ }
+            }, 1000);
             const pv = document.getElementById('webcam-preview'); if (pv) pv.hidden = false; // (the camera's window in the corner, as in the game)
             this.status = svc.native ? 'камера: программа камеры' : 'камера: в браузере';
         } catch (e) {
@@ -110,6 +124,7 @@ export class ZnsArms {
     solve(frame, dt) {
         if (frame === this._frame) return;
         this._frame = frame;
+        if (this.smoother?.to) { const sp = this.smoother.sample(); if (sp) this.pose = sp; }
         for (const K of ['L', 'R']) this.dirs[K].ok = false;
         if (!this.live()) return;
         const p = this.pose, aspect = p.aspect || 1, adt = Math.min(0.2, Math.max(0.001, dt));
@@ -120,7 +135,8 @@ export class ZnsArms {
             const out = D._o || (D._o = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } });
             AS.solve(side, p[side + 'Shoulder'], p[side + 'Elbow'], p[side + 'Wrist'], aspect, out, adt, p.armMove ? p.armMove[side] : -1);
             if (!Number.isFinite(out.u.x + out.f.x)) continue;
-            set(D.u, -out.u.x, out.u.y, -out.u.z); set(D.f, -out.f.x, out.f.y, -out.f.z);
+            const sm = (v, x, y, z) => { const l = Math.hypot(x, y, z) || 1; x /= l; y /= l; z /= l; if (!D.ok0 || v.x * x + v.y * y + v.z * z < 0.94) { v.x = x; v.y = y; v.z = z; return; } const k = 1 - Math.pow(0.5, adt * 60); set(v, v.x + (x - v.x) * k, v.y + (y - v.y) * k, v.z + (z - v.z) * k); };
+            sm(D.u, -out.u.x, out.u.y, -out.u.z); sm(D.f, -out.f.x, out.f.y, -out.f.z); D.ok0 = true;
             D.ok = true;
             // (the author 23.11: «палочка смотрит вверх и не такая стабильная, как V3»): the wand hand's aim as in the game's V3 — where the real
             // hand points mixed with the forearm (V5_WAND.PALM), then the game's own steadying (AimSteady; calmer while running)

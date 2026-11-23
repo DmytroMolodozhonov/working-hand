@@ -1218,7 +1218,8 @@ function updatePlayer(dt){
   return speed;
 }
 function headSeen(v){if(!charRig||charRig._headSeen===v)return;charRig._headSeen=v;for(const o of charRig.B.head.children)if(o.isMesh)o.visible=v;}
-function setView(v){player.view=v;player.camInit=false;$('#viewBtn')&&($('#viewBtn').textContent=v==='first'?'Вид: от первого лица':'Вид: от третьего лица');}
+function setView(v){player.view=v;player.camInit=false;camera.fov=v==='first'?75:58;camera.updateProjectionMatrix(); // (the first person: the game's own 75° — the hands and the wand in view without raising them high)
+  $('#viewBtn')&&($('#viewBtn').textContent=v==='first'?'Вид: от первого лица':'Вид: от третьего лица');}
 
 /* ============================== CHARACTER ============================== */
 const charRoot=new THREE.Group();charRoot.visible=false;
@@ -1699,6 +1700,7 @@ function twoBoneKnee(a,t,l1,l2,pole){
   const pp=pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
   return {knee:a.clone().addScaledVector(dir,cosA*l1).addScaledVector(pp,sinA*l1),end:a.clone().add(d)};
 }
+const _wandDown=new V3();
 function aimBone(c,name,dirC,poleC,parentQc){const m=c.basis(dirC,poleC).multiply(c.restB[name]);const Qc=new THREE.Quaternion().setFromRotationMatrix(m);
   c.B[name].quaternion.copy(parentQc.clone().invert().multiply(Qc));return Qc;}
 const wp_=(b,out)=>b.getWorldPosition(out);
@@ -1825,7 +1827,7 @@ function animateMannequin(c,dt,speed,P){
       let pole=f.clone().sub(u.clone().multiplyScalar(f.dot(u)));pole=pole.lengthSq()>0.0025?pole.normalize().negate():new V3(0,0,-1);
       const QcUa=aimBone(c,'ua'+K,u,pole,QcChest);const QcFa=aimBone(c,'fa'+K,f,pole,QcUa);
       if(K==='R'&&Z.aim&&c.restB.wandR&&c.fingers?.R?.grip){ // (the wand hand: turned so the WAND points along the steadied aim — the game's V3)
-        const np=Z.np||Z.n,m=c.basis(Z.aim,new V3(np.x,np.y,np.z)).multiply(c.restB.wandR);const Qc=new THREE.Quaternion().setFromRotationMatrix(m);B.hdR.quaternion.copy(QcFa.clone().invert().multiply(Qc));}
+        const np=Z.np||Z.n,ad=_wandDown.copy(Z.aim);ad.y-=0.2;ad.normalize();const m=c.basis(ad,new V3(np.x,np.y,np.z)).multiply(c.restB.wandR); // (≈11° lower than the aim: the author «чуть вверх смотрит»)const Qc=new THREE.Quaternion().setFromRotationMatrix(m);B.hdR.quaternion.copy(QcFa.clone().invert().multiply(Qc));}
       else if(Z.hand)aimBone(c,'hd'+K,new V3(Z.h.x,Z.h.y,Z.h.z),new V3(Z.n.x,Z.n.y,Z.n.z),QcFa);else B['hd'+K].quaternion.identity();
       H.init=false;continue;}
     const sh=wp_(B['ua'+K],new V3());const out=right.clone().multiplyScalar(-s);
