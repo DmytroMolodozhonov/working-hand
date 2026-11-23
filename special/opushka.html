@@ -1262,14 +1262,18 @@ function headPrims(){ // head-local (origin = head bone)
   return P;
 }
 function handPrims(s){ // hand-local: origin wrist, built hanging along -y then tilted to the arm angle
-  const P=[],o={bone:'hd',reg:0};
+  // (23.11, the author: real fingers — each primitive carries its bone: the palm, and three joints of every finger «f<finger><joint>»
+  //  (0 index … 3 little, 4 the thumb); P.joints — each joint's place and its parent: the skeleton of the hand is built from them)
+  const P=[],o={bone:'palm',reg:0};P.joints={};
   P.push(PB([0,-0.05,0.004],[0.011,0.036,0.036],0.012,{...o,k:0}));
   P.push(PC([0,0.0,0.0],[0,-0.03,0.004],0.024,0.022,{...o,k:0.015}));
   const fz=[0.03,0.01,-0.01,-0.028],fl=[[0.044,0.026,0.02],[0.048,0.029,0.022],[0.045,0.028,0.021],[0.036,0.022,0.018]];
   for(let f=0;f<4;f++){let p=new V3(-0.002*s,-0.088,fz[f]),dir=new V3(-0.12*s,-1,0).normalize();const r=[0.0092,0.0085,0.0078,0.0072][f];
-    for(let sgm=0;sgm<3;sgm++){const q=p.clone().addScaledVector(dir,fl[f][sgm]);P.push(PC(p.toArray(),q.toArray(),r*(1-sgm*0.08),r*(1-(sgm+1)*0.08),{...o,k:sgm?0.003:0.008}));p=q;dir.applyAxisAngle(new V3(0,0,1),-s*0.18).normalize();}}
+    for(let sgm=0;sgm<3;sgm++){const q=p.clone().addScaledVector(dir,fl[f][sgm]);const bn='f'+f+sgm;P.joints[bn]={pos:p.clone(),parent:sgm?'f'+f+(sgm-1):'palm'};
+      P.push(PC(p.toArray(),q.toArray(),r*(1-sgm*0.08),r*(1-(sgm+1)*0.08),{bone:bn,reg:0,k:sgm?0.003:0.008}));p=q;dir.applyAxisAngle(new V3(0,0,1),-s*0.18).normalize();}}
   let p=new V3(-0.008*s,-0.03,0.035),dir=new V3(-0.45*s,-0.7,0.55).normalize();
-  for(let sgm=0;sgm<3;sgm++){const q=p.clone().addScaledVector(dir,[0.038,0.03,0.024][sgm]);P.push(PC(p.toArray(),q.toArray(),0.0115-sgm*0.001,0.0105-sgm*0.001,{...o,k:sgm?0.003:0.012}));p=q;dir.add(new V3(0,-0.2,0.05)).normalize();}
+  for(let sgm=0;sgm<3;sgm++){const q=p.clone().addScaledVector(dir,[0.038,0.03,0.024][sgm]);const bn='f4'+sgm;P.joints[bn]={pos:p.clone(),parent:sgm?'f4'+(sgm-1):'palm'};
+    P.push(PC(p.toArray(),q.toArray(),0.0115-sgm*0.001,0.0105-sgm*0.001,{bone:bn,reg:0,k:sgm?0.003:0.012}));p=q;dir.add(new V3(0,-0.2,0.05)).normalize();}
   return P;
 }
 
@@ -1419,11 +1423,28 @@ async function buildMannequin(){
       ['#include <metalnessmap_fragment>','float metalnessFactor=step(0.014,vHP.y)*step(vHP.y,0.05)*step(length(vHP.xz),0.1)*0.85;']]});
   const hat=new THREE.Mesh(hatG,hatM);hat.position.set(0,0.162,-0.008);hat.rotation.x=-0.12;hat.castShadow=true;B.head.add(hat);
   // hands
-  for(const [s,K] of [[1,'L'],[-1,'R']]){const hgm=await polygonize(handPrims(s),0.0022);
-    hgm.scale(0.9,0.9,0.9);hgm.rotateZ(s*ARM_A);const p=hgm.attributes.position,wr=rp('hd'+K),l=new Float32Array(p.count*3),r=new Float32Array(p.count);
-    for(let i=0;i<p.count;i++){l[i*3]=p.getX(i)+wr.x;l[i*3+1]=p.getY(i)+wr.y;l[i*3+2]=p.getZ(i)+wr.z;}
+  // (23.11: a hand that bends — a skinned mesh with its own small skeleton: the palm and three joints of each finger; every vertex weighted to the
+  //  bones of the nearest parts, softly at the joints, like the body)
+  const fingers={};
+  for(const [s,K] of [[1,'L'],[-1,'R']]){const HP=handPrims(s);const hgm=await polygonize(HP,0.0022);
+    const frame=new THREE.Group();frame.rotation.z=s*ARM_A;frame.scale.setScalar(0.9);B['hd'+K].add(frame);
+    const hb={palm:new THREE.Bone()};frame.add(hb.palm);
+    for(const n in HP.joints)hb[n]=new THREE.Bone();
+    for(const n in HP.joints){const j=HP.joints[n];hb[j.parent].add(hb[n]);hb[n].position.copy(j.pos).sub(j.parent==='palm'?new V3():HP.joints[j.parent].pos);}
+    const names=['palm',...Object.keys(HP.joints)],bi={};names.forEach((n,i)=>bi[n]=i);
+    const byB={};for(const q of HP){if(q.sub)continue;(byB[q.bone]=byB[q.bone]||[]).push(q);}
+    const p=hgm.attributes.position,wr=rp('hd'+K),n=p.count,l=new Float32Array(n*3),r=new Float32Array(n),si=new Uint16Array(n*4),sw=new Float32Array(n*4);
+    const tmp=new V3(),Z=new V3(0,0,1);
+    for(let i=0;i<n;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+      tmp.set(x,y,z).multiplyScalar(0.9).applyAxisAngle(Z,s*ARM_A).add(wr);l[i*3]=tmp.x;l[i*3+1]=tmp.y;l[i*3+2]=tmp.z;
+      const ds=[];for(const b in byB){let dm=1e9;for(const q of byB[b]){const d=primD(q,x,y,z);if(d<dm)dm=d;}ds.push([b,dm]);}
+      ds.sort((a,b)=>a[1]-b[1]);let tot=0;const w=[];for(let k=0;k<4;k++){const wv=k<ds.length?Math.exp(-(ds[k][1]-ds[0][1])/0.0035):0;w.push(wv);tot+=wv;}
+      for(let k=0;k<4;k++){si[i*4+k]=k<ds.length?bi[ds[k][0]]:0;sw[i*4+k]=w[k]/tot;}}
     hgm.setAttribute('aLP',new THREE.BufferAttribute(l,3));hgm.setAttribute('aReg',new THREE.BufferAttribute(r,1));
-    const hm=new THREE.Mesh(hgm,mat);hm.castShadow=hm.receiveShadow=true;B['hd'+K].add(hm);}
+    hgm.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));hgm.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
+    const hm=new THREE.SkinnedMesh(hgm,mat);hm.castShadow=hm.receiveShadow=true;hm.frustumCulled=false;frame.add(hm);
+    root.updateMatrixWorld(true);hm.bind(new THREE.Skeleton(names.map(nm=>hb[nm])));
+    fingers[K]={hb,s,cur:new Float32Array(15)};}
   // staff in the right hand
   const stG=new THREE.CylinderGeometry(0.016,0.022,1.72,10,40);{const p=stG.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i),a=Math.atan2(p.getZ(i),p.getX(i));
       const k=1+0.18*SN(y*9,a*1.5)+0.1*Math.max(0,SN(y*3+5,0));p.setX(i,p.getX(i)*k+0.012*Math.sin(y*2.3));p.setZ(i,p.getZ(i)*k+0.01*Math.sin(y*3.1+1));}stG.computeVertexNormals();}
@@ -1451,7 +1472,7 @@ async function buildMannequin(){
     restB['hd'+K]=basis(rp('tip'+K).sub(rp('hd'+K)),new V3(K==='L'?-1:1,0,0)).transpose();} // (the hand: fingers along it, the palm towards the body in the rest pose)
   const sp=v=>({x:v,v:0});const sv=()=>({x:new V3(),v:new V3(),init:false});
   const cape=buildCape();
-  return {root,B,body,eyes,lids,crys,cape,restB,basis,
+  return {root,B,body,eyes,lids,crys,cape,restB,basis,fingers,
     legs:{L:{plant:new V3(),from:new V3(),to:new V3(),swing:false,s:0,dur:0.3,mode:'t'},R:{plant:new V3(),from:new V3(),to:new V3(),swing:false,s:0,dur:0.3,mode:'t'}},
     hands:{L:sv(),R:sv()},phase:0,hipsY:sp(0.97),lean:sp(0),roll:sp(0),chestLag:sp(0),sway:sp(0),shift:sp(0),shiftT:0,shiftTarget:0,
     headYaw:sp(0),headPitch:sp(0),lookT:0,lookTarget:0,blinkT:2,blink:0,saccT:0,sacc:new THREE.Vector2(),prevVel:new V3(),prevYaw:0,acc:new V3(),idleT:0,
@@ -1670,9 +1691,22 @@ function animateMannequin(c,dt,speed,P){
     aimBone(c,'fa'+K,toC(ik.end.clone().sub(ik.knee)),toC(pole),QcUa);
     B['hd'+K].quaternion.setFromEuler(_e.set(staffHand?-0.2:0.15+run*0.2,s*-0.1,staffHand?0.35:s*0.05,'XYZ'));
   }
+  bendFingers(c,dt);
   charRoot.updateMatrixWorld(true);
   updateCape(c,dt,P);
 }
+/** The fingers: each joint's bend (rad) from the camera's hand points (ZnsArms.curl), else the right hand round the wand, the left at rest.
+ *  Fingers bend round the hand's own Z (across the knuckles, as they were sculpted); the thumb a little less. Smoothed a touch. */
+const _fq=new THREE.Quaternion(),_fz=new V3(0,0,1),_ft=new V3(0.35,0.25,1).normalize();
+function bendFingers(c,dt){
+  if(!c.fingers)return;
+  for(const K of ['L','R']){const F=c.fingers[K];if(!F)continue;const Z=zns.dirs[K];
+    const want=Z.ok&&Z.curl?Z.curl:(K==='R'?HOLD_WAND:AT_REST);const k=1-Math.exp(-dt*18);
+    for(let f=0;f<5;f++)for(let j=0;j<3;j++){const i=f*3+j;F.cur[i]+=(want[i]-F.cur[i])*k;
+      _fq.setFromAxisAngle(f===4?_ft:_fz,-F.s*F.cur[i]*(f===4?0.8:1));F.hb['f'+f+j].quaternion.copy(_fq);}}
+}
+const HOLD_WAND=new Float32Array([1.2,1.3,0.9, 1.3,1.4,0.9, 1.35,1.35,0.9, 1.4,1.3,0.85, 0.5,0.6,0.5]);
+const AT_REST=new Float32Array([0.25,0.3,0.2, 0.3,0.35,0.2, 0.35,0.35,0.22, 0.4,0.35,0.2, 0.15,0.2,0.15]);
 
 /* ---------- custom model (GLB / FBX + optional animation files) ---------- */
 async function loadCustomCharacter(files){

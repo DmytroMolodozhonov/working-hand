@@ -74,6 +74,19 @@ export class ZnsArms {
                 if (side === 'left') { nx = -nx; ny = -ny; nz = -nz; } // (the two hands are mirror images: one formula for «out of the palm»)
                 const fl = Math.hypot(fm.x, fm.y, fm.z), nl = Math.hypot(nx, ny, nz);
                 if (fl > 1e-4 && nl > 1e-6) { set(D.h, -fm.x / fl, fm.y / fl, -fm.z / fl); set(D.n, -nx / nl, ny / nl, -nz / nl); D.hand = true; }
+                // the fingers' bends (rad, each of 3 joints of index, middle, ring, little and the thumb): the angle between one bone of the
+                // finger and the next, as the camera sees it in depth too; a straight finger shows ~0.1, a fist ~1.5 at each joint
+                const curl = D.curl || (D.curl = new Float32Array(15));
+                const V = (i, j) => { const A = lm[i], B = lm[j]; return [(B.x - A.x) * aspect, B.y - A.y, (B.z - A.z) * aspect]; };
+                const angle = (u, v) => { const lu = Math.hypot(u[0], u[1], u[2]) || 1, lv = Math.hypot(v[0], v[1], v[2]) || 1; return Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (lu * lv)))); };
+                const FING = [[5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]];
+                for (let f = 0; f < 4; f++) {
+                    const [a0, a1, a2, a3] = FING[f];
+                    const bends = [angle(V(0, a0), V(a0, a1)), angle(V(a0, a1), V(a1, a2)), angle(V(a1, a2), V(a2, a3))];
+                    for (let j = 0; j < 3; j++) curl[f * 3 + j] = Math.max(0, Math.min(1.7, bends[j] - 0.12));
+                }
+                const t0 = angle(V(1, 2), V(2, 3)), t1 = angle(V(2, 3), V(3, 4));
+                curl[12] = Math.max(0, Math.min(1.2, t0 - 0.1)); curl[13] = Math.max(0, Math.min(1.4, t1 - 0.1)); curl[14] = curl[13] * 0.6;
             }
         }
     }
