@@ -123,6 +123,8 @@ import { OpushkaSpells } from './opushka-spells.js';
 import { PortalLoader } from '../src/ui/PortalLoader.js';
 import { ZnsArms } from './opushka-hands.js';
 import { wandModel } from '../src/game/WandModel.js';
+import { geography, heightTriangle, OpushkaCaves, WATER_KIND, CAVE_TILE } from './opushka-world.js';
+import { caveGeometry, terrainIndex, waterGeometry } from './opushka-mesh.js';
 const zns = new ZnsArms(); window.__znsArms = zns; // (tests and the camera check reach it here)
 // (multiplayer — special/opushka-net.js: the game's network; friends are whole wizards here, moved by their poses)
 const mpNet = new OpushkaNet({ THREE, get scene() { return scene; }, player: () => player, arms: zns, rig: () => charRig, buildAvatar: () => buildAvatar(),
@@ -131,7 +133,7 @@ const mpNet = new OpushkaNet({ THREE, get scene() { return scene; }, player: () 
 window.__mpNet = mpNet;
 // (the battle spells — special/opushka-spells.js: the game's words, the wand in the fist; a blast dents this world's ground)
 const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() { return camera; }, get U() { return U; }, player: () => player, rig: () => charRig, charRoot: () => charRoot,
-  get pigs() { return pigs; }, groundH: (x, z) => groundH(x, z), dent: (x, z, r, d) => dentGround(x, z, r, d), trees: () => treesNear(), rocks: () => rocksAll(),
+  get pigs() { return pigs; }, groundH: (x, z) => groundH(x, z), solid: (x,y,z) => surfaceDensity(x,y,z), dent: (x, z, r, d, y) => dentGround(x, z, r, d, y), trees: () => treesNear(), rocks: () => rocksAll(),
   net: () => (mpNet.on ? mpNet.net : null), remotes: () => mpNet.remotes, audio: () => audio.ctx, playing: () => playing, armsLive: () => zns.live(), running: () => !!zns.raw?.isRunning, keysOff: () => AUTO,
   hud: (t) => spellHud(t), pain: (k) => painFlash(k), setLocked: (b) => { player.locked = b; }, nameOf: (id) => mpNet.net?.players.get(id)?.name || 'другой волшебник',
   oink: (pg) => audio.oink && audio.oink(pg, 1.4), fell: (i, x, z, k) => fellTree(i, x, z, k), respawn: () => { player.pos.set(MEADOW[0] - 4 + Math.random() * 3, 0, MEADOW[1] + 14 + Math.random() * 3); player.pos.y = groundH(player.pos.x, player.pos.z); player.vel.set(0, 0, 0); player.vy = 0; } });
@@ -225,16 +227,41 @@ function forestAt(x,z){
   f*=smooth(-0.62,-0.32,fbm(x*0.006+40,z*0.006-11,2));     // clearings inside the forest
   return f;
 }
-function heightAnalytic(x,z){
+function meadowHeight(x,z){
   let h=fbm(x*0.0022,z*0.0022,4)*15+fbm(x*0.011+5.2,z*0.011-1.3,3)*2.2+fbm(x*0.05,z*0.05,2)*0.3;
   const md=meadowDist(x,z), m=1-smooth(50,125,md);
   const mh=fbm(x*0.006,z*0.006,2)*2.6+fbm(x*0.03,z*0.03,2)*0.45;
   h=lerp(h,mh,m);
-  const e=smooth(430,1150,Math.max(Math.abs(x),Math.abs(z)));
-  h+=e*e*70*(0.7+0.5*fbm(x*0.004,z*0.004,3));
-  const r=Math.hypot(x,z), mt=smooth(1100,2700,r);
-  if(mt>0){const rg=ridged(x*0.0007,z*0.0007,4);h+=mt*(rg*rg*0.9*520+fbm(x*0.0012,z*0.0012,3)*90+60);}
   return h;
+}
+const heightAnalytic=geography(meadowHeight);
+let caves;
+const HYD=new Uint8Array(HM_N*HM_N), FLOW=new Int8Array(HM_N*HM_N*2);
+const waterCode=()=>heightAnalytic.sea?WATER_KIND.SEA:heightAnalytic.river?WATER_KIND.RIVER:heightAnalytic.water?WATER_KIND.LAKE:0;
+function waterKind(x,z){
+  const i=Math.round((x+HM_HALF)/HM_STEP),j=Math.round((z+HM_HALF)/HM_STEP);
+  if(i>=0&&i<HM_N&&j>=0&&j<HM_N)return HYD[j*HM_N+i];
+  heightAnalytic(x,z);
+  return waterCode();
+}
+function waterAt(x,z){
+  if(groundH(x,z)>=0)return 0;
+  for(const dx of [-1,1])for(const dz of [-1,1]){const kind=waterKind(x+dx,z+dz);if(kind)return kind;}
+  return 0;
+}
+function flowAt(x,z){
+  const i=Math.floor((x+HM_HALF)/HM_STEP),j=Math.floor((z+HM_HALF)/HM_STEP);
+  for(let dz=0;dz<2;dz++)for(let dx=0;dx<2;dx++){
+    const k=(j+dz)*HM_N+i+dx;
+    if(HYD[k]===WATER_KIND.RIVER)return [FLOW[k*2]/127,FLOW[k*2+1]/127];
+  }
+  return [0,0];
+}
+function scenery(x,z){
+  if(waterAt(x,z))return false;
+  const h=groundH(x,z);
+  if(caves?.density(x,h-0.2,z)<0)return false;
+  return Math.hypot(groundH(x+1,z)-groundH(x-1,z),groundH(x,z+1)-groundH(x,z-1))<1.8;
 }
 function hmIdx(x,z){return [(x+HM_HALF)/HM_STEP,(z+HM_HALF)/HM_STEP];}
 function sampleArr(arr,x,z){
@@ -242,7 +269,8 @@ function sampleArr(arr,x,z){
   const ix=fx|0,iz=fz|0,tx=fx-ix,tz=fz-iz,i=iz*HM_N+ix;
   return (arr[i]*(1-tx)+arr[i+1]*tx)*(1-tz)+(arr[i+HM_N]*(1-tx)+arr[i+HM_N+1]*tx)*tz;
 }
-function groundH(x,z){return (Math.abs(x)<HM_HALF-2&&Math.abs(z)<HM_HALF-2)?sampleArr(HGT,x,z):heightAnalytic(x,z);}
+function surfaceDensity(x,y,z){return caves?caves.density(x,y,z):groundH(x,z)-y;}
+function groundH(x,z){return (Math.abs(x)<HM_HALF-2&&Math.abs(z)<HM_HALF-2)?heightTriangle(HGT,HM_N,(x+HM_HALF)/HM_STEP,(z+HM_HALF)/HM_STEP):heightAnalytic(x,z);}
 
 // tree arrays
 const VARIANTS=9; // 0-2 spruce, 3-4 pine, 5-7 birch, 8 sapling
@@ -254,16 +282,19 @@ let FN=0; const FMAX=90000; const FX=new Float32Array(FMAX),FY=new Float32Array(
 async function genWorld(progress){
   for(let j=0;j<HM_N;j++){
     const z=-HM_HALF+j*HM_STEP;
-    for(let i=0;i<HM_N;i++){const x=-HM_HALF+i*HM_STEP,k=j*HM_N+i;HGT[k]=heightAnalytic(x,z);FOR[k]=forestAt(x,z);
+    for(let i=0;i<HM_N;i++){const x=-HM_HALF+i*HM_STEP,k=j*HM_N+i;HGT[k]=heightAnalytic(x,z);HYD[k]=waterCode();
+      if(HYD[k]===WATER_KIND.RIVER){FLOW[k*2]=heightAnalytic.flowX*127;FLOW[k*2+1]=heightAnalytic.flowZ*127;}
+      FOR[k]=HYD[k]?0:forestAt(x,z);
       LUSH[k]=0.5+0.5*fbm(x*0.02+9,z*0.02+4,2);}
     if(j%64===0){progress(0.05+0.25*j/HM_N,'Рельеф');await nextFrame();}
   }
+  caves=new OpushkaCaves(groundH,(x,z)=>Math.hypot(x,z)<80||!!waterKind(x,z),PLAY);
   // trees
   const rng=mulberry32(99), cell=4.4, lim=760;
   for(let gz=-lim;gz<lim;gz+=cell)for(let gx=-lim;gx<lim;gx+=cell){
     const x=gx+rng()*cell,z=gz+rng()*cell; const f=forestAt(x,z);
     const p=Math.pow(f,1.4)*0.9+0.006*(1-f); const r1=rng(),r2=rng(),r3=rng(),r4=rng();
-    if(r1>p||TN>=TMAX)continue;
+    if(r1>p||TN>=TMAX||!scenery(x,z))continue;
     if(Math.abs(x)<HM_HALF-4&&Math.abs(z)<HM_HALF-4&&Math.hypot(x-MEADOW[0],z-MEADOW[1]+14)<6)continue;
     const edge=1-smooth(0.45,0.95,f+SN(x*0.02,z*0.02)*0.25);
     let v;
@@ -286,12 +317,12 @@ async function genWorld(progress){
   // rocks
   const rr=mulberry32(7);
   for(let n=0;n<6000&&RN<RMAX;n++){const x=(rr()*2-1)*600,z=(rr()*2-1)*600;const f=forestAt(x,z);
-    const p=0.18*f+0.03+(SN(x*0.01,z*0.01)>0.5?0.3:0);if(rr()>p)continue;
+    const p=0.18*f+0.03+(SN(x*0.01,z*0.01)>0.5?0.3:0);if(rr()>p||!scenery(x,z))continue;
     const big=rr()<0.1;RX[RN]=x;RZ[RN]=z;RS[RN]=big?1.4+rr()*2.2:0.25+rr()*0.9;RY[RN]=groundH(x,z)-RS[RN]*0.25;RV[RN]=(rr()*5)|0;RR[RN]=rr()*6.28;RN++;}
   // ferns
   const fr=mulberry32(21);
   for(let gz=-600;gz<600;gz+=3.2)for(let gx=-600;gx<600;gx+=3.2){const x=gx+fr()*3.2,z=gz+fr()*3.2;const f=forestAt(x,z);
-    const p=0.45*smooth(0.3,0.8,f)*smooth(-0.2,0.4,SN(x*0.025+5,z*0.025))+0.05*f;if(fr()>p||FN>=FMAX)continue;
+    const p=0.45*smooth(0.3,0.8,f)*smooth(-0.2,0.4,SN(x*0.025+5,z*0.025))+0.05*f;if(fr()>p||FN>=FMAX||!scenery(x,z))continue;
     FX[FN]=x;FZ[FN]=z;FY[FN]=groundH(x,z)-0.05;FS[FN]=0.6+fr()*0.7;FRt[FN]=fr()*6.28;FN++;}
 }
 
@@ -310,7 +341,7 @@ const camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,0.08,9000);
 
 /* shared uniforms */
 const U={
-  uTime:{value:0}, uHM:{value:null}, uHMHalf:{value:HM_HALF}, uHMRes:{value:HM_N},
+  uTime:{value:0}, uHM:{value:null}, uGeography:{value:null}, uHMHalf:{value:HM_HALF}, uHMRes:{value:HM_N},
   uWind:{value:new THREE.Vector2(0.8,0.6).normalize()}, uWindStr:{value:0.5},
   uSunDirW:{value:new THREE.Vector3(0,1,0)}, uLodR:{value:Q.treeR}, uPlayer:{value:new THREE.Vector3(0,-999,0)},
   uFlashV:{value:new THREE.Vector3()}, uFlashC:{value:new THREE.Vector4(1,0.6,0.3,0)},
@@ -318,7 +349,7 @@ const U={
 };
 
 const GLSL_COMMON=/* glsl */`
-uniform float uTime; uniform sampler2D uHM; uniform float uHMHalf; uniform float uHMRes;
+uniform float uTime; uniform sampler2D uHM,uGeography; uniform float uHMHalf; uniform float uHMRes;
 uniform vec2 uWind; uniform float uWindStr; uniform vec3 uSunDirW; uniform float uLodR; uniform vec3 uPlayer;
 float hash12(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float hash13(vec3 p3){p3=fract(p3*.1031);p3+=dot(p3,p3.zyx+31.32);return fract((p3.x+p3.y)*p3.z);}
@@ -330,7 +361,9 @@ float vnoise3(vec3 p){vec3 i=floor(p),f=fract(p);vec3 u=f*f*(3.-2.*f);
   return mix(a,b,u.z);}
 float fbmN(vec2 p){float s=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<4;i++){s+=a*vnoise(p);p=m*p;a*=.5;}return s/.9375;}
 float fbm3N(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise3(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s/.9375;}
-vec4 sampleHM(vec2 wxz){vec2 uv=(wxz+uHMHalf)/(2.*uHMHalf);uv=(uv*(uHMRes-1.)+.5)/uHMRes;return texture2D(uHM,uv);}
+vec2 mapUV(vec2 p){return ((p+uHMHalf)/(2.*uHMHalf)*(uHMRes-1.)+.5)/uHMRes;}
+vec4 sampleHM(vec2 p){return texture2D(uHM,mapUV(p));}
+vec2 geographyAt(vec2 p){return texture2D(uGeography,mapUV(p)).rg;}
 uniform vec4 uBlast[12]; uniform vec4 uBlastP[12]; uniform vec3 uFlashV; uniform vec4 uFlashC;
 // (23.11, the spells — opushka-spells.js: each blast or frost patch — x, z, its radius, the time it came; P: power, 1 = frost, how long it stays,
 //  the crater's radius — the bare earth it threw out)
@@ -717,10 +750,11 @@ function applyTOD(){
 
 /* ---------- terrain ---------- */
 let groundMat;
-function buildTerrain(texF,texM){
+async function buildTerrain(texF,texM){
   const N=640/HM_STEP*2; // inner ±640
   const g=new THREE.PlaneGeometry(1280,1280,N,N);g.rotateX(-Math.PI/2);
-  const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i);p.setY(i,sampleArr(HGT,x,z));}g.computeVertexNormals();
+  const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i);p.setY(i,groundH(x,z));}g.computeVertexNormals();
+  terrainIndex(g,HM_STEP,(x,z)=>!!caves.tile(x,z)?.open);
   groundMat=patch(new THREE.MeshStandardMaterial({roughness:0.95,metalness:0,envMapIntensity:0.8}),{key:'ground',
     uniforms:{tF:{value:texF.map},tFN:{value:texF.normal},tM:{value:texM.map},tMN:{value:texM.normal}},
     vpars:`varying vec3 vWP;varying vec3 vWN;`,
@@ -746,16 +780,64 @@ function buildTerrain(texF,texM){
         float far=smoothstep(700.,820.,max(abs(p.x),abs(p.y)));
         vec3 hill=mix(vec3(0.018,0.028,0.014),vec3(0.035,0.045,0.022),fbmN(p*0.004));hill=mix(hill,vec3(0.13,0.12,0.11),smoothstep(0.45,0.7,slope)+smoothstep(380.,560.,vWP.y)*0.6);
         gAlb=mix(gAlb,hill,far);gNrm*=1.-far;
-        gOcc=(1.-hm.g*0.78*(1.-far))*(1.-far*0.4);
+        vec2 geo=geographyAt(p);
+        float depth=max(0.,hm.r-vWP.y);
+        float cave=smoothstep(0.25,1.4,depth);
+        float wet=step(0.003,geo.r)*(1.-smoothstep(0.0,0.8,vWP.y));
+        vec3 stratum=mix(vec3(0.095,0.086,0.072),vec3(0.18,0.16,0.13),fbmN(vec2(p.x+p.y*0.47,vWP.y*3.8)*0.34));
+        float small=fbmN(vec2(p.x*2.1+p.y,vWP.y*2.8+p.y*0.37));
+        gAlb=mix(gAlb,vec3(0.11,0.085,0.054)*(0.65+small*0.7),wet*0.85);
+        gAlb=mix(gAlb,stratum*(0.72+small*0.62),cave);
+        gAlb=mix(gAlb,vec3(0.45,0.46,0.46)*(0.78+small*0.25),smoothstep(52.,72.,vWP.y+fb*6.)*smoothstep(0.52,0.87,vWN.y)*(1.-cave)*0.82);
+        gOcc=(1.-hm.g*0.78*(1.-far))*(1.-far*0.4)*mix(1.,0.18,smoothstep(1.0,12.,depth));
       }`,
     f:[['#include <map_fragment>','groundSample();gAlb=blastGround(vWP.xz,gAlb);diffuseColor.rgb=gAlb;'],['#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=blastGlow;'],
        ['#include <normal_fragment_maps>','{vec3 nw=normalize(vWN+vec3(gNrm.x,0.,gNrm.y)*0.9);normal=normalize((viewMatrix*vec4(nw,0.)).xyz);}'],
        OCC_LIGHT('gOcc')]});
   const m=new THREE.Mesh(g,groundMat);m.receiveShadow=true;m.castShadow=true;scene.add(m);terrainMesh=m;
+  let count=0;
+  for(const tile of caves.tiles.values()){
+    const mesh=new THREE.Mesh(caveGeometry(caves,tile),groundMat);
+    mesh.receiveShadow=mesh.castShadow=true;scene.add(mesh);tile.mesh=mesh;
+    if(++count%12===0)await nextFrame();
+  }
   // outer ring terrain to the mountains
   const S=20,R=4480,NN=R*2/S;const g2=new THREE.PlaneGeometry(R*2,R*2,NN,NN);g2.rotateX(-Math.PI/2);const p2=g2.attributes.position;
-  for(let i=0;i<p2.count;i++){const x=p2.getX(i),z=p2.getZ(i);let h=(Math.abs(x)<=HM_HALF&&Math.abs(z)<=HM_HALF)?sampleArr(HGT,x,z):heightAnalytic(x,z);if(Math.abs(x)<639.9&&Math.abs(z)<639.9)h-=6;p2.setY(i,h);}
+  for(let i=0;i<p2.count;i++){const x=p2.getX(i),z=p2.getZ(i);p2.setY(i,groundH(x,z));}
+  terrainIndex(g2,S,(x,z)=>Math.abs(x)<640&&Math.abs(z)<640);
   g2.computeVertexNormals();const m2=new THREE.Mesh(g2,groundMat);m2.receiveShadow=true;scene.add(m2);
+}
+
+function buildWater(){
+  const water=patch(new THREE.MeshPhysicalMaterial({roughness:0.22,metalness:0.08,envMapIntensity:0.85,side:THREE.DoubleSide}),{key:'opushka-water',
+    vpars:`attribute vec3 hydro;varying vec3 vHydro;varying vec3 vWater;`,
+    v:[['#include <begin_vertex>',`#include <begin_vertex>
+      vHydro=hydro; vWater=position;
+      float k=mix(0.009,0.06,step(2.5,hydro.x));
+      transformed.y+=k*(sin(position.x*.55+position.z*.26-uTime*1.8)+sin(position.x*.20-position.z*.46+uTime*1.6));`]],
+    fpars:`varying vec3 vHydro;varying vec3 vWater;`,
+    f:[['#include <color_fragment>',`#include <color_fragment>
+      vec2 p=vWater.xz;
+      float depth=max(0.,-sampleHM(p).r);
+      float sea=step(2.5,vHydro.x),river=1.-step(1.5,vHydro.x);
+      vec3 deep=mix(vec3(0.021,0.061,0.059),vec3(0.014,0.049,0.066),sea);
+      vec3 shoal=vec3(0.14,0.168,0.107);
+      float murk=1.-exp(-depth*(river*.15+.50));
+      diffuseColor.rgb=mix(shoal,deep,murk);
+      float thread=vnoise((p-vHydro.yz*uTime*.85)*1.3);
+      diffuseColor.rgb+=vec3(.025,.037,.034)*smoothstep(.69,.92,thread)*(0.25+river*.75);
+      float tide=smoothstep(.02,.17,depth)*(1.-smoothstep(.22,.50,depth));
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.27,.33,.32),tide*sea*smoothstep(.56,.81,thread)*.48);`],
+      ['#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+      vec2 drift=vHydro.yz*uTime*.9;
+      vec2 q=(vWater.xz-drift);
+      vec3 wn=normalize(vec3(.048*cos(q.x*1.6+q.y*.81-uTime*1.7)+.028*cos(q.x*3.8-uTime),1.,
+        .051*cos(q.y*1.12-q.x*.72+uTime*1.3)+.024*sin(q.y*4.8+uTime)));
+      normal=normalize((viewMatrix*vec4(wn*faceDirection,0.)).xyz);`]]});
+  const mesh=new THREE.Mesh(waterGeometry(-640,640,2,waterKind,flowAt),water);mesh.receiveShadow=true;scene.add(mesh);
+  const outer=new THREE.Mesh(waterGeometry(-1800,1800,20,(x,z)=>waterKind(x,z)===WATER_KIND.SEA?WATER_KIND.SEA:0,flowAt,
+    (x,z)=>Math.abs(x)<640&&Math.abs(z)<640),water);
+  scene.add(outer);
 }
 
 /* ---------- grass ---------- */
@@ -785,7 +867,8 @@ function makeGrassMat(){
       dens*=smoothstep(0.1,0.38,field+0.22)*(1.-hm.g*0.55);
       float keep=step(hB,dens);
       float fade=smoothstep(uFade.x,uFade.y,dist)*(1.-smoothstep(uFade.z,uFade.w,dist));
-      float H=uBlade.x*mix(0.4,1.0,aRnd.x)*mix(0.55,1.55,tall)*mix(1.,0.55,forest)*keep*fade;
+      float water=step(0.003,geographyAt(wxz).r)*(1.-smoothstep(-0.06,0.13,hm.r));
+      float H=(1.-water)*(1.-geographyAt(wxz).g)*uBlade.x*mix(0.4,1.0,aRnd.x)*mix(0.55,1.55,tall)*mix(1.,0.55,forest)*keep*fade;
       float bBurn=blastBurn(wxz),bDry=blastDry(wxz),bFrost=blastFrost(wxz);vec2 bSoil=blastSoil(wxz);H*=mix(1.,0.1+0.12*aRnd.x,bBurn)*(1.-bSoil.x)*mix(1.,0.25+0.3*aRnd.y,bSoil.y);
       float W=uBlade.y*mix(0.6,1.35,aRnd.y)*(0.6+0.4*fade)*(1.+dist*0.045);
       float ang=aRnd.z*6.2831853+hA*2.0;vec2 face=vec2(cos(ang),sin(ang));vec2 side=vec2(-face.y,face.x);
@@ -1186,6 +1269,7 @@ function updateShadow(){
 const player={walkYaw:0,camDrive:false,pos:new V3(MEADOW[0]-4,0,MEADOW[1]+14),yaw:0,pitch:-0.02,vel:new V3(),bob:0,stepT:0,vy:0,grounded:true,landT:0,faceYaw:0,view:params.get('view')||'first',camPos:new V3(),camInit:false};
 const keys={};let pointerLocked=false,playing=false,started=false;
 function collide(p){
+  if(p.y<groundH(p.x,p.z)-1.25)return;
   for(const i of nearList){const dx=p.x-TX[i],dz=p.z-TZ[i];const tv=treeVar[TV[i]];const rr=tv.g.trunk*TS[i]*1.6+0.3;const d2=dx*dx+dz*dz;
     if(d2<rr*rr&&d2>1e-6){const d=Math.sqrt(d2);p.x=TX[i]+dx/d*rr;p.z=TZ[i]+dz/d*rr;}}
   collideFallen(p);
@@ -1206,13 +1290,27 @@ function updatePlayer(dt){
   const sp=player.crouch?(run?1.8:0.95):cam?1.65+(4.6-1.65)*clamp((cam.k-0.25)/0.6,0,1):run?4.6:1.65;const my=cam?player.walkYaw:player.yaw;
   const fw=new V3(-Math.sin(my),0,-Math.cos(my)),rt=new V3(Math.cos(my),0,-Math.sin(my));
   const target=fw.multiplyScalar(fz*sp).addScaledVector(rt,fx*sp);
+  if(player.swimming)target.multiplyScalar(0.58);
   if(player.landT>0.1)target.multiplyScalar(0.4);
   player.vel.lerp(target,1-Math.exp(-dt*(player.grounded?(len>0?5:7):0.7)));
-  player.pos.addScaledVector(player.vel,dt);collide(player.pos);
-  const g=groundH(player.pos.x,player.pos.z);
+  const p=player.pos,oldX=p.x,oldZ=p.z,oldY=p.y,head=player.crouch?1.27:1.74;
+  p.addScaledVector(player.vel,dt);collide(p);
+  p.x=clamp(p.x,-PLAY,PLAY);p.z=clamp(p.z,-PLAY,PLAY);
+  if(caves&&(caves.tile(oldX,oldZ)||caves.tile(p.x,p.z))&&!caves.canStand(p.x,p.y,p.z,head)){
+    if(caves.canStand(p.x,p.y,oldZ,head)){p.z=oldZ;player.vel.z=0;}
+    else if(caves.canStand(oldX,p.y,p.z,head)){p.x=oldX;player.vel.x=0;}
+    else{p.x=oldX;p.z=oldZ;player.vel.x=player.vel.z=0;}
+  }
+  const outdoors=groundH(p.x,p.z);
+  const g=caves?.floor(p.x,p.z,p.y)??outdoors;
+  player.swimming=!!waterAt(p.x,p.z)&&outdoors<-0.73&&p.y<-0.60;
   if(((!AUTO&&keys.Space)||joy.jump)&&player.grounded&&playing&&!player.locked&&player.landT<0.05&&!player.jumpPrep){player.jumpPrep=1e-4;joy.jump=false;}
   if(player.jumpPrep>0){player.jumpPrep+=dt;if(player.jumpPrep>=0.14){const hs=Math.hypot(player.vel.x,player.vel.z);player.jumpPrep=0;player.airStyle=hs>2.6?'leap':'tuck';player.vy=4.5+hs*0.12;player.grounded=false;audio.step(2,true);}}
-  if(!player.grounded){player.vy-=11.5*dt;player.pos.y+=player.vy*dt;
+  if(player.swimming){
+    p.y=lerp(p.y,Math.max(outdoors,-1.12),1-Math.exp(-dt*5));
+    player.grounded=false;player.vy=0;player.jumpPrep=0;joy.jump=false;
+  }else if(!player.grounded){player.vy-=11.5*dt;p.y+=player.vy*dt;
+    if(player.vy>0&&caves?.tile(p.x,p.z)&&surfaceDensity(p.x,p.y+head,p.z)>0){p.y=oldY;player.vy=0;}
     if(player.pos.y<=g&&player.vy<0){player.justLanded=player.vy;player.landT=0.22*clamp(-player.vy/5,0.3,1);player.pos.y=g;player.grounded=true;player.vy=0;audio.step(3.5,true);}}
   else{if(player.pos.y-g>0.35){player.grounded=false;player.vy=0;}else player.pos.y=dt>0?lerp(player.pos.y,g,1-Math.exp(-dt*14)):g;}
   player.landT=Math.max(0,player.landT-dt);
@@ -1237,7 +1335,10 @@ function updatePlayer(dt){
     const right=new V3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
     const pivot=player.pos.clone().add(new V3(0,1.55-player.landT*0.4,0));
     const want=pivot.clone().addScaledVector(dir,-dist).addScaledVector(right,0.55);
-    const gh=groundH(want.x,want.z)+0.35;if(want.y<gh)want.y=gh;
+    for(let i=1;i<=15;i++){
+      const t=i/15,x=lerp(pivot.x,want.x,t),y=lerp(pivot.y,want.y,t),z=lerp(pivot.z,want.z,t);
+      if(surfaceDensity(x,y,z)>-0.10){want.lerp(pivot,1-(i-1)/15);break;}
+    }
     if(!player.camInit||dt===0){player.camPos.copy(want);player.camInit=true;}else player.camPos.lerp(want,1-Math.exp(-dt*12));
     camera.position.copy(player.camPos);camera.rotation.set(pitch,player.yaw,0,'YXZ');
   }
@@ -1991,8 +2092,8 @@ function updateCharacter(dt,speed){
 /* ---------- the ground dented (the spells: a blast presses a hollow into the earth — opushka-spells.js) ---------- */
 /** A hollow of radius r and depth d at (x, z) with a low rim of thrown earth: the height map (feet, pigs, everything that asks groundH), the ground's
  *  mesh (its normals too) and the texture the grass and the ground's shading read — only the few rows that changed are sent to the video card. */
-function dentGround(x,z,r,d){
-  if(!terrainMesh||Math.abs(x)>620||Math.abs(z)>620)return;
+function dentGround(x,z,r,d,y=Infinity){
+  if(!terrainMesh||Math.abs(x)>620||Math.abs(z)>620||y<groundH(x,z)-1.1)return;
   const R=r*1.6,i0=Math.max(1,Math.floor((x-R+HM_HALF)/HM_STEP)),i1=Math.min(HM_N-2,Math.ceil((x+R+HM_HALF)/HM_STEP));
   const j0=Math.max(1,Math.floor((z-R+HM_HALF)/HM_STEP)),j1=Math.min(HM_N-2,Math.ceil((z+R+HM_HALF)/HM_STEP));
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const px=-HM_HALF+i*HM_STEP,pz=-HM_HALF+j*HM_STEP,q=Math.hypot(px-x,pz-z)/r;
@@ -2004,6 +2105,11 @@ function dentGround(x,z,r,d){
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const ix=i-off,iy=j-off;if(ix<0||iy<0||ix>NN||iy>NN)continue;const v=iy*W+ix;
     P.setY(v,hAt(i,j));const nx=-(hAt(i+1,j)-hAt(i-1,j))/(2*HM_STEP),nz=-(hAt(i,j+1)-hAt(i,j-1))/(2*HM_STEP),l=Math.hypot(nx,1,nz);Nm.setXYZ(v,nx/l,1/l,nz/l);lo=Math.min(lo,iy);hi=Math.max(hi,iy);}
   if(hi>=lo){P.addUpdateRange(lo*W*3,(hi-lo+1)*W*3);Nm.addUpdateRange(lo*W*3,(hi-lo+1)*W*3);P.needsUpdate=true;Nm.needsUpdate=true;}
+  for(const tile of caves.tiles.values()){
+    if(tile.x>x+R||tile.x+CAVE_TILE<x-R||tile.z>z+R||tile.z+CAVE_TILE<z-R)continue;
+    tile.mesh.geometry.dispose();
+    tile.mesh.geometry=caveGeometry(caves,tile);
+  }
   // the texture: the height channel of the changed nodes, only that patch
   const half=hmSrc.image.data;for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)half[(j*HM_N+i)*4]=THREE.DataUtils.toHalfFloat(HGT[j*HM_N+i]);
   renderer.copyTextureToTexture(hmSrc,U.uHM.value,new THREE.Box2(new THREE.Vector2(i0,j0),new THREE.Vector2(i1+1,j1+1)),new THREE.Vector2(i0,j0));
@@ -2308,12 +2414,19 @@ async function init(){
     await genWorld(prog);
     const half=new Uint16Array(HM_N*HM_N*4);for(let i=0;i<HM_N*HM_N;i++){half[i*4]=THREE.DataUtils.toHalfFloat(HGT[i]);half[i*4+1]=THREE.DataUtils.toHalfFloat(CAN[i]);half[i*4+2]=THREE.DataUtils.toHalfFloat(FOR[i]);half[i*4+3]=THREE.DataUtils.toHalfFloat(LUSH[i]);}
     const hmTex=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);hmTex.minFilter=hmTex.magFilter=THREE.LinearFilter;hmTex.wrapS=hmTex.wrapT=THREE.ClampToEdgeWrapping;hmTex.needsUpdate=true;U.uHM.value=hmTex;hmSrc=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);
+    const geo=new Uint8Array(HM_N*HM_N*4);
+    for(let j=0;j<HM_N;j++)for(let i=0;i<HM_N;i++){
+      const k=j*HM_N+i,x=-HM_HALF+i*HM_STEP,z=-HM_HALF+j*HM_STEP;
+      geo[k*4]=HYD[k]?255:0;
+      geo[k*4+1]=caves.density(x,HGT[k]-0.25,z)<0?255:0;
+    }
+    const geoTex=new THREE.DataTexture(geo,HM_N,HM_N);geoTex.minFilter=geoTex.magFilter=THREE.LinearFilter;geoTex.needsUpdate=true;U.uGeography.value=geoTex;
     prog(0.45,'Кора и почва');await nextFrame();
     const barks={spruce:makeBark('spruce'),pine:makeBark('pine'),birch:makeBark('birch')};await nextFrame();
     const gF=makeGround('forest');await nextFrame();const gM=makeGround('meadow');
     prog(0.6,'Небо');await nextFrame();
     buildSky();applyTOD();
-    prog(0.66,'Рельеф');await nextFrame();buildTerrain(gF,gM);
+    prog(0.66,'Рельеф');await nextFrame();await buildTerrain(gF,gM);buildWater();
     prog(0.72,'Деревья');await nextFrame();buildTrees(barks);
     prog(0.8,'Дальний лес');await nextFrame();await buildImpostors();
     prog(0.86,'Трава и цветы');await nextFrame();buildGrass();buildFlowers(tex(makeFlowerAtlas(),true,false));buildFerns(tex(makeFern(4),true,false));buildRocks();buildDust();prog(0.9,'Персонаж');await nextFrame();await buildCharacter();restoreCharacter();prog(0.93,'Летающие свиньи');await nextFrame();await buildPigs();
@@ -2358,7 +2471,7 @@ function loop(now){
   if(dynTimer>2.5&&playing){dynTimer=0;const old=dynScale;if(fpsShow<42)dynScale=Math.max(0.55,dynScale-0.1);else if(fpsShow>58&&dynScale<1)dynScale=Math.min(1,dynScale+0.05);if(old!==dynScale)resizePost();}
   requestAnimationFrame(loop);
 }
-window.__debug={get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
+window.__debug={get caves(){return caves;},groundH,waterAt,get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
 init();
 </script>
 

@@ -563,7 +563,7 @@ export function treeFitsChunk(c, x, z, h, kind) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false, riverSizes = false, moreForest = false) {
+export function createHeightField(seed, mountains, seas = null, test = false, lush = false, seabed = false, riverSizes = false, moreForest = false, smoothLand = null) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -593,9 +593,11 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
         }
         const dist = Math.sqrt(ix * ix + iz * iz);
         const near = smoothstep(38, 70, dist); // flat play area around spawn
-        if (near <= 0) return 0;
+        if (near <= 0 && !smoothLand) return 0;
         let h;
-        if (land && dist >= LUSH.FAR) {
+        if (smoothLand) {
+            h = smoothLand(ix, iz, dist, land);
+        } else if (land && dist >= LUSH.FAR) {
             // (generation 5, far out: only the new landscape — the spawn's old hills not worked out)
             h = Math.round(land.height(ix, iz, dist));
             fn.kind = land.kind;
@@ -631,9 +633,9 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
                     const j = s > SEA.SHELF ? Math.round(noise(ix / 37 + 91, iz / 37 - 13) * 1.2) : 0;
                     const d = seabed ? seabedDepth(ix, iz, s, seaDepth(s, 0), noise) : seaDepth(s, j); // (generation 24: the bottom a landscape)
                     fn.water = d; fn.sea = true;
-                    return -d;
+                    return smoothLand ? -Math.min(d, s * 0.3) : -d;
                 }
-                h = Math.min(h, seaLandCap(-s));
+                h = Math.min(h, smoothLand ? -s / 6 + Math.max(0, -s - SEA.BEACH) ** 2 / 180 : seaLandCap(-s));
                 fn.beach = s > -SEA.BEACH;
             }
         }
@@ -660,10 +662,12 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
                 const sAt = land ? (x, z) => rivers(x / 380, z / 380) + 0.16 * rivers(x / 60 + 50, z / 60 - 20) : (x, z) => rivers(x / 230, z / 230) + 0.18 * rivers(x / 45 + 50, z / 45 - 20);
                 const gx = sAt(ix + 2, iz) - sAt(ix - 2, iz), gz = sAt(ix, iz + 2) - sAt(ix, iz - 2), gl = Math.hypot(gx, gz) || 1;
                 fn.river = true; fn.flowX = -gz / gl; fn.flowZ = gx / gl;
+                if (smoothLand) return -(1 - rv / width) * (fn.big ? 4.4 : 2.1);
                 return -depth;
             }
             // Valley sides rise gently from the banks
-            h = Math.min(h, Math.floor(((rv - width) / (width * 2)) * 6));
+            const bankHeight = ((rv - width) / (width * 2)) * 6;
+            h = Math.min(h, smoothLand ? bankHeight : Math.floor(bankHeight));
             // sandy banks: a strip of 1-3 blocks along the river, ragged by noise, with spits and coves
             const bn = noise2(ix / 11 + 7, iz / 11 - 31) * 0.5 + noise2(ix / 4 - 3, iz / 4 + 9) * 0.25 + 0.5;
             fn.bank = h <= 4 && rv < width * (1.25 + 1.5 * Math.max(0, bn));
@@ -671,7 +675,8 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
             // (generation 5: through high land a river runs in a valley, its sides rising steeper
             // and steeper — not a slot cut straight down through a mountain)
             const e = rv - width * 3;
-            h = Math.min(h, 6 + Math.floor(e * 110 + e * e * 2600));
+            const valley = e * 110 + e * e * 2600;
+            h = Math.min(h, 6 + (smoothLand ? valley : Math.floor(valley)));
         }
         // Lakes in low land (not on a beach)
         if (h <= 1 && !fn.beach) {
@@ -681,7 +686,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
                 // shallow at the shore, deep enough to swim in the middle (up to 7 blocks)
                 const depth = Math.min(7, 1 + Math.floor(d * 1.6));
                 fn.water = depth;
-                return -depth;
+                return smoothLand ? -Math.min(7, d * 1.6) : -depth;
             }
         }
         return h;

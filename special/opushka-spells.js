@@ -187,7 +187,7 @@ export class OpushkaSpells {
 
     _lookPoint(cam) {
         const o = cam.position, d = cam.getWorldDirection(new V3());
-        for (let t = 1; t < 120; t += 0.5) { _v.copy(o).addScaledVector(d, t); if (_v.y < this.api.groundH(_v.x, _v.z)) return _v.clone(); }
+        for (let t = 1; t < 120; t += 0.5) { _v.copy(o).addScaledVector(d, t); if (this.api.solid ? this.api.solid(_v.x,_v.y,_v.z)>0 : _v.y < this.api.groundH(_v.x,_v.z)) return _v.clone(); }
         return o.clone().addScaledVector(d, 120);
     }
 
@@ -382,7 +382,16 @@ export class OpushkaSpells {
         for (let i = 1; i <= steps; i++) {
             const t = i / steps; _v.copy(a).lerp(b, t);
             const g = this.api.groundH(_v.x, _v.z);
-            if (_v.y - rad <= g) { best = { t, p: _v.clone().setY(Math.max(_v.y, g)), kind: 'ground', n: new V3(0, 1, 0) }; break; }
+            const solid = this.api.solid;
+            if (solid ? solid(_v.x, _v.y, _v.z) >= -rad : _v.y - rad <= g) {
+                const p = _v.clone(), n = new V3(0, 1, 0);
+                if (solid) {
+                    const {x,y,z} = p, d=0.16;
+                    n.set(solid(x-d,y,z)-solid(x+d,y,z),solid(x,y-d,z)-solid(x,y+d,z),solid(x,y,z-d)-solid(x,y,z+d)).normalize();
+                } else p.y = Math.max(p.y, g);
+                best = { t, p, kind: 'ground', n };
+                break;
+            }
         }
         for (const tr of this.api.trees()) {
             if (_u.set(b.x - tr.x, 0, b.z - tr.z).lengthSq() > 64) continue;
@@ -464,7 +473,7 @@ export class OpushkaSpells {
             // (the author 23.11: «слабый в плане разрушения… при взаимодействии с землёй»): a real crater — bare earth thrown out, a rim of it
             const Rc = (maxi ? BLAST.CRATER_MAX : BLAST.CRATER) * soft, depth = (maxi ? BLAST.DEPTH_MAX : BLAST.DEPTH) * soft;
             const k = clamp(1 - (p.y - g) / (R * 0.7), 0.3, 1); // (an orb going off above the ground digs less)
-            this.api.dent(p.x, p.z, Rc * k, depth * k);
+            this.api.dent(p.x, p.z, Rc * k, depth * k, p.y);
             this._scorch(p.x, p.z, R, pw, Rc * k);
             this.clods.burst(p, maxi ? 160 : 80, Rc);
             this._earthFountain(p, Rc * k, maxi);
