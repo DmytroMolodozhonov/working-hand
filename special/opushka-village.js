@@ -4,8 +4,12 @@ import { OUTFITS, fitArmor } from './opushka-appearance.js';
 import { makePiece, makeRobe } from '../src/game/ArmorTypes.js';
 
 const V3 = THREE.Vector3;
-const houses = [[-8, -3, 5.6, 4.6, false], [3.5, 3, 6.8, 5.0, true], [9, -6.2, 4.8, 4.2, false]];
-export const villageClearing = (x, z) => houses.some(([dx, dz, w, d]) => Math.abs(x - dx) < w / 2 + 1.6 && Math.abs(z - dz) < d / 2 + 1.65);
+const houses = [
+    { dx: -8.5, dz: -2.0, width: 5.6, depth: 4.9, style: 'cottage' },
+    { dx: 3.7, dz: 3.0, width: 6.5, depth: 5.2, style: 'hall' },
+    { dx: 9.5, dz: -7.1, width: 5.7, depth: 3.8, style: 'workshop' },
+];
+export const villageClearing = (x, z) => houses.some(({dx, dz, width, depth}) => Math.abs(x - dx) < width / 2 + 2.15 && Math.abs(z - dz) < depth / 2 + 2.7);
 
 function siding(stone, seed) {
     const rand = createRng(seed);
@@ -40,6 +44,29 @@ function siding(stone, seed) {
     return map;
 }
 
+function roofing(slate) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d'), rand = createRng(slate ? 6061 : 1083);
+    g.fillStyle = slate ? '#313a3a' : '#3e2d23';
+    g.fillRect(0, 0, 256, 256);
+    for (let row = 0; row < 10; row++) for (let col = -1; col < 8; col++) {
+        const x = col * 37 + (row % 2) * 16, y = row * 25.6, tint = (slate ? 77 : 108) + rand() * 31;
+        g.fillStyle = slate ? `rgb(${tint - 9},${tint},${tint + 3})` : `rgb(${tint},${tint * .68},${tint * .47})`;
+        g.beginPath();
+        g.moveTo(x+1,y);g.lineTo(x+36,y);g.lineTo(x+35-rand()*2,y+23);g.lineTo(x+5,y+25);g.lineTo(x+1,y+22);g.fill();
+        g.fillStyle = '#e1cbb324';g.fillRect(x+3,y+1,31,1);
+        g.fillStyle = '#191a184d';g.fillRect(x+4,y+21.5,30,3);
+        for (let n = 0; n < 13; n++) {
+            g.fillStyle = n % 2 ? '#e2d5bd1e' : '#13191425';
+            g.fillRect(x+3+rand()*29,y+2+rand()*18,slate?1+rand()*3:0.7,2+rand()*7);
+        }
+    }
+    const map = new THREE.CanvasTexture(c);
+    map.colorSpace = THREE.SRGBColorSpace;map.wrapS = map.wrapT = THREE.RepeatWrapping;map.anisotropy = 4;
+    return map;
+}
+
 export class OpushkaVillage {
     constructor(api, origin) {
         this.api = api;
@@ -51,67 +78,216 @@ export class OpushkaVillage {
         const wood = siding(false, 22), stones = siding(true, 92);
         const material = (color, map = null) => new THREE.MeshStandardMaterial({ color, map, bumpMap: map, bumpScale: 0.062, roughness: 0.87 });
         this.materials = { wood: material(0xf6ce9b, wood), stone: material(0xe5decb, stones), beam: material(0x4c3325, wood),
-            tile: material(0x5c3c30, wood), slate: material(0x4b5256, stones), plaster: material(0xd5c6a9),
-            dark: material(0x2b322b), brass: material(0xb48e57), glass: material(0x8eaa9c) };
-        this.homes = houses.map(([dx, dz, w, d, stone], id) => this.house(dx, dz, w, d, stone, id));
+            tile: material(0xd0bab0, roofing(false)), slate: material(0xb9bebc, roofing(true)), plaster: material(0xcfc3a3),
+            dark: material(0x323b34), brass: material(0xa27a45), joinery: material(0xd0c2a4, wood),
+            glass: new THREE.MeshPhysicalMaterial({ color: 0xe2ece5, roughness: 0.11, metalness: 0.15,
+                transparent: true, opacity: 0.19, depthWrite: false, envMapIntensity: 0.65, side: THREE.DoubleSide }) };
+        this.homes = houses.map((plan, id) => this.house(plan, id));
         this.trail();
     }
 
     piece(home, material, x, y, z, sx, sy, sz, opts = {}) {
-        const geometry = new THREE.BoxGeometry(sx, sy, sz);
+        const geometry = opts.geometry || new THREE.BoxGeometry(sx, sy, sz);
         const uv = geometry.attributes.uv;
-        for (let i = 0; i < uv.count; i++) {
+        for (let i = 0; !opts.geometry && i < uv.count; i++) {
             const face = Math.floor(i / 4), width = face < 2 ? sz : sx, height = face === 2 || face === 3 ? sz : sy;
-            uv.setXY(i, uv.getX(i) * width / 2.9, uv.getY(i) * height / 2.9);
+            const u = uv.getX(i), v = uv.getY(i);
+            if (opts.vertical && ![2, 3].includes(face)) uv.setXY(i, v * height / 2.9, u * width / 2.9);
+            else uv.setXY(i, u * width / 2.9, v * height / 2.9);
         }
         const mesh = new THREE.Mesh(geometry, this.materials[material]);
         mesh.position.set(home.x + x, home.y + y, home.z + z);
-        mesh.rotation.z = opts.angle || 0;
-        mesh.castShadow = mesh.receiveShadow = true;
+        mesh.rotation.set(opts.pitch || 0, opts.turn || 0, opts.angle || 0);
+        mesh.castShadow = material !== 'glass' && Math.max(sx, sy, sz) > 0.30;
+        mesh.receiveShadow = material !== 'glass';
+        if (material === 'glass') mesh.renderOrder = 2;
         this.api.scene.add(mesh);
         const bounds = new THREE.Box3().setFromObject(mesh);
-        const part = { mesh, home, bounds, solid: opts.solid ?? true, roof: !!opts.roof, hp: material === 'stone' ? 2.1 : 1.17, material, broken: false };
+        const part = { mesh, home, bounds, solid: opts.solid ?? true, roof: !!opts.roof, hp: material === 'stone' ? 2.1 : material === 'glass' ? 0.29 : 1.16, material, broken: false };
         this.parts.push(part);
         return part;
     }
 
-    house(dx, dz, width, depth, stone, id) {
-        const x = this.origin.x + dx, z = this.origin.z + dz;
-        const y = Math.max(...[-1, 1].flatMap(a => [-1, 1].map(b => this.api.ground(x + a * width * 0.5, z + b * depth * 0.5)))) + 0.13;
-        const home = { x, y, z, id, door: new V3(x, y, z + depth * 0.5 + 0.75) };
-        const wall = stone ? 'stone' : 'wood', roof = stone ? 'slate' : 'tile', h = stone ? 2.85 : 2.56, w = width / 2, d = depth / 2;
-        this.piece(home, 'stone', 0, -0.42, 0, width + 0.05, 0.84, depth + 0.05, { solid: false });
-        this.piece(home, 'beam', 0, -0.025, 0, width + 0.08, 0.12, depth + 0.08, { solid: false });
+    house(plan, id) {
+        const { dx, dz, width, depth, style } = plan;
+        const x = this.origin.x + dx, z = this.origin.z + dz, w = width / 2, d = depth / 2;
+        const y = Math.max(...[-1, 1].flatMap(a => [-1, 1].map(b => this.api.ground(x + a * w, z + b * d)))) + 0.13;
+        const stone = style === 'hall', shop = style === 'workshop';
+        const entrance = stone ? 0 : shop ? -1.36 : 0.78;
+        const h = stone ? 3.60 : shop ? 2.28 : 2.65;
+        const home = { x, y, z, id, style, width, depth, ruined:false, door: new V3(x + entrance, y, z + d + 0.9) };
+        const wall = stone ? 'stone' : 'wood', trim = stone ? 'joinery' : 'beam';
+        const add = (mat, a, b, c, u, v, w_, options) => this.piece(home, mat, a, b, c, u, v, w_, options);
+        add('stone', 0, -0.52, 0, width + 0.14, 1.03, depth + 0.15, { solid: false });
+        add('beam', 0, 0.024, 0, width + 0.05, 0.105, depth + 0.05, { solid: false });
         for (const s of [-1, 1]) {
-            const frontMiddle = (w + 0.61) * 0.5;
-            for (const e of [-1, 1]) {
-                this.piece(home, wall, s * w, h * 0.5, e * d * 0.5, 0.24, h, d + 0.06);
-                this.piece(home, wall, e * width * 0.25, h * 0.5, -d, width * 0.5, h, 0.24);
-                this.piece(home, 'beam', s * w, h * 0.5, e * d, 0.25, h + 0.1, 0.25);
+            for (const half of [-1, 1]) {
+                add(wall, s*w,h/2,half*d/2,0.24,h,d+0.02,{vertical:shop});
+                add(wall, s*w/2,h/2,-d,w,h,0.24,{vertical:shop});
             }
-            this.piece(home, wall, s * frontMiddle, 0.35, d, w - 0.61, 0.7, 0.24);
-            this.piece(home, wall, s * frontMiddle, h - 0.28, d, w - 0.61, 0.56, 0.24);
-            for (const a of [-1, 1]) this.piece(home, wall, s * frontMiddle + a * (w - 0.61) * 0.35, h * 0.5 - 0.1, d, (w - 0.61) * 0.30, h - 0.88, 0.24);
-            this.piece(home, 'glass', s * frontMiddle, h * 0.5 - 0.04, d + 0.05, (w - 0.61) * 0.43, 1.16, 0.088, { solid: false });
-            this.piece(home, 'beam', s * frontMiddle, h * 0.5 - 0.04, d + 0.14, 0.06, 1.18, 0.077);
-            this.piece(home, 'beam', s * frontMiddle, h * 0.5 - 0.04, d + 0.14, (w - 0.61) * 0.47, 0.05, 0.077);
+            add(trim,s*w,h/2,d,0.23,h+0.09,0.29);
+            add(trim,s*w,h/2,-d,0.23,h+0.09,0.28);
         }
-        this.piece(home, 'beam', 0, h - 0.18, d, 1.43, 0.38, 0.27);
-        this.piece(home, 'wood', -0.586, 1.08, d - 0.55, 0.095, 2.11, 1.02);
-        this.piece(home, 'stone', 0, -0.02, d + 0.33, 1.49, 0.18, 0.57, { solid: false });
-        const rise = 1.38, angle = Math.atan2(rise, w + 0.30);
-        for (const s of [-1, 1]) for (const zSection of [-1, 1]) {
-            this.piece(home, roof, s * (w + 0.32) * 0.50, h + rise * 0.5, zSection * (d + 0.31) * 0.5,
-                Math.hypot(w + 0.33, rise), 0.16, d + 0.38, { roof: true, angle: -s * angle });
+        const doorHalf = stone ? 0.73 : 0.65, doorTop = stone ? 2.45 : 2.10;
+        const windows = stone
+            ? [{x:-1.90,w:0.86,base:0.96,top:2.74},{x:1.86,w:0.90,base:0.96,top:2.74}]
+            : shop ? [{x:0.71,w:1.26,base:0.83,top:1.88}]
+                : [{x:-1.08,w:1.18,base:0.75,top:1.88}];
+        const holes = [...windows, { x: entrance, w: doorHalf * 2, base: 0, top: doorTop, door: true }]
+            .sort((a, b) => a.x - b.x);
+        let cursor = -w;
+        for (const hole of holes) {
+            const left = hole.x - hole.w / 2;
+            if (left > cursor) add(wall,(cursor+left)/2,h/2,d,left-cursor,h,.24,{vertical:shop});
+            if (hole.base > 0) add(wall,hole.x,hole.base/2,d,hole.w,hole.base,.25,{vertical:shop});
+            add(wall,hole.x,(h+hole.top)/2,d,hole.w,h-hole.top,.25,{vertical:shop});
+            if (!hole.door) this.window(home,hole,d,trim,stone);
+            cursor = hole.x + hole.w / 2;
         }
-        for (let i = 0; i < 5; i++) for (const s of [-1, 1]) {
-            const span = width * (1 - (i + 1) / 5.5);
-            this.piece(home, wall, 0, h + 0.13 + i * rise / 5, s * d, span, rise / 5 + 0.02, 0.26);
+        if (cursor < w) add(wall,(cursor+w)/2,h/2,d,w-cursor,h,.24,{vertical:shop});
+        add(trim,entrance,doorTop+0.045,d+0.014,doorHalf*2+0.25,0.19,0.36);
+        add('wood',entrance-doorHalf+0.029,doorTop*.5,d-.46,.064,doorTop-.08,.92,{vertical:true});
+        add('brass',entrance-doorHalf+.085,1.01,d-.18,.095,.14,.064,{solid:false});
+        add('stone',entrance,0.10,d+.28,doorHalf*2+.26,.23,.45,{solid:false});
+        add('stone',entrance,-.015,d+.63,doorHalf*2+.45,.17,.31,{solid:false});
+
+        if (stone) {
+            this.hipRoof(home,w,d,h);
+            this.tower(home,2.07,-1.9,h);
+            add('joinery',0,h-.30,d+.15,width,.18,.15,{solid:false});
+            add('joinery',0,.36,d+.15,width,.17,.15,{solid:false});
+        } else if (shop) {
+            this.shedRoof(home,w,d,h);
+            this.leanTo(home,w-1.34,d,h);
+            // A counter and tools built into the workshop's rear wall.
+            add('beam',1.24,.83,-d+.54,1.85,.15,.85);
+            add('wood',1.24,.38,-d+.54,1.62,.76,.56);
+        } else {
+            this.gable(home,w,d,h);
+            this.porch(home,entrance,d,doorTop);
+            add('beam',-w*.63,1.04,d+.24,1.21,.17,.39,{solid:false});
         }
-        this.piece(home, 'stone', w * 0.71, h + 0.7, -d * 0.55, 0.56, 1.58, 0.56);
-        this.piece(home, 'stone', w * 0.71, h + 1.53, -d * 0.55, 0.74, 0.15, 0.70);
-        this.piece(home, 'beam', w - 0.72, 0.62, -d + 0.64, 0.84, 0.12, 0.75);
+        if (!stone) {
+            add('stone',w*.58,h+.89,-d*.58,.46,1.92,.54);
+            add('stone',w*.58,h+1.85,-d*.58,.64,.13,.71);
+        }
+        if (!shop) {
+            add('beam',w-.87,.58,-d+.72,1.04,.14,.91);
+            add('wood',w-1.38,.29,-d+.69,.11,.57,.71);
+            add('wood',w-.36,.29,-d+.69,.11,.57,.71);
+        }
         return home;
+    }
+
+    window(home, hole, z, trim, tall) {
+        const { x, w, base, top } = hole, h = top-base;
+        const y = (base+top)/2, bar = tall ? 0.073 : 0.085;
+        const add = (mat, a, b, c, u, v, k, opts) => this.piece(home,mat,a,b,c,u,v,k,opts);
+        add('glass',x,y,z-.009,w-.045,h-.047,.024,{solid:false});
+        for (const s of [-1,1]) add(trim,x+s*w*.49,y,z+.14,bar,h+.15,.14);
+        add(trim,x,top,z+.14,w+.12,bar,.17);
+        add(trim,x,base,z+.18,w+.18,.092,.23);
+        add(trim,x,y,z+.092,bar*.62,h,.062,{solid:false});
+        add(trim,x,y+(tall?.32:.09),z+.092,w,bar*.64,.062,{solid:false});
+        if (tall) {
+            const radius = w*.61;
+            const curve = new THREE.TorusGeometry(radius,.095,7,20,Math.PI);
+            add('joinery',x,top-.075,z+.179,radius*2,.28,.18,{geometry:curve,solid:false});
+        }
+    }
+
+    roofFace(home, material, points) {
+        const g = new THREE.BufferGeometry(), uv = [];
+        const vertices = points.map(p => new V3(...p));
+        const origin = vertices[0];
+        const center = vertices.reduce((sum,p) => sum.add(p), new V3()).divideScalar(vertices.length);
+        const u = vertices[1].clone().sub(origin).normalize();
+        const normal = u.clone().cross(vertices.at(-1).clone().sub(origin)).normalize();
+        const v = normal.clone().cross(u).normalize();
+        for (const vertex of vertices) {
+            const q = vertex.clone().sub(origin);
+            uv.push(q.dot(u)/2.5,q.dot(v)/2.5);
+        }
+        g.setAttribute('position',new THREE.Float32BufferAttribute(vertices.flatMap(p => p.sub(center).toArray()),3));
+        g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+        const indices = points.length===3 ? [0,1,2] : [0,1,2,0,2,3];
+        if (normal.y < 0) for (let i=0;i<indices.length;i+=3) [indices[i+1],indices[i+2]]=[indices[i+2],indices[i+1]];
+        g.setIndex(indices);
+        g.computeVertexNormals();
+        this.piece(home,material,center.x,center.y,center.z,1,1,1,{geometry:g,roof:true,solid:false});
+    }
+
+    gable(home, w, d, h) {
+        const ridge=-.59, rise=2.22, eave=w+.43, end=d+.45;
+        for (const side of [-1,1]) {
+            const midX=(ridge+side*eave)/2, length=Math.hypot(side*eave-ridge,rise+.18);
+            const angle=Math.atan2(-side*(rise+.18),Math.abs(side*eave-ridge));
+            for (const z of [-end/2,end/2]) this.piece(home,'tile',midX,h+rise/2,z,length,.17,end+.055,{roof:true,angle});
+            this.piece(home,'beam',side*eave,h-.066,0,.14,.21,end*2+.14,{roof:true});
+        }
+        const gable=new THREE.Shape();
+        gable.moveTo(-w,h);gable.lineTo(w,h);gable.lineTo(ridge,h+rise);gable.closePath();
+        const hole=new THREE.Path();
+        hole.moveTo(ridge-.31,h+.34);hole.lineTo(ridge-.31,h+1.03);
+        hole.lineTo(ridge+.31,h+1.03);hole.lineTo(ridge+.31,h+.34);hole.closePath();
+        gable.holes.push(hole);
+        for (const side of [-1,1]) {
+            const shape=side>0?gable: new THREE.Shape([new THREE.Vector2(-w,h),new THREE.Vector2(w,h),new THREE.Vector2(ridge,h+rise)]);
+            const geometry = new THREE.ExtrudeGeometry(shape,{depth:.14,bevelEnabled:false});
+            const uv=geometry.attributes.uv;
+            for (let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)/2.9,uv.getY(i)/2.9);
+            geometry.translate(0,-h-rise*.31,0);
+            this.piece(home,'wood',0,h+rise*.31,side*d-.071,1,1,1,{geometry,solid:false});
+        }
+        this.piece(home,'beam',ridge,h+rise+.045,0,.23,.16,end*2,{roof:true});
+        this.window(home,{x:ridge,w:.62,base:h+.34,top:h+1.03},d+.071,'beam',false);
+    }
+
+    hipRoof(home,w,d,h) {
+        const e=w+.42,l=d+.42,r=1.58,k=.75;
+        const a=[-e,h,-l],b=[e,h,-l],c=[e,h,l],d0=[-e,h,l],u=[-k,h+r,0],v=[k,h+r,0];
+        for (const points of [[a,b,v,u],[d0,u,v,c],[a,u,d0],[b,c,v]]) this.roofFace(home,'slate',points);
+        this.piece(home,'dark',0,h+r,0,1.64,.13,.15,{roof:true});
+        this.piece(home,'dark',0,h-.02,-l,e*2,.16,.12,{roof:true});
+        this.piece(home,'dark',0,h-.02,l,e*2,.16,.12,{roof:true});
+    }
+
+    tower(home,x,z,wallHeight) {
+        const radius=.83,height=wallHeight+1.36, sides=10;
+        for (let i=0;i<sides;i++) {
+            const angle=(i+.5)*Math.PI*2/sides;
+            this.piece(home,'stone',x+Math.sin(angle)*radius,height*.5,z+Math.cos(angle)*radius,
+                2*radius*Math.tan(Math.PI/sides)+.07,height,.215,{turn:angle});
+        }
+        const cone=new THREE.ConeGeometry(1.05,1.47,10,1,false);
+        this.piece(home,'slate',x,height+.67,z,2.1,1.47,2.1,{geometry:cone,roof:true,solid:false});
+        this.piece(home,'brass',x,height+1.50,z,.075,.24,.075,{roof:true,solid:false});
+    }
+
+    shedRoof(home,w,d,h) {
+        const lean=.20, length=(d+.37)*2, roofY=h+.44;
+        for (const side of [-1,1]) {
+            this.piece(home,'tile',side*w*.50,roofY,0,w+.51,.15,length,
+                {pitch:lean,roof:true});
+        }
+        this.piece(home,'wood',0,h+.13,-d,w*2,.35,.16,{vertical:true});
+        this.piece(home,'beam',0,h+.25,d+.30,w*2+.43,.14,.15,{roof:true});
+    }
+
+    porch(home,x,d,top) {
+        for (const side of [-1,1]) this.piece(home,'beam',x+side*.85,1.13,d+1.01,.14,2.10,.16);
+        this.piece(home,'tile',x,top+.21,d+.63,2.16,.135,1.55,{pitch:.16,roof:true});
+        this.piece(home,'beam',x,top+.064,d+1.08,1.97,.14,.14);
+        this.piece(home,'beam',x,-.018,d+.79,1.98,.145,1.20,{solid:false});
+    }
+
+    leanTo(home,x,d,h) {
+        const z=-d-.65;
+        this.piece(home,'wood',x,.73,z-.48,1.6,1.48,.13,{vertical:true});
+        this.piece(home,'wood',x+.82,.73,z,.13,1.48,.98,{vertical:true});
+        this.piece(home,'beam',x-.79,.78,z-.44,.13,1.58,.13);
+        this.piece(home,'tile',x,h-.38,z,1.98,.13,1.44,{pitch:-.23,roof:true});
+        this.piece(home,'wood',x,.46,z,.87,.47,.59,{vertical:true});
     }
 
     trail() {
@@ -148,18 +324,26 @@ export class OpushkaVillage {
         const delta = b.clone().sub(a), len = delta.length();
         if (len < 0.0001) return result;
         const ray = new THREE.Ray(a, delta.divideScalar(len));
+        const box = new THREE.Box3(), point = new V3();
         for (const part of this.parts) {
             if (part.broken) continue;
-            const hit = ray.intersectBox(part.bounds.clone().expandByScalar(radius), new V3());
+            const hit = ray.intersectBox(box.copy(part.bounds).expandByScalar(radius), point);
+            if (hit && part.roof) {
+                const caster = new THREE.Raycaster(a, ray.direction, 0, len);
+                const surface = caster.intersectObject(part.mesh, false)[0];
+                if (!surface) continue;
+                hit.copy(surface.point);
+            }
             if (!hit) continue;
             const t = a.distanceTo(hit) / len;
             if (t > 1 || result && t >= result.t) continue;
-            result = { t, p: hit, n: a.clone().sub(hit).normalize(), kind: 'house' };
+            result = { t, p: hit.clone(), n: a.clone().sub(hit).normalize(), kind: 'house' };
         }
         return result;
     }
 
     solidAt(x, y, z, radius = 0.24) {
+        if (Math.abs(x - this.origin.x) > 16 || Math.abs(z - this.origin.z) > 14) return false;
         for (const part of this.parts) {
             if (part.broken || !part.solid) continue;
             const { min, max } = part.bounds;
@@ -170,6 +354,7 @@ export class OpushkaVillage {
     }
 
     floor(x, y, z, base) {
+        if (Math.abs(x - this.origin.x) > 16 || Math.abs(z - this.origin.z) > 14) return base;
         for (const part of this.parts) {
             if (part.broken || part.roof) continue;
             const { min, max } = part.bounds, top = max.y;
@@ -192,6 +377,9 @@ export class OpushkaVillage {
             if (!part.roof || part.broken || !alarm.has(part.home.id)) continue;
             const support = this.parts.filter(other => other.home === part.home && !other.broken && !other.roof && other.bounds.max.y >= part.home.y + 2.05);
             if (support.length <= 5) this.breakPiece(part, point);
+        }
+        for (const house of this.homes) {
+            if (alarm.has(house.id)) house.ruined = !this.parts.some(part => part.home === house && part.roof && !part.broken);
         }
         return alarm;
     }

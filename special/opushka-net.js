@@ -19,6 +19,7 @@
  * he stands where he was; two friends with one name — the network numbers them («Игрок 2»); a guest's pig never decides anything itself.
  */
 import { Network } from '../src/net/Network.js';
+import { attachBeltWand } from './opushka-inventory.js';
 
 const SEND_DT = 1 / 15;      // a pose: 15 times a second (each ~0.3 KB)
 const PIGS_DT = 0.2;         // the pigs: 5 times a second
@@ -129,9 +130,7 @@ export class OpushkaNet {
                     hand.stowed = stowed;
                     hand.heldAt ||= { position: hand.wand.position.clone(), quaternion: hand.wand.quaternion.clone() };
                     if (stowed) {
-                        R.rig.B.hips.add(hand.wand);
-                        hand.wand.position.set(hand.s * -0.08, -0.26, 0.15);
-                        hand.wand.rotation.set(-0.20, 0, hand.s * 0.25);
+                        attachBeltWand(hand.wand, R.rig.B.hips, R.rig.activeHand);
                     } else {
                         hand.hb.palm.add(hand.wand);
                         hand.wand.position.copy(hand.heldAt.position);

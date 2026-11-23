@@ -5,13 +5,14 @@ const MAP_UPDATE_MS = 90;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 export class OpushkaMap {
-    constructor(canvas, { heights, forest, water, size, half, step, caves }) {
+    constructor(canvas, { heights, forest, water, size, half, step, caves, buildings = () => [] }) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.half = half;
         this.step = step;
         this.mouths = caves.systems.map((c) => c.start);
         this.last = -Infinity;
+        this.buildings = buildings;
         this.source = document.createElement('canvas');
         this.source.width = this.source.height = size;
         const ctx = this.source.getContext('2d'), pixels = ctx.createImageData(size, size);
@@ -37,14 +38,29 @@ export class OpushkaMap {
         if (now - this.last < MAP_UPDATE_MS) return;
         this.last = now;
         const { ctx, canvas } = this, w = canvas.width, h = canvas.height;
-        const cx = w / 2, cy = h / 2, span = VIEW * 2 / this.step;
+        const cx = w / 2, cy = h / 2, scale = cx / VIEW;
+        const span = VIEW * 2 / this.step, heightSpan = span * h / w;
         ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(2, 2, w - 4, h - 4, 9);
+        ctx.clip();
+        ctx.fillStyle = '#292f26';
+        ctx.fillRect(0, 0, w, h);
         ctx.drawImage(this.source, (player.pos.x + this.half) / this.step - span / 2,
-            (player.pos.z + this.half) / this.step - span / 2, span, span, 0, 0, w, h);
+            (player.pos.z + this.half) / this.step - heightSpan / 2, span, heightSpan, 0, 0, w, h);
 
+        const edge = ctx.createLinearGradient(0, 0, 0, h);
+        edge.addColorStop(0, 'rgba(24,28,22,.20)');
+        edge.addColorStop(0.2, 'rgba(24,28,22,0)');
+        edge.addColorStop(0.8, 'rgba(24,28,22,0)');
+        edge.addColorStop(1, 'rgba(24,28,22,.24)');
+        ctx.fillStyle = edge;
+        ctx.fillRect(0, 0, w, h);
+        const at = (x, z) => [cx + (x - player.pos.x) * scale, cy + (z - player.pos.z) * scale];
         for (const mouth of this.mouths) {
-            const x = cx + (mouth.x - player.pos.x) * cx / VIEW, y = cy + (mouth.z - player.pos.z) * cy / VIEW;
-            if (Math.hypot((x - cx) / cx, (y - cy) / cy) > 0.82) continue;
+            const [x, y] = at(mouth.x, mouth.z);
+            if (x < 4 || x > w-4 || y < 4 || y > h-4) continue;
             ctx.fillStyle = '#191e1b';
             ctx.strokeStyle = '#e5d5ae';
             ctx.lineWidth = 1.5;
@@ -56,22 +72,28 @@ export class OpushkaMap {
             ctx.fill();
             ctx.stroke();
         }
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.scale(cx, cy);
-        const vignette = ctx.createRadialGradient(0, 0, 0.58, 0, 0, 1);
-        vignette.addColorStop(0, 'rgba(25,31,24,0)');
-        vignette.addColorStop(1, 'rgba(25,31,24,.58)');
-        ctx.fillStyle = vignette;
-        ctx.fillRect(-1, -1, 2, 2);
-        ctx.globalCompositeOperation = 'destination-in';
-        const edge = ctx.createRadialGradient(0, 0, 0.69, 0, 0, 1);
-        edge.addColorStop(0, '#fff');
-        edge.addColorStop(0.86, 'rgba(255,255,255,.38)');
-        edge.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = edge;
-        ctx.fillRect(-1, -1, 2, 2);
+        for (const house of this.buildings()) {
+            const [x, y] = at(house.x, house.z);
+            const width = Math.max(10, house.width * scale), height = Math.max(8, house.depth * scale);
+            if (x < -width || x > w + width || y < -height || y > h + height) continue;
+            ctx.fillStyle = house.ruined ? '#746f5a' : house.style === 'hall' ? '#bcb7a6' : '#b98154';
+            ctx.strokeStyle = house.ruined ? '#c0ad8b' : '#f0d9ad';
+            ctx.lineWidth = 1.7;
+            ctx.setLineDash(house.ruined ? [2, 2] : []);
+            ctx.fillRect(x-width/2,y-height/2,width,height);
+            ctx.strokeRect(x-width/2,y-height/2,width,height);
+            ctx.setLineDash([]);
+            if (!house.ruined) {
+                ctx.fillStyle = '#4e4436';
+                ctx.fillRect(x-1.15,y+height/2-2,2.3,2.6);
+            }
+        }
         ctx.restore();
+        ctx.strokeStyle = '#c7be9b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(2, 2, w - 4, h - 4, 9);
+        ctx.stroke();
 
         ctx.save();
         ctx.translate(cx, cy);

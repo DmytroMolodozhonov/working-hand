@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { Inventory, POCKET_STAY, CREATIVE_APPLES, lookSteady, RESOURCE } from '../src/game/Inventory.js';
-import { ITEM_INFO, makeItemModel, disposeModel } from '../src/game/ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, starterWand } from '../src/game/ItemTypes.js';
 import { BACK_HOLD } from '../src/game/BackInteraction.js';
-import { TUCK_LOOK } from '../src/game/WandBelt.js';
+import { BELT_TOP, BELT_TIP, TUCK_LOOK } from '../src/game/WandBelt.js';
+import { ItemIcons } from '../src/ui/ItemIcons.js';
+import { buildWeapon } from '../src/entities/WeaponModels.js';
 import { ARMOR, armorName, wearSpot } from '../src/game/ArmorTypes.js';
 
 const backKinds = new Set(['weapon', 'bow', 'hammer', 'shield', 'backpack']);
@@ -15,6 +17,24 @@ const drawings = {
 };
 const sideOf = (hand) => hand === 'L' ? 'left' : 'right';
 const other = (hand) => hand === 'L' ? 'R' : 'L';
+
+export function attachBeltWand(wand, hips, side) {
+    const scale = 0.47, top = BELT_TOP.clone(), tip = BELT_TIP.clone();
+    if (side === 'L') { top.x *= -1; tip.x *= -1; }
+    for (const v of [top, tip]) { v.x *= -scale; v.y *= scale; v.z *= -scale; }
+    hips.add(wand);
+    const direction = tip.sub(top).normalize();
+    wand.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+    wand.position.copy(top);
+}
+export function opushkaWand(source) {
+    const wand = starterWand();
+    if (Number.isInteger(source?.model) && source.model >= 0 && source.model <= 9) wand.model = source.model;
+    if (Number.isInteger(source?.color) && source.color >= 0 && source.color <= 0xffffff) wand.color = source.color;
+    if (source?.plain === false || wand.model !== 0) wand.plain = false;
+    if (source?.dragon === true) wand.dragon = true;
+    return wand;
+}
 
 export class OpushkaInventory extends Inventory {
     constructor(api) {
@@ -36,25 +56,22 @@ export class OpushkaInventory extends Inventory {
         this.backTimers = { L: 0, R: 0 };
         this.backReady = { L: false, R: false };
         this.wandStowed = false;
+        this.wandItem = api.rig().wandItem;
+        this.icons = new ItemIcons(api.renderer, { makeModel: makeItemModel, buildWeapon, dispose: disposeModel,
+            onReady: () => this._render() });
+        this.toggleWand(true);
         if (api.creative) this.storeItem({ kind: 'apple', count: CREATIVE_APPLES });
-        else this._render();
+        this.icons.warm(this.slots.filter(Boolean));
+        this._render();
     }
 
     _buildBar() {
         const bar = document.createElement('section');
         bar.id = 'op-pocket';
         bar.setAttribute('aria-label', 'Инвентарь героя');
-        const button = (className, name, activate) => {
-            const el = document.createElement('button');
-            el.type = 'button';
-            el.className = className;
-            el.setAttribute('aria-label', name);
-            el.addEventListener('click', activate);
-            bar.append(el);
-            return el;
-        };
-        this.cells = this.slots.map((_, i) => button('op-cell', 'Ячейка ' + (i + 1), () => this.select(i)));
-        this.wandCell = button('op-cell op-wand-cell', 'Палочка на поясе', () => this.toggleWand());
+        this.cells = [];
+        this.bar = bar;
+        for (let i = 0; i < this.slots.length; i++) this._appendCell();
         document.body.append(bar);
         this.bar = bar;
         const equipment = document.createElement('section');
@@ -80,12 +97,36 @@ export class OpushkaInventory extends Inventory {
         document.body.append(equipment);
     }
 
+    _appendCell() {
+        const index = this.cells.length;
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'op-cell';
+        cell.addEventListener('click', () => this.select(index));
+        this.bar.append(cell);
+        this.cells.push(cell);
+    }
+
     _render() {
         this.cells.forEach((cell, i) => {
             const slot = this.slots[i] || (this.heldFrom === i ? this.held?.[this.off]?.item : null);
             const name = slot?.kind === 'res' ? RESOURCE[slot.block]?.name : ITEM_INFO[slot?.kind]?.name;
             const title = slot?.kind === 'weapon' ? (slot.type === 'axe' ? 'Топор' : 'Меч') : name || (slot ? 'Предмет' : 'Пусто');
-            cell.textContent = slot?.kind === 'res' ? '◆' : slot ? Inventory.emojiOf(slot) : '';
+            cell.replaceChildren();
+            const key = document.createElement('span');
+            key.className = 'op-key';
+            key.textContent = i < 9 ? i + 1 : '';
+            cell.append(key);
+            const url = this.icons?.url(slot);
+            if (url) {
+                const img = document.createElement('img');
+                img.alt = '';
+                img.src = url;
+                img.className = 'op-item';
+                cell.append(img);
+            } else if (slot && slot.kind !== 'wand') {
+                cell.append(document.createTextNode(slot.kind === 'res' ? '◆' : Inventory.emojiOf(slot)));
+            }
             if (slot?.count > 1) {
                 const count = document.createElement('small');
                 count.textContent = slot.count;
@@ -94,10 +135,8 @@ export class OpushkaInventory extends Inventory {
             cell.title = title;
             cell.setAttribute('aria-label', 'Ячейка ' + (i + 1) + ' · ' + title);
             cell.setAttribute('aria-pressed', String(i === this.selected));
+            cell.classList.toggle('op-wand', slot === this.wandItem);
         });
-        this.wandCell.textContent = '🪄';
-        this.wandCell.title = this.wandStowed ? 'Палочка на поясе' : 'Палочка в руке';
-        this.wandCell.setAttribute('aria-pressed', String(!!this.wandStowed));
         for (const [slot, cell] of Object.entries(this.armorCells)) {
             const item = this.equipped?.[slot];
             cell.title = item ? armorName(item) : armorSlots[slot];
@@ -112,21 +151,21 @@ export class OpushkaInventory extends Inventory {
         let next = -1;
         for (let k = 1; k <= count; k++) {
             const index = (start + k) % count;
-            if (this.slots[index]) { next = index; break; }
+            if (this.slots[index] && this.slots[index] !== this.wandItem) { next = index; break; }
         }
         return { on: true, leftHanded: this.main === 'L', shut: this.api.disabled(),
-            wand: this.wandStowed, cells: this.slots.map(Boolean), next, pocketUrl: null };
+            wand: this.wandStowed, cells: this.slots.map(Boolean), next, pocketUrl: this.icons.url(this.slots[next]) };
     }
 
     wandInHand() {
         return !this.wandStowed && !this.api.disarmed();
     }
 
-    toggleWand() {
+    toggleWand(initial = false) {
         const rig = this.api.rig(), hand = rig?.fingers?.[this.main];
-        if (!hand?.wand || this.api.disabled() || this.api.disarmed()) return false;
+        if (!hand?.wand || (!initial && this.api.disabled()) || this.api.disarmed()) return false;
         if (this.wandStowed && this.held[this.main]) return false;
-        if (!this.wandStowed && this.api.casting()) {
+        if (!initial && !this.wandStowed && this.api.casting()) {
             this.api.notify('Сначала завершите заклинание');
             return false;
         }
@@ -136,17 +175,24 @@ export class OpushkaInventory extends Inventory {
         }
         this.wandStowed = !this.wandStowed;
         if (this.wandStowed) {
-            rig.B.hips.add(hand.wand);
-            hand.wand.position.set(this.main === 'R' ? 0.08 : -0.08, -0.26, 0.15);
-            hand.wand.rotation.set(-0.20, 0, this.main === 'R' ? -0.25 : 0.25);
+            let index = this.slots.findIndex((item, i) => !item && i !== this.heldFrom);
+            if (index < 0) {
+                index = this.slots.length;
+                this.slots.push(null);
+                this._appendCell();
+            }
+            this.slots[index] = this.wandItem;
+            attachBeltWand(hand.wand, rig.B.hips, this.main);
             hand.grip = null;
         } else {
+            const index = this.slots.indexOf(this.wandItem);
+            if (index >= 0) this.slots[index] = null;
             hand.hb.palm.add(hand.wand);
             hand.wand.position.copy(hand.heldTransform.position);
             hand.wand.quaternion.copy(hand.heldTransform.quaternion);
             hand.grip = hand.normalGrip;
         }
-        this.api.sound(this.wandStowed ? 'wandPut' : 'wandTake');
+        if (!initial) this.api.sound(this.wandStowed ? 'wandPut' : 'wandTake');
         this._render();
         return true;
     }
@@ -222,6 +268,7 @@ export class OpushkaInventory extends Inventory {
 
     select(index) {
         if (this.api.disabled() || index >= this.slots.length) return false;
+        if (this.slots[index] === this.wandItem) return this.toggleWand();
         if (this.heldFrom === index) return this.putInPocket();
         if (index >= 0 && !this.slots[index]) return false;
         if (!this.putInPocket()) return false;
@@ -238,7 +285,7 @@ export class OpushkaInventory extends Inventory {
     cycle() {
         for (let k = 1; k <= this.slots.length; k++) {
             const i = ((this.lastSlot ?? -1) + k) % this.slots.length;
-            if (this.slots[i]) return this.select(i);
+            if (this.slots[i] && this.slots[i] !== this.wandItem) return this.select(i);
         }
         if (this.heldFrom == null) this.api.notify('Карман пуст');
         return false;
@@ -293,7 +340,7 @@ export class OpushkaInventory extends Inventory {
             this.backTimers.L = this.backTimers.R = 0;
             this.beltReady = this.wandReach = false;
             this.bar.classList.remove('at-pocket');
-            this.wandCell.classList.remove('at-wand');
+            this.bar.classList.remove('at-wand');
             this.backReady.L = this.backReady.R = false;
             return;
         }
@@ -316,7 +363,7 @@ export class OpushkaInventory extends Inventory {
         }
         const belt = pose.belt?.[sideOf(this.main)];
         const wand = rig?.fingers?.[this.main]?.wand;
-        this.wandCell.classList.toggle('at-wand', !!belt?.near);
+        this.bar.classList.toggle('at-wand', !!belt?.near);
         if (!belt?.near) {
             this.wandReach = false;
             this.beltTime = 0;

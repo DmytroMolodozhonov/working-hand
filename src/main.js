@@ -2020,7 +2020,10 @@ async function toOpushka(query, cfg = readConfig()) {
     // (the author 23.11: «последнее обновление грузится с сильной задержкой — игра не понимает, что есть обновы»): the menu asks for a newer version
     // only when it opens; going straight into «Опушка» skipped that — so it is asked here too, and a newer one is downloaded first
     try { const u = await (await fetch('/api/update?fresh=1', { cache: 'no-store' })).json(); if (await updateIfNewer(u)) return; } catch (e) { /* (no launcher / no internet) */ }
-    try { sessionStorage.setItem('zns-opushka-cfg', JSON.stringify({ ...cfg, characterLook: activeLook() })); } catch (e) { /* */ }
+    const selected = game?.items?.held?.[game.dom || 'right']?.item;
+    const wand = selected?.kind === 'wand' ? selected : game?.inventory?.slots.find((item) => item?.kind === 'wand');
+    const wandLook = wand ? { model: wand.model, color: wand.color, plain: wand.plain, dragon: wand.dragon } : cfg.wandLook;
+    try { sessionStorage.setItem('zns-opushka-cfg', JSON.stringify({ ...cfg, characterLook: activeLook(), wandLook })); } catch (e) { /* */ }
     if (!window.__ZNS_NO_FULLSCREEN__) { try { await enterGameFullscreen(); } catch (e) { /* */ } }
     try { poseService.close?.(); } catch (e) { /* the world page opens its own camera */ }
     // (the same passage as any world's loading: the menu is drawn into the whirl here, the forest's page goes on with it)

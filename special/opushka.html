@@ -3,13 +3,16 @@
 body.playing #terrain-map{display:block;}
 body.touch #terrain-map{bottom:calc(174px + env(safe-area-inset-bottom,0px));}
 
-#op-pocket{position:fixed;z-index:6;bottom:calc(14px + env(safe-area-inset-bottom,0px));right:calc(16px + env(safe-area-inset-right,0px));display:none;gap:4px;padding:4px;border:1px solid #c4b49547;border-radius:12px;background:linear-gradient(150deg,#30291de0,#171d18b0);box-shadow:0 5px 15px #080b0788;}
+#op-pocket{position:fixed;z-index:6;bottom:calc(14px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);display:none;gap:7px;padding:5px;border:1px solid #c4b49547;border-radius:12px;background:linear-gradient(150deg,#30291de0,#171d18b0);box-shadow:0 5px 15px #080b0788;}
 body.playing:not(.nohud) #op-pocket{display:flex;}
 .op-cell{position:relative;display:grid;place-items:center;width:clamp(27px,4.7vw,38px);height:clamp(27px,4.7vw,38px);border:1px solid #c2b99446;border-radius:8px;background:#eae5ba15;color:#f4e9cb;font:18px/1 system-ui;cursor:pointer;}
 .op-cell small{position:absolute;right:3px;bottom:2px;font:10px system-ui;color:#fff9e8;text-shadow:0 1px 3px #000;}
 .op-cell[aria-pressed=true],#op-pocket.at-pocket .op-cell[aria-pressed=true],.op-cell.at-wand{background:#c1a66354;border-color:#e5c789;}
 .op-cell:focus-visible{outline:1px solid #f8dd9d;outline-offset:2px;}
-.op-wand-cell{margin-left:3px;}
+#op-pocket .op-cell{width:clamp(32px,5.7vw,57px);height:clamp(32px,5.7vw,57px);}
+.op-key{position:absolute;top:4px;left:5px;font:10px/1 system-ui;color:#dfd1aa;z-index:1;}
+.op-item{width:80%;height:80%;object-fit:contain;pointer-events:none;}
+#op-pocket.at-wand .op-wand{background:#c1a66354;border-color:#e5c789;}
 #op-equipment{position:fixed;z-index:6;display:none;top:36%;right:calc(17px + env(safe-area-inset-right,0px));gap:5px;padding:4px;background:#1b211bbc;border:1px solid #c4b49547;border-radius:12px;}
 body.playing:not(.nohud) #op-equipment{display:grid;}
 .op-armor-cell svg{width:72%;stroke:#d5c9a9;opacity:.66;fill:#bfbda923;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;}
@@ -140,10 +143,10 @@ import { OpushkaNet } from './opushka-net.js';
 import { OpushkaSpells, HERO } from './opushka-spells.js';
 import { PortalLoader } from '../src/ui/PortalLoader.js';
 import { ZnsArms } from './opushka-hands.js';
-import { wandModel } from '../src/game/WandModel.js';
+import { makeItemModel } from '../src/game/ItemTypes.js';
 import { geography, heightTriangle, OpushkaCaves, WATER_KIND, CAVE_TILE } from './opushka-world.js';
 import { OpushkaMap } from './opushka-map.js';
-import { OpushkaInventory } from './opushka-inventory.js';
+import { OpushkaInventory, opushkaWand } from './opushka-inventory.js';
 import { OUTFITS, heroProfile, avatarHair, moveHair, fitArmor } from './opushka-appearance.js';
 import { OpushkaVillage, villageClearing } from './opushka-village.js';
 import { SoundManager } from '../src/audio/SoundManager.js';
@@ -1737,7 +1740,7 @@ function eyeMaterial(){
       vec3 c=mix(ir,sc,smoothstep(0.95,1.05,ri));c=mix(vec3(0.008),c,smoothstep(0.3,0.38,ri));diffuseColor.rgb=c;}`]]});
 }
 
-async function buildMannequin(activeHand='R',profile=OUTFITS[5],light=false,seed=1337){
+async function buildMannequin(activeHand='R',profile=OUTFITS[5],light=false,seed=1337,wandItem=opushkaWand()){
   const mage=profile.role==='wizard';
   const colors={coat:{value:new THREE.Color(profile.coat)},skin:{value:new THREE.Color(profile.skin)},trim:{value:new THREE.Color(profile.trim)},decor:{value:mage?1:0.10}};
   const mat=charMaterial(colors);const skinFlat=new THREE.MeshStandardMaterial({color:colors.skin.value,roughness:0.5});
@@ -1853,7 +1856,7 @@ async function buildMannequin(activeHand='R',profile=OUTFITS[5],light=false,seed
   // (WandModel.js), sized for a person (34 cm, the handle ~2.4 cm thick), held as a hand holds it — the handle across the palm diagonally,
   // from the heel of the hand past the little finger to between the thumb and the index, every finger bent just so far that it lies ON the
   // handle (gripWand), the thumb closed over it. It hangs on the palm's bone, so it turns with the hand.
-  if(activeHand){const F=fingers[activeHand],WS=[0.3,0.55,0.3];const wand=wandModel({model:0,color:0x8b5a2b});
+  if(activeHand){const F=fingers[activeHand],WS=[0.3,0.55,0.3];const wand=makeItemModel(wandItem);
     const Rw=0.0115/0.9,G=gripWand(F,F.HP,Rw),A=G.A,D=G.D;F.grip=G.curl;
     wand.scale.set(WS[0]/0.9,WS[1]/0.9,WS[2]/0.9);wand.quaternion.setFromUnitVectors(new V3(0,1,0),D);
     wand.position.copy(A).addScaledVector(D,(-0.046-A.z)/D.z); // (the butt ~1.5 cm out past the little finger)
@@ -1871,7 +1874,7 @@ async function buildMannequin(activeHand='R',profile=OUTFITS[5],light=false,seed
     restB['hd'+K]=basis(rp('tip'+K).sub(rp('hd'+K)),new V3(K==='L'?-1:1,0,0)).transpose();} // (the hand: fingers along it, the palm towards the body in the rest pose)
   const sp=v=>({x:v,v:0});const sv=()=>({x:new V3(),v:new V3(),init:false});
   const cape=mage?buildCape(colors.coat):null;
-  return {root,B,body,eyes,lids,crys,cape,restB,basis,fingers,activeHand,profile,colors,hair,hat,
+  return {root,B,body,eyes,lids,crys,cape,restB,basis,fingers,activeHand,profile,colors,hair,hat,wandItem,
     legs:{L:{plant:new V3(),from:new V3(),to:new V3(),swing:false,s:0,dur:0.3,mode:'t'},R:{plant:new V3(),from:new V3(),to:new V3(),swing:false,s:0,dur:0.3,mode:'t'}},
     hands:{L:sv(),R:sv()},phase:0,hipsY:sp(0.97),lean:sp(0),roll:sp(0),chestLag:sp(0),sway:sp(0),shift:sp(0),shiftT:0,shiftTarget:0,
     headYaw:sp(0),headPitch:sp(0),lookT:0,lookTarget:0,blinkT:2,blink:0,saccT:0,sacc:new THREE.Vector2(),prevVel:new V3(),prevYaw:0,acc:new V3(),idleT:0,
@@ -2223,7 +2226,7 @@ async function restoreCharacter(){try{const db=await idb();const files=await new
 /** A friend's wizard (multiplayer): the same body as mine, with its own bones, cape, fingers and wand; P — his pose from the net. */
 async function buildAvatar(hand,profile,light,seed){const rig=await buildMannequin(hand,profile,light,seed);const holder=new THREE.Group();holder.add(rig.root);rig.holder=holder;scene.add(holder);return rig;}
 function animateAvatar(rig,dt,speed,P){rig.holder.position.copy(P.pos);rig.holder.rotation.y=P.faceYaw;animateMannequin(rig,dt,speed,P);}
-async function buildCharacter(){charRig=await buildMannequin(wandHand,heroProfile(zns.set.config.characterLook));charRoot.add(charRig.root);scene.add(charRoot);}
+async function buildCharacter(){charRig=await buildMannequin(wandHand,heroProfile(zns.set.config.characterLook),false,1337,opushkaWand(zns.set.config.wandLook));charRoot.add(charRig.root);scene.add(charRoot);}
 function makePocket(){
   const uiAudio={enabled:true,sounds:{},get context(){return audio.ctx;},
     _synthPocketCue:SoundManager.prototype._synthPocketCue,
@@ -2232,7 +2235,7 @@ function makePocket(){
       src.buffer=buffer;src.playbackRate.value=rate;gain.gain.value=volume;
       src.connect(gain).connect(this.context.destination);src.start();
     }};
-  return new OpushkaInventory({main:wandHand,creative:CREATIVE,scene,rig:()=>charRig,player:()=>player,notify:gameNotify,
+  return new OpushkaInventory({main:wandHand,creative:CREATIVE,scene,renderer,rig:()=>charRig,player:()=>player,notify:gameNotify,
     sound:(cue)=>SoundManager.prototype.playPocket.call(uiAudio,cue),disabled:()=>!playing||!!player.locked||!!charCustom,
     disarmed:()=>!!spells.me.wandOut,casting:()=>spells.shields.some(sh=>sh.by===spells._myId()&&!sh.dead),
     floor:(x,z,y)=>{const base=caves?.floor(x,z,y)??groundH(x,z);return village?.floor(x,y,z,base)??base;},fit:(slot,item)=>{
@@ -2641,7 +2644,7 @@ function showMenu(){if(AUTO){gamePause(true);return;}playing=false;$('#overlay')
 document.addEventListener('pointerlockchange',()=>{pointerLocked=document.pointerLockElement===canvasEl;if(!pointerLocked&&playing&&!isTouch)showMenu();});
 canvasEl.addEventListener('click',()=>{if(playing&&!pointerLocked&&!isTouch){try{canvasEl.requestPointerLock();}catch(e){}}});
 addEventListener('mousemove',e=>{if(!pointerLocked||player.camDrive||AUTO)return;player.yaw-=e.movementX*0.0021;player.pitch=clamp(player.pitch-e.movementY*0.0021,-1.35,1.35);});
-addEventListener('keydown',e=>{keys[e.code]=true;if(playing&&!AUTO&&!e.repeat&&/^Digit[0-5]$/.test(e.code)){inventory?.select(+e.code.at(-1)-1);}
+addEventListener('keydown',e=>{keys[e.code]=true;if(playing&&!AUTO&&!e.repeat&&/^Digit[0-9]$/.test(e.code)){inventory?.select(+e.code.at(-1)-1);}
   if(playing&&!AUTO&&!e.repeat&&e.code==='KeyF')inventory?.toggleWand();
   if(!playing){if(e.code==='Digit1')setTod('golden');if(e.code==='Digit2')setTod('noon');if(e.code==='Digit3')setTod('mist');}
   if(hasWings&&!AUTO&&playing&&!e.repeat&&e.code==='Space'){
@@ -2665,7 +2668,7 @@ async function init(){
     zns.start(); // (the camera at once, while the forest is made — as the game does: by the end of the loading it already sees the player)
     prog(0.02,'Генерация мира');await nextFrame();
     await genWorld(prog);
-    minimap=new OpushkaMap($('#terrain-map'),{heights:HGT,forest:FOR,water:HYD,size:HM_N,half:HM_HALF,step:HM_STEP,caves});
+    minimap=new OpushkaMap($('#terrain-map'),{heights:HGT,forest:FOR,water:HYD,size:HM_N,half:HM_HALF,step:HM_STEP,caves,buildings:()=>village?.homes||[]});
     const half=new Uint16Array(HM_N*HM_N*4);for(let i=0;i<HM_N*HM_N;i++){half[i*4]=THREE.DataUtils.toHalfFloat(HGT[i]);half[i*4+1]=THREE.DataUtils.toHalfFloat(CAN[i]);half[i*4+2]=THREE.DataUtils.toHalfFloat(FOR[i]);half[i*4+3]=THREE.DataUtils.toHalfFloat(LUSH[i]);}
     const hmTex=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);hmTex.minFilter=hmTex.magFilter=THREE.LinearFilter;hmTex.wrapS=hmTex.wrapT=THREE.ClampToEdgeWrapping;hmTex.needsUpdate=true;U.uHM.value=hmTex;hmSrc=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);
     const geo=new Uint8Array(HM_N*HM_N*4);
@@ -2718,7 +2721,7 @@ function loop(now){
   updatePigs(dt);
   village?.update(dt);
   mpNet.update(dt);
-  updateCaveMeshes(player.pos);spells.update(dt);updateFallen(dt);updateHp();
+  inventory?.icons.update(1.5);updateCaveMeshes(player.pos);spells.update(dt);updateFallen(dt);updateHp();
   updateGrass(camera.position);updateTrees();updateShadow();
   renderFrame();
   // audio & hud
