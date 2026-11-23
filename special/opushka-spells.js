@@ -393,7 +393,7 @@ export class OpushkaSpells {
     }
 
     _onWorld(b, w) {
-        (window.__spellLog || (window.__spellLog = [])).push(`${b.name} → ${w.kind} на ${b.age.toFixed(2)} с, ${w.p.distanceTo(b.hand).toFixed(1)} м`);
+        spellLog(`${b.name} → ${w.kind} на ${b.age.toFixed(2)} с, ${w.p.distanceTo(b.hand).toFixed(1)} м`);
         if (b.S.kind === 'orb') { this._explode(b, w.p.addScaledVector(w.n, 0.1)); return; }
         b.done = true;
         const G = this.glow, S = b.S;
@@ -413,7 +413,7 @@ export class OpushkaSpells {
 
     /** A charge reached a body. */
     _onBody(b, p, t) {
-        (window.__spellLog || (window.__spellLog = [])).push(`${b.name} → ${t.kind} на ${b.age.toFixed(2)} с, ${p.distanceTo(b.hand).toFixed(1)} м`);
+        spellLog(`${b.name} → ${t.kind} на ${b.age.toFixed(2)} с, ${p.distanceTo(b.hand).toFixed(1)} м`);
         b.done = true;
         const S = b.S, G = this.glow;
         if (S.kind === 'orb') { this._explode(b, p); return; }
@@ -428,7 +428,7 @@ export class OpushkaSpells {
     // ----------------------------------------------------------------------------------------------- the blast
     _explode(b, p, soft = 1) {
         b.done = true;
-        (window.__spellLog || (window.__spellLog = [])).push(`${b.name} взрыв: ${b.age.toFixed(2)} с, ${b.p.distanceTo(b.hand).toFixed(1)} м от руки`);
+        spellLog(`${b.name} взрыв: ${b.age.toFixed(2)} с, ${b.p.distanceTo(b.hand).toFixed(1)} м от руки`);
         const maxi = b.name === 'BombardoMaxima', S = b.S, pw = S.power;
         const R = BLAST.R * Math.sqrt(pw);
         const G = this.glow, Sm = this.smoke;
@@ -686,6 +686,8 @@ export class OpushkaSpells {
     }
 }
 
+/** The spells' short journal (for checks): the last 40 lines only. */
+function spellLog(line) { const L = window.__spellLog || (window.__spellLog = []); L.push(line); if (L.length > 40) L.shift(); }
 function r3(v) { return Math.round(v * 1000) / 1000; }
 function r4(v) { return Math.round(v * 10000) / 10000; }
 
