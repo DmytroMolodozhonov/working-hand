@@ -1,5 +1,7 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Опушка</title>
+<!-- (the author 23.11: «интерфейс Опушки должен быть такой же, как у нас в обычной игре… и загрузка тоже»): the game's own look -->
+<link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="../theme.css"><link rel="stylesheet" href="../magic-ui.css"><link rel="stylesheet" href="../arcane-ui.css">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap">
@@ -39,15 +41,17 @@ h1{margin:0;font-weight:300;font-size:clamp(2.6rem,9vw,4.6rem);letter-spacing:.4
 .hint{font-size:.74rem;color:var(--muted);line-height:1.5}
 .keys{font-size:.78rem;color:var(--muted);line-height:1.8}
 .keys b{font-weight:500;color:var(--paper)}
-#hud{position:fixed;z-index:4;left:0;right:0;bottom:0;display:flex;justify-content:space-between;gap:12px;
+#opHud{position:fixed;z-index:4;left:0;right:0;bottom:0;display:flex;justify-content:space-between;gap:12px;
   padding:0 max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
   font-size:.72rem;letter-spacing:.12em;color:rgba(233,230,220,.55);pointer-events:none;font-variant-numeric:tabular-nums;text-transform:uppercase}
-body.nohud #hud{display:none}
+body.nohud #opHud{display:none}body.auto #opHud{display:none}
 #joy{position:fixed;z-index:4;left:calc(28px + env(safe-area-inset-left,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));width:120px;height:120px;border-radius:50%;border:1px solid var(--line);display:none}
 #joy i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(233,230,220,.25)}
 body.touch.playing #joy{display:block}
 @media (prefers-reduced-motion:reduce){.bar,#overlay{transition:none}}
 .loading #overlay .row,.loading #go,.loading #overlay .keys,.loading #overlay .sub,.loading #overlay a{display:none!important}
+body.auto #overlay{display:none!important}
+#pause-menu .pause-box button{min-width:12rem}
 </style>
 
 <canvas id="c"></canvas>
@@ -80,14 +84,24 @@ body.touch.playing #joy{display:block}
     <div class="keys"><b>WASD</b> идти · <b>Shift</b> бег · <b>Пробел</b> прыжок · <b>Ctrl/X</b> крадучись · <b>V</b> вид · <b>мышь</b> взгляд · <b>1 2 3</b> время суток · <b>C</b> кинокадр · <b>H</b> скрыть интерфейс · <b>Esc</b> меню</div>
   </div>
 </div>
-<div id="hud"><span id="hudL"></span><span id="hudR"></span></div>
+<div id="opHud"><span id="hudL"></span><span id="hudR"></span></div>
+<!-- the game's HUD pieces (the same ids and look as index.html): health, the words heard, the pause menu -->
+<div id="hud"><div id="hp-col"><div id="hp-container"><div id="hp-bar-fill"></div><span id="hp-text">HP: 100/100</span></div></div></div>
+<div id="voice-debug" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);color:#ffeaa7;font-size:12px;font-weight:normal;font-family:sans-serif;z-index:9999;text-shadow:1px 1px 2px #000;pointer-events:none;text-align:center;background:rgba(0,0,0,.3);padding:5px 10px;border-radius:5px;display:none"></div>
+<div id="damage-flash" class="hidden"></div>
+<div id="pause-menu" class="hidden"><div class="pause-box"><div class="pause-title">Пауза</div>
+  <div class="pause-pane active" style="display:flex;flex-direction:column;gap:10px">
+    <div class="mu-seal" aria-hidden="true"><i></i></div>
+    <button id="op-continue">▶ Продолжить</button>
+    <button id="op-view">👁 Вид: от первого лица</button>
+    <div class="op-row" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button data-tod="golden">🌅 Золотой час</button><button data-tod="noon">☀️ Полдень</button><button data-tod="mist">🌫 Утренний туман</button></div>
+    <div class="op-row" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button data-q="medium">Среднее</button><button data-q="high">Высокое</button><button data-q="ultra">Ультра</button></div>
+    <button id="op-exit">⟲ Выйти в главное меню</button>
+  </div></div></div>
 <div id="joy"><i></i></div>
 
 <script src="../vendor/peerjs/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"../vendor/three-r170/three.module.js","three/addons/":"../vendor/three-r170/addons/"}}</script>
-<div id="painV" style="position:fixed;inset:0;z-index:25;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(120,0,0,0) 45%,rgba(150,10,10,.55) 100%)"></div>
-<div id="spellHud" style="position:fixed;left:50%;bottom:72px;transform:translateX(-50%);z-index:30;padding:6px 14px;border-radius:8px;background:rgba(10,12,8,.55);color:#efe6cf;font:15px/1.4 Georgia,serif;pointer-events:none;opacity:0;transition:opacity .4s;max-width:calc(100vw - 32px);text-align:center"></div>
-<div id="hpBar" style="position:fixed;left:16px;bottom:16px;z-index:30;width:min(220px,40vw);height:8px;border-radius:4px;background:rgba(10,12,8,.55);overflow:hidden;pointer-events:none"><div id="hpFill" style="height:100%;width:100%;background:linear-gradient(90deg,#8e1b12,#c8402a);transition:width .25s"></div></div>
 <div id="mpHud" hidden style="position:fixed;left:16px;top:16px;z-index:30;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;border-radius:8px;background:rgba(10,12,8,.62);color:#efe6cf;font:13px/1.4 Georgia,serif;pointer-events:none"></div>
 <video id="zns-webcam" playsinline muted hidden></video>
 <!-- (the author 23.11: «не вижу справа внизу, как я выгляжу — по аналогии со стандартным»): the game's own camera window — the picture and the skeleton the camera sees -->
@@ -103,13 +117,14 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 // (the game's hands in this world — the same camera and the same arm solving as the game: special/opushka-hands.js)
 import { OpushkaNet } from './opushka-net.js';
 import { OpushkaSpells } from './opushka-spells.js';
+import { PortalLoader } from '../src/ui/PortalLoader.js';
 import { ZnsArms } from './opushka-hands.js';
 import { wandModel } from '../src/game/WandModel.js';
 const zns = new ZnsArms(); window.__znsArms = zns; // (tests and the camera check reach it here)
 // (multiplayer — special/opushka-net.js: the game's network; friends are whole wizards here, moved by their poses)
 const mpNet = new OpushkaNet({ THREE, get scene() { return scene; }, player: () => player, arms: zns, rig: () => charRig, buildAvatar: () => buildAvatar(),
   animateAvatar: (r, dt, sp, P) => animateAvatar(r, dt, sp, P), get pigs() { return pigs; }, groundH: (x, z) => groundH(x, z),
-  setTod: (k) => setTod(k), tod: () => todKey, hud: (t) => { const el = document.getElementById('mpHud'); if (el) { el.textContent = t; el.hidden = !t; } } });
+  setTod: (k) => setTod(k), tod: () => todKey, hud: (t) => { if (t) gameNotify(t, 7000); } });
 window.__mpNet = mpNet;
 // (the battle spells — special/opushka-spells.js: the game's words, the wand in the fist; a blast dents this world's ground)
 const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() { return camera; }, get U() { return U; }, player: () => player, rig: () => charRig, charRoot: () => charRoot,
@@ -120,9 +135,14 @@ const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() {
 window.__spells = spells; mpNet.spells = spells;
 let _hudT = 0;
 let _hpShown = -1;
-function updateHp() { const h = Math.round(spells.me.hp * 10) / 10; if (h === _hpShown) return; _hpShown = h; const el = document.getElementById('hpFill'); if (el) el.style.width = h + '%'; }
-function spellHud(t) { const el = document.getElementById('spellHud'); if (!el) return; el.textContent = t; el.style.opacity = 1; clearTimeout(_hudT); _hudT = setTimeout(() => { el.style.opacity = 0; }, 2600); }
-function painFlash(k) { const el = document.getElementById('painV'); if (!el) return; el.style.transition = 'none'; el.style.opacity = Math.min(1, 0.35 + k); requestAnimationFrame(() => { el.style.transition = 'opacity 1.2s ease-out'; el.style.opacity = 0; }); }
+function updateHp() { const h = Math.max(0, Math.round(spells.me.hp)); if (h === _hpShown) return; _hpShown = h; const el = document.getElementById('hp-bar-fill'); if (el) el.style.width = h + '%'; const tx = document.getElementById('hp-text'); if (tx) tx.textContent = `HP: ${h}/100`; }
+/** The words heard / the spell cast — the game's own line at the top (Hud.setVoice). */
+function spellHud(t) { const el = document.getElementById('voice-debug'); if (!el) return; el.textContent = t; el.style.display = 'block'; clearTimeout(_hudT); _hudT = setTimeout(() => { el.style.display = 'none'; }, 2600); }
+/** The game's notifications at the left (Hud.notify): the same box, the same items. */
+function gameNotify(text, ms = 5000) { let box = document.getElementById('hud-notify'); if (!box) { box = document.createElement('div'); box.id = 'hud-notify'; document.body.appendChild(box); }
+  const item = document.createElement('div'); item.className = 'hud-notify-item'; item.textContent = text; box.appendChild(item); while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => { item.style.opacity = '0'; }, ms); setTimeout(() => item.remove(), ms + 600); }
+function painFlash(k) { const f = document.getElementById('damage-flash'); if (!f) return; f.classList.remove('hidden', 'active'); void f.offsetWidth; f.classList.add('active'); void k; }
 
 const $ = s => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -177,7 +197,9 @@ const PRESETS={
 };
 const params=new URLSearchParams(location.search);
 const AUTO=params.get('auto')==='1'||!!params.get('mp'); // (from the game's menu: straight into the world — no menu of this page, ultra, the golden hour)
-if(AUTO)document.body.classList.add('loading');
+if(AUTO){document.body.classList.add('loading','auto');}
+// (the author 23.11: «загрузка тоже должна быть как у нас в обычной игре»): the game's own passage (PortalLoader) while the forest is made
+const portal=AUTO?new PortalLoader():null;if(portal)portal.start();
 let qKey=params.get('q')||(AUTO?'ultra':isTouch?'low':'high'); if(!PRESETS[qKey])qKey='high';
 let Q=PRESETS[qKey];
 let todKey=params.get('tod')||'golden';
@@ -2232,7 +2254,7 @@ const audio={ctx:null,start(){if(this.ctx)return;try{const C=new (window.AudioCo
     const g=C.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(run?0.09:0.05,t+0.015);g.gain.exponentialRampToValueAtTime(0.0005,t+0.22);s.connect(f).connect(g).connect(C.destination);s.start(t,Math.random()*1.5,0.3);}};
 
 /* ============================== UI ============================== */
-const prog=(p,msg)=>{$('#bar').style.width=(p*100).toFixed(0)+'%';$('#status').textContent=msg+'…';};
+const prog=(p,msg)=>{$('#bar').style.width=(p*100).toFixed(0)+'%';$('#status').textContent=msg+'…';portal&&portal.progress(Math.min(92,p*92),msg);};
 function setSeg(id,val){document.querySelectorAll(`#${id} button`).forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===val?'true':'false'));}
 setSeg('qual',qKey);setSeg('tod',todKey);
 let dynScale=1;
@@ -2250,12 +2272,19 @@ function autoEnter(){audio.start();enterPlay();spells.startVoice();setTimeout(()
   let app=false;try{app=sessionStorage.getItem('zns-app-window')==='1'||document.documentElement.classList.contains('app-full');}catch(e){}
   const wake=()=>{try{audio.ctx&&audio.ctx.state==='suspended'&&audio.ctx.resume();}catch(e){}
     if(!app&&!document.fullscreenElement)document.documentElement.requestFullscreen?.({navigationUI:'hide'}).catch(()=>{});};addEventListener('pointerdown',wake,{once:true});addEventListener('keydown',wake,{once:true});}
-function showMenu(){playing=false;$('#overlay').classList.remove('gone');document.body.classList.remove('playing');$('#go').textContent='Вернуться';}
+/** The game's pause menu (Esc): continue, the view, the time of day, the quality, back to the game's menu. */
+function gamePause(on){const m=document.getElementById('pause-menu');if(!m)return;m.classList.toggle('hidden',!on);if(on){playing=false;document.body.classList.remove('playing');try{document.exitPointerLock?.();}catch(e){}$('#op-view').textContent=player.view==='first'?'👁 Вид: от первого лица':'👁 Вид: от третьего лица';}else enterPlay();}
+document.getElementById('op-continue')?.addEventListener('click',()=>gamePause(false));
+document.getElementById('op-view')?.addEventListener('click',()=>{setView(player.view==='first'?'third':'first');$('#op-view').textContent=player.view==='first'?'👁 Вид: от первого лица':'👁 Вид: от третьего лица';});
+document.querySelectorAll('#pause-menu [data-tod]').forEach(b=>b.addEventListener('click',()=>setTod(b.dataset.tod)));
+document.querySelectorAll('#pause-menu [data-q]').forEach(b=>b.addEventListener('click',()=>{qKey=b.dataset.q;Q=PRESETS[qKey];setSeg('qual',qKey);if(started)applyQuality();}));
+document.getElementById('op-exit')?.addEventListener('click',()=>{location.href='../index.html';});
+function showMenu(){if(AUTO){gamePause(true);return;}playing=false;$('#overlay').classList.remove('gone');document.body.classList.remove('playing');$('#go').textContent='Вернуться';}
 document.addEventListener('pointerlockchange',()=>{pointerLocked=document.pointerLockElement===canvasEl;if(!pointerLocked&&playing&&!isTouch)showMenu();});
 canvasEl.addEventListener('click',()=>{if(playing&&!pointerLocked&&!isTouch){try{canvasEl.requestPointerLock();}catch(e){}}});
 addEventListener('mousemove',e=>{if(!pointerLocked||player.camDrive)return;player.yaw-=e.movementX*0.0021;player.pitch=clamp(player.pitch-e.movementY*0.0021,-1.35,1.35);});
 addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Digit1')setTod('golden');if(e.code==='Digit2')setTod('noon');if(e.code==='Digit3')setTod('mist');
-  if(e.code==='KeyC')document.body.classList.toggle('lb');if(e.code==='KeyV')setView(player.view==='first'?'third':'first');if(e.code==='Space'&&playing)e.preventDefault();if(e.code==='KeyH')document.body.classList.toggle('nohud');if(e.code==='Escape'&&AUTO&&started){if(playing)showMenu();else enterPlay();}});
+  if(e.code==='KeyC')document.body.classList.toggle('lb');if(e.code==='KeyV')setView(player.view==='first'?'third':'first');if(e.code==='Space'&&playing)e.preventDefault();if(e.code==='KeyH')document.body.classList.toggle('nohud');if(e.code==='Escape'&&AUTO&&started){if(playing)gamePause(true);else gamePause(false);}});
 addEventListener('keyup',e=>{keys[e.code]=false;});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
 // touch
@@ -2269,6 +2298,7 @@ addEventListener('resize',()=>{if(post)resizePost();});
 let lastT=performance.now(),fpsAcc=0,fpsN=0,fpsShow=0,dynTimer=0;
 async function init(){
   try{
+    zns.start(); // (the camera at once, while the forest is made — as the game does: by the end of the loading it already sees the player)
     prog(0.02,'Генерация мира');await nextFrame();
     await genWorld(prog);
     const half=new Uint16Array(HM_N*HM_N*4);for(let i=0;i<HM_N*HM_N;i++){half[i*4]=THREE.DataUtils.toHalfFloat(HGT[i]);half[i*4+1]=THREE.DataUtils.toHalfFloat(CAN[i]);half[i*4+2]=THREE.DataUtils.toHalfFloat(FOR[i]);half[i*4+3]=THREE.DataUtils.toHalfFloat(LUSH[i]);}
@@ -2294,10 +2324,12 @@ async function init(){
     prog(0.95,'Компиляция шейдеров');await nextFrame();
     updateGrass(camera.position);updateTrees();updateShadow();
     buildStumps();spells.init();renderer.compile(scene,camera);renderFrame();
-    zns.start();
     mpNet.start();
     prog(1,'Готово');$('#status').textContent='Лес готов. Нажми, чтобы войти.';$('#go').disabled=false;started=true;window.__ready=true;
-    if(AUTO){document.body.classList.remove('loading');autoEnter();}
+    if(AUTO){prog(0.97,'Камера');const t0=performance.now();
+      const wait=()=>{const seen=zns.live()||!!zns.raw?.hasPose;
+        if(seen||performance.now()-t0>40000){portal.finish();document.body.classList.remove('loading');autoEnter();if(!seen)gameNotify('📷 Камера пока не видит вас — встаньте в кадр; до тех пор — клавиатура и мышь');}
+        else{portal.progress(Math.min(99,93+(performance.now()-t0)/40000*6));setTimeout(wait,150);}};wait();}
     requestAnimationFrame(loop);
   }catch(e){console.error(e);$('#status').textContent='Ошибка: '+(e&&e.message||e)+'. Обнови страницу или выбери качество ниже.';window.__err=String(e&&e.stack||e);}
 }

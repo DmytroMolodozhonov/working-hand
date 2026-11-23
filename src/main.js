@@ -2007,9 +2007,14 @@ function goOpushka(kind, code = '') {
  * (the same networks, smoothness and sensitivity as in the game), and the page goes straight into the world — no menu of its own.
  */
 async function toOpushka(query) {
+    // (the author 23.11: «последнее обновление грузится с сильной задержкой — игра не понимает, что есть обновы»): the menu asks for a newer version
+    // only when it opens; going straight into «Опушка» skipped that — so it is asked here too, and a newer one is downloaded first
+    try { const u = await (await fetch('/api/update?fresh=1', { cache: 'no-store' })).json(); if (await updateIfNewer(u)) return; } catch (e) { /* (no launcher / no internet) */ }
     try { sessionStorage.setItem('zns-opushka-cfg', JSON.stringify(readConfig())); } catch (e) { /* */ }
     if (!window.__ZNS_NO_FULLSCREEN__) { try { await enterGameFullscreen(); } catch (e) { /* */ } }
     try { poseService.stop?.(); } catch (e) { /* (the menu's camera, if it ran: the world's page takes it) */ }
+    // (the same passage as any world's loading: the menu is drawn into the whirl here, the forest's page goes on with it)
+    try { await Promise.race([portal.start(mainMenu), new Promise((r) => setTimeout(r, 500))]); } catch (e) { /* */ }
     location.href = 'special/opushka.html?' + query;
 }
 
