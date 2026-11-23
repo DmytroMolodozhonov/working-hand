@@ -1559,7 +1559,7 @@ $('start-btn').addEventListener('click', () => {
     if (cfg.mode === 'tutorial') { startTutorial(tutContinue); return; }
     if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     // («Особая графика», автор 23.11: Творческий в мире «Опушка» — отдельная страница на своём движке, руки с нашей камеры — special/opushka.html)
-    if (cfg.mode === 'creative' && !cfg.map && $('special-graphics')?.checked) { toOpushka('auto=1'); return; }
+    if (cfg.mode === 'creative' && !cfg.map && $('special-graphics')?.checked) { toOpushka('auto=1', cfg); return; }
     cfg.smooth = true; // (the «Гладкий мир» — always: ramps — newest world generation; no setting any more)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     startGame(cfg);
@@ -2016,11 +2016,11 @@ function goOpushka(kind, code = '') {
  * window is made full screen first (the game's app window — by its server, a tab — by the browser), the game's camera settings go along
  * (the same networks, smoothness and sensitivity as in the game), and the page goes straight into the world — no menu of its own.
  */
-async function toOpushka(query) {
+async function toOpushka(query, cfg = readConfig()) {
     // (the author 23.11: «последнее обновление грузится с сильной задержкой — игра не понимает, что есть обновы»): the menu asks for a newer version
     // only when it opens; going straight into «Опушка» skipped that — so it is asked here too, and a newer one is downloaded first
     try { const u = await (await fetch('/api/update?fresh=1', { cache: 'no-store' })).json(); if (await updateIfNewer(u)) return; } catch (e) { /* (no launcher / no internet) */ }
-    try { sessionStorage.setItem('zns-opushka-cfg', JSON.stringify(readConfig())); } catch (e) { /* */ }
+    try { sessionStorage.setItem('zns-opushka-cfg', JSON.stringify(cfg)); } catch (e) { /* */ }
     if (!window.__ZNS_NO_FULLSCREEN__) { try { await enterGameFullscreen(); } catch (e) { /* */ } }
     try { poseService.close?.(); } catch (e) { /* the world page opens its own camera */ }
     // (the same passage as any world's loading: the menu is drawn into the whirl here, the forest's page goes on with it)

@@ -130,6 +130,7 @@ import { ZnsArms } from './opushka-hands.js';
 import { wandModel } from '../src/game/WandModel.js';
 import { geography, heightTriangle, OpushkaCaves, WATER_KIND, CAVE_TILE } from './opushka-world.js';
 import { OpushkaMap } from './opushka-map.js';
+import { OpushkaFlight } from './opushka-flight.js';
 import { caveGeometry, terrainIndex, waterGeometry } from './opushka-mesh.js';
 const zns = new ZnsArms(); window.__znsArms = zns; // (tests and the camera check reach it here)
 // (multiplayer — special/opushka-net.js: the game's network; friends are whole wizards here, moved by their poses)
@@ -211,6 +212,9 @@ const AUTO=params.get('auto')==='1'||!!params.get('mp'); // (from the game's men
 if(AUTO){document.body.classList.add('loading','auto');}
 // (the author 23.11: «через Творческий захожу — почему-то ХП появились»): Creative is as the game's — no health, nobody hurt; a server's «Опушка» has it
 const CREATIVE=!params.get('mp');if(CREATIVE){document.body.classList.add('creative');spells.noHarm=true;}
+const hasWings=CREATIVE&&(!!zns.set.config.hero?.wings||(!AUTO&&params.get('wings')==='1'));
+const wingFlight=hasWings?new OpushkaFlight():null;
+let heroWings=null, flightBoost=false, lastFlightKey=-Infinity;
 // (the author 23.11: «загрузка тоже должна быть как у нас в обычной игре»): the game's own passage (PortalLoader) while the forest is made
 const portal=AUTO?new PortalLoader():null;if(portal)portal.start();
 let qKey=params.get('q')||(AUTO?'ultra':isTouch?'low':'high'); if(!PRESETS[qKey])qKey='high';
@@ -1299,6 +1303,19 @@ function updatePlayer(dt){
   if(player.swimming)target.multiplyScalar(0.58);
   if(player.landT>0.1)target.multiplyScalar(0.4);
   player.vel.lerp(target,1-Math.exp(-dt*(player.grounded?(len>0?5:7):0.7)));
+  const beforeFly=wingFlight?.state.air;
+  if(wingFlight&&dt>0){
+    const floor=caves?.floor(player.pos.x,player.pos.z,player.pos.y)??groundH(player.pos.x,player.pos.z);
+    const st=wingFlight.step(dt,performance.now(),{pose:cam?zns.raw:null,at:zns.at,pitch:player.pitch,alt:player.pos.y-floor,
+      ground:player.grounded?Math.hypot(player.vel.x,player.vel.z):0,boost:flightBoost,blocked:player.locked||player.swimming});
+    flightBoost=false;
+    player.flying=st.air;
+    if(st.air){
+      player.grounded=false;player.jumpPrep=0;joy.jump=false;
+      player.vy=player.pos.y<210?st.vy:Math.min(0,st.vy);
+      player.vel.set(-Math.sin(my)*st.vf,0,-Math.cos(my)*st.vf);
+    }
+  }
   const p=player.pos,oldX=p.x,oldZ=p.z,oldY=p.y,head=player.crouch?1.27:1.74;
   p.addScaledVector(player.vel,dt);collide(p);
   p.x=clamp(p.x,-PLAY,PLAY);p.z=clamp(p.z,-PLAY,PLAY);
@@ -1315,10 +1332,12 @@ function updatePlayer(dt){
   if(player.swimming){
     p.y=lerp(p.y,Math.max(outdoors,-1.12),1-Math.exp(-dt*5));
     player.grounded=false;player.vy=0;player.jumpPrep=0;joy.jump=false;
-  }else if(!player.grounded){player.vy-=11.5*dt;p.y+=player.vy*dt;
-    if(player.vy>0&&caves?.tile(p.x,p.z)&&surfaceDensity(p.x,p.y+head,p.z)>0){p.y=oldY;player.vy=0;}
-    if(player.pos.y<=g&&player.vy<0){player.justLanded=player.vy;player.landT=0.22*clamp(-player.vy/5,0.3,1);player.pos.y=g;player.grounded=true;player.vy=0;audio.step(3.5,true);}}
+  }else if(!player.grounded){if(!player.flying)player.vy-=11.5*dt;p.y+=player.vy*dt;
+    if(player.vy>0&&caves?.tile(p.x,p.z)&&surfaceDensity(p.x,p.y+head,p.z)>0){p.y=oldY;player.vy=0;if(wingFlight?.state.air)wingFlight.state.vy=0;}
+    if(player.pos.y<=g&&player.vy<0){player.justLanded=player.vy;player.landT=0.22*clamp(-player.vy/5,0.3,1);player.pos.y=g;player.grounded=true;player.vy=0;player.flying=false;wingFlight?.land();audio.step(3.5,true);}}
   else{if(player.pos.y-g>0.35){player.grounded=false;player.vy=0;}else player.pos.y=dt>0?lerp(player.pos.y,g,1-Math.exp(-dt*14)):g;}
+  if(beforeFly&&!player.flying)flightBoost=false;
+  if(player.swimming){player.flying=false;wingFlight?.land();}
   player.landT=Math.max(0,player.landT-dt);
   const speed=Math.hypot(player.vel.x,player.vel.z);
   if(player.view==='first')player.faceYaw=ang(player.faceYaw,(player.camDrive?player.walkYaw:player.yaw)+Math.PI,1-Math.exp(-dt*12)); // (in the first person the body faces where you look: your arms are before you)
@@ -2090,7 +2109,7 @@ function animateAvatar(rig,dt,speed,P){rig.holder.position.copy(P.pos);rig.holde
 async function buildCharacter(){charRig=await buildMannequin();charRoot.add(charRig.root);scene.add(charRoot);}
 function updateCharacter(dt,speed){
   if(charCustom&&charRig)charRig.cape.mesh.visible=false;
-  charRoot.position.copy(player.pos);charRoot.rotation.y=player.faceYaw;
+  charRoot.position.copy(player.pos);charRoot.rotation.y=player.faceYaw;animateExplorerWings(dt);
   if(charCustom)animateCustom(charCustom,dt,speed,player);else animateMannequin(charRig,dt,speed,player);
 }
 
@@ -2204,6 +2223,29 @@ function wingGeometry(outer){
     for(const [u,v] of [[0,0],[1,0],[0,1],[1,1]]){const p=root.clone().add(new V3((u-0.5)*w,0.012+v*0.0,-v*len));gb.v(p,new V3(0,1,0),u,v,[0.95,0.95,0.95],v);}
     gb.t(base,base+2,base+1);gb.t(base+1,base+2,base+3);}
   return gb.build();
+}
+function buildExplorerWings(){
+  if(!hasWings)return;
+  heroWings=[1,-1].map((side)=>{
+    const root=new THREE.Group();
+    root.position.set(side*.16,1.32,-.16);root.scale.set(side*2.7,2.7,2.7);
+    const inner=new THREE.Mesh(pigShared.wingIn,pigShared.wingMat),hinge=new THREE.Group();
+    hinge.position.x=.30;
+    const tip=new THREE.Mesh(pigShared.wingOut,pigShared.wingMat);
+    inner.castShadow=tip.castShadow=true;
+    hinge.add(tip);root.add(inner,hinge);charRoot.add(root);
+    return {side,root,hinge};
+  });
+}
+function animateExplorerWings(dt){
+  if(!heroWings)return;
+  const open=player.flying?1:0,beat=wingFlight.flap;
+  for(const {side,root,hinge} of heroWings){
+    const a=1-Math.exp(-dt*9);
+    root.rotation.y=lerp(root.rotation.y,side*(1-open)*.92,a);
+    root.rotation.z=lerp(root.rotation.z,side*(-.85+open*(.85+Math.sin(beat*Math.PI*2)*.57)),a);
+    hinge.rotation.y=lerp(hinge.rotation.y,(1-open)*.8+beat*.17,a);
+  }
 }
 async function buildPigShared(){
   const P=[],o=(r)=>({bone:'b',reg:r});
@@ -2382,7 +2424,7 @@ function applyQuality(){U.uLodR.value=Q.treeR;dynScale=1;setupShadow();buildGras
 $('#go').onclick=()=>{audio.start();enterPlay();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);};
 $('#viewBtn').onclick=()=>setView(player.view==='first'?'third':'first');
 $('#charFile').onchange=e=>{if(e.target.files.length)loadCustomCharacter(e.target.files);};
-function enterPlay(){playing=true;$('#overlay').classList.add('gone');document.body.classList.add('playing');if(!isTouch){try{const p=canvasEl.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}}
+function enterPlay(){playing=true;if(hasWings)gameNotify('🪽 Разбегитесь и взмахните обеими руками, чтобы взлететь');$('#overlay').classList.add('gone');document.body.classList.add('playing');if(!isTouch){try{const p=canvasEl.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}}
 /** Straight into the world (from the game's menu): the sound may wait for the first touch of a key or the mouse (the browser's rule). */
 function autoEnter(){audio.start();enterPlay();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);
   // (a browser tab: full screen needs a click — the first one does it; the game's own app window is full already: its server made it so)
@@ -2401,6 +2443,10 @@ document.addEventListener('pointerlockchange',()=>{pointerLocked=document.pointe
 canvasEl.addEventListener('click',()=>{if(playing&&!pointerLocked&&!isTouch){try{canvasEl.requestPointerLock();}catch(e){}}});
 addEventListener('mousemove',e=>{if(!pointerLocked||player.camDrive||AUTO)return;player.yaw-=e.movementX*0.0021;player.pitch=clamp(player.pitch-e.movementY*0.0021,-1.35,1.35);});
 addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Digit1')setTod('golden');if(e.code==='Digit2')setTod('noon');if(e.code==='Digit3')setTod('mist');
+  if(hasWings&&!AUTO&&playing&&!e.repeat&&e.code==='Space'){
+    if(performance.now()-lastFlightKey<310)flightBoost=true;
+    lastFlightKey=performance.now();
+  }
   if(e.code==='KeyC')document.body.classList.toggle('lb');if(e.code==='KeyV')setView(player.view==='first'?'third':'first');if(e.code==='Space'&&playing)e.preventDefault();if(e.code==='KeyH')document.body.classList.toggle('nohud');if(e.code==='Escape'&&AUTO&&started){if(playing)gamePause(true);else gamePause(false);}});
 addEventListener('keyup',e=>{keys[e.code]=false;});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
@@ -2436,7 +2482,7 @@ async function init(){
     prog(0.66,'Рельеф');await nextFrame();await buildTerrain(gF,gM);buildWater();
     prog(0.72,'Деревья');await nextFrame();buildTrees(barks);
     prog(0.8,'Дальний лес');await nextFrame();await buildImpostors();
-    prog(0.86,'Трава и цветы');await nextFrame();buildGrass();buildFlowers(tex(makeFlowerAtlas(),true,false));buildFerns(tex(makeFern(4),true,false));buildRocks();buildDust();prog(0.9,'Персонаж');await nextFrame();await buildCharacter();restoreCharacter();prog(0.93,'Летающие свиньи');await nextFrame();await buildPigs();
+    prog(0.86,'Трава и цветы');await nextFrame();buildGrass();buildFlowers(tex(makeFlowerAtlas(),true,false));buildFerns(tex(makeFern(4),true,false));buildRocks();buildDust();prog(0.9,'Персонаж');await nextFrame();await buildCharacter();restoreCharacter();prog(0.93,'Летающие свиньи');await nextFrame();await buildPigs();buildExplorerWings();
     buildPost();applyTOD();setupShadow();resizePost();
     dust.material.uniforms.uCol.value.copy(sun.color).multiplyScalar(4);
     // spawn: face the forest edge with the sun ahead and to the side
@@ -2479,7 +2525,7 @@ function loop(now){
   if(dynTimer>2.5&&playing){dynTimer=0;const old=dynScale;if(fpsShow<42)dynScale=Math.max(0.55,dynScale-0.1);else if(fpsShow>58&&dynScale<1)dynScale=Math.min(1,dynScale+0.05);if(old!==dynScale)resizePost();}
   requestAnimationFrame(loop);
 }
-window.__debug={get minimap(){return minimap;},get caves(){return caves;},groundH,waterAt,get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
+window.__debug={wingFlight,get minimap(){return minimap;},get caves(){return caves;},groundH,waterAt,get rig(){return charRig;},buildMannequin,updateFallen,fallen,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
 init();
 </script>
 
