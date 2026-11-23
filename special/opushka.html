@@ -1006,6 +1006,7 @@ function resizePost(){
 }
 const _v=new V3();
 function renderFrame(){
+  if(window.__camHook)window.__camHook(camera); // (close-up pictures for checks)
   renderer.setRenderTarget(post.rt);renderer.render(skyScene,camera);
   renderer.autoClear=false;renderer.clearDepth();renderer.render(scene,camera);renderer.autoClear=true;
   // god rays
@@ -1281,10 +1282,10 @@ function nearestReg(prims,x,y,z){let best=1e9,r=0;for(const p of prims){if(p.sub
 
 /* ---------- wizard cloth material ---------- */
 function charMaterial(){
-  return patch(new THREE.MeshPhysicalMaterial({roughness:0.8,metalness:0,sheen:1,sheenRoughness:0.45,sheenColor:new THREE.Color(0.32,0.36,0.62)}),{key:'wizmat',
-    vpars:`attribute float aReg;attribute vec3 aLP;varying float vReg;varying vec3 vLP;`,
-    v:[['#include <begin_vertex>','#include <begin_vertex>\nvReg=aReg;vLP=aLP;']],
-    fpars:`varying float vReg;varying vec3 vLP;float cRough;float cSkin;float cMetal;float cSheen;vec3 cBump;
+  return withSkinDefault(patch(new THREE.MeshPhysicalMaterial({roughness:0.8,metalness:0,sheen:1,sheenRoughness:0.45,sheenColor:new THREE.Color(0.32,0.36,0.62)}),{key:'wizmat',
+    vpars:`attribute float aReg;attribute vec3 aLP;attribute vec4 aSkin;varying float vReg;varying vec3 vLP;varying vec4 vSkin;`,
+    v:[['#include <begin_vertex>','#include <begin_vertex>\nvReg=aReg;vLP=aLP;vSkin=aSkin;']],
+    fpars:`varying float vReg;varying vec3 vLP;varying vec4 vSkin;float cRough;float cSkin;float cMetal;float cSheen;vec3 cBump;
       float rib(float x,float f){return abs(fract(x*f)-0.5)*2.;}
       vec3 nz3(vec3 p){return vec3(vnoise3(p),vnoise3(p+17.3),vnoise3(p+41.7))-0.5;}
       float star5(vec2 p,float r){float a=atan(p.y,p.x)+1.5708;float k=6.2832/5.;a=mod(a,k)-k*0.5;float l=length(p);float rr=r*(0.55+0.45*smoothstep(0.,k*0.5,abs(a))*0.0+0.45*(1.-abs(a)/(k*0.5)));return smoothstep(rr,rr*0.8,l);}
@@ -1306,6 +1307,35 @@ function charMaterial(){
         if(r==0.||r==6.||r==7.){
           c=vec3(0.36,0.225,0.165);cSkin=1.;cRough=0.5;
           c*=0.95+0.08*vnoise3(p*60.);cBump=nz3(p*1100.)*0.12+nz3(p*260.)*0.12;
+          if(r==0.){
+            // the hand (23.11): living skin — blood under the knuckles and the fingertips, a paler warm palm with its lines, fine pores and
+            // freckles, faint veins on the back, creases at the joints, wrinkles over the knuckles, and nails: pink, glossy, a pale moon at the root
+            float nail=vSkin.x,crease=vSkin.y,palmS=max(vSkin.z,0.),backS=max(-vSkin.z,0.),al=vSkin.w;
+            float blush=smoothstep(0.55,1.0,al)*0.6+crease*0.4;c=mix(c,c*vec3(1.14,0.88,0.84),blush*0.45);
+            c=mix(c,c*vec3(1.1,1.03,0.93)+vec3(0.018,0.01,0.006),palmS*0.7);
+            float pore=vnoise3(p*2400.);c*=0.965+0.05*pore;cBump+=nz3(p*2400.)*0.16;
+            float fre=smoothstep(0.8,0.87,vnoise3(p*800.+7.))*backS;c=mix(c,c*vec3(0.84,0.72,0.64),fre*0.45);
+            // the back of the hand: three thin veins from the knuckles converging to the wrist, a branch between them — faintly blue, raised
+            float bk=smoothstep(0.7,1.0,backS),yy=clamp(-p.y/0.09,0.,1.),vein=0.;
+            for(int i=0;i<3;i++){float fi=float(i),z0=0.017-fi*0.016;float zc=z0*(0.35+0.65*yy)+0.0025*sin(p.y*70.+fi*2.1)+0.0015*sin(p.y*190.+fi*5.);
+              vein=max(vein,smoothstep(0.0016,0.0003,abs(p.z-zc)));}
+            float zb=mix(0.009,-0.007,clamp((-p.y-0.03)/0.035,0.,1.));vein=max(vein,smoothstep(0.0013,0.0002,abs(p.z-zb))*step(0.03,-p.y)*step(-p.y,0.065));
+            vein*=bk*smoothstep(0.004,0.02,-p.y)*smoothstep(0.092,0.07,-p.y)*(0.6+0.4*vnoise3(p*300.));
+            c=mix(c,c*vec3(0.86,0.9,1.06),vein*0.32);cBump+=vec3(0.,vein*0.35,0.);
+            // the palm: the heart line, the head line and the life line round the thumb's pad, with fine creases between
+            float pm=smoothstep(0.7,1.0,palmS),wob=vnoise3(p*500.)*0.0006;
+            float heart=smoothstep(0.0011,0.0002,abs(p.y-(-0.072-0.009*smoothstep(-0.044,0.014,p.z)+0.004*smoothstep(0.004,0.02,p.z))+wob))*step(-0.046,p.z)*step(p.z,0.02);
+            float head=smoothstep(0.001,0.0002,abs(p.y-(-0.08+(0.042-p.z)*0.3+0.002*sin(p.z*90.))+wob))*step(-0.026,p.z)*step(p.z,0.042);
+            float life=smoothstep(0.0011,0.0002,abs(length(vec2(p.y+0.035,p.z-0.052))-0.034)+wob)*step(p.z,0.046)*step(p.y,-0.012);
+            float minor=smoothstep(0.82,1.,vnoise3(vec3(p.x*200.,p.y*700.,p.z*260.)))*0.35;
+            float pl=clamp(max(max(heart,head),life)+minor,0.,1.)*pm;c*=1.-pl*0.28;cBump-=vec3(0.,pl*0.45,0.);
+            // the joints: creases across the palm side, fine wrinkles over the knuckles on the back
+            float jw=crease*smoothstep(0.55,1.0,sin(p.y*2300.+vnoise3(p*400.)*3.)*0.5+0.5)*(palmS>0.?1.:0.7);
+            c*=1.-jw*0.22;cBump+=vec3(0.,-jw*0.5,0.);
+            if(nail>0.01){vec3 nc=vec3(0.62,0.43,0.38)*(0.95+0.08*vnoise3(p*900.));float moon=smoothstep(0.45,0.38,vSkin.w)*0.5;nc=mix(nc,vec3(0.85,0.75,0.7),moon);
+              float tipW=smoothstep(0.9,0.98,vSkin.w);nc=mix(nc,vec3(0.9,0.86,0.8),tipW*0.6);
+              c=mix(c,nc,nail);cRough=mix(cRough,0.22,nail);cBump=mix(cBump,nz3(p*300.)*0.03,nail);}
+          }
           if(r==7.){vec3 h=p-vec3(0.,1.57,0.008);float ax=abs(h.x);
             float bY=0.1275+0.005*(1.-pow((ax-0.034)/0.023,2.));
             float brow=step(0.012,ax)*step(ax,0.056)*smoothstep(0.0045,0.0018,abs(h.y-bY+(ax-0.012)*0.04))*step(0.055,h.z);
@@ -1360,8 +1390,9 @@ function charMaterial(){
         #if NUM_DIR_LIGHTS > 0
         {vec3 L_=directionalLights[0].direction;float nl=dot(normal,L_);float wrapT=saturate(nl*0.5+0.5)-saturate(nl);
          reflectedLight.directDiffuse+=directLight.color*diffuseColor.rgb*vec3(0.9,0.32,0.2)*wrapT*0.4*cSkin;}
-        #endif`]]});
+        #endif`]]}));
 }
+function withSkinDefault(m){m.defaultAttributeValues={...(m.defaultAttributeValues||{}),aSkin:[0,0,0,0]};return m;} // (meshes without the hand's marks read zeros)
 function eyeMaterial(){
   return patch(new THREE.MeshPhysicalMaterial({roughness:0.08,clearcoat:1,clearcoatRoughness:0.03,metalness:0}),{key:'eye2',
     vpars:`varying vec3 vEP;`,v:[['#include <begin_vertex>','#include <begin_vertex>\nvEP=normalize(position);']],
@@ -1434,17 +1465,28 @@ async function buildMannequin(){
     const names=['palm',...Object.keys(HP.joints)],bi={};names.forEach((n,i)=>bi[n]=i);
     const byB={};for(const q of HP){if(q.sub)continue;(byB[q.bone]=byB[q.bone]||[]).push(q);}
     const p=hgm.attributes.position,wr=rp('hd'+K),n=p.count,l=new Float32Array(n*3),r=new Float32Array(n),si=new Uint16Array(n*4),sw=new Float32Array(n*4);
-    const tmp=new V3(),Z=new V3(0,0,1);
+    const tmp=new V3(),Z=new V3(0,0,1),sk=new Float32Array(n*4);
     for(let i=0;i<n;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
-      tmp.set(x,y,z).multiplyScalar(0.9).applyAxisAngle(Z,s*ARM_A).add(wr);l[i*3]=tmp.x;l[i*3+1]=tmp.y;l[i*3+2]=tmp.z;
+      l[i*3]=x*s;l[i*3+1]=y;l[i*3+2]=z; // (the hand's own place, both hands alike — +x the back: the skin's veins and lines are drawn in it)
       const ds=[];for(const b in byB){let dm=1e9;for(const q of byB[b]){const d=primD(q,x,y,z);if(d<dm)dm=d;}ds.push([b,dm]);}
       ds.sort((a,b)=>a[1]-b[1]);let tot=0;const w=[];for(let k=0;k<4;k++){const wv=k<ds.length?Math.exp(-(ds[k][1]-ds[0][1])/0.0035):0;w.push(wv);tot+=wv;}
-      for(let k=0;k<4;k++){si[i*4+k]=k<ds.length?bi[ds[k][0]]:0;sw[i*4+k]=w[k]/tot;}}
+      for(let k=0;k<4;k++){si[i*4+k]=k<ds.length?bi[ds[k][0]]:0;sw[i*4+k]=w[k]/tot;}
+      // the skin's marks (the author 23.11: «текстура кожи и руки»): x — the nail, y — a crease at a joint (palm side) / wrinkles over a knuckle
+      // (back), z — the palm, w — along the finger's bone (0 its joint … 1 its end)
+      const smoothstep=(e0,e1,v)=>{const t=clamp((v-e0)/(e1-e0),0,1);return t*t*(3-2*t);};
+      const nb=ds[0][0];let nail=0,crease=0,palm=0,along=0;
+      if(nb==='palm')palm=x*s<0.002?1:(x*s>0.006?-1:0); // (z: +1 the palm, −1 the back of the hand)
+      else{const q=byB[nb][0],ab=q.b.clone().sub(q.a),t=clamp(tmp.set(x,y,z).sub(q.a).dot(ab)/ab.lengthSq(),0,1);along=t;
+        const off=tmp.set(x,y,z).sub(q.a).addScaledVector(ab,-t);const rr=q.r0+(q.r1-q.r0)*t,back=off.x*s/Math.max(rr,1e-4);
+        if(nb[2]==='2'&&nb[1]!=='4'||nb==='f42')nail=smoothstep(0.35,0.55,t)*smoothstep(0.25,0.6,back);
+        crease=(1-smoothstep(0.0,0.16,t))*(back<0?1:0.6);palm=back<-0.2?0.5:back>0.3?-0.5:0;}
+      sk[i*4]=nail;sk[i*4+1]=crease;sk[i*4+2]=palm;sk[i*4+3]=along;}
     hgm.setAttribute('aLP',new THREE.BufferAttribute(l,3));hgm.setAttribute('aReg',new THREE.BufferAttribute(r,1));
+    hgm.setAttribute('aSkin',new THREE.BufferAttribute(sk,4));
     hgm.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));hgm.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
     const hm=new THREE.SkinnedMesh(hgm,mat);hm.castShadow=hm.receiveShadow=true;hm.frustumCulled=false;frame.add(hm);
     root.updateMatrixWorld(true);hm.bind(new THREE.Skeleton(names.map(nm=>hb[nm])));
-    fingers[K]={hb,s,cur:new Float32Array(15)};}
+    fingers[K]={hb,s,cur:new Float32Array(15),HP};}
   // staff in the right hand
   const stG=new THREE.CylinderGeometry(0.016,0.022,1.72,10,40);{const p=stG.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i),a=Math.atan2(p.getZ(i),p.getX(i));
       const k=1+0.18*SN(y*9,a*1.5)+0.1*Math.max(0,SN(y*3+5,0));p.setX(i,p.getX(i)*k+0.012*Math.sin(y*2.3));p.setZ(i,p.getZ(i)*k+0.01*Math.sin(y*3.1+1));}stG.computeVertexNormals();}
@@ -1456,11 +1498,15 @@ async function buildMannequin(){
   const crys=new THREE.Mesh(new THREE.OctahedronGeometry(0.045,0),new THREE.MeshStandardMaterial({color:0x0,emissive:new THREE.Color(0.35,0.75,1.0),emissiveIntensity:3.5,roughness:0.15}));
   crys.scale.set(0.7,1.4,0.7);crys.position.y=1.27;staff.add(crys);
   for(let k=0;k<3;k++){const prong=new THREE.Mesh(new THREE.TorusGeometry(0.04,0.006,6,16,Math.PI*0.9),woodM);prong.position.y=1.24;prong.rotation.set(0,k*2.09,Math.PI/2);staff.add(prong);}
-  // (the author 23.11: «убрать посох и вставить волшебную палочку — нашу, из нашей игры»): the game's own wand (WandModel.js), in the right hand,
-  // its grip in the fist and its tip on along the fingers (the staff is not attached: its crystal object stays for the animation's glow only)
-  const wand=wandModel({model:0,color:0x8b5a2b});const fd=rp('tipR').sub(rp('hdR')).normalize();
-  wand.scale.setScalar(0.5);wand.quaternion.setFromUnitVectors(new V3(0,1,0),fd);wand.position.copy(fd).multiplyScalar(0.035).add(new V3(0,0,0.012));
-  wand.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});B.hdR.add(wand);
+  // (the author 23.11: «убрать посох и вставить волшебную палочку — нашу, из нашей игры»; then «палочка ужасно держится»): the game's own wand
+  // (WandModel.js), sized for a person (34 cm, the handle ~2.4 cm thick), held as a hand holds it — the handle across the palm diagonally,
+  // from the heel of the hand past the little finger to between the thumb and the index, every finger bent just so far that it lies ON the
+  // handle (gripWand), the thumb closed over it. It hangs on the palm's bone, so it turns with the hand.
+  {const F=fingers.R,s=F.s,WS=[0.3,0.55,0.3];const wand=wandModel({model:0,color:0x8b5a2b});
+    const Rw=0.0115/0.9,G=gripWand(F,F.HP,Rw),A=G.A,D=G.D;F.grip=G.curl;
+    wand.scale.set(WS[0]/0.9,WS[1]/0.9,WS[2]/0.9);wand.quaternion.setFromUnitVectors(new V3(0,1,0),D);
+    wand.position.copy(A).addScaledVector(D,(-0.046-A.z)/D.z); // (the butt ~1.5 cm out past the little finger)
+    wand.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});F.hb.palm.add(wand);F.wand=wand;}
   root.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});crys.castShadow=false;
   const restB={};const basis=(d,p)=>{const D=d.clone().normalize(),Pp=p.clone().sub(D.clone().multiplyScalar(p.dot(D))).normalize();return new THREE.Matrix4().makeBasis(D,Pp,new V3().crossVectors(D,Pp));};
   for(const K of ['L','R']){
@@ -1701,11 +1747,46 @@ const _fq=new THREE.Quaternion(),_fz=new V3(0,0,1),_ft=new V3(0.35,0.25,1).norma
 function bendFingers(c,dt){
   if(!c.fingers)return;
   for(const K of ['L','R']){const F=c.fingers[K];if(!F)continue;const Z=zns.dirs[K];
-    const want=Z.ok&&Z.curl?Z.curl:(K==='R'?HOLD_WAND:AT_REST);const k=1-Math.exp(-dt*18);
+    const want=F.grip?F.grip:Z.ok&&Z.curl?Z.curl:AT_REST,k=1-Math.exp(-dt*18); // (the wand's hand holds the wand: its fingers stay on the handle)const k=1-Math.exp(-dt*18);
     for(let f=0;f<5;f++)for(let j=0;j<3;j++){const i=f*3+j;F.cur[i]+=(want[i]-F.cur[i])*k;
       _fq.setFromAxisAngle(f===4?_ft:_fz,-F.s*F.cur[i]*(f===4?0.8:1));F.hb['f'+f+j].quaternion.copy(_fq);}}
 }
-const HOLD_WAND=new Float32Array([1.2,1.3,0.9, 1.3,1.4,0.9, 1.35,1.35,0.9, 1.4,1.3,0.85, 0.5,0.6,0.5]);
+
+// The grip on a handle (the author 23.11: «палочка ужасно держится»): for each finger and the thumb — its three joints' bends such that the
+// finger lies ON the handle (a cylinder: point A, direction D, radius Rw — the hand's own units) all along its middle and end joints, never
+// through it; the thumb also never through the index. A small search (coordinate descent from a fist) on the hand's own skeleton — the same
+// joints and turns as bendFingers uses — once, on load.
+function gripWand(F,HP,Rw){
+  // where the handle lies: tried across the palm's end (a diagonal from the little finger to the index), the place where the fingers close on it best
+  let best=null;
+  for(let ax=0.012;ax<=0.0481;ax+=0.004)for(let ay=-0.075;ay>=-0.1251;ay-=0.005){
+    const A=new V3(-F.s*ax,ay,-0.028),D=new V3(F.s*0.004,-0.019,0.058).normalize();const r=gripAt(F,HP,A,D,Rw);
+    if(!best||r.e<best.e)best={...r,A,D};}
+  return best;
+}
+function gripAt(F,HP,A,D,Rw){
+  const s=F.s,J=HP.joints,seg={};for(const q of HP){if(!q.sub&&q.bone!=='palm')seg[q.bone]=q;}
+  const M=new THREE.Matrix4(),T=new THREE.Matrix4(),R=new THREE.Matrix4(),Q=new THREE.Quaternion(),w=new V3();
+  const fk=(f,c)=>{const out=[];M.identity();let px=0,py=0,pz=0;
+    for(let j=0;j<3;j++){const bn='f'+f+j,jp=J[bn].pos;T.makeTranslation(jp.x-px,jp.y-py,jp.z-pz);px=jp.x;py=jp.y;pz=jp.z;
+      Q.setFromAxisAngle(f===4?_ft:_fz,-s*c[j]*(f===4?0.8:1));R.makeRotationFromQuaternion(Q);M.multiply(T).multiply(R);
+      const g=seg[bn];for(const t of [0.15,0.5,0.85,1]){out.push({p:g.a.clone().lerp(g.b,t).sub(jp).applyMatrix4(M),r:g.r0+(g.r1-g.r0)*t,j,t});}}
+    return out;};
+  const axisD=(p)=>{w.copy(p).sub(A);return w.addScaledVector(D,-w.dot(D)).length();};
+  let index=null;
+  const E=(f,c)=>{let e=0;for(const o of fk(f,c)){const g=axisD(o.p)-(Rw+o.r*0.92);
+      if(g<0)e+=g*g*400;if(o.j>0||o.t>0.8)e+=g*g; // (lie on it from the end of the first joint on; never sink in)
+      if(index)for(const q of index){const d=o.p.distanceTo(q.p)-(o.r+q.r)*0.95;if(d<0)e+=d*d*400;}}
+    return e+1e-7*(c[0]*c[0]+c[1]*c[1]+c[2]*c[2]);};
+  const out=new Float32Array(15),palm=HP.filter(q=>!q.sub&&q.bone==='palm');let total=0;
+  for(let t=-0.045;t<=0.0451;t+=0.01){const x=A.x+D.x*(t-A.z)/D.z,y=A.y+D.y*(t-A.z)/D.z;let d=1e9;for(const q of palm)d=Math.min(d,primD(q,x,y,t));if(d<Rw)total+=(Rw-d)*(Rw-d)*400;
+    else if(Math.abs(t)<0.03)total+=(d-Rw)*(d-Rw)*2;} // (the handle rests on the palm: no gap under it)
+  for(const f of [0,1,2,3,4]){const c=f===4?[0.2,0.4,0.4]:[1.1,1.3,0.9],lo=f===4?-0.9:0,hi=f===4?1.4:1.75;let best=E(f,c),step=0.25;
+    while(step>0.004){let moved=false;for(let j=0;j<3;j++)for(const d of [step,-step]){const v=c[j];c[j]=clamp(v+d,lo,hi);const e=E(f,c);if(e<best-1e-12){best=e;moved=true;}else c[j]=v;}
+      if(!moved)step*=0.5;}
+    out.set(c,f*3);total+=best;if(f===0)index=fk(0,c);}
+  return {curl:out,e:total};
+}
 const AT_REST=new Float32Array([0.25,0.3,0.2, 0.3,0.35,0.2, 0.35,0.35,0.22, 0.4,0.35,0.2, 0.15,0.2,0.15]);
 
 /* ---------- custom model (GLB / FBX + optional animation files) ---------- */
@@ -2020,7 +2101,7 @@ function loop(now){
   if(dynTimer>2.5&&playing){dynTimer=0;const old=dynScale;if(fpsShow<42)dynScale=Math.max(0.55,dynScale-0.1);else if(fpsShow>58&&dynScale<1)dynScale=Math.min(1,dynScale+0.05);if(old!==dynScale)resizePost();}
   requestAnimationFrame(loop);
 }
-window.__debug={pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
+window.__debug={get rig(){return charRig;},pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
 init();
 </script>
 
