@@ -118,12 +118,13 @@ for ext, ctype in FORCED_TYPES.items():
 def game_version():
     """Date of the newest game file (archives keep the commit time) and the commit id."""
     newest = 0.0
-    for base, _dirs, files in os.walk("src"):
-        for f in files:
-            try:
-                newest = max(newest, os.path.getmtime(os.path.join(base, f)))
-            except OSError:
-                pass
+    for top in ("src", "special"):
+        for base, _dirs, files in os.walk(top):
+            for f in files:
+                try:
+                    newest = max(newest, os.path.getmtime(os.path.join(base, f)))
+                except OSError:
+                    pass
     for f in ("index.html", "server.py"):
         try:
             newest = max(newest, os.path.getmtime(f))
@@ -224,7 +225,7 @@ def build_id():
         return _BUILD["id"]
     import hashlib
     h = hashlib.sha1()
-    for top in ("src", "vendor"):
+    for top in ("src", "vendor", "special"):
         for base, dirs, files in os.walk(top):
             dirs.sort()
             for f in sorted(files):
@@ -245,31 +246,42 @@ def build_id():
     return _BUILD["id"]
 
 
-_LATEST = {"sha": "", "at": 0.0}
+_LATEST = {"sha": "", "at": 0.0, "ok": False}
+_LATEST_LOCK = threading.Lock()
 
 
 def latest_version(fresh=False):
-    """The newest version's commit id on GitHub (7 letters, '' if unknown), checked at most every 10 min
-    (fresh: at most every 20 s — the menu as it opens). Only when the launcher started the game:
-    it can get the new version at once (/__launcher/update)."""
+    """The published branch head, checked only when the launcher can install it."""
     if not os.environ.get("ZNS_LAUNCHER"):
         return ""
-    if time.time() - _LATEST["at"] < (20 if fresh else 600):
-        return _LATEST["sha"]
-    _LATEST["at"] = time.time()
-    try:
-        req = urllib.request.Request(os.environ.get("ZNS_UPDATE_REFS") or "https://github.com/DmytroMolodozhonov/working-hand/info/refs?service=git-upload-pack",
-                                     headers={"User-Agent": "Volshebstvo"})
-        with urllib.request.urlopen(req, timeout=8) as r:
-            text = r.read().decode("utf-8", "replace")
-        for line in text.splitlines():
-            if line.rstrip().endswith(" refs/heads/main-fbxy0j"):
-                sha = line.split(" ")[0][-40:]
-                _LATEST["sha"] = sha[:7]
-                break
-    except Exception:  # noqa: BLE001  (no internet: nothing to say)
-        pass
-    return _LATEST["sha"]
+    with _LATEST_LOCK:
+        ttl = (12 if fresh else 45) if _LATEST["ok"] else 5
+        if time.monotonic() - _LATEST["at"] < ttl and _LATEST["at"]:
+            return _LATEST["sha"] if _LATEST["ok"] else ""
+        repo = "DmytroMolodozhonov/working-hand"
+        branch = "main-fbxy0j"
+        refs = os.environ.get("ZNS_UPDATE_REFS") or f"https://github.com/{repo}/info/refs?service=git-upload-pack"
+        api = os.environ.get("ZNS_UPDATE_API") or f"https://api.github.com/repos/{repo}/branches/{branch}?zns_check={time.time_ns()}"
+        headers = {"User-Agent": "Volshebstvo", "Cache-Control": "no-cache", "Pragma": "no-cache"}
+        sha = ""
+        try:
+            with urllib.request.urlopen(urllib.request.Request(refs, headers=headers), timeout=5) as r:
+                text = r.read().decode("utf-8", "replace")
+            hit = re.search(r"([0-9a-f]{40}) refs/heads/" + re.escape(branch) + r"(?=\s|$)", text)
+            if hit:
+                sha = hit[1]
+        except (OSError, ValueError):
+            pass
+        if not sha:
+            try:
+                with urllib.request.urlopen(urllib.request.Request(api, headers=headers), timeout=5) as r:
+                    candidate = json.load(r)["commit"]["sha"]
+                if isinstance(candidate, str) and re.fullmatch("[0-9a-f]{40}", candidate):
+                    sha = candidate
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+        _LATEST.update(sha=sha, ok=bool(sha), at=time.monotonic())
+        return sha
 
 
 def update_desktop_launcher():
@@ -506,7 +518,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         # Game code changes between versions — never serve stale scripts.
         path = urlparse(self.path).path
-        if path.endswith((".js", ".mjs", ".html", ".css", ".json")) or path == "/":
+        if path in ("/api/update", "/api/version"):
+            self.send_header("Cache-Control", "no-store")
+        elif path.endswith((".js", ".mjs", ".html", ".css", ".json")) or path == "/":
             self.send_header("Cache-Control", "no-cache")
         # A cross-origin-isolated page: the villagers' voices and neural net may use several
         # processor cores (threads need SharedArrayBuffer) — their answers come several times sooner.
@@ -735,7 +749,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, {"zns": "zns-game", "boot": BOOT})
         if path == "/api/update":
             fresh = "fresh" in parse_qs(urlparse(self.path).query)
-            return self._json(200, {"have": game_version()["sha"], "latest": latest_version(fresh)})
+            current = game_version()
+            latest = latest_version(fresh)
+            return self._json(200, {"have": current["sha"], "latest": latest[:7], "latestFull": latest})
         if path == "/api/logs":
             return self._json(200, {"logs": read_logs(), "launcher": bool(os.environ.get("ZNS_LAUNCHER"))})
         if path == "/api/alive":

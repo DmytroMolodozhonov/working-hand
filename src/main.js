@@ -624,12 +624,22 @@ fetch('/api/version').then((r) => r.json()).then((v) => {
     if (!v || !v.date) return;
     const el = $('game-version-top');
     if (el) el.innerHTML = `Версия от <b>${v.date}</b>` + (v.sha ? ` <span class="ver-sha">(${v.sha})</span>` : '');
-    // a newer version is out: it is downloaded right now (a loading window), then the menu opens again
-    fetch('/api/update?fresh=1').then((r) => r.json()).then(async (u) => {
-        if (game?.active || starting || rejoinNow || creativeRestartNow) return; // (never in the middle of a game)
-        await updateIfNewer(u);
-    }).catch(() => {});
+    checkMenuUpdate();
 }).catch(() => {});
+
+let menuVersionCheck = false;
+async function checkMenuUpdate() {
+    if (menuVersionCheck || document.hidden || game?.active || starting || net.active || rejoinNow || creativeRestartNow) return;
+    menuVersionCheck = true;
+    try {
+        const res = await fetch('/api/update?fresh=1', { cache: 'no-store' });
+        const u = await res.json();
+        if (!game?.active && !starting && !net.active) await updateIfNewer(u);
+    } catch (e) { /* the next check retries */ }
+    finally { menuVersionCheck = false; }
+}
+setInterval(checkMenuUpdate, 16000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkMenuUpdate(); });
 
 // ------------------------------------------------------------------ voice
 const voiceToggleBtn = $('voice-toggle-btn');

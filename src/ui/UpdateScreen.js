@@ -8,7 +8,9 @@
  */
 
 const REJOIN = 'zns-rejoin';
-const TRIED = 'zns-update-tried';
+const DONE = 'zns-update-installed';
+let updating = false;
+let retryAt = 0;
 
 /** Can this game download a version while it runs? */
 export async function canUpdate() {
@@ -79,15 +81,22 @@ export async function runUpdate(sha = '', title = 'Скачиваю новую �
  * same version in a row — no reload loop if something goes wrong.)
  */
 export async function updateIfNewer(info) {
-    if (!info?.latest || !info.have || info.latest === info.have) return false;
+    if (!info?.latest || !info.have || info.latest === info.have || updating || Date.now() < retryAt) return false;
     if (pendingRejoin(false)) return false;
+    const target = info.latestFull || info.latest;
+    try { if (sessionStorage.getItem(DONE) === target) return false; } catch (e) { /* ignore */ }
+    updating = true;
     try {
-        if (sessionStorage.getItem(TRIED) === info.latest) return false;
-        sessionStorage.setItem(TRIED, info.latest);
-    } catch (e) { /* ignore */ }
-    if (!(await canUpdate())) return false;
-    if (await runUpdate('', 'Вышла новая версия — скачиваю…')) { location.reload(); return true; }
-    return false;
+        if (await canUpdate() && await runUpdate(target, 'Вышла новая версия — скачиваю…')) {
+            try { sessionStorage.setItem(DONE, target); } catch (e) { /* ignore */ }
+            location.reload();
+            return true;
+        }
+        retryAt = Date.now() + 8000;
+        return false;
+    } finally {
+        updating = false;
+    }
 }
 
 /** Remember to join this server again after the page reloads with its version. */

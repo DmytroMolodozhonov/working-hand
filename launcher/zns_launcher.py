@@ -180,8 +180,11 @@ def parse_refs(text, branch=BRANCH):
     return ""
 
 
-def http_get(url, timeout=20):
-    req = urllib.request.Request(url, headers={"User-Agent": "Volshebstvo-launcher"})
+def http_get(url, timeout=20, fresh=False):
+    headers = {"User-Agent": "Volshebstvo-launcher"}
+    if fresh:
+        headers.update({"Cache-Control": "no-cache", "Pragma": "no-cache"})
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
@@ -189,13 +192,16 @@ def http_get(url, timeout=20):
 def latest_version():
     """The newest version's commit id on GitHub ('' when it can't be learned)."""
     try:
-        sha = parse_refs(http_get(refs_url()).decode("utf-8", "replace"))
+        sha = parse_refs(http_get(refs_url(), timeout=5, fresh=True).decode("utf-8", "replace"))
         if sha:
             return sha
     except Exception as e:  # noqa: BLE001
         log(f"  (версия через git refs не получена: {e})")
     try:
-        sha = json.loads(http_get(api_url()).decode("utf-8"))["commit"]["sha"]
+        url = api_url()
+        if not env("ZNS_UPDATE_API"):
+            url += f"?zns_check={time.time_ns()}"
+        sha = json.loads(http_get(url, timeout=5, fresh=True).decode("utf-8"))["commit"]["sha"]
         return sha if isinstance(sha, str) else ""
     except Exception as e:  # noqa: BLE001
         log(f"  (версия через GitHub API не получена: {e})")
