@@ -903,6 +903,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 line = str(data.get("line", ""))[:2000].replace("\r", " ").replace("\n", " ")
                 if line:
                     print(f"  [{tag or 'Игра'}] {line}")
+                    if tag == "Камера" and is_own_page(self.client_address[0], self.headers):
+                        append_game_log(time.strftime("%H:%M:%S") + f" · [Камера] {line}\n", False)
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/logs/send":

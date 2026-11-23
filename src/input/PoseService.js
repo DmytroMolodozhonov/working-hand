@@ -472,7 +472,6 @@ export class PoseService {
     _startNative(waitMs = 40000) {
         this._cancelNativeOpen?.();
         this._nativeCapture = null; this._nativeTs = null;
-        this._cameraFrameAt = performance.now();
         return new Promise((resolve) => {
             this._status('Нейросеть камеры (отдельная программа) запускается...');
             const hands = this.handsWanted;
@@ -494,8 +493,12 @@ export class PoseService {
             }, waitMs);
             es.onmessage = (ev) => {
                 if (this._native !== es && this._cancelNativeOpen !== cancel) return;
-                finish(true);
-                this._cameraFrameAt = performance.now();
+                if (this._cancelNativeOpen === cancel) {
+                    let first;
+                    try { first = JSON.parse(ev.data); } catch (e) { return; }
+                    if (!Number.isFinite(first?.t) || Date.now() - first.t > 500) return;
+                    finish(true);
+                }
                 if (this._nativeData != null) this.stats.nativeSkipped = (this.stats.nativeSkipped || 0) + 1;
                 this._nativeData = ev.data;
                 if (this._nativeTimer) return;
@@ -512,7 +515,7 @@ export class PoseService {
                 let msg = '';
                 try { msg = JSON.parse(ev.data).error; } catch (e) { /* ignore */ }
                 this.stats.nativeWhy = msg || 'ошибка программы';
-                console.warn('[PoseService] camera network program:', this.stats.nativeWhy);
+                this._captureLog('Ошибка программы камеры: ' + this.stats.nativeWhy);
                 es.close();
                 cancel();
             });
@@ -538,7 +541,10 @@ export class PoseService {
         if (this._nativeTs != null && ts <= this._nativeTs) { this.stats.nativeRejected = (this.stats.nativeRejected || 0) + 1; return; }
         this._nativeCapture = Number.isFinite(r.t) ? r.t : null;
         this._nativeTs = ts;
-        this.stats.lastResultAt = performance.now();
+        if (this._captureLost) this._captureRestored();
+        this._cameraFrameAt = now;
+        this._nativeRecoveryFailures = 0;
+        this.stats.lastResultAt = now;
         if (r.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + r.cost * 0.1 : r.cost;
         this.stats.backend = r.backend;
         this.stats.handsEngine = r.handsEngine || 'mp';
@@ -568,6 +574,7 @@ export class PoseService {
         if (this._captureWatch) return;
         this._cameraFrameAt = performance.now();
         this._captureWatch = setInterval(() => this._checkCapture(), 1000);
+        this._captureLog(this.native ? 'Активен захват через программу камеры' : 'Активен захват через браузер');
     }
 
     async _checkCapture(now = performance.now()) {
@@ -581,30 +588,68 @@ export class PoseService {
         this._recovering = true;
         const epoch = this._captureEpoch;
         this._status('Камера потеряла связь — подключаю снова…');
-        console.warn('[PoseService] camera disconnected', { native: !!this.native, ended, silentMs: Math.round(now - this._cameraFrameAt) });
+        this._notice('Камера потеряла связь — подключаю снова…');
+        this._captureLost = true;
+        const mode = this.native ? 'программа' : 'браузер';
+        this._captureLog(`Потеря камеры (${mode}): ${ended ? 'поток закрыт' : 'нет свежих кадров'}, ${Math.round(now - this._cameraFrameAt)} мс`);
         try {
             if (this.native) {
                 this._native?.close();
                 this._native = null;
-                if (!await this._startNative(14000)) return;
-            } else {
-                if (this.stream) for (const t of this.stream.getTracks()) t.stop();
-                this.stream = null;
-                const stream = await this._openCamera();
-                if (!this.isRunning || epoch !== this._captureEpoch) {
-                    for (const t of stream.getTracks()) t.stop();
-                    return;
+                const opened = await this._startNative(12000);
+                if (!this.isRunning || epoch !== this._captureEpoch) return;
+                if (opened) {
+                    this._cameraFrameAt = performance.now();
+                    return; // The first fresh, accepted frame completes recovery.
                 }
-                this._bindBrowserStream(stream);
-                this._pump();
+                this._nativeRecoveryFailures = (this._nativeRecoveryFailures || 0) + 1;
+                if (this._nativeRecoveryFailures < 2) return;
+                this._captureLog('Программа камеры не восстановилась. Переключение на браузер.');
+                const quality = this.native.quality;
+                await this._startBrowserModels(quality);
+                if (!this.isRunning || epoch !== this._captureEpoch) return;
             }
-            this._status('Камера снова работает');
+            if (this.stream) for (const t of this.stream.getTracks()) t.stop();
+            this.stream = null;
+            const stream = await this._openCamera(true);
+            if (!this.isRunning || epoch !== this._captureEpoch) {
+                for (const t of stream.getTracks()) t.stop();
+                return;
+            }
+            this._bindBrowserStream(stream);
+            this._pump();
+            this._captureRestored();
         } catch (e) {
-            console.warn('[PoseService] camera recovery:', e?.message || e);
+            this._captureLog('Переподключение: ' + (e?.name || 'Error') + ' ' + (e?.message || e));
         } finally {
             this._captureRetryAt = performance.now() + CAMERA_RETRY_MS;
             this._recovering = false;
         }
+    }
+
+    _captureRestored() {
+        this._captureLost = false;
+        this._status('Камера снова работает');
+        this._notice('Камера снова работает');
+        this._captureLog('Камера восстановлена: ' + (this.native ? 'программа' : 'браузер'));
+    }
+
+    _captureLog(line) {
+        console.info('[PoseService]', line);
+        const url = new URL('api/gamelog', this.baseUrl);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag: 'Камера', line }), keepalive: true }).catch(() => {});
+    }
+
+    async _startBrowserModels(quality) {
+        try {
+            await this._startHolistic(quality, this._engine === 'classic-main');
+        } catch (e) {
+            this._captureLog('Браузерный Holistic недоступен: ' + (e?.message || e));
+            await this._startModels(quality);
+        }
+        this.native = null;
     }
 
     _bindBrowserStream(stream) {
@@ -630,8 +675,7 @@ export class PoseService {
             if (!this.handsWanted.startsWith('v5')) this._notice(`Нейросеть камеры работает в браузере — игра медленнее (${this.stats.nativeWhy || 'программа камеры не запустилась'})`);
             if (this.handsWanted.startsWith('v5')) this._notice(`Кисти V5 не запустились (нет программы камеры: ${this.stats.nativeWhy || 'ошибка'}) — работают кисти V4`);
             const q = this.native.quality;
-            this.native = null;
-            await this._startHolistic(q, false);
+            await this._startBrowserModels(q);
             if (epoch !== this._captureEpoch) return;
         }
         if (!this.stream) {
@@ -662,7 +706,7 @@ export class PoseService {
      * virtual or broken default camera is common). A camera that opens but
      * shows nothing is skipped too. Throws the most telling error.
      */
-    async _openCamera() {
+    async _openCamera(recovering = false) {
         if (!navigator.mediaDevices?.getUserMedia) {
             throw Object.assign(new Error('Браузер не даёт камеру на этом адресе'), { name: 'InsecureError' });
         }
@@ -677,7 +721,21 @@ export class PoseService {
         for (let i = 0; i < tries.length; i++) {
             let stream = null;
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: tries[i], audio: false });
+                const request = navigator.mediaDevices.getUserMedia({ video: tries[i], audio: false });
+                if (recovering) {
+                    let expired = false, timeout;
+                    const bounded = request.then((candidate) => {
+                        if (expired) for (const track of candidate.getTracks()) track.stop();
+                        return candidate;
+                    });
+                    const limit = new Promise((_, reject) => {
+                        timeout = setTimeout(() => {
+                            expired = true;
+                            reject(Object.assign(new Error('Драйвер камеры не ответил'), { name: 'CaptureTimeoutError' }));
+                        }, 6000);
+                    });
+                    try { stream = await Promise.race([bounded, limit]); } finally { clearTimeout(timeout); }
+                } else stream = await request;
                 if (await this._attach(stream)) {
                     const id = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
                     if (id) { try { localStorage.setItem('zns-camera-id', id); } catch (e) { /* ignore */ } }
@@ -687,7 +745,7 @@ export class PoseService {
             } catch (e) {
                 lastErr = e;
                 // Forbidden by the browser or Windows: other cameras won't help
-                if (e.name === 'NotAllowedError' || e.name === 'SecurityError') throw e;
+                if (e.name === 'NotAllowedError' || e.name === 'SecurityError' || e.name === 'CaptureTimeoutError') throw e;
             }
             if (stream) for (const t of stream.getTracks()) t.stop();
             if (i === tries.length - 1 && !listed) {
@@ -705,10 +763,13 @@ export class PoseService {
         const v = this.videoElement;
         v.srcObject = stream;
         v.muted = true;
-        await v.play().catch(() => {});
-        const t0 = performance.now();
-        while (!(v.videoWidth > 0) && performance.now() - t0 < 4000) await new Promise((r) => setTimeout(r, 100));
-        return v.videoWidth > 0;
+        v.play().catch(() => {});
+        const deadline = performance.now() + 4000;
+        while (performance.now() < deadline && v.srcObject === stream) {
+            if (v.readyState >= 2 && v.videoWidth > 0 && v.currentTime > 0) return true;
+            await new Promise((r) => setTimeout(r, 75));
+        }
+        return false;
     }
 
     /** Use another camera (from the camera panel or the settings). */
@@ -762,6 +823,8 @@ export class PoseService {
         this._captureEpoch = (this._captureEpoch || 0) + 1;
         clearInterval(this._captureWatch);
         this._captureWatch = null;
+        this._captureLost = false;
+        this._nativeRecoveryFailures = 0;
         this._cancelNativeOpen?.();
         if (this._native) { this._native.close(); this._native = null; }
     }

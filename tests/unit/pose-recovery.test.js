@@ -70,3 +70,35 @@ test('leaving the page cancels an EventSource still waiting for the first image'
         assert.ok(!svc._native);
     } finally { globalThis.EventSource = eventBefore; }
 });
+
+test('after two failed native reconnects the active game switches to browser capture', async () => {
+    const documentBefore = globalThis.document;
+    globalThis.document = { hidden: false };
+    try {
+        const svc = new PoseService();
+        svc.isRunning = true;
+        svc.native = { quality: 2 };
+        const browser = camera('live');
+        let attempts = 0, pumped = 0;
+        svc._startNative = async () => { attempts++; return false; };
+        svc._startBrowserModels = async (quality) => { assert.equal(quality, 2); svc.native = null; };
+        svc._openCamera = async () => browser;
+        svc._pump = () => pumped++;
+        await svc._checkCapture(10000);
+        assert.equal(svc.stream, null);
+        svc._captureRetryAt = 0;
+        await svc._checkCapture(20000);
+        assert.equal(attempts, 2);
+        assert.equal(svc.stream, browser);
+        assert.equal(pumped, 1);
+        assert.equal(svc.isRunning, true);
+    } finally { globalThis.document = documentBefore; }
+});
+
+test('buffered native poses do not mask loss of fresh frames', () => {
+    const svc = new PoseService();
+    svc._cameraFrameAt = 123;
+    svc._onNative({ t: Date.now() - 1200 });
+    assert.equal(svc._cameraFrameAt, 123);
+    assert.equal(svc.stats.nativeRejected, 1);
+});

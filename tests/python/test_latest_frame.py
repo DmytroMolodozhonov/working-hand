@@ -49,6 +49,19 @@ class LatestFrame(unittest.TestCase):
         finally:
             g.close()
 
+    def test_driver_read_error_marks_capture_dead(self):
+        class BrokenCamera:
+            def read(self):
+                raise OSError("device disconnected")
+
+        grab = pose_native._LatestFrame(BrokenCamera(), threading.Event())
+        try:
+            grab.thread.join(timeout=1)
+            self.assertTrue(grab.dead)
+            self.assertEqual(grab.next(timeout=0), (False, None))
+        finally:
+            grab.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -96,7 +96,14 @@ class _LatestFrame:
     def _run(self):
         _boost_thread()  # (the camera's reader before the villagers' network and the voice: the hands wait for it)
         while not self.stop.is_set() and not self.outer.is_set():
-            ok, frame = self.cap.read()
+            try:
+                ok, frame = self.cap.read()
+            except Exception as e:  # noqa: BLE001
+                print(f"  [Камера] Ошибка чтения драйвера: {type(e).__name__}: {e}", flush=True)
+                with self.cond:
+                    self.dead = True
+                    self.cond.notify_all()
+                return
             now = time.time()
             with self.cond:
                 if ok and frame is not None:
@@ -234,6 +241,8 @@ class NativePose:
         self.last_frame = None
         self.hands_mode = ""  # "" — MediaPipe's own hands; "v5" — hand_v5.py (Settings → V5)
         self._cam_hd = False  # (the camera opened at 1280×720)
+        self._camera_api = None
+        self.reopens = 0
         self.game_fps = 0.0  # the game's frames a second (pace()), and when it said so
         self.game_fps_at = 0.0
         self._hd_slow = False
@@ -281,6 +290,8 @@ class NativePose:
             "error": self.error,
             "backend": self.backend,
             "camera": self.camera_index,
+            "camera_api": self._camera_api,
+            "reopens": self.reopens,
             "fps": round(self.fps, 1),
             "cost": round(self.cost, 1),
             "size": [self.width, self.height],
@@ -342,7 +353,7 @@ class NativePose:
         return 1.0 / max(12.0, self.game_fps + 4)
 
     # ------------------------------------------------------------ the camera
-    def _open_camera(self):
+    def _open_camera(self, alternate=False):
         cv2 = self._cv2
         # (tests: a video file in place of the camera)
         if os.environ.get("ZNS_CAMERA_FILE"):
@@ -354,7 +365,12 @@ class NativePose:
                 return cap
             return None
         # Windows: DirectShow opens most webcams fastest; elsewhere the default
-        api = cv2.CAP_DSHOW if sys.platform.startswith("win") else cv2.CAP_ANY
+        if sys.platform.startswith("win"):
+            api = cv2.CAP_DSHOW
+            if alternate:
+                api = cv2.CAP_MSMF if self._camera_api != cv2.CAP_MSMF else cv2.CAP_DSHOW
+        else:
+            api = cv2.CAP_ANY
         order = [self.camera_index] if self.camera_index is not None else []
         order += [i for i in range(4) if i not in order]
         for i in order:
@@ -378,7 +394,7 @@ class NativePose:
                 if ok and frame is not None and frame.size:
                     break
                 time.sleep(0.05)
-            if ok and hd and frame.shape[1] > 800:
+            if ok and frame is not None and frame.size and hd and frame.shape[1] > 800:
                 # a camera that gives 720p only slowly (< 20 a second): back to 640×480 — the hands
                 # would lag more than the pixels help
                 t = time.perf_counter()
@@ -388,8 +404,9 @@ class NativePose:
                     print("  [Камера] 1280×720 у этой камеры медленно — беру 640×480")
                     self._hd_slow = True
                     cap.release()
-                    return self._open_camera()
-            if ok:
+                    return self._open_camera(alternate)
+            if ok and frame is not None and frame.size:
+                self._camera_api = api
                 self.camera_index = i
                 self.height, self.width = frame.shape[:2]
                 self._cam_hd = hd
@@ -400,7 +417,7 @@ class NativePose:
             # «no camera» because of V5 (the game would fall back to the browser's slow network)
             print("  [Камера] 1280×720 не открылась — беру 640×480")
             self._hd_slow = True
-            return self._open_camera()
+            return self._open_camera(alternate)
         return None
 
     def _want_hd(self):
@@ -593,6 +610,7 @@ class NativePose:
             light = None if os.environ.get("ZNS_NO_LIGHT") else Light(cv2, np)
             last_body = None
             last_picture = time.monotonic()
+            recovery_tries = 0
             while not self._stop.is_set():
                 if grab:
                     ok, frame = grab.next(timeout=1.0)
@@ -604,24 +622,41 @@ class NativePose:
                         ok2, f2 = grab.next(timeout=0)
                         if ok2:
                             frame = f2
+                lost = grab and (grab.dead or time.monotonic() - last_picture > 4)
+                size_changed = grab and self._want_hd() != self._cam_hd
+                if lost or size_changed:
+                    if lost:
+                        recovery_tries += 1
+                        self.reopens += 1
+                        print(f"  [Камера] Нет кадров. Перезапуск №{recovery_tries}, устройство {self.camera_index}, драйвер {self._camera_api}", flush=True)
+                        if self._cam_hd:
+                            self._hd_slow = True
+                    self.last_frame = None
+                    grab.close()
+                    grab = None
+                    cap.release()
+                    cap = None
+                    if self._stop.wait(0.25):
+                        break
+                    cap = self._open_camera(alternate=lost and recovery_tries > 1)
+                    if cap is None and lost and recovery_tries == 1:
+                        cap = self._open_camera(alternate=True)
+                    if cap is None or recovery_tries > 3:
+                        raise RuntimeError("камера не открылась после пропажи кадров")
+                    grab = _LatestFrame(cap, self._stop)
+                    print(f"  [Камера] Захват открыт: {self.width}x{self.height}, драйвер {self._camera_api}")
+                    last_picture = time.monotonic()
+                    t_last = 0.0
+                    continue
                 if not ok or frame is None:
                     if os.environ.get("ZNS_CAMERA_FILE"):
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # (the test video: round again)
-                    if grab and (grab.dead or time.monotonic() - last_picture > 8):
-                        raise RuntimeError("камера перестала отдавать картинку")
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     time.sleep(0.01)
                     continue
+                # A single frame after reopening does not reset the retry count.
+                if recovery_tries and grab and grab.seq >= 20:
+                    recovery_tries = 0
                 last_picture = time.monotonic()
-                # V5 switched on or off: the camera again at its size (720p for V5)
-                if grab and self._want_hd() != self._cam_hd:
-                    grab.close()
-                    cap.release()
-                    cap = self._open_camera()
-                    if cap is None:
-                        raise RuntimeError("камера не открылась заново")
-                    grab = _LatestFrame(cap, self._stop)
-                    print(f"  [Камера] камера {self.width}x{self.height}")
-                    continue
                 t0 = t_last = time.perf_counter()
                 # (when the picture came from the camera — the game measures the hands' whole delay from it; it may have
                 # waited here while the networks worked on the one before: `wait`)
@@ -699,7 +734,7 @@ class NativePose:
         except Exception as e:  # noqa: BLE001
             self.state = "error"
             self.error = str(e)
-            print(f"  [Камера] нейросеть не запустилась: {e}")
+            print(f"  [Камера] захват прерван: {type(e).__name__}: {e}", flush=True)
         finally:
             if grab is not None:
                 grab.close()
