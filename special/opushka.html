@@ -82,7 +82,9 @@ body.touch.playing #joy{display:block}
 <div id="hud"><span id="hudL"></span><span id="hudR"></span></div>
 <div id="joy"><i></i></div>
 
+<script src="../vendor/peerjs/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"../vendor/three-r170/three.module.js","three/addons/":"../vendor/three-r170/addons/"}}</script>
+<div id="mpHud" hidden style="position:fixed;left:16px;top:16px;z-index:30;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;border-radius:8px;background:rgba(10,12,8,.62);color:#efe6cf;font:13px/1.4 Georgia,serif;pointer-events:none"></div>
 <video id="zns-webcam" playsinline muted hidden></video><video id="zns-preview" playsinline muted hidden></video>
 <script type="module">
 import * as THREE from 'three';
@@ -90,9 +92,15 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 // (the game's hands in this world — the same camera and the same arm solving as the game: special/opushka-hands.js)
+import { OpushkaNet } from './opushka-net.js';
 import { ZnsArms } from './opushka-hands.js';
 import { wandModel } from '../src/game/WandModel.js';
 const zns = new ZnsArms(); window.__znsArms = zns; // (tests and the camera check reach it here)
+// (multiplayer — special/opushka-net.js: the game's network; friends are whole wizards here, moved by their poses)
+const mpNet = new OpushkaNet({ THREE, get scene() { return scene; }, player: () => player, arms: zns, rig: () => charRig, buildAvatar: () => buildAvatar(),
+  animateAvatar: (r, dt, sp, P) => animateAvatar(r, dt, sp, P), get pigs() { return pigs; }, groundH: (x, z) => groundH(x, z),
+  setTod: (k) => setTod(k), tod: () => todKey, hud: (t) => { const el = document.getElementById('mpHud'); if (el) { el.textContent = t; el.hidden = !t; } } });
+window.__mpNet = mpNet;
 
 const $ = s => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -1149,7 +1157,12 @@ function primAABB(p){const m=(p.k||0)+0.006;let mn,mx;
   else{const e=p.R+p.r+m;mn=new V3(p.c.x-e,p.c.y-p.r-m,p.c.z-e);mx=new V3(p.c.x+e,p.c.y+p.r+m,p.c.z+e);}
   return [mn,mx];}
 function evalSDF(list,x,y,z){let d=1e9;for(let i=0;i<list.length;i++){const p=list[i],pd=primD(p,x,y,z);d=p.sub?-smin(-d,pd,p.k||0):smin(d,pd,p.k||0);}return d;}
+const _polyMemo=new Map(); // (23.11, multiplayer: every wizard has the same body — the surface is found once, each next one takes a copy)
 async function polygonize(prims,h){
+  const key=h+'|'+JSON.stringify(prims,(k,v)=>k==='_b'?undefined:v);const got=_polyMemo.get(key);if(got)return got.clone();
+  const g=await polygonizeRaw(prims,h);_polyMemo.set(key,g.clone());return g;
+}
+async function polygonizeRaw(prims,h){
   for(const p of prims)p._b=primAABB(p);
   const mn=new V3(1e9,1e9,1e9),mx=new V3(-1e9,-1e9,-1e9);for(const p of prims){if(p.sub)continue;mn.min(p._b[0]);mx.max(p._b[1]);}
   mn.subScalar(h*2);mx.addScalar(h*2);
@@ -1654,7 +1667,7 @@ function animateMannequin(c,dt,speed,P){
   c.blinkT-=dt;if(c.blinkT<=0){c.blink=1;c.blinkT=2.5+Math.random()*4;}c.blink=Math.max(0,c.blink-dt*7);
   const bl=Math.sin(c.blink*Math.PI);for(const l of c.lids)l.rotation.x=-0.42+bl*0.9;
   c.crys.material.emissiveIntensity=3+Math.sin(t*2.1)*0.6+Math.sin(t*7.3)*0.2;c.crys.rotation.y=t*0.6;
-  charRoot.updateMatrixWorld(true);
+  (c.holder||charRoot).updateMatrixWorld(true);
   const QcHips=new THREE.Quaternion().setFromEuler(_e.set(hipE[0],hipE[1],hipE[2],'YXZ'));
   const QcSpine=QcHips.clone().multiply(B.spine.quaternion),QcChest=QcSpine.clone().multiply(B.chest.quaternion);
   // ---------- legs ----------
@@ -1713,11 +1726,11 @@ function animateMannequin(c,dt,speed,P){
     aimBone(c,'ft'+K,toC(fdir.clone().add(new V3(0,-0.26,0).applyAxisAngle(fr,pitch))),toC(fpole),QcSn);
   }
   // ---------- arms ----------
-  charRoot.updateMatrixWorld(true);
-  zns.solve(U.uTime.value,dt);
+  (c.holder||charRoot).updateMatrixWorld(true);
+  (c.arms||zns).solve(U.uTime.value,dt);
   for(const K of ['L','R']){const s=K==='L'?1:-1;const H=c.hands[K];const staffHand=K==='R';
     // the player's own arm from the camera (the game's ArmSolver): the bones along it; the hand turned by its own points
-    const Z=zns.dirs[K];
+    const Z=(c.arms||zns).dirs[K];
     if(Z.ok){const u=new V3(Z.u.x,Z.u.y,Z.u.z),f=new V3(Z.f.x,Z.f.y,Z.f.z);
       let pole=f.clone().sub(u.clone().multiplyScalar(f.dot(u)));pole=pole.lengthSq()>0.0025?pole.normalize().negate():new V3(0,0,-1);
       const QcUa=aimBone(c,'ua'+K,u,pole,QcChest);const QcFa=aimBone(c,'fa'+K,f,pole,QcUa);
@@ -1744,7 +1757,7 @@ function animateMannequin(c,dt,speed,P){
     B['hd'+K].quaternion.setFromEuler(_e.set(staffHand?-0.2:0.15+run*0.2,s*-0.1,staffHand?0.35:s*0.05,'XYZ'));
   }
   bendFingers(c,dt);
-  charRoot.updateMatrixWorld(true);
+  (c.holder||charRoot).updateMatrixWorld(true);
   updateCape(c,dt,P);
 }
 /** The fingers: each joint's bend (rad) from the camera's hand points (ZnsArms.curl), else the right hand round the wand, the left at rest.
@@ -1752,7 +1765,7 @@ function animateMannequin(c,dt,speed,P){
 const _fq=new THREE.Quaternion(),_fz=new V3(0,0,1),_ft=new V3(0.35,0.25,1).normalize();
 function bendFingers(c,dt){
   if(!c.fingers)return;
-  for(const K of ['L','R']){const F=c.fingers[K];if(!F)continue;const Z=zns.dirs[K];
+  for(const K of ['L','R']){const F=c.fingers[K];if(!F)continue;const Z=(c.arms||zns).dirs[K];
     const want=F.grip?F.grip:Z.ok&&Z.curl?Z.curl:AT_REST,k=1-Math.exp(-dt*18); // (the wand's hand holds the wand: its fingers stay on the handle)const k=1-Math.exp(-dt*18);
     for(let f=0;f<5;f++)for(let j=0;j<3;j++){const i=f*3+j;F.cur[i]+=(want[i]-F.cur[i])*k;
       _fq.setFromAxisAngle(f===4?_ft:_fz,-F.s*F.cur[i]*(f===4?0.8:1));F.hb['f'+f+j].quaternion.copy(_fq);}}
@@ -1843,6 +1856,9 @@ function animateCustom(c,dt,speed,P){
 }
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('opushka',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 async function restoreCharacter(){try{const db=await idb();const files=await new Promise((res)=>{const q=db.transaction('f').objectStore('f').get('char');q.onsuccess=()=>res(q.result);q.onerror=()=>res(null);});if(files&&files.length)await loadCustomCharacter(files);}catch(e){}}
+/** A friend's wizard (multiplayer): the same body as mine, with its own bones, cape, fingers and wand; P — his pose from the net. */
+async function buildAvatar(){const rig=await buildMannequin();const holder=new THREE.Group();holder.add(rig.root);rig.holder=holder;scene.add(holder);return rig;}
+function animateAvatar(rig,dt,speed,P){rig.holder.position.copy(P.pos);rig.holder.rotation.y=P.faceYaw;animateMannequin(rig,dt,speed,P);}
 async function buildCharacter(){charRig=await buildMannequin();charRoot.add(charRig.root);scene.add(charRoot);}
 function updateCharacter(dt,speed){
   if(charCustom&&charRig)charRig.cape.mesh.visible=false;
@@ -1944,12 +1960,20 @@ function makePig(seed){
 }
 function pickFlyTarget(pg){const a=pg.r()*Math.PI*2,d=pg.r()*55;pg.target.set(MEADOW[0]+Math.cos(a)*d,0,MEADOW[1]+Math.sin(a)*d*0.85);pg.target.y=groundH(pg.target.x,pg.target.z)+5+pg.r()*12;}
 async function buildPigs(){await buildPigShared();for(let i=0;i<8;i++){const pg=makePig(300+i);pickFlyTarget(pg);pigs.push(pg);}}
+/** A guest's pig: where the host's pig is (its place, turn and what it does), reached smoothly; → its wings' beat. */
+function netPig(pg,dt){const N=pg.net,k=1-Math.exp(-dt*6);const px=pg.pos.x,py=pg.pos.y,pz=pg.pos.z;
+  pg.pos.x+=(N.x-pg.pos.x)*k;pg.pos.y+=(N.y-pg.pos.y)*k;pg.pos.z+=(N.z-pg.pos.z)*k;pg.yaw+=wrapA(N.yaw-pg.yaw)*k;
+  if(dt>0)pg.vel.set((pg.pos.x-px)/dt,(pg.pos.y-py)/dt,(pg.pos.z-pz)/dt);
+  pg.state=N.st;pg.glide=lerp(pg.glide||0,N.gl||0,k);pg.pitch=lerp(pg.pitch,clamp(-pg.vel.y*0.12,-0.5,0.5),k);spr(pg.roll,0,dt,2,0.8);
+  const ground=N.st==='ground';const hv=Math.hypot(pg.vel.x,pg.vel.z);pg.walk=lerp(pg.walk,ground&&hv>0.2?1:0,1-Math.exp(-dt*5));
+  if(ground)pg.pos.y=Math.max(pg.pos.y,groundH(pg.pos.x,pg.pos.z));
+  return ground?0:1-pg.glide*0.9;}
 function updatePigs(dt){
   if(!pigShared)return;dt=Math.min(dt,0.05);if(dt<=0)return;const t=U.uTime.value;const pp=player.pos;
   for(const pg of pigs){
-    const g=groundH(pg.pos.x,pg.pos.z);const dPlayer=Math.hypot(pg.pos.x-pp.x,pg.pos.z-pp.z);
+    const g=groundH(pg.pos.x,pg.pos.z);let dPlayer=Math.hypot(pg.pos.x-pp.x,pg.pos.z-pp.z);for(const o of mpNet.others())dPlayer=Math.min(dPlayer,Math.hypot(pg.pos.x-o.x,pg.pos.z-o.z)); // (a friend frightens a pig as I do)
     pg.stateT-=dt;let flap=0;
-    if(pg.state==='fly'||pg.state==='land'||pg.state==='takeoff'){
+    if(pg.net){flap=netPig(pg,dt);}else if(pg.state==='fly'||pg.state==='land'||pg.state==='takeoff'){
       if(pg.state==='takeoff'){pg.vel.y+=9*dt;if(pg.pos.y>g+3){pg.state='fly';pickFlyTarget(pg);}}
       const to=pg.target.clone().sub(pg.pos);const dist=to.length();
       if(pg.state==='fly'&&dist<4)pickFlyTarget(pg);
@@ -2034,7 +2058,7 @@ setSeg('qual',qKey);setSeg('tod',todKey);
 let dynScale=1;
 document.querySelectorAll('#qual button').forEach(b=>b.onclick=()=>{qKey=b.dataset.v;Q=PRESETS[qKey];setSeg('qual',qKey);if(started)applyQuality();});
 document.querySelectorAll('#tod button').forEach(b=>b.onclick=()=>setTod(b.dataset.v));
-function setTod(k){todKey=k;T=TOD[k];setSeg('tod',k);if(started)applyTOD();}
+function setTod(k){todKey=k;T=TOD[k];setSeg('tod',k);if(started)applyTOD();mpNet.todChanged(k);}
 function applyQuality(){U.uLodR.value=Q.treeR;dynScale=1;setupShadow();buildGrass();resizePost();post.rays.uniforms.uN.value=Q.rays;lastLod.set(1e9,0,1e9);}
 $('#go').onclick=()=>{audio.start();enterPlay();};
 $('#viewBtn').onclick=()=>setView(player.view==='first'?'third':'first');
@@ -2085,6 +2109,7 @@ async function init(){
     updateGrass(camera.position);updateTrees();updateShadow();
     renderer.compile(scene,camera);renderFrame();
     zns.start();
+    mpNet.start();
     prog(1,'Готово');$('#status').textContent='Лес готов. Нажми, чтобы войти.';$('#go').disabled=false;started=true;window.__ready=true;
     requestAnimationFrame(loop);
   }catch(e){console.error(e);$('#status').textContent='Ошибка: '+(e&&e.message||e)+'. Обнови страницу или выбери качество ниже.';window.__err=String(e&&e.stack||e);}
@@ -2096,6 +2121,7 @@ function loop(now){
   const speed=playing?updatePlayer(dt):(updatePlayer(0),0);
   if(camera.position.distanceTo(lastLod)>8)refreshLod(camera.position);
   updatePigs(dt);
+  mpNet.update(dt);
   updateGrass(camera.position);updateTrees();updateShadow();
   renderFrame();
   // audio & hud
@@ -2107,7 +2133,7 @@ function loop(now){
   if(dynTimer>2.5&&playing){dynTimer=0;const old=dynScale;if(fpsShow<42)dynScale=Math.max(0.55,dynScale-0.1);else if(fpsShow>58&&dynScale<1)dynScale=Math.min(1,dynScale+0.05);if(old!==dynScale)resizePost();}
   requestAnimationFrame(loop);
 }
-window.__debug={get rig(){return charRig;},pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
+window.__debug={get rig(){return charRig;},buildMannequin,pigs,sim:(n,dt,k)=>{Object.assign(keys,k);const was=playing;playing=true;for(let i=0;i<n;i++){U.uTime.value+=dt;updatePlayer(dt);updatePigs(dt);}playing=was;for(const q in k)keys[q]=false;},camera,player,renderFrame,updateGrass,updateTrees,updateShadow,refreshLod,setTod,get started(){return started;},U,treeVar,post:()=>post};
 init();
 </script>
 

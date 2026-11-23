@@ -1991,8 +1991,19 @@ setInterval(() => { if ($('tab-mp')?.classList.contains('active')) refreshServer
 $('mp-refresh-btn').addEventListener('click', () => { if (refreshing || mpUnavailable()) return; servers = null; renderServers(); refreshServers(); });
 $('mp-create-open').addEventListener('click', () => $('mp-create').classList.toggle('hidden'));
 
+/** «Опушка» (the world of the special graphics) is its own page: a server of it is made there, a friend joins it there (the author 23.11). */
+function goOpushka(kind, code = '') {
+    const q = new URLSearchParams({ mp: kind, name: playerName() });
+    if (code) q.set('code', code);
+    if (kind === 'host') q.set('srv', (($('mp-srv-name')?.value || '').trim().slice(0, 24)) || `Сервер ${playerName()}`);
+    if (mpServer.value) q.set('server', mpServer.value);
+    try { net.leave(); } catch (e) { /* ignore */ }
+    location.href = 'special/opushka.html?' + q;
+}
+
 async function joinRoom(code, byCode = false) {
     if (mpUnavailable()) return;
+    if (!byCode && servers?.find((x) => x.code === code)?.mode === 'opushka') { goOpushka('join', code); return; }
     if (!(await tutorialGate())) return; // (the first server ever: «Вы уже прошли обучение?»)
     mpBusy = true;
     updateMpButtons();
@@ -2024,6 +2035,7 @@ const heroMp = mountHeroPanel($('hero-settings-mp'), 'hero-mp');
 $('mp-host-btn').addEventListener('click', async () => {
     if (mpUnavailable()) return;
     if (!(await tutorialGate())) return; // (the first game ever: «Вы уже прошли обучение?» — before the server is made)
+    if ($('mp-mode')?.value === 'opushka' && !$('mp-world')?.value) { goOpushka('host'); return; }
     mpBusy = true;
     updateMpButtons();
     net.stopProbe();
@@ -2054,6 +2066,7 @@ $('mp-host-btn').addEventListener('click', async () => {
 $('mp-private-btn').addEventListener('click', async () => {
     if (mpUnavailable()) return;
     if (!(await tutorialGate())) return; // (the first game ever: «Вы уже прошли обучение?» — before the server is made)
+    if ($('mp-mode')?.value === 'opushka' && !$('mp-world')?.value) { goOpushka('code'); return; }
     mpBusy = true;
     updateMpButtons();
     net.stopProbe();
@@ -2161,6 +2174,7 @@ net.on('disconnected', ({ reason, kind }) => {
 net.on('message', (msg) => {
     if (msg.t !== 'welcome' || !net.isClient) return;
     if ((game && game.active) || starting) return;
+    if (msg.config?.mode === 'opushka') { const code = net.code || lastJoin?.code || ''; goOpushka('join', code); return; } // (a game by code turned out to be «Опушка»)
     pendingWelcome = msg;
     const local = readConfig();
     startGame({ ...local, mode: legacyMode(msg.config.mode, msg.config.map), map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1, godsOnEarth: !!msg.config.godsOnEarth, realTrees: !!msg.config.realTrees, hero: msg.config.hero }, msg);

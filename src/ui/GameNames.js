@@ -18,6 +18,8 @@ export const MODES = {
     creative: { label: 'Творческий', icon: '🏗️', hint: 'Всё открыто: стройте, пробуйте заклинания, зомби — по желанию' },
     freeworld: { label: 'Выживание', icon: '🌍', hint: 'Бесконечный мир: здоровье, мана, сундуки, свитки и дуэли с друзьями' },
     // («Школа Акселдорф»: a new world like the others, saved and continued from the list — internally a 'freeworld' game with `school`)
+    // («Опушка»: the world of the special graphics — its own page special/opushka.html; in the menus only as a multiplayer server's world)
+    opushka: { label: 'Опушка', icon: '🌲', hint: 'Мир особой графики: лес, поляна, летающие свиньи — вместе с друзьями' },
     school: { label: 'Школа Акселдорф', icon: '🏰', wip: true, hint: 'Год в школе волшебства: уроки защиты, зельеварения, пентаграмм и истории мира вместе с другими учениками. ⚠️ Режим ещё в разработке — многое будет дополняться' },
 };
 
