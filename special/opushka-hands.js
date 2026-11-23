@@ -97,20 +97,6 @@ export class ZnsArms {
                 try { await svc.start(); break; } catch (e) { this.status = 'камера: ' + (e?.name === 'NotAllowedError' ? 'нет разрешения' : e?.name === 'NotReadableError' ? 'занята другой программой' : 'не найдена') + ' — пробую снова'; if (i > 40) throw e; await new Promise((r) => setTimeout(r, 3000)); }
             }
             this.svc = svc;
-            // (the author 23.11: «в какой-то момент просто завис анализ с камеры»): the camera program's stream silent for 4 s while the page is
-            // shown — it is opened again (as the game does when it changes the hands' network); a camera taken away — the start is tried again
-            this.heardAt = performance.now();
-            // (only the camera program's stream, and only when NOTHING came for 6 s — not even a picture without a person — at most every 20 s;
-            //  the browser's camera is never started again here: starting it over and over is what froze the page)
-            let reopened = 0;
-            setInterval(() => {
-                if (document.hidden || !svc.isRunning || !svc._native) return;
-                const last = Math.max(svc.stats?.lastResultAt || 0, this.heardAt || 0), now = performance.now();
-                if (now - last < 6000 || now - reopened < 20000) return;
-                reopened = now;
-                console.warn('[Опушка] the camera program silent 6 s — its stream opened again');
-                try { svc._native.close(); svc._native = null; svc._startNative?.(); } catch (e) { /* */ }
-            }, 2000);
             const pv = document.getElementById('webcam-preview'); if (pv) pv.hidden = false; // (the camera's window in the corner, as in the game)
             this.status = svc.native ? 'камера: программа камеры' : 'камера: в браузере';
         } catch (e) {

@@ -2022,7 +2022,7 @@ async function toOpushka(query) {
     try { const u = await (await fetch('/api/update?fresh=1', { cache: 'no-store' })).json(); if (await updateIfNewer(u)) return; } catch (e) { /* (no launcher / no internet) */ }
     try { sessionStorage.setItem('zns-opushka-cfg', JSON.stringify(readConfig())); } catch (e) { /* */ }
     if (!window.__ZNS_NO_FULLSCREEN__) { try { await enterGameFullscreen(); } catch (e) { /* */ } }
-    try { poseService.stop?.(); } catch (e) { /* (the menu's camera, if it ran: the world's page takes it) */ }
+    try { poseService.close?.(); } catch (e) { /* the world page opens its own camera */ }
     // (the same passage as any world's loading: the menu is drawn into the whirl here, the forest's page goes on with it)
     try { await Promise.race([portal.start(mainMenu), new Promise((r) => setTimeout(r, 500))]); } catch (e) { /* */ }
     location.href = 'special/opushka.html?' + query;

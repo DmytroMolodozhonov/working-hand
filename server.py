@@ -583,20 +583,24 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         from pose_native import POSE
         q = parse_qs(query)
         cam = q.get("cam", [None])[0]
-        POSE.start(quality=q.get("q", ["1"])[0], camera=int(cam) if cam and cam.isdigit() else None,
-                   hands=q.get("hands", [""])[0])  # ("v5": Settings → Версия Кистей Рук → V5, hand_v5.py)
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.end_headers()
-        POSE.clients += 1
-        seen = POSE.seq
+        args = {"quality": q.get("q", ["1"])[0], "camera": int(cam) if cam and cam.isdigit() else None,
+                "hands": q.get("hands", [""])[0]}
+        with POSE.cond:
+            POSE.clients += 1
         try:
+            POSE.start(**args)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            seen = POSE.seq
             while True:
                 with POSE.cond:
                     POSE.cond.wait_for(lambda: POSE.seq != seen or POSE.state in ("error", "unavailable"), timeout=2)
                     seq, data, state = POSE.seq, POSE.latest, POSE.state
+                if state == "idle":
+                    POSE.start(**args)
                 if state in ("error", "unavailable"):
                     self.wfile.write(("event: fail\ndata: " + json.dumps({"error": POSE.error}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                     self.wfile.flush()
@@ -610,8 +614,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
             return
         finally:
-            POSE.clients -= 1
-            POSE.last_client = time.time()
+            with POSE.cond:
+                POSE.clients -= 1
+                POSE.last_client = time.time()
 
     # ---------- the voice network outside the browser ----------
     def _voice_status(self):

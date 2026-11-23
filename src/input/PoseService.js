@@ -27,6 +27,8 @@ const HAND_LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 
 const AUTO_GPU_ABOVE_MS = 85;
 // Minimum ms between Holistic runs (it runs on the game's own thread)
 const HOLISTIC_INTERVAL = 44;
+const CAMERA_SILENCE_MS = 6500;
+const CAMERA_RETRY_MS = 4000;
 
 export class PoseService {
     constructor({ faceSolver = null, baseUrl = null } = {}) {
@@ -467,20 +469,33 @@ export class PoseService {
     }
 
     /** The program looks at the camera; its points arrive as a stream. False if it can't. */
-    _startNative() {
+    _startNative(waitMs = 40000) {
+        this._cancelNativeOpen?.();
         this._nativeCapture = null; this._nativeTs = null;
+        this._cameraFrameAt = performance.now();
         return new Promise((resolve) => {
             this._status('Нейросеть камеры (отдельная программа) запускается...');
             const hands = this.handsWanted;
-            const es = new EventSource(new URL(`api/pose/stream?q=${this.native.quality}${hands ? '&hands=' + hands : ''}`, this.baseUrl));
+            const url = new URL(`api/pose/stream?q=${this.native.quality}${hands ? '&hands=' + hands : ''}`, this.baseUrl);
+            const es = new EventSource(url);
             es._hands = hands;
-            let first = true;
-            const timeout = setTimeout(() => { if (first) { es.close(); this.stats.nativeWhy = 'программа не ответила за 40 с'; resolve(false); } }, 40000);
+            const finish = (ok) => {
+                if (this._cancelNativeOpen !== cancel) return;
+                this._cancelNativeOpen = null;
+                clearTimeout(timeout);
+                if (ok) this._native = es; else es.close();
+                resolve(ok);
+            };
+            const cancel = () => finish(false);
+            this._cancelNativeOpen = cancel;
+            const timeout = setTimeout(() => {
+                this.stats.nativeWhy = 'программа камеры не прислала кадры';
+                cancel();
+            }, waitMs);
             es.onmessage = (ev) => {
-                if (first) { first = false; clearTimeout(timeout); this._native = es; resolve(true); }
-                // Only the NEWEST result is used. While the game is busy (in flight it builds the world),
-                // the results pile up waiting for it; taken one by one, oldest first, the hands showed
-                // what they did seconds ago. Now a waiting one is replaced by the newer, never queued.
+                if (this._native !== es && this._cancelNativeOpen !== cancel) return;
+                finish(true);
+                this._cameraFrameAt = performance.now();
                 if (this._nativeData != null) this.stats.nativeSkipped = (this.stats.nativeSkipped || 0) + 1;
                 this._nativeData = ev.data;
                 if (this._nativeTimer) return;
@@ -499,9 +514,9 @@ export class PoseService {
                 this.stats.nativeWhy = msg || 'ошибка программы';
                 console.warn('[PoseService] camera network program:', this.stats.nativeWhy);
                 es.close();
-                if (first) { first = false; clearTimeout(timeout); resolve(false); }
+                cancel();
             });
-            es.onerror = () => { if (es.readyState === EventSource.CLOSED && first) { first = false; clearTimeout(timeout); resolve(false); } };
+            es.onerror = () => { if (es.readyState === EventSource.CLOSED) cancel(); };
         });
     }
 
@@ -549,41 +564,66 @@ export class PoseService {
         else this._onHolistic(r);
     }
 
-    /**
-     * The program wasn't there when the game started (MediaPipe was being installed):
-     * keep asking the server, and the moment it can run — switch to it, in the game.
-     */
-    _watchForNative() {
-        if (this._nativeWatch || globalThis.__ZNS_NO_NATIVE__ || !(this._engine === 'classic' || this._engine === 'classic-main')) return;
-        this._nativeWatch = setInterval(async () => {
-            if (this.native || !this.isRunning || this._switching) return;
-            if (!(await this._nativeAvailable())) return;
-            this._switching = true;
-            clearInterval(this._nativeWatch);
-            this._nativeWatch = null;
-            const q = this._quality;
-            // let the browser's camera and network go: the program opens the camera itself
-            if (this.stream) { for (const t of this.stream.getTracks()) t.stop(); this.stream = null; }
-            this._closeModels();
-            this.native = { quality: q };
-            this.stats.mode = 'native';
-            this.stats.thread = 'program';
-            if (await this._startNative()) console.info('[PoseService] switched to the camera network program');
-            else {
-                // (it couldn't after all: the browser's network again)
-                this.native = null;
-                await this._startHolistic(q, false);
-                this.isRunning = false;
-                await this.start();
+    _watchCapture() {
+        if (this._captureWatch) return;
+        this._cameraFrameAt = performance.now();
+        this._captureWatch = setInterval(() => this._checkCapture(), 1000);
+    }
+
+    async _checkCapture(now = performance.now()) {
+        if (!this.isRunning || this.injected || this._recovering || this._cancelNativeOpen) return;
+        if (document.hidden) { this._cameraFrameAt = now; return; }
+        if (now < (this._captureRetryAt || 0)) return;
+        const track = this.stream?.getVideoTracks()[0];
+        const ended = this.native ? !this._native || this._native.readyState === EventSource.CLOSED : !track || track.readyState === 'ended';
+        if (!ended && now - this._cameraFrameAt < CAMERA_SILENCE_MS) return;
+
+        this._recovering = true;
+        const epoch = this._captureEpoch;
+        this._status('Камера потеряла связь — подключаю снова…');
+        console.warn('[PoseService] camera disconnected', { native: !!this.native, ended, silentMs: Math.round(now - this._cameraFrameAt) });
+        try {
+            if (this.native) {
+                this._native?.close();
+                this._native = null;
+                if (!await this._startNative(14000)) return;
+            } else {
+                if (this.stream) for (const t of this.stream.getTracks()) t.stop();
+                this.stream = null;
+                const stream = await this._openCamera();
+                if (!this.isRunning || epoch !== this._captureEpoch) {
+                    for (const t of stream.getTracks()) t.stop();
+                    return;
+                }
+                this._bindBrowserStream(stream);
+                this._pump();
             }
-            this._switching = false;
-        }, 5000);
+            this._status('Камера снова работает');
+        } catch (e) {
+            console.warn('[PoseService] camera recovery:', e?.message || e);
+        } finally {
+            this._captureRetryAt = performance.now() + CAMERA_RETRY_MS;
+            this._recovering = false;
+        }
+    }
+
+    _bindBrowserStream(stream) {
+        this.stream = stream;
+        this._lastVideoTime = null;
+        this._cameraFrameAt = performance.now();
+        if (this.previewElement) {
+            this.previewElement.srcObject = stream;
+            this.previewElement.play().catch(() => {});
+        }
     }
 
     async start() {
         if (this.isRunning) return;
+        const epoch = this._captureEpoch;
         if (this.native) {
-            if (await this._startNative()) { this.isRunning = true; return; }
+            const ok = await this._startNative();
+            if (epoch !== this._captureEpoch) return;
+            if (ok) { this.isRunning = true; this._watchCapture(); return; }
             // the program couldn't (no camera for it, an error): the browser's network as before
             console.warn('[PoseService] camera network program unavailable, using the browser:', this.stats.nativeWhy);
             // (said to the player: the browser's network runs on the game's own thread — the game slows down)
@@ -592,19 +632,20 @@ export class PoseService {
             const q = this.native.quality;
             this.native = null;
             await this._startHolistic(q, false);
+            if (epoch !== this._captureEpoch) return;
         }
         if (!this.stream) {
             this._status('Включение камеры...');
-            this.stream = await this._openCamera();
-            if (this.previewElement) {
-                // Reuse the same camera stream for the preview (the original opened the camera twice)
-                this.previewElement.srcObject = this.stream;
-                this.previewElement.play().catch(() => {});
+            const stream = await this._openCamera();
+            if (epoch !== this._captureEpoch) {
+                for (const t of stream.getTracks()) t.stop();
+                return;
             }
+            this._bindBrowserStream(stream);
         }
         this.isRunning = true;
         this._pump();
-        this._watchForNative();
+        this._watchCapture();
     }
 
     /** All cameras of this computer (names appear once the camera is allowed). */
@@ -675,6 +716,7 @@ export class PoseService {
         this.cameraId = deviceId || null;
         try { if (deviceId) localStorage.setItem('zns-camera-id', deviceId); else localStorage.removeItem('zns-camera-id'); } catch (e) { /* ignore */ }
         const wasRunning = this.isRunning;
+        this._captureEpoch = (this._captureEpoch || 0) + 1;
         if (this.stream) { for (const t of this.stream.getTracks()) t.stop(); this.stream = null; }
         this.isRunning = false;
         if (wasRunning) await this.start();
@@ -717,6 +759,10 @@ export class PoseService {
 
     stop() {
         this.isRunning = false;
+        this._captureEpoch = (this._captureEpoch || 0) + 1;
+        clearInterval(this._captureWatch);
+        this._captureWatch = null;
+        this._cancelNativeOpen?.();
         if (this._native) { this._native.close(); this._native = null; }
     }
 
@@ -736,17 +782,19 @@ export class PoseService {
         const gen = (this._pumpGen = (this._pumpGen || 0) + 1); // one loop only, even after a camera switch
         const next = () => {
             if (!this.isRunning || gen !== this._pumpGen) return;
-            if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => { this._onVideoFrame(); next(); });
-            else requestAnimationFrame(() => { this._onVideoFrame(); next(); });
+            if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => { if (this.isRunning && gen === this._pumpGen) this._onVideoFrame(); next(); });
+            else requestAnimationFrame(() => { if (this.isRunning && gen === this._pumpGen) this._onVideoFrame(); next(); });
         };
         next();
     }
 
     async _onVideoFrame() {
         const v = this.videoElement;
-        if (this.injected || this.inFlight || !v || v.readyState < 2 || !v.videoWidth) return;
+        if (!v || v.readyState < 2 || !v.videoWidth) return;
         if (this._lastVideoTime === v.currentTime && !v.requestVideoFrameCallback) return;
         this._lastVideoTime = v.currentTime;
+        this._cameraFrameAt = performance.now();
+        if (this.injected || this.inFlight) return;
         this.stats.frames++;
         const ts = performance.now();
         if (this.holisticFrame) {

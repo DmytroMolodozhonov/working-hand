@@ -592,6 +592,7 @@ class NativePose:
             watch = FarWatch()
             light = None if os.environ.get("ZNS_NO_LIGHT") else Light(cv2, np)
             last_body = None
+            last_picture = time.monotonic()
             while not self._stop.is_set():
                 if grab:
                     ok, frame = grab.next(timeout=1.0)
@@ -606,10 +607,11 @@ class NativePose:
                 if not ok or frame is None:
                     if os.environ.get("ZNS_CAMERA_FILE"):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # (the test video: round again)
-                    if grab and grab.dead:
+                    if grab and (grab.dead or time.monotonic() - last_picture > 8):
                         raise RuntimeError("камера перестала отдавать картинку")
                     time.sleep(0.01)
                     continue
+                last_picture = time.monotonic()
                 # V5 switched on or off: the camera again at its size (720p for V5)
                 if grab and self._want_hd() != self._cam_hd:
                     grab.close()
