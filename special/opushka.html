@@ -1266,10 +1266,16 @@ function handPrims(s){ // hand-local: origin wrist, built hanging along -y then 
   // (23.11, the author: real fingers — each primitive carries its bone: the palm, and three joints of every finger «f<finger><joint>»
   //  (0 index … 3 little, 4 the thumb); P.joints — each joint's place and its parent: the skeleton of the hand is built from them)
   const P=[],o={bone:'palm',reg:0};P.joints={};
-  P.push(PB([0,-0.05,0.004],[0.011,0.036,0.036],0.012,{...o,k:0}));
-  P.push(PC([0,0.0,0.0],[0,-0.03,0.004],0.024,0.022,{...o,k:0.015}));
-  const fz=[0.03,0.01,-0.01,-0.028],fl=[[0.044,0.026,0.02],[0.048,0.029,0.022],[0.045,0.028,0.021],[0.036,0.022,0.018]];
-  for(let f=0;f<4;f++){let p=new V3(-0.002*s,-0.088,fz[f]),dir=new V3(-0.12*s,-1,0).normalize();const r=[0.0092,0.0085,0.0078,0.0072][f];
+  // (the author 23.11: the palm was a box) a real palm: thinner, a little wider at the knuckles, the thumb's pad and the little finger's
+  // edge swelling on the palm side (−s·x), the knuckles standing out on the back, the wrist flowing into it
+  P.push(PB([0,-0.053,0.002],[0.0055,0.033,0.027],0.0105,{...o,k:0}));
+  P.push(PE([-0.008*s,-0.042,0.027],[0.012,0.023,0.0145],{...o,k:0.014}));
+  P.push(PE([-0.007*s,-0.054,-0.025],[0.0085,0.027,0.0095],{...o,k:0.012}));
+  P.push(PE([-0.004*s,-0.083,0.0],[0.009,0.008,0.034],{...o,k:0.012}));
+  P.push(PC([0,0.006,0.0],[0,-0.028,0.003],0.021,0.0205,{...o,k:0.016}));
+  const fz=[0.026,0.0085,-0.0085,-0.0245],fl=[[0.044,0.026,0.02],[0.048,0.029,0.022],[0.045,0.028,0.021],[0.036,0.022,0.018]];
+  for(let f=0;f<4;f++)P.push(PE([0.005*s,-0.088,fz[f]],[0.0075,0.0075,0.0085],{...o,k:0.008})); // the knuckles
+  for(let f=0;f<4;f++){let p=new V3(-0.002*s,-0.088,fz[f]),dir=new V3(-0.12*s,-1,0).normalize();const r=[0.0099,0.0096,0.009,0.008][f];
     for(let sgm=0;sgm<3;sgm++){const q=p.clone().addScaledVector(dir,fl[f][sgm]);const bn='f'+f+sgm;P.joints[bn]={pos:p.clone(),parent:sgm?'f'+f+(sgm-1):'palm'};
       P.push(PC(p.toArray(),q.toArray(),r*(1-sgm*0.08),r*(1-(sgm+1)*0.08),{bone:bn,reg:0,k:sgm?0.003:0.008}));p=q;dir.applyAxisAngle(new V3(0,0,1),-s*0.18).normalize();}}
   let p=new V3(-0.008*s,-0.03,0.035),dir=new V3(-0.45*s,-0.7,0.55).normalize();
