@@ -286,6 +286,7 @@ const U={
   uTime:{value:0}, uHM:{value:null}, uHMHalf:{value:HM_HALF}, uHMRes:{value:HM_N},
   uWind:{value:new THREE.Vector2(0.8,0.6).normalize()}, uWindStr:{value:0.5},
   uSunDirW:{value:new THREE.Vector3(0,1,0)}, uLodR:{value:Q.treeR}, uPlayer:{value:new THREE.Vector3(0,-999,0)},
+  uFlashV:{value:new THREE.Vector3()}, uFlashC:{value:new THREE.Vector4(1,0.6,0.3,0)},
   uBlast:{value:Array.from({length:6},()=>new THREE.Vector4(0,0,0,-1e4))}, uBlastP:{value:Array.from({length:6},()=>new THREE.Vector4())},
 };
 
@@ -303,7 +304,7 @@ float vnoise3(vec3 p){vec3 i=floor(p),f=fract(p);vec3 u=f*f*(3.-2.*f);
 float fbmN(vec2 p){float s=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<4;i++){s+=a*vnoise(p);p=m*p;a*=.5;}return s/.9375;}
 float fbm3N(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise3(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s/.9375;}
 vec4 sampleHM(vec2 wxz){vec2 uv=(wxz+uHMHalf)/(2.*uHMHalf);uv=(uv*(uHMRes-1.)+.5)/uHMRes;return texture2D(uHM,uv);}
-uniform vec4 uBlast[6]; uniform vec4 uBlastP[6];
+uniform vec4 uBlast[6]; uniform vec4 uBlastP[6]; uniform vec3 uFlashV; uniform vec4 uFlashC;
 // (23.11, the spells — opushka-spells.js: each blast or frost patch — x, z, its radius, the time it came; P: power, 1 = frost, how long it stays)
 float blastBurn(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z||Q.y>0.5)continue;
   float fade=1.-smoothstep(Q.z*0.7,Q.z,age);float d=length(p-B.xy)/B.z;float n=vnoise(p*3.1+B.xy)*0.35+vnoise(p*11.)*0.15;
@@ -351,6 +352,8 @@ function patch(mat,o){
   return mat;
 }
 const OCC_LIGHT=(expr)=>['#include <lights_fragment_end>',`{float occ_=${expr};irradiance*=occ_;iblIrradiance*=occ_;
+  // (a spell's flash: no light of its own — one more light would make every blade of grass count it — just this, only while it shines)
+  if(uFlashC.w>0.001){vec3 L_=uFlashV+vViewPosition;float d_=length(L_)+1e-3;reflectedLight.directDiffuse+=diffuseColor.rgb*uFlashC.rgb*(uFlashC.w/(1.+d_*d_))*max(dot(normal,L_/d_),0.);}
   #if defined(RE_IndirectSpecular)
   radiance*=occ_;
   #endif

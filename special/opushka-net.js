@@ -128,7 +128,7 @@ export class OpushkaNet {
 
     /** My pose for the others. */
     _pose() {
-        const P = this.api.player(), Z = this.api.arms, rig = this.api.rig();
+        const P = this.api.player(), rig = this.api.rig(), Z = rig?.arms || this.api.arms; // (a raised arm to cast without the camera too)
         const arm = (K) => {
             const D = Z.dirs[K];
             if (!D.ok) return 0;

@@ -73,7 +73,7 @@ export class OpushkaSpells {
     /** At loading: everything that will ever be drawn, made now (no shader made in the middle of a fight; one light, always there). */
     init() {
         const { scene, U } = this.api;
-        this.light = new THREE.PointLight(0xffa050, 0, 0, 2); scene.add(this.light); this._lightT = 0; this._lightK = 0; this._lightTau = 1; this._ember = 0;
+        this.light = { position: new V3(), color: new THREE.Color(0xffa050), intensity: 0 }; this._lightT = 0; this._lightK = 0; this._lightTau = 1; this._ember = 0; // (not a THREE light: the shaders' own flash — uFlashV/uFlashC)
         U.uBlast.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, -1e4));
         U.uBlastP.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, 0));
         this.glow = new Sparks(scene, 2400, true);
@@ -146,10 +146,30 @@ export class OpushkaSpells {
         } else {
             o.copy(P.pos).add(_v.set(0, 1.45, 0)).addScaledVector(d, 0.4);
         }
+        // no camera: the arm is raised toward where the eyes look and the charge leaves from the end of the raised wand (not from the wand
+        // hanging at the knee — it went into the ground beside the wizard: the author's screenshots)
+        if (wand && !this.me.wandOut && !this.api.armsLive() && rig?.B?.uaR) {
+            const sh = new V3(); rig.B.uaR.getWorldPosition(sh);
+            const far = this._lookPoint(cam);
+            d.copy(far).sub(sh).normalize();
+            o.copy(sh).addScaledVector(d, 0.82);
+            this._raiseArm(d);
+        }
         // a little help: a living target within ~5° of the line is aimed at its chest
         const best = this._assist(o, d);
         if (best) d.copy(best).sub(o).normalize();
         return { o, d };
+    }
+
+    /** The right arm raised along `d` (world) for a moment — the camera's arm source replaced by this pose; the others see it too. */
+    _raiseArm(d) {
+        const rig = this.api.rig(), P = this.api.player(); if (!rig) return;
+        const dc = d.clone().applyAxisAngle(_u.set(0, 1, 0), -P.faceYaw);
+        const mk = () => ({ u: { x: 0, y: -1, z: 0 }, f: { x: 0, y: -1, z: 0 }, h: { x: 0, y: -1, z: 0 }, n: { x: 1, y: 0, z: 0 }, ok: false, hand: false, curl: null });
+        const A = this._raise || (this._raise = { dirs: { L: mk(), R: mk() }, solve() {} });
+        const u = dc.clone().add(_v.set(-0.12, -0.3, 0)).normalize();
+        Object.assign(A.dirs.R.u, { x: u.x, y: u.y, z: u.z }); Object.assign(A.dirs.R.f, { x: dc.x, y: dc.y, z: dc.z }); A.dirs.R.ok = true;
+        rig.arms = A; this._raiseT = 0.9;
     }
 
     _lookPoint(cam) {
@@ -293,13 +313,16 @@ export class OpushkaSpells {
         // (never «not a number»: a NaN light turns every lit thing on the video card black — the author's dark forest, 23.11)
         const li = this._lightK * Math.exp(-this._lightT / (this._lightTau || 1)) + (this._ember || 0) * Math.max(0, 1 - this._lightT / 6) * (0.8 + 0.2 * Math.sin(this._lightT * 23));
         this.light.intensity = Number.isFinite(li) ? li : 0;
+        const Uf = this.api.U;
+        Uf.uFlashC.value.set(this.light.color.r, this.light.color.g, this.light.color.b, this.light.intensity * 0.15);
+        if (this.light.intensity > 0.01) Uf.uFlashV.value.copy(this.light.position).applyMatrix4(this.api.camera.matrixWorldInverse);
         this.shake = Math.max(0, this.shake - dt * 1.6);
         void U;
     }
 
     flash(p, color, k, tau) {
         if (this._lightK * Math.exp(-this._lightT / (this._lightTau || 1)) > k * 1.5) return; // (a bigger flash still burning wins)
-        this.light.position.copy(p); this.light.color.setHex(color); this._lightK = k * 40; this._lightT = 0; this._lightTau = tau; this._ember = 0;
+        this.light.position.copy(p); this.light.color.setHex(color).convertSRGBToLinear(); this._lightK = k * 40; this._lightT = 0; this._lightTau = tau; this._ember = 0;
     }
 
     _fly(b, dt) {
@@ -543,6 +566,7 @@ export class OpushkaSpells {
     }
 
     _me(dt) {
+        if (this._raiseT > 0 && (this._raiseT -= dt) <= 0) { const rig = this.api.rig(); if (rig?.arms === this._raise) rig.arms = null; }
         const me = this.me, P = this.api.player(), root = this.api.charRoot();
         this._wandStep(dt);
         if (me.frozen > 0) {
