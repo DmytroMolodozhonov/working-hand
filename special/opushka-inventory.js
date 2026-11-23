@@ -222,7 +222,8 @@ export class OpushkaInventory extends Inventory {
     }
 
     itemModel(item) {
-        const model = makeItemModel(item);
+        const appearance = item.kind === 'res' ? { kind: 'blocks', color: RESOURCE[item.block]?.color } : item;
+        const model = item.kind === 'weapon' ? buildWeapon(item.type, this.api.renderer).group : makeItemModel(appearance);
         model.scale.multiplyScalar(0.48);
         model.traverse((mesh) => { if (mesh.isMesh) mesh.castShadow = mesh.receiveShadow = true; });
         return model;
@@ -313,11 +314,20 @@ export class OpushkaInventory extends Inventory {
         return true;
     }
 
-    placeLoose(item, position) {
+    placeLoose(item, position, offsetY = 0, onTake = null) {
         const model = this.itemModel(item);
         model.position.copy(position);
+        model.position.y += offsetY;
         this.api.scene.add(model);
-        this.loose.push({ item, model });
+        this.loose.push({ item, model, onTake });
+    }
+
+    removeLoose(uid) {
+        const i = this.loose.findIndex((entry) => entry.item.uid === uid);
+        if (i < 0) return;
+        const [{model}] = this.loose.splice(i,1);
+        model.removeFromParent();
+        disposeModel(model);
     }
 
     pickNear(hand, position) {
@@ -326,10 +336,13 @@ export class OpushkaInventory extends Inventory {
             const distance = model.position.distanceToSquared(position);
             if (distance < best) { at = i; best = distance; }
         });
-        if (at < 0 || !this.takeInHand(this.loose[at].item, hand)) return false;
-        const [{ model }] = this.loose.splice(at, 1);
-        model.removeFromParent();
-        disposeModel(model);
+        if (at < 0) return false;
+        const entry = this.loose[at];
+        if (entry.onTake) return entry.onTake(hand,entry);
+        if (!this.takeInHand(entry.item, hand)) return false;
+        this.loose.splice(at, 1);
+        entry.model.removeFromParent();
+        disposeModel(entry.model);
         this.api.sound('switch');
         return true;
     }
@@ -405,8 +418,8 @@ export class OpushkaInventory extends Inventory {
             if (hand === this.main && belt?.near && this.wandStowed && down && closedNow && this.wandReach && this.beltReady) {
                 if (this.toggleWand()) this.beltReady = false;
             } else if (closedNow && !(hand === this.off && pocket) && !behind && !(hand === this.main && belt?.near)) {
-                this.pickNear(hand, position);
-            } else if (openedNow && this.held[hand] && !behind && !(hand === this.off && pocket)) {
+                if (!this.pickNear(hand, position)) this.api.touch?.(hand,position);
+            } else if (openedNow && this.held[hand] && !behind && !(hand === this.off && pocket) && !this.api.reading?.(hand)) {
                 position.y = this.api.floor(position.x, position.z, position.y) + 0.12;
                 this.placeLoose(this.release(hand), position);
                 this.selected = -1;

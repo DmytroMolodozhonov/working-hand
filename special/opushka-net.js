@@ -20,6 +20,7 @@
  */
 import { Network } from '../src/net/Network.js';
 import { attachBeltWand } from './opushka-inventory.js';
+import { limpPose } from './opushka-ragdoll.js';
 
 const SEND_DT = 1 / 15;      // a pose: 15 times a second (each ~0.3 KB)
 const PIGS_DT = 0.2;         // the pigs: 5 times a second
@@ -61,6 +62,8 @@ export class OpushkaNet {
             // (a newcomer: this world is «Опушка» — a guest still in the game's menu goes there; the time of day, now)
             net.sendTo(id, { t: 'welcome', config: { mode: 'opushka' } });
             net.sendTo(id, { t: 'tod', k: this.api.tod() });
+            this.api.loot?.()?.sync(id);
+            this.api.sandSync?.(id);
         });
         net.on('disconnected', ({ reason }) => { this._say('⚠️ ' + (reason || 'Связь потеряна') + ' — мир остаётся, можно вернуться в меню'); for (const id of [...this.remotes.keys()]) this._drop(id); });
         net.on('status', (t) => this._say('⚠️ ' + t));
@@ -116,10 +119,10 @@ export class OpushkaNet {
             P.vy = T.vy; P.grounded = T.g; P.crouch = T.c; P.airStyle = T.leap ? 'leap' : 'tuck'; P.view = T.third ? 'third' : 'first'; P.landT = T.landT;
             if (!was && P.grounded) P.justLanded = Math.min(-2, T.vyWas || -4);
             const speed = Math.hypot(P.vel.x, P.vel.z);
+            if ((R.st & 9) && T.limp) this.api.remoteFall?.(R.rig,P.pos,T.limp,k);
+            else this.api.stand?.(R.rig);
             this.api.animateAvatar(R.rig, dt, speed, P);
             P.justLanded = 0;
-            R.fall = (R.fall || 0) + (((R.st & 1) || (R.st & 8) ? 1 : 0) - (R.fall || 0)) * (1 - Math.exp(-dt * 5));
-            R.rig.holder.rotation.order = 'YXZ'; R.rig.holder.rotation.x = -R.fall * Math.PI * 0.47;
             const hand = R.rig.fingers?.[R.rig.activeHand];
             if (hand?.wand) {
                 hand.wand.visible = !(R.st & 4);
@@ -159,7 +162,7 @@ export class OpushkaNet {
         const fl = (P.grounded ? 1 : 0) | (P.crouch ? 2 : 0) | (P.airStyle === 'leap' ? 4 : 0) | (P.view === 'third' ? 8 : 0);
         const look = this.api.look?.();
         const appearance = look ? [look.skin, look.hairColor, look.topColor, look.hair, look.face] : undefined;
-        return { t: 'p', appearance, s: [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r3(P.faceYaw), r3(P.yaw), r3(P.pitch), r2(P.vel.x), r2(P.vel.z), r2(P.vy), fl, r2(P.landT || 0), this.spells?.stateBits() || 0], a: [arm('L'), arm('R')], c: curl };
+        return { t: 'p', appearance, s: [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r3(P.faceYaw), r3(P.yaw), r3(P.pitch), r2(P.vel.x), r2(P.vel.z), r2(P.vy), fl, r2(P.landT || 0), this.spells?.stateBits() || 0], a: [arm('L'), arm('R')], c: curl, limp:limpPose(rig,P.pos) };
     }
 
     _pigs() {
@@ -181,6 +184,14 @@ export class OpushkaNet {
         }
         if (m.t === 'tod' && net.isClient && m.k) { this.api.setTod(m.k); return; }
         // the spells: a friend's charge flies here too; a pig a guest's charge reached — the host decides; who fell to whom
+        if (m.t?.startsWith('oploot-')) {
+            if (net.isHost || m.from==='H') this.api.loot?.()?.message(m);
+            return;
+        }
+        if (m.t?.startsWith('opsand-')) {
+            if (net.isHost || m.from === 'H') this.api.sandMessage?.(m);
+            return;
+        }
         if (m.t === 'cast' && m.from !== net.localId) { this.spells?.netCast(m); return; }
         if (net.isClient && m.from === 'H' && m.t === 'opclash') { this.spells?.netClash(m); return; }
         if (net.isClient && m.from === 'H' && m.t === 'opimpact' && m.who === net.localId && Array.isArray(m.dir) && m.dir.every(Number.isFinite)) {
@@ -213,6 +224,7 @@ export class OpushkaNet {
         T.vyWas = T.vy;
         T.x = s[0]; T.y = s[1]; T.z = s[2]; T.fy = s[3]; T.yaw = s[4]; T.pitch = s[5]; T.vx = s[6]; T.vz = s[7]; T.vy = s[8];
         R.st = s[11] | 0; R.dead = !!(R.st & 8);
+        T.limp=(R.st&9)&&Array.isArray(m.limp)&&m.limp.length===33&&m.limp.every(v=>Number.isFinite(v)&&Math.abs(v)<3)?m.limp:null;
         T.g = !!(s[9] & 1); T.c = !!(s[9] & 2); T.leap = !!(s[9] & 4); T.third = !!(s[9] & 8); T.landT = s[10] || 0;
         R.last = performance.now();
         // his arms (the directions his own camera gave) and the fingers of his free hand

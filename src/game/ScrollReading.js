@@ -16,7 +16,7 @@
  */
 
 import * as THREE from 'three';
-import { describeItem, ITEM_SCALE, scrollPaperMaterial } from './ItemTypes.js';
+import { describeItem, scrollPaperMaterial } from './ItemTypes.js';
 import { holoParts, holoPlain, withSpellDescription } from './HoloText.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
@@ -153,8 +153,9 @@ function disposeParchment(R) {
 }
 
 export class ScrollReading {
-    constructor(game) {
+    constructor(game, unit = 1) {
         this.game = game;
+        this.unit = unit;
         this.r = null; // {side, other, item, model, open, touchT, closeT, group, tex, mat}
         this.readingSide = null;
         this.readCam = null;
@@ -186,9 +187,9 @@ export class ScrollReading {
             // closes its fingers on it (an open hand passing by, or a fist arriving at it, takes nothing)
             if (!free || !g.currentPose && !this.input) { this._touchT = 0; this._armed = false; return; }
             const d = this._endDist(s.model, ho);
-            if (d > END_NEAR * 2) this._armed = false;
+            if (d > END_NEAR * 2 * this.unit) this._armed = false;
             else if (curl < ARM_CURL) this._armed = true;
-            const near = d < END_NEAR;
+            const near = d < END_NEAR * this.unit;
             const closing = curl > GRAB_CURL && this._armed;
             this._touchT = near && closing ? (this._touchT || 0) + dt : 0;
             if (this._touchT < GRAB_T) return;
@@ -207,7 +208,7 @@ export class ScrollReading {
         // the fingers on the roller opened: that hand let it go
         R.letT = curl < OPEN_CURL && !lostO ? (R.letT || 0) + dt : 0;
         // pulled further apart than the parchment is long: the roller slips out of the fingers
-        const dist = hs.distanceTo(hoG);
+        const dist = hs.distanceTo(hoG) / this.unit;
         R.slipT = dist > MAX_W + SLIP ? (R.slipT || 0) + dt : 0;
         // an arm dropped to the side: it rolls up again (hands brought together only roll it up
         // between them — the other hand still holds its roller, so it does not jump closed and open)
@@ -239,7 +240,7 @@ export class ScrollReading {
     _rollBack(R, hs, dt) {
         R.w = Math.max(0.12, (R.w || 0.12) - ROLL_V * dt);
         const across = _v6.set(1, 0, 0).applyQuaternion(R.group.quaternion);
-        R.group.position.copy(hs).addScaledVector(across, R.sSign * R.w / 2);
+        R.group.position.copy(hs).addScaledVector(across, R.sSign * R.w * this.unit / 2);
         this._unroll(R, R.w);
         if (R.w <= 0.12) this._close();
     }
@@ -247,9 +248,10 @@ export class ScrollReading {
     _begin(s, other) {
         const g = this.game;
         const { group, parch, rollA, rollB, tex, mat, tablet = false } = buildParchment(s.item);
+        group.scale.setScalar(this.unit);
         g.scene.add(group);
         s.model.visible = tablet; // (it is the open one now)
-        this.r = { side: s.side, other, item: s.item, model: s.model, open: 0, closeT: 0, w: 0.12, sSign: 1, group, parch, rollA, rollB, tex, mat, tablet, c: null };
+        this.r = { side: s.side, other, item: s.item, model: s.model, modelScale: s.model.scale.clone(), open: 0, closeT: 0, w: 0.12, sSign: 1, group, parch, rollA, rollB, tex, mat, tablet, c: null };
         this.readingSide = s.side;
         const hand = g.character.getActiveHands?.()[other];
         if (hand?.setGrip) hand.setGrip(0.5);
@@ -289,7 +291,7 @@ export class ScrollReading {
         R.group.position.copy(R.c);
         R.group.quaternion.copy(_q);
         // unrolled as far as the hands are apart (at most MAX_W); the text shows as it unrolls
-        const w = Math.max(0.12, Math.min(MAX_W, hs.distanceTo(ho)));
+        const w = Math.max(0.12, Math.min(MAX_W, hs.distanceTo(ho) / this.unit));
         R.w = w;
         this._unroll(R, w);
         // the camera: over the shoulder, the whole parchment in view
@@ -305,7 +307,7 @@ export class ScrollReading {
         } else this.readCam = null;
         if (k > 0.6 && !R.told) {
             R.told = true;
-            g.hud.setVoice?.('📜 Свиток раскрыт. Чтобы выучить — сожгите его («Инферно»); разожмите вторую руку — свернётся', true);
+            g.hud.setVoice?.('📜 Разожмите вторую руку, чтобы свернуть свиток. Сожгите свиток, если хотите запомнить это заклинание.', true);
         }
     }
 
@@ -361,7 +363,7 @@ export class ScrollReading {
         const g = this.game;
         disposeParchment(R);
         R.model.visible = true;
-        R.model.scale.setScalar(ITEM_SCALE.scroll || 2);
+        R.model.scale.copy(R.modelScale);
         const hand = g.character.getActiveHands?.()[R.other];
         if (hand?.setGrip && !g.items.held[R.other] && !g.weapons.hands[R.other].held) hand.setGrip(null);
     }

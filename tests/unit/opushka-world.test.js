@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { geography, heightTriangle, OpushkaCaves } from '../../special/opushka-world.js';
+import { geography, heightTriangle, markShoreSand, SHORE_SAND, WATER_KIND, OpushkaCaves } from '../../special/opushka-world.js';
 import { caveGeometry, waterGeometry } from '../../special/opushka-mesh.js';
 
 test('Opushka preserves its clearing and has reachable ranges, rivers, lakes and a sea', () => {
@@ -27,6 +27,40 @@ test('height interpolation matches the terrain indices and pools omit dry cells'
     const water = waterGeometry(0, 4, 2, (x, z) => x === 0 && z === 0 ? 1 : 0, () => [0.5, 0.5]);
     assert.equal(water.index.count, 6);
     assert.deepEqual([...water.attributes.hydro.array.slice(0, 3)], [1, 0.5, 0.5]);
+});
+
+test('shore sand follows the water and leaves dry land and some banks untouched', () => {
+    const size = 421, half = 420, step = 2, field = geography(() => 0.84);
+    const heights = new Float32Array(size ** 2), water = new Uint8Array(heights.length);
+    const banks = new Uint8Array(heights.length), sand = new Uint8Array(heights.length);
+    for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+        const k = j * size + i;
+        heights[k] = field(i * step - half, j * step - half);
+        water[k] = field.sea ? WATER_KIND.SEA : field.river ? WATER_KIND.RIVER : field.water ? WATER_KIND.LAKE : 0;
+        banks[k] = field.beach || field.bank ? 1 : 0;
+    }
+    markShoreSand(sand, heights, water, banks, size, half, step, (x,z)=>Math.hypot(x,z)<10);
+    const sandy = new Set(), plain = new Set();
+    for (let j = 2; j < size - 2; j++) for (let i = 2; i < size - 2; i++) {
+        const k = j * size + i;
+        if (water[k] || heights[k] < 0 || heights[k] > 2.4) {
+            assert.equal(sand[k], 0);
+            continue;
+        }
+        const near = new Set();
+        for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+            const kind = water[k + dz * size + dx];
+            if (kind && dx * dx + dz * dz <= 5) near.add(kind);
+        }
+        if (sand[k]) {
+            assert.equal(sand[k], SHORE_SAND);
+            assert.ok(near.size);
+            assert.ok(Math.hypot(i * step - half, j * step - half) >= 10);
+        }
+        for (const kind of near) (sand[k] ? sandy : plain).add(kind);
+    }
+    assert.deepEqual([...sandy].sort(), [WATER_KIND.RIVER, WATER_KIND.LAKE, WATER_KIND.SEA]);
+    assert.deepEqual([...plain].sort(), [...sandy].sort());
 });
 
 test('the cave network has dry entries, underground air, solid roofs and an actual mesh', () => {

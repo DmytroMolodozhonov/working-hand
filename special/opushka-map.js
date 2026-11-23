@@ -5,7 +5,7 @@ const MAP_UPDATE_MS = 90;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 export class OpushkaMap {
-    constructor(canvas, { heights, forest, water, size, half, step, caves, buildings = () => [] }) {
+    constructor(canvas, { heights, forest, water, size, half, step, caves, buildings = () => [], chests = () => [] }) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.half = half;
@@ -13,6 +13,7 @@ export class OpushkaMap {
         this.mouths = caves.systems.map((c) => c.start);
         this.last = -Infinity;
         this.buildings = buildings;
+        this.chests = chests;
         this.source = document.createElement('canvas');
         this.source.width = this.source.height = size;
         const ctx = this.source.getContext('2d'), pixels = ctx.createImageData(size, size);
@@ -76,7 +77,7 @@ export class OpushkaMap {
             const [x, y] = at(house.x, house.z);
             const width = Math.max(10, house.width * scale), height = Math.max(8, house.depth * scale);
             if (x < -width || x > w + width || y < -height || y > h + height) continue;
-            ctx.fillStyle = house.ruined ? '#746f5a' : house.style === 'hall' ? '#bcb7a6' : '#b98154';
+            ctx.fillStyle = house.ruined ? '#746f5a' : house.style === 'hall' || house.style === 'castle' ? '#bcb7a6' : '#b98154';
             ctx.strokeStyle = house.ruined ? '#c0ad8b' : '#f0d9ad';
             ctx.lineWidth = 1.7;
             ctx.setLineDash(house.ruined ? [2, 2] : []);
@@ -88,8 +89,18 @@ export class OpushkaMap {
                 ctx.fillRect(x-1.15,y+height/2-2,2.3,2.6);
             }
         }
+        for (const chest of this.chests()) {
+            if (Math.abs(chest.y - player.pos.y) > 3) continue;
+            const [x,y] = at(chest.x,chest.z);
+            if (x < 3 || x > w-3 || y < 3 || y > h-3) continue;
+            ctx.fillStyle = chest.open ? '#777362' : '#f2c56c';
+            ctx.strokeStyle = '#423326';
+            ctx.lineWidth=1.5;
+            ctx.fillRect(x-3.3,y-2.8,6.6,5.6);
+            ctx.strokeRect(x-3.3,y-2.8,6.6,5.6);
+        }
         ctx.restore();
-        ctx.strokeStyle = '#c7be9b';
+        ctx.strokeStyle = 'rgba(220,208,173,.38)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.roundRect(2, 2, w - 4, h - 4, 9);

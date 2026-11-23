@@ -27,6 +27,8 @@ import * as THREE from 'three';
 import { VoiceService } from '../src/input/VoiceService.js';
 import { matchSpell } from '../src/fx/SpellManager.js';
 import { DAMAGE } from '../src/game/Damage.js';
+import { MANA, FIRST_SPELL } from '../src/game/Mana.js';
+import { SPELL_COST } from '../src/game/SpellCosts.js';
 import { CLASH, DUEL, clashPush } from '../src/game/Duel.js';
 import { segmentToSegment } from '../src/game/SegmentContact.js';
 import { spellPhrase, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR } from '../src/audio/SpellPhrase.js';
@@ -47,13 +49,19 @@ export const SPELLS = {
     AvadaKedavra: { ru: 'Авада Кедавра', kind: 'bolt', speed: 12, color: 0x1f8a2a, core: 0x9dff3a, size: 0.06, hp: DAMAGE.AvadaKedavra, pierce: true, life: 2.6 },
     Ice: { ru: 'Айс', kind: 'bolt', speed: 14, color: 0x8fdcff, core: 0xf2fbff, size: 0.04, freeze: 10, burn: 3, life: 2.4 },
     IceMaxima: { ru: 'Айс Максима', kind: 'bolt', speed: 14, color: 0x6fc8ff, core: 0xffffff, size: 0.055, freeze: 6, burn: 10, life: 2.4 },
+    SapiraDuel: { ru: 'Сапира', kind: 'bolt', speed: 12, color: 0xa77af6, core: 0xecdbff, size: 0.047, hp: DAMAGE.Sapira, push: 2.1, life: 2.5 },
+    LevitateDuel: { ru: 'Вингардиум Левиоса', kind: 'bolt', speed: 11, color: 0xe7bb69, core: 0xfff4c9, size: 0.041, hp: 0, lift: 3.1, life: 2.5 },
+    Wind: { ru: 'Вайнд', kind: 'gust', power: 1 },
+    WindMaxima: { ru: 'Вайнд Максима', kind: 'gust', power: 3 },
+    Inferno: { ru: 'Инферно', kind: 'fire' },
+    Gather: { ru: 'Gather', kind: 'gather' },
     Protection: { ru: 'Протекшн', kind: 'shield', hold: 3, sphere: false },
     ProtectionMaxima: { ru: 'Протекшн Максима', kind: 'shield', hold: 6, sphere: true },
 };
 // (the game's word for each: «Frozen» is «Айс»)
-const ALIAS = { Frozen: 'Ice', FrozenMaxima: 'IceMaxima', SapiraDuel: null };
+const ALIAS = { Frozen: 'Ice', FrozenMaxima: 'IceMaxima', IceDuel: 'Ice', Sapira: 'SapiraDuel', Levitation: 'LevitateDuel' };
 const KEYS = { KeyB: ['Bombardo', 'BombardoMaxima'], KeyJ: ['Jolt', 'JoltMaxima'], KeyT: ['Stupefy', 'Stupefy'], KeyE: ['Expelliarmus', 'Expelliarmus'],
-    KeyK: ['AvadaKedavra', 'AvadaKedavra'], KeyI: ['Ice', 'IceMaxima'], KeyP: ['Protection', 'ProtectionMaxima'] };
+    KeyK: ['AvadaKedavra', 'AvadaKedavra'], KeyG: ['Wind', 'WindMaxima'], KeyI: ['Ice', 'IceMaxima'], KeyP: ['Protection', 'ProtectionMaxima'] };
 
 export const HERO = { HP: 20, RESPAWN: 6, BODY_R: 0.32, BODY_H: 1.8 };
 const BLAST = { R: 4.2, PEAK: 8, CRATER: 4.8, DEPTH: 1.3, CRATER_MAX: 8.5, DEPTH_MAX: 2.8 }; // the blast of a Bombardo (Maxima: ×√3 the reach, ×3 the harm, the dent ×2.2) — the author 23.11: «слишком слабые, прямо слишком»
@@ -65,6 +73,8 @@ export class OpushkaSpells {
     constructor(api) {
         this.api = api;
         this.bolts = [];
+        this.successes = new Set();
+        this.mana = this.maxMana = MANA.BASE;
         this.clashes = new Map();
         this.shields = [];   // {by, pos, dir, sphere, t, life, mesh}
         this.clods = null;
@@ -133,7 +143,11 @@ export class OpushkaSpells {
         const phrase = spellPhrase(command, { final });
         if (phrase.name && !phrase.ok) return; // (a spell's word inside talk)
         let spoken = matchSpell(command);
-        if (!spoken) return;
+        if (!spoken) {
+            if (final && command.length>=3 && !this.api.village?.()?.voiceActive) this.api.village?.()?.hear?.(command);
+            return;
+        }
+        if (spoken === 'Reveal') { if (final) this.api.reveal?.(); return; }
         const now = performance.now(), running = !!this.api.running?.();
         const why = afterCast(this._lastCast, spoken, meta, now) || lateInSpeech(spoken, command, meta, now)
             || bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips: undefined })
@@ -143,14 +157,14 @@ export class OpushkaSpells {
         if (spoken in ALIAS) spoken = ALIAS[spoken];
         if (!SPELLS[spoken]) { if (final) this.api.hud(`«${command}» — в этом мире это заклинание пока не работает`); return; }
         // (a «Бомбардо» may still become «… Максима»: the plain one waits for the phrase's end; the others go at once — once a phrase)
-        if (!final && (spoken === 'Bombardo' || spoken === 'Jolt' || spoken === 'Ice' || spoken === 'Protection')) return;
+        if (!final && (spoken === 'Bombardo' || spoken === 'Jolt' || spoken === 'Ice' || spoken === 'Protection' || spoken === 'Wind')) return;
         if (this._lastCast && this._lastCast.seg != null && meta?.seg === this._lastCast.seg && this._lastCast.spell === spoken) return; // (the same phrase seen again)
         this._lastCast = { spell: spoken, at: now, seg: meta?.seg, to: meta?.to };
         this.cast(spoken);
     }
 
     /** Where the wand's tip is and where it points. */
-    aim() {
+    aim(assist = true) {
         const rig = this.api.rig(), cam = this.api.camera, P = this.api.player();
         const hand = this.api.wandHand?.() || 'R';
         const wand = this.api.wandHeld?.() === false ? null : rig?.fingers?.[hand]?.wand;
@@ -181,7 +195,7 @@ export class OpushkaSpells {
             this._raiseArm(d);
         }
         // a little help: a living target within ~5° of the line is aimed at its chest
-        const best = this._assist(o, d);
+        const best = assist ? this._assist(o, d) : null;
         if (best) d.copy(best).sub(o).normalize();
         return { o, d };
     }
@@ -231,15 +245,40 @@ export class OpushkaSpells {
             return;
         }
         if ((this.me.wandOut || this.api.wandHeld?.() === false) && S.kind !== 'shield') { this.api.hud('🪄 Палочки нет в руке — подберите её'); return; }
-        const { o, d } = this.aim();
+        if (this.api.knows?.(name) === false) { this.api.hud('Сначала изучите это заклинание со свитка'); return; }
+        const canonical = name === 'SapiraDuel' ? 'Sapira' : name === 'LevitateDuel' ? 'Levitation' : name;
+        const cost = SPELL_COST[canonical] ?? 0;
+        if (!this.noHarm && this.mana < cost) { this.api.hud('Не хватает маны'); return; }
+        const { o, d } = this.aim(S.kind !== 'gather');
+        if (S.kind === 'gather') {
+            if (this.api.gather?.(o, d, cost)) this.sound('cast', o, .5);
+            return;
+        }
+        if (!this.noHarm) this.mana -= cost;
         const id = this.api.net()?.localId || 'me';
         const castId = id + ':' + (++this._seq);
         this.api.hud(`🪄 «${S.ru}»`);
         this._spawn(name, o, d, id, castId, true);
-        this.api.net()?.send({ t: 'cast', n: name, o: [o.x, o.y, o.z].map(r3), d: [d.x, d.y, d.z].map(r4), id: castId }, true);
+        if (name !== 'Inferno') this.api.net()?.send({ t: 'cast', n: name, o: [o.x, o.y, o.z].map(r3), d: [d.x, d.y, d.z].map(r4), id: castId }, true);
+    }
+
+    crystalFound(point) {
+        this.maxMana += MANA.CRYSTAL;
+        this.mana = Math.min(this.maxMana,this.mana+MANA.CRYSTAL);
+        this.flash(point,0x6abfff,1.3,.17);
+        this.api.hud('Кристалл маны · +'+MANA.CRYSTAL+' ячейка');
+    }
+
+    _succeeded(name) {
+        if(this.noHarm||this.successes.has(name))return;
+        this.successes.add(name);
+        const gain=FIRST_SPELL[name]??(name==='SapiraDuel'?FIRST_SPELL.Sapira:0)??0;
+        this.maxMana+=gain;this.mana+=gain;
     }
 
     castResident(npc, target, name) {
+        name=ALIAS[name]||name;
+        if(!SPELLS[name])return false;
         const wand = npc.rig.fingers?.[npc.rig.activeHand]?.wand;
         if (!wand) return false;
         const origin = wand.localToWorld(new V3(0, wand.userData.tipY || 0.62, 0));
@@ -252,7 +291,7 @@ export class OpushkaSpells {
 
     /** Somebody else's cast came over the net: the same charge here (it hurts whoever it reaches on his own computer). */
     netCast(m) {
-        if (!SPELLS[m.n] || !Array.isArray(m.o) || !Array.isArray(m.d)) return;
+        if (!SPELLS[m.n] || SPELLS[m.n].kind === 'gather' || !Array.isArray(m.o) || !Array.isArray(m.d)) return;
         const o = new V3(...m.o), d = new V3(...m.d).normalize();
         if (![o.x, o.y, o.z, d.x, d.y, d.z].every(Number.isFinite)) return;
         this._spawn(m.n, o, d, m.from, m.id, false);
@@ -260,7 +299,18 @@ export class OpushkaSpells {
 
     _spawn(name, o, d, by, castId, mine) {
         const S = SPELLS[name];
-        if (S.kind === 'shield') { this._shield(name, o, d, by); return; }
+        if (S.kind === 'shield') { this._shield(name, o, d, by); if(mine)this._succeeded(name);return; }
+        if (S.kind === 'fire') { if(mine&&this.api.ignite?.())this._succeeded(name);return; }
+        if (S.kind === 'gust') {
+            const door=this.api.village?.()?.windDoor(o,d);
+            for(let i=0;i<38;i++){
+                const p=o.clone().addScaledVector(d,rnd(.1,1.3));
+                this.smoke.spawn(p,d.clone().multiplyScalar(rnd(3,7)*S.power).add(new V3(rnd(-1,1),rnd(-.3,.6),rnd(-1,1))),0xa6c4c8,.05,rnd(.23,.45),{grow:4,alpha:.23,drag:.9});
+            }
+            this.sound('cast',o,.55);
+            if(mine&&door)this._succeeded(name);
+            return;
+        }
         const core = new THREE.Mesh(this.coreGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(S.core).multiplyScalar(2.2), toneMapped: false }));
         core.scale.setScalar(S.size); core.position.copy(o);
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.halo, color: S.color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.9 }));
@@ -331,6 +381,7 @@ export class OpushkaSpells {
     update(dt) {
         const { U } = this.api;
         this._me(dt);
+        this.mana=Math.min(this.maxMana,this.mana+dt);
         for (const sh of this.shields) {
             sh.t += dt; this._placeShield(sh); sh.mesh.material.uniforms.uTime.value = this.api.U.uTime.value;
             const fade = Math.min(1, sh.t * 6) * (1 - clamp((sh.t - sh.life + 0.6) / 0.6, 0, 1));
@@ -612,6 +663,7 @@ export class OpushkaSpells {
         spellLog(`${b.name} → ${t.kind} на ${b.age.toFixed(2)} с, ${p.distanceTo(b.hand).toFixed(1)} м`);
         b.done = true;
         const S = b.S, G = this.glow;
+        if(b.mine)this._succeeded(b.name);
         if (S.kind === 'orb') { this._explode(b, p); return; }
         for (let i = 0; i < 30; i++) G.spawn(p, _v.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(2), i % 2 ? S.color : S.core, rnd(0.02, 0.04), rnd(0.2, 0.45), { drag: 3 });
         this.flash(p, S.color, 1.4, 0.12);
@@ -622,7 +674,9 @@ export class OpushkaSpells {
         } else if (t.kind === 'friend' && net?.isHost) {
             net.send({ t: 'opimpact', who: t.id, by: b.by, spell: b.name, dir: b.dir.toArray().map(r3) });
         }
-        else if (t.kind === 'resident') this.api.village().hit(t.npc, S.hp || 0, b.dir, b.by, S.push || S.stun || S.freeze ? 1.0 : 0.25);
+        else if (t.kind === 'resident') this.api.village().hit(t.npc, b.name==='AvadaKedavra' ? t.npc.hp : S.hp || 0, b.dir, b.by, {
+            push: S.push || 0, up: S.push ? 2.5 + S.push * .15 : 0, stun: S.stun || 0, freeze: S.freeze || 0,
+        });
         else if (t.kind === 'pig') this._pigHit(t.i, b.name, b.dir, 1);
     }
 
@@ -632,6 +686,8 @@ export class OpushkaSpells {
         spellLog(`${b.name} взрыв: ${b.age.toFixed(2)} с, ${b.p.distanceTo(b.hand).toFixed(1)} м от руки`);
         const maxi = b.name === 'BombardoMaxima', S = b.S, pw = S.power;
         const R = BLAST.R * Math.sqrt(pw);
+        if(b.mine)this._succeeded(b.name);
+        this.api.loot?.()?.blast(p,R,b.by);
         const G = this.glow, Sm = this.smoke;
         if (water) this.waterBurst(p, R, soft);
         else {
@@ -683,7 +739,10 @@ export class OpushkaSpells {
                 const d = npc.pos.clone().add(new V3(0, 0.9, 0)).distanceTo(p);
                 if (d < reach || alarm.has(npc.home.id)) {
                     const force = Math.max(0, 1 - d / reach);
-                    village.hit(npc, BLAST.PEAK * pw * force * soft, npc.pos.clone().sub(p).setY(0).normalize(), b.by, force);
+                    const dir = npc.pos.clone().sub(p).setY(0).normalize();
+                    village.hit(npc, BLAST.PEAK * pw * force * soft, dir, b.by, {
+                        push: (9 + 9 * pw) * force * soft, up: (5 + 2 * pw) * force * soft,
+                    });
                 }
             }
         }
@@ -782,10 +841,22 @@ export class OpushkaSpells {
         let hp = o ? o.hp : S.hp || 0, push = o ? o.push : S.push || 0, up = o ? o.up : 0;
         if (S.stun) { me.stun = Math.max(me.stun, S.stun); this.api.hud('💫 Вас оглушили'); }
         if (S.freeze) { me.frozen = S.freeze; me.burn = S.burn; this.api.hud('❄️ Вы во льду'); this.sound('freeze', P.pos, 0.8); }
+        if (S.lift) { P.grounded=false;P.vy=Math.max(P.vy,S.lift);me.stun=Math.max(me.stun,.55); }
         if (S.disarm && !me.wandOut && this.api.wandHeld?.() !== false) this._loseWand(dir);
         if (name.startsWith('Jolt')) { up = 2.5 + push * 0.15; me.stun = Math.max(me.stun, 0.6); }
         if (push > 0) { P.vel.x += dir.x * push; P.vel.z += dir.z * push; P.vy = Math.max(P.vy, up); P.grounded = false; }
         if (hp > 0) this._damage(hp, by);
+        if (me.dead || S.stun || push >= 4.5) {
+            if (!me.dead) me.stun = Math.max(me.stun, push >= 4.5 ? 2.4 : S.stun || 0);
+            this._fall(P, dir, push || (me.dead ? 2.1 : 1.4));
+        }
+    }
+
+    _fall(P, direction, energy) {
+        if (direction.lengthSq() < .001) direction = new V3(-Math.sin(P.faceYaw), 0, -Math.cos(P.faceYaw));
+        const rig = this.api.rig();
+        if (!rig?.limp && P.vel.lengthSq() < .5) P.vel.addScaledVector(direction, energy * .45);
+        this.api.fall?.(P, direction, energy);
     }
 
     _damage(hp, by) {
@@ -797,6 +868,7 @@ export class OpushkaSpells {
             me.dead = HERO.RESPAWN; me.stun = 0; me.frozen = 0;
             const who = by && by !== this._myId() ? this.api.nameOf(by) : null;
             this.api.hud(who ? `☠️ Вас победил ${who} — встанете на поляне` : '☠️ Вы погибли — встанете на поляне');
+            this.mana=this.maxMana=MANA.BASE;this.successes.clear();
             this.api.net()?.send({ t: 'died', by }, true);
         }
     }
@@ -848,16 +920,18 @@ export class OpushkaSpells {
             if (me.frozen <= 0 || me.dead) { this.iceMine.visible = false; me.frozen = 0; this._shatter(P.pos); }
         }
         if (me.stun > 0) me.stun -= dt;
-        // the fall: stunned (Остолбеней), knocked off the feet, dead — the body goes over backwards; gets up again
-        const down = me.dead || me.stun > 0.7 ? 1 : 0;
-        me.fall += (down - me.fall) * (1 - Math.exp(-dt * (down ? 5 : 3)));
-        root.rotation.order = 'YXZ'; root.rotation.x = -me.fall * Math.PI * 0.47;
-        this.api.setLocked(me.dead > 0 || me.stun > 0 || me.frozen > 0);
+        const rig = this.api.rig();
+        if (me.dead && !rig?.limp) this._fall(P, new V3(), 1.4);
+        if (!me.dead && me.stun <= 0) this.api.recover?.(P);
+        me.fall = rig?.limp ? 1 : 0;
+        root.rotation.x = 0;
+        this.api.setLocked(me.dead > 0 || me.stun > 0 || me.frozen > 0 || !!rig?.limp);
         if (me.dead) {
             me.dead -= dt;
             if (me.dead <= 0) { // up again at the meadow
                 me.dead = 0; me.hp = HERO.HP; me.fall = 0; me.stun = 0; me.frozen = 0;
                 if (me.wandOut) this._takeWand();
+                this.api.stand?.();
                 this.api.respawn();
                 this.api.hud('✨ Вы снова на поляне');
             }
@@ -928,6 +1002,7 @@ export class OpushkaSpells {
                 ph += 2 * Math.PI * (tone * (1 + 0.6 * k)) / sr; d[i] = (y * 1.4 + (tone ? Math.sin(ph) * 0.35 + Math.sin(ph * 2.01) * 0.12 : 0)) * env; }
         });
         this.snd = {
+            creak: whoosh(.48,115,330,98),
             splash: mk(1.65, (samples, n) => {
                 let low = 0;
                 for (let i = 0; i < n; i++) {

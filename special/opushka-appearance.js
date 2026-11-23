@@ -10,6 +10,9 @@ export const OUTFITS = [
     { role: 'resident', coat: 0x855836, skin: 0xba8863, hair: 0x774426, style: 'swept', face: [1.07, 1.02, 1.01], trim: 0x9b8266 },
     { role: 'resident', coat: 0x4f586c, skin: 0xd6a383, hair: 0x4d271d, style: 'curl', face: [0.92, 0.98, 1.03], trim: 0x9a9da3 },
     { role: 'wizard', coat: 0x34385c, skin: 0xc49476, hair: 0x413025, style: 'swept', face: [1, 1, 1], trim: 0xcab175 },
+    { role: 'king', coat: 0x6e292c, skin: 0xbf8566, hair: 0x52443e, style: 'crest', face: [1.1, 1.04, 1], trim: 0xe1c06f },
+    { role: 'vizier', coat: 0x514168, skin: 0xa06c48, hair: 0x3e2a24, style: 'bun', face: [0.96, 1.06, 0.95], trim: 0xc5b792 },
+    { role: 'knight', coat: 0x5e3640, skin: 0xd2a888, hair: 0x6d4636, style: 'shoulder', face: [1.03, 1.03, 0.98], trim: 0xbbaeb0 },
 ];
 
 export function heroProfile(look) {

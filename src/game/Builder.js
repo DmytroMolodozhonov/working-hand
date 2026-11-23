@@ -24,9 +24,10 @@ import { RESOURCE, STACK, resourceOf } from './Inventory.js';
 import { settleAround } from '../world/Collapse.js';
 import { stuffOf } from '../world/Structure.js';
 import { knows } from './SpellBook.js';
+import { SPELL_COST } from './SpellCosts.js';
 
 export const BUILD_SPELLS = {
-    Gather: { name: 'Gather', ru: 'собрать ресурс', cost: 3 },
+    Gather: { name: 'Gather', ru: 'собрать ресурс', cost: SPELL_COST.Gather },
     CreateFloor: { name: 'Create a Floor', ru: 'пол', cost: 4 },
     CreateWall: { name: 'Create a Wall', ru: 'стена', cost: 4 },
     CreateCeiling: { name: 'Create a Ceiling', ru: 'потолок', cost: 4 },
