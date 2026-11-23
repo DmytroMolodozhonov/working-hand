@@ -105,6 +105,7 @@ export class OpushkaSpells {
     startVoice() {
         for (const w of this._warm || []) w.removeFromParent();
         this._warm = null;
+        if (navigator.webdriver) return; // (automated checks: no microphone)
         try { this.voice.start(); } catch (e) { console.warn('[Опушка] voice', e); }
     }
 
@@ -369,6 +370,7 @@ export class OpushkaSpells {
     }
 
     _onWorld(b, w) {
+        (window.__spellLog || (window.__spellLog = [])).push(`${b.name} → ${w.kind} на ${b.age.toFixed(2)} с, ${w.p.distanceTo(b.hand).toFixed(1)} м`);
         if (b.S.kind === 'orb') { this._explode(b, w.p.addScaledVector(w.n, 0.1)); return; }
         b.done = true;
         const G = this.glow, S = b.S;
@@ -388,6 +390,7 @@ export class OpushkaSpells {
 
     /** A charge reached a body. */
     _onBody(b, p, t) {
+        (window.__spellLog || (window.__spellLog = [])).push(`${b.name} → ${t.kind} на ${b.age.toFixed(2)} с, ${p.distanceTo(b.hand).toFixed(1)} м`);
         b.done = true;
         const S = b.S, G = this.glow;
         if (S.kind === 'orb') { this._explode(b, p); return; }
@@ -402,6 +405,7 @@ export class OpushkaSpells {
     // ----------------------------------------------------------------------------------------------- the blast
     _explode(b, p, soft = 1) {
         b.done = true;
+        (window.__spellLog || (window.__spellLog = [])).push(`${b.name} взрыв: ${b.age.toFixed(2)} с, ${b.p.distanceTo(b.hand).toFixed(1)} м от руки`);
         const maxi = b.name === 'BombardoMaxima', S = b.S, pw = S.power;
         const R = BLAST.R * Math.sqrt(pw);
         const G = this.glow, Sm = this.smoke;
@@ -426,7 +430,7 @@ export class OpushkaSpells {
             this.clods.burst(p, maxi ? 70 : 30, R);
         }
         this._needlesAround(p, R * 2);
-        this.flash(p, 0xff9a40, (maxi ? 9 : 4) * soft, maxi ? 0.35 : 0.22); this._ember = onGround ? (maxi ? 30 : 14) : 0;
+        this.flash(p, 0xff9a40, (maxi ? 9 : 4) * soft, maxi ? 0.35 : 0.22); this._ember = onGround ? (maxi ? 8 : 4) : 0;
         this.sound(maxi ? 'boomMax' : 'boom', p, soft);
         // who it reaches (each on his own computer; the pigs on the host's)
         const P = this.api.player();
@@ -747,7 +751,7 @@ function shieldMaterial() {
           void main(){float fr=1.-abs(dot(normalize(vN),normalize(vP)));vec2 q=vW.xz*6.+vW.y*3.;vec2 g=vec2(q.x+q.y*0.577,q.y*1.155);vec2 c=floor(g)+0.5;
             float hx=smoothstep(0.42,0.5,hexd(fract(g)-0.5));float t=uTime;
             float hit=max(0.,1.-distance(vW,uHit)*1.5)*exp(-max(0.,(t-uHitT))*3.);
-            float a=uA*(0.12+fr*0.55+hx*0.18+hit*1.5+0.08*n3(vW*8.));gl_FragColor=vec4(vec3(0.55,0.78,1.)*a*1.6,a);}`,
+            float a=uA*(0.04+fr*0.35+hx*0.1+hit*1.2+0.05*n3(vW*8.));gl_FragColor=vec4(vec3(0.45,0.7,1.)*a,a);}`,
     });
 }
 
