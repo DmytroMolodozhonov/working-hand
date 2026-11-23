@@ -78,6 +78,7 @@ export class ZnsArms {
                 try { await svc.start(); break; } catch (e) { this.status = 'камера: ' + (e?.name === 'NotAllowedError' ? 'нет разрешения' : e?.name === 'NotReadableError' ? 'занята другой программой' : 'не найдена') + ' — пробую снова'; if (i > 40) throw e; await new Promise((r) => setTimeout(r, 3000)); }
             }
             this.svc = svc;
+            const pv = document.getElementById('webcam-preview'); if (pv) pv.hidden = false; // (the camera's window in the corner, as in the game)
             this.status = svc.native ? 'камера: программа камеры' : 'камера: в браузере';
         } catch (e) {
             this.status = 'камера недоступна: ' + (e?.message || e);

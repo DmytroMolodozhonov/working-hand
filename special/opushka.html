@@ -89,7 +89,12 @@ body.touch.playing #joy{display:block}
 <div id="spellHud" style="position:fixed;left:50%;bottom:72px;transform:translateX(-50%);z-index:30;padding:6px 14px;border-radius:8px;background:rgba(10,12,8,.55);color:#efe6cf;font:15px/1.4 Georgia,serif;pointer-events:none;opacity:0;transition:opacity .4s;max-width:calc(100vw - 32px);text-align:center"></div>
 <div id="hpBar" style="position:fixed;left:16px;bottom:16px;z-index:30;width:min(220px,40vw);height:8px;border-radius:4px;background:rgba(10,12,8,.55);overflow:hidden;pointer-events:none"><div id="hpFill" style="height:100%;width:100%;background:linear-gradient(90deg,#8e1b12,#c8402a);transition:width .25s"></div></div>
 <div id="mpHud" hidden style="position:fixed;left:16px;top:16px;z-index:30;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;border-radius:8px;background:rgba(10,12,8,.62);color:#efe6cf;font:13px/1.4 Georgia,serif;pointer-events:none"></div>
-<video id="zns-webcam" playsinline muted hidden></video><video id="zns-preview" playsinline muted hidden></video>
+<video id="zns-webcam" playsinline muted hidden></video>
+<!-- (the author 23.11: «не вижу справа внизу, как я выгляжу — по аналогии со стандартным»): the game's own camera window — the picture and the skeleton the camera sees -->
+<div id="webcam-preview" hidden style="position:fixed;right:20px;bottom:40px;width:200px;height:150px;border-radius:12px;overflow:hidden;border:3px solid rgba(255,255,255,.2);box-shadow:0 8px 32px rgba(0,0,0,.3);background:#000;z-index:28;pointer-events:none">
+  <video id="zns-preview" autoplay playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)"></video>
+  <canvas id="skeleton-canvas" width="320" height="240" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+</div>
 <script type="module">
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
@@ -309,7 +314,7 @@ float blastFrost(vec2 p){float b=0.;for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q
   float fade=1.-smoothstep(Q.z*0.5,Q.z,age);float d=length(p-B.xy)/B.z;b=max(b,(1.-smoothstep(0.4,1.,d+vnoise(p*7.)*0.4))*fade*min(1.,age*4.));}return b;}
 vec2 blastPush(vec2 p){vec2 o=vec2(0.);for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>25.||Q.y>0.5)continue;
   vec2 dp=p-B.xy;float dl=length(dp);vec2 dir=dp/max(dl,1e-3);float rf=age*38.;
-  float front=exp(-pow((dl-rf)/(1.2+age*4.),2.))*(1.-smoothstep(0.,1.6,age))*2.4*min(Q.x,2.);
+  float front=exp(-((dl-rf)/(1.2+age*4.))*((dl-rf)/(1.2+age*4.)))*(1.-smoothstep(0.,1.6,age))*2.4*min(Q.x,2.);
   float lay=(1.-smoothstep(B.z,B.z*3.,dl))*(1.-smoothstep(4.,25.,age))*1.1;o+=dir*(front+lay);}return o;}
 vec3 blastGlow;
 vec3 blastGround(vec2 p,vec3 alb){blastGlow=vec3(0.);for(int i=0;i<6;i++){vec4 B=uBlast[i];vec4 Q=uBlastP[i];float age=uTime-B.w;if(B.z<=0.||age<0.||age>Q.z)continue;
@@ -325,7 +330,7 @@ vec3 blastGround(vec2 p,vec3 alb){blastGlow=vec3(0.);for(int i=0;i<6;i++){vec4 B
   alb=mix(alb,alb*vec3(0.75,0.6,0.38)+vec3(0.02,0.012,0.),ring*0.8*fade);alb=mix(alb,cc,soot*fade);
   float hot=exp(-age/2.5)*0.8+exp(-age/9.)*0.2;float crack=smoothstep(0.035,0.,abs(vnoise(p*6.+B.xy)-0.5))*charA;
   float speck=smoothstep(0.82,0.9,vnoise(p*23.+age*0.3))*charA;blastGlow+=vec3(1.,0.32,0.06)*(crack*0.9+speck*0.6)*hot*2.5*fade*min(Q.x,2.);
-  float rf=age*38.;float wave=exp(-pow((dl-rf)/0.8,2.))*(1.-smoothstep(0.,1.,age));alb=mix(alb,vec3(0.25,0.21,0.16),wave*0.5);}
+  float rf=age*38.;float wave=exp(-((dl-rf)/0.8)*((dl-rf)/0.8))*(1.-smoothstep(0.,1.,age));alb=mix(alb,vec3(0.25,0.21,0.16),wave*0.5);}
   return alb;}
 
 float ign(vec2 fc){return fract(52.9829189*fract(dot(fc,vec2(0.06711056,0.00583715))));}

@@ -73,7 +73,7 @@ export class OpushkaSpells {
     /** At loading: everything that will ever be drawn, made now (no shader made in the middle of a fight; one light, always there). */
     init() {
         const { scene, U } = this.api;
-        this.light = new THREE.PointLight(0xffa050, 0, 0, 2); scene.add(this.light); this._lightT = 0; this._lightK = 0;
+        this.light = new THREE.PointLight(0xffa050, 0, 0, 2); scene.add(this.light); this._lightT = 0; this._lightK = 0; this._lightTau = 1; this._ember = 0;
         U.uBlast.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, -1e4));
         U.uBlastP.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, 0));
         this.glow = new Sparks(scene, 2400, true);
@@ -289,7 +289,9 @@ export class OpushkaSpells {
         }
         // the one light: a flash fades, then the embers' glow
         this._lightT += dt;
-        this.light.intensity = this._lightK * Math.exp(-this._lightT / this._lightTau) + (this._ember || 0) * Math.max(0, 1 - this._lightT / 6) * (0.8 + 0.2 * Math.sin(this._lightT * 23));
+        // (never «not a number»: a NaN light turns every lit thing on the video card black — the author's dark forest, 23.11)
+        const li = this._lightK * Math.exp(-this._lightT / (this._lightTau || 1)) + (this._ember || 0) * Math.max(0, 1 - this._lightT / 6) * (0.8 + 0.2 * Math.sin(this._lightT * 23));
+        this.light.intensity = Number.isFinite(li) ? li : 0;
         this.shake = Math.max(0, this.shake - dt * 1.6);
         void U;
     }
