@@ -52,7 +52,9 @@ body.touch.playing #joy{display:block}
 .loading #overlay .row,.loading #go,.loading #overlay .keys,.loading #overlay .sub,.loading #overlay a{display:none!important}
 body.auto #overlay{display:none!important}
 body.creative #hud{display:none!important}
-#pause-menu .pause-box button{min-width:12rem}
+#pause-main{display:flex!important;flex-direction:column;align-items:center;gap:12px}
+.op-opts{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;font-size:.9rem;opacity:.95}.op-opts span{width:100%;text-align:center;opacity:.7;font-size:.85rem;letter-spacing:.04em}
+.pause-box .op-opts button{display:inline-block;width:auto;margin:0;font-size:.95rem;padding:8px 14px}
 </style>
 
 <canvas id="c"></canvas>
@@ -91,13 +93,13 @@ body.creative #hud{display:none!important}
 <div id="voice-debug" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);color:#ffeaa7;font-size:12px;font-weight:normal;font-family:sans-serif;z-index:9999;text-shadow:1px 1px 2px #000;pointer-events:none;text-align:center;background:rgba(0,0,0,.3);padding:5px 10px;border-radius:5px;display:none"></div>
 <div id="damage-flash" class="hidden"></div>
 <div id="pause-menu" class="hidden"><div class="pause-box"><div class="pause-title">Пауза</div>
-  <div class="pause-pane active" style="display:flex;flex-direction:column;gap:10px">
+  <div id="pause-main" class="pause-pane active">
     <div class="mu-seal" aria-hidden="true"><i></i></div>
-    <button id="op-continue">▶ Продолжить</button>
-    <button id="op-view">👁 Вид: от первого лица</button>
-    <div class="op-row" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button data-tod="golden">🌅 Золотой час</button><button data-tod="noon">☀️ Полдень</button><button data-tod="mist">🌫 Утренний туман</button></div>
-    <div class="op-row" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button data-q="medium">Среднее</button><button data-q="high">Высокое</button><button data-q="ultra">Ультра</button></div>
-    <button id="op-exit">⟲ Выйти в главное меню</button>
+    <button id="pause-continue-btn">▶ Продолжить</button>
+    <div class="op-opts"><span>Вид</span><button class="pause-tab" id="op-view">от первого лица</button></div>
+    <div class="op-opts"><span>Время суток</span><button class="pause-tab" data-tod="golden">Золотой час</button><button class="pause-tab" data-tod="noon">Полдень</button><button class="pause-tab" data-tod="mist">Утренний туман</button></div>
+    <div class="op-opts"><span>Качество</span><button class="pause-tab" data-q="medium">Среднее</button><button class="pause-tab" data-q="high">Высокое</button><button class="pause-tab" data-q="ultra">Ультра</button></div>
+    <button id="pause-exit-btn">⟲ Выйти в главное меню</button>
   </div></div></div>
 <div id="joy"><i></i></div>
 
@@ -130,7 +132,7 @@ window.__mpNet = mpNet;
 // (the battle spells — special/opushka-spells.js: the game's words, the wand in the fist; a blast dents this world's ground)
 const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() { return camera; }, get U() { return U; }, player: () => player, rig: () => charRig, charRoot: () => charRoot,
   get pigs() { return pigs; }, groundH: (x, z) => groundH(x, z), dent: (x, z, r, d) => dentGround(x, z, r, d), trees: () => treesNear(), rocks: () => rocksAll(),
-  net: () => (mpNet.on ? mpNet.net : null), remotes: () => mpNet.remotes, audio: () => audio.ctx, playing: () => playing, armsLive: () => zns.live(),
+  net: () => (mpNet.on ? mpNet.net : null), remotes: () => mpNet.remotes, audio: () => audio.ctx, playing: () => playing, armsLive: () => zns.live(), running: () => !!zns.raw?.isRunning, keysOff: () => AUTO,
   hud: (t) => spellHud(t), pain: (k) => painFlash(k), setLocked: (b) => { player.locked = b; }, nameOf: (id) => mpNet.net?.players.get(id)?.name || 'другой волшебник',
   oink: (pg) => audio.oink && audio.oink(pg, 1.4), fell: (i, x, z, k) => fellTree(i, x, z, k), respawn: () => { player.pos.set(MEADOW[0] - 4 + Math.random() * 3, 0, MEADOW[1] + 14 + Math.random() * 3); player.pos.y = groundH(player.pos.x, player.pos.z); player.vel.set(0, 0, 0); player.vy = 0; } });
 window.__spells = spells; mpNet.spells = spells;
@@ -194,7 +196,7 @@ const PRESETS={
   low:   {grass:0.22,treeR:70, shadow:2048,shadowR:55, scale:0.7, dpr:1,   msaa:0,rays:28,ferns:0.35},
   medium:{grass:0.42,treeR:95, shadow:2048,shadowR:70, scale:0.85,dpr:1,   msaa:2,rays:40,ferns:0.6},
   high:  {grass:0.7, treeR:125,shadow:4096,shadowR:85, scale:1.0, dpr:1.25,msaa:4,rays:56,ferns:0.85},
-  ultra: {grass:1.0, treeR:155,shadow:4096,shadowR:105,scale:1.0, dpr:2,   msaa:4,rays:72,ferns:1.0},
+  ultra: {grass:1.0, treeR:155,shadow:4096,shadowR:105,scale:1.0, dpr:1.25,   msaa:4,rays:72,ferns:1.0},
 };
 const params=new URLSearchParams(location.search);
 const AUTO=params.get('auto')==='1'||!!params.get('mp'); // (from the game's menu: straight into the world — no menu of this page, ultra, the golden hour)
@@ -1192,15 +1194,15 @@ function collide(p){
 }
 const joy={x:0,y:0,id:null,lookId:null,lx:0,ly:0};
 function updatePlayer(dt){
-  let fx=0,fz=0;if(keys.KeyW||keys.ArrowUp)fz+=1;if(keys.KeyS||keys.ArrowDown)fz-=1;if(keys.KeyA||keys.ArrowLeft)fx-=1;if(keys.KeyD||keys.ArrowRight)fx+=1;
-  fx+=joy.x;fz+=-joy.y;
+  let fx=0,fz=0;if(!AUTO){if(keys.KeyW||keys.ArrowUp)fz+=1;if(keys.KeyS||keys.ArrowDown)fz-=1;if(keys.KeyA||keys.ArrowLeft)fx-=1;if(keys.KeyD||keys.ArrowRight)fx+=1;}
+  if(!AUTO){fx+=joy.x;fz+=-joy.y;}
   // (the author 23.11: «управление должно быть через камеру», as in the game: the head looks and turns the body, stepping on the spot walks,
   //  faster steps run, a squat crouches, a jump jumps — ZnsArms.drive; the keys and the mouse only while the camera does not see the player)
   const cam=playing?zns.drive(player,dt):null;player.camDrive=!!cam;
   if(cam){fx=0;fz=cam.run?1:0;if(cam.jump)joy.jump=true;}
   if(player.locked){fx=0;fz=0;}const run=cam?cam.k>0.55:keys.ShiftLeft||keys.ShiftRight||Math.hypot(joy.x,joy.y)>0.92;
   const len=Math.hypot(fx,fz);if(len>1){fx/=len;fz/=len;}
-  player.crouch=cam?cam.crouch:!!(keys.ControlLeft||keys.ControlRight||keys.KeyX);
+  player.crouch=cam?cam.crouch:!AUTO&&!!(keys.ControlLeft||keys.ControlRight||keys.KeyX);
   const sp=player.crouch?(run?1.8:0.95):cam?1.65+(4.6-1.65)*clamp((cam.k-0.25)/0.6,0,1):run?4.6:1.65;const my=cam?player.walkYaw:player.yaw;
   const fw=new V3(-Math.sin(my),0,-Math.cos(my)),rt=new V3(Math.cos(my),0,-Math.sin(my));
   const target=fw.multiplyScalar(fz*sp).addScaledVector(rt,fx*sp);
@@ -1208,7 +1210,7 @@ function updatePlayer(dt){
   player.vel.lerp(target,1-Math.exp(-dt*(player.grounded?(len>0?5:7):0.7)));
   player.pos.addScaledVector(player.vel,dt);collide(player.pos);
   const g=groundH(player.pos.x,player.pos.z);
-  if((keys.Space||joy.jump)&&player.grounded&&playing&&!player.locked&&player.landT<0.05&&!player.jumpPrep){player.jumpPrep=1e-4;joy.jump=false;}
+  if(((!AUTO&&keys.Space)||joy.jump)&&player.grounded&&playing&&!player.locked&&player.landT<0.05&&!player.jumpPrep){player.jumpPrep=1e-4;joy.jump=false;}
   if(player.jumpPrep>0){player.jumpPrep+=dt;if(player.jumpPrep>=0.14){const hs=Math.hypot(player.vel.x,player.vel.z);player.jumpPrep=0;player.airStyle=hs>2.6?'leap':'tuck';player.vy=4.5+hs*0.12;player.grounded=false;audio.step(2,true);}}
   if(!player.grounded){player.vy-=11.5*dt;player.pos.y+=player.vy*dt;
     if(player.pos.y<=g&&player.vy<0){player.justLanded=player.vy;player.landT=0.22*clamp(-player.vy/5,0.3,1);player.pos.y=g;player.grounded=true;player.vy=0;audio.step(3.5,true);}}
@@ -2276,16 +2278,16 @@ function autoEnter(){audio.start();enterPlay();spells.startVoice();setTimeout(()
   const wake=()=>{try{audio.ctx&&audio.ctx.state==='suspended'&&audio.ctx.resume();}catch(e){}
     if(!app&&!document.fullscreenElement)document.documentElement.requestFullscreen?.({navigationUI:'hide'}).catch(()=>{});};addEventListener('pointerdown',wake,{once:true});addEventListener('keydown',wake,{once:true});}
 /** The game's pause menu (Esc): continue, the view, the time of day, the quality, back to the game's menu. */
-function gamePause(on){const m=document.getElementById('pause-menu');if(!m)return;m.classList.toggle('hidden',!on);if(on){playing=false;document.body.classList.remove('playing');try{document.exitPointerLock?.();}catch(e){}$('#op-view').textContent=player.view==='first'?'👁 Вид: от первого лица':'👁 Вид: от третьего лица';}else enterPlay();}
-document.getElementById('op-continue')?.addEventListener('click',()=>gamePause(false));
-document.getElementById('op-view')?.addEventListener('click',()=>{setView(player.view==='first'?'third':'first');$('#op-view').textContent=player.view==='first'?'👁 Вид: от первого лица':'👁 Вид: от третьего лица';});
-document.querySelectorAll('#pause-menu [data-tod]').forEach(b=>b.addEventListener('click',()=>setTod(b.dataset.tod)));
-document.querySelectorAll('#pause-menu [data-q]').forEach(b=>b.addEventListener('click',()=>{qKey=b.dataset.q;Q=PRESETS[qKey];setSeg('qual',qKey);if(started)applyQuality();}));
-document.getElementById('op-exit')?.addEventListener('click',()=>{location.href='../index.html';});
+function gamePause(on){const m=document.getElementById('pause-menu');if(!m)return;m.classList.toggle('hidden',!on);if(on){playing=false;document.body.classList.remove('playing');try{document.exitPointerLock?.();}catch(e){}$('#op-view').textContent=player.view==='first'?'от первого лица':'от третьего лица';document.querySelectorAll('#pause-menu [data-tod]').forEach(b=>b.classList.toggle('active',b.dataset.tod===todKey));document.querySelectorAll('#pause-menu [data-q]').forEach(b=>b.classList.toggle('active',b.dataset.q===qKey));}else enterPlay();}
+document.getElementById('pause-continue-btn')?.addEventListener('click',()=>gamePause(false));
+document.getElementById('op-view')?.addEventListener('click',()=>{setView(player.view==='first'?'third':'first');$('#op-view').textContent=player.view==='first'?'от первого лица':'от третьего лица';});
+document.querySelectorAll('#pause-menu [data-tod]').forEach(b=>b.addEventListener('click',()=>{setTod(b.dataset.tod);document.querySelectorAll('#pause-menu [data-tod]').forEach(x=>x.classList.toggle('active',x===b));}));
+document.querySelectorAll('#pause-menu [data-q]').forEach(b=>b.addEventListener('click',()=>{qKey=b.dataset.q;Q=PRESETS[qKey];setSeg('qual',qKey);if(started)applyQuality();document.querySelectorAll('#pause-menu [data-q]').forEach(x=>x.classList.toggle('active',x===b));}));
+document.getElementById('pause-exit-btn')?.addEventListener('click',()=>{location.href='../index.html';});
 function showMenu(){if(AUTO){gamePause(true);return;}playing=false;$('#overlay').classList.remove('gone');document.body.classList.remove('playing');$('#go').textContent='Вернуться';}
 document.addEventListener('pointerlockchange',()=>{pointerLocked=document.pointerLockElement===canvasEl;if(!pointerLocked&&playing&&!isTouch)showMenu();});
 canvasEl.addEventListener('click',()=>{if(playing&&!pointerLocked&&!isTouch){try{canvasEl.requestPointerLock();}catch(e){}}});
-addEventListener('mousemove',e=>{if(!pointerLocked||player.camDrive)return;player.yaw-=e.movementX*0.0021;player.pitch=clamp(player.pitch-e.movementY*0.0021,-1.35,1.35);});
+addEventListener('mousemove',e=>{if(!pointerLocked||player.camDrive||AUTO)return;player.yaw-=e.movementX*0.0021;player.pitch=clamp(player.pitch-e.movementY*0.0021,-1.35,1.35);});
 addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Digit1')setTod('golden');if(e.code==='Digit2')setTod('noon');if(e.code==='Digit3')setTod('mist');
   if(e.code==='KeyC')document.body.classList.toggle('lb');if(e.code==='KeyV')setView(player.view==='first'?'third':'first');if(e.code==='Space'&&playing)e.preventDefault();if(e.code==='KeyH')document.body.classList.toggle('nohud');if(e.code==='Escape'&&AUTO&&started){if(playing)gamePause(true);else gamePause(false);}});
 addEventListener('keyup',e=>{keys[e.code]=false;});

@@ -42,7 +42,8 @@ export class ZnsArms {
         const lm = p.rightHandLandmarks, has = !!(lm && lm.length >= 18);
         const k = has ? V5_WAND.PALM : 0, T = this._aimT;
         // (D.hand is solved just below; the previous frame's hand direction serves — one frame late is nothing next to the steadying)
-        T.set(D.h.x * k + D.f.x * (1 - k), D.h.y * k + D.f.y * (1 - k), D.h.z * k + D.f.z * (1 - k)).normalize();
+        const H = D.hs || D.h;
+        T.set(H.x * k + D.f.x * (1 - k), H.y * k + D.f.y * (1 - k), H.z * k + D.f.z * (1 - k)).normalize();
         if (!D.aim) { D.aim = T.clone(); D.np = new THREE.Vector3(D.n.x, D.n.y, D.n.z); }
         const a = this.steady.alpha(D.aim, T, dt, !!p.isRunning);
         D.aim.lerp(T, a).normalize();
@@ -99,13 +100,17 @@ export class ZnsArms {
             // (the author 23.11: «в какой-то момент просто завис анализ с камеры»): the camera program's stream silent for 4 s while the page is
             // shown — it is opened again (as the game does when it changes the hands' network); a camera taken away — the start is tried again
             this.heardAt = performance.now();
+            // (only the camera program's stream, and only when NOTHING came for 6 s — not even a picture without a person — at most every 20 s;
+            //  the browser's camera is never started again here: starting it over and over is what froze the page)
+            let reopened = 0;
             setInterval(() => {
-                if (document.hidden || !svc.isRunning) return;
-                if (performance.now() - (this.heardAt || 0) < 4000) return;
-                this.heardAt = performance.now();
-                console.warn('[Опушка] camera silent 4 s — reopening');
-                try { if (svc._native) { svc._native.close(); svc._native = null; svc._startNative?.(); } else svc.start?.().catch(() => {}); } catch (e) { /* */ }
-            }, 1000);
+                if (document.hidden || !svc.isRunning || !svc._native) return;
+                const last = Math.max(svc.stats?.lastResultAt || 0, this.heardAt || 0), now = performance.now();
+                if (now - last < 6000 || now - reopened < 20000) return;
+                reopened = now;
+                console.warn('[Опушка] the camera program silent 6 s — its stream opened again');
+                try { svc._native.close(); svc._native = null; svc._startNative?.(); } catch (e) { /* */ }
+            }, 2000);
             const pv = document.getElementById('webcam-preview'); if (pv) pv.hidden = false; // (the camera's window in the corner, as in the game)
             this.status = svc.native ? 'камера: программа камеры' : 'камера: в браузере';
         } catch (e) {
@@ -151,7 +156,10 @@ export class ZnsArms {
                 let nx = a.y * c.z - a.z * c.y, ny = a.z * c.x - a.x * c.z, nz = a.x * c.y - a.y * c.x; // index × pinky
                 if (side === 'left') { nx = -nx; ny = -ny; nz = -nz; } // (the two hands are mirror images: one formula for «out of the palm»)
                 const fl = Math.hypot(fm.x, fm.y, fm.z), nl = Math.hypot(nx, ny, nz);
-                if (fl > 1e-4 && nl > 1e-6) { set(D.h, -fm.x / fl, fm.y / fl, -fm.z / fl); set(D.n, -nx / nl, ny / nl, -nz / nl); D.hand = true; }
+                if (fl > 1e-4 && nl > 1e-6) { set(D.h, -fm.x / fl, fm.y / fl, -fm.z / fl); set(D.n, -nx / nl, ny / nl, -nz / nl); D.hand = true;
+                    // (the hand's own pointing, read off a fist of ~50 px, trembles most: steadied on its own before it joins the forearm in the wand's aim)
+                    const hs = D.hs || (D.hs = { x: D.h.x, y: D.h.y, z: D.h.z }), kh = 1 - Math.exp(-adt * 7);
+                    set(hs, hs.x + (D.h.x - hs.x) * kh, hs.y + (D.h.y - hs.y) * kh, hs.z + (D.h.z - hs.z) * kh); }
                 // the fingers' bends (rad, each of 3 joints of index, middle, ring, little and the thumb): the angle between one bone of the
                 // finger and the next, as the camera sees it in depth too; a straight finger shows ~0.1, a fist ~1.5 at each joint
                 const curl = D.curl || (D.curl = new Float32Array(15));

@@ -26,6 +26,7 @@
 import * as THREE from 'three';
 import { VoiceService } from '../src/input/VoiceService.js';
 import { matchSpell } from '../src/fx/SpellManager.js';
+import { spellPhrase, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR } from '../src/audio/SpellPhrase.js';
 
 const V3 = THREE.Vector3;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -94,9 +95,9 @@ export class OpushkaSpells {
         for (const w of warm) { w.position.set(0, -500, 0); scene.add(w); }
         this._warm = warm;
         this.voice = new VoiceService();
-        this.voice.onResult = (text, isFinal) => this._heard(text, isFinal);
+        this.voice.onResult = (text, isFinal, held, meta) => this._heard(text, isFinal, meta);
         addEventListener('keydown', (e) => {
-            if (e.repeat || !this.api.playing() || e.ctrlKey || e.metaKey) return;
+            if (e.repeat || !this.api.playing() || e.ctrlKey || e.metaKey || this.api.keysOff?.()) return; // (from the game's menu: spells by the voice only, as in the game)
             const k = KEYS[e.code]; if (k) this.cast(k[e.shiftKey ? 1 : 0]);
         });
     }
@@ -109,20 +110,32 @@ export class OpushkaSpells {
         try { this.voice.start(); } catch (e) { console.warn('[Опушка] voice', e); }
     }
 
-    _heard(text, isFinal) {
-        if (!this.api.playing()) return;
-        let sp = matchSpell(String(text || ''));
-        if (sp in ALIAS) sp = ALIAS[sp];
-        if (!sp || !SPELLS[sp]) {
-            if (isFinal && sp) this.api.hud(`«${text}» — в этом мире это заклинание пока не работает`);
-            return;
-        }
-        // (a «Бомбардо» may still become «… Максима»: the Maxima waits for the end of the phrase; the others fly at once, once per phrase)
-        if (!isFinal && (sp === 'Bombardo' || sp === 'Jolt' || sp === 'Ice' || sp === 'Protection')) return;
-        const now = performance.now();
-        if (sp === this._lastSp && now - this._lastAt < 900) return;
-        this._lastSp = sp; this._lastAt = now;
-        this.cast(sp);
+    /**
+     * A phrase heard — the game's own way to tell a spell (main.js voice.onResult; the author 23.11: «у нас есть система определения заклинаний,
+     * много защиты — возьми готовую»; after «Бомбардо Максима» the blast's sound came back as «Айс», «Бомбардо»…): the phrase must be a spell
+     * and not talk (spellPhrase), not the tail of my own last spell — its blast, its echo, the end of the same breath (afterCast), not a word
+     * deep in a long sentence (lateInSpeech), not breath or steps (bodyNoise), and — found by its sound — sure enough (soundTrust).
+     */
+    _heard(command, isFinal, meta = null) {
+        if (!this.api.playing() || !command) return;
+        const final = isFinal || !!meta?.settled;
+        const phrase = spellPhrase(command, { final });
+        if (phrase.name && !phrase.ok) return; // (a spell's word inside talk)
+        let spoken = matchSpell(command);
+        if (!spoken) return;
+        const now = performance.now(), running = !!this.api.running?.();
+        const why = afterCast(this._lastCast, spoken, meta, now) || lateInSpeech(spoken, command, meta, now)
+            || bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips: undefined })
+            || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len,
+                far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips: undefined, snr: meta.snr, combat: false, handAimed: true, known: true, holding: false, hope: false }) : null);
+        if (why) { spellLog(`«${command}» отсеяно: ${why}`); return; }
+        if (spoken in ALIAS) spoken = ALIAS[spoken];
+        if (!SPELLS[spoken]) { if (final) this.api.hud(`«${command}» — в этом мире это заклинание пока не работает`); return; }
+        // (a «Бомбардо» may still become «… Максима»: the plain one waits for the phrase's end; the others go at once — once a phrase)
+        if (!final && (spoken === 'Bombardo' || spoken === 'Jolt' || spoken === 'Ice' || spoken === 'Protection')) return;
+        if (this._lastCast && this._lastCast.seg != null && meta?.seg === this._lastCast.seg && this._lastCast.spell === spoken) return; // (the same phrase seen again)
+        this._lastCast = { spell: spoken, at: now, seg: meta?.seg, to: meta?.to };
+        this.cast(spoken);
     }
 
     /** Where the wand's tip is and where it points. */
