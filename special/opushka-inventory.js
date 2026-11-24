@@ -6,6 +6,7 @@ import { BELT_TOP, BELT_TIP, TUCK_LOOK } from '../src/game/WandBelt.js';
 import { ItemIcons } from '../src/ui/ItemIcons.js';
 import { buildWeapon } from '../src/entities/WeaponModels.js';
 import { ARMOR, armorName, wearSpot } from '../src/game/ArmorTypes.js';
+import { RigidProp } from '../src/game/RigidProp.js';
 
 const backKinds = new Set(['weapon', 'bow', 'hammer', 'shield', 'backpack']);
 const armorSlots = { helmet: 'Шлем', chest: 'Нагрудник', legs: 'Поножи', robe: 'Мантия' };
@@ -319,7 +320,56 @@ export class OpushkaInventory extends Inventory {
         model.position.copy(position);
         model.position.y += offsetY;
         this.api.scene.add(model);
-        this.loose.push({ item, model, onTake });
+        const entry={item,model,onTake};
+        this.loose.push(entry);
+        return entry;
+    }
+
+    scatterArmor(items,position) {
+        items.forEach((item,i)=>{
+            const a=(i+.5)*Math.PI*.69;
+            const p=position.clone().add(new THREE.Vector3(Math.sin(a)*.31,.49+i*.10,Math.cos(a)*.31));
+            const entry=this.placeLoose(item,p);
+            entry.body=new RigidProp(entry.model,{vel:new THREE.Vector3(Math.sin(a)*1.5,1.7,Math.cos(a)*1.5),spin:new THREE.Vector3(.58,.42,i*.41)});
+        });
+    }
+
+    stepLoose(dt) {
+        this.looseWorld ||= {ground:(x,z,y)=>this.api.floor(x,z,y-.39),blocked:this.api.blocked};
+        for(const item of this.loose){
+            if(item.body&&item.model.position.distanceToSquared(this.api.player().pos)<65**2)item.body.step(dt,this.looseWorld);
+        }
+    }
+
+    stripArmor() {
+        const removed=[];
+        for(const [slot,item] of Object.entries(this.equipped)){
+            if(!item||item.magic)continue;
+            this.equipped[slot]=null;
+            this.api.fit(slot,null);
+            removed.push(item);
+        }
+        this.scatterArmor(removed,this.api.player().pos);
+        if(removed.length)this._render();
+        return removed.length>0;
+    }
+
+    suitUp() {
+        const p=this.api.player().pos;
+        let count=0;
+        for(let i=this.loose.length-1;i>=0;i--){
+            const entry=this.loose[i],it=entry.item;
+            const slot=it.kind==='robe'?'robe':it.kind==='armor'?it.piece:null;
+            if(!slot||this.equipped[slot]||entry.onTake||entry.model.position.distanceToSquared(p)>3.4**2)continue;
+            this.equipped[slot]=it;
+            this.api.fit(slot,it);
+            entry.model.removeFromParent();
+            disposeModel(entry.model);
+            this.loose.splice(i,1);
+            count++;
+        }
+        if(count)this._render();
+        return count>0;
     }
 
     removeLoose(uid) {

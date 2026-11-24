@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { geography, heightTriangle, markShoreSand, SHORE_SAND, WATER_KIND, OpushkaCaves } from '../../special/opushka-world.js';
 import { caveGeometry, waterGeometry } from '../../special/opushka-mesh.js';
+import { CASTLE_HOUSES, MARKET_SITE, TOWN_STALLS, settlementSites, townPathAt } from '../../special/opushka-castle.js';
 
 test('Opushka preserves its clearing and has reachable ranges, rivers, lakes and a sea', () => {
     const field = geography(() => 0.84);
@@ -93,4 +94,18 @@ test('the cave network has dry entries, underground air, solid roofs and an actu
     const mesh = caveGeometry(caves,caves.tile(seg.ax,seg.az));
     assert.ok(mesh.index.count > 300);
     assert.ok(mesh.attributes.normal.array.every(Number.isFinite));
+});
+
+test('castle districts have varied houses and other settlements depend on the seed', () => {
+    assert.equal(CASTLE_HOUSES.length, 36);
+    assert.equal(new Set(CASTLE_HOUSES.map(house=>house.style)).size, 9);
+    const same = (seed) => settlementSites(seed, geography(()=>0.84,seed), 35, -16);
+    const first = same(1337), second = same(1338);
+    assert.deepEqual(same(1337), first);
+    assert.notDeepEqual(first.slice(1), second.slice(1));
+    assert.equal(first.filter(site=>site.kind==='castle').length, 2);
+    assert.equal(first.filter(site=>site.kind==='settlement').length, 4);
+    for(const [x,z] of TOWN_STALLS){
+        assert.equal(townPathAt(MARKET_SITE.dx+x,MARKET_SITE.dz+z-.54),false);
+    }
 });

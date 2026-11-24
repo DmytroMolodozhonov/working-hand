@@ -3,7 +3,7 @@ import { createRng } from '../src/core/math.js';
 import { OUTFITS, fitArmor, residentWardrobe } from './opushka-appearance.js';
 import { makePiece, makeRobe } from '../src/game/ArmorTypes.js';
 import { RigidProp } from '../src/game/RigidProp.js';
-import { CASTLE_PLAN, CASTLE_HOUSES, MARKET_SITE, TOWN_PATHS, buildOpushkaCastle } from './opushka-castle.js';
+import { CASTLE_PLAN, CASTLE_HOUSES, MARKET_SITE, TOWN_PATHS, TOWN_STALLS, buildOpushkaCastle } from './opushka-castle.js';
 import { stallTrades, SHOPS } from '../src/game/MarketGoods.js';
 import { VillagerBrain } from '../src/game/VillagerBrain.js';
 import { SpeechBubble } from '../src/ui/SpeechBubble.js';
@@ -633,7 +633,7 @@ export class OpushkaVillage {
         const trades=stallTrades('opushka-castle',3);
         const add=(...args)=>this.piece(home,...args);
         for(const [i,trade] of trades.entries()){
-            const px=-6.2+i*6.3,pz=.45+Math.sin(i*2.2)*1.4,base=this.api.ground(x+px,z+pz);
+            const [px,pz]=TOWN_STALLS[i],base=this.api.ground(x+px,z+pz);
             const post=(a,b)=>add('beam',px+a,base+1.12,pz+b,.13,2.35,.14);
             const posts=[post(-1.35,-.95),post(1.35,-.95),post(-1.35,1.03),post(1.35,1.03)];
             const counter=add(i===1?'stone':'wood',px,base+.76,pz+.45,2.42,.32,.87);
@@ -866,7 +866,8 @@ export class OpushkaVillage {
                 ()=>({castleName:'Серый Кряж',kingName:'Эдгар',timeOfDay:'day',danger:person.alert>0,trade:stall?.trade?.ru}));
             if(stall)stall.seller=person;
             if (profile.role === 'knight') {
-                for (const slot of ['helmet', 'chest', 'legs']) fitArmor(rig, slot, makePiece(slot));
+                person.armor=['helmet','chest','legs'].map(slot=>makePiece(slot));
+                for(const item of person.armor)fitArmor(rig,item.piece,item);
                 armKnight(person,this.inventory,i+this.id);
             }
             if (mage) {
@@ -919,6 +920,14 @@ export class OpushkaVillage {
             person.down = Math.max(person.down || 0, stun, topple ? 2.4 : 0);
             this.api.fall?.(person.rig,person,direction,push || (person.dead ? 2.1 : 1.4));
         }
+    }
+
+    stripArmor(person) {
+        if(!person.armor?.length)return;
+        const removed=person.armor.filter(item=>!item.magic);
+        person.armor=person.armor.filter(item=>item.magic);
+        for(const item of removed)fitArmor(person.rig,item.piece,null);
+        this.inventory?.scatterArmor(removed,person.pos);
     }
 
     update(dt) {
@@ -1097,6 +1106,7 @@ export class OpushkaSettlements {
     pay(item,p) { return this.active.some(t=>t.pay(item,p)); }
     hear(text) { return this.active.some(t=>t.hear(text)); }
     hit(npc,...args) { npc.town.hit(npc,...args); }
+    stripArmor(npc) { npc.town.stripArmor(npc); }
 
     blast(p,power,radius) {
         const alarms=new Set();

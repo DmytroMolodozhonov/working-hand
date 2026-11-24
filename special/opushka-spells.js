@@ -31,6 +31,8 @@ import { MANA, FIRST_SPELL } from '../src/game/Mana.js';
 import { SPELL_COST } from '../src/game/SpellCosts.js';
 import { CLASH, DUEL, clashPush } from '../src/game/Duel.js';
 import { segmentToSegment } from '../src/game/SegmentContact.js';
+import { cardilonCost } from '../src/game/CardilonRules.js';
+import { CardilonLook } from '../src/fx/CardilonLook.js';
 import { spellPhrase, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR } from '../src/audio/SpellPhrase.js';
 
 const V3 = THREE.Vector3;
@@ -66,6 +68,12 @@ export const SPELLS = {
     Up: { ru: 'Up', kind: 'utility' },
     Stand: { ru: 'Stand', kind: 'utility' },
     Stop: { ru: 'Stop', kind: 'utility' },
+    SuitUp: { ru:'Suit Up', kind:'utility' },
+    Disarmor: { ru:'Дизармор', kind:'bolt', speed:14, color:0xe88159,core:0xffd4ab,size:.047, push:6,strip:true,life:2.1 },
+    Fireworks: { ru:'Фейерверк', kind:'utility' },
+    Fire: { ru:'Fire', kind:'utility' },
+    Firefighting: { ru:'Firefighting', kind:'utility' },
+    Cardilon: { ru:'Кардилон', kind:'utility' },
     SwordStrike: { ru:'Удар мечом', kind:'hit' },
     Protection: { ru: 'Протекшн', kind: 'shield', hold: 3, sphere: false },
     ProtectionMaxima: { ru: 'Протекшн Максима', kind: 'shield', hold: 6, sphere: true },
@@ -100,6 +108,8 @@ export class OpushkaSpells {
     /** At loading: everything that will ever be drawn, made now (no shader made in the middle of a fight; one light, always there). */
     init() {
         const { scene, U } = this.api;
+        this.cardilonLook=new CardilonLook({scene});
+        this.campfires=[];
         this.light = { position: new V3(), color: new THREE.Color(0xffa050), intensity: 0 }; this._lightT = 0; this._lightK = 0; this._lightTau = 1; this._ember = 0; // (not a THREE light: the shaders' own flash — uFlashV/uFlashC)
         U.uBlast.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, -1e4));
         U.uBlastP.value = Array.from({ length: MAX_BLASTS }, () => new THREE.Vector4(0, 0, 0, 0));
@@ -266,7 +276,18 @@ export class OpushkaSpells {
             if (this.api.gather?.(o, d, cost)) this.sound('cast', o, .5);
             return;
         }
+        if(name==='Disarmor'&&d.y>.9){
+            if(this.api.stripMe?.()){
+                if(!this.noHarm)this.mana-=cost;
+                this._succeeded(name);
+            }
+            return;
+        }
         if(S.kind==='light'||S.kind==='utility'){
+            if(name==='Cardilon'){
+                this._cardilon();
+                return;
+            }
             const success=S.kind==='light'?this._lightSpell(name,o,d):this._utility(name,o,d);
             if(success){
                 if(!this.noHarm)this.mana-=cost;
@@ -337,6 +358,20 @@ export class OpushkaSpells {
         if(name==='Alohomora'||name==='Lock')return this.api.village?.()?.doorSpell(o,d,name==='Lock')||false;
         if(name==='Accio')return this.api.callItem?.(o,d)||false;
         if(name==='Up')return this.api.up?.()||false;
+        if(name==='SuitUp')return this.api.suitUp?.()||false;
+        if(name==='Fire')return this._campfire(o,d);
+        if(name==='Firefighting')return this._douse(o,d);
+        if(name==='Fireworks'){
+            const p=o.clone().add(new V3(0,1.29,0)).addScaledVector(d,2.1);
+            const hues=[0xffb153,0xe27cf1,0x69ddff,0xf0ff9f];
+            for(let i=0;i<120;i++){
+                const theta=Math.random()*Math.PI*2,y=Math.random()*2-1,r=Math.sqrt(1-y*y);
+                const v=new V3(Math.sin(theta)*r,y,Math.cos(theta)*r).multiplyScalar(rnd(2.3,6.4));
+                this.glow.spawn(p,v,hues[i%hues.length],rnd(.05,.097),rnd(.74,1.45),{drag:.95,grav:3.1});
+            }
+            this.flash(p,0xffae77,2.1,.21);
+            return true;
+        }
         if(name==='Stand'){
             if(this.api.rig()?.limp){this.me.stun=0;this.api.recover?.(this.api.player());return true;}
             return this.api.standSpell?.()||false;
@@ -347,6 +382,73 @@ export class OpushkaSpells {
             return true;
         }
         return false;
+    }
+
+    _cardilon() {
+        if(this.api.net()?.active){this.api.hud('Кардилон доступен в одиночной «Опушке»');return;}
+        const id=this._myId(), shield=this.shields.find(sh=>sh.by===id&&!sh.sphere&&!sh.dead);
+        if(!shield){this.api.hud('Сначала поднимите обычный Protection');return;}
+        const p=this.api.player().pos.clone().add(new V3(0,1.04,0));
+        let chosen=null, nearest=24**2;
+        for(const b of this.bolts){
+            if(b.done||b.by===id||b.S.kind!=='orb')continue;
+            const travel=p.clone().sub(b.p),sq=travel.lengthSq(),reach=travel.dot(b.v),speed=b.v.lengthSq();
+            if(sq>=nearest||reach<=0||speed<1||sq-reach*reach/speed>=(b.S.power>1?3.10:2.05)**2||this._worldHit(shield.pos,b.p,0))continue;
+            chosen=b;nearest=sq;
+        }
+        if(!chosen){this.api.hud('Нет летящей к вам Бомбарды');return;}
+        const cost=cardilonCost(chosen.S.power);
+        if(!this.noHarm&&this.mana<cost){this.api.hud('Не хватает маны');return;}
+        if(!this.noHarm)this.mana-=cost;
+        chosen.done=true;shield.dead=true;
+        this.cardilonLook.start(shield.pos,chosen.p,chosen.S.power);
+        this._succeeded('Cardilon');
+        this.sound('cast',shield.pos,.58);
+        this.api.hud('Кардилон · заряд перехвачен');
+    }
+
+    _campfire(o,d) {
+        const hit=this._worldHit(o,o.clone().addScaledVector(d,11),0,true);
+        if(hit?.kind!=='ground'||hit.n.y<.55||this.api.waterAt(hit.p.x,hit.p.z)
+            ||this.campfires.some(f=>f.root.position.distanceToSquared(hit.p)<1.4))return false;
+        this.fireWood ||= {geo:new THREE.CylinderGeometry(.064,.082,.65,9),mat:new THREE.MeshStandardMaterial({color:0x463323,roughness:.94})};
+        const root=new THREE.Group(),wood=this.fireWood;
+        root.position.copy(hit.p);
+        for(let i=0;i<4;i++){
+            const log=new THREE.Mesh(wood.geo,wood.mat),a=i*Math.PI*.47;
+            log.rotation.set(Math.PI*.49,0,a,'YXZ');
+            log.position.y=.13+i*.027;
+            root.add(log);
+        }
+        const mat=this.fireMat.clone(),flame=new THREE.Mesh(this.fireGeo,mat);
+        mat.uniforms.uSeed.value=hit.p.x*.013+hit.p.z*.017;
+        mat.uniforms.uK.value=.32;
+        flame.position.y=.38;flame.scale.set(.33,.64,.34);flame.frustumCulled=false;
+        root.add(flame);this.api.scene.add(root);
+        this.campfires.push({root,flame,age:0,smoke:0});
+        if(this.campfires.length>12)this._removeFire(this.campfires[0]);
+        return true;
+    }
+
+    _removeFire(fire) {
+        const i=this.campfires.indexOf(fire);
+        if(i>=0)this.campfires.splice(i,1);
+        fire.root.removeFromParent();
+        fire.flame.material.dispose();
+    }
+
+    _douse(o,d) {
+        const end=o.clone().addScaledVector(d,10);
+        const targets=this.campfires.filter(f=>{
+            const center=f.root.position.clone().add(new V3(0,.44,0));
+            return segSphere(o,end,center,.68)!==null&&!this._worldHit(o,center,0);
+        });
+        for(const fire of targets){
+            const p=fire.root.position.clone().add(new V3(0,.33,0));
+            for(let i=0;i<18;i++)this.smoke.spawn(p,new V3(rnd(-.5,.5),rnd(.7,1.7),rnd(-.5,.5)),0xb9c4bb,.1,rnd(.53,.94),{grow:1,alpha:.56});
+            this._removeFire(fire);
+        }
+        return targets.length>0;
     }
 
     castResident(npc, target, name) {
@@ -455,6 +557,7 @@ export class OpushkaSpells {
         const { U } = this.api;
         this._me(dt);
         this._lampStep();
+        this.cardilonLook?.update(dt);
         this.mana=Math.min(this.maxMana,this.mana+dt);
         for (const sh of this.shields) {
             sh.t += dt; this._placeShield(sh); sh.mesh.material.uniforms.uTime.value = this.api.U.uTime.value;
@@ -477,6 +580,17 @@ export class OpushkaSpells {
             ring.material.opacity = 0.55 * Math.max(0, 1 - progress) ** 1.4;
         }
         for (const f of this.fires) if (f.visible) this._fireStep(f, dt);
+        for(const fire of this.campfires){
+            fire.age+=dt;fire.smoke+=dt;
+            const pulse=Math.sin(fire.age*11.3)+.51*Math.sin(fire.age*27.2);
+            fire.flame.scale.set(.32+pulse*.024,.54+pulse*.058,.33+pulse*.021);
+            const u=fire.flame.material.uniforms;
+            u.uTime.value+=dt;
+            if(fire.smoke>.12&&fire.root.position.distanceToSquared(this.api.player().pos)<34**2){
+                fire.smoke=0;
+                this.smoke.spawn(fire.root.position.clone().add(new V3(0,.55,0)),new V3(rnd(-.12,.12),1.08,rnd(-.12,.12)),0x655b4f,.12,2.3,{grow:.9,alpha:.44});
+            }
+        }
         for (const pg of this.api.pigs) {
             const on = pg.frozen > 0 && !pg.dead;
             if (on && !pg.ice) { pg.ice = new THREE.Mesh(this.iceGeo, this.iceMat); pg.ice.scale.set(1.3, 0.45, 1.6); this.api.scene.add(pg.ice); }
@@ -748,9 +862,13 @@ export class OpushkaSpells {
         } else if (t.kind === 'friend' && net?.isHost) {
             net.send({ t: 'opimpact', who: t.id, by: b.by, spell: b.name, dir: b.dir.toArray().map(r3) });
         }
-        else if (t.kind === 'resident') this.api.village().hit(t.npc, b.name==='AvadaKedavra' ? t.npc.hp : S.hp || 0, b.dir, b.by, {
-            push: S.push || 0, up: S.push ? 2.5 + S.push * .15 : 0, stun: S.stun || 0, freeze: S.freeze || 0,
-        });
+        else if (t.kind === 'resident') {
+            const village=this.api.village();
+            if(S.strip)village.stripArmor?.(t.npc);
+            village.hit(t.npc,b.name==='AvadaKedavra'?t.npc.hp:S.hp||0,b.dir,b.by,{
+                push:S.push||0,up:S.push?2.5+S.push*.15:0,stun:S.stun||0,freeze:S.freeze||0,
+            });
+        }
         else if (t.kind === 'pig') this._pigHit(t.i, b.name, b.dir, 1);
     }
 
@@ -917,7 +1035,8 @@ export class OpushkaSpells {
         if (S.freeze) { me.frozen = S.freeze; me.burn = S.burn; this.api.hud('❄️ Вы во льду'); this.sound('freeze', P.pos, 0.8); }
         if (S.lift) { P.grounded=false;P.vy=Math.max(P.vy,S.lift);me.stun=Math.max(me.stun,.55); }
         if (S.disarm && !me.wandOut && this.api.wandHeld?.() !== false) this._loseWand(dir);
-        if (name.startsWith('Jolt')) { up = 2.5 + push * 0.15; me.stun = Math.max(me.stun, 0.6); }
+        if (S.strip)this.api.stripMe?.();
+        if (name.startsWith('Jolt')||S.strip) { up = 2.5 + push * 0.15; me.stun = Math.max(me.stun, 0.6); }
         if (push > 0) { P.vel.x += dir.x * push; P.vel.z += dir.z * push; P.vy = Math.max(P.vy, up); P.grounded = false; }
         if (hp > 0) this._damage(hp, by);
         if (me.dead || S.stun || push >= 4.5) {

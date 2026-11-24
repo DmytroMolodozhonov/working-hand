@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { smoothstep } from '../src/core/math.js';
-import { createRng } from '../src/core/math.js';
+import { createRng, smoothstep } from '../src/core/math.js';
 
 export const CASTLE_PLAN = { dx: 55, dz: -68, width: 65, depth: 60 };
 const MARKET_HOUSES = [
@@ -36,6 +35,7 @@ export const CASTLE_HOUSES = [
     }),
 ];
 export const MARKET_SITE = { dx: 58, dz: -25, width: 29, depth: 10 };
+export const TOWN_STALLS = [[-6.2,.45],[.1,1.58],[3.6,-.88]];
 export const TOWN_PATHS = [
     { wide: 2.15, points: [[12,-9],[25,-14],[33,-20],[47,-18],[60,-20],[65,-29],[64,-40]] },
     { wide: 1.25, points: [[32,-20],[34,-23],[36.8,-26.3]] },
@@ -51,6 +51,16 @@ export const TOWN_PATHS = [
     { wide: 1.62, points: [[78,-24],[89,-30],[97,-42],[96,-53],[98,-67],[103,-80],[102,-85]] },
     { wide: 1.25, points: [[95,-25],[104,-29],[113,-46],[111,-60],[117,-66]] },
 ];
+
+export function townPathAt(dx,dz) {
+    if(dx< -5||dx>120||dz>16||dz< -89)return false;
+    return TOWN_PATHS.some(({points,wide})=>points.some(([qx,qz],n)=>{
+        if(!n)return false;
+        const [px,pz]=points[n-1],a=qx-px,b=qz-pz;
+        const t=Math.max(0,Math.min(1,((dx-px)*a+(dz-pz)*b)/(a*a+b*b)));
+        return (dx-px-a*t)**2+(dz-pz-b*t)**2<wide**2*.36;
+    }));
+}
 
 export function settlementSites(seed, height, startX, startZ, limit=470) {
     const rng=createRng(seed^0x158aa9);

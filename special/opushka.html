@@ -152,7 +152,7 @@ import { OpushkaMap } from './opushka-map.js';
 import { OpushkaInventory, opushkaWand } from './opushka-inventory.js';
 import { OUTFITS, heroProfile, avatarHair, moveHair, fitArmor, fitTownClothes } from './opushka-appearance.js';
 import { OpushkaVillage, OpushkaSettlements, villageClearing } from './opushka-village.js';
-import { castleGrade, settlementSites, TOWN_PATHS } from './opushka-castle.js';
+import { castleGrade, settlementSites, townPathAt } from './opushka-castle.js';
 import { OpushkaCaveLoot } from './opushka-cave-loot.js';
 import { tumble, stepLimp, drawLimp, standLimp, recoverLimp, applyLimpPose } from './opushka-ragdoll.js';
 import { ScrollReading } from '../src/game/ScrollReading.js';
@@ -179,6 +179,8 @@ const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() {
   recover:(state)=>recoverLimp(charRig,bodyWorld,state),
   knows:(name)=>name!=='WindMaxima'||CREATIVE||learnedScrolls.has('s:WindMaxima'),
   callItem:(o,d)=>inventory?.callLoose(o,d,(a,b)=>spells._worldHit(a,b,0)),
+  stripMe:()=>inventory?.stripArmor(),
+  suitUp:()=>inventory?.suitUp(),
   up:()=>{if(player.locked||!player.grounded&&!player.swimming)return false;player.grounded=false;player.vy=Math.max(player.vy,player.swimming?5.2:4.4);return true;},
   standSpell:standInCave,
   oink: (pg) => audio.oink && audio.oink(pg, 1.4), fell: (i, x, z, k) => fellTree(i, x, z, k), respawn: () => { player.pos.set(MEADOW[0] - 4 + Math.random() * 3, 0, MEADOW[1] + 14 + Math.random() * 3); player.pos.y = groundH(player.pos.x, player.pos.z); player.vel.set(0, 0, 0); player.vy = 0; } });
@@ -267,16 +269,7 @@ const VILLAGE_ORIGIN=[MEADOW[0]+25,MEADOW[1]+4];
 const WORLD_SEED=CREATIVE?Number(params.get('seed'))||OPUSHKA_SEED:OPUSHKA_SEED;
 const inVillage=(x,z)=>worldSites.some(site=>Math.abs(x-site.x)<134&&Math.abs(z-site.z)<111&&villageClearing(x-site.x,z-site.z,site.kind));
 function townPath(x,z){
-  return worldSites.some(site=>site.kind==='castle'&&localTownPath(x-site.x,z-site.z));
-}
-function localTownPath(dx,dz){
-  if(dx< -5||dx>120||dz>16||dz< -89)return false;
-  for(const {points,wide} of TOWN_PATHS)for(let n=1;n<points.length;n++){
-    const [px,pz]=points[n-1],[qx,qz]=points[n],a=qx-px,b=qz-pz;
-    const t=clamp(((dx-px)*a+(dz-pz)*b)/(a*a+b*b),0,1);
-    if((dx-px-a*t)**2+(dz-pz-b*t)**2<wide**2*.36)return true;
-  }
-  return false;
+  return worldSites.some(site=>site.kind==='castle'&&townPathAt(x-site.x,z-site.z));
 }
 function meadowDist(x,z){
   const dx=x-MEADOW[0],dz=(z-MEADOW[1])*1.18;
@@ -2394,6 +2387,7 @@ function makePocket(){
   return new OpushkaInventory({main:wandHand,creative:CREATIVE,scene,renderer,rig:()=>charRig,player:()=>player,notify:gameNotify,
     touch:(hand,pos)=>village?.touchDoor(pos)||caveLoot?.hand(hand,pos),reading:(hand)=>scrollReader?.readingSide===(hand==='L'?'left':'right'),
     pay:(item,pos)=>village?.pay(item,pos),
+    blocked:(x,y,z)=>surfaceDensity(x,y,z)>.02||!!village?.collisionBoxes(x,x,z,z).some(b=>y>b.minY&&y<b.maxY),
     sound:(cue)=>SoundManager.prototype.playPocket.call(uiAudio,cue),disabled:()=>!playing||!!player.locked||!!charCustom,
     disarmed:()=>!!spells.me.wandOut,casting:()=>spells.shields.some(sh=>sh.by===spells._myId()&&!sh.dead),
     floor:(x,z,y)=>{const base=caves?.floor(x,z,y)??groundH(x,z);return village?.floor(x,y,z,base)??base;},fit:(slot,item)=>{
@@ -2962,7 +2956,7 @@ function loop(now){
   updatePigs(dt);
   village?.update(dt,player.pos);
   mpNet.update(dt);
-  inventory?.icons.update(1.5);if(playing){caveLoot.update(dt);scrollReader.update(dt);}updateCaveMeshes(player.pos);spells.update(dt);updateFallen(dt);updateHp();
+  inventory?.icons.update(1.5);inventory?.stepLoose(dt);if(playing){caveLoot.update(dt);scrollReader.update(dt);}updateCaveMeshes(player.pos);spells.update(dt);updateFallen(dt);updateHp();
   updateGrass(camera.position);updateTrees();updateShadow();
   renderFrame();
   // audio & hud
