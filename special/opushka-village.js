@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { createRng } from '../src/core/math.js';
 import { OUTFITS, fitArmor, residentWardrobe } from './opushka-appearance.js';
 import { makePiece, makeRobe } from '../src/game/ArmorTypes.js';
-import { RigidProp } from '../src/game/RigidProp.js';
+import { EXPELLIARMUS, pickFlight } from '../src/game/Expelliarmus.js';
+import { RIGID, RigidProp } from '../src/game/RigidProp.js';
 import { CASTLE_PLAN, CASTLE_HOUSES, MARKET_SITE, TOWN_PATHS, TOWN_STALLS, buildOpushkaCastle } from './opushka-castle.js';
 import { stallTrades, SHOPS } from '../src/game/MarketGoods.js';
 import { VillagerBrain } from '../src/game/VillagerBrain.js';
@@ -858,12 +859,14 @@ export class OpushkaVillage {
         return {
             parts:this.parts.filter(p=>p.broken||p.hp!==p.fullHp).map(p=>[p.key,p.broken?0:p.hp]),
             doors:this.doors.filter(d=>d.goal||d.locked).map(d=>[d.part.key,d.goal,!!d.locked]),
+            lostWands:[...(this.lostWands||[])],
             sales:this.stalls.flatMap(s=>s.goods?.filter(o=>o.sold).map(o=>o.uid)||[]),
         };
     }
 
     restore(state){
         if(!state)return;
+        this.lostWands=new Map(state.lostWands||[]);
         const parts=new Map(state.parts||[]),doors=new Map((state.doors||[]).map(([key,angle,locked])=>[key,{angle,locked}]));
         for(const part of this.parts){
             if(!parts.has(part.key))continue;
@@ -1075,12 +1078,13 @@ export class OpushkaVillage {
                     rig.B.head.add(tip);
                 }
             }
+            if(this.lostWands?.has(person.id))this.hideWand(person);
             this.schedule(person);
             this.people.push(person);
         }
     }
 
-    hit(person, damage, direction, caster, {push=0,up=0,stun=0,freeze=0} = {}) {
+    hit(person, damage, direction, caster, {push=0,up=0,stun=0,freeze=0,hostile=false} = {}) {
         const topple=push>=4.5;
         const response=Math.max(.64,Math.min(1.36,76/(person.mass||76)));
         push*=response;up*=Math.sqrt(response);
@@ -1092,7 +1096,7 @@ export class OpushkaVillage {
         person.alert = 18;
         person.brain?.feel(caster,-12);
         person.caster = caster;
-        if(damage>0&&caster&&this.api.body(caster))for(const guard of this.people){
+        if((damage>0||hostile)&&caster&&this.api.body(caster))for(const guard of this.people){
             if(guard===person||!guard.sword||guard.dead||guard.pos.distanceToSquared(person.pos)>19**2)continue;
             if(this.trace(guard.pos.clone().add(new V3(0,1.35,0)),person.pos.clone().add(new V3(0,1.1,0)),0))continue;
             guard.alert=18;guard.caster=caster;
@@ -1112,6 +1116,52 @@ export class OpushkaVillage {
             person.down = Math.max(person.down || 0, stun, topple ? 2.4 : 0);
             this.api.fall?.(person.rig,person,direction,push || (person.dead ? 2.1 : 1.4));
         }
+    }
+
+    hideWand(person) {
+        const hand=person.rig.fingers?.[person.rig.activeHand];
+        if(!hand?.wand)return;
+        person.wandGrip=hand.grip;
+        hand.grip=null;
+        hand.wand.visible=false;
+    }
+
+    disarm(person) {
+        const wand=person.rig.fingers?.[person.rig.activeHand]?.wand;
+        if(!wand?.visible||!this.inventory)return false;
+        const point=wand.getWorldPosition(new V3());
+        const flight=pickFlight({collision:{
+            groundAt:(x,z,y)=>this.floor(x,y,z,this.api.ground(x,z)),
+            lineOfSight:(x,y,z,a,b,c)=>!this.trace(new V3(x,y,z),new V3(a,b,c),0),
+        }},point,this.rand);
+        flight.vel.multiplyScalar(Math.sqrt(RIGID.G/EXPELLIARMUS.G)*.74);
+        const entry=this.inventory.throwLoose(person.rig.wandItem,wand,flight);
+        (this.lostWands||=new Map()).set(person.id,entry.item.uid);
+        person.fetchTime=0;
+        this.hideWand(person);
+        return true;
+    }
+
+    fetchWand(person,dt) {
+        const uid=this.lostWands?.get(person.id);
+        if(!uid)return null;
+        const entry=this.inventory.loose.find(item=>item.item.uid===uid);
+        if(!entry||entry.body&&!entry.body.sleeping&&(!entry.body.touching||entry.body.v.lengthSq()>RIGID.SLEEP_V**2))return null;
+        const point=entry.body?.com()||entry.model.position;
+        const delta=point.clone().sub(person.pos);
+        person.fetchTime=(person.fetchTime||0)+dt;
+        const canReach=Math.abs(delta.y)<1.25&&Math.hypot(delta.x,delta.z)<.8;
+        const canCall=person.fetchTime>=EXPELLIARMUS.FETCH_GIVE_UP&&delta.lengthSq()<13**2;
+        if((canReach||canCall)&&!this.trace(person.pos.clone().add(new V3(0,1.05,0)),point,0)){
+            this.inventory.removeLoose(uid);
+            person.rig.wandItem=entry.item;
+            const hand=person.rig.fingers[person.rig.activeHand];
+            hand.wand.visible=true;
+            hand.grip=person.wandGrip;
+            this.lostWands.delete(person.id);
+            return null;
+        }
+        return delta.setY(0).clampLength(0,1);
     }
 
     stripArmor(person) {
@@ -1162,8 +1212,9 @@ export class OpushkaVillage {
             person.talking = Math.max(0, (person.talking || 0) - dt);
             const listening = !enemy && (person.talking > 0 || speaker === person.id)
                 && pos.distanceToSquared(player.pos) < ATT.TALK ** 2;
-            const walk = enemy||person.follow||listening?new V3():this.routeWalk(person,dt);
-            if (enemy) {
+            const fetching=this.fetchWand(person,dt);
+            const walk=fetching||(enemy||person.follow||listening?new V3():this.routeWalk(person,dt));
+            if (!fetching&&enemy) {
                 walk.copy(enemy).sub(pos).setY(0).normalize();
                 if(person.sword){
                     if(person.sword.move)walk.multiplyScalar(person.sword.move.time<.8?.22:.07);
@@ -1171,7 +1222,7 @@ export class OpushkaVillage {
                     else if(distance<1.48)walk.set(-walk.z,0,walk.x).multiplyScalar(person.mass<75?.44:-.30);
                 }else if (profile.role === 'resident' || person.stall || distance < 3) walk.negate();
                 else if (person.mage && distance < 10) walk.multiplyScalar(0.04);
-            } else {
+            } else if(!fetching) {
                 if(person.follow&&!listening){
                     walk.copy(player.pos).sub(pos).setY(0);
                     if(walk.lengthSq()<1.45**2)walk.set(0,0,0);
@@ -1179,7 +1230,7 @@ export class OpushkaVillage {
                 walk.clampLength(0,1);
             }
             const stamina=Math.max(.75,Math.min(1.19,Math.sqrt(75/person.mass)));
-            const speed = (enemy ? 3.25 : 1.04)*stamina;
+            const speed = (enemy||fetching ? 3.25 : 1.04)*stamina;
             const goal = vel.clone().lerp(walk.multiplyScalar(speed), 1 - Math.exp(-dt * 4*stamina));
             if (person.hurt <= 0) vel.copy(goal);
             else vel.multiplyScalar(Math.exp(-dt * 2.6));
@@ -1213,7 +1264,7 @@ export class OpushkaVillage {
                 if (pos.y - footing > 0.34) person.grounded = false;
                 else pos.y = footing;
             }
-            const face = listening ? player.pos.clone().sub(pos) : enemy && profile.role !== 'resident' ? enemy.clone().sub(pos) : vel;
+            const face = fetching ? vel : listening ? player.pos.clone().sub(pos) : enemy && profile.role !== 'resident' ? enemy.clone().sub(pos) : vel;
             if (Math.hypot(face.x, face.z) > 0.2) {
                 const yaw = Math.atan2(face.x, face.z);
                 person.faceYaw += Math.atan2(Math.sin(yaw - person.faceYaw), Math.cos(yaw - person.faceYaw)) * (1 - Math.exp(-dt * 5));
@@ -1379,6 +1430,7 @@ export class OpushkaSettlements {
         this.say(person,person.brain.greet({now,selfId:'me'}),false);
     }
     hit(npc,...args) { npc.town.hit(npc,...args); }
+    disarm(npc) { return npc.town.disarm(npc); }
     stripArmor(npc) { npc.town.stripArmor(npc); }
 
     blast(p,power,radius) {

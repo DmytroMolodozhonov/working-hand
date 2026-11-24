@@ -371,6 +371,13 @@ export class OpushkaInventory extends Inventory {
         return entry;
     }
 
+    throwLoose(item, source, flight) {
+        const entry=this.placeLoose(item,source.getWorldPosition(new THREE.Vector3()));
+        source.getWorldQuaternion(entry.model.quaternion);
+        entry.body=new RigidProp(entry.model,flight);
+        return entry;
+    }
+
     scatterArmor(items,position) {
         items.forEach((item,i)=>{
             const a=(i+.5)*Math.PI*.69;

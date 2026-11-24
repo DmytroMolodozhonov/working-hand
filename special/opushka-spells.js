@@ -16,7 +16,7 @@
  *   Bombardo     | by distance: up to 8 HP (Maxima ×3), thrown    | thrown, hurt by distance               | stops the orb; needles | a dent, char, burnt grass, clods
  *   Jolt         | 3 HP, thrown back off the feet (Maxima ×3)     | thrown far                             | stops it, a puff       | a puff of dust
  *   Stupefy      | 6 HP, falls, 3 s unable to move                | falls asleep: drops, lies 8 s          | stops it, red sparks   | red sparks
- *   Expelliarmus | 2 HP, the wand flies out — lies there, walk to it| not at all (no wand): a shove only   | sparks                 | sparks
+ *   Expelliarmus | the wand flies out — lies there, walk to it| not at all (no wand): a shove only   | sparks                 | sparks
  *   Avada        | 25 HP (armour does not stop it)         | dies: falls and lies                   | stops it (no harm)     | green smoke
  *   Ice          | 10 s in ice, −3 HP/s (Maxima 6 s, −10/s)       | frozen in ice, falls; thaws            | frost on the bark      | a patch of rime
  *   Protection   | a shield before the hand 3 s (Maxima — a sphere round the body 6 s): charges stop on it; a blast is softened
@@ -48,7 +48,7 @@ export const SPELLS = {
     Jolt: { ru: 'Джолт', kind: 'bolt', speed: 13, color: 0xa9d6ff, core: 0xeaf6ff, size: 0.035, hp: 3, push: 7, life: 2.2 },
     JoltMaxima: { ru: 'Джолт Максима', kind: 'bolt', speed: 13, color: 0xc4e4ff, core: 0xffffff, size: 0.05, hp: 9, push: 15, life: 2.2 },
     Stupefy: { ru: 'Остолбеней', kind: 'bolt', speed: 12, color: 0xff3b3b, core: 0xffd8d0, size: 0.045, hp: 3, stun: 3, life: 2.4 },
-    Expelliarmus: { ru: 'Экспеллиармус', kind: 'bolt', speed: 13, color: 0xc8102e, core: 0xffffff, size: 0.045, hp: 2, disarm: true, life: 2.4 },
+    Expelliarmus: { ru: 'Экспеллиармус', kind: 'bolt', speed: 13, color: 0xc8102e, core: 0xffffff, size: 0.045, disarm: true, life: 2.4 },
     AvadaKedavra: { ru: 'Авада Кедавра', kind: 'bolt', speed: 12, color: 0x1f8a2a, core: 0x9dff3a, size: 0.06, hp: DAMAGE.AvadaKedavra, pierce: true, life: 2.6 },
     Ice: { ru: 'Айс', kind: 'bolt', speed: 14, color: 0x8fdcff, core: 0xf2fbff, size: 0.04, freeze: 10, burn: 3, life: 2.4 },
     IceMaxima: { ru: 'Айс Максима', kind: 'bolt', speed: 14, color: 0x6fc8ff, core: 0xffffff, size: 0.055, freeze: 6, burn: 10, life: 2.4 },
@@ -463,7 +463,7 @@ export class OpushkaSpells {
         name=ALIAS[name]||name;
         if(!SPELLS[name])return false;
         const wand = npc.rig.fingers?.[npc.rig.activeHand]?.wand;
-        if (!wand) return false;
+        if (!wand?.visible) return false;
         const origin = wand.localToWorld(new V3(0, wand.userData.tipY || 0.62, 0));
         const heading = target.clone().add(new V3(0, 1.13, 0)).sub(origin).normalize();
         const end = origin.clone().addScaledVector(heading, origin.distanceTo(target) - 0.4);
@@ -872,6 +872,11 @@ export class OpushkaSpells {
         }
         else if (t.kind === 'resident') {
             const village=this.api.village();
+            if(S.disarm){
+                const disarmed=village.disarm(t.npc);
+                village.hit(t.npc,0,b.dir,b.by,{push:disarmed?0:1.6,hostile:true});
+                return;
+            }
             if(S.strip)village.stripArmor?.(t.npc);
             village.hit(t.npc,b.name==='AvadaKedavra'?t.npc.hp:S.hp||0,b.dir,b.by,{
                 push:S.push||0,up:S.push?2.5+S.push*.15:0,stun:S.stun||0,freeze:S.freeze||0,
