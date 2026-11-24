@@ -387,6 +387,19 @@ export class OpushkaInventory extends Inventory {
         });
     }
 
+    blowLoose(push) {
+        let moved=false;
+        for(const entry of this.loose){
+            if(entry.onTake)continue;
+            const impulse=push(entry.body?.com()||entry.model.position);
+            if(!impulse)continue;
+            entry.body ||= new RigidProp(entry.model);
+            entry.body.push(impulse);
+            moved=true;
+        }
+        return moved;
+    }
+
     stepLoose(dt) {
         this.looseWorld ||= {ground:(x,z,y)=>this.api.floor(x,z,y-.39),blocked:this.api.blocked};
         for(const item of this.loose){

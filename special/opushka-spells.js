@@ -25,13 +25,14 @@
  */
 import * as THREE from 'three';
 import { VoiceService } from '../src/input/VoiceService.js';
-import { matchSpell } from '../src/fx/SpellManager.js';
+import { matchSpell, windPushAt, WIND_BODY_K } from '../src/fx/SpellManager.js';
 import { DAMAGE } from '../src/game/Damage.js';
 import { MANA, FIRST_SPELL } from '../src/game/Mana.js';
 import { SPELL_COST } from '../src/game/SpellCosts.js';
 import { CLASH, DUEL, clashPush } from '../src/game/Duel.js';
 import { segmentToSegment } from '../src/game/SegmentContact.js';
 import { aimOffset, steadyDir, applyAimOffset } from '../src/game/AimHold.js';
+import { isWindRing, windRingPush } from '../src/game/WindRing.js';
 import { LEVITATE } from '../src/game/Levitation.js';
 import { fromGame, soundingLine } from '../src/audio/GameVoices.js';
 import { cardilonCost } from '../src/game/CardilonRules.js';
@@ -598,14 +599,8 @@ export class OpushkaSpells {
         const S = SPELLS[name];
         if (S.kind === 'shield') { this._shield(name, o, d, by); if(mine)this._succeeded(name);return; }
         if (S.kind === 'fire') { if(mine&&this.api.ignite?.())this._succeeded(name);return; }
-        if (S.kind === 'gust') {
-            const door=this.api.village?.()?.windDoor(o,d);
-            for(let i=0;i<38;i++){
-                const p=o.clone().addScaledVector(d,rnd(.1,1.3));
-                this.smoke.spawn(p,d.clone().multiplyScalar(rnd(3,7)*S.power).add(new V3(rnd(-1,1),rnd(-.3,.6),rnd(-1,1))),0xa6c4c8,.05,rnd(.23,.45),{grow:4,alpha:.23,drag:.9});
-            }
-            this.sound('cast',o,.55);
-            if(mine&&door)this._succeeded(name);
+        if(S.kind==='gust'){
+            this.castGust(name,o,d,by,mine);
             return;
         }
         const core = new THREE.Mesh(this.coreGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(S.core).multiplyScalar(2.2), toneMapped: false }));
@@ -619,6 +614,40 @@ export class OpushkaSpells {
         this.bolts.push(b);
         this._castFx(b);
         this.sound(name === 'BombardoMaxima' ? 'castMax' : S.kind === 'orb' ? 'cast' : name === 'AvadaKedavra' ? 'avada' : name.startsWith('Ice') ? 'ice' : name.startsWith('Jolt') ? 'jolt' : 'bolt', o, S.kind === 'orb' ? 1 : 0.8, S.color);
+    }
+
+    castGust(name,origin,direction,caster,mine) {
+        const power=SPELLS[name].power, radial=isWindRing(name,direction);
+        const source=this._bodyOf(caster);
+        if(radial&&source)origin=source.clone().add(new V3(0,.65,0));
+        this.api.airGust?.(origin,direction,power,radial);
+        let affected=this.api.village?.()?.windDoor(origin,direction);
+        const scale=.60, range=(power>1?24:14)*scale;
+        const push=(point)=>{
+            if(this._worldHit(origin,point,0)||this._shieldHit(origin,point,caster))return null;
+            if(!radial)return windPushAt(origin,direction,point,range,13*power*scale,2.5*scale);
+            const scaled=point.clone().sub(origin).divideScalar(scale).add(origin);
+            return windRingPush(origin,scaled)?.multiplyScalar(scale) || null;
+        };
+        const myId=this._myId(), net=this.api.net();
+        for(const target of this._targets()){
+            if(target.kind==='friend'||target.kind==='resident'&&target.id===caster||target.kind==='me'&&(mine||caster===myId)||target.kind==='pig'&&net?.isClient)continue;
+            const force=push(target.c);
+            if(!force)continue;
+            const up=force.y*1.25, speed=force.setY(0).length()*WIND_BODY_K;
+            const dir=force.normalize();
+            affected=true;
+            if(target.kind==='resident')this.api.village().hit(target.npc,0,dir,caster,{push:speed,up,hostile:true});
+            else if(target.kind==='me')this.hurtMe(name,dir,caster,{hp:0,push:speed,up});
+            else if(target.kind==='pig'){
+                target.pg.vel.addScaledVector(dir,speed).setY(up);
+                target.pg.ko=Math.max(target.pg.ko||0,1.3);
+                target.pg.state='ko';
+            }
+        }
+        if(this.api.blowItems?.(push))affected=true;
+        this.sound('gust',origin,.55);
+        if(mine&&affected)this._succeeded(name);
     }
 
     _castFx(b) {
@@ -1327,6 +1356,7 @@ export class OpushkaSpells {
                 ph += 2 * Math.PI * (tone * (1 + 0.6 * k)) / sr; d[i] = (y * 1.4 + (tone ? Math.sin(ph) * 0.35 + Math.sin(ph * 2.01) * 0.12 : 0)) * env; }
         });
         this.snd = {
+            gust: whoosh(.72,210,610,0),
             creak: whoosh(.48,115,330,98),
             splash: mk(1.65, (samples, n) => {
                 let low = 0;

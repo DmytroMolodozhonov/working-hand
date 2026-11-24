@@ -139,6 +139,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 // (the game's hands in this world — the same camera and the same arm solving as the game: special/opushka-hands.js)
+import { AirDistortion } from '../src/fx/AirDistortion.js';
 import { OpushkaNet } from './opushka-net.js';
 import { OpushkaSpells, HERO } from './opushka-spells.js';
 import { PortalLoader } from '../src/ui/PortalLoader.js';
@@ -178,6 +179,7 @@ const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() {
   hud: (t) => spellHud(t), pain: (k) => painFlash(k), setLocked: (b) => { player.locked = b; }, nameOf: (id) => mpNet.net?.players.get(id)?.name || 'другой волшебник',
   fall:(state,direction,force)=>tipAvatar(charRig,state,direction,force),stand:()=>standLimp(charRig),
   recover:(state)=>recoverLimp(charRig,bodyWorld,state),
+  airGust:(...args)=>airFx.gust(...args),blowItems:push=>inventory?.blowLoose(push),
   fallResident:(state,dir,force)=>tipAvatar(state.rig,state,dir,force),liftFloor:(x,z,y)=>bodyWorld.floor(x,z,y),
   knows:(name)=>name!=='WindMaxima'||CREATIVE||learnedScrolls.has('s:WindMaxima'),
   callItem:(o,d)=>inventory?.callLoose(o,d,(a,b)=>spells._worldHit(a,b,0)),
@@ -1345,6 +1347,7 @@ function buildDust(){
 
 /* ============================== POST PROCESSING ============================== */
 let post=null;
+const airFx=new AirDistortion({renderer,camera,scene},.60);
 const FSQ=new THREE.Mesh(new THREE.BufferGeometry(),null);
 FSQ.geometry.setAttribute('position',new THREE.Float32BufferAttribute([-1,-1,0,3,-1,0,-1,3,0],3));FSQ.frustumCulled=false;
 const fsScene=new THREE.Scene();fsScene.add(FSQ);const fsCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
@@ -1412,6 +1415,7 @@ function resizePost(){
   const dt=new THREE.DepthTexture(w,h);dt.type=THREE.FloatType;
   post.rt=new THREE.WebGLRenderTarget(w,h,{type:THREE.HalfFloatType,samples:Q.msaa,depthTexture:dt,depthBuffer:true});
   if(post.raysRT)post.raysRT.dispose();post.raysRT=new THREE.WebGLRenderTarget(w>>1,h>>1,{type:THREE.HalfFloatType,depthBuffer:false});
+  if(post.gustRT){post.gustRT.dispose();post.gustRT=null;}
   if(post.ldr)post.ldr.dispose();post.ldr=new THREE.WebGLRenderTarget(w,h,{type:THREE.UnsignedByteType,depthBuffer:false});
   if(!post.smaa)post.smaa=new SMAAPass(w,h);post.smaa.setSize(w,h);
   post.bloom.forEach(b=>b.dispose());post.bloom=[];let bw=w>>1,bh=h>>1;for(let i=0;i<6&&bw>8&&bh>8;i++){post.bloom.push(new THREE.WebGLRenderTarget(bw,bh,{type:THREE.HalfFloatType,depthBuffer:false}));bw>>=1;bh>>=1;}
@@ -1434,7 +1438,14 @@ function renderFrame(){
   for(let i=post.bloom.length-1;i>0;i--){const s=post.bloom[i],d=post.bloom[i-1];post.up.uniforms.tSrc.value=s.texture;post.up.uniforms.uTexel.value.set(1/s.width,1/s.height);pass(post.up,d);}
   const f=post.fin.uniforms;f.tScene.value=post.rt.texture;f.tDepth.value=post.rt.depthTexture;f.tBloom.value=post.bloom[0].texture;f.tRays.value=post.raysRT.texture;
   f.uProjInv.value.copy(camera.projectionMatrixInverse);f.uCamWorld.value.copy(camera.matrixWorld);f.uCamPos.value.copy(camera.position);f.uDive.value=waterAt(camera.position.x,camera.position.z)?smooth(0.01,0.36,-camera.position.y):0;f.uRes.value.set(post.w,post.h);
-  pass(post.fin,post.ldr);post.smaa.renderToScreen=true;post.smaa.render(renderer,null,post.ldr);
+  pass(post.fin,post.ldr);
+  let display=post.ldr;
+  if(airFx.prepare(camera,post.w,post.h)){
+    post.gustRT ||= new THREE.WebGLRenderTarget(post.w,post.h,{depthBuffer:false});
+    airFx.texturePass(post.ldr.texture,post.gustRT);
+    display=post.gustRT;
+  }
+  post.smaa.renderToScreen=true;post.smaa.render(renderer,null,display);
   if(_cq){camera.quaternion.copy(_cq);camera.updateMatrixWorld();}
 }
 
@@ -3079,7 +3090,7 @@ function loop(now){
   updatePigs(dt);
   village?.update(dt,player.pos);
   mpNet.update(dt);
-  inventory?.icons.update(1.5);inventory?.stepLoose(dt);if(playing){caveLoot.update(dt);scrollReader.update(dt);}updateCaveMeshes(player.pos);spells.update(dt);updateFallen(dt);updateHp();
+  inventory?.icons.update(1.5);inventory?.stepLoose(dt);if(playing){caveLoot.update(dt);scrollReader.update(dt);}updateCaveMeshes(player.pos);spells.update(dt);airFx.update(dt);updateFallen(dt);updateHp();
   updateGrass(camera.position);updateTrees();updateShadow();
   renderFrame();
   // audio & hud

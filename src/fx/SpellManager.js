@@ -86,6 +86,16 @@ const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Over
 /** «Вайнд» on creatures and players: this many times its push on loose things. */
 export const WIND_BODY_K = 2;
 
+/** A directional gust in the same units as its origin and targets. */
+export function windPushAt(origin, direction, pos, range, strength, close = 2.5, cone = .65, out = new THREE.Vector3()) {
+    const toward=_a.subVectors(pos,origin), distance=toward.length();
+    if(distance>range)return null;
+    toward.normalize();
+    if(distance>close ? direction.angleTo(toward)>cone : direction.dot(toward)<0)return null;
+    const force=strength*(1-.6*distance/range);
+    return out.copy(direction).lerp(toward,.5).setY(0).normalize().multiplyScalar(force).setY(force*.35);
+}
+
 /** The planet spells of the gods' scrolls by their words (Russian and English as the recognizer writes them), or null. */
 export function planetSpellWords(s) {
     const has = (...w) => w.some((x) => s.includes(x));
@@ -1184,16 +1194,7 @@ export class SpellManager {
         // along the ground; the lift only a little more, so nobody is thrown up into the sky
         const body = (v) => v && v.clone().multiplyScalar(WIND_BODY_K).setY(v.y * 1.25);
         this.hooks.airGust?.(origin,direction,power,false);
-        const push = (pos) => {
-            const to = _a.subVectors(pos, origin);
-            const dist = to.length();
-            if (dist > range) return null;
-            const dirTo = to.normalize();
-            if (dist > 2.5 && direction.angleTo(dirTo) > cone) return null;
-            if (dist <= 2.5 && direction.dot(dirTo) < 0) return null;
-            const k = strength * (1 - 0.6 * dist / range);
-            return _b.copy(direction).lerp(dirTo, 0.5).setY(0).normalize().multiplyScalar(k).setY(k * 0.35);
-        };
+        const push = (pos) => windPushAt(origin,direction,pos,range,strength,2.5,cone,_b);
         // Creatures (moved where they are simulated): a stagger across the cone, off the feet point-blank
         if (this.auth && this.hooks.creatures) this.hooks.creatures(power > 1 ? 'WindMaxima' : 'Wind', casterId, (pos) => body(push(pos)), { from: origin });
         else if (this.auth) {
