@@ -59,6 +59,14 @@ export function handFrame(lm, aspect = 4 / 3, out = {}) {
     return out;
 }
 
+/** Tracked closure for item interactions, independent of the drawn finger joints. */
+export function fingerCurl(landmarks, baseIdx, tipIdx) {
+    const wrist = landmarks[0], base = landmarks[baseIdx], tip = landmarks[tipIdx];
+    const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+    const dBase = Math.hypot(base.x - wrist.x, base.y - wrist.y);
+    return Math.max(0, Math.min(1, (1.15 - dTip / (dBase + 0.05)) * 3.2));
+}
+
 /**
  * How much every joint is bent (rad, 0 = straight), from the points in 3D.
  * Fingers: [knuckle, middle joint, end joint]; the knuckle can bend a little

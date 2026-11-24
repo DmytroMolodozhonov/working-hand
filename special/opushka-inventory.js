@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { Inventory, POCKET_STAY, CREATIVE_APPLES, lookSteady, RESOURCE } from '../src/game/Inventory.js';
 import { ITEM_INFO, makeItemModel, disposeModel, starterWand } from '../src/game/ItemTypes.js';
 import { BACK_HOLD } from '../src/game/BackInteraction.js';
-import { BELT_TOP, BELT_TIP, TUCK_LOOK } from '../src/game/WandBelt.js';
+import { BELT_TOP, BELT_TIP, TUCK_LOOK, TAKE_LOOK, beltGrip, BELT_TAKE_CURL } from '../src/game/WandBelt.js';
+import { fingerCurl } from '../src/entities/HandPose.js';
 import { ItemIcons } from '../src/ui/ItemIcons.js';
 import { buildWeapon } from '../src/entities/WeaponModels.js';
 import { ARMOR, armorName, wearSpot } from '../src/game/ArmorTypes.js';
@@ -53,7 +54,7 @@ export class OpushkaInventory extends Inventory {
         this.pocketTime = 0;
         this.beltTime = 0;
         this.wandReach = false;
-        this.beltReady = false;
+        this.beltReady = true;
         this.backTimers = { L: 0, R: 0 };
         this.backReady = { L: false, R: false };
         this.wandStowed = false;
@@ -460,7 +461,7 @@ export class OpushkaInventory extends Inventory {
         if (!pose?.hasPose || this.api.disabled() || pose.isRunning || this.api.player().flying) {
             this.pocketTime = this.beltTime = 0;
             this.backTimers.L = this.backTimers.R = 0;
-            this.beltReady = this.wandReach = false;
+            this.wandReach = false;
             this.bar.classList.remove('at-pocket');
             this.bar.classList.remove('at-wand');
             this.backReady.L = this.backReady.R = false;
@@ -483,21 +484,25 @@ export class OpushkaInventory extends Inventory {
                 this.cycle();
             }
         }
-        const belt = pose.belt?.[sideOf(this.main)];
-        const wand = rig?.fingers?.[this.main]?.wand;
-        this.bar.classList.toggle('at-wand', !!belt?.near);
-        if (!belt?.near) {
-            this.wandReach = false;
-            this.beltTime = 0;
-            this.beltReady = true;
-        } else if (down && this.beltReady && wand) {
-            const direction = new THREE.Vector3(0, 1, 0).transformDirection(wand.matrixWorld);
-            if (!this.wandStowed && belt.at && direction.y < TUCK_LOOK) {
-                this.beltTime += dt;
-                if (this.beltTime >= 0.22 && this.toggleWand()) this.beltReady = false;
-            } else this.beltTime = 0;
-            if (!this.grip[this.main] && directions[this.main]?.hand) this.wandReach = true;
+        const side = sideOf(this.main), belt = pose.belt?.[side];
+        const wand = rig?.fingers?.[this.main]?.wand, landmarks = pose[side + 'HandLandmarks'];
+        const reach = !!(belt?.at || belt?.near) && pose.place?.[side] !== 'purse';
+        this.bar.classList.toggle('at-wand', reach);
+        if (!reach) this.beltReady = true;
+        const curl = landmarks?.length >= 21 ?
+            (fingerCurl(landmarks, 5, 8) + fingerCurl(landmarks, 9, 12) + fingerCurl(landmarks, 13, 16)) / 3 : NaN;
+        this.wandReach = beltGrip(this.wandReach, reach && Number.isFinite(curl), curl);
+        if (this.wandStowed && this.beltReady && this.wandReach && Math.sin(player.pitch) < TAKE_LOOK && curl > BELT_TAKE_CURL) {
+            if (this.toggleWand()) {
+                this.beltReady = this.wandReach = false;
+                return;
+            }
         }
+        if (!this.wandStowed && this.beltReady && reach && belt.at && wand && Math.sin(player.pitch) < TUCK_LOOK &&
+            new THREE.Vector3(0, 1, 0).transformDirection(wand.matrixWorld).y < TUCK_LOOK) {
+            this.beltTime += dt;
+            if (this.beltTime >= 0.22 && this.toggleWand()) this.beltReady = false;
+        } else this.beltTime = 0;
         for (const hand of ['L', 'R']) {
             const dir = directions[hand];
             if (!dir.hand || !dir.curl || !rig?.fingers?.[hand]) { this.grip[hand] = null; continue; }
@@ -524,9 +529,7 @@ export class OpushkaInventory extends Inventory {
                 this.backReady[hand] = false;
                 this.putOnBack(hand);
             }
-            if (hand === this.main && belt?.near && this.wandStowed && down && closedNow && this.wandReach && this.beltReady) {
-                if (this.toggleWand()) this.beltReady = false;
-            } else if (closedNow && !(hand === this.off && pocket) && !behind && !(hand === this.main && belt?.near)) {
+            if (closedNow && !(hand === this.off && pocket) && !behind && !(hand === this.main && reach)) {
                 if (!this.pickNear(hand, position)) this.api.touch?.(hand,position);
             } else if (openedNow && this.held[hand] && !behind && !(hand === this.off && pocket) && !this.api.reading?.(hand)) {
                 const item=this.release(hand);

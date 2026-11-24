@@ -8,9 +8,25 @@ import { stallTrades, SHOPS } from '../src/game/MarketGoods.js';
 import { VillagerBrain } from '../src/game/VillagerBrain.js';
 import { SpeechBubble } from '../src/ui/SpeechBubble.js';
 import { armKnight, prepareSword, swingSword } from './opushka-swords.js';
+import { Attention, ATT, mayNotice } from '../src/game/Attention.js';
+import { Speech } from '../src/audio/Speech.js';
+import { HERO } from './opushka-spells.js';
 import { TownRoutes } from './opushka-routes.js';
 
 const V3 = THREE.Vector3;
+
+function blocksBody(fromX, fromZ, x, y, z, other, height) {
+    const center = other.pos;
+    if (other.dead || other.rig?.limp || center.y + (other.crouch ? 1.27 : HERO.BODY_H) <= y || y + height <= center.y) return false;
+    const radius = HERO.BODY_R * 2;
+    const ax = fromX - center.x, az = fromZ - center.z;
+    const bx = x - center.x, bz = z - center.z;
+    const before = ax * ax + az * az, after = bx * bx + bz * bz;
+    if (before < radius * radius) return after < before;
+    const dx = bx - ax, dz = bz - az, length = dx * dx + dz * dz;
+    const t = length ? Math.max(0, Math.min(1, -(ax * dx + az * dz) / length)) : 0;
+    return (ax + t * dx) ** 2 + (az + t * dz) ** 2 < radius * radius;
+}
 const houses = [
     { dx: -8.5, dz: -2.0, width: 5.6, depth: 4.9, style: 'cottage' },
     { dx: 3.7, dz: 3.0, width: 6.5, depth: 5.2, style: 'hall' },
@@ -897,24 +913,13 @@ export class OpushkaVillage {
         return true;
     }
 
-    hear(text) {
-        const eye=this.api.player().pos.clone().add(new V3(0,1.45,0));
-        const last=this.talkTo;
-        const person=this.people.filter(p=>!p.dead&&!p.rig.limp&&p.pos.distanceToSquared(eye)<4.7**2).sort((a,b)=>
-            a.pos.distanceToSquared(eye)-b.pos.distanceToSquared(eye)||(a===last?-1:0))[0];
-        if(!person)return;
-        const answer=person.brain.hear(text,{now:performance.now(),selfId:'me',danger:person.alert>0});
-        if(answer.action==='follow')person.follow=true;
-        else if(answer.action==='stop_follow')person.follow=false;
-        if(!answer.reply)return;
-        this.talkTo=person;
+    showSpeech(person, text) {
         if(!person.bubble){
             person.bubble=new SpeechBubble({offsetY:.14});
             this.api.scene.add(person.bubble.sprite);
         }
         this.bubbles.add(person);
-        person.bubble.show(answer.reply,{name:person.name,seconds:Math.min(9,3.2+answer.reply.length*.035)});
-        return true;
+        person.bubble.show(text,{name:person.name,seconds:Math.min(9,3.2+text.length*.035)});
     }
 
     trace(a, b, radius) {
@@ -1119,6 +1124,7 @@ export class OpushkaVillage {
 
     update(dt) {
         const player = this.api.player();
+        const speaker = this.api.talk?.()?.speech.currentKey;
         for (const door of this.doors) {
             if (door.part.broken || door.angle===door.goal) continue;
             const k=1-Math.exp(-dt*9);
@@ -1153,7 +1159,10 @@ export class OpushkaVillage {
             }
             const enemy = person.alert && this.api.body(person.caster);
             const distance = enemy ? enemy.distanceTo(pos) : Infinity;
-            const walk = enemy||person.follow?new V3():this.routeWalk(person,dt);
+            person.talking = Math.max(0, (person.talking || 0) - dt);
+            const listening = !enemy && (person.talking > 0 || speaker === person.id)
+                && pos.distanceToSquared(player.pos) < ATT.TALK ** 2;
+            const walk = enemy||person.follow||listening?new V3():this.routeWalk(person,dt);
             if (enemy) {
                 walk.copy(enemy).sub(pos).setY(0).normalize();
                 if(person.sword){
@@ -1163,7 +1172,7 @@ export class OpushkaVillage {
                 }else if (profile.role === 'resident' || person.stall || distance < 3) walk.negate();
                 else if (person.mage && distance < 10) walk.multiplyScalar(0.04);
             } else {
-                if(person.follow){
+                if(person.follow&&!listening){
                     walk.copy(player.pos).sub(pos).setY(0);
                     if(walk.lengthSq()<1.45**2)walk.set(0,0,0);
                 }
@@ -1176,7 +1185,10 @@ export class OpushkaVillage {
             else vel.multiplyScalar(Math.exp(-dt * 2.6));
             const nx = pos.x + vel.x * dt, nz = pos.z + vel.z * dt;
             const floor = this.floor(nx, pos.y, nz, this.api.ground(nx, nz));
-            if (!this.solidAt(nx, pos.y, nz) && floor - pos.y < 0.66) {
+            const bodyInWay = blocksBody(pos.x,pos.z,nx,pos.y,nz,player,HERO.BODY_H);
+            if (bodyInWay) {
+                vel.multiplyScalar(0.15);
+            } else if (!this.solidAt(nx, pos.y, nz) && floor - pos.y < 0.66) {
                 person.obstruction=0;
                 if (floor - pos.y > 0.2 && person.grounded) {
                     person.vy = 2.7; person.grounded = false; person.airStyle = 'leap';
@@ -1201,7 +1213,7 @@ export class OpushkaVillage {
                 if (pos.y - footing > 0.34) person.grounded = false;
                 else pos.y = footing;
             }
-            const face = enemy && profile.role !== 'resident' ? enemy.clone().sub(pos) : vel;
+            const face = listening ? player.pos.clone().sub(pos) : enemy && profile.role !== 'resident' ? enemy.clone().sub(pos) : vel;
             if (Math.hypot(face.x, face.z) > 0.2) {
                 const yaw = Math.atan2(face.x, face.z);
                 person.faceYaw += Math.atan2(Math.sin(yaw - person.faceYaw), Math.cos(yaw - person.faceYaw)) * (1 - Math.exp(-dt * 5));
@@ -1251,8 +1263,15 @@ export class OpushkaVillage {
 }
 
 export class OpushkaSettlements {
-    constructor(sites, create) {
+    constructor(sites, create, api) {
         this.sites=sites;
+        this.api=api;
+        this.attention=new Attention();
+        this.speech=new Speech({engine:api.config.villagerVoiceEngine,master:()=>api.config.talkVolume ?? .4,audioContext:api.audio,
+            onStatus:state=>{if(state.state==='failed')console.warn('[Жители]',state.text);}});
+        this.speech.enabled=api.config.villagerVoice!==false;
+        this.noticeIn=0;
+        this.stillFor=0;
         this.create=create;
         this.active=[];
         this.open(sites[0]);
@@ -1290,7 +1309,75 @@ export class OpushkaSettlements {
     windDoor(p,d) { return this.active.some(t=>t.windDoor(p,d)); }
     doorSpell(p,d,lock) { return this.active.some(t=>t.doorSpell(p,d,lock)); }
     pay(item,p) { return this.active.some(t=>t.pay(item,p)); }
-    hear(text) { return this.active.some(t=>t.hear(text)); }
+    bodyBlocked(fromX,fromZ,x,y,z,height) {
+        return this.active.some(town=>town.people.some(person=>blocksBody(fromX,fromZ,x,y,z,person,height)));
+    }
+
+    attentionStep(dt) {
+        const player=this.api.player(), camera=this.api.camera();
+        const eyes=player.pos.clone().add(new V3(0,player.crouch?1.22:1.64,0));
+        const look=camera.getWorldDirection(new V3());
+        this.listeners=this.people.filter(person=>!person.dead&&!person.rig.limp&&!person.alert&&person.pos.distanceToSquared(eyes)<(ATT.SHOUT+5)**2);
+        this.attention.update(eyes,look,player.vel,this.listeners.map(({id,pos})=>({id,x:pos.x,y:pos.y+1.38,z:pos.z})),dt,performance.now());
+    }
+
+    canHear(person) {
+        if(!person)return false;
+        const eyes=this.api.player().pos.clone().add(new V3(0,1.55,0));
+        const face=person.pos.clone().add(new V3(0,1.52,0));
+        return !this.trace(eyes,face,0);
+    }
+
+    say(person,text,reply) {
+        if(!text)return;
+        const live=()=>{
+            if(person.dead||person.rig.limp)return {volume:0};
+            const {pos,yaw}=this.api.player(), dx=person.pos.x-pos.x, dz=person.pos.z-pos.z;
+            const distance=Math.hypot(dx,dz,(person.pos.y-pos.y)*.5);
+            const level=Math.max(0,Math.min(1,1-(distance-4)/31));
+            return {volume:level*level,pan:distance>1?(dx*Math.cos(yaw)-dz*Math.sin(yaw))/distance*.8:0};
+        };
+        const voiced=this.speech.say(text,{voiceKey:person.id,role:person.profile.role,female:person.profile.female,
+            volume:live().volume,live,reply,onEnd:ok=>{if(!ok&&!person.dead)person.town.showSpeech(person,text);}});
+        if(voiced&&this.api.config.villagerText!=='always')person.bubble?.hide();
+        else person.town.showSpeech(person,text);
+    }
+
+    hear(text,{loud=false}={}) {
+        this.attentionStep(0);
+        const id=this.attention.addressee(id=>this.canHear(this.listeners.find(p=>p.id===id)),loud);
+        const person=this.listeners.find(p=>p.id===id);
+        if(!person)return false;
+        const now=performance.now();
+        const answer=person.brain.hear(text,{now,selfId:'me',danger:person.alert>0});
+        this.attention.talkedWith(person.id,now);
+        person.talking=4;
+        if(answer.action==='follow')person.follow=true;
+        else if(answer.action==='stop_follow')person.follow=false;
+        this.say(person,answer.reply,true);
+        return true;
+    }
+
+    notice(dt) {
+        if(!this.api.playing())return;
+        const player=this.api.player();
+        this.stillFor=player.vel.lengthSq()<.08?this.stillFor+dt:0;
+        if((this.noticeIn-=dt)>0)return;
+        this.noticeIn=.16;
+        this.attentionStep(.16);
+        const now=performance.now();
+        if(now-(this.attention.partner?.at??-Infinity)<ATT.PARTNER*1000||this.speech.speaking)return;
+        const id=this.attention.addressee(id=>{
+            const p=this.listeners.find(person=>person.id===id);
+            return now-(p.greetedAt??-Infinity)>=90000&&this.attention.score(id)>=ATT.NOTICE&&
+                mayNotice({now,d:p.pos.distanceTo(player.pos),stillClose:this.stillFor>=ATT.STILL})&&this.canHear(p);
+        });
+        const person=this.listeners.find(p=>p.id===id);
+        if(!person)return;
+        person.greetedAt=now;
+        person.talking=3;
+        this.say(person,person.brain.greet({now,selfId:'me'}),false);
+    }
     hit(npc,...args) { npc.town.hit(npc,...args); }
     stripArmor(npc) { npc.town.stripArmor(npc); }
 
@@ -1310,6 +1397,7 @@ export class OpushkaSettlements {
                 if(Math.hypot(p.x-cx,p.z-cz)<radius)this.open(site);
             }
         }
+        this.notice(dt);
         for(const town of this.active)town.update(dt);
     }
 }

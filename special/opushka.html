@@ -174,7 +174,7 @@ window.__mpNet = mpNet;
 // (the battle spells — special/opushka-spells.js: the game's words, the wand in the fist; a blast dents this world's ground)
 const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() { return camera; }, get U() { return U; }, player: () => player, rig: () => charRig, charRoot: () => charRoot, wandHand:()=>wandHand, wandHeld:()=>inventory?.wandInHand()??true,reveal:()=>inspectHeld(false),ignite:()=>inspectHeld(true),
   get pigs() { return pigs; }, village:()=>village, loot:()=>caveLoot, gather:(o,d)=>gatherSand(o,d), waterAt:(x,z)=>waterAt(x,z), groundH: (x, z) => groundH(x, z), solid: (x,y,z) => surfaceDensity(x,y,z), dent: (x, z, r, d, y) => dentGround(x, z, r, d, y), trees: () => treesNear(), rocks: () => rocksAll(),
-  net: () => (mpNet.on ? mpNet.net : null), remotes: () => mpNet.remotes, audio: () => audio.ctx, playing: () => playing, armsLive: () => zns.live(), running: () => !!zns.raw?.isRunning, keysOff: () => AUTO,
+  net: () => (mpNet.on ? mpNet.net : null), remotes: () => mpNet.remotes, audio: () => audio.ctx, playing: () => playing, armsLive: () => zns.live(), running: () => !!zns.raw?.isRunning, keysOff: () => AUTO, voiceSettings:zns.set,
   hud: (t) => spellHud(t), pain: (k) => painFlash(k), setLocked: (b) => { player.locked = b; }, nameOf: (id) => mpNet.net?.players.get(id)?.name || 'другой волшебник',
   fall:(state,direction,force)=>tipAvatar(charRig,state,direction,force),stand:()=>standLimp(charRig),
   recover:(state)=>recoverLimp(charRig,bodyWorld,state),
@@ -1543,10 +1543,13 @@ function updatePlayer(dt){
     else if(caves.canStand(oldX,p.y,p.z,head)){p.x=oldX;player.vel.x=0;}
     else{p.x=oldX;p.z=oldZ;player.vel.x=player.vel.z=0;}
   }
-  if(village?.solidAt(p.x,p.y,p.z)){
-    if(!village.solidAt(p.x,p.y,oldZ)){p.z=oldZ;player.vel.z=0;}
-    else if(!village.solidAt(oldX,p.y,p.z)){p.x=oldX;player.vel.x=0;}
-    else{p.x=oldX;p.z=oldZ;player.vel.x=player.vel.z=0;}
+  if(village){
+    const blocked=(x,z)=>village.solidAt(x,p.y,z)||village.bodyBlocked(oldX,oldZ,x,p.y,z,head);
+    if(blocked(p.x,p.z)){
+      if(!blocked(p.x,oldZ)){p.z=oldZ;player.vel.z=0;}
+      else if(!blocked(oldX,p.z)){p.x=oldX;player.vel.x=0;}
+      else{p.x=oldX;p.z=oldZ;player.vel.x=player.vel.z=0;}
+    }
   }
   const outdoors=groundH(p.x,p.z);
   const terrainFloor=caves?.floor(p.x,p.z,p.y)??outdoors;
@@ -2182,7 +2185,7 @@ function animateMannequin(c,dt,speed,P){
   B.chest.quaternion.setFromEuler(_e.set(chestLag*0.35+breathe*0.012,-twist*0.8,roll*0.25,'YXZ'));
   let lookYaw=0;
   if(P.view==='third'){const d=wrapA(P.yaw+Math.PI-fy);lookYaw=Math.abs(d)>2.4?0:clamp(d,-1.15,1.15);}
-  if(c.idleT>4){c.lookT-=dt;if(c.lookT<=0){c.lookTarget=(Math.random()-0.5)*1.6;c.lookT=2+Math.random()*3;}lookYaw+=c.lookTarget;}
+  if(c.idleT>4&&!(P.talking>0)){c.lookT-=dt;if(c.lookT<=0){c.lookTarget=(Math.random()-0.5)*1.6;c.lookT=2+Math.random()*3;}lookYaw+=c.lookTarget;}
   const hYaw=spr(c.headYaw,clamp(lookYaw,-1.2,1.2),dt,1.8,0.7),hPitch=spr(c.headPitch,clamp(-P.pitch*0.5,-0.5,0.4),dt,1.8,0.7);
   const totalPitch=lean*0.35+lean*0.45+chestLag*0.35;
   B.neck.quaternion.setFromEuler(_e.set(-totalPitch*0.45+hPitch*0.4,hYaw*0.45+twist*0.2,-roll*0.3,'YXZ'));
@@ -2447,7 +2450,7 @@ function makeTown(site,starter){
   const origin=new V3(site.x,0,site.z);
   const town=new OpushkaVillage({scene,ground:groundH,foundationGround:(x,z)=>groundH(x,z,originalHeights),player:()=>player,
     spawn:starter?spawnPoint.clone().setY(groundH(spawnPoint.x,spawnPoint.z,originalHeights)):new V3(site.x,groundH(site.x,site.z+14),site.z+14),avatar:buildAvatar,
-    animate:animateAvatar,camera:()=>camera,notify:gameNotify,sound:(cue,pos)=>spells.sound(cue==='door'?'creak':cue,pos,.55),audio:()=>audio.ctx,body:(id)=>spells._bodyOf(id),cast:(person,target,name)=>spells.castResident(person,target,name),
+    talk:()=>village,animate:animateAvatar,camera:()=>camera,notify:gameNotify,sound:(cue,pos)=>spells.sound(cue==='door'?'creak':cue,pos,.55),audio:()=>audio.ctx,body:(id)=>spells._bodyOf(id),cast:(person,target,name)=>spells.castResident(person,target,name),
     strike:(knight,target,dir,hp,push)=>{
       if(target===spells._myId()||target==='me'){
         const shield=spells.shields.some(s=>s.by===spells._myId()&&(s.sphere||knight.pos.clone().sub(s.pos).dot(s.dir)>0));
@@ -2868,12 +2871,12 @@ document.querySelectorAll('#qual button').forEach(b=>b.onclick=()=>{qKey=b.datas
 document.querySelectorAll('#tod button').forEach(b=>b.onclick=()=>setTod(b.dataset.v));
 function setTod(k){todKey=k;T=TOD[k];setSeg('tod',k);if(started)applyTOD();mpNet.todChanged(k);}
 function applyQuality(){U.uLodR.value=Q.treeR;dynScale=1;setupShadow();buildGrass();resizePost();post.rays.uniforms.uN.value=Q.rays;lastLod.set(1e9,0,1e9);}
-$('#go').onclick=()=>{audio.start();enterPlay();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);};
+$('#go').onclick=()=>{audio.start();enterPlay();if(village?.speech.enabled&&!navigator.webdriver)village.speech.preload();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);};
 $('#viewBtn').onclick=()=>setView(player.view==='first'?'third':'first');
 $('#charFile').onchange=e=>{if(e.target.files.length)loadCustomCharacter(e.target.files);};
 function enterPlay(){playing=true;if(hasWings)gameNotify('🪽 Разбегитесь и взмахните обеими руками, чтобы взлететь');$('#overlay').classList.add('gone');document.body.classList.add('playing');if(!isTouch){try{const p=canvasEl.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}}
 /** Straight into the world (from the game's menu): the sound may wait for the first touch of a key or the mouse (the browser's rule). */
-function autoEnter(){audio.start();enterPlay();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);
+function autoEnter(){audio.start();enterPlay();if(village?.speech.enabled&&!navigator.webdriver)village.speech.preload();spells.startVoice();setTimeout(()=>spells.makeSounds(audio.ctx),50);
   // (a browser tab: full screen needs a click — the first one does it; the game's own app window is full already: its server made it so)
   let app=false;try{app=sessionStorage.getItem('zns-app-window')==='1'||document.documentElement.classList.contains('app-full');}catch(e){}
   const wake=()=>{try{audio.ctx&&audio.ctx.state==='suspended'&&audio.ctx.resume();}catch(e){}
@@ -3040,7 +3043,7 @@ async function init(){
     if(params.get('pitch'))player.pitch=+params.get('pitch');
     restoreSavedPlayer();
     updatePlayer(0.016);refreshLod(camera.position);
-    if(CREATIVE)village=new OpushkaSettlements(worldSites,makeTown);
+    if(CREATIVE)village=new OpushkaSettlements(worldSites,makeTown,{config:zns.set.config,audio:()=>audio.ctx,player:()=>player,camera:()=>camera,playing:()=>playing&&!spells.me.dead});
     scrollReader=makeScrollReader();
     caveLoot=new OpushkaCaveLoot(caves,{scene,inventory,player:()=>player,net:()=>mpNet.on?mpNet.net:null,
       remote:(id)=>mpNet.remotes.get(id)?.P?.pos,knowsScroll:(item)=>learnedScrolls.has(scrollKey(item)),

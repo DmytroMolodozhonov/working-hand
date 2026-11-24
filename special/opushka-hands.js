@@ -29,9 +29,12 @@ export function gameCameraSettings() {
     const sm = num(saved['cam-smooth'], 70), se = num(saved['cam-sens'], 100);
     const config = cfg || {
         modelComplexity: parseInt(saved['model-quality'] ?? 1, 10), delegate: saved['vision-delegate'] || 'auto', engine: saved['vision-engine'] || 'classic',
+        villagerVoice: saved['villager-voice'] !== '0', villagerVoiceEngine: saved['villager-voice'] === 'system' ? 'system' : 'neural',
+        talkVolume: num(saved['talk-vol'], 40) / 100, villagerText: saved['villager-text'],
         resolution: saved['camera-res'] || '640', handQuality: String(saved['hand-quality'] || 'high').includes('high') ? 'high' : 'low', leftHanded: saved.handedness === 'left',
     };
-    return { config, smoothness: Math.max(0.05, 1 - sm / 100), sensitivity: se / 100, handSmooth: sm, drifting: saved['drift-camera'] !== false && saved['drift-camera'] !== 'false' };
+    return { config, voiceEngine: saved['voice-engine'], voiceMic: saved['voice-mic'],
+        smoothness: Math.max(0.05, 1 - sm / 100), sensitivity: se / 100, handSmooth: sm, drifting: saved['drift-camera'] !== false && saved['drift-camera'] !== 'false' };
 }
 
 const LIVE_MS = 600; // a pose older than this: the camera stopped — the walking swing comes back

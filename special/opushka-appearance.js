@@ -120,7 +120,7 @@ export function fitArmor(rig, slot, item) {
     if (!item) return;
     const plate = (bone, dimensions, position, steel, shin = false) => {
         const geometry = shin ? new THREE.CylinderGeometry(dimensions[0], dimensions[2], dimensions[1], 10, 2, true, 0, Math.PI * 1.35)
-            : new THREE.SphereGeometry(1, 24, 16, 0, Math.PI * 2, 0, slot === 'helmet' ? Math.PI * 0.57 : Math.PI);
+            : new THREE.SphereGeometry(1, 24, 16, 0, Math.PI * 2, 0, slot === 'helmet' ? Math.PI / 2 : Math.PI);
         const material = new THREE.MeshStandardMaterial({ color: item.magic ? 0x879eb0 : steel, metalness: 0.76, roughness: item.magic ? 0.28 : 0.5 });
         const mesh = new THREE.Mesh(geometry, material);
         if (!shin) mesh.scale.set(...dimensions);
@@ -129,7 +129,7 @@ export function fitArmor(rig, slot, item) {
         mesh.castShadow = mesh.receiveShadow = true;
         rig.armor[slot].push(mesh);
     };
-    if (slot === 'helmet') plate(rig.B.head, [0.10, 0.12, 0.115], [0, 0.105, -0.007], 0x818482);
+    if (slot === 'helmet') plate(rig.B.head, [0.10, 0.12, 0.115], [0, 0.125, -0.007], 0x818482);
     if (slot === 'chest') {
         plate(rig.B.chest, [0.174, 0.17, 0.083], [0, 0, 0.063], 0x838789);
         for (const side of ['L', 'R']) plate(rig.B['ua' + side], [0.076, 0.069, 0.075], [0, -0.008, 0], 0xa49a82);

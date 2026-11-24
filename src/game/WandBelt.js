@@ -29,6 +29,13 @@ const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be si
 const CALM_S = 0.25; // s the arm must be calm first (no wind-up, no flick)
 /** Looking down this much (the view's forward, down, in the body's own space) to tuck it in: a slight nod never does. */
 export const TUCK_LOOK = -0.34;
+export const TAKE_LOOK = -0.1;
+
+/** Keep an open grip armed until the hand leaves the wand's belt area. */
+export function beltGrip(open, reach, curl) {
+    return reach && (open || curl < 0.4);
+}
+export const BELT_TAKE_CURL = 0.45;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
@@ -144,13 +151,13 @@ export class WandBelt {
             // as easy as in reality: anywhere by the waist, looking down)
             // (never at the coin pouches' place: PoseInterpreter.bodyPlace — reaching for the wand takes the wand only)
             const reach = (near || !!rb?.near) && g.currentPose.place?.[side] !== 'purse';
-            if (!reach) { this._open[side] = false; continue; }
-            if (curl < 0.4) this._open[side] = true;
+            this._open[side] = beltGrip(this._open[side], reach, curl);
+            if (!reach) continue;
             const free = !h && !g.weapons?.hands?.[side]?.held;
             // (only the leading hand takes it off the belt: the right one, a left-hander's left)
             const leading = side === (g.dom || 'right');
             if (reach && leading && this.beltWand()) this._diagLog(side, 'take', rb, null, { free, look: this.lookingDown(), curl: +curl.toFixed(2), open: this._open[side] });
-            if (free && leading && this.beltWand() && this.lookingDown() && curl > 0.45 && this._open[side]) {
+            if (free && leading && this.beltWand() && this.lookingDown() && curl > BELT_TAKE_CURL && this._open[side]) {
                 this._take(side);
                 return;
             }
@@ -217,7 +224,7 @@ export class WandBelt {
         console.info('[Предметы]', `пояс(${act} ${side}): camera dy=${rb?.dy?.toFixed(2)} u=${rb?.u?.toFixed(2)} bend=${rb?.bend?.toFixed(2)} upper=${rb?.upper} at=${rb?.at} near=${rb?.near} hipsEst=${rb?.hipsEst} | 3d=${local ? local.toArray().map((x) => x.toFixed(2)).join(',') : '-'} | ${JSON.stringify(st)}`);
     }
 
-    lookingDown(lim = -0.1) {
+    lookingDown(lim = TAKE_LOOK) {
         const ch = this.game.character;
         if (!ch.getHeadQuaternion) return false;
         ch.getHeadQuaternion(_q).premultiply(ch.group.getWorldQuaternion(_q2).invert());

@@ -444,6 +444,7 @@ function readConfig() {
         walkBack: false, // (the lean of the back is gone from the settings — the author 05.11: «ходьба назад только при чужаке»; ThreatBack.js) // (the author 05.11: stepping on the spot leaning back — the hero walks backwards; off by default)
         leftHanded: $('handedness')?.value === 'left',
         look: activeLook(), // the hero from the «Персонаж» tab
+        talkVolume: Number($('talk-vol')?.value ?? 40) / 100,
         villagerVoice: ($('villager-voice')?.value ?? '1') !== '0',
         villagerVoiceEngine: $('villager-voice')?.value === 'system' ? 'system' : 'neural', // (neural: Supertonic 3 in the browser)
         villagerText: $('villager-text')?.value === 'always' ? 'always' : 'auto', // (the words over the head: only when no voice says them)

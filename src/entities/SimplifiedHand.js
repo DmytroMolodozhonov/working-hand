@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import { lerpAngle } from '../core/math.js';
-import { handFrame, fingerJoints } from './HandPose.js';
+import { handFrame, fingerCurl, fingerJoints } from './HandPose.js';
 
 /**
  * How far the wrist is bent to the little finger's side (+) or the thumb's (−), rad, from
@@ -472,19 +472,11 @@ export class SimplifiedHand {
 
     analyzeLandmarks(landmarks) {
         const wrist = landmarks[0];
-        const getCurl = (baseIdx, tipIdx) => {
-            const tip = landmarks[tipIdx];
-            const base = landmarks[baseIdx];
-            const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
-            const dBase = Math.hypot(base.x - wrist.x, base.y - wrist.y);
-            const ratio = dTip / (dBase + 0.05);
-            return Math.max(0, Math.min(1, (1.15 - ratio) * 3.2));
-        };
         const ts = this.targetState;
-        ts.fingers.index = getCurl(5, 8);
-        ts.fingers.middle = getCurl(9, 12);
-        ts.fingers.ring = getCurl(13, 16);
-        ts.fingers.pinky = getCurl(17, 20);
+        ts.fingers.index = fingerCurl(landmarks, 5, 8);
+        ts.fingers.middle = fingerCurl(landmarks, 9, 12);
+        ts.fingers.ring = fingerCurl(landmarks, 13, 16);
+        ts.fingers.pinky = fingerCurl(landmarks, 17, 20);
 
         const tBase = landmarks[1];
         const tTip = landmarks[4];

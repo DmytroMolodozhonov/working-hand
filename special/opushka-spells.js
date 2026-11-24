@@ -31,9 +31,10 @@ import { MANA, FIRST_SPELL } from '../src/game/Mana.js';
 import { SPELL_COST } from '../src/game/SpellCosts.js';
 import { CLASH, DUEL, clashPush } from '../src/game/Duel.js';
 import { segmentToSegment } from '../src/game/SegmentContact.js';
+import { fromGame, soundingLine } from '../src/audio/GameVoices.js';
 import { cardilonCost } from '../src/game/CardilonRules.js';
 import { CardilonLook } from '../src/fx/CardilonLook.js';
-import { spellPhrase, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR } from '../src/audio/SpellPhrase.js';
+import { spellPhrase, afterCast, lateInSpeech, bodyNoise, soundTrust, ownVoiceEcho, TRUSTED_FAR } from '../src/audio/SpellPhrase.js';
 
 const V3 = THREE.Vector3;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -138,6 +139,7 @@ export class OpushkaSpells {
         for (const w of warm) { w.position.set(0, -500, 0); scene.add(w); }
         this._warm = warm;
         this.voice = new VoiceService();
+        this.voice.setPreference(this.api.voiceSettings?.voiceEngine);
         this.voice.onResult = (text, isFinal, held, meta) => this._heard(text, isFinal, meta);
         addEventListener('keydown', (e) => {
             if (e.repeat || !this.api.playing() || e.ctrlKey || e.metaKey || this.api.keysOff?.()) return; // (from the game's menu: spells by the voice only, as in the game)
@@ -150,6 +152,8 @@ export class OpushkaSpells {
         for (const w of this._warm || []) w.removeFromParent();
         this._warm = null;
         if (navigator.webdriver) return; // (automated checks: no microphone)
+        const mic=this.api.voiceSettings?.voiceMic;
+        if(mic&&this.voice.prefer!=='browser'&&!this.voice.shouldListen)this.voice.native.setMic(mic);
         try { this.voice.start(); } catch (e) { console.warn('[Опушка] voice', e); }
     }
 
@@ -163,12 +167,16 @@ export class OpushkaSpells {
         if (!this.api.playing() || !command) return;
         const final = isFinal || !!meta?.settled;
         const phrase = spellPhrase(command, { final });
-        if (phrase.name && !phrase.ok) return; // (a spell's word inside talk)
-        let spoken = matchSpell(command);
+        let spoken = meta?.talkOnly || phrase.name && !phrase.ok ? null : matchSpell(command);
+        const when=performance.now(), from=meta?.from ?? when-2500, to=meta?.to ?? when;
         if (!spoken) {
-            if (final && command.length>=3 && !this.api.village?.()?.voiceActive) this.api.village?.()?.hear?.(command);
+            if (final && command.length>=3 && !ownVoiceEcho(command,meta,soundingLine(from,to))) {
+                const voice=this.voice, peak=voice?.recentPeak?.(2500);
+                this.api.village?.()?.hear(command,{loud:Number.isFinite(peak) && peak-voice.noiseFloor>=30});
+            }
             return;
         }
+        if(fromGame(spoken,{...meta,from,to}))return;
         if (spoken === 'Reveal') { if (final) this.api.reveal?.(); return; }
         const now = performance.now(), running = !!this.api.running?.();
         const why = afterCast(this._lastCast, spoken, meta, now) || lateInSpeech(spoken, command, meta, now)
