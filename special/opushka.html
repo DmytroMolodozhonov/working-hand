@@ -178,6 +178,7 @@ const spells = new OpushkaSpells({ get scene() { return scene; }, get camera() {
   hud: (t) => spellHud(t), pain: (k) => painFlash(k), setLocked: (b) => { player.locked = b; }, nameOf: (id) => mpNet.net?.players.get(id)?.name || 'другой волшебник',
   fall:(state,direction,force)=>tipAvatar(charRig,state,direction,force),stand:()=>standLimp(charRig),
   recover:(state)=>recoverLimp(charRig,bodyWorld,state),
+  fallResident:(state,dir,force)=>tipAvatar(state.rig,state,dir,force),liftFloor:(x,z,y)=>bodyWorld.floor(x,z,y),
   knows:(name)=>name!=='WindMaxima'||CREATIVE||learnedScrolls.has('s:WindMaxima'),
   callItem:(o,d)=>inventory?.callLoose(o,d,(a,b)=>spells._worldHit(a,b,0)),
   stripMe:()=>inventory?.stripArmor(),
@@ -2784,7 +2785,7 @@ function updatePigs(dt){
   for(const pg of pigs){
     const g=groundH(pg.pos.x,pg.pos.z);let dPlayer=Math.hypot(pg.pos.x-pp.x,pg.pos.z-pp.z);for(const o of mpNet.others())dPlayer=Math.min(dPlayer,Math.hypot(pg.pos.x-o.x,pg.pos.z-o.z)); // (a friend frightens a pig as I do)
     pg.stateT-=dt;let flap=0;
-    if(pg.ko>0&&!pg.net){flap=koPig(pg,dt);}else if(pg.net){flap=netPig(pg,dt);}else if(pg.state==='fly'||pg.state==='land'||pg.state==='takeoff'){
+    if(pg.levitated){pg.walk=0;}else if(pg.ko>0&&!pg.net){flap=koPig(pg,dt);}else if(pg.net){flap=netPig(pg,dt);}else if(pg.state==='fly'||pg.state==='land'||pg.state==='takeoff'){
       if(pg.state==='takeoff'){pg.vel.y+=9*dt;if(pg.pos.y>g+3){pg.state='fly';pickFlyTarget(pg);}}
       const to=pg.target.clone().sub(pg.pos);const dist=to.length();
       if(pg.state==='fly'&&dist<4)pickFlyTarget(pg);

@@ -482,6 +482,12 @@ export class Ragdoll {
             for (let b = 0; b < this.sp.bones.length; b++) { const B = this.sp.bones[b]; this._len(B[0], B[1], B[2], B[2], B[3]); };
             for (let b = 0; b < this.sp.limits.length; b++) { const L = this.sp.limits[b]; this._len(L[0], L[1], L[2], L[3], 1); };
             if (this.sp.pin) this._pin();
+            if (this.carry) {
+                const { joint, position } = this.carry, j = joint * 3;
+                const dx = position.x - x[j], dy = position.y - x[j + 1], dz = position.z - x[j + 2];
+                const scale = Math.min(0.72, 0.016 / (Math.hypot(dx, dy, dz) || 1));
+                x[j] += dx * scale; x[j + 1] += dy * scale; x[j + 2] += dz * scale;
+            }
             if (!this.sp.quad) { this._knee(P.HIPL, P.KNL, P.FTL); this._knee(P.HIPR, P.KNR, P.FTR); } // (a hock bends the other way: only its limits)
             this._handsOut();
             if (it & 1 && this._selfOn !== false && this.age > SELF_FROM && this.age < DOLL.SELF_T && !(this._hitMask & SELF_GRIP)) { if (this._selfOut() && this.contacts > 0) this._selfFight = (this._selfFight || 0) + 1; else if (it === DOLL.ITER - 1) this._selfFight = 0; if (this._selfFight > 24) this._selfOn = false; } // (while it falls and rolls; if the self-pushes keep fighting the floor / a wall — a knee pushed out of the belly into the floor and back — they stop: lying, the world decides, and it comes to rest)
@@ -492,6 +498,7 @@ export class Ragdoll {
         let mv = 0;
         for (let i = 0; i < N * 3; i++) { const d = Math.abs(x[i] - o[i]); if (d > mv) mv = d; }
         this._mvPrev = mv;
+        if (this.carry) { this.still = 0; return; }
         if (mv < DOLL.SLEEP_V && this.contacts > 0) { this.still += dt; if (this.still >= DOLL.SLEEP_T) this._sleep(); } else this.still = 0;
         if (this.age > DOLL.SIM_MAX && this.contacts > 0) this._sleep();
     }

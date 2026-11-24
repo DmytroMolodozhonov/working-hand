@@ -31,6 +31,8 @@ import { MANA, FIRST_SPELL } from '../src/game/Mana.js';
 import { SPELL_COST } from '../src/game/SpellCosts.js';
 import { CLASH, DUEL, clashPush } from '../src/game/Duel.js';
 import { segmentToSegment } from '../src/game/SegmentContact.js';
+import { aimOffset, steadyDir, applyAimOffset } from '../src/game/AimHold.js';
+import { LEVITATE } from '../src/game/Levitation.js';
 import { fromGame, soundingLine } from '../src/audio/GameVoices.js';
 import { cardilonCost } from '../src/game/CardilonRules.js';
 import { CardilonLook } from '../src/fx/CardilonLook.js';
@@ -187,7 +189,7 @@ export class OpushkaSpells {
         if (spoken in ALIAS) spoken = ALIAS[spoken];
         if (!SPELLS[spoken]) { if (final) this.api.hud(`«${command}» — в этом мире это заклинание пока не работает`); return; }
         // (a «Бомбардо» may still become «… Максима»: the plain one waits for the phrase's end; the others go at once — once a phrase)
-        if (!final && (spoken === 'Bombardo' || spoken === 'Jolt' || spoken === 'Ice' || spoken === 'Protection' || spoken === 'Wind')) return;
+        if (!final && (spoken === 'Bombardo' || spoken === 'Jolt' || spoken === 'Ice' || spoken === 'Protection' || spoken === 'Wind' || spoken === 'LevitateDuel')) return;
         if (this._lastCast && this._lastCast.seg != null && meta?.seg === this._lastCast.seg && this._lastCast.spell === spoken) return; // (the same phrase seen again)
         this._lastCast = { spell: spoken, at: now, seg: meta?.seg, to: meta?.to };
         this.cast(spoken);
@@ -279,7 +281,19 @@ export class OpushkaSpells {
         const canonical = name === 'SapiraDuel' ? 'Sapira' : name === 'LevitateDuel' ? 'Levitation' : name;
         const cost = SPELL_COST[canonical] ?? 0;
         if (!this.noHarm && this.mana < cost) { this.api.hud('Не хватает маны'); return; }
-        const { o, d } = this.aim(!['gather','utility','light'].includes(S.kind));
+        const { o, d } = this.aim(!S.lift&&!['gather','utility','light'].includes(S.kind));
+        if(S.lift){
+            if(this.levitating){this.releaseLift();return;}
+            const target=this.liftTarget(o,d);
+            if(target?.direct){
+                if(this.startLift(target,o,d)){
+                    if(!this.noHarm)this.mana-=cost;
+                    this._succeeded(name);
+                    this.sound('cast',o,.6);
+                }
+                return;
+            }
+        }
         if (S.kind === 'gather') {
             if (this.api.gather?.(o, d, cost)) this.sound('cast', o, .5);
             return;
@@ -311,6 +325,105 @@ export class OpushkaSpells {
         this.api.hud(`🪄 «${S.ru}»`);
         this._spawn(name, o, d, id, castId, true);
         if (name !== 'Inferno') this.api.net()?.send({ t: 'cast', n: name, o: [o.x, o.y, o.z].map(r3), d: [d.x, d.y, d.z].map(r4), id: castId }, true);
+    }
+
+    liftTarget(origin, direction) {
+        const range=LEVITATE.RANGE*.65, end=origin.clone().addScaledVector(direction,range);
+        let target, first=range;
+        const consider=(kind,subject,point,joint,direct)=>{
+            const t=segSphere(origin,end,point,.29);
+            if(t===null||t*range>=first)return;
+            const obstacle=this._worldHit(origin,point,.02);
+            if(obstacle&&obstacle.t<.95)return;
+            first=t*range;
+            target={kind,subject,point,joint,direct};
+        };
+        for(const person of this.api.village?.()?.people||[]){
+            if(person.rig.limp){
+                const x=person.rig.limp.doll.x;
+                for(let i=0;i<x.length;i+=3){
+                    consider('resident',person,new V3(x[i],x[i+1],x[i+2]),i/3,person.dead||!person.mage);
+                }
+            }else if(!person.dead){
+                const t=segCapsule(origin,end,person.pos,HERO.BODY_R,HERO.BODY_H);
+                if(t!==null&&t*range<first){
+                    const point=origin.clone().lerp(end,t);
+                    if(!this._worldHit(origin,point,.02)){
+                        first=t*range;
+                        target={kind:'resident',subject:person,point,direct:!person.mage};
+                    }
+                }
+            }
+        }
+        if(!this.api.net()?.isClient)for(const pig of this.api.pigs){
+            consider('pig',pig,pig.pos.clone().add(new V3(0,.4,0)),0,true);
+        }
+        return target;
+    }
+
+    startLift(target,origin,direction) {
+        const {kind,subject,point}=target;
+        let joint=target.joint;
+        if(kind==='resident'){
+            if(!subject.rig.limp)this.api.fallResident?.(subject,new V3(),0);
+            const limp=subject.rig.limp;
+            if(!limp)return false;
+            if(joint==null){
+                let best=Infinity;
+                for(let i=0;i<limp.doll.x.length;i+=3){
+                    const distance=point.distanceToSquared(new V3(limp.doll.x[i],limp.doll.x[i+1],limp.doll.x[i+2]));
+                    if(distance<best){best=distance;joint=i/3;}
+                }
+            }
+            limp.recovering=false;
+            limp.doll.goal=limp.doll.rise=null;
+            limp.levTarget={joint,position:point.clone()};
+        }else{
+            subject.levitated=true;
+            subject.state='ko';
+            subject.ko=Math.max(subject.ko||0,2);
+        }
+        const offset=point.clone().sub(origin);
+        this.levitating={kind,subject,point:point.clone(),distance:Math.max(1,offset.length()),
+            off:aimOffset(direction,offset),last:point.clone(),velocity:new V3(),steady:{},age:0};
+        return true;
+    }
+
+    stepLift(dt) {
+        const lift=this.levitating;
+        if(!lift)return;
+        const {subject,kind}=lift;
+        if(this.me.dead||this.me.stun>0||this.me.frozen>0||this.api.wandHeld?.()===false||kind==='resident'&&!subject.rig.limp){
+            this.releaseLift();return;
+        }
+        lift.age+=dt;
+        if(lift.age>=(kind==='resident'&&!subject.dead&&subject.mage?LEVITATE.WIZARD_T:LEVITATE.MAX_HOLD)){this.releaseLift();return;}
+        const {o,d}=this.aim(false), direction=steadyDir(lift.steady,d,dt);
+        lift.off.dp*=Math.exp(-dt*LEVITATE.RISE);
+        const want=o.clone().addScaledVector(applyAimOffset(direction,lift.off,new V3()),lift.distance);
+        const floor=this.api.liftFloor?.(want.x,want.z,lift.point.y)??this.api.groundH(want.x,want.z);
+        want.y=Math.max(want.y+.45,floor+1.95);
+        const next=lift.point.clone().lerp(want,1-Math.exp(-dt*LEVITATE.FOLLOW));
+        if(!this._worldHit(lift.point,next,.02))lift.point.copy(next);
+        lift.velocity.lerp(lift.point.clone().sub(lift.last).multiplyScalar(1/Math.max(dt,.001)),Math.min(1,dt*6));
+        lift.last.copy(lift.point);
+        if(kind==='resident')subject.rig.limp.levTarget.position.copy(lift.point);
+        else subject.pos.copy(lift.point).add(new V3(0,-.4,0));
+    }
+
+    releaseLift() {
+        const lift=this.levitating;
+        if(!lift)return;
+        const {kind,subject,velocity}=lift;
+        velocity.clampLength(0,9);
+        if(kind==='resident'&&subject.rig.limp){
+            subject.rig.limp.levTarget=null;
+            subject.rig.limp.doll.push(velocity.x,velocity.y,velocity.z);
+        }else if(kind==='pig'){
+            subject.levitated=false;
+            subject.vel.copy(velocity);
+        }
+        this.levitating=null;
     }
 
     crystalFound(point) {
@@ -385,6 +498,7 @@ export class OpushkaSpells {
             return this.api.standSpell?.()||false;
         }
         if(name==='Stop'){
+            this.releaseLift();
             for(const sh of this.shields)if(sh.by===this._myId())sh.dead=true;
             this._lightSpell('Nox',o,d);
             return true;
@@ -564,6 +678,7 @@ export class OpushkaSpells {
     update(dt) {
         const { U } = this.api;
         this._me(dt);
+        this.stepLift(dt);
         this._lampStep();
         this.cardilonLook?.update(dt);
         this.mana=Math.min(this.maxMana,this.mana+dt);
@@ -872,6 +987,10 @@ export class OpushkaSpells {
         }
         else if (t.kind === 'resident') {
             const village=this.api.village();
+            if(S.lift&&b.mine){
+                if(!this.levitating)this.startLift({kind:'resident',subject:t.npc,point:p},b.hand,b.dir);
+                return;
+            }
             if(S.disarm){
                 const disarmed=village.disarm(t.npc);
                 village.hit(t.npc,0,b.dir,b.by,{push:disarmed?0:1.6,hostile:true});

@@ -58,7 +58,9 @@ export function tumble(rig, rest, motion, direction, energy, grounded, dead) {
 }
 
 export function stepLimp(rig, world, dt, state) {
-    const { doll, point, feet } = rig.limp;
+    const { doll, point, feet, levTarget } = rig.limp;
+    doll.carry=levTarget;
+    if(levTarget)doll.wake();
     doll.step(world, dt);
     doll.at(P.PELVIS, point);
     doll.at(P.FTL, feet);
@@ -77,7 +79,7 @@ export function drawLimp(rig) {
 }
 
 export function recoverLimp(rig, world, state) {
-    if(!rig?.limp || rig.limp.recovering || !state.grounded)return;
+    if(!rig?.limp || rig.limp.recovering || rig.limp.levTarget || !state.grounded)return;
     const floor=world.floor(state.pos.x,state.pos.z,state.pos.y+.2);
     const {fx,fz}=rig.limp.doll.standUp(state.pos.x,floor,state.pos.z,Math.sin(state.faceYaw),Math.cos(state.faceYaw));
     state.faceYaw=Math.atan2(fx,fz);
