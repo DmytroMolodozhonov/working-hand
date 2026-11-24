@@ -388,6 +388,11 @@ def append_game_log(text, new_game):
         print(f"  [Логи игр] не записать: {e}")
 
 
+def log_camera(line):
+    clean = line.replace("\r", " ").replace("\n", " ")[:2000]
+    append_game_log(time.strftime("%H:%M:%S") + f" · [Камера] {clean}\n", False)
+
+
 def append_all_log(text):
     """Append to zns-all.log; past ALL_LOG_MAX only the newest half stays (cut at a line start)."""
     try:
@@ -581,6 +586,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _pose_stream(self, query):
         """Server-Sent Events: every new result of the network as one 'data:' line."""
         from pose_native import POSE
+        POSE.on_log = log_camera
         q = parse_qs(query)
         cam = q.get("cam", [None])[0]
         args = {"quality": q.get("q", ["1"])[0], "camera": int(cam) if cam and cam.isdigit() else None,
@@ -904,7 +910,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if line:
                     print(f"  [{tag or 'Игра'}] {line}")
                     if tag == "Камера" and is_own_page(self.client_address[0], self.headers):
-                        append_game_log(time.strftime("%H:%M:%S") + f" · [Камера] {line}\n", False)
+                        log_camera(line)
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/logs/send":

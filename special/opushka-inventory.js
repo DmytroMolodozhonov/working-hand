@@ -162,6 +162,51 @@ export class OpushkaInventory extends Inventory {
         return !this.wandStowed && !this.api.disarmed();
     }
 
+    snapshot() {
+        return {
+            slots:this.slots.map(item=>item===this.wandItem?null:item),
+            wand:this.wandItem,wandStowed:this.wandStowed,wandSlot:this.slots.indexOf(this.wandItem),
+            held:{main:this.held[this.main]?.item||null,off:this.held[this.off]?.item||null},heldFrom:this.heldFrom,
+            equipped:this.equipped,back:this.back,
+            loose:this.loose.filter(entry=>!entry.onTake).map(entry=>({item:entry.item,pos:entry.model.position.toArray()})),
+        };
+    }
+
+    restore(state) {
+        if(!Array.isArray(state?.slots))return;
+        this.slots=state.slots.slice(0,32);
+        while(this.slots.length<5)this.slots.push(null);
+        while(this.cells.length<this.slots.length)this._appendCell();
+        if(this.wandStowed!==state.wandStowed)this.toggleWand(true);
+        if(this.wandStowed){
+            const old=this.slots.indexOf(this.wandItem);
+            const wanted=Number.isInteger(state.wandSlot)&&state.wandSlot>=0&&state.wandSlot<this.slots.length?state.wandSlot:-1;
+            if(old>=0)this.slots[old]=null;
+            const target=wanted>=0&&!this.slots[wanted]?wanted:this.slots.indexOf(null);
+            if(target>=0)this.slots[target]=this.wandItem;
+            else{this.slots.push(this.wandItem);this._appendCell();}
+        }
+        Object.entries(state.equipped||{}).forEach(([slot,item])=>{
+            if(item&&slot in armorSlots){this.equipped[slot]=item;this.api.fit(slot,item);}
+        });
+        for(const hand of ['main','off']){
+            if(state.held?.[hand])this.takeInHand(state.held[hand],this[hand]);
+        }
+        this.heldFrom=this.held[this.off]&&Number.isInteger(state.heldFrom)?state.heldFrom:null;
+        for(let i=0;i<Math.min(this.back.length,state.back?.length||0);i++)if(state.back[i]){
+            this.back[i]=state.back[i];
+            const model=this.itemModel(state.back[i]);
+            model.position.set((i-.5)*.23,.04,-.20);
+            model.rotation.z=(i-.5)*.9;
+            this.api.rig().B.chest.add(model);
+            this.backModels[i]=model;
+        }
+        for(const {item,pos} of state.loose||[])if(item&&pos?.length===3&&pos.every(Number.isFinite)){
+            this.placeLoose(item,new THREE.Vector3(...pos));
+        }
+        this._render();
+    }
+
     toggleWand(initial = false) {
         const rig = this.api.rig(), hand = rig?.fingers?.[this.main];
         if (!hand?.wand || (!initial && this.api.disabled()) || this.api.disarmed()) return false;

@@ -101,7 +101,7 @@ export function castleGrade(dx, dz, natural) {
 export function buildOpushkaCastle(site, plan, id) {
     const {dx,dz,width,depth}=plan;
     const V3=THREE.Vector3,x=site.origin.x+dx,z=site.origin.z+dz,y=0;
-    const surface=(a,b)=>site.api.ground(x+a,z+b);
+    const surface=(a,b)=>site.api.foundationGround(x+a,z+b);
     const home={id,x,y,z,style:'castle',width,depth,ruined:false};
     const add=(...args)=>site.piece(home,...args);
     const archMat='castleDressed';

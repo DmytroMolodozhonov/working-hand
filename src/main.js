@@ -1582,8 +1582,9 @@ async function renderSavedWorlds() {
     const worlds = await listWorlds();
     if (sel) {
         const cur = sel.value;
-        sel.innerHTML = '<option value="">✨ Новый мир</option>' + worlds.map((w) => `<option value="${w.id}">💾 ${escapeHtml(w.name)}</option>`).join('');
-        if (worlds.some((w) => w.id === cur)) sel.value = cur;
+        const hostable = worlds.filter(w => w.mode !== 'opushka');
+        sel.innerHTML = '<option value="">✨ Новый мир</option>' + hostable.map((w) => `<option value="${w.id}">💾 ${escapeHtml(w.name)}</option>`).join('');
+        if (hostable.some((w) => w.id === cur)) sel.value = cur;
     }
     if (!box) return;
     if (!worlds.length) {
@@ -1594,7 +1595,7 @@ async function renderSavedWorlds() {
     if (!createTouched) showCreateWorld(false); // (worlds to continue: the choice waits for «Создать мир»)
     box.innerHTML = worlds.map((w) => {
         const note = worldHoverNote(w);
-        const old = (Number.isFinite(w.gen) ? w.gen : 1) < WORLD_GEN || worldVersionLabel(w).old;
+        const old = w.mode!=='opushka'&&((Number.isFinite(w.gen) ? w.gen : 1) < WORLD_GEN || worldVersionLabel(w).old);
         return `
         <div class="world-row" data-id="${w.id}" title="${escapeHtml(note)}">
             <button class="world-fav${w.fav ? ' on' : ''}" title="${w.fav ? 'Убрать из избранного' : 'В избранное'}">${w.fav ? '♥' : '♡'}</button>
@@ -1651,6 +1652,7 @@ async function renderSavedWorlds() {
             if (!tut && !starting) { if (!window.__ZNS_NO_FULLSCREEN__) enterGameFullscreen(); portal.start(mainMenu); }
             const w = await loadWorld(id);
             if (!w) { portal.cancel(mainMenu); delete btn.dataset.busy; btn.innerHTML = label; btn.style.opacity = ''; return; }
+            if (w.mode==='opushka') { await toOpushka(new URLSearchParams({auto:'1',world:w.id}).toString()); return; }
             startGame({ ...readConfig(), mode: w.mode, map: null, seed: w.seed, saved: w });
         };
         // deleting asks first — right in the row, in the game's own look

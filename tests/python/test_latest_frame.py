@@ -11,6 +11,13 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import pose_native  # noqa: E402
+from camera_process import CameraProcess  # noqa: E402
+
+
+def blocked_driver(pipe, pixels, settings):
+    pipe.send(settings)
+    pipe.recv()
+    time.sleep(30)
 
 
 class Cap:
@@ -26,6 +33,17 @@ class Cap:
 
 
 class LatestFrame(unittest.TestCase):
+    def test_unresponsive_driver_can_be_replaced(self):
+        settings = (0, 0, 640, 480, False, False)
+        driver = CameraProcess(settings, worker=blocked_driver)
+        try:
+            self.assertEqual(driver.open(), settings)
+            with self.assertRaises(TimeoutError):
+                driver.read()
+        finally:
+            driver.release()
+        self.assertFalse(driver.process.is_alive())
+
     def test_a_slow_network_gets_the_newest_picture(self):
         cap = Cap()
         g = pose_native._LatestFrame(cap, threading.Event())

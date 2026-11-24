@@ -81,6 +81,7 @@ class _LatestFrame:
         self.taken = 0
         self.fails = 0
         self.dead = False
+        self.error = None
         self.at = 0.0  # when the newest picture was read from the camera (time.time(): the game measures the delay from it)
         self.fps = 0.0  # pictures a second the camera itself gives (a dim room: the camera's exposure halves it)
         self._n = 0
@@ -99,12 +100,12 @@ class _LatestFrame:
             try:
                 ok, frame = self.cap.read()
             except Exception as e:  # noqa: BLE001
-                print(f"  [Камера] Ошибка чтения драйвера: {type(e).__name__}: {e}", flush=True)
                 with self.cond:
+                    self.error = f"{type(e).__name__}: {e}"
                     self.dead = True
                     self.cond.notify_all()
                 return
-            now = time.time()
+            now = getattr(self.cap, "at", 0) or time.time()
             with self.cond:
                 if ok and frame is not None:
                     self.frame = frame
@@ -251,6 +252,12 @@ class NativePose:
         self.v5 = _V5Hands()
         self._zoom = None  # body_zoom.BodyZoom (made with the camera)
         self._zrect = None  # the crop the networks look at in the current picture (x, y, w, h in pixels)
+        self.on_log = None
+
+    def _log(self, message):
+        print(f"  [Камера] {message}", flush=True)
+        if self.on_log:
+            self.on_log(message)
 
     # ------------------------------------------------------------ availability
     def available(self):
@@ -364,6 +371,22 @@ class NativePose:
 
     # ------------------------------------------------------------ the camera
     def _open_camera(self, alternate=False):
+        if not sys.platform.startswith("win") or os.environ.get("ZNS_CAMERA_FILE"):
+            return self._open_device(alternate)
+        from camera_process import CameraProcess
+
+        capture = CameraProcess((self.camera_index, self.hands_mode, self._hd_slow, alternate))
+        try:
+            result = capture.open()
+            if result is not None:
+                self.camera_index, self._camera_api, self.width, self.height, self._cam_hd, self._hd_slow = result
+                return capture
+        except (EOFError, OSError) as exc:
+            self._log(f"Не удалось открыть устройство: {type(exc).__name__}: {exc}")
+        capture.release()
+        return None
+
+    def _open_device(self, alternate=False):
         cv2 = self._cv2
         # (tests: a video file in place of the camera)
         if os.environ.get("ZNS_CAMERA_FILE"):
@@ -414,7 +437,7 @@ class NativePose:
                     print("  [Камера] 1280×720 у этой камеры медленно — беру 640×480")
                     self._hd_slow = True
                     cap.release()
-                    return self._open_camera(alternate)
+                    return self._open_device(alternate)
             if ok and frame is not None and frame.size:
                 self._camera_api = api
                 self.camera_index = i
@@ -427,7 +450,7 @@ class NativePose:
             # «no camera» because of V5 (the game would fall back to the browser's slow network)
             print("  [Камера] 1280×720 не открылась — беру 640×480")
             self._hd_slow = True
-            return self._open_camera(alternate)
+            return self._open_device(alternate)
         return None
 
     def _want_hd(self):
@@ -597,11 +620,11 @@ class NativePose:
                 made = self._make_tasks()
                 self.backend = "tasks"
             run, close = made
-            cap = self._open_camera()
+            cap = self._open_camera() or self._open_camera(alternate=True)
             if cap is None:
                 raise RuntimeError("камера не найдена или занята другой программой")
             self.state = "running"
-            print(f"  [Камера] нейросеть запущена отдельно от браузера: {self.backend}, камера №{self.camera_index} {self.width}x{self.height}")
+            self._log(f"Захват запущен: {self.backend}, устройство {self.camera_index}, драйвер {self._camera_api}, {self.width}×{self.height}")
             t_start = time.time()
             frames = 0
             t_rate = time.time()
@@ -632,13 +655,14 @@ class NativePose:
                         ok2, f2 = grab.next(timeout=0)
                         if ok2:
                             frame = f2
-                lost = grab and (grab.dead or time.monotonic() - last_picture > 4)
+                lost = grab and (grab.dead or (not ok and time.monotonic() - last_picture > 4))
                 size_changed = grab and self._want_hd() != self._cam_hd
                 if lost or size_changed:
                     if lost:
                         recovery_tries += 1
                         self.reopens += 1
-                        print(f"  [Камера] Нет кадров. Перезапуск №{recovery_tries}, устройство {self.camera_index}, драйвер {self._camera_api}", flush=True)
+                        detail = grab.error or "нет свежих кадров"
+                        self._log(f"Перезапуск №{recovery_tries}, устройство {self.camera_index}, драйвер {self._camera_api}: {detail}")
                         if self._cam_hd:
                             self._hd_slow = True
                     self.last_frame = None
@@ -654,7 +678,7 @@ class NativePose:
                     if cap is None or recovery_tries > 3:
                         raise RuntimeError("камера не открылась после пропажи кадров")
                     grab = self._grab = _LatestFrame(cap, self._stop)
-                    print(f"  [Камера] Захват открыт: {self.width}x{self.height}, драйвер {self._camera_api}")
+                    self._log(f"Захват открыт после перезапуска: {self.width}×{self.height}, драйвер {self._camera_api}")
                     last_picture = time.monotonic()
                     t_last = 0.0
                     continue
@@ -745,7 +769,7 @@ class NativePose:
         except Exception as e:  # noqa: BLE001
             self.state = "error"
             self.error = str(e)
-            print(f"  [Камера] захват прерван: {type(e).__name__}: {e}", flush=True)
+            self._log(f"Захват прерван: {type(e).__name__}: {e}")
         finally:
             self._grab = None
             if grab is not None:

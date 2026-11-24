@@ -147,11 +147,12 @@ import { makeItemModel, describeItem } from '../src/game/ItemTypes.js';
 import { STACK } from '../src/game/Inventory.js';
 import { BLOCK } from '../src/world/Terrain.js';
 import { scrollKey } from '../src/game/SpellBook.js';
+import { loadWorld, newWorldId, putWorld } from '../src/game/WorldSave.js';
 import { geography, heightTriangle, markShoreSand, SHORE_SAND, OPUSHKA_SEED, OpushkaCaves, WATER_KIND, CAVE_TILE } from './opushka-world.js';
 import { OpushkaMap } from './opushka-map.js';
 import { OpushkaInventory, opushkaWand } from './opushka-inventory.js';
 import { OUTFITS, heroProfile, avatarHair, moveHair, fitArmor, fitTownClothes } from './opushka-appearance.js';
-import { OpushkaVillage, OpushkaSettlements, villageClearing } from './opushka-village.js';
+import { OpushkaVillage, OpushkaSettlements, villageClearing, villageInterior } from './opushka-village.js';
 import { castleGrade, settlementSites, townPathAt } from './opushka-castle.js';
 import { OpushkaCaveLoot } from './opushka-cave-loot.js';
 import { tumble, stepLimp, drawLimp, standLimp, recoverLimp, applyLimpPose } from './opushka-ragdoll.js';
@@ -266,7 +267,9 @@ const HM_N=769, HM_HALF=768, HM_STEP=2, PLAY=470;
 const HGT=new Float32Array(HM_N*HM_N), FOR=new Float32Array(HM_N*HM_N), CAN=new Float32Array(HM_N*HM_N), LUSH=new Float32Array(HM_N*HM_N);
 const MEADOW=[10,-20];
 const VILLAGE_ORIGIN=[MEADOW[0]+25,MEADOW[1]+4];
-const WORLD_SEED=CREATIVE?Number(params.get('seed'))||OPUSHKA_SEED:OPUSHKA_SEED;
+let WORLD_SEED=CREATIVE?Number(params.get('seed'))||OPUSHKA_SEED:OPUSHKA_SEED;
+let saveRecord=null, savedState=null, saveActive=null, saveTimer=null;
+const terrainEdits=new Map();
 const inVillage=(x,z)=>worldSites.some(site=>Math.abs(x-site.x)<134&&Math.abs(z-site.z)<111&&villageClearing(x-site.x,z-site.z,site.kind));
 function townPath(x,z){
   return worldSites.some(site=>site.kind==='castle'&&townPathAt(x-site.x,z-site.z));
@@ -290,8 +293,12 @@ function meadowHeight(x,z){
   h=lerp(h,mh,m);
   return h;
 }
-const heightAnalytic=geography(meadowHeight,WORLD_SEED);
-const worldSites=CREATIVE?settlementSites(WORLD_SEED,heightAnalytic,...VILLAGE_ORIGIN,PLAY):[];
+let heightAnalytic,worldSites=[];
+function configureWorld(){
+  heightAnalytic=geography(meadowHeight,WORLD_SEED);
+  worldSites=CREATIVE?settlementSites(WORLD_SEED,heightAnalytic,...VILLAGE_ORIGIN,PLAY):[];
+  for(const site of worldSites)if(site.kind==='settlement')site.height=Math.max(.75,heightAnalytic(site.x,site.z));
+}
 function townGround(x,z,surface){
   let h=surface;
   for(const site of worldSites){
@@ -307,7 +314,6 @@ function townGround(x,z,surface){
   }
   return h;
 }
-for(const site of worldSites)if(site.kind==='settlement')site.height=Math.max(.75,heightAnalytic(site.x,site.z));
 let caves, minimap;
 const HYD=new Uint8Array(HM_N*HM_N), FLOW=new Int8Array(HM_N*HM_N*2);
 const SAND=new Uint8Array(HM_N*HM_N), harvestedSand=new Set();
@@ -427,7 +433,8 @@ function sampleArr(arr,x,z){
   return (arr[i]*(1-tx)+arr[i+1]*tx)*(1-tz)+(arr[i+HM_N]*(1-tx)+arr[i+HM_N+1]*tx)*tz;
 }
 function surfaceDensity(x,y,z){return caves?caves.density(x,y,z):groundH(x,z)-y;}
-function groundH(x,z){return (Math.abs(x)<HM_HALF-2&&Math.abs(z)<HM_HALF-2)?heightTriangle(HGT,HM_N,(x+HM_HALF)/HM_STEP,(z+HM_HALF)/HM_STEP):heightAnalytic(x,z);}
+let originalHeights;
+function groundH(x,z,heights=HGT){return (Math.abs(x)<HM_HALF-2&&Math.abs(z)<HM_HALF-2)?heightTriangle(heights,HM_N,(x+HM_HALF)/HM_STEP,(z+HM_HALF)/HM_STEP):heightAnalytic(x,z);}
 
 // tree arrays
 const VARIANTS=9; // 0-2 spruce, 3-4 pine, 5-7 birch, 8 sapling
@@ -504,7 +511,7 @@ const camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,0.08,9000);
 
 /* shared uniforms */
 const U={
-  uTime:{value:0}, uHM:{value:null}, uGeography:{value:null}, uHMHalf:{value:HM_HALF}, uHMRes:{value:HM_N},
+  uTime:{value:0}, uHM:{value:null}, uGeography:{value:null}, uInteriors:{value:null}, uHMHalf:{value:HM_HALF}, uHMRes:{value:HM_N},
   uWind:{value:new THREE.Vector2(0.8,0.6).normalize()}, uWindStr:{value:0.5},
   uSunDirW:{value:new THREE.Vector3(0,1,0)}, uLodR:{value:Q.treeR}, uCameraLOD:{value:new THREE.Vector3()}, uPlayer:{value:new THREE.Vector3(0,-999,0)},
   uFlashV:{value:new THREE.Vector3()}, uFlashC:{value:new THREE.Vector4(1,0.6,0.3,0)},
@@ -512,7 +519,7 @@ const U={
 };
 
 const GLSL_COMMON=/* glsl */`
-uniform float uTime; uniform sampler2D uHM,uGeography; uniform float uHMHalf; uniform float uHMRes;
+uniform float uTime; uniform sampler2D uHM,uGeography,uInteriors; uniform float uHMHalf; uniform float uHMRes;
 uniform vec2 uWind; uniform float uWindStr; uniform vec3 uSunDirW; uniform float uLodR; uniform vec3 uCameraLOD; uniform vec3 uPlayer;
 float hash12(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float hash13(vec3 p3){p3=fract(p3*.1031);p3+=dot(p3,p3.zyx+31.32);return fract((p3.x+p3.y)*p3.z);}
@@ -527,6 +534,10 @@ float fbm3N(vec3 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vnoise3(p);p=p*2.0
 vec2 mapUV(vec2 p){return ((p+uHMHalf)/(2.*uHMHalf)*(uHMRes-1.)+.5)/uHMRes;}
 vec4 sampleHM(vec2 p){return texture2D(uHM,mapUV(p));}
 vec2 geographyAt(vec2 p){return texture2D(uGeography,mapUV(p)).rg;}
+float interiorAt(vec2 p){
+  float size=uHMRes*2.-1.;
+  return texture2D(uInteriors,((p+uHMHalf)/(2.*uHMHalf)*(size-1.)+.5)/size).r;
+}
 uniform vec4 uBlast[12]; uniform vec4 uBlastP[12]; uniform vec3 uFlashV; uniform vec4 uFlashC;
 // (23.11, the spells — opushka-spells.js: each blast or frost patch — x, z, its radius, the time it came; P: power, 1 = frost, how long it stays,
 //  the crater's radius — the bare earth it threw out)
@@ -1067,7 +1078,7 @@ function makeGrassMat(){
       float fade=smoothstep(uFade.x,uFade.y,dist)*(1.-smoothstep(uFade.z,uFade.w,dist));
       float water=step(0.003,geographyAt(wxz).r)*(1.-smoothstep(-0.06,0.13,hm.r));
       vec4 groundMask=texture2D(uGeography,mapUV(wxz));
-      float H=(1.-water)*(1.-groundMask.g)*(1.-groundMask.b)*(1.-smoothstep(0.3,0.55,groundMask.a))*uBlade.x*mix(0.4,1.0,aRnd.x)*mix(0.55,1.55,tall)*mix(1.,0.55,forest)*keep*fade;
+      float H=(1.-water)*(1.-groundMask.g)*(1.-groundMask.b)*(1.-step(.42,interiorAt(wxz)))*(1.-smoothstep(0.3,0.55,groundMask.a))*uBlade.x*mix(0.4,1.0,aRnd.x)*mix(0.55,1.55,tall)*mix(1.,0.55,forest)*keep*fade;
       float bBurn=blastBurn(wxz),bDry=blastDry(wxz),bFrost=blastFrost(wxz);vec2 bSoil=blastSoil(wxz);H*=mix(1.,0.1+0.12*aRnd.x,bBurn)*(1.-bSoil.x)*mix(1.,0.25+0.3*aRnd.y,bSoil.y);
       float W=uBlade.y*mix(0.6,1.35,aRnd.y)*(0.6+0.4*fade)*(1.+dist*0.045);
       float ang=aRnd.z*6.2831853+hA*2.0;vec2 face=vec2(cos(ang),sin(ang));vec2 side=vec2(-face.y,face.x);
@@ -1151,7 +1162,7 @@ function buildFlowers(atlas){
       float patchN=smoothstep(0.45,0.75,vnoise(wxz*0.06+aRnd.x*0.0+vec2(floor(aRnd.z*4.)*13.)));
       float dist=distance(wxz,c);float fade=1.-smoothstep(uP*0.38,uP*0.5,dist);
       vec4 groundMask=texture2D(uGeography,mapUV(wxz));
-      float on=step(aRnd.w,meadow*patchN*0.95)*fade*(1.-groundMask.b)*(1.-smoothstep(0.3,0.55,groundMask.a))*(1.-step(0.3,blastBurn(wxz)))*(1.-step(0.3,dot(blastSoil(wxz),vec2(1.))));
+      float on=step(aRnd.w,meadow*patchN*0.95)*fade*(1.-groundMask.b)*(1.-step(.42,interiorAt(wxz)))*(1.-smoothstep(0.3,0.55,groundMask.a))*(1.-step(0.3,blastBurn(wxz)))*(1.-step(0.3,dot(blastSoil(wxz),vec2(1.))));
       float type=floor(aRnd.z*4.);float hgt=(type==1.?0.45:type==3.?0.28:0.5)*mix(0.7,1.3,aRnd.y)*on;float hs=(type==3.?0.022:0.03)*mix(0.8,1.25,aRnd.x)*on;
       vec2 wp=wxz*0.028-uWind*uTime*0.16;float gust=smoothstep(0.25,0.85,vnoise(wp)*0.7+vnoise(wp*2.9)*0.3);
       vec2 sway=uWind*uWindStr*(0.1+0.6*gust)*0.25+vec2(sin(uTime*2.1+aRnd.x*30.),cos(uTime*1.7+aRnd.y*20.))*0.02;
@@ -1476,7 +1487,8 @@ function updateShadow(){
 }
 
 /* ============================== PLAYER ============================== */
-const player={walkYaw:0,camDrive:false,pos:new V3(MEADOW[0]-4,0,MEADOW[1]+14),yaw:0,pitch:-0.02,vel:new V3(),bob:0,stepT:0,vy:0,grounded:true,landT:0,faceYaw:0,view:params.get('view')||'first',camPos:new V3(),camInit:false};
+const spawnPoint=new V3(MEADOW[0]-4,0,MEADOW[1]+14);
+const player={walkYaw:0,camDrive:false,pos:spawnPoint.clone(),yaw:0,pitch:-0.02,vel:new V3(),bob:0,stepT:0,vy:0,grounded:true,landT:0,faceYaw:0,view:params.get('view')||'first',camPos:new V3(),camInit:false};
 const keys={};let pointerLocked=false,playing=false,started=false;
 function collide(p){
   if(p.y<groundH(p.x,p.z)-1.25)return;
@@ -2375,7 +2387,7 @@ async function restoreCharacter(){try{const db=await idb();const files=await new
 /** A friend's wizard (multiplayer): the same body as mine, with its own bones, cape, fingers and wand; P — his pose from the net. */
 async function buildAvatar(hand,profile,light,seed){const rig=await buildMannequin(hand,profile,light,seed);const holder=new THREE.Group();holder.add(rig.root);rig.holder=holder;scene.add(holder);return rig;}
 function animateAvatar(rig,dt,speed,P){rig.holder.position.copy(P.pos);rig.holder.rotation.y=P.faceYaw;animateMannequin(rig,dt,speed,P);}
-async function buildCharacter(){charRig=await buildMannequin(wandHand,heroProfile(zns.set.config.characterLook),false,1337,opushkaWand(zns.set.config.wandLook));charRoot.add(charRig.root);scene.add(charRoot);}
+async function buildCharacter(){charRig=await buildMannequin(wandHand,heroProfile(zns.set.config.characterLook),false,1337,opushkaWand(savedState?.gear?.wand||zns.set.config.wandLook));charRoot.add(charRig.root);scene.add(charRoot);}
 function makePocket(){
   const uiAudio={enabled:true,sounds:{},get context(){return audio.ctx;},
     _synthPocketCue:SoundManager.prototype._synthPocketCue,
@@ -2433,8 +2445,8 @@ function makeScrollReader(){
 }
 function makeTown(site,starter){
   const origin=new V3(site.x,0,site.z);
-  const town=new OpushkaVillage({scene,ground:groundH,player:()=>player,
-    spawn:starter?player.pos.clone():new V3(site.x,groundH(site.x,site.z+14),site.z+14),avatar:buildAvatar,
+  const town=new OpushkaVillage({scene,ground:groundH,foundationGround:(x,z)=>groundH(x,z,originalHeights),player:()=>player,
+    spawn:starter?spawnPoint.clone().setY(groundH(spawnPoint.x,spawnPoint.z,originalHeights)):new V3(site.x,groundH(site.x,site.z+14),site.z+14),avatar:buildAvatar,
     animate:animateAvatar,camera:()=>camera,notify:gameNotify,sound:(cue,pos)=>spells.sound(cue==='door'?'creak':cue,pos,.55),audio:()=>audio.ctx,body:(id)=>spells._bodyOf(id),cast:(person,target,name)=>spells.castResident(person,target,name),
     strike:(knight,target,dir,hp,push)=>{
       if(target===spells._myId()||target==='me'){
@@ -2448,8 +2460,9 @@ function makeTown(site,starter){
     },
     mergeGeometries,fall:tipAvatar,stepLimp:(rig,dt,state)=>stepLimp(rig,bodyWorld,dt,state),
     recover:(rig,state)=>recoverLimp(rig,bodyWorld,state)},origin,site);
-  if(starter)town.putTestGear(inventory);
-  town.stock(inventory,starter);
+  if(starter&&!savedState)town.putTestGear(inventory);
+  town.stock(inventory,starter&&!savedState);
+  town.restore(savedState?.towns?.[site.id]);
   town.populate().catch(e=>console.warn('[Опушка] поселение',e));
   return town;
 }
@@ -2495,7 +2508,9 @@ function dentGround(x,z,r,d,y=Infinity, rim=true){
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const px=-HM_HALF+i*HM_STEP,pz=-HM_HALF+j*HM_STEP,q=Math.hypot(px-x,pz-z)/r;
     const lower=q<1?-d*(1-q*q)**2:0;
     const raised=rim?d*0.22*Math.exp(-(((q-1.05)/0.35)**2)):0;
-    HGT[j*HM_N+i]+=lower+raised;
+    const index=j*HM_N+i,change=lower+raised;
+    HGT[index]+=change;
+    if(change&&CREATIVE)terrainEdits.set(index,HGT[index]);
   }
   // the mesh: its vertices on the 2 m grid of ±640 (row iy — z, column ix — x)
   const g=terrainMesh.geometry,P=g.attributes.position,Nm=g.attributes.normal,NN=640,W=NN+1;
@@ -2869,7 +2884,8 @@ document.getElementById('pause-continue-btn')?.addEventListener('click',()=>game
 document.getElementById('op-view')?.addEventListener('click',()=>{setView(player.view==='first'?'third':'first');$('#op-view').textContent=player.view==='first'?'от первого лица':'от третьего лица';});
 document.querySelectorAll('#pause-menu [data-tod]').forEach(b=>b.addEventListener('click',()=>{setTod(b.dataset.tod);document.querySelectorAll('#pause-menu [data-tod]').forEach(x=>x.classList.toggle('active',x===b));}));
 document.querySelectorAll('#pause-menu [data-q]').forEach(b=>b.addEventListener('click',()=>{qKey=b.dataset.q;Q=PRESETS[qKey];setSeg('qual',qKey);if(started)applyQuality();document.querySelectorAll('#pause-menu [data-q]').forEach(x=>x.classList.toggle('active',x===b));}));
-document.getElementById('pause-exit-btn')?.addEventListener('click',()=>{location.href='../index.html';});
+document.getElementById('pause-exit-btn')?.addEventListener('click',exitOpushka);
+document.querySelector('#overlay a[href="../index.html"]')?.addEventListener('click',event=>{if(started&&saveRecord){event.preventDefault();exitOpushka();}});
 function showMenu(){if(AUTO){gamePause(true);return;}playing=false;$('#overlay').classList.remove('gone');document.body.classList.remove('playing');$('#go').textContent='Вернуться';}
 document.addEventListener('pointerlockchange',()=>{pointerLocked=document.pointerLockElement===canvasEl;if(!pointerLocked&&playing&&!isTouch)showMenu();});
 canvasEl.addEventListener('click',()=>{if(playing&&!pointerLocked&&!isTouch){try{canvasEl.requestPointerLock();}catch(e){}}});
@@ -2892,12 +2908,106 @@ canvasEl.addEventListener('touchend',e=>{for(const t of e.changedTouches){if(t.i
 addEventListener('resize',()=>{if(post)resizePost();});
 
 /* ============================== MAIN ============================== */
+async function openWorld(){
+  if(!CREATIVE)return;
+  const id=params.get('world');
+  if(id){
+    saveRecord=await loadWorld(id);
+    if(!saveRecord||saveRecord.mode!=='opushka')throw new Error('Сохранение «Опушки» недоступно');
+    WORLD_SEED=saveRecord.seed;
+    savedState=saveRecord.opushka;
+    if(savedState?.tod&&TOD[savedState.tod])setTod(savedState.tod);
+    if(!params.has('q')&&Object.hasOwn(PRESETS,savedState?.quality)){
+      qKey=savedState.quality;Q=PRESETS[qKey];setSeg('qual',qKey);U.uLodR.value=Q.treeR;
+    }
+  }else{
+    const now=Date.now();
+    saveRecord={id:newWorldId(),name:'Опушка — '+new Date(now).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),
+      mode:'opushka',seed:WORLD_SEED,created:now,updated:now};
+  }
+}
+function sceneSnapshot(){
+  return {...saveRecord,updated:Math.max(Date.now(),saveRecord.updated+1),opushka:{
+    player:{pos:player.pos.toArray(),yaw:player.yaw,pitch:player.pitch,view:player.view,mana:spells.mana,maxMana:spells.maxMana},
+    tod:todKey,quality:qKey,gear:inventory.snapshot(),learned:[...learnedScrolls], terrain:[...terrainEdits],
+    sand:Array.from(harvestedSand,k=>[k,SAND[k]]),fell:FELL.subarray(0,TN).reduce((out,value,i)=>{if(value)out.push(i);return out;},[]),
+    cave:{opened:[...caveLoot.opened.values()],taken:[...caveLoot.taken]},
+    towns:{...savedState?.towns,...Object.fromEntries(village.active.map(town=>[town.id,town.snapshot()]))},
+  }};
+}
+async function saveOpushka(){
+  if(!saveRecord||!started)return;
+  if(saveActive)await saveActive.catch(()=>{});
+  const snapshot=sceneSnapshot();
+  saveRecord=snapshot;
+  const pending=putWorld(snapshot);
+  saveActive=pending;
+  try{
+    await pending;
+    if(!new URLSearchParams(location.search).has('world')){
+      const url=new URL(location.href);url.searchParams.set('world',snapshot.id);history.replaceState(null,'',url);
+    }
+  }finally{if(saveActive===pending)saveActive=null;}
+}
+async function exitOpushka(){
+  try{
+    await saveOpushka();
+    try{navigator.sendBeacon?.('/api/logs/send');}catch{}
+    location.href='../index.html';
+  }
+  catch(error){gameNotify('Мир пока не сохранился. Попробуйте выйти снова.',7000);console.warn('[Опушка] сохранение',error);}
+}
+function restoreWorldSurface(){
+  for(const [k,value] of savedState?.terrain||[])if(Number.isInteger(k)&&k>=0&&k<HGT.length&&Number.isFinite(value)){
+    HGT[k]=value;terrainEdits.set(k,value);
+  }
+  for(const [k,count] of savedState?.sand||[])if(Number.isInteger(k)&&k>=0&&k<SAND.length&&Number.isInteger(count)&&count>=0&&count<=SHORE_SAND){
+    SAND[k]=count;harvestedSand.add(k);
+  }
+  for(const k of savedState?.fell||[])if(Number.isInteger(k)&&k>=0&&k<TN)FELL[k]=1;
+}
+function buildInteriorMask(){
+  const size=HM_N*2-1,mask=new Uint8Array(size*size);
+  for(const site of worldSites){
+    const castle=site.kind==='castle';
+    for(let z=castle?-110:-15;z<=(castle?23:15);z++)for(let x=-16;x<=(castle?123:17);x++){
+      if(villageInterior(x,z,site.kind))mask[(site.z+z+HM_HALF)*size+site.x+x+HM_HALF]=255;
+    }
+  }
+  const tex=new THREE.DataTexture(mask,size,size,THREE.RedFormat);
+  tex.minFilter=tex.magFilter=THREE.LinearFilter;tex.needsUpdate=true;U.uInteriors.value=tex;
+}
+function restoreSavedPlayer(){
+  const s=savedState?.player;
+  if(s?.pos?.length===3&&s.pos.every(Number.isFinite)){
+    player.pos.set(clamp(s.pos[0],-PLAY,PLAY),s.pos[1],clamp(s.pos[2],-PLAY,PLAY));
+    player.yaw=Number.isFinite(s.yaw)?s.yaw:player.yaw;
+    player.pitch=Number.isFinite(s.pitch)?s.pitch:player.pitch;
+    player.faceYaw=player.yaw+Math.PI;
+    setView(s.view==='third'?'third':'first');
+    player.grounded=false;
+    if(Number.isFinite(s.maxMana)&&s.maxMana>0)spells.maxMana=s.maxMana;
+    if(Number.isFinite(s.mana))spells.mana=clamp(s.mana,0,spells.maxMana);
+  }
+  inventory.restore(savedState?.gear);
+  for(const key of savedState?.learned||[])if(typeof key==='string')learnedScrolls.add(key);
+}
+addEventListener('pagehide',()=>{
+  clearInterval(saveTimer);
+  if(!saveRecord||!started)return;
+  try{navigator.sendBeacon?.('/api/worlds',new Blob([JSON.stringify(sceneSnapshot())],{type:'application/json'}));}catch{}
+});
 let lastT=performance.now(),fpsAcc=0,fpsN=0,fpsShow=0,dynTimer=0;
 async function init(){
   try{
+    fetch('../api/alllog',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines:['=== старт · Опушка']})}).catch(()=>{});
     zns.start(); // (the camera at once, while the forest is made — as the game does: by the end of the loading it already sees the player)
+    await openWorld();configureWorld();
     prog(0.02,'Генерация мира');await nextFrame();
     await genWorld(prog);
+    if(CREATIVE)originalHeights=HGT.slice();
+    restoreWorldSurface();
+    buildInteriorMask();
     minimap=new OpushkaMap($('#terrain-map'),{heights:HGT,forest:FOR,water:HYD,size:HM_N,half:HM_HALF,step:HM_STEP,caves,buildings:()=>village?.homes||[],chests:()=>caveLoot?.mapChests()||[]});
     const half=new Uint16Array(HM_N*HM_N*4);for(let i=0;i<HM_N*HM_N;i++){half[i*4]=THREE.DataUtils.toHalfFloat(HGT[i]);half[i*4+1]=THREE.DataUtils.toHalfFloat(CAN[i]);half[i*4+2]=THREE.DataUtils.toHalfFloat(FOR[i]);half[i*4+3]=THREE.DataUtils.toHalfFloat(LUSH[i]);}
     const hmTex=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);hmTex.minFilter=hmTex.magFilter=THREE.LinearFilter;hmTex.wrapS=hmTex.wrapT=THREE.ClampToEdgeWrapping;hmTex.needsUpdate=true;U.uHM.value=hmTex;hmSrc=new THREE.DataTexture(half,HM_N,HM_N,THREE.RGBAFormat,THREE.HalfFloatType);
@@ -2928,17 +3038,26 @@ async function init(){
     player.pos.y=groundH(player.pos.x,player.pos.z);player.faceYaw=player.yaw+Math.PI+(params.get('face')?+params.get('face')-Math.PI:0);setView(player.view);
     if(params.get('x')){player.pos.x=+params.get('x');player.pos.z=+params.get('z');}
     if(params.get('pitch'))player.pitch=+params.get('pitch');
+    restoreSavedPlayer();
     updatePlayer(0.016);refreshLod(camera.position);
     if(CREATIVE)village=new OpushkaSettlements(worldSites,makeTown);
     scrollReader=makeScrollReader();
     caveLoot=new OpushkaCaveLoot(caves,{scene,inventory,player:()=>player,net:()=>mpNet.on?mpNet.net:null,
       remote:(id)=>mpNet.remotes.get(id)?.P?.pos,knowsScroll:(item)=>learnedScrolls.has(scrollKey(item)),
       crystal:(position)=>spells.crystalFound(position)});
+    if(savedState?.cave){
+      caveLoot.message({t:'oploot-gone',ids:savedState.cave.taken||[]});
+      for(const record of savedState.cave.opened||[])caveLoot.message(record);
+    }
     prog(0.95,'Компиляция шейдеров');await nextFrame();
     updateGrass(camera.position);updateTrees();updateShadow();
     buildStumps();spells.init();renderer.compile(scene,camera);renderFrame();
     mpNet.start();
     prog(1,'Готово');$('#status').textContent='Лес готов. Нажми, чтобы войти.';$('#go').disabled=false;started=true;window.__ready=true;
+    if(saveRecord){
+      saveOpushka().catch(error=>console.warn('[Опушка] сохранение',error));
+      saveTimer=setInterval(()=>{if(!document.hidden)saveOpushka().catch(error=>console.warn('[Опушка] сохранение',error));},17000);
+    }
     if(AUTO){prog(0.97,'Камера');const t0=performance.now();
       const wait=()=>{const seen=zns.live()||!!zns.raw?.hasPose;
         if(seen||performance.now()-t0>40000){portal.finish();document.body.classList.remove('loading');autoEnter();if(!seen)gameNotify('📷 Камера пока не видит вас — встаньте в кадр; до тех пор — клавиатура и мышь');}

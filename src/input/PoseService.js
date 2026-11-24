@@ -581,7 +581,7 @@ export class PoseService {
 
     async _checkCapture(now = performance.now()) {
         if (!this.isRunning || this.injected || this._recovering || this._cancelNativeOpen) return;
-        if (document.hidden) { this._cameraFrameAt = now; return; }
+        if (document.hidden) return;
         if (now < (this._captureRetryAt || 0)) return;
         const track = this.stream?.getVideoTracks()[0];
         const ended = this.native ? !this._native || this._native.readyState === EventSource.CLOSED : !track || track.readyState === 'ended';
@@ -718,7 +718,7 @@ export class PoseService {
         }
         if (!this.stream) {
             this._status('Включение камеры...');
-            const stream = await this._openCamera();
+            const stream = await this._openCamera(true);
             if (epoch !== this._captureEpoch) {
                 for (const t of stream.getTracks()) t.stop();
                 return;
